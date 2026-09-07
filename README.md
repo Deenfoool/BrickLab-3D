@@ -9,13 +9,15 @@ Core loop: **build → simulate → test → inspect telemetry → modify → te
 ### Builder
 
 - Three.js scene with improved lighting, shadows and procedural part geometry.
-- 20+ prototype parts: bricks, plates, Technic beams, Axle 3L/5L/7L, pins, gears, wheel, Lab Motor, F/N/R Gearbox, Open Differential, Bearing Block, Suspension Arm and sensors.
+- 37 prototype parts including an expanded basic construction pack: multiple brick/plate sizes, Technic beams 3L/5L/7L/9L/11L, Technic bricks, Axle 2L/3L/5L/7L/9L, bushes, pins, gears, wheel, Lab Motor, F/N/R Gearbox, Open Differential, Bearing Block, Suspension Arm and sensors.
+- Catalog-wide Visual v3 pass: refined ABS/metal/rubber materials, Technic hole liners, axle detail bands, gear-face detail, power-unit fasteners, wheel sidewall detail and improved shadows.
+- Decorative Visual v3 meshes are excluded from Physics v2 collider bounds, so visual detail does not change simulation geometry.
 - Connector types: `stud`, `tube`, `pin`, `pin-hole`, `axle`, `axle-hole`.
 - Connector snapping, grid snapping, persistent connection graph, bearings and keyed shafts.
 - Undo/redo, autosave, `.bricklab` v2 import/export, multi-select and logical grouping.
 - Floating Parts / Properties windows with drag, resize, List/Grid, collapsible inspector sections, Focus Scene and mobile drawers.
 - RU / EN interface switch.
-- Real 3D part previews in the catalog.
+- Higher-resolution real 3D part previews in the catalog with contact shadow presentation.
 
 Scale is intentionally unavailable: arbitrary scaling would break mechanical dimensions and connector pitch.
 
@@ -149,7 +151,9 @@ index.html
 bootstrap.js
   ↓
 runtime-extensions.js
+  ├─ basic parts pack
   ├─ physical part DB
+  ├─ catalog-wide Visual v3
   ├─ Physics v2
   ├─ corrected colliders
   ├─ bounded powertrain
