@@ -176,7 +176,7 @@ PhysicsSession.prototype.updateTelemetryReadings = function updateSensorTelemetr
       : `${sensor.actualTorque.toFixed(2)} T`
   }
 
-  const primaryRpm = this.motorDrives[0]?.actualRpm ?? this.shaftMonitors[0] ? actualRpm(this.shaftMonitors[0]) : 0
+  const primaryRpm = this.motorDrives[0]?.actualRpm ?? (this.shaftMonitors[0] ? actualRpm(this.shaftMonitors[0]) : 0)
   const bodySpeed = this.chassisMonitor?.speed ?? 0
   appendHistory(this.sensorHistory.rpm, Number.isFinite(primaryRpm) ? primaryRpm : 0)
   appendHistory(this.sensorHistory.speed, Number.isFinite(bodySpeed) ? bodySpeed : 0)
