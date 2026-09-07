@@ -171,7 +171,7 @@ function createPin(id, color) {
 }
 
 function gearPitchRadius(teeth) {
-  return Math.max(0.45, teeth * 0.055)
+  return teeth / 16
 }
 
 function createGear(id, teeth, color) {
