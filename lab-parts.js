@@ -76,8 +76,10 @@ addPart({
   mechanics: { bearingBlock: true },
   connectors: [
     { id: 'bearing', type: 'pin-hole', position: [0, 0.9, 0], axis: [1, 0, 0] },
-    { id: 'mount-0', type: 'tube', position: [-0.5, 0, 0], axis: [0, -1, 0] },
-    { id: 'mount-1', type: 'tube', position: [0.5, 0, 0], axis: [0, -1, 0] },
+    { id: 'mount-0-0', type: 'tube', position: [-0.5, 0, -0.5], axis: [0, -1, 0] },
+    { id: 'mount-1-0', type: 'tube', position: [0.5, 0, -0.5], axis: [0, -1, 0] },
+    { id: 'mount-0-1', type: 'tube', position: [-0.5, 0, 0.5], axis: [0, -1, 0] },
+    { id: 'mount-1-1', type: 'tube', position: [0.5, 0, 0.5], axis: [0, -1, 0] },
   ],
   create: createBearingBlock,
 })
