@@ -1,6 +1,42 @@
 import * as THREE from 'three'
 import { PARTS } from './parts.js'
 
+const LEGACY_MOTOR_MOUNTS = {
+  'mount-0': 'mount-0-0',
+  'mount-1': 'mount-1-0',
+  'mount-2': 'mount-0-1',
+  'mount-3': 'mount-1-1',
+}
+
+function migrateProjectKey(key) {
+  const raw = localStorage.getItem(key)
+  if (!raw) return
+  try {
+    const project = JSON.parse(raw)
+    if (!Array.isArray(project?.connections) || !Array.isArray(project?.parts)) return
+    const motorIds = new Set(project.parts.filter(part => part.partId === 'motor').map(part => part.instanceId))
+    let changed = false
+
+    for (const connection of project.connections) {
+      for (const side of ['a', 'b']) {
+        const endpoint = connection?.[side]
+        if (!endpoint || !motorIds.has(endpoint.instanceId)) continue
+        const next = LEGACY_MOTOR_MOUNTS[endpoint.connectorId]
+        if (!next) continue
+        endpoint.connectorId = next
+        changed = true
+      }
+    }
+
+    if (changed) localStorage.setItem(key, JSON.stringify(project))
+  } catch (error) {
+    console.warn(`BrickLab could not migrate ${key}`, error)
+  }
+}
+
+migrateProjectKey('bricklab.project.v2')
+migrateProjectKey('bricklab.demo.backup.v1')
+
 function material(color) {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.58, metalness: 0.04 })
 }
