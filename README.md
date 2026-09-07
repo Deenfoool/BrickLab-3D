@@ -9,12 +9,12 @@ The goal is to let users assemble brick/Technic-style mechanisms, simulate them,
 ### Builder
 
 - Three.js 3D viewport with orbit camera, lighting, shadows and grid.
-- Searchable catalog with 13 procedural prototype parts.
-- Bricks, plates, Technic-style beams, axles, axle coupler, pin, gears, wheel and Lab Motor.
+- Searchable catalog with 14 procedural prototype parts.
+- Bricks, plates, a studded Technic chassis brick, beams, axles, axle coupler, pin, gears, wheel and Lab Motor.
 - Move / rotate gizmos with optional grid snapping and 90° rotation snapping.
 - Mechanical connector metadata for `stud`, `tube`, `pin`, `pin-hole`, `axle`, and `axle-hole`.
 - Compatible connector snapping with automatic axis orientation before attachment.
-- Beam holes accept pins as hinges and axles as rotational bearings.
+- Beam and Technic-brick holes accept pins as hinges and axles as rotational bearings.
 - Free connector guides are blue, occupied connectors are orange, saved graph connections are green.
 - Perspective and orthographic camera modes plus front / side / top views.
 - World / local transform-space switching.
@@ -67,7 +67,7 @@ The goal is to let users assemble brick/Technic-style mechanisms, simulate them,
 
 ### Drivetrain graph
 
-`drivetrain.js` now analyzes the mechanical build before simulation:
+`drivetrain.js` analyzes the mechanical build before simulation:
 
 - all rigid axle/axle-hole connections are grouped into shafts;
 - Lab Motor connections seed shaft RPM;
@@ -88,12 +88,14 @@ Gear-driven shafts currently receive Rapier angular-velocity targets. This is a 
 
 ### SIMULATE telemetry
 
-Entering SIMULATE now opens a drivetrain panel with:
+Entering SIMULATE opens a drivetrain panel with:
 
 - motor count;
 - powered shaft count;
 - detected gear meshes;
 - target shaft RPM;
+- **actual shaft RPM measured from the Rapier rigid body's angular velocity**;
+- visual warning when actual RPM differs materially from the target;
 - ratio relative to the motor;
 - detected tooth-count ratios;
 - drivetrain conflicts.
@@ -174,7 +176,7 @@ Shaft graph + automatic gear mesh analysis
     ↓
 Rapier physics adapter
     ↓
-Drivetrain telemetry
+Target + actual drivetrain telemetry
     ↓
 Test scenarios / challenges
 ```
@@ -205,13 +207,13 @@ Implemented foundation:
 - Motorized output shaft.
 - Rigid shaft grouping.
 - Wheel and gear collider specializations.
+- Actual shaft RPM measurement.
 - Play / pause / reset.
 - Non-destructive simulation state.
 
 Next:
 - Torque limits and motor stall behaviour.
-- Actual-vs-target RPM measurement.
-- Wheel slip telemetry.
+- Wheel slip / ground-speed telemetry.
 - Suspension springs / dampers.
 - More accurate per-part collider metadata.
 
@@ -224,7 +226,7 @@ Implemented foundation:
 - Rotation direction propagation.
 - Multi-stage RPM propagation.
 - Drivetrain conflict detection.
-- SIMULATE telemetry panel.
+- Target / actual RPM telemetry panel.
 
 Next:
 - Torque propagation.
