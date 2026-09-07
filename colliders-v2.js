@@ -16,9 +16,32 @@ function pose(matrix) {
 }
 
 function localBounds(object) {
-  const clone = object.clone(true)
-  clone.position.set(0, 0, 0); clone.quaternion.identity(); clone.scale.set(1, 1, 1); clone.updateMatrixWorld(true)
-  const box = new THREE.Box3().setFromObject(clone), size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3())
+  object.updateWorldMatrix(true, true)
+  const rootInverse = object.matrixWorld.clone().invert()
+  const box = new THREE.Box3().makeEmpty()
+  const meshBox = new THREE.Box3()
+  const relative = new THREE.Matrix4()
+
+  object.traverse(child => {
+    if (!child.isMesh || !child.geometry) return
+    if (!child.geometry.boundingBox) child.geometry.computeBoundingBox()
+    if (!child.geometry.boundingBox) return
+
+    meshBox.copy(child.geometry.boundingBox)
+    relative.multiplyMatrices(rootInverse, child.matrixWorld)
+    meshBox.applyMatrix4(relative)
+    box.union(meshBox)
+  })
+
+  if (box.isEmpty()) {
+    return {
+      size: new THREE.Vector3(0.12, 0.12, 0.12),
+      center: new THREE.Vector3(),
+    }
+  }
+
+  const size = box.getSize(new THREE.Vector3())
+  const center = box.getCenter(new THREE.Vector3())
   size.set(Math.max(size.x, .12), Math.max(size.y, .12), Math.max(size.z, .12))
   return { size, center }
 }
