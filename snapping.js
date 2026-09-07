@@ -5,8 +5,8 @@ const COMPATIBLE = {
   stud: ['tube'],
   tube: ['stud'],
   pin: ['pin-hole'],
-  'pin-hole': ['pin'],
-  axle: ['axle-hole'],
+  'pin-hole': ['pin', 'axle'],
+  axle: ['axle-hole', 'pin-hole'],
   'axle-hole': ['axle'],
 }
 
