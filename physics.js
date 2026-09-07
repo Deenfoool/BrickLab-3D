@@ -179,6 +179,8 @@ export class PhysicsSession {
     this.bearingCount = 0
     this.drivetrain = null
     this.gearVelocityTargets = []
+    this.shaftMonitors = []
+    this.telemetryTick = 0
   }
 
   build() {
@@ -203,6 +205,7 @@ export class PhysicsSession {
 
     this.drivetrain = analyzeDrivetrain(this.objects, this.connections)
     this.buildGearVelocityTargets()
+    this.buildShaftMonitors()
     this.mountTelemetry()
   }
 
@@ -351,6 +354,32 @@ export class PhysicsSession {
     }
   }
 
+  buildShaftMonitors() {
+    this.shaftMonitors = []
+    if (!this.drivetrain) return
+
+    for (const shaft of this.drivetrain.shafts) {
+      if (shaft.rpm == null) continue
+      const member = shaft.memberIds
+        .map(instanceId => this.members.get(instanceId))
+        .find(Boolean)
+      if (!member) continue
+
+      const localAxis = shaft.axisWorld
+        .clone()
+        .applyQuaternion(member.component.bodyWorldRotation.clone().invert())
+        .normalize()
+
+      this.shaftMonitors.push({
+        shaftId: shaft.id,
+        body: member.body,
+        localAxis,
+        targetRpm: shaft.rpm,
+        ratioFromMotor: shaft.ratioFromMotor,
+      })
+    }
+  }
+
   mountTelemetry() {
     document.getElementById('drivetrainTelemetry')?.remove()
     if (!document.querySelector('link[data-bricklab-drivetrain]')) {
@@ -371,7 +400,7 @@ export class PhysicsSession {
     const shaftRows = driven.slice(0, 8).map(shaft => {
       const rpm = Math.round(shaft.rpm)
       const ratio = shaft.ratioFromMotor == null ? '—' : `${shaft.ratioFromMotor >= 0 ? '+' : ''}${shaft.ratioFromMotor.toFixed(2)}×`
-      return `<div class="telemetry-row"><span>${shaft.id}</span><b>${rpm >= 0 ? '+' : ''}${rpm} RPM</b><small>${ratio}</small></div>`
+      return `<div class="telemetry-row" data-shaft-id="${shaft.id}"><span>${shaft.id}</span><b title="Target RPM">${rpm >= 0 ? '+' : ''}${rpm}</b><small data-actual-rpm title="Actual RPM">0</small><em>${ratio}</em></div>`
     }).join('')
 
     const gearRows = this.drivetrain.gearMeshes.slice(0, 5).map(mesh => {
@@ -381,7 +410,7 @@ export class PhysicsSession {
 
     panel.innerHTML = `
       <div class="telemetry-head">
-        <div><small>DRIVETRAIN</small><strong>Live targets</strong></div>
+        <div><small>DRIVETRAIN</small><strong>Target / Actual RPM</strong></div>
         <i data-lucide="gauge"></i>
       </div>
       <div class="telemetry-summary">
@@ -390,7 +419,7 @@ export class PhysicsSession {
         <span><b>${this.drivetrain.stats.gearMeshes}</b> gear meshes</span>
       </div>
       <div class="telemetry-section">
-        <label>SHAFT RPM</label>
+        <label>SHAFT · TARGET · ACTUAL · RATIO</label>
         ${shaftRows || '<div class="telemetry-empty">No powered shaft. Connect a Lab Motor output to an axle-hole.</div>'}
       </div>
       <div class="telemetry-section">
@@ -402,6 +431,7 @@ export class PhysicsSession {
 
     host.append(panel)
     window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } })
+    this.updateTelemetryReadings(true)
   }
 
   removeTelemetry() {
@@ -419,11 +449,39 @@ export class PhysicsSession {
     }
   }
 
+  updateTelemetryReadings(force = false) {
+    this.telemetryTick += 1
+    if (!force && this.telemetryTick % 6 !== 0) return
+
+    for (const monitor of this.shaftMonitors) {
+      const angularVelocity = monitor.body.angvel()
+      const rotation = monitor.body.rotation()
+      const bodyRotation = new THREE.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w)
+      const worldAxis = monitor.localAxis.clone().applyQuaternion(bodyRotation).normalize()
+      const projectedRadians = new THREE.Vector3(
+        angularVelocity.x,
+        angularVelocity.y,
+        angularVelocity.z,
+      ).dot(worldAxis)
+      const actualRpm = projectedRadians * 60 / (Math.PI * 2)
+
+      const row = document.querySelector(`[data-shaft-id="${monitor.shaftId}"]`)
+      const actual = row?.querySelector('[data-actual-rpm]')
+      if (!actual) continue
+
+      actual.textContent = `${actualRpm >= 0 ? '+' : ''}${Math.round(actualRpm)}`
+      const tolerance = Math.max(5, Math.abs(monitor.targetRpm) * 0.12)
+      actual.classList.toggle('off-target', Math.abs(actualRpm - monitor.targetRpm) > tolerance)
+      actual.title = `Actual ${actualRpm.toFixed(1)} RPM · target ${monitor.targetRpm.toFixed(1)} RPM`
+    }
+  }
+
   step() {
     if (!this.world || !this.running) return
     this.enforceGearVelocityTargets()
     this.world.step()
     this.syncObjects()
+    this.updateTelemetryReadings()
   }
 
   syncObjects() {
@@ -473,6 +531,7 @@ export class PhysicsSession {
     this.members.clear()
     this.components = []
     this.gearVelocityTargets = []
+    this.shaftMonitors = []
   }
 
   get telemetry() {
