@@ -9,6 +9,7 @@ import {
   isEndpointOccupied,
   removeConnectionsForPart,
 } from './connections.js'
+import { PhysicsSession } from './physics.js'
 
 const $ = selector => document.querySelector(selector)
 const app = $('#app')
@@ -36,6 +37,11 @@ app.innerHTML = `
       <span class="divider"></span>
       <button id="duplicateBtn" class="tool">⧉ <span>Duplicate</span></button>
       <button id="deleteBtn" class="tool danger">⌫ <span>Delete</span></button>
+    </div>
+    <div id="simControls" class="sim-controls hidden">
+      <button id="simPlayPause" class="ghost small">Pause</button>
+      <button id="simReset" class="ghost small">Reset</button>
+      <span id="simState">Physics idle</span>
     </div>
     <div class="scene-status"><span class="dot"></span><span id="statusText">BUILD MODE · Connector graph enabled</span></div>
     <div class="help">LMB select · RMB orbit · Wheel zoom · W move · E rotate · Ctrl+Z undo · Del remove</div><div id="toast" class="toast"></div>
@@ -132,6 +138,9 @@ let historyIndex = -1
 let toastTimer = 0
 let isDragging = false
 let detachedDuringDrag = false
+let physicsSession = null
+let simulationStartState = null
+let simulationGeneration = 0
 
 function toast(text) {
   const el = $('#toast')
@@ -357,7 +366,7 @@ function connectionIsValid(connection, usedEndpoints) {
   return true
 }
 
-function applyProject(data, { reset = false } = {}) {
+function applyProject(data, { reset = false, persist = true } = {}) {
   if (!data || !Array.isArray(data.parts)) throw new Error('Invalid BrickLab project')
 
   select(null)
@@ -387,7 +396,7 @@ function applyProject(data, { reset = false } = {}) {
   refreshSnap()
 
   if (reset) resetHistory()
-  else saveLocal()
+  else if (persist) saveLocal()
 }
 
 function undo() {
@@ -606,6 +615,72 @@ function setPartColor(hex, commit = false) {
   else saveLocal()
 }
 
+async function startSimulation({ preserveStartState = false } = {}) {
+  if (!preserveStartState || !simulationStartState) simulationStartState = cloneState(projectState())
+  const generation = ++simulationGeneration
+  physicsSession?.dispose()
+  physicsSession = null
+
+  $('#simControls').classList.remove('hidden')
+  $('#simPlayPause').disabled = true
+  $('#simReset').disabled = true
+  $('#simState').textContent = 'Loading Rapier…'
+  $('#statusText').textContent = `SIMULATE · loading physics · ${connections.length} graph links`
+
+  try {
+    const session = await PhysicsSession.create([...buildRoot.children], cloneState(connections))
+    if (generation !== simulationGeneration || mode !== 'simulate') {
+      session.dispose()
+      return
+    }
+
+    physicsSession = session
+    physicsSession.setRunning(true)
+    $('#simPlayPause').textContent = 'Pause'
+    $('#simPlayPause').disabled = false
+    $('#simReset').disabled = false
+
+    const stats = session.stats
+    $('#simState').textContent = `${stats.bodies} bodies · ${stats.joints} joints${stats.failedJoints ? ` · ${stats.failedJoints} skipped` : ''}`
+    $('#statusText').textContent = `SIMULATE · gravity on · ${stats.bodies} bodies · ${stats.joints} joints`
+    toast('Physics simulation started')
+  } catch (error) {
+    console.error('Could not start Rapier simulation', error)
+    if (generation !== simulationGeneration) return
+    $('#simState').textContent = 'Physics failed to load'
+    $('#statusText').textContent = 'SIMULATE · physics unavailable'
+    $('#simReset').disabled = false
+    toast('Physics module could not be loaded')
+  }
+}
+
+function stopSimulation({ restore = true } = {}) {
+  simulationGeneration += 1
+  physicsSession?.dispose()
+  physicsSession = null
+  $('#simControls').classList.add('hidden')
+
+  if (restore && simulationStartState) {
+    applyProject(simulationStartState, { persist: false })
+  }
+}
+
+function toggleSimulationRunning() {
+  if (!physicsSession) return
+  physicsSession.setRunning(!physicsSession.running)
+  $('#simPlayPause').textContent = physicsSession.running ? 'Pause' : 'Play'
+  $('#statusText').textContent = physicsSession.running
+    ? `SIMULATE · running · ${physicsSession.stats.joints} joints`
+    : 'SIMULATE · paused'
+}
+
+function resetSimulation() {
+  if (!simulationStartState) return
+  stopSimulation({ restore: true })
+  mode = 'simulate'
+  startSimulation({ preserveStartState: true })
+}
+
 function buildTestCourse() {
   testRoot.clear()
   const mat = new THREE.MeshStandardMaterial({ color: 0x454b52, roughness: 0.95 })
@@ -623,6 +698,13 @@ function buildTestCourse() {
 }
 
 function setMode(next) {
+  if (!next || next === mode) return
+  const previousMode = mode
+
+  if (previousMode === 'simulate') {
+    stopSimulation({ restore: true })
+  }
+
   mode = next
   document.querySelectorAll('.mode').forEach(button => button.classList.toggle('active', button.dataset.mode === next))
   $('.viewport-toolbar').classList.toggle('disabled', next !== 'build')
@@ -638,9 +720,9 @@ function setMode(next) {
     updateConnectionVisuals()
     updateProjectStats()
   } else if (next === 'simulate') {
-    $('#statusText').textContent = `SIMULATE PREVIEW · ${connections.length} graph links ready for physics`
     select(null)
-    toast('Connection graph is ready for Rapier joints')
+    simulationStartState = cloneState(projectState())
+    startSimulation({ preserveStartState: true })
   } else {
     $('#statusText').textContent = 'TEST LAB · Prototype obstacle course'
     select(null)
@@ -681,6 +763,8 @@ $('#redoBtn').onclick = redo
 $('#duplicateBtn').onclick = duplicateSelected
 $('#deleteBtn').onclick = removeSelected
 $('#disconnectBtn').onclick = disconnectSelected
+$('#simPlayPause').onclick = toggleSimulationRunning
+$('#simReset').onclick = resetSimulation
 $('#saveBtn').onclick = () => { saveLocal(); toast('Saved in this browser') }
 $('#exportBtn').onclick = exportProject
 $('#newBtn').onclick = () => {
@@ -745,6 +829,7 @@ function resize() {
 new ResizeObserver(resize).observe(viewport)
 
 function animate() {
+  if (mode === 'simulate' && physicsSession) physicsSession.step()
   orbit.update()
   selectionBox?.update()
   renderer.render(scene, camera)
