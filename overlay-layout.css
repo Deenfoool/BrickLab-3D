@@ -10,7 +10,6 @@
   --overlay-panel-shadow:0 20px 55px rgba(0,0,0,.34),0 3px 12px rgba(0,0,0,.22);
 }
 
-/* The viewport owns the whole area below the topbar. Side panels float above it. */
 .shell{
   position:relative;
   display:grid;
@@ -25,10 +24,12 @@
 .sidebar.parts-panel,.sidebar.inspector-panel{
   position:absolute;
   top:var(--overlay-top);
-  bottom:var(--overlay-bottom);
+  bottom:auto;
   z-index:20;
   width:var(--overlay-left-width);
-  min-height:0;
+  height:min(720px,calc(100% - var(--overlay-top) - var(--overlay-bottom)));
+  min-height:300px;
+  max-height:calc(100% - var(--overlay-top) - var(--overlay-bottom));
   overflow:hidden;
   border:1px solid var(--overlay-panel-border)!important;
   border-radius:12px;
@@ -37,48 +38,39 @@
   backdrop-filter:blur(18px) saturate(115%);
   -webkit-backdrop-filter:blur(18px) saturate(115%);
   transition:transform .22s ease,opacity .18s ease,box-shadow .18s ease;
+  will-change:transform,left,top,width;
 }
-.sidebar.parts-panel{
-  left:var(--overlay-gap);
-  grid-area:unset!important;
-  display:flex!important;
-  flex-direction:column;
-}
-.sidebar.inspector-panel{
-  right:var(--overlay-gap);
-  width:var(--overlay-right-width);
-  grid-area:unset!important;
-  display:flex!important;
-  flex-direction:column;
-}
+.sidebar.parts-panel{left:var(--overlay-gap);grid-area:unset!important;display:flex!important;flex-direction:column}
+.sidebar.inspector-panel{right:var(--overlay-gap);width:var(--overlay-right-width);grid-area:unset!important;display:flex!important;flex-direction:column}
+.sidebar.overlay-positioned{right:auto!important;bottom:auto!important}
+.sidebar.panel-dragging,.sidebar.panel-resizing{transition:none!important;user-select:none;box-shadow:0 28px 75px rgba(0,0,0,.46),0 4px 18px rgba(0,0,0,.28)}
 
-/* Give the panels a floating-card header instead of a docked-sidebar header. */
 .sidebar .panel-title{
   height:44px;
-  padding:0 10px 0 14px;
+  padding:0 8px 0 14px;
   border-bottom:1px solid rgba(255,255,255,.065);
   background:rgba(25,29,33,.76);
   backdrop-filter:blur(10px);
+  cursor:grab;
+  user-select:none;
+  touch-action:none;
 }
+.sidebar.panel-dragging .panel-title{cursor:grabbing}
+.sidebar .panel-title button{cursor:pointer}
 .sidebar .search{background:rgba(12,15,17,.72)}
 .sidebar .parts-list,.sidebar .inspector{scrollbar-color:#394148 transparent;scrollbar-width:thin}
 .sidebar .project-box{background:rgba(18,22,25,.72)}
 
-/* Collapsed panels slide just outside the scene instead of changing viewport size. */
-body:not(.parts-overlay-open) .parts-panel{
-  transform:translateX(calc(-100% - var(--overlay-gap) - 6px));
-  opacity:0;
-  pointer-events:none;
-}
-body:not(.properties-overlay-open) .inspector-panel{
-  transform:translateX(calc(100% + var(--overlay-gap) + 6px));
-  opacity:0;
-  pointer-events:none;
-}
-body.parts-overlay-open .parts-panel,
-body.properties-overlay-open .inspector-panel{transform:translateX(0);opacity:1}
+.panel-resize-handle{position:absolute;top:44px;bottom:0;width:10px;z-index:4;cursor:ew-resize;touch-action:none}
+.parts-panel .panel-resize-handle{right:-5px}
+.inspector-panel .panel-resize-handle{left:-5px}
+.panel-resize-handle:after{content:"";position:absolute;top:50%;left:4px;transform:translateY(-50%);width:2px;height:46px;border-radius:4px;background:#46515a;opacity:0;transition:opacity .15s ease}
+.sidebar:hover .panel-resize-handle:after,.sidebar.panel-resizing .panel-resize-handle:after{opacity:.8}
 
-/* Topbar controls for opening/closing floating panels. */
+body:not(.parts-overlay-open) .parts-panel{transform:translateX(calc(-100% - var(--overlay-gap) - 10px));opacity:0;pointer-events:none}
+body:not(.properties-overlay-open) .inspector-panel{transform:translateX(calc(100% + var(--overlay-gap) + 10px));opacity:0;pointer-events:none}
+body.parts-overlay-open .parts-panel,body.properties-overlay-open .inspector-panel{transform:translateX(0);opacity:1}
+
 .overlay-panel-toggles{display:flex;align-items:center;gap:5px;margin-right:2px}
 .overlay-toggle{
   position:relative;
@@ -98,68 +90,39 @@ body.properties-overlay-open .inspector-panel{transform:translateX(0);opacity:1}
 .overlay-toggle svg{width:15px;height:15px}
 .overlay-toggle .panel-dot{position:absolute;right:5px;top:5px;width:5px;height:5px;border-radius:50%;background:var(--accent);opacity:0;box-shadow:0 0 7px rgba(116,230,166,.6)}
 .overlay-toggle.active .panel-dot{opacity:1}
+.overlay-reset{color:#6f7982}
+.overlay-reset:hover{color:#cbd3d9}
 
-.panel-float-close{
-  width:28px;
-  height:28px;
-  flex:none;
-  display:grid;
-  place-items:center;
-  margin-left:auto;
-  border:0;
-  border-radius:6px;
-  background:transparent;
-  color:#6f7982;
-  cursor:pointer;
-}
+.panel-float-close{width:28px;height:28px;flex:none;display:grid;place-items:center;margin-left:auto;border:0;border-radius:6px;background:transparent;color:#6f7982;cursor:pointer}
 .panel-float-close:hover{background:#272d32;color:#fff}
 .panel-float-close svg{width:14px;height:14px}
 
-.overlay-drawer-scrim{
-  position:absolute;
-  inset:56px 0 0;
-  z-index:15;
-  display:none;
-  border:0;
-  padding:0;
-  background:rgba(4,6,8,.46);
-  backdrop-filter:blur(2px);
-  opacity:0;
-  cursor:default;
-}
+.overlay-drawer-scrim{position:absolute;inset:56px 0 0;z-index:15;display:none;border:0;padding:0;background:rgba(4,6,8,.46);backdrop-filter:blur(2px);opacity:0;cursor:default}
 .overlay-drawer-scrim.active{display:block;opacity:1}
 
-/* Keep useful scene UI visible beside the overlays when there is enough room. */
 .scene-status,.snap-toolbar,.help,.drivetrain-telemetry{transition:left .22s ease,right .22s ease}
 @media(min-width:1181px){
-  body.parts-overlay-open .snap-toolbar{left:calc(var(--overlay-left-width) + var(--overlay-gap) + 12px)}
-  body.parts-overlay-open .scene-status{left:calc(var(--overlay-left-width) + var(--overlay-gap) + 12px)}
-  body.properties-overlay-open .help{right:calc(var(--overlay-right-width) + var(--overlay-gap) + 12px)}
-  body.properties-overlay-open .drivetrain-telemetry{right:calc(var(--overlay-right-width) + var(--overlay-gap) + 12px)}
+  body.parts-overlay-open:not(.overlay-layout-custom) .snap-toolbar{left:calc(var(--overlay-left-width) + var(--overlay-gap) + 12px)}
+  body.parts-overlay-open:not(.overlay-layout-custom) .scene-status{left:calc(var(--overlay-left-width) + var(--overlay-gap) + 12px)}
+  body.properties-overlay-open:not(.overlay-layout-custom) .help{right:calc(var(--overlay-right-width) + var(--overlay-gap) + 12px)}
+  body.properties-overlay-open:not(.overlay-layout-custom) .drivetrain-telemetry{right:calc(var(--overlay-right-width) + var(--overlay-gap) + 12px)}
 }
 
-/* Medium screens keep the same overlay idea, with slightly tighter cards. */
 @media(max-width:1180px){
   :root{--overlay-left-width:260px;--overlay-right-width:280px;--overlay-gap:10px}
   .brand{min-width:auto}
-  .sidebar.parts-panel,.sidebar.inspector-panel{top:74px;bottom:10px}
+  .sidebar.parts-panel,.sidebar.inspector-panel{height:min(680px,calc(100% - 84px));max-height:calc(100% - 84px)}
 }
 
-/* On tablet/mobile the panels become drawers over the scene. */
 @media(max-width:800px){
   :root{--overlay-left-width:min(86vw,330px);--overlay-right-width:min(86vw,330px);--overlay-gap:8px}
   .shell{grid-template-rows:56px minmax(0,1fr)!important;grid-template-areas:"top" "viewport"!important}
   .topbar{padding:0 8px;gap:7px}
-  .sidebar.parts-panel,.sidebar.inspector-panel{
-    position:absolute!important;
-    top:64px!important;
-    bottom:8px!important;
-    width:min(86vw,330px)!important;
-    border-radius:11px!important;
-    z-index:21;
-  }
+  .sidebar.parts-panel,.sidebar.inspector-panel{position:absolute!important;top:64px!important;bottom:8px!important;height:auto!important;max-height:none!important;width:min(86vw,330px)!important;border-radius:11px!important;z-index:21}
   .sidebar.parts-panel{left:8px!important;border-top:1px solid var(--overlay-panel-border)!important;border-right:1px solid var(--overlay-panel-border)!important}
-  .sidebar.inspector-panel{right:8px!important;border-left:1px solid var(--overlay-panel-border)!important}
+  .sidebar.inspector-panel{left:auto!important;right:8px!important;border-left:1px solid var(--overlay-panel-border)!important}
+  .sidebar .panel-title{cursor:default}
+  .panel-resize-handle{display:none!important}
   .parts-list{display:flex!important;grid-template-columns:none!important}
   .panel-title{display:flex!important}
   .top-actions{gap:5px}
