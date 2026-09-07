@@ -45,6 +45,61 @@ function connectorFor(object, connectorId) {
   return findPart(object?.userData.partId)?.connectors?.find(connector => connector.id === connectorId) ?? null
 }
 
+function localColliderSpecs(object) {
+  const definition = findPart(object?.userData.partId)
+  const wheel = definition?.mechanics?.wheel
+  if (wheel) {
+    return [{
+      shape: 'cylinder',
+      halfHeight: 0.34,
+      radius: wheel.radius,
+      center: new THREE.Vector3(0, 1.15, 0),
+      rotation: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI / 2)),
+    }]
+  }
+
+  const gear = definition?.mechanics?.gear
+  if (gear) {
+    return [{
+      shape: 'cylinder',
+      halfHeight: 0.18,
+      radius: Math.max(0.65, gear.teeth * 0.045) * 1.12,
+      center: new THREE.Vector3(0, 0.4, 0),
+      rotation: new THREE.Quaternion(),
+    }]
+  }
+
+  const { size, center } = localBounds(object)
+  return [{ shape: 'cuboid', size, center, rotation: new THREE.Quaternion() }]
+}
+
+function createColliderDescriptor(RAPIER, spec, relativeMatrix, relativeRotation, relativeScale) {
+  const center = spec.center.clone().applyMatrix4(relativeMatrix)
+  const rotation = relativeRotation.clone().multiply(spec.rotation)
+  let collider
+
+  if (spec.shape === 'cylinder') {
+    const radialScale = Math.max(Math.abs(relativeScale.x), Math.abs(relativeScale.z))
+    collider = RAPIER.ColliderDesc.cylinder(
+      spec.halfHeight * Math.abs(relativeScale.y),
+      spec.radius * radialScale,
+    )
+  } else {
+    collider = RAPIER.ColliderDesc.cuboid(
+      spec.size.x * Math.abs(relativeScale.x) / 2,
+      spec.size.y * Math.abs(relativeScale.y) / 2,
+      spec.size.z * Math.abs(relativeScale.z) / 2,
+    )
+  }
+
+  return collider
+    .setTranslation(center.x, center.y, center.z)
+    .setRotation(quaternion(rotation))
+    .setFriction(0.9)
+    .setRestitution(0.03)
+    .setDensity(0.7)
+}
+
 function buildFixedComponents(objects, connections) {
   const byId = new Map(objects.map(object => [object.userData.instanceId, object]))
   const parent = new Map([...byId.keys()].map(id => [id, id]))
@@ -112,6 +167,7 @@ export class PhysicsSession {
     this.jointCount = 0
     this.failedJointCount = 0
     this.internalJointCount = 0
+    this.motorCount = 0
   }
 
   build() {
@@ -163,22 +219,10 @@ export class PhysicsSession {
     for (const object of objects) {
       const relativeMatrix = bodyWorldInverse.clone().multiply(object.matrixWorld)
       const { rotation: relativeRotation, scale: relativeScale } = matrixPose(relativeMatrix)
-      const { size, center } = localBounds(object)
-
-      const colliderCenter = center.clone().applyMatrix4(relativeMatrix)
-      const halfExtents = new THREE.Vector3(
-        size.x * Math.abs(relativeScale.x) / 2,
-        size.y * Math.abs(relativeScale.y) / 2,
-        size.z * Math.abs(relativeScale.z) / 2,
-      )
-
-      const colliderDesc = RAPIER.ColliderDesc.cuboid(halfExtents.x, halfExtents.y, halfExtents.z)
-        .setTranslation(colliderCenter.x, colliderCenter.y, colliderCenter.z)
-        .setRotation(quaternion(relativeRotation))
-        .setFriction(0.85)
-        .setRestitution(0.03)
-        .setDensity(0.7)
-      this.world.createCollider(colliderDesc, body)
+      for (const spec of localColliderSpecs(object)) {
+        const colliderDesc = createColliderDescriptor(RAPIER, spec, relativeMatrix, relativeRotation, relativeScale)
+        this.world.createCollider(colliderDesc, body)
+      }
 
       const member = { object, body, component, relativeMatrix }
       component.members.push(member)
@@ -225,12 +269,52 @@ export class PhysicsSession {
       }
 
       if (!params) return
-      this.world.createImpulseJoint(params, memberA.body, memberB.body, true)
+      const joint = this.world.createImpulseJoint(params, memberA.body, memberB.body, true)
+      joint.setContactsEnabled?.(false)
+      this.configureMotor(connection, memberA, memberB, connectorA, connectorB, axisA, joint)
       this.jointCount += 1
     } catch (error) {
       this.failedJointCount += 1
       console.warn('BrickLab could not create physics joint', connection, error)
     }
+  }
+
+  configureMotor(connection, memberA, memberB, connectorA, connectorB, axisA, joint) {
+    if (connection.kind !== 'axle' || !joint?.configureMotorVelocity) return
+
+    const definitionA = findPart(memberA.object.userData.partId)
+    const definitionB = findPart(memberB.object.userData.partId)
+    const motorA = definitionA?.mechanics?.motor
+    const motorB = definitionB?.mechanics?.motor
+
+    let motor = null
+    let motorMember = null
+    let motorConnector = null
+    let motorIsA = false
+
+    if (motorA && connection.a.connectorId === motorA.connectorId) {
+      motor = motorA
+      motorMember = memberA
+      motorConnector = connectorA
+      motorIsA = true
+    } else if (motorB && connection.b.connectorId === motorB.connectorId) {
+      motor = motorB
+      motorMember = memberB
+      motorConnector = connectorB
+    }
+
+    if (!motor || !motorMember || !motorConnector) return
+
+    const jointAxisWorld = axisA.clone().applyQuaternion(memberA.component.bodyWorldRotation).normalize()
+    const motorObjectRotation = motorMember.object.getWorldQuaternion(new THREE.Quaternion())
+    const motorAxisWorld = new THREE.Vector3(...motorConnector.axis).normalize().applyQuaternion(motorObjectRotation)
+    const axisSign = jointAxisWorld.dot(motorAxisWorld) >= 0 ? 1 : -1
+    const sideSign = motorIsA ? 1 : -1
+    const radiansPerSecond = (motor.rpm ?? 120) * Math.PI * 2 / 60
+    const targetVelocity = radiansPerSecond * (motor.direction ?? 1) * axisSign * sideSign
+
+    joint.configureMotorVelocity(targetVelocity, motor.damping ?? 1.0)
+    this.motorCount += 1
   }
 
   step() {
@@ -294,6 +378,7 @@ export class PhysicsSession {
       joints: this.jointCount,
       failedJoints: this.failedJointCount,
       internalJoints: this.internalJointCount,
+      motors: this.motorCount,
     }
   }
 }
