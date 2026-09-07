@@ -4,6 +4,7 @@ import { findPart } from './parts.js'
 
 const TWO_PI = Math.PI * 2
 const HISTORY_LIMIT = 180
+const LOG_LIMIT = 12000
 
 function bodyRotation(body) {
   const rotation = body.rotation()
@@ -114,11 +115,101 @@ function drawTrend(canvas, history) {
   ctx.fillText('SPEED', 34, 11)
 }
 
+function csvValue(value) {
+  if (value == null) return ''
+  const text = String(value)
+  if (!/[",\n]/.test(text)) return text
+  return `"${text.replaceAll('"', '""')}"`
+}
+
+function telemetryFilename(session) {
+  const scenario = session.scenario && session.scenario !== 'flat' ? session.scenario : 'simulate'
+  const stamp = new Date().toISOString().replaceAll(':', '-').replace(/\.\d{3}Z$/, 'Z')
+  return `bricklab-${scenario}-${stamp}.csv`
+}
+
+function exportTelemetryCsv(session) {
+  const samples = session.telemetryLog ?? []
+  if (!samples.length) return
+
+  const sensorHeaders = (session.sensorMonitors ?? []).map((sensor, index) => ({
+    id: sensor.id,
+    header: `${sensor.kind}_${index + 1}_${sensor.kind === 'rpm' ? 'rpm' : 'torque_T'}`,
+  }))
+
+  const headers = [
+    'time_s',
+    'scenario',
+    'test_status',
+    'body_speed_u_s',
+    'body_accel_u_s2',
+    'primary_rpm',
+    'motor_load_pct',
+    'motor_torque_T',
+    'pull_force_F',
+    ...sensorHeaders.map(item => item.header),
+  ]
+
+  const rows = [headers]
+  for (const sample of samples) {
+    rows.push([
+      sample.time.toFixed(3),
+      sample.scenario,
+      sample.testStatus,
+      sample.bodySpeed.toFixed(4),
+      sample.bodyAcceleration.toFixed(4),
+      sample.primaryRpm.toFixed(3),
+      sample.motorLoad.toFixed(2),
+      sample.motorTorque.toFixed(4),
+      sample.pullForce == null ? '' : sample.pullForce.toFixed(4),
+      ...sensorHeaders.map(item => {
+        const value = sample.sensors[item.id]
+        return Number.isFinite(value) ? value.toFixed(4) : ''
+      }),
+    ])
+  }
+
+  const csv = rows.map(row => row.map(csvValue).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = telemetryFilename(session)
+  document.body.append(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function recordTelemetrySample(session, primaryRpm, bodySpeed) {
+  session.telemetryLog ??= []
+  const drive = session.motorDrives[0]
+  const sensorValues = {}
+  for (const sensor of session.sensorMonitors ?? []) {
+    sensorValues[sensor.id] = sensor.kind === 'rpm' ? sensor.actualRpm : sensor.actualTorque
+  }
+
+  session.telemetryLog.push({
+    time: session.simulationTime ?? 0,
+    scenario: session.scenario ?? 'flat',
+    testStatus: session.testStatus ?? 'RUNNING',
+    bodySpeed,
+    bodyAcceleration: session.chassisMonitor?.acceleration ?? 0,
+    primaryRpm,
+    motorLoad: (drive?.load ?? 0) * 100,
+    motorTorque: drive?.torque ?? 0,
+    pullForce: session.scenario === 'torque-pull' ? Number(session.scenarioData?.currentForce ?? 0) : null,
+    sensors: sensorValues,
+  })
+  if (session.telemetryLog.length > LOG_LIMIT) session.telemetryLog.shift()
+}
+
 const previousMountTelemetry = PhysicsSession.prototype.mountTelemetry
 PhysicsSession.prototype.mountTelemetry = function mountSensorTelemetry(...args) {
   const result = previousMountTelemetry.apply(this, args)
   this.sensorMonitors = buildSensorMonitors(this)
   this.sensorHistory ??= { rpm: [], speed: [] }
+  this.telemetryLog ??= []
 
   const panel = document.getElementById('drivetrainTelemetry')
   if (!panel) return result
@@ -148,11 +239,13 @@ PhysicsSession.prototype.mountTelemetry = function mountSensorTelemetry(...args)
     trend.className = 'telemetry-section trend-telemetry'
     trend.dataset.trendSection = 'true'
     trend.innerHTML = `
-      <label>LIVE HISTORY · RPM / BODY SPEED</label>
+      <div class="trend-head"><label>LIVE HISTORY · RPM / BODY SPEED</label><button type="button" data-export-telemetry title="Export telemetry CSV"><i data-lucide="file-down"></i><span>CSV</span></button></div>
       <canvas data-live-trend></canvas>
       <div class="trend-values"><span>RPM <b data-trend-rpm>0</b></span><span>SPEED <b data-trend-speed>0.00</b></span></div>
     `
     panel.append(trend)
+    trend.querySelector('[data-export-telemetry]').onclick = () => exportTelemetryCsv(this)
+    window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } })
   }
   return result
 }
@@ -180,6 +273,7 @@ PhysicsSession.prototype.updateTelemetryReadings = function updateSensorTelemetr
   const bodySpeed = this.chassisMonitor?.speed ?? 0
   appendHistory(this.sensorHistory.rpm, Number.isFinite(primaryRpm) ? primaryRpm : 0)
   appendHistory(this.sensorHistory.speed, Number.isFinite(bodySpeed) ? bodySpeed : 0)
+  recordTelemetrySample(this, Number.isFinite(primaryRpm) ? primaryRpm : 0, Number.isFinite(bodySpeed) ? bodySpeed : 0)
 
   const rpmValue = document.querySelector('[data-trend-rpm]')
   const speedValue = document.querySelector('[data-trend-speed]')
@@ -194,5 +288,6 @@ PhysicsSession.prototype.dispose = function disposeSensorTelemetry(...args) {
   const result = previousDispose.apply(this, args)
   this.sensorMonitors = []
   this.sensorHistory = { rpm: [], speed: [] }
+  this.telemetryLog = []
   return result
 }
