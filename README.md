@@ -94,11 +94,15 @@ Entering SIMULATE opens a drivetrain panel with:
 - powered shaft count;
 - detected gear meshes;
 - target shaft RPM;
-- **actual shaft RPM measured from the Rapier rigid body's angular velocity**;
+- actual shaft RPM measured from the Rapier rigid body's angular velocity;
 - visual warning when actual RPM differs materially from the target;
 - ratio relative to the motor;
 - detected tooth-count ratios;
-- drivetrain conflicts.
+- drivetrain conflicts;
+- ground speed for every Off-road Wheel;
+- wheel slip estimated from wheel rim speed versus translational rolling speed.
+
+Wheel speed is currently shown in BrickLab world units per second (`u/s`). Slip is a first horizontal-ground estimate intended for vehicle and hill-climb testing; more advanced contact-patch telemetry will come later.
 
 ## GitHub Pages
 
@@ -176,7 +180,7 @@ Shaft graph + automatic gear mesh analysis
     ↓
 Rapier physics adapter
     ↓
-Target + actual drivetrain telemetry
+Target / actual RPM + wheel-slip telemetry
     ↓
 Test scenarios / challenges
 ```
@@ -208,12 +212,13 @@ Implemented foundation:
 - Rigid shaft grouping.
 - Wheel and gear collider specializations.
 - Actual shaft RPM measurement.
+- Wheel ground-speed and slip telemetry.
 - Play / pause / reset.
 - Non-destructive simulation state.
 
 Next:
 - Torque limits and motor stall behaviour.
-- Wheel slip / ground-speed telemetry.
+- Vehicle/chassis speed and acceleration telemetry.
 - Suspension springs / dampers.
 - More accurate per-part collider metadata.
 
@@ -227,6 +232,7 @@ Implemented foundation:
 - Multi-stage RPM propagation.
 - Drivetrain conflict detection.
 - Target / actual RPM telemetry panel.
+- Wheel-slip preview.
 
 Next:
 - Torque propagation.
