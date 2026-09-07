@@ -6,9 +6,18 @@
     <meta name="theme-color" content="#101214" />
     <meta name="description" content="BrickLab 3D — browser-based mechanical brick construction sandbox." />
     <title>BrickLab 3D</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="./app.js"></script>
   </body>
 </html>
