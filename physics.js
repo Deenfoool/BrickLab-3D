@@ -353,6 +353,13 @@ export class PhysicsSession {
 
   mountTelemetry() {
     document.getElementById('drivetrainTelemetry')?.remove()
+    if (!document.querySelector('link[data-bricklab-drivetrain]')) {
+      const stylesheet = document.createElement('link')
+      stylesheet.rel = 'stylesheet'
+      stylesheet.href = './drivetrain.css'
+      stylesheet.dataset.bricklabDrivetrain = 'true'
+      document.head.append(stylesheet)
+    }
     const host = document.querySelector('.viewport-wrap')
     if (!host || !this.drivetrain) return
 
