@@ -1,5 +1,5 @@
-const BUILD_ID = 'PV2-FIX3'
-const BUILD_TAG = 'pv2-fix3-20260908-0038'
+const BUILD_ID = 'PV2-FIX4'
+const BUILD_TAG = 'pv2-fix4-20260908-0046'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -20,19 +20,20 @@ function showPhysicsError(detail = {}) {
 
     const ru = isRussian()
     const loadFailure = detail.stage === 'rapier-load'
+    const buildStage = detail.buildStage ? ` [${detail.buildStage}]` : ''
     const prefix = loadFailure
       ? (ru ? 'RAPIER: не удалось загрузить движок' : 'RAPIER: engine load failed')
-      : (ru ? 'PHYSICS: ошибка сборки мира' : 'PHYSICS: world build failed')
+      : (ru ? `PHYSICS${buildStage}: ошибка сборки мира` : `PHYSICS${buildStage}: world build failed`)
     const message = `${prefix} · ${shortMessage(detail.message)}`
 
     toast.textContent = message
     toast.classList.add('show')
     if (simState) simState.textContent = loadFailure
       ? (ru ? 'Rapier не загрузился' : 'Rapier failed to load')
-      : (ru ? 'Ошибка Physics v2' : 'Physics v2 build error')
+      : `${ru ? 'Ошибка Physics v2' : 'Physics v2 build error'}${buildStage}`
 
     clearTimeout(window.__bricklabPhysicsErrorToastTimer)
-    window.__bricklabPhysicsErrorToastTimer = setTimeout(() => toast.classList.remove('show'), 9000)
+    window.__bricklabPhysicsErrorToastTimer = setTimeout(() => toast.classList.remove('show'), 12000)
   }, 0)
 }
 
@@ -71,6 +72,7 @@ installBuildStamp()
 window.__bricklabPhysicsDiagnostics = () => ({
   buildId: BUILD_ID,
   buildTag: BUILD_TAG,
+  buildStage: window.__bricklabPhysicsStage ?? null,
   lastError: window.__bricklabPhysicsLastError ?? null,
   rapierSource: window.__bricklabRapierSource ?? null,
 })
