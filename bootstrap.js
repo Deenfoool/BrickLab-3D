@@ -1,6 +1,6 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: MULTI-1 · multi-selection transform.
-const V = 'multi-1-20260908-0054'
+// BUILD: WELD-1 · Physics v2 structural weld fix.
+const V = 'weld-1-20260908-0104'
 
 // Diagnostics must exist before any runtime/app module can fail.
 await import(`./physics-error-ui.js?v=${V}`)
