@@ -29,8 +29,8 @@ function collisionMask(def, selfCollision) {
   let filter = GROUP.WORLD
   if (selfCollision === 'full') filter = ALL
   else if (selfCollision === 'mechanical') {
-    filter |= GROUP.WHEEL | GROUP.MECHANICAL
-    if (membership === GROUP.WHEEL || membership === GROUP.MECHANICAL) filter |= GROUP.STRUCTURE
+    if (membership === GROUP.STRUCTURE) filter |= GROUP.WHEEL | GROUP.MECHANICAL
+    else if (membership === GROUP.WHEEL || membership === GROUP.MECHANICAL) filter |= GROUP.STRUCTURE | GROUP.WHEEL | GROUP.MECHANICAL
   }
   return pack(membership, filter)
 }
