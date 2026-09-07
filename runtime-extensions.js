@@ -1,8 +1,9 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: PV2-FIX4 · cache-busted module graph + cyclic userData guard.
-const V = 'pv2-fix4-20260908-0046'
+// BUILD: MULTI-1 · shared pivot for multi-selection move / rotate.
+const V = 'multi-1-20260908-0054'
 
 await import(`./three-cycle-guard.js?v=${V}`)
+await import(`./multi-transform-patch.js?v=${V}`)
 await import(`./render-quality.js?v=${V}`)
 await import(`./lab-parts.js?v=${V}`)
 await import(`./physical-parts.js?v=${V}`)
