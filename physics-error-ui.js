@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG}`
+  badge.title = `BrickLab production build ${BUILD_TAG} · multi-selection transform enabled`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
