@@ -1,6 +1,6 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: MULTI-1 · shared pivot for multi-selection move / rotate.
-const V = 'multi-1-20260908-0054'
+// BUILD: WELD-1 · automatic stud/tube structural welding for Physics v2.
+const V = 'weld-1-20260908-0104'
 
 await import(`./three-cycle-guard.js?v=${V}`)
 await import(`./multi-transform-patch.js?v=${V}`)
@@ -12,6 +12,7 @@ await import(`./differential-patch.js?v=${V}`)
 await import(`./sensors-patch.js?v=${V}`)
 await import(`./physics-v2.js?v=${V}`)
 await import(`./colliders-v2.js?v=${V}`)
+await import(`./structural-auto-weld-v2.js?v=${V}`)
 await import(`./powertrain-physics-v2.js?v=${V}`)
 await import(`./drivetrain-stress-v2.js?v=${V}`)
 await import(`./surface-v2.js?v=${V}`)
