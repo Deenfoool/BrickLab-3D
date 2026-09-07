@@ -9,7 +9,7 @@ The goal is to assemble brick/Technic-style mechanisms, simulate them, inspect t
 ### Builder
 
 - Three.js viewport with orbit camera, lighting, shadows and grid.
-- About 19 procedural prototype parts including bricks, plates, Technic beams, Axle 3L / 5L / 7L, coupler, gears, wheel, Lab Motor, F/N/R Gearbox, Open Differential, Bearing Block and Suspension Arm.
+- 20+ procedural prototype parts including bricks, plates, Technic beams, Axle 3L / 5L / 7L, coupler, gears, wheel, Lab Motor, F/N/R Gearbox, Open Differential, Bearing Block, Suspension Arm and placeable sensors.
 - Move / rotate gizmos with optional grid snapping and 90° rotation snapping.
 - Mechanical connector metadata for `stud`, `tube`, `pin`, `pin-hole`, `axle`, and `axle-hole`.
 - Automatic compatible connector snapping and axis orientation.
@@ -30,7 +30,7 @@ The goal is to assemble brick/Technic-style mechanisms, simulate them, inspect t
 - `.bricklab` v2 export/import with persisted mechanical connections.
 - Compatibility migration for legacy Lab Motor mount connector IDs.
 
-Scale is intentionally out of the editor for now because arbitrary scaling would break connector spacing and mechanical dimensions.
+Scale is intentionally out of the editor because arbitrary scaling would break connector spacing and mechanical dimensions.
 
 ## Connection graph
 
@@ -94,27 +94,29 @@ So 8T + 24T and 16T + 16T both sit at exactly 2 stud center distance.
 
 The `F/N/R Gearbox` has separate input and output shafts and is not merged into one rigid axle component.
 
-The top bar now exposes:
+The top bar exposes:
 
 - **F** — `+1.0` drive ratio;
 - **N** — drivetrain coupling removed, output free;
 - **R** — `-1.0` reverse ratio.
 
-Changing F/N/R while physics is running restarts the simulation with the new drivetrain graph.
+Changing F/N/R during SIMULATE or any active TEST rebuilds the current physics session with the new transmission state.
 
 A wrench button next to the selector loads `examples/powertrain-bench.bricklab`, a ready-made motor → gearbox → bearing → wheel test fixture. The previous project gets its own backup and can be restored with the same button.
 
 ### Open Differential
 
-The first `Open Differential` prototype has:
+The `Open Differential` has one input and independent left/right half-shaft outputs.
 
-- one input;
-- left and right half-shaft outputs;
-- independent output shafts;
-- prototype 50/50 torque budget split;
-- 0.92 efficiency.
+The physics extension constrains the average half-shaft speed relative to carrier/input speed while leaving left-right RPM difference free, matching the useful open-differential relationship:
 
-This is a useful first vehicle differential, but not yet the exact spider-gear equation for asymmetric wheel speed. See [`docs/POWERTRAIN.md`](docs/POWERTRAIN.md).
+```text
+ω_left + ω_right = 2 × ω_carrier
+```
+
+The prototype currently uses a 50/50 torque budget and 0.92 efficiency. Telemetry exposes left RPM, right RPM and ΔRPM.
+
+See [`docs/POWERTRAIN.md`](docs/POWERTRAIN.md).
 
 ## Suspension
 
@@ -133,47 +135,92 @@ SIMULATE shows approximate arm travel and highlights movement near the joint lim
 
 This is torsion-spring control-arm suspension, not yet a telescoping linear shock. See [`docs/SUSPENSION.md`](docs/SUSPENSION.md).
 
-## Live telemetry
+## Sensors and telemetry
 
-SIMULATE currently reports:
+Placeable lab sensors:
+
+- `RPM Sensor` — reads actual shaft angular velocity from Rapier;
+- `Torque Sensor` — reports the current semantic shaft torque estimate.
+
+Live telemetry reports:
 
 - motor RPM / load / torque / stall;
 - target and actual shaft RPM;
 - shaft torque capacity;
 - transmission ratio;
 - physical gear meshes;
-- F/N/R gearbox state;
-- Open Differential presence;
+- F/N/R state;
+- Open Differential left/right RPM;
 - whole-build speed and acceleration;
 - wheel ground speed and slip;
 - suspension arm travel;
-- drivetrain conflicts.
+- drivetrain conflicts;
+- live RPM + body-speed history graph.
 
-## TEST — Hill Climb
+The telemetry panel also exports **CSV**. Recorded samples include simulation time, scenario, test result state, body speed/acceleration, RPM, motor load, motor torque, Pull Bench force and any installed sensor channels.
 
-The first physics test is **Hill Climb 22°**:
+See [`docs/SENSORS.md`](docs/SENSORS.md).
 
-- visible Three.js ramp;
-- matching Rapier collider;
+## TEST Lab
+
+The TEST selector now has three physical scenarios:
+
+### HILL — Hill Climb 22°
+
+- visible Three.js ramp + matching Rapier collider;
 - finish gate;
 - progress and altitude;
-- vehicle speed / acceleration;
 - drivetrain load;
-- `RUNNING`, `STALLED`, or `PASSED` result;
-- run timer, retry and local best time.
+- `RUNNING`, `STALLED`, or `PASSED`;
+- retry and local **best time**.
+
+### PULL — Pull / Torque Bench
+
+- continuously increasing reverse load on the chassis;
+- finite motor torque and stall determine the result;
+- current force displayed in BrickLab force units (`F`);
+- retry and local **best sustained load**.
+
+### OBST — Obstacle Course
+
+- physical entry threshold;
+- staggered articulation blocks;
+- high cross bump;
+- short two-ramp bridge;
+- finish gate;
+- retry and local **best time**.
+
+This course is intended to expose poor ground clearance, unstable chassis layouts and suspension-travel limitations.
 
 The built-in **Demo** button loads a Starter Hill Climber while preserving the previous build for Restore.
 
 ## GitHub Pages
 
-BrickLab uses a no-build Pages deployment:
+BrickLab uses a no-build Pages deployment.
 
-1. browser-ready HTML/CSS/JS lives in the repository root;
-2. Three.js is loaded as pinned ES modules;
-3. Lucide is loaded as a pinned browser bundle;
-4. Rapier is lazy-loaded only when physics starts;
-5. `.nojekyll` is present;
-6. `.github/workflows/pages.yml` publishes the repository root directly.
+Production runtime now enters through a deterministic module chain:
+
+```text
+index.html
+   ↓
+bootstrap.js
+   ↓
+runtime-extensions.js
+   ├─ lab parts
+   ├─ suspension
+   ├─ differential
+   ├─ sensors
+   ├─ pull test
+   └─ obstacle test
+   ↓
+app.js
+   ↓
+testlab.js + powertrain-ui.js
+```
+
+This guarantees that catalog additions and PhysicsSession extensions are registered before project restore and before the first simulation.
+
+Three.js and Lucide remain pinned browser dependencies; Rapier is lazy-loaded only when physics starts. `.github/workflows/pages.yml` publishes the repository root directly without npm/Vite build requirements.
 
 Expected URL:
 
@@ -220,45 +267,23 @@ Expected URL:
 
 Mouse: left click selects, `Shift+Click` toggles multi-selection, right mouse orbits, wheel zooms.
 
-## Architecture
-
-```text
-UI / Builder
-    ↓
-Part definitions + lab-parts extension
-    ↓
-Connector metadata
-    ↓
-Snap + orientation engine
-    ↓
-Persistent connection graph
-    ↓
-Shaft graph + gears + gearbox + differential
-    ↓
-Finite-torque Rapier physics
-    ↓
-Suspension / RPM / load / speed / slip telemetry
-    ↓
-TEST scenarios
-```
-
-Documentation:
+## Documentation
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/PROJECT_FORMAT.md`](docs/PROJECT_FORMAT.md)
 - [`docs/PHYSICS.md`](docs/PHYSICS.md)
 - [`docs/POWERTRAIN.md`](docs/POWERTRAIN.md)
 - [`docs/SUSPENSION.md`](docs/SUSPENSION.md)
+- [`docs/SENSORS.md`](docs/SENSORS.md)
 
 ## Next
 
-- exact open-differential wheel-speed constraint;
 - selectable multi-ratio gearbox beyond F/N/R;
-- placeable RPM / torque sensors and time-series graphs;
 - linear shock / spring part;
 - contact-aware tyre grip;
 - explicit part mass and collider metadata;
-- Obstacle Course, Pull/Torque Bench and Gearbox Bench challenges;
+- Gearbox Bench / dynamometer challenge;
+- calibrated physical units;
 - curated LDraw geometry adapter.
 
 ## Trademark / LDraw note
