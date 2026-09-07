@@ -4,13 +4,28 @@ import { connectorWorldAxis, connectorWorldPosition } from './snapping.js'
 
 const DEFAULT_STALL_TORQUE = 5.5
 const DEFAULT_GEAR_EFFICIENCY = 0.92
+const TRANSMISSION_MODES = new Set(['forward', 'neutral', 'reverse'])
 
 function endpointObject(connection, side, byId) {
   return byId.get(connection?.[side]?.instanceId) ?? null
 }
 
+function mechanicsFor(object) {
+  return findPart(object?.userData.partId)?.mechanics ?? null
+}
+
+function semanticHousing(object) {
+  const mechanics = mechanicsFor(object)
+  return Boolean(mechanics?.transmission || mechanics?.differential)
+}
+
+export function currentTransmissionMode() {
+  const mode = globalThis.__bricklabTransmissionMode
+  return TRANSMISSION_MODES.has(mode) ? mode : 'forward'
+}
+
 export function isMotorEndpoint(object, connectorId) {
-  const motor = findPart(object?.userData.partId)?.mechanics?.motor
+  const motor = mechanicsFor(object)?.motor
   return Boolean(motor && motor.connectorId === connectorId)
 }
 
@@ -34,12 +49,20 @@ export function motorConnectionInfo(connection, objectsOrMap) {
 }
 
 export function isRigidAxleConnection(connection, objectsOrMap) {
-  return connection?.kind === 'axle' && !motorConnectionInfo(connection, objectsOrMap)
+  if (connection?.kind !== 'axle') return false
+  const byId = objectsOrMap instanceof Map
+    ? objectsOrMap
+    : new Map((objectsOrMap ?? []).map(object => [object.userData.instanceId, object]))
+  const objectA = endpointObject(connection, 'a', byId)
+  const objectB = endpointObject(connection, 'b', byId)
+  if (!objectA || !objectB) return false
+  if (semanticHousing(objectA) || semanticHousing(objectB)) return false
+  return !motorConnectionInfo(connection, byId)
 }
 
 function shaftEligible(object) {
   const definition = findPart(object?.userData.partId)
-  if (!definition || definition.mechanics?.motor) return false
+  if (!definition || definition.mechanics?.motor || definition.mechanics?.transmission || definition.mechanics?.differential) return false
   return definition.connectors?.some(connector => connector.type === 'axle' || connector.type === 'axle-hole') ?? false
 }
 
@@ -164,6 +187,7 @@ export function detectGearMeshes(objects, shaftByPart, options = {}) {
       const efficiency = Math.min(a.efficiency, b.efficiency)
       meshes.push({
         id: `gear:${a.instanceId}:${b.instanceId}`,
+        kind: 'gear',
         a,
         b,
         shaftA: a.shaft.id,
@@ -171,6 +195,7 @@ export function detectGearMeshes(objects, shaftByPart, options = {}) {
         ratioAB: directionSign * (a.teeth / b.teeth),
         ratioBA: directionSign * (b.teeth / a.teeth),
         efficiency,
+        torqueShare: 1,
         centerDistance: radial,
         targetDistance,
         error,
@@ -179,6 +204,143 @@ export function detectGearMeshes(objects, shaftByPart, options = {}) {
   }
 
   return meshes
+}
+
+function connectionAtPort(object, connectorId, connections, byId, shaftByPart) {
+  for (const connection of connections) {
+    let otherId = null
+    if (connection.a.instanceId === object.userData.instanceId && connection.a.connectorId === connectorId) otherId = connection.b.instanceId
+    else if (connection.b.instanceId === object.userData.instanceId && connection.b.connectorId === connectorId) otherId = connection.a.instanceId
+    if (!otherId) continue
+    const otherObject = byId.get(otherId)
+    const shaft = shaftByPart.get(otherId)
+    if (otherObject && shaft) return { connection, object: otherObject, shaft }
+  }
+  return null
+}
+
+function axisSignForPort(housing, connectorId, shaft) {
+  const definition = findPart(housing.userData.partId)
+  const connector = definition?.connectors?.find(item => item.id === connectorId)
+  if (!connector || !shaft) return 1
+  const portAxis = connectorWorldAxis(housing, connector).normalize()
+  return shaft.axisWorld.dot(portAxis) >= 0 ? 1 : -1
+}
+
+function semanticEnd(shaft, object, teeth = 16) {
+  return {
+    instanceId: object.userData.instanceId,
+    object,
+    teeth,
+    shaft,
+  }
+}
+
+function transmissionCouplers(objects, connections, shaftByPart, byId) {
+  const mode = currentTransmissionMode()
+  const couplers = []
+  const transmissions = []
+
+  for (const object of objects) {
+    const definition = findPart(object.userData.partId)
+    const transmission = definition?.mechanics?.transmission
+    if (!transmission) continue
+
+    const input = connectionAtPort(object, transmission.inputConnectorId, connections, byId, shaftByPart)
+    const output = connectionAtPort(object, transmission.outputConnectorId, connections, byId, shaftByPart)
+    const rawRatio = transmission.modes?.[mode] ?? 0
+    const inputSign = input ? axisSignForPort(object, transmission.inputConnectorId, input.shaft) : 1
+    const outputSign = output ? axisSignForPort(object, transmission.outputConnectorId, output.shaft) : 1
+    const ratio = rawRatio * inputSign * outputSign
+
+    transmissions.push({
+      id: object.userData.instanceId,
+      partId: object.userData.partId,
+      object,
+      mode,
+      ratio,
+      inputShaftId: input?.shaft.id ?? null,
+      outputShaftId: output?.shaft.id ?? null,
+      connected: Boolean(input && output),
+    })
+
+    if (!input || !output || input.shaft.id === output.shaft.id || Math.abs(ratio) < 0.0001) continue
+    const efficiency = transmission.efficiency ?? 0.9
+    couplers.push({
+      id: `transmission:${object.userData.instanceId}`,
+      kind: 'transmission',
+      housingId: object.userData.instanceId,
+      mode,
+      a: semanticEnd(input.shaft, input.object),
+      b: semanticEnd(output.shaft, output.object),
+      shaftA: input.shaft.id,
+      shaftB: output.shaft.id,
+      ratioAB: ratio,
+      ratioBA: 1 / ratio,
+      efficiency,
+      torqueShare: 1,
+      error: 0,
+    })
+  }
+
+  return { transmissions, couplers }
+}
+
+function differentialCouplers(objects, connections, shaftByPart, byId) {
+  const couplers = []
+  const differentials = []
+
+  for (const object of objects) {
+    const definition = findPart(object.userData.partId)
+    const differential = definition?.mechanics?.differential
+    if (!differential) continue
+
+    const input = connectionAtPort(object, differential.inputConnectorId, connections, byId, shaftByPart)
+    const left = connectionAtPort(object, differential.leftConnectorId, connections, byId, shaftByPart)
+    const right = connectionAtPort(object, differential.rightConnectorId, connections, byId, shaftByPart)
+    const baseRatio = differential.ratio ?? 1
+    const inputSign = input ? axisSignForPort(object, differential.inputConnectorId, input.shaft) : 1
+    const efficiency = differential.efficiency ?? 0.92
+    const torqueSplit = differential.torqueSplit ?? 0.5
+
+    const result = {
+      id: object.userData.instanceId,
+      partId: object.userData.partId,
+      object,
+      inputShaftId: input?.shaft.id ?? null,
+      leftShaftId: left?.shaft.id ?? null,
+      rightShaftId: right?.shaft.id ?? null,
+      connectedOutputs: Number(Boolean(left)) + Number(Boolean(right)),
+    }
+    differentials.push(result)
+    if (!input) continue
+
+    for (const [side, port, connectorId] of [
+      ['left', left, differential.leftConnectorId],
+      ['right', right, differential.rightConnectorId],
+    ]) {
+      if (!port || port.shaft.id === input.shaft.id) continue
+      const outputSign = axisSignForPort(object, connectorId, port.shaft)
+      const ratio = baseRatio * inputSign * outputSign
+      couplers.push({
+        id: `differential:${object.userData.instanceId}:${side}`,
+        kind: 'differential',
+        housingId: object.userData.instanceId,
+        side,
+        a: semanticEnd(input.shaft, input.object),
+        b: semanticEnd(port.shaft, port.object),
+        shaftA: input.shaft.id,
+        shaftB: port.shaft.id,
+        ratioAB: ratio,
+        ratioBA: 1 / ratio,
+        efficiency,
+        torqueShare: torqueSplit,
+        error: 0,
+      })
+    }
+  }
+
+  return { differentials, couplers }
 }
 
 function motorSeeds(objects, connections, shaftByPart) {
@@ -220,8 +382,15 @@ function motorSeeds(objects, connections, shaftByPart) {
 export function analyzeDrivetrain(objects, connections) {
   for (const object of objects) object.updateWorldMatrix(true, false)
 
-  const { shafts, shaftByPart } = buildShaftGraph(objects, connections)
-  const gearMeshes = detectGearMeshes(objects, shaftByPart)
+  const { shafts, shaftByPart, byId } = buildShaftGraph(objects, connections)
+  const physicalGearMeshes = detectGearMeshes(objects, shaftByPart)
+  const transmissionLayer = transmissionCouplers(objects, connections, shaftByPart, byId)
+  const differentialLayer = differentialCouplers(objects, connections, shaftByPart, byId)
+  const gearMeshes = [
+    ...physicalGearMeshes,
+    ...transmissionLayer.couplers,
+    ...differentialLayer.couplers,
+  ]
   const motors = motorSeeds(objects, connections, shaftByPart)
   const shaftState = new Map(shafts.map(shaft => [shaft.id, {
     shaft,
@@ -237,8 +406,8 @@ export function analyzeDrivetrain(objects, connections) {
 
   const adjacency = new Map(shafts.map(shaft => [shaft.id, []]))
   for (const mesh of gearMeshes) {
-    adjacency.get(mesh.shaftA)?.push({ to: mesh.shaftB, factor: mesh.ratioAB, efficiency: mesh.efficiency, mesh })
-    adjacency.get(mesh.shaftB)?.push({ to: mesh.shaftA, factor: mesh.ratioBA, efficiency: mesh.efficiency, mesh })
+    adjacency.get(mesh.shaftA)?.push({ to: mesh.shaftB, factor: mesh.ratioAB, efficiency: mesh.efficiency, torqueShare: mesh.torqueShare ?? 1, mesh })
+    adjacency.get(mesh.shaftB)?.push({ to: mesh.shaftA, factor: mesh.ratioBA, efficiency: mesh.efficiency, torqueShare: mesh.torqueShare ?? 1, mesh })
   }
 
   const queue = []
@@ -256,12 +425,7 @@ export function analyzeDrivetrain(objects, connections) {
       state.stages = 0
       queue.push(state.shaft.id)
     } else if (Math.abs(state.rpm - motor.rpm) > Math.max(1, Math.abs(motor.rpm) * 0.02)) {
-      conflicts.push({
-        type: 'motor-conflict',
-        shaftId: state.shaft.id,
-        expectedRpm: state.rpm,
-        incomingRpm: motor.rpm,
-      })
+      conflicts.push({ type: 'motor-conflict', shaftId: state.shaft.id, expectedRpm: state.rpm, incomingRpm: motor.rpm })
     }
   }
 
@@ -281,13 +445,13 @@ export function analyzeDrivetrain(objects, connections) {
       const expectedRpm = source.rpm * edge.factor
       const expectedTorque = source.torqueCapacity == null
         ? null
-        : source.torqueCapacity / Math.max(Math.abs(edge.factor), 0.001) * edge.efficiency
+        : source.torqueCapacity / Math.max(Math.abs(edge.factor), 0.001) * edge.efficiency * edge.torqueShare
       const expectedEfficiency = (source.efficiency ?? 1) * edge.efficiency
 
       if (target.rpm == null) {
         target.rpm = expectedRpm
         target.sourceMotorId = source.sourceMotorId
-        target.sourceType = 'gear'
+        target.sourceType = edge.mesh.kind ?? 'gear'
         const motor = motors.find(item => item.id === source.sourceMotorId)
         target.ratioFromMotor = motor?.nominalRpm ? expectedRpm / motor.nominalRpm : null
         target.torqueCapacity = expectedTorque
@@ -296,7 +460,7 @@ export function analyzeDrivetrain(objects, connections) {
         queue.push(target.shaft.id)
       } else if (Math.abs(target.rpm - expectedRpm) > Math.max(1, Math.abs(expectedRpm) * 0.03)) {
         conflicts.push({
-          type: 'gear-loop-conflict',
+          type: `${edge.mesh.kind ?? 'gear'}-loop-conflict`,
           shaftId: target.shaft.id,
           expectedRpm: target.rpm,
           incomingRpm: expectedRpm,
@@ -335,15 +499,21 @@ export function analyzeDrivetrain(objects, connections) {
     shafts: shaftResults,
     shaftByPart,
     gearMeshes,
+    physicalGearMeshes,
+    transmissions: transmissionLayer.transmissions,
+    differentials: differentialLayer.differentials,
     motors,
     conflicts,
     partRpm,
     partTorque,
+    transmissionMode: currentTransmissionMode(),
     stats: {
       shafts: shaftResults.length,
       drivenShafts: shaftResults.filter(shaft => shaft.rpm != null).length,
       motors: motors.length,
-      gearMeshes: gearMeshes.length,
+      gearMeshes: physicalGearMeshes.length,
+      transmissions: transmissionLayer.transmissions.length,
+      differentials: differentialLayer.differentials.length,
       conflicts: conflicts.length,
       maxTorque: Math.max(0, ...shaftResults.map(shaft => shaft.torqueCapacity ?? 0)),
     },
