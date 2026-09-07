@@ -78,9 +78,11 @@ for (const part of PARTS) {
   if (part.mechanics?.suspensionArm) {
     part.mechanics.suspensionArm = {
       ...part.mechanics.suspensionArm,
-      springRate: 8.5,
-      compressionDamping: 1.55,
-      reboundDamping: 1.10,
+      stiffness: 0.12,
+      damping: 0.010,
+      springRate: 0.12,
+      compressionDamping: 0.012,
+      reboundDamping: 0.008,
       preload: 0,
       bumpStop: 0.88,
     }
