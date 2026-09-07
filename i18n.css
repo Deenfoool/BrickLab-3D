@@ -1,0 +1,6 @@
+/* BrickLab RU / EN language switcher */
+.language-switcher{height:34px;display:inline-flex;align-items:center;padding:3px;border:1px solid var(--line);border-radius:7px;background:#171b1f;flex:none}
+.language-switcher button{height:26px;min-width:31px;padding:0 7px;border:0;border-radius:5px;background:transparent;color:#727d86;font-size:9px;font-weight:850;letter-spacing:.08em;cursor:pointer}
+.language-switcher button:hover{color:#d8dee3;background:#20252a}.language-switcher button.active{background:#26362d;color:#c9f4d9;box-shadow:inset 0 0 0 1px #365b46}
+@media(max-width:960px){.language-switcher{height:32px}.language-switcher button{height:24px;min-width:28px;padding:0 5px}}
+@media(max-width:560px){.language-switcher{position:absolute;right:48px;top:50%;transform:translateY(-50%);height:30px}.language-switcher button{height:22px;min-width:27px;font-size:8px}.top-actions{padding-right:76px}}
