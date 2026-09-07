@@ -1,22 +1,22 @@
 // BrickLab production mechanics and rendering extensions.
-// Physics v2 replaces the early prototype world layer and is refined by
-// corrected colliders, bounded powertrain, stress/failure, tyres/surfaces,
-// suspension, telemetry, Dyno, debug vectors, and visual TEST-world decorators.
-import './render-quality.js'
-import './lab-parts.js'
-import './physical-parts.js'
-import './suspension-patch.js'
-import './differential-patch.js'
-import './sensors-patch.js'
-import './physics-v2.js'
-import './colliders-v2.js'
-import './powertrain-physics-v2.js'
-import './drivetrain-stress-v2.js'
-import './surface-v2.js'
-import './suspension-v2.js'
-import './physics-v2-telemetry.js'
-import './dyno-v2.js'
-import './surface-telemetry-v2.js'
-import './physics-debug-v2.js'
-import './test-world-visuals-v2.js'
-import './rapier-loader-v2.js'
+// BUILD: PV2-FIX2 · each extension is cache-busted so GitHub Pages/CDN cannot mix generations.
+const V = 'pv2-fix2-20260907-2133'
+
+await import(`./render-quality.js?v=${V}`)
+await import(`./lab-parts.js?v=${V}`)
+await import(`./physical-parts.js?v=${V}`)
+await import(`./suspension-patch.js?v=${V}`)
+await import(`./differential-patch.js?v=${V}`)
+await import(`./sensors-patch.js?v=${V}`)
+await import(`./physics-v2.js?v=${V}`)
+await import(`./colliders-v2.js?v=${V}`)
+await import(`./powertrain-physics-v2.js?v=${V}`)
+await import(`./drivetrain-stress-v2.js?v=${V}`)
+await import(`./surface-v2.js?v=${V}`)
+await import(`./suspension-v2.js?v=${V}`)
+await import(`./physics-v2-telemetry.js?v=${V}`)
+await import(`./dyno-v2.js?v=${V}`)
+await import(`./surface-telemetry-v2.js?v=${V}`)
+await import(`./physics-debug-v2.js?v=${V}`)
+await import(`./test-world-visuals-v2.js?v=${V}`)
+await import(`./rapier-loader-v2.js?v=${V}`)
