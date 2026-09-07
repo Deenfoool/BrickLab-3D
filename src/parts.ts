@@ -1,9 +1,40 @@
 import * as THREE from 'three'
-import type { PartDefinition } from './types'
+import type { ConnectorDefinition, PartDefinition } from './types'
 
 const STUD = 1
 const BRICK_HEIGHT = 1.2
 const PLATE_HEIGHT = 0.4
+
+function brickConnectors(width: number, depth: number, height: number): ConnectorDefinition[] {
+  const connectors: ConnectorDefinition[] = []
+  for (let x = 0; x < width; x += 1) {
+    for (let z = 0; z < depth; z += 1) {
+      const px = x - (width - 1) / 2
+      const pz = z - (depth - 1) / 2
+      connectors.push({ id: `stud-${x}-${z}`, type: 'stud', position: [px, height, pz], axis: [0, 1, 0] })
+      connectors.push({ id: `tube-${x}-${z}`, type: 'tube', position: [px, 0, pz], axis: [0, -1, 0] })
+    }
+  }
+  return connectors
+}
+
+function beamConnectors(length: number): ConnectorDefinition[] {
+  return Array.from({ length }, (_, i) => ({
+    id: `hole-${i}`,
+    type: 'pin-hole' as const,
+    position: [i - (length - 1) / 2, 0.45, 0] as [number, number, number],
+    axis: [0, 0, 1] as [number, number, number],
+  }))
+}
+
+function axleConnectors(length: number): ConnectorDefinition[] {
+  return [-length / 2, 0, length / 2].map((x, i) => ({
+    id: `axle-${i}`,
+    type: 'axle' as const,
+    position: [x, 0.32, 0] as [number, number, number],
+    axis: [1, 0, 0] as [number, number, number],
+  }))
+}
 
 function material(color: number) {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05 })
@@ -80,11 +111,11 @@ function axle(id: string, length: number, color: number) {
 function pin(id: string, color: number) {
   const group = groupWithUserData(id, color)
   const mat = material(color)
-  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 1.35, 20), mat)
-  core.rotation.z = Math.PI / 2
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 2, 20), mat)
+  core.rotation.x = Math.PI / 2
   core.position.y = 0.28
   const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.16, 20), mat)
-  collar.rotation.z = Math.PI / 2
+  collar.rotation.x = Math.PI / 2
   collar.position.y = 0.28
   group.add(core, collar)
   return group
@@ -146,18 +177,18 @@ function motor(id: string, color: number) {
 }
 
 export const PARTS: PartDefinition[] = [
-  { id: 'brick-2x4', name: 'Brick 2×4', category: 'Bricks', icon: '▦', description: 'Classic 2×4 construction brick.', defaultColor: 0xd7263d, create: c => brick('brick-2x4', 4, 2, BRICK_HEIGHT, c) },
-  { id: 'plate-2x4', name: 'Plate 2×4', category: 'Bricks', icon: '▤', description: 'Low-profile 2×4 plate.', defaultColor: 0xf6c945, create: c => brick('plate-2x4', 4, 2, PLATE_HEIGHT, c) },
-  { id: 'beam-5', name: 'Technic Beam 1×5', category: 'Beams', icon: '•••••', description: 'Short liftarm with five pin holes.', defaultColor: 0xd7263d, create: c => technicBeam('beam-5', 5, c) },
-  { id: 'beam-9', name: 'Technic Beam 1×9', category: 'Beams', icon: '•••••••••', description: 'Medium liftarm with nine pin holes.', defaultColor: 0x2d69c4, create: c => technicBeam('beam-9', 9, c) },
-  { id: 'axle-3', name: 'Axle 3L', category: 'Axles', icon: '━', description: 'Short cross axle.', defaultColor: 0xadb5bd, create: c => axle('axle-3', 3, c) },
-  { id: 'axle-5', name: 'Axle 5L', category: 'Axles', icon: '━━', description: 'Medium cross axle.', defaultColor: 0x2b2d31, create: c => axle('axle-5', 5, c) },
-  { id: 'pin', name: 'Friction Pin', category: 'Axles', icon: '●', description: 'Connector pin for Technic holes.', defaultColor: 0x2b2d31, create: c => pin('pin', c) },
-  { id: 'gear-8', name: 'Gear 8T', category: 'Gears', icon: '⚙', description: 'Small 8-tooth spur gear.', defaultColor: 0xadb5bd, create: c => gear('gear-8', 8, c) },
-  { id: 'gear-16', name: 'Gear 16T', category: 'Gears', icon: '⚙', description: 'Medium 16-tooth spur gear.', defaultColor: 0xd9d9d9, create: c => gear('gear-16', 16, c) },
-  { id: 'gear-24', name: 'Gear 24T', category: 'Gears', icon: '⚙', description: 'Large 24-tooth spur gear.', defaultColor: 0xd9d9d9, create: c => gear('gear-24', 24, c) },
-  { id: 'wheel', name: 'Off-road Wheel', category: 'Wheels', icon: '◉', description: 'Large wheel for vehicle prototypes.', defaultColor: 0xb7bcc3, create: c => wheel('wheel', c) },
-  { id: 'motor', name: 'Lab Motor', category: 'Power', icon: 'M', description: 'Placeholder motor body for drivetrain prototyping.', defaultColor: 0x6f7680, create: c => motor('motor', c) },
+  { id: 'brick-2x4', name: 'Brick 2×4', category: 'Bricks', icon: '▦', description: 'Classic 2×4 construction brick.', defaultColor: 0xd7263d, connectors: brickConnectors(4, 2, BRICK_HEIGHT), create: c => brick('brick-2x4', 4, 2, BRICK_HEIGHT, c) },
+  { id: 'plate-2x4', name: 'Plate 2×4', category: 'Bricks', icon: '▤', description: 'Low-profile 2×4 plate.', defaultColor: 0xf6c945, connectors: brickConnectors(4, 2, PLATE_HEIGHT), create: c => brick('plate-2x4', 4, 2, PLATE_HEIGHT, c) },
+  { id: 'beam-5', name: 'Technic Beam 1×5', category: 'Beams', icon: '•••••', description: 'Short liftarm with five pin holes.', defaultColor: 0xd7263d, connectors: beamConnectors(5), create: c => technicBeam('beam-5', 5, c) },
+  { id: 'beam-9', name: 'Technic Beam 1×9', category: 'Beams', icon: '•••••••••', description: 'Medium liftarm with nine pin holes.', defaultColor: 0x2d69c4, connectors: beamConnectors(9), create: c => technicBeam('beam-9', 9, c) },
+  { id: 'axle-3', name: 'Axle 3L', category: 'Axles', icon: '━', description: 'Short cross axle.', defaultColor: 0xadb5bd, connectors: axleConnectors(3), create: c => axle('axle-3', 3, c) },
+  { id: 'axle-5', name: 'Axle 5L', category: 'Axles', icon: '━━', description: 'Medium cross axle.', defaultColor: 0x2b2d31, connectors: axleConnectors(5), create: c => axle('axle-5', 5, c) },
+  { id: 'pin', name: 'Friction Pin', category: 'Axles', icon: '●', description: 'Connector pin for Technic holes.', defaultColor: 0x2b2d31, connectors: [-1, 0, 1].map((z, i) => ({ id: `pin-${i}`, type: 'pin' as const, position: [0, 0.28, z] as [number, number, number], axis: [0, 0, 1] as [number, number, number] })), create: c => pin('pin', c) },
+  { id: 'gear-8', name: 'Gear 8T', category: 'Gears', icon: '⚙', description: 'Small 8-tooth spur gear.', defaultColor: 0xadb5bd, connectors: [{ id: 'axle-hole', type: 'axle-hole', position: [0, 0.4, 0], axis: [0, 1, 0] }], create: c => gear('gear-8', 8, c) },
+  { id: 'gear-16', name: 'Gear 16T', category: 'Gears', icon: '⚙', description: 'Medium 16-tooth spur gear.', defaultColor: 0xd9d9d9, connectors: [{ id: 'axle-hole', type: 'axle-hole', position: [0, 0.4, 0], axis: [0, 1, 0] }], create: c => gear('gear-16', 16, c) },
+  { id: 'gear-24', name: 'Gear 24T', category: 'Gears', icon: '⚙', description: 'Large 24-tooth spur gear.', defaultColor: 0xd9d9d9, connectors: [{ id: 'axle-hole', type: 'axle-hole', position: [0, 0.4, 0], axis: [0, 1, 0] }], create: c => gear('gear-24', 24, c) },
+  { id: 'wheel', name: 'Off-road Wheel', category: 'Wheels', icon: '◉', description: 'Large wheel for vehicle prototypes.', defaultColor: 0xb7bcc3, connectors: [{ id: 'axle-hole', type: 'axle-hole', position: [0, 1.15, 0], axis: [1, 0, 0] }], create: c => wheel('wheel', c) },
+  { id: 'motor', name: 'Lab Motor', category: 'Power', icon: 'M', description: 'Placeholder motor body for drivetrain prototyping.', defaultColor: 0x6f7680, connectors: [{ id: 'output', type: 'axle', position: [1.75, 0.9, 0], axis: [1, 0, 0] }], create: c => motor('motor', c) },
 ]
 
 export function findPart(id: string) {
