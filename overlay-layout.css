@@ -105,6 +105,7 @@ body.properties-overlay-open .inspector-panel{transform:translateX(0);opacity:1}
   flex:none;
   display:grid;
   place-items:center;
+  margin-left:auto;
   border:0;
   border-radius:6px;
   background:transparent;
@@ -113,8 +114,20 @@ body.properties-overlay-open .inspector-panel{transform:translateX(0);opacity:1}
 }
 .panel-float-close:hover{background:#272d32;color:#fff}
 .panel-float-close svg{width:14px;height:14px}
-.panel-title-main{display:flex;align-items:center;gap:8px;min-width:0}
-.panel-title-actions{display:flex;align-items:center;gap:3px;margin-left:auto}
+
+.overlay-drawer-scrim{
+  position:absolute;
+  inset:56px 0 0;
+  z-index:15;
+  display:none;
+  border:0;
+  padding:0;
+  background:rgba(4,6,8,.46);
+  backdrop-filter:blur(2px);
+  opacity:0;
+  cursor:default;
+}
+.overlay-drawer-scrim.active{display:block;opacity:1}
 
 /* Keep useful scene UI visible beside the overlays when there is enough room. */
 .scene-status,.snap-toolbar,.help,.drivetrain-telemetry{transition:left .22s ease,right .22s ease}
@@ -143,6 +156,7 @@ body.properties-overlay-open .inspector-panel{transform:translateX(0);opacity:1}
     bottom:8px!important;
     width:min(86vw,330px)!important;
     border-radius:11px!important;
+    z-index:21;
   }
   .sidebar.parts-panel{left:8px!important;border-top:1px solid var(--overlay-panel-border)!important;border-right:1px solid var(--overlay-panel-border)!important}
   .sidebar.inspector-panel{right:8px!important;border-left:1px solid var(--overlay-panel-border)!important}
@@ -154,6 +168,8 @@ body.properties-overlay-open .inspector-panel{transform:translateX(0);opacity:1}
   .scene-status{left:8px;bottom:8px;max-width:calc(100% - 16px)}
   .help{display:none!important}
 }
+
+@media(min-width:801px){.overlay-drawer-scrim{display:none!important}}
 
 @media(max-width:560px){
   .top-actions>button:not(#shortcutsBtn):not(#demoProjectBtn){display:none}
