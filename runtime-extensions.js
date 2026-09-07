@@ -1,7 +1,8 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: PV2-FIX3 · each extension is cache-busted so GitHub Pages/CDN cannot mix generations.
-const V = 'pv2-fix3-20260908-0038'
+// BUILD: PV2-FIX4 · cache-busted module graph + cyclic userData guard.
+const V = 'pv2-fix4-20260908-0046'
 
+await import(`./three-cycle-guard.js?v=${V}`)
 await import(`./render-quality.js?v=${V}`)
 await import(`./lab-parts.js?v=${V}`)
 await import(`./physical-parts.js?v=${V}`)
@@ -19,4 +20,5 @@ await import(`./dyno-v2.js?v=${V}`)
 await import(`./surface-telemetry-v2.js?v=${V}`)
 await import(`./physics-debug-v2.js?v=${V}`)
 await import(`./test-world-visuals-v2.js?v=${V}`)
+await import(`./physics-stage-diagnostics.js?v=${V}`)
 await import(`./rapier-loader-v2.js?v=${V}`)
