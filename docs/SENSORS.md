@@ -25,14 +25,41 @@ The reading is shown in BrickLab internal torque units (`T`). It is not yet cali
 
 ## Live history
 
-SIMULATE also shows a small rolling chart with approximately the latest 180 telemetry samples.
+SIMULATE and TEST show a rolling chart with approximately the latest 180 display samples.
 
 Current traces:
 
 - motor/primary-shaft RPM;
 - whole-build body speed.
 
-Telemetry normally refreshes at roughly one sample every six render/physics updates, so the visible time window is intended as a short diagnostic history rather than a precision data-acquisition system.
+Telemetry normally refreshes at roughly one sample every six physics updates. The graph is intentionally a short diagnostic window rather than a precision DAQ display.
+
+## CSV logging
+
+The telemetry panel has a **CSV** export action. BrickLab records a longer in-memory run log while the current physics session is alive.
+
+Current CSV columns include:
+
+- simulation time;
+- scenario ID;
+- TEST status;
+- body speed;
+- body acceleration;
+- primary/motor RPM;
+- motor load %;
+- motor torque in BrickLab `T` units;
+- Pull / Torque Bench load in `F` units when applicable;
+- one channel for each installed RPM Sensor or Torque Sensor.
+
+The file name includes the current scenario and an ISO timestamp.
+
+CSV logging is reset when the physics session is disposed or reset. It is deliberately local-only; no telemetry is uploaded to a server.
+
+## Current limits
+
+- Torque Sensor is a semantic estimate, not a direct constraint-impulse torque measurement.
+- `T`, `F`, and world-speed units are not yet calibrated to SI units.
+- Sensor sample cadence is tied to the current telemetry update interval.
 
 ## Future sensor work
 
@@ -40,9 +67,9 @@ Planned channels include:
 
 - wheel RPM;
 - exact delivered shaft torque from constraint impulses;
-- motor current and electrical power;
-- suspension travel and velocity;
+- motor electrical power;
+- suspension travel velocity;
 - chassis pitch/roll;
 - acceleration vectors;
 - tyre contact load;
-- exportable CSV/test-run traces.
+- run-to-run comparison overlays.
