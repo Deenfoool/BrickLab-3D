@@ -23,7 +23,7 @@ function localBounds(object) {
   const relative = new THREE.Matrix4()
 
   object.traverse(child => {
-    if (!child.isMesh || !child.geometry) return
+    if (!child.isMesh || !child.geometry || child.userData?.physicsIgnore) return
     if (!child.geometry.boundingBox) child.geometry.computeBoundingBox()
     if (!child.geometry.boundingBox) return
 
