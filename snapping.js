@@ -15,13 +15,19 @@ export function connectorWorldPosition(object, connector) {
   return new THREE.Vector3(...connector.position).applyMatrix4(object.matrixWorld)
 }
 
-function connectorWorldAxis(object, connector) {
+export function connectorWorldAxis(object, connector) {
   const quaternion = object.getWorldQuaternion(new THREE.Quaternion())
   return new THREE.Vector3(...connector.axis).normalize().applyQuaternion(quaternion).normalize()
 }
 
+function directionalPair(sourceType, targetType) {
+  return (sourceType === 'stud' && targetType === 'tube') ||
+    (sourceType === 'tube' && targetType === 'stud')
+}
+
 export function findSnapCandidate(selected, objects, options = {}) {
   const maxDistance = typeof options === 'number' ? options : (options.maxDistance ?? 0.72)
+  const minAlignment = typeof options === 'object' ? (options.minAlignment ?? 0) : 0
   const isAvailable = typeof options === 'object' && options.isAvailable
     ? options.isAvailable
     : () => true
@@ -53,9 +59,10 @@ export function findSnapCandidate(selected, objects, options = {}) {
 
         const targetAxis = connectorWorldAxis(object, target)
         const alignment = Math.abs(sourceAxis.dot(targetAxis))
-        if (alignment < 0.8) continue
+        if (alignment < minAlignment) continue
 
-        const score = distance + (1 - alignment) * 0.25
+        const orientationPenalty = (1 - alignment) * 0.32
+        const score = distance + orientationPenalty
         if (score < bestScore) {
           bestScore = score
           best = { source, target, targetObject: object, targetWorld, distance, alignment }
@@ -65,6 +72,34 @@ export function findSnapCandidate(selected, objects, options = {}) {
   }
 
   return best
+}
+
+export function orientForSnap(selected, candidate) {
+  selected.updateWorldMatrix(true, false)
+  candidate.targetObject.updateWorldMatrix(true, false)
+
+  const sourceAxis = connectorWorldAxis(selected, candidate.source)
+  const targetAxis = connectorWorldAxis(candidate.targetObject, candidate.target)
+  const desiredAxis = targetAxis.clone()
+
+  if (directionalPair(candidate.source.type, candidate.target.type)) {
+    desiredAxis.multiplyScalar(-1)
+  } else if (sourceAxis.dot(desiredAxis) < 0) {
+    desiredAxis.multiplyScalar(-1)
+  }
+
+  const alignQuaternion = new THREE.Quaternion().setFromUnitVectors(sourceAxis, desiredAxis)
+  const worldQuaternion = selected.getWorldQuaternion(new THREE.Quaternion())
+  const alignedWorldQuaternion = alignQuaternion.multiply(worldQuaternion)
+
+  if (!selected.parent) {
+    selected.quaternion.copy(alignedWorldQuaternion)
+    return
+  }
+
+  const parentWorldQuaternion = selected.parent.getWorldQuaternion(new THREE.Quaternion())
+  selected.quaternion.copy(parentWorldQuaternion.invert().multiply(alignedWorldQuaternion))
+  selected.updateMatrixWorld(true)
 }
 
 export function applySnap(selected, candidate) {
