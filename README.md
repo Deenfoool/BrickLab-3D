@@ -28,7 +28,7 @@ BrickLab follows the same no-build Pages deployment pattern used by the portfoli
 2. `index.html` loads `app.js` with relative paths.
 3. Three.js is pinned to `0.180.0` and loaded as ES modules through jsDelivr.
 4. `.nojekyll` is included.
-5. `.github/workflows/deploy-pages.yml` uploads the repository root directly with `actions/upload-pages-artifact` — no `npm install` and no Vite build are required for deployment.
+5. `.github/workflows/pages.yml` uploads the repository root directly with `actions/upload-pages-artifact` — no `npm install` and no Vite build are required for deployment.
 
 Expected Pages URL:
 
