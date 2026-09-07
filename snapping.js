@@ -26,6 +26,11 @@ function directionalPair(sourceType, targetType) {
 }
 
 export function findSnapCandidate(selected, objects, options = {}) {
+  // Connector snapping is intentionally suspended while TransformControls owns
+  // a shared multi-selection pivot. Otherwise only the active part would snap
+  // away from the rest of the selection on mouse-up.
+  if (globalThis.__bricklabMultiTransformActive) return null
+
   const maxDistance = typeof options === 'number' ? options : (options.maxDistance ?? 0.72)
   const minAlignment = typeof options === 'object' ? (options.minAlignment ?? 0) : 0
   const isAvailable = typeof options === 'object' && options.isAvailable
@@ -57,7 +62,7 @@ export function findSnapCandidate(selected, objects, options = {}) {
         const distance = sourceWorld.distanceTo(targetWorld)
         if (distance > maxDistance) continue
 
-        const targetAxis = connectorWorldAxis(object, target)
+        const targetAxis = connectorWorldAxis(object, connector)
         const alignment = Math.abs(sourceAxis.dot(targetAxis))
         if (alignment < minAlignment) continue
 
