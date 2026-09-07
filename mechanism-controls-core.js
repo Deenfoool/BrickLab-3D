@@ -195,6 +195,14 @@ function getConfig(id) {
   return object ? clone(ensureConfig(object)) : null
 }
 
+function stageProjectControls(parts) {
+  for (const part of parts ?? []) {
+    if (!part?.instanceId || !part?.control) continue
+    store[part.instanceId] = clone(part.control)
+  }
+  persistStore()
+}
+
 function getRuntime(id) {
   return runtime.get(id) ?? null
 }
@@ -255,8 +263,6 @@ const oldBuild = PhysicsSession.prototype.build
 PhysicsSession.prototype.build = function buildWithMechanismControls(...args) {
   resetRuntimeForObjects(this.objects)
 
-  // The drivetrain analyzer must always create a forward coupler. Per-instance
-  // F/N/R is applied at runtime below, so neutral never requires rebuilding.
   const previousGlobalMode = globalThis.__bricklabTransmissionMode
   globalThis.__bricklabTransmissionMode = 'forward'
   let result
@@ -338,6 +344,7 @@ window.BrickLabControls = {
   getObjects: () => activeObjects(),
   getConfig,
   updateConfig,
+  stageProjectControls,
   getRuntime,
   getRuntimeEntries: () => [...runtime.entries()],
   resetRuntimeForObjects,
