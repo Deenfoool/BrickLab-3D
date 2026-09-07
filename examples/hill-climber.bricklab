@@ -49,25 +49,25 @@
       "id": "demo-mount-0",
       "kind": "fixed",
       "a": { "instanceId": "demo-plate", "connectorId": "stud-1-0", "connectorType": "stud" },
-      "b": { "instanceId": "demo-motor", "connectorId": "mount-0", "connectorType": "tube" }
+      "b": { "instanceId": "demo-motor", "connectorId": "mount-0-0", "connectorType": "tube" }
     },
     {
       "id": "demo-mount-1",
       "kind": "fixed",
       "a": { "instanceId": "demo-plate", "connectorId": "stud-2-0", "connectorType": "stud" },
-      "b": { "instanceId": "demo-motor", "connectorId": "mount-1", "connectorType": "tube" }
+      "b": { "instanceId": "demo-motor", "connectorId": "mount-1-0", "connectorType": "tube" }
     },
     {
       "id": "demo-mount-2",
       "kind": "fixed",
       "a": { "instanceId": "demo-plate", "connectorId": "stud-1-1", "connectorType": "stud" },
-      "b": { "instanceId": "demo-motor", "connectorId": "mount-2", "connectorType": "tube" }
+      "b": { "instanceId": "demo-motor", "connectorId": "mount-0-1", "connectorType": "tube" }
     },
     {
       "id": "demo-mount-3",
       "kind": "fixed",
       "a": { "instanceId": "demo-plate", "connectorId": "stud-2-1", "connectorType": "stud" },
-      "b": { "instanceId": "demo-motor", "connectorId": "mount-3", "connectorType": "tube" }
+      "b": { "instanceId": "demo-motor", "connectorId": "mount-1-1", "connectorType": "tube" }
     },
     {
       "id": "demo-drive",
