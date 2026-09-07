@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { PARTS, findPart } from './parts.js'
-import { applySnap, connectorWorldPosition, findSnapCandidate } from './snapping.js'
+import { applySnap, connectorWorldPosition, findSnapCandidate, orientForSnap } from './snapping.js'
 import {
   connectionsForPart,
   createConnection,
@@ -427,6 +427,7 @@ transform.addEventListener('mouseUp', () => {
   refreshSnap()
 
   if (selected && snapCandidate) {
+    orientForSnap(selected, snapCandidate)
     applySnap(selected, snapCandidate)
     const connection = attachSnapConnection(snapCandidate)
     if (connection) toast(`Connected ${connection.kind}: ${snapCandidate.source.type} → ${snapCandidate.target.type}`)
