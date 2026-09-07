@@ -62,7 +62,7 @@ export function findSnapCandidate(selected, objects, options = {}) {
         const distance = sourceWorld.distanceTo(targetWorld)
         if (distance > maxDistance) continue
 
-        const targetAxis = connectorWorldAxis(object, connector)
+        const targetAxis = connectorWorldAxis(object, target)
         const alignment = Math.abs(sourceAxis.dot(targetAxis))
         if (alignment < minAlignment) continue
 
