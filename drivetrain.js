@@ -2,6 +2,9 @@ import * as THREE from 'three'
 import { findPart } from './parts.js'
 import { connectorWorldAxis, connectorWorldPosition } from './snapping.js'
 
+const DEFAULT_STALL_TORQUE = 5.5
+const DEFAULT_GEAR_EFFICIENCY = 0.92
+
 function endpointObject(connection, side, byId) {
   return byId.get(connection?.[side]?.instanceId) ?? null
 }
@@ -123,7 +126,8 @@ function gearInfo(object, shaftByPart) {
     instanceId: object.userData.instanceId,
     partId: object.userData.partId,
     teeth: gear.teeth,
-    pitchRadius: gear.pitchRadius ?? Math.max(0.45, gear.teeth * 0.055),
+    pitchRadius: gear.pitchRadius ?? gear.teeth / 16,
+    efficiency: gear.efficiency ?? DEFAULT_GEAR_EFFICIENCY,
     center: connectorWorldPosition(object, connector),
     axis: connectorWorldAxis(object, connector).normalize(),
     shaft: shaftByPart.get(object.userData.instanceId) ?? null,
@@ -157,6 +161,7 @@ export function detectGearMeshes(objects, shaftByPart, options = {}) {
 
       const shaftAxisDot = a.shaft.axisWorld.dot(b.shaft.axisWorld)
       const directionSign = shaftAxisDot >= 0 ? -1 : 1
+      const efficiency = Math.min(a.efficiency, b.efficiency)
       meshes.push({
         id: `gear:${a.instanceId}:${b.instanceId}`,
         a,
@@ -165,6 +170,7 @@ export function detectGearMeshes(objects, shaftByPart, options = {}) {
         shaftB: b.shaft.id,
         ratioAB: directionSign * (a.teeth / b.teeth),
         ratioBA: directionSign * (b.teeth / a.teeth),
+        efficiency,
         centerDistance: radial,
         targetDistance,
         error,
@@ -191,7 +197,8 @@ function motorSeeds(objects, connections, shaftByPart) {
 
     const motorAxis = connectorWorldAxis(info.motorObject, motorConnector).normalize()
     const axisSign = motorAxis.dot(drivenShaft.axisWorld) >= 0 ? 1 : -1
-    const rpm = (motor.rpm ?? 120) * (motor.direction ?? 1) * axisSign
+    const nominalRpm = motor.rpm ?? 120
+    const rpm = nominalRpm * (motor.direction ?? 1) * axisSign
 
     motors.push({
       id: info.motorObject.userData.instanceId,
@@ -200,7 +207,10 @@ function motorSeeds(objects, connections, shaftByPart) {
       connectionId: connection.id,
       shaftId: drivenShaft.id,
       rpm,
-      nominalRpm: motor.rpm ?? 120,
+      nominalRpm,
+      stallTorque: motor.stallTorque ?? DEFAULT_STALL_TORQUE,
+      freeCurrent: motor.freeCurrent ?? 0.15,
+      stallCurrent: motor.stallCurrent ?? 2.2,
     })
   }
 
@@ -219,13 +229,16 @@ export function analyzeDrivetrain(objects, connections) {
     sourceMotorId: null,
     sourceType: null,
     ratioFromMotor: null,
+    torqueCapacity: null,
+    efficiency: null,
+    stages: 0,
   }]))
   const conflicts = []
 
   const adjacency = new Map(shafts.map(shaft => [shaft.id, []]))
   for (const mesh of gearMeshes) {
-    adjacency.get(mesh.shaftA)?.push({ to: mesh.shaftB, factor: mesh.ratioAB, mesh })
-    adjacency.get(mesh.shaftB)?.push({ to: mesh.shaftA, factor: mesh.ratioBA, mesh })
+    adjacency.get(mesh.shaftA)?.push({ to: mesh.shaftB, factor: mesh.ratioAB, efficiency: mesh.efficiency, mesh })
+    adjacency.get(mesh.shaftB)?.push({ to: mesh.shaftA, factor: mesh.ratioBA, efficiency: mesh.efficiency, mesh })
   }
 
   const queue = []
@@ -238,6 +251,9 @@ export function analyzeDrivetrain(objects, connections) {
       state.sourceMotorId = motor.id
       state.sourceType = 'motor'
       state.ratioFromMotor = motor.nominalRpm ? motor.rpm / motor.nominalRpm : 1
+      state.torqueCapacity = motor.stallTorque
+      state.efficiency = 1
+      state.stages = 0
       queue.push(state.shaft.id)
     } else if (Math.abs(state.rpm - motor.rpm) > Math.max(1, Math.abs(motor.rpm) * 0.02)) {
       conflicts.push({
@@ -263,6 +279,10 @@ export function analyzeDrivetrain(objects, connections) {
       const target = shaftState.get(edge.to)
       if (!target) continue
       const expectedRpm = source.rpm * edge.factor
+      const expectedTorque = source.torqueCapacity == null
+        ? null
+        : source.torqueCapacity / Math.max(Math.abs(edge.factor), 0.001) * edge.efficiency
+      const expectedEfficiency = (source.efficiency ?? 1) * edge.efficiency
 
       if (target.rpm == null) {
         target.rpm = expectedRpm
@@ -270,6 +290,9 @@ export function analyzeDrivetrain(objects, connections) {
         target.sourceType = 'gear'
         const motor = motors.find(item => item.id === source.sourceMotorId)
         target.ratioFromMotor = motor?.nominalRpm ? expectedRpm / motor.nominalRpm : null
+        target.torqueCapacity = expectedTorque
+        target.efficiency = expectedEfficiency
+        target.stages = source.stages + 1
         queue.push(target.shaft.id)
       } else if (Math.abs(target.rpm - expectedRpm) > Math.max(1, Math.abs(expectedRpm) * 0.03)) {
         conflicts.push({
@@ -293,12 +316,19 @@ export function analyzeDrivetrain(objects, connections) {
       sourceMotorId: state?.sourceMotorId ?? null,
       sourceType: state?.sourceType ?? null,
       ratioFromMotor: state?.ratioFromMotor ?? null,
+      torqueCapacity: state?.torqueCapacity ?? null,
+      efficiency: state?.efficiency ?? null,
+      stages: state?.stages ?? 0,
     }
   })
 
   const partRpm = new Map()
+  const partTorque = new Map()
   for (const shaft of shaftResults) {
-    for (const memberId of shaft.memberIds) partRpm.set(memberId, shaft.rpm)
+    for (const memberId of shaft.memberIds) {
+      partRpm.set(memberId, shaft.rpm)
+      partTorque.set(memberId, shaft.torqueCapacity)
+    }
   }
 
   return {
@@ -308,12 +338,14 @@ export function analyzeDrivetrain(objects, connections) {
     motors,
     conflicts,
     partRpm,
+    partTorque,
     stats: {
       shafts: shaftResults.length,
       drivenShafts: shaftResults.filter(shaft => shaft.rpm != null).length,
       motors: motors.length,
       gearMeshes: gearMeshes.length,
       conflicts: conflicts.length,
+      maxTorque: Math.max(0, ...shaftResults.map(shaft => shaft.torqueCapacity ?? 0)),
     },
   }
 }
