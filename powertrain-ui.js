@@ -110,16 +110,24 @@ function decorateTelemetry() {
 
   const rows = [...gearSection.querySelectorAll('.telemetry-gear')]
   rows.forEach((row, index) => row.classList.toggle('semantic-hidden', index >= physicalMeshCount))
-  gearSection.querySelector('.powertrain-badge')?.remove()
-  if (!gearboxes.length && !differentials.length) return
 
-  const badge = document.createElement('div')
-  badge.className = 'powertrain-badge'
+  let badge = gearSection.querySelector('.powertrain-badge')
+  if (!gearboxes.length && !differentials.length) {
+    badge?.remove()
+    return
+  }
+
   const mode = currentMasterMode()
   const modeLabel = mode === 'forward' ? 'F' : mode === 'neutral' ? 'N' : mode === 'reverse' ? 'R' : 'MIX'
   const modeClass = mode === 'neutral' ? 'neutral' : mode === 'reverse' ? 'reverse' : mode === 'mixed' ? 'mixed' : ''
-  badge.innerHTML = `${gearboxes.length ? `<span>GEARBOX <b class="${modeClass}">${modeLabel}</b>${gearboxes.length > 1 ? ` ×${gearboxes.length}` : ''}</span>` : ''}${differentials.length ? `<span>DIFF <b>OPEN</b>${differentials.length > 1 ? ` ×${differentials.length}` : ''}</span>` : ''}`
-  gearSection.append(badge)
+  const html = `${gearboxes.length ? `<span>GEARBOX <b class="${modeClass}">${modeLabel}</b>${gearboxes.length > 1 ? ` ×${gearboxes.length}` : ''}</span>` : ''}${differentials.length ? `<span>DIFF <b>OPEN</b>${differentials.length > 1 ? ` ×${differentials.length}` : ''}</span>` : ''}`
+
+  if (!badge) {
+    badge = document.createElement('div')
+    badge.className = 'powertrain-badge'
+    gearSection.append(badge)
+  }
+  if (badge.innerHTML !== html) badge.innerHTML = html
 }
 
 installControls()
