@@ -26,6 +26,7 @@ export function connectionKind(typeA, typeB) {
   const types = new Set([typeA, typeB])
   if (types.has('stud') && types.has('tube')) return 'fixed'
   if (types.has('pin') && types.has('pin-hole')) return 'hinge'
+  if (types.has('axle') && types.has('pin-hole')) return 'bearing'
   if (types.has('axle') && types.has('axle-hole')) return 'axle'
   return 'generic'
 }
