@@ -1,26 +1,39 @@
-const HILL_BEST_KEY = 'bricklab.test.hill-climb.best.v1'
-const PULL_BEST_KEY = 'bricklab.test.torque-pull.best.v1'
-const TEST_SCENARIO_KEY = 'bricklab.test.scenario.v1'
 const DEMO_BACKUP_KEY = 'bricklab.demo.backup.v1'
 const PROJECT_KEY = 'bricklab.project.v2'
+const SCENARIO_KEY = 'bricklab.test.scenario.v1'
 
 const SCENARIOS = {
-  'hill-climb': { short: 'HILL', label: 'Hill Climb 22°', status: 'TEST · HILL CLIMB' },
-  'torque-pull': { short: 'PULL', label: 'Pull / Torque Bench', status: 'TEST · TORQUE PULL' },
+  'hill-climb': {
+    id: 'hill-climb',
+    short: 'HILL',
+    title: 'Hill Climb 22°',
+    statusTitle: 'HILL CLIMB',
+    bestKey: 'bricklab.test.hill-climb.best.v1',
+    bestKind: 'time',
+  },
+  'torque-pull': {
+    id: 'torque-pull',
+    short: 'PULL',
+    title: 'Pull / Torque Bench',
+    statusTitle: 'PULL / TORQUE',
+    bestKey: 'bricklab.test.torque-pull.best.v1',
+    bestKind: 'force',
+  },
 }
 
-function readScenario() {
-  const saved = localStorage.getItem(TEST_SCENARIO_KEY)
+function readScenarioId() {
+  const saved = localStorage.getItem(SCENARIO_KEY)
   return SCENARIOS[saved] ? saved : 'hill-climb'
 }
 
-let selectedScenario = readScenario()
+function isTypingTarget(target) {
+  return target instanceof HTMLElement && (/INPUT|TEXTAREA|SELECT/.test(target.tagName) || target.isContentEditable)
+}
 
-// Scale is intentionally out of the editor for now. Capture only the plain S key;
-// Shift+S must continue to reach the connector-snap shortcut in app.js.
+// Scale is intentionally out of the editor for now. Shift+S remains connector snap.
 window.addEventListener('keydown', event => {
   if (event.code !== 'KeyS' || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
-  if (event.target instanceof HTMLElement && (/INPUT|TEXTAREA|SELECT/.test(event.target.tagName) || event.target.isContentEditable)) return
+  if (isTypingTarget(event.target)) return
   event.preventDefault()
   event.stopImmediatePropagation()
 }, true)
@@ -43,10 +56,13 @@ function installTestLab() {
     if (row.textContent?.includes('Scale (reserved)')) row.remove()
   })
 
+  let selectedScenarioId = readScenarioId()
   let runStartedAt = 0
+  let runPeakForce = 0
   let finished = false
   let timerFrame = 0
-  let maxPullForce = 0
+
+  const scenario = () => SCENARIOS[selectedScenarioId]
 
   const readProject = () => {
     try {
@@ -56,17 +72,26 @@ function installTestLab() {
     }
   }
 
-  const readPositiveNumber = key => {
-    const value = Number(localStorage.getItem(key))
+  const readBest = config => {
+    const value = Number(localStorage.getItem(config.bestKey))
     return Number.isFinite(value) && value > 0 ? value : null
+  }
+
+  const saveResult = (config, value) => {
+    if (!Number.isFinite(value) || value <= 0) return readBest(config)
+    const previous = readBest(config)
+    const better = previous == null || (config.bestKind === 'time' ? value < previous : value > previous)
+    if (better) localStorage.setItem(config.bestKey, String(value))
+    return readBest(config) ?? value
   }
 
   const formatTime = seconds => `${seconds.toFixed(2)}s`
   const formatForce = force => `${force.toFixed(1)} F`
-
-  const bestForScenario = scenario => scenario === 'torque-pull'
-    ? readPositiveNumber(PULL_BEST_KEY)
-    : readPositiveNumber(HILL_BEST_KEY)
+  const formatBest = config => {
+    const value = readBest(config)
+    if (value == null) return '—'
+    return config.bestKind === 'time' ? formatTime(value) : formatForce(value)
+  }
 
   const installDemoButton = () => {
     if (document.getElementById('demoProjectBtn')) return
@@ -96,7 +121,7 @@ function installTestLab() {
         if (!response.ok) throw new Error(`Demo HTTP ${response.status}`)
         const demo = await response.json()
         localStorage.setItem(PROJECT_KEY, JSON.stringify(demo))
-        localStorage.setItem(TEST_SCENARIO_KEY, 'hill-climb')
+        localStorage.setItem(SCENARIO_KEY, 'hill-climb')
         location.reload()
       } catch (error) {
         console.error('Could not load BrickLab demo', error)
@@ -104,138 +129,124 @@ function installTestLab() {
     }
 
     topActions.insertBefore(button, shortcutsButton || null)
-    window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } })
   }
 
-  const updateScenarioControl = () => {
-    const control = document.getElementById('testScenarioControl')
-    if (!control) return
-    const config = SCENARIOS[selectedScenario]
-    control.querySelector('[data-test-scenario-label]').textContent = config.short
-    control.title = `TEST scenario: ${config.label}. Click to switch.`
-    control.dataset.scenario = selectedScenario
+  const syncScenarioSelector = () => {
+    document.querySelectorAll('[data-test-scenario]').forEach(button => {
+      button.classList.toggle('active', button.dataset.testScenario === selectedScenarioId)
+    })
   }
 
-  const installScenarioControl = () => {
-    if (document.getElementById('testScenarioControl')) return
-    const button = document.createElement('button')
-    button.id = 'testScenarioControl'
-    button.className = 'test-scenario-control'
-    button.innerHTML = '<i data-lucide="route"></i><span data-test-scenario-label></span><i data-lucide="repeat-2"></i>'
-    button.onclick = () => {
-      selectedScenario = selectedScenario === 'hill-climb' ? 'torque-pull' : 'hill-climb'
-      localStorage.setItem(TEST_SCENARIO_KEY, selectedScenario)
-      updateScenarioControl()
-      if (document.body.dataset.bricklabTest) testButton.click()
-    }
-    modes.after(button)
-    updateScenarioControl()
-    window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } })
+  const installScenarioSelector = () => {
+    if (document.getElementById('testScenarioSelector')) return
+    const selector = document.createElement('div')
+    selector.id = 'testScenarioSelector'
+    selector.className = 'test-scenario-selector'
+    selector.setAttribute('aria-label', 'TEST scenario')
+    selector.innerHTML = Object.values(SCENARIOS).map(item => `
+      <button type="button" data-test-scenario="${item.id}" title="${item.title}">${item.short}</button>
+    `).join('')
+    testButton.insertAdjacentElement('afterend', selector)
+
+    selector.querySelectorAll('[data-test-scenario]').forEach(button => {
+      button.onclick = event => {
+        event.stopPropagation()
+        const next = button.dataset.testScenario
+        if (!SCENARIOS[next] || next === selectedScenarioId) return
+        selectedScenarioId = next
+        localStorage.setItem(SCENARIO_KEY, next)
+        syncScenarioSelector()
+        if (document.body.dataset.bricklabTest) testButton.click()
+      }
+    })
   }
 
   installDemoButton()
-  installScenarioControl()
+  installScenarioSelector()
+  syncScenarioSelector()
+  window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } })
 
-  const markTestUi = scenario => {
+  const markTestUi = () => {
     document.querySelectorAll('.mode').forEach(button => button.classList.remove('active'))
     testButton.classList.add('active')
-    document.body.dataset.bricklabTest = scenario
-    document.body.dataset.bricklabTestLabel = SCENARIOS[scenario]?.short || 'TEST'
+    document.body.dataset.bricklabTest = selectedScenarioId
+    syncScenarioSelector()
   }
 
   const clearTestUi = () => {
     delete document.body.dataset.bricklabTest
-    delete document.body.dataset.bricklabTestLabel
     cancelAnimationFrame(timerFrame)
   }
 
-  const ensureRunUi = scenario => {
+  const ensureRunUi = () => {
     const testPanel = document.querySelector('.telemetry-test')
     if (!testPanel) return null
-    const existing = testPanel.querySelector('.test-run-meta')
-    if (existing) return testPanel
-
-    const best = bestForScenario(scenario)
-    const meta = document.createElement('div')
-    meta.className = 'test-run-meta'
-    meta.dataset.scenario = scenario
-
-    if (scenario === 'torque-pull') {
-      meta.innerHTML = `
-        <span>TIME <b data-test-time>0.00s</b></span>
-        <span>BEST LOAD <b data-test-best>${best == null ? '—' : formatForce(best)}</b></span>
-        <button type="button" data-test-retry><i data-lucide="rotate-ccw"></i><span>Retry</span></button>
-      `
-    } else {
-      meta.innerHTML = `
-        <span>TIME <b data-test-time>0.00s</b></span>
-        <span>BEST TIME <b data-test-best>${best == null ? '—' : formatTime(best)}</b></span>
-        <button type="button" data-test-retry><i data-lucide="rotate-ccw"></i><span>Retry</span></button>
-      `
+    const config = scenario()
+    let meta = testPanel.querySelector('.test-run-meta')
+    if (!meta) {
+      meta = document.createElement('div')
+      meta.className = 'test-run-meta'
+      testPanel.append(meta)
     }
 
-    testPanel.append(meta)
+    if (meta.dataset.scenario === config.id) return testPanel
+    meta.dataset.scenario = config.id
+    const label = config.bestKind === 'time' ? 'TIME' : 'LOAD'
+    const initial = config.bestKind === 'time' ? '0.00s' : '0.0 F'
+    meta.innerHTML = `
+      <span>${label} <b data-test-primary>${initial}</b></span>
+      <span>BEST <b data-test-best>${formatBest(config)}</b></span>
+      <button type="button" data-test-retry><i data-lucide="rotate-ccw"></i><span>Retry</span></button>
+    `
     meta.querySelector('[data-test-retry]').onclick = () => testButton.click()
     window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } })
     return testPanel
   }
 
-  const readCurrentPullForce = panel => {
-    const text = panel?.querySelector('[data-test-altitude]')?.textContent || ''
-    const value = Number.parseFloat(text)
-    return Number.isFinite(value) ? value : 0
-  }
-
-  const finishRun = (scenario, panel, elapsed, statusValue) => {
-    if (finished) return
+  const finishRun = (panel, config, statusValue, elapsed) => {
+    if (finished || !['PASSED', 'STALLED'].includes(statusValue)) return
     finished = true
 
-    if (scenario === 'torque-pull') {
-      const previous = readPositiveNumber(PULL_BEST_KEY)
-      if (previous == null || maxPullForce > previous) localStorage.setItem(PULL_BEST_KEY, String(maxPullForce))
-      const bestEl = panel?.querySelector('[data-test-best]')
-      if (bestEl) bestEl.textContent = formatForce(readPositiveNumber(PULL_BEST_KEY) ?? maxPullForce)
-    } else if (statusValue === 'PASSED') {
-      const previous = readPositiveNumber(HILL_BEST_KEY)
-      if (previous == null || elapsed < previous) localStorage.setItem(HILL_BEST_KEY, String(elapsed))
-      const bestEl = panel?.querySelector('[data-test-best]')
-      if (bestEl) bestEl.textContent = formatTime(readPositiveNumber(HILL_BEST_KEY) ?? elapsed)
+    let result = elapsed
+    if (config.bestKind === 'force') {
+      const currentForce = Number(panel?.dataset.testForce || 0)
+      runPeakForce = Math.max(runPeakForce, Number.isFinite(currentForce) ? currentForce : 0)
+      result = runPeakForce
     }
 
+    const best = saveResult(config, result)
+    const bestEl = panel?.querySelector('[data-test-best]')
+    if (bestEl && best != null) bestEl.textContent = config.bestKind === 'time' ? formatTime(best) : formatForce(best)
     panel?.classList.toggle('run-complete', statusValue === 'PASSED')
     panel?.classList.toggle('run-failed', statusValue === 'STALLED')
   }
 
-  const updateRunTimer = () => {
-    const activeScenario = document.body.dataset.bricklabTest
-    if (!SCENARIOS[activeScenario]) return
-
-    const panel = ensureRunUi(activeScenario)
-    const timeEl = panel?.querySelector('[data-test-time]')
+  const updateRun = () => {
+    if (document.body.dataset.bricklabTest !== selectedScenarioId) return
+    const panel = ensureRunUi()
+    const config = scenario()
+    const primary = panel?.querySelector('[data-test-primary]')
     const statusValue = panel?.dataset.testStatus || 'RUNNING'
     const elapsed = runStartedAt ? (performance.now() - runStartedAt) / 1000 : 0
-    if (timeEl) timeEl.textContent = formatTime(elapsed)
 
-    if (activeScenario === 'torque-pull') {
-      maxPullForce = Math.max(maxPullForce, readCurrentPullForce(panel))
-      const bestEl = panel?.querySelector('[data-test-best]')
-      const storedBest = readPositiveNumber(PULL_BEST_KEY) ?? 0
-      if (bestEl && !finished) bestEl.textContent = formatForce(Math.max(storedBest, maxPullForce))
+    if (config.bestKind === 'time') {
+      if (primary) primary.textContent = formatTime(elapsed)
+    } else {
+      const currentForce = Number(panel?.dataset.testForce || 0)
+      if (Number.isFinite(currentForce)) runPeakForce = Math.max(runPeakForce, currentForce)
+      if (primary) primary.textContent = formatForce(runPeakForce)
     }
 
-    if (!finished && (statusValue === 'PASSED' || statusValue === 'STALLED')) {
-      finishRun(activeScenario, panel, elapsed, statusValue)
-    }
-
-    if (!finished) timerFrame = requestAnimationFrame(updateRunTimer)
+    finishRun(panel, config, statusValue, elapsed)
+    if (!finished) timerFrame = requestAnimationFrame(updateRun)
   }
 
-  const startTimer = () => {
+  const startRun = () => {
     cancelAnimationFrame(timerFrame)
     runStartedAt = performance.now()
+    runPeakForce = 0
     finished = false
-    maxPullForce = 0
-    timerFrame = requestAnimationFrame(updateRunTimer)
+    timerFrame = requestAnimationFrame(updateRun)
   }
 
   const originalBuild = buildButton.onclick
@@ -254,17 +265,16 @@ function installTestLab() {
   }
 
   testButton.onclick = () => {
-    const scenario = selectedScenario
     if (!buildButton.classList.contains('active')) originalBuild?.call(buildButton, new Event('click'))
-    window.__bricklabNextScenario = scenario
+    window.__bricklabNextScenario = selectedScenarioId
     originalSimulate?.call(simulateButton, new Event('click'))
-    markTestUi(scenario)
-    startTimer()
+    markTestUi()
+    startRun()
   }
 
   const observer = new MutationObserver(() => {
-    const activeScenario = document.body.dataset.bricklabTest
-    if (!SCENARIOS[activeScenario]) return
+    if (!document.body.dataset.bricklabTest) return
+    const config = scenario()
 
     if (status.textContent.startsWith('BUILD')) {
       clearTestUi()
@@ -272,10 +282,9 @@ function installTestLab() {
     }
 
     if (status.textContent.startsWith('SIMULATE')) {
-      status.textContent = status.textContent.replace(/^SIMULATE[^·]*/, SCENARIOS[activeScenario].status)
+      status.textContent = status.textContent.replace(/^SIMULATE/, `TEST · ${config.statusTitle}`)
     }
-    markTestUi(activeScenario)
-    ensureRunUi(activeScenario)
+    markTestUi()
   })
   observer.observe(status, { childList: true, characterData: true, subtree: true })
 }
