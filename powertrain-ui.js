@@ -1,9 +1,19 @@
 const MODE_KEY = 'bricklab.transmission.mode.v1'
+const PROJECT_KEY = 'bricklab.project.v2'
 const MODES = ['forward', 'neutral', 'reverse']
 
 function readMode() {
   const saved = localStorage.getItem(MODE_KEY)
   return MODES.includes(saved) ? saved : 'forward'
+}
+
+function readProjectParts() {
+  try {
+    const project = JSON.parse(localStorage.getItem(PROJECT_KEY) || 'null')
+    return Array.isArray(project?.parts) ? project.parts : []
+  } catch {
+    return []
+  }
 }
 
 let mode = readMode()
@@ -18,8 +28,7 @@ function setMode(next, { restart = true } = {}) {
   document.querySelectorAll('[data-transmission-mode]').forEach(button => {
     button.classList.toggle('active', button.dataset.transmissionMode === next)
   })
-  const label = document.querySelector('[data-transmission-label]')
-  if (label) label.textContent = next === 'forward' ? 'F' : next === 'neutral' ? 'N' : 'R'
+  decorateTelemetry()
 
   if (!restart) return
   const inHillClimb = document.body.dataset.bricklabTest === 'hill-climb'
@@ -62,7 +71,48 @@ function installControls() {
   window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } })
 }
 
+function decorateTelemetry() {
+  const panel = document.getElementById('drivetrainTelemetry')
+  if (!panel) return
+
+  const parts = readProjectParts()
+  const gearboxCount = parts.filter(part => part.partId === 'gearbox-fnr').length
+  const differentialCount = parts.filter(part => part.partId === 'open-differential').length
+  const summary = panel.querySelector('.telemetry-summary')
+  const physicalMeshCount = Number(summary?.querySelector('span:nth-child(3) b')?.textContent || 0)
+  const gearSection = [...panel.querySelectorAll('.telemetry-section')]
+    .find(section => section.querySelector('label')?.textContent?.trim() === 'GEARS')
+
+  if (gearSection) {
+    const rows = [...gearSection.querySelectorAll('.telemetry-gear')]
+    rows.forEach((row, index) => row.classList.toggle('semantic-hidden', index >= physicalMeshCount))
+
+    gearSection.querySelector('.powertrain-badge')?.remove()
+    if (gearboxCount || differentialCount) {
+      const badge = document.createElement('div')
+      badge.className = 'powertrain-badge'
+      const modeLabel = mode === 'forward' ? 'F' : mode === 'neutral' ? 'N' : 'R'
+      const modeClass = mode === 'neutral' ? 'neutral' : mode === 'reverse' ? 'reverse' : ''
+      badge.innerHTML = `
+        ${gearboxCount ? `<span>GEARBOX <b class="${modeClass}">${modeLabel}</b>${gearboxCount > 1 ? ` ×${gearboxCount}` : ''}</span>` : ''}
+        ${differentialCount ? `<span>DIFF <b>OPEN</b>${differentialCount > 1 ? ` ×${differentialCount}` : ''}</span>` : ''}
+      `
+      gearSection.append(badge)
+    }
+  }
+}
+
 installControls()
+
+let decorateQueued = false
+new MutationObserver(() => {
+  if (decorateQueued) return
+  decorateQueued = true
+  requestAnimationFrame(() => {
+    decorateQueued = false
+    decorateTelemetry()
+  })
+}).observe(document.body, { childList: true, subtree: true })
 
 window.addEventListener('bricklab:set-transmission', event => {
   setMode(event.detail?.mode)
