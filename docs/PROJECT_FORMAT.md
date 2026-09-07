@@ -21,38 +21,51 @@ BrickLab project files are JSON documents. Format version 2 adds an explicit mec
   "instanceId": "8ec6...",
   "partId": "beam-9",
   "color": 2976196,
+  "groupId": null,
   "position": [0, 0, 0],
   "rotation": [0, 0, 0]
 }
 ```
 
-`instanceId` identifies one placed part. `partId` points to a catalog definition in `parts.js`.
+`instanceId` identifies one placed part. `partId` points to a catalog definition in `parts.js`. `groupId` is an optional editor-only logical group identifier.
 
 ## Connection edge
 
 ```json
 {
   "id": "48d2...",
-  "kind": "hinge",
+  "kind": "bearing",
   "a": {
-    "instanceId": "part-a",
+    "instanceId": "beam-a",
     "connectorId": "hole-2",
     "connectorType": "pin-hole"
   },
   "b": {
-    "instanceId": "part-b",
-    "connectorId": "pin-1",
-    "connectorType": "pin"
+    "instanceId": "axle-b",
+    "connectorId": "axle-1",
+    "connectorType": "axle"
   }
 }
 ```
 
 Current `kind` values:
 
-- `fixed` — stud/tube attachment; intended to merge parts into one rigid physics group.
-- `hinge` — pin/pin-hole attachment; intended to become a revolute joint where appropriate.
-- `axle` — axle/axle-hole attachment; intended for rotational drivetrain propagation and physics constraints.
+- `fixed` — stud/tube attachment; parts belong to the same rigid physics component.
+- `hinge` — pin/pin-hole attachment; a revolute connection.
+- `bearing` — axle through a normal Technic beam hole; keeps the axle located while allowing free rotation.
+- `axle` — keyed axle/axle-hole attachment; transmits rotation and joins parts into the same drivetrain shaft unless one endpoint is a powered motor output.
 - `generic` — fallback for future connector types.
+
+## Drivetrain relationships
+
+Shaft membership and gear meshes are currently derived from part placement and the connection graph at simulation time, so they are not persisted as extra edges yet.
+
+- Rigid `axle` edges form one shaft.
+- A Lab Motor output seeds shaft RPM.
+- Spur gears on separate shafts are recognized automatically when their axes are parallel, their faces are aligned, and their pitch circles are at mesh distance.
+- Gear RPM is propagated from tooth count and rotation direction.
+
+This keeps `.bricklab` files compact while the drivetrain model is still evolving.
 
 ## Validation rules
 
@@ -73,8 +86,8 @@ Old version 1 projects contain only `parts`. They still load; their connection g
 Potential future fields may include:
 
 - connector joint configuration;
-- gear mesh relationships;
-- motor configuration;
+- persisted manual gear-mesh overrides;
+- motor torque curves and controller settings;
 - sensors and telemetry channels;
 - scenario/test configuration;
 - custom parts and embedded metadata.
