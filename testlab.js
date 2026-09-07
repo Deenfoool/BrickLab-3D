@@ -2,6 +2,15 @@ const HILL_BEST_KEY = 'bricklab.test.hill-climb.best.v1'
 const DEMO_BACKUP_KEY = 'bricklab.demo.backup.v1'
 const PROJECT_KEY = 'bricklab.project.v2'
 
+// Scale is intentionally out of the editor for now. Capture only the plain S key;
+// Shift+S must continue to reach the connector-snap shortcut in app.js.
+window.addEventListener('keydown', event => {
+  if (event.code !== 'KeyS' || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return
+  if (event.target instanceof HTMLElement && (/INPUT|TEXTAREA|SELECT/.test(event.target.tagName) || event.target.isContentEditable)) return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+}, true)
+
 function installTestLab() {
   const buildButton = document.querySelector('.mode[data-mode="build"]')
   const simulateButton = document.querySelector('.mode[data-mode="simulate"]')
@@ -13,6 +22,11 @@ function installTestLab() {
     requestAnimationFrame(installTestLab)
     return
   }
+
+  document.getElementById('scaleTool')?.remove()
+  document.querySelectorAll('.shortcut-row').forEach(row => {
+    if (row.textContent?.includes('Scale (reserved)')) row.remove()
+  })
 
   let runStartedAt = 0
   let finished = false
