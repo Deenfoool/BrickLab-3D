@@ -2,15 +2,15 @@
 
 ## Runtime
 
-BrickLab is deployed without a bundler, so physics uses the Rapier 3D compatibility package. It is loaded lazily only when the user enters `SIMULATE`.
+BrickLab is deployed without a bundler, so physics uses the Rapier 3D compatibility package and loads it lazily when a physics session starts.
 
 Current pinned package:
 
 `@dimforge/rapier3d-compat@0.20.0`
 
-This keeps initial BUILD startup lighter and avoids making GitHub Pages depend on an npm build step.
+BUILD therefore stays lightweight and GitHub Pages still does not require an npm build step.
 
-## Current simulation pipeline
+## Simulation pipeline
 
 ```text
 BUILD project state
@@ -22,148 +22,189 @@ rigid-component analysis
       └─ rigid keyed axle groups
       ↓
 Rapier world
-      ├─ ground collider
+      ├─ flat ground
+      ├─ optional test-scenario colliders
       ├─ compound dynamic rigid bodies
-      ├─ wheel / gear specific approximate colliders
-      ├─ hinge + bearing revolute joints
-      └─ powered motor-output revolute joints
+      ├─ wheel / gear approximate colliders
+      └─ hinge / bearing / motor revolute joints
       ↓
 semantic drivetrain analysis
       ├─ shaft graph
-      ├─ automatic spur-gear mesh detection
-      ├─ tooth-count RPM propagation
-      └─ drivetrain conflict detection
+      ├─ spur-gear mesh detection
+      ├─ RPM propagation
+      ├─ torque-capacity propagation
+      └─ conflict detection
+      ↓
+finite motor torque + finite gear coupling torque
       ↓
 world.step()
       ↓
-Three.js object transforms + drivetrain telemetry
+Three.js transforms + live telemetry
 ```
 
-Returning to BUILD restores the pre-simulation snapshot, so physics does not overwrite the saved construction.
+Returning to BUILD restores the pre-simulation snapshot, so simulation never overwrites the saved construction.
 
 ## Connection semantics
 
-BrickLab now separates a keyed axle connection from a bearing:
+- `fixed` — stud/tube; merged into one rigid component.
+- `hinge` — pin/pin-hole; revolute joint.
+- `bearing` — axle through a normal Technic hole; revolute joint, so the shaft can spin inside the chassis.
+- `axle` — axle/axle-hole keyed connection; normally merged into the same rigid shaft.
+- motor-output `axle` — remains a revolute joint between the motor housing and the driven shaft.
 
-- `fixed` — stud/tube connection; members are merged into one compound rigid body.
-- `hinge` — pin/pin-hole connection; translated to a revolute joint.
-- `bearing` — axle through a normal beam hole; translated to a revolute joint so the axle can spin inside the chassis.
-- `axle` — axle/axle-hole keyed connection; normally merged into one rigid shaft because it must transmit rotation.
-- motor-output `axle` connection — remains a revolute joint and receives the Lab Motor velocity target.
-
-This distinction is required for a usable vehicle drivetrain: a wheel and gear must rotate with their axle, while the same axle must remain free to rotate inside a beam bearing.
+This separation is required for vehicles: wheel + axle + gear rotate together, while the axle remains free to rotate in chassis bearings.
 
 ## Rigid components
 
-Before the Rapier world is created, BrickLab builds compound groups from:
+Before Rapier bodies are created, BrickLab merges:
 
-1. all `fixed` graph links;
+1. all `fixed` links;
 2. all non-motor keyed `axle` links.
 
-Every group becomes one Rapier rigid body with multiple colliders. This is more stable than connecting each brick, axle, wheel and gear with a chain of fixed constraints.
+Each resulting component becomes one dynamic Rapier rigid body with multiple colliders. This is considerably more stable than a long chain of fixed constraints.
 
 ## Collider approximation
 
-The current collision shapes are still intentionally simplified:
+Current shapes are intentionally simplified:
 
-- ordinary parts use local bounding-box cuboids;
-- wheels use cylindrical colliders with higher friction;
-- gears use smaller cylinders inside the pitch circle because gear teeth are coupled semantically rather than through tooth-to-tooth collision.
+- ordinary parts → local bounding-box cuboids;
+- wheels → cylinders with increased friction;
+- gears → cylinders smaller than the pitch circle.
 
-The gear collider is deliberately smaller than the visible gear. Otherwise two visually meshed gears would also collide as overlapping cylinders and fight the drivetrain constraint.
+Gear teeth are semantic, not collision-driven. The smaller gear collider avoids a second physical contact constraint fighting the drivetrain coupling.
 
 ## Motor model
 
-`Lab Motor` currently exposes:
+The Lab Motor has a no-load target of 120 RPM. Motor output is no longer an unlimited velocity controller.
 
-```js
-mechanics: {
-  motor: {
-    connectorId: 'output',
-    rpm: 120,
-    direction: 1,
-    damping: 1.0
-  }
-}
+Every physics step BrickLab reads the relative angular velocity of the motor housing and output shaft, then applies a finite torque pair through Rapier `addTorque()`.
+
+The simplified torque-speed curve is:
+
+```text
+available torque = stall torque × |target speed - actual speed| / target speed
 ```
 
-When its output is connected to an axle-hole, the resulting revolute joint uses Rapier motor velocity control.
+The value is clamped from 0 to the configured stall torque. The driven shaft receives the torque and the motor housing receives the equal/opposite reaction torque.
 
-The motor also has four bottom tube mounting points so it can be fixed to a plate/chassis instead of behaving as a free body.
+Default prototype values when a part does not explicitly override them:
 
-Torque limiting is not implemented yet. Current motor behaviour is velocity-target based.
+```text
+no-load speed:   120 RPM
+stall torque:    5.5 BrickLab torque units
+free current:    0.15 A estimated
+stall current:   2.2 A estimated
+```
 
-## Bearings
+**BrickLab torque units are not N·m yet.** The world scale, mass scale and motor constants must be calibrated before the UI can honestly display SI torque.
 
-Technic beam holes now accept either pins or axles:
+A motor is marked `STALL` when it remains close to zero RPM at high calculated load for a sustained interval.
 
-- pin + beam hole → `hinge`;
-- axle + beam hole → `bearing`.
+## Gear torque transfer
 
-This allows a shaft to be mechanically supported by the chassis without locking its rotation.
+Detected gear pairs now transfer finite torque instead of forcing the output body to a target angular velocity with `setAngvel()`.
 
-## Drivetrain analysis
-
-`drivetrain.js` derives a shaft graph from the placed model.
-
-### Shaft grouping
-
-All non-motor `axle ↔ axle-hole` links are unioned into one shaft. An `Axle Coupler` part has two axle-hole endpoints so the powered shaft can be extended from a motor to longer axles, gears and wheels.
-
-### Automatic gear meshing
-
-Two spur gears are considered meshed when:
-
-- they belong to different shafts;
-- their axes are parallel;
-- their faces are close on the axial direction;
-- the center distance is close to the sum of their pitch radii.
-
-For gear A driving gear B:
+For an ideal pair:
 
 ```text
 RPM_B = -RPM_A × teeth_A / teeth_B
+Torque_B ≈ Torque_A × teeth_B / teeth_A × efficiency
 ```
 
-The sign is corrected for opposite shaft-axis orientation.
+Current per-mesh prototype efficiency is approximately 92%.
 
 Example:
 
 ```text
-Motor / Gear 8T: +120 RPM
-        ↓
-Gear 24T:        -40 RPM
+8T → 24T
+speed:  120 → 40 RPM
+moment: 1.0× → about 2.76× after mesh loss
 ```
 
-### Gear coupling preview
+A coupling controller measures the current shaft-speed error and applies limited opposite torques to both shaft bodies. This means drivetrain load can now feed back into actual RPM instead of every driven gear being kinematically forced to its theoretical speed.
 
-Motor-driven shafts are controlled by the actual motorized revolute joint. Shafts driven only through detected gear meshes receive angular-velocity targets before each Rapier step.
+This is still a simplified semantic gear constraint: there is no backlash, tooth elasticity or individual tooth contact.
 
-This is currently a kinematic drivetrain preview, not a full torque-conserving gear constraint. It gives correct target RPM and direction and lets wheels/gears visibly respond, but it does not yet calculate tooth force, backlash, motor stall or torque transfer.
+## Gear pitch
 
-## Telemetry
+The prototype Technic-style gear pitch uses:
 
-SIMULATE now mounts a drivetrain panel showing:
+```text
+pitch radius = teeth / 16 stud
+```
 
-- number of detected motors;
-- driven shaft count;
-- automatic gear-mesh count;
-- target RPM per powered shaft;
-- ratio relative to the motor;
-- tooth-count ratios for detected gear pairs;
-- drivetrain conflicts when multiple paths imply incompatible RPM.
+This keeps common pairs aligned to the BrickLab grid. For example:
 
-## Next physics work
+- 8T + 24T → 2 stud center distance;
+- 16T + 16T → 2 stud center distance.
 
-1. Add torque limits / motor stall behaviour.
-2. Measure actual shaft RPM from Rapier bodies and compare it with target RPM.
-3. Add wheel-ground slip telemetry.
-4. Add differential semantics.
-5. Add gearbox selector / clutch relationships.
-6. Add spring and damper suspension.
-7. Move more collision shapes into explicit per-part collider metadata.
-8. Add deterministic drivetrain test fixtures.
+## Live telemetry
 
-## Current limitation
+SIMULATE now reports:
 
-The semantic gear layer intentionally does not use detailed tooth collision. Real tooth-to-tooth collision would be expensive, unstable at browser simulation rates and unnecessarily dependent on render geometry. BrickLab treats visible teeth as presentation and the drivetrain graph as the authoritative mechanical model.
+- motor actual RPM;
+- motor load %;
+- applied motor torque;
+- estimated current;
+- STALL state;
+- shaft target RPM;
+- shaft actual RPM from Rapier `angvel()`;
+- shaft torque capacity and transmission ratio;
+- detected gear meshes;
+- body speed and acceleration;
+- wheel ground speed;
+- wheel rim speed;
+- wheel slip %;
+- drivetrain conflicts.
+
+The actual shaft RPM is calculated by projecting the body's real angular-velocity vector onto the shaft axis.
+
+## Hill Climb TEST
+
+TEST now reuses the non-destructive physics runtime with a dedicated scenario instead of being only a decorative scene.
+
+Current first scenario:
+
+```text
+Hill Climb 22°
+ramp length: 18 BrickLab units
+ramp width: 8 BrickLab units
+finish gate near the top
+```
+
+The test creates both a visible Three.js ramp and a matching static Rapier collider.
+
+The test panel tracks:
+
+- chassis speed;
+- acceleration;
+- climb progress;
+- gained altitude;
+- drivetrain load;
+- `RUNNING`, `STALLED`, or `PASSED` state.
+
+The default ramp rises along world +Z so a conventional vehicle with X-axis wheel axles naturally faces the course.
+
+## Bearings
+
+Technic beam holes accept both pins and axles:
+
+- pin + hole → `hinge`;
+- axle + hole → `bearing`.
+
+This lets a shaft be supported by the chassis without locking its rotation.
+
+## Remaining physics work
+
+1. Calibrate BrickLab mass/length/torque units and then expose real SI units where defensible.
+2. Add differential semantics.
+3. Add gearbox selector, clutch and neutral relationships.
+4. Add spring/damper suspension.
+5. Add explicit per-part collider/mass metadata.
+6. Add contact-aware tyre grip instead of only inferred slip.
+7. Add deterministic drivetrain and Hill Climb fixtures for regression testing.
+8. Add more test scenarios: torque bench, obstacle course and gearbox bench.
+
+## Design rule
+
+Detailed gear-tooth collision is intentionally not the authoritative mechanical model. Browser simulation would become expensive and unstable, and mechanics would depend on render geometry. BrickLab keeps visible teeth as presentation and uses semantic drivetrain constraints for behaviour.
