@@ -1,5 +1,5 @@
-const BUILD_ID = 'CONTROL-1'
-const BUILD_TAG = 'control-1-20260908-0118'
+const BUILD_ID = 'CATALOG-2'
+const BUILD_TAG = 'catalog-2-20260908-0138'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG} · per-instance mechanism controls enabled`
+  badge.title = `BrickLab production build ${BUILD_TAG} · expanded parts catalog and visual quality v3`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
