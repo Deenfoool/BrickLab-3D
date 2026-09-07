@@ -3,6 +3,14 @@ import type { Object3D } from 'three'
 export type PartCategory = 'Bricks' | 'Beams' | 'Axles' | 'Gears' | 'Wheels' | 'Power'
 export type EditorMode = 'build' | 'simulate' | 'test'
 export type TransformMode = 'translate' | 'rotate'
+export type ConnectorType = 'stud' | 'tube' | 'pin' | 'pin-hole' | 'axle' | 'axle-hole'
+
+export type ConnectorDefinition = {
+  id: string
+  type: ConnectorType
+  position: [number, number, number]
+  axis: [number, number, number]
+}
 
 export type PartDefinition = {
   id: string
@@ -11,6 +19,7 @@ export type PartDefinition = {
   icon: string
   description: string
   defaultColor: number
+  connectors: ConnectorDefinition[]
   create: (color: number) => Object3D
 }
 
