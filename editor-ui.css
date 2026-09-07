@@ -1,0 +1,29 @@
+/* BrickLab 3D — Lucide UI + shortcut layer */
+button svg,.search svg,.empty-icon svg{width:16px;height:16px;flex:none;pointer-events:none}
+.mode{display:flex;align-items:center;gap:7px}.mode svg{width:14px;height:14px}
+.top-actions button,.ghost,.primary,.tool,.state-pill{display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.top-actions button svg,.ghost svg,.primary svg{width:15px;height:15px}
+.icon-btn{width:34px;height:34px;display:grid;place-items:center;border:1px solid var(--line);border-radius:7px;background:#171b1f;color:#8b949d;cursor:pointer;padding:0}
+.icon-btn:hover{background:#20252a;color:#fff}.icon-btn svg{width:17px;height:17px}
+.search svg{width:14px;height:14px}.part-card .plus{display:grid;place-items:center}.part-card .plus svg{width:14px;height:14px}
+.tool kbd,.state-pill kbd,.connection-action kbd{margin-left:2px}
+kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:9px;line-height:1;border:1px solid #343a41;border-bottom-color:#454d56;background:#111417;color:#8f99a4;border-radius:4px;padding:3px 5px;white-space:nowrap;box-shadow:0 1px 0 #050607}
+.tool kbd{color:#777f88;background:#15191c}.tool.active kbd{color:#c9f7da;border-color:#41634e}.tool.reserved{opacity:.58}.tool.reserved:hover{opacity:.85}
+.snap-toolbar{position:absolute;top:62px;left:12px;display:flex;gap:5px;padding:5px;background:rgba(17,20,23,.9);border:1px solid var(--line);border-radius:8px;backdrop-filter:blur(10px);z-index:3}
+.state-pill{border:1px solid #2b3137;background:#171b1f;color:#7d8791;border-radius:6px;padding:6px 8px;font-size:9px;cursor:pointer}
+.state-pill:hover{background:#20252a;color:#cbd2d8}.state-pill.active{border-color:#31523f;background:#18231d;color:#bceccb}.state-pill svg{width:13px;height:13px}.state-pill kbd{font-size:8px;padding:2px 4px}
+.help{display:flex;gap:10px}.help span{white-space:nowrap}.sim-controls .ghost{display:inline-flex;align-items:center;gap:6px}
+.selected-card{min-width:0}.selected-card>div:last-child{min-width:0}.selected-card strong,.selected-card small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.empty-icon{display:grid;place-items:center}.empty-icon svg{width:32px;height:32px}.connection-action{display:flex!important;align-items:center;justify-content:center;gap:6px}.connection-action svg{width:13px;height:13px}.project-box button{display:inline-flex;align-items:center;gap:6px}
+.modal-backdrop{position:fixed;inset:0;z-index:100;background:rgba(5,7,9,.74);backdrop-filter:blur(7px);display:grid;place-items:center;padding:24px}
+.shortcuts-modal{width:min(920px,96vw);max-height:min(760px,92vh);overflow:auto;border:1px solid #31373e;border-radius:14px;background:#13171a;box-shadow:0 24px 80px rgba(0,0,0,.55)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 22px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(19,23,26,.96);backdrop-filter:blur(12px);z-index:2}
+.modal-head small{display:block;color:var(--accent);font-size:8px;letter-spacing:.17em;font-weight:800;margin-bottom:5px}.modal-head h2{font-size:18px;margin:0;font-weight:720;letter-spacing:-.02em}
+.shortcut-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:16px}.shortcut-group{border:1px solid #292f35;border-radius:9px;background:#171b1f;padding:12px}
+.shortcut-group h3{margin:0 0 7px;color:#7d8791;font-size:9px;letter-spacing:.14em;text-transform:uppercase}.shortcut-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:31px;border-top:1px solid #23292e;font-size:10px;color:#aeb6be}.shortcut-row:first-of-type{border-top:0}.shortcut-row kbd{text-align:center;color:#dce1e6;flex:none}
+.modal-foot{border-top:1px solid var(--line);padding:12px 18px;color:#737d86;font-size:9px;text-align:center}
+#mechanicsSection.pulse{animation:mechanicsPulse .75s ease}@keyframes mechanicsPulse{0%,100%{background:transparent}35%{background:rgba(116,230,166,.075)}}
+.tool:focus-visible,.state-pill:focus-visible,.icon-btn:focus-visible,.mode:focus-visible,.ghost:focus-visible,.primary:focus-visible{outline:2px solid rgba(116,230,166,.65);outline-offset:2px}
+@media(max-width:1280px){.viewport-toolbar .tool kbd{display:none}.snap-toolbar .state-pill kbd{display:none}}
+@media(max-width:960px){.top-actions button span{display:none}.top-actions button{width:34px;height:34px;padding:0}.shortcut-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.snap-toolbar{top:52px;left:8px}.state-pill span,.state-pill kbd{display:none}.state-pill{width:30px;height:30px;padding:0}.shortcut-grid{grid-template-columns:1fr;padding:10px}.modal-backdrop{padding:10px}.modal-head{padding:15px}.shortcuts-modal{max-height:96vh}}
