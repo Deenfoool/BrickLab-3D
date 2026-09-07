@@ -45,6 +45,16 @@ function axleConnectors(length) {
   }))
 }
 
+function motorConnectors() {
+  return [
+    { id: 'output', type: 'axle', position: [1.75, 0.9, 0], axis: [1, 0, 0] },
+    { id: 'mount-0', type: 'tube', position: [-0.75, 0, -0.5], axis: [0, -1, 0] },
+    { id: 'mount-1', type: 'tube', position: [0.75, 0, -0.5], axis: [0, -1, 0] },
+    { id: 'mount-2', type: 'tube', position: [-0.75, 0, 0.5], axis: [0, -1, 0] },
+    { id: 'mount-3', type: 'tube', position: [0.75, 0, 0.5], axis: [0, -1, 0] },
+  ]
+}
+
 function addStuds(g, width, depth, y, color) {
   const geo = new THREE.CylinderGeometry(0.3, 0.3, 0.18, 20)
   const mat = material(color)
@@ -94,6 +104,21 @@ function createAxle(id, length, color) {
   return g
 }
 
+function createAxleCoupler(id, color) {
+  const g = group(id, color)
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 1.5, 24), material(color))
+  body.rotation.z = Math.PI / 2
+  body.position.y = 0.38
+  const bore = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.19, 0.19, 1.54, 20),
+    new THREE.MeshStandardMaterial({ color: 0x17191b, roughness: 0.9 }),
+  )
+  bore.rotation.z = Math.PI / 2
+  bore.position.y = 0.38
+  g.add(body, bore)
+  return g
+}
+
 function createPin(id, color) {
   const g = group(id, color)
   const mat = material(color)
@@ -107,14 +132,18 @@ function createPin(id, color) {
   return g
 }
 
+function gearPitchRadius(teeth) {
+  return Math.max(0.45, teeth * 0.055)
+}
+
 function createGear(id, teeth, color) {
   const g = group(id, color)
-  const radius = Math.max(0.65, teeth * 0.045)
+  const radius = gearPitchRadius(teeth)
   const shape = new THREE.Shape()
   const points = teeth * 2
   for (let i = 0; i < points; i++) {
     const angle = i / points * Math.PI * 2
-    const r = i % 2 === 0 ? radius * 1.12 : radius
+    const r = i % 2 === 0 ? radius * 1.12 : radius * 0.92
     const x = Math.cos(angle) * r
     const y = Math.sin(angle) * r
     if (!i) shape.moveTo(x, y); else shape.lineTo(x, y)
@@ -134,7 +163,10 @@ function createGear(id, teeth, color) {
 
 function createWheel(id, color) {
   const g = group(id, color)
-  const tire = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.35, 18, 36), new THREE.MeshStandardMaterial({ color: 0x222426, roughness: 0.95 }))
+  const tire = new THREE.Mesh(
+    new THREE.TorusGeometry(1.05, 0.35, 18, 36),
+    new THREE.MeshStandardMaterial({ color: 0x222426, roughness: 0.95 }),
+  )
   tire.rotation.y = Math.PI / 2
   tire.position.y = 1.15
   const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.48, 32), material(color))
@@ -158,16 +190,40 @@ function createMotor(id, color) {
 export const PARTS = [
   { id: 'brick-2x4', name: 'Brick 2×4', category: 'Bricks', icon: '▦', description: 'Classic 2×4 brick', defaultColor: 0xd7263d, connectors: brickConnectors(4, 2, BRICK_HEIGHT), create: c => createBrick('brick-2x4', 4, 2, BRICK_HEIGHT, c) },
   { id: 'plate-2x4', name: 'Plate 2×4', category: 'Bricks', icon: '▤', description: 'Low-profile 2×4 plate', defaultColor: 0xf6c945, connectors: brickConnectors(4, 2, PLATE_HEIGHT), create: c => createBrick('plate-2x4', 4, 2, PLATE_HEIGHT, c) },
-  { id: 'beam-5', name: 'Technic Beam 1×5', category: 'Beams', icon: '•••••', description: 'Five pin holes', defaultColor: 0xd7263d, connectors: beamConnectors(5), create: c => createBeam('beam-5', 5, c) },
-  { id: 'beam-9', name: 'Technic Beam 1×9', category: 'Beams', icon: '•••••••••', description: 'Nine pin holes', defaultColor: 0x2d69c4, connectors: beamConnectors(9), create: c => createBeam('beam-9', 9, c) },
-  { id: 'axle-3', name: 'Axle 3L', category: 'Axles', icon: '━', description: 'Short cross axle', defaultColor: 0xadb5bd, connectors: axleConnectors(3), create: c => createAxle('axle-3', 3, c) },
-  { id: 'axle-5', name: 'Axle 5L', category: 'Axles', icon: '━━', description: 'Medium cross axle', defaultColor: 0x2b2d31, connectors: axleConnectors(5), create: c => createAxle('axle-5', 5, c) },
+  { id: 'beam-5', name: 'Technic Beam 1×5', category: 'Beams', icon: '•••••', description: 'Five bearing / pin holes', defaultColor: 0xd7263d, connectors: beamConnectors(5), create: c => createBeam('beam-5', 5, c) },
+  { id: 'beam-9', name: 'Technic Beam 1×9', category: 'Beams', icon: '•••••••••', description: 'Nine bearing / pin holes', defaultColor: 0x2d69c4, connectors: beamConnectors(9), create: c => createBeam('beam-9', 9, c) },
+  { id: 'axle-3', name: 'Axle 3L', category: 'Axles', icon: '━', description: 'Short cross axle', defaultColor: 0xadb5bd, mechanics: { shaft: true }, connectors: axleConnectors(3), create: c => createAxle('axle-3', 3, c) },
+  { id: 'axle-5', name: 'Axle 5L', category: 'Axles', icon: '━━', description: 'Medium cross axle', defaultColor: 0x2b2d31, mechanics: { shaft: true }, connectors: axleConnectors(5), create: c => createAxle('axle-5', 5, c) },
+  {
+    id: 'axle-coupler',
+    name: 'Axle Coupler',
+    category: 'Axles',
+    icon: '◫',
+    description: 'Rigid coupler for extending a driven shaft',
+    defaultColor: 0xb7bcc3,
+    mechanics: { shaft: true },
+    connectors: [
+      { id: 'hole-left', type: 'axle-hole', position: [-0.75, 0.38, 0], axis: [1, 0, 0] },
+      { id: 'hole-right', type: 'axle-hole', position: [0.75, 0.38, 0], axis: [1, 0, 0] },
+    ],
+    create: c => createAxleCoupler('axle-coupler', c),
+  },
   { id: 'pin', name: 'Friction Pin', category: 'Axles', icon: '●', description: 'Technic connector pin', defaultColor: 0x2b2d31, connectors: [-1, 0, 1].map((z, i) => ({ id: `pin-${i}`, type: 'pin', position: [0, 0.28, z], axis: [0, 0, 1] })), create: c => createPin('pin', c) },
-  { id: 'gear-8', name: 'Gear 8T', category: 'Gears', icon: '⚙', description: 'Small spur gear', defaultColor: 0xadb5bd, mechanics: { gear: { teeth: 8 } }, connectors: [{ id: 'axle-hole', type: 'axle-hole', position: [0, 0.4, 0], axis: [0, 1, 0] }], create: c => createGear('gear-8', 8, c) },
-  { id: 'gear-16', name: 'Gear 16T', category: 'Gears', icon: '⚙', description: 'Medium spur gear', defaultColor: 0xd9d9d9, mechanics: { gear: { teeth: 16 } }, connectors: [{ id: 'axle-hole', type: 'axle-hole', position: [0, 0.4, 0], axis: [0, 1, 0] }], create: c => createGear('gear-16', 16, c) },
-  { id: 'gear-24', name: 'Gear 24T', category: 'Gears', icon: '⚙', description: 'Large spur gear', defaultColor: 0xd9d9d9, mechanics: { gear: { teeth: 24 } }, connectors: [{ id: 'axle-hole', type: 'axle-hole', position: [0, 0.4, 0], axis: [0, 1, 0] }], create: c => createGear('gear-24', 24, c) },
-  { id: 'wheel', name: 'Off-road Wheel', category: 'Wheels', icon: '◉', description: 'Large prototype wheel', defaultColor: 0xb7bcc3, mechanics: { wheel: { radius: 1.4 } }, connectors: [{ id: 'axle-hole', type: 'axle-hole', position: [0, 1.15, 0], axis: [1, 0, 0] }], create: c => createWheel('wheel', c) },
-  { id: 'motor', name: 'Lab Motor', category: 'Power', icon: 'M', description: '120 RPM drivetrain motor', defaultColor: 0x6f7680, mechanics: { motor: { connectorId: 'output', rpm: 120, direction: 1, damping: 1.0 } }, connectors: [{ id: 'output', type: 'axle', position: [1.75, 0.9, 0], axis: [1, 0, 0] }], create: c => createMotor('motor', c) },
+  { id: 'gear-8', name: 'Gear 8T', category: 'Gears', icon: '⚙', description: 'Small spur gear', defaultColor: 0xadb5bd, mechanics: { gear: { teeth: 8, pitchRadius: gearPitchRadius(8) } }, connectors: [{ id: 'axle-hole', type: 'axle-hole', position: [0, 0.4, 0], axis: [0, 1, 0] }], create: c => createGear('gear-8', 8, c) },
+  { id: 'gear-16', name: 'Gear 16T', category: 'Gears', icon: '⚙', description: 'Medium spur gear', defaultColor: 0xd9d9d9, mechanics: { gear: { teeth: 16, pitchRadius: gearPitchRadius(16) } }, connectors: [{ id: 'axle-hole', type: 'axle-hole', position: [0, 0.4, 0], axis: [0, 1, 0] }], create: c => createGear('gear-16', 16, c) },
+  { id: 'gear-24', name: 'Gear 24T', category: 'Gears', icon: '⚙', description: 'Large spur gear', defaultColor: 0xd9d9d9, mechanics: { gear: { teeth: 24, pitchRadius: gearPitchRadius(24) } }, connectors: [{ id: 'axle-hole', type: 'axle-hole', position: [0, 0.4, 0], axis: [0, 1, 0] }], create: c => createGear('gear-24', 24, c) },
+  { id: 'wheel', name: 'Off-road Wheel', category: 'Wheels', icon: '◉', description: 'Large prototype wheel', defaultColor: 0xb7bcc3, mechanics: { wheel: { radius: 1.4 }, shaft: true }, connectors: [{ id: 'axle-hole', type: 'axle-hole', position: [0, 1.15, 0], axis: [1, 0, 0] }], create: c => createWheel('wheel', c) },
+  {
+    id: 'motor',
+    name: 'Lab Motor',
+    category: 'Power',
+    icon: 'M',
+    description: '120 RPM drivetrain motor with plate mounts',
+    defaultColor: 0x6f7680,
+    mechanics: { motor: { connectorId: 'output', rpm: 120, direction: 1, damping: 1.0 } },
+    connectors: motorConnectors(),
+    create: c => createMotor('motor', c),
+  },
 ]
 
 export const findPart = id => PARTS.find(part => part.id === id)
