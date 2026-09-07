@@ -19,6 +19,14 @@ const SCENARIOS = {
     bestKey: 'bricklab.test.torque-pull.best.v1',
     bestKind: 'force',
   },
+  'obstacle-course': {
+    id: 'obstacle-course',
+    short: 'OBST',
+    title: 'Obstacle Course',
+    statusTitle: 'OBSTACLE COURSE',
+    bestKey: 'bricklab.test.obstacle-course.best.v1',
+    bestKind: 'time',
+  },
 }
 
 function readScenarioId() {
