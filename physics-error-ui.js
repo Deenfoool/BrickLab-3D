@@ -1,5 +1,5 @@
-const BUILD_ID = 'PV2-FIX2'
-const BUILD_TAG = 'pv2-fix2-20260907-2133'
+const BUILD_ID = 'PV2-FIX3'
+const BUILD_TAG = 'pv2-fix3-20260908-0038'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
