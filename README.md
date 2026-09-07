@@ -6,39 +6,46 @@ The long-term goal is to let users assemble brick/Technic-style mechanisms, simu
 
 ## Current MVP
 
-The first interactive builder milestone is now in `main`:
-
 - Three.js 3D viewport with orbit camera, lighting, shadows and grid.
 - Searchable catalog with 12 procedural prototype parts.
 - Bricks, plates, Technic-style beams, axles, pin, gears, wheel and motor placeholder.
-- Click-to-add and click-to-select workflow.
-- Move and rotate gizmos with 0.5-stud translation snap and 90° rotation snap.
-- Mechanical connector metadata on parts.
-- Connector guides rendered on the selected part.
-- Automatic compatible snapping for `stud ↔ tube`, `pin ↔ pin-hole`, and `axle ↔ axle-hole`.
-- Duplicate and delete actions plus keyboard shortcuts.
-- Inspector for position, rotation, connector count and color.
-- Browser autosave using `localStorage`.
-- `.bricklab` project export/import (JSON format).
+- Move / rotate gizmos with grid and 90° rotation snapping.
+- Mechanical connector metadata and compatible connector snapping.
+- Duplicate, delete and keyboard shortcuts.
+- Inspector for transforms, connector count and color.
+- Browser autosave via `localStorage`.
+- `.bricklab` JSON export/import.
 - BUILD / SIMULATE / TEST mode shell.
-- Prototype obstacle course in TEST mode.
-- Responsive UI prepared for GitHub Pages.
+- Prototype test course.
 
-> Geometry is deliberately procedural in this milestone. It lets us validate the editor, connector semantics and project format before replacing visuals with LDraw assets.
+> Geometry is deliberately procedural for the first milestone. The next visual layer will use LDraw while keeping editor and mechanical metadata independent from geometry.
 
-## Run locally
+## GitHub Pages
+
+BrickLab follows the same no-build Pages deployment pattern used by the portfolio repository:
+
+1. The production site is plain browser-ready HTML/CSS/JS in the repository root.
+2. `index.html` loads `app.js` with relative paths.
+3. Three.js is pinned to `0.180.0` and loaded as ES modules through jsDelivr.
+4. `.nojekyll` is included.
+5. `.github/workflows/deploy-pages.yml` uploads the repository root directly with `actions/upload-pages-artifact` — no `npm install` and no Vite build are required for deployment.
+
+Expected Pages URL:
+
+`https://deenfoool.github.io/BrickLab-3D/`
+
+The TypeScript/Vite source under `src/` remains available as development source, but GitHub Pages does not depend on it.
+
+## Local development
+
+For the TypeScript development version:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Production build:
-
-```bash
-npm run build
-npm run preview
-```
+The root static version can also be served by any local static HTTP server. Do not open `index.html` directly through `file://`, because browser ES modules require HTTP(S).
 
 ## Controls
 
@@ -71,9 +78,7 @@ Rapier physics
 Test scenarios + telemetry
 ```
 
-The connector layer is intentionally separate from geometry. A mesh describes appearance; connector metadata describes how a part can interact mechanically.
-
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the planned connection and physics pipeline.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Roadmap
 
@@ -95,8 +100,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the planned connection an
 ### Milestone 4 — drivetrain lab
 - Gear meshing and tooth-count ratios.
 - Differential and gearbox building.
-- RPM / torque sensors.
-- Graph telemetry.
+- RPM / torque sensors and telemetry.
 
 ### Milestone 5 — test worlds
 - Hill climb.
@@ -104,10 +108,6 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the planned connection an
 - Pull / torque bench.
 - Gearbox bench.
 - Build constraints and challenges.
-
-## Static hosting
-
-The project is designed to run entirely in the browser. A GitHub Pages workflow is included in `.github/workflows/deploy-pages.yml`, and Vite uses `/BrickLab-3D/` as its production base path.
 
 ## Trademark / future LDraw note
 
