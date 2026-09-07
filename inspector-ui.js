@@ -56,10 +56,7 @@ function installInspectorSections() {
       window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } })
     }
 
-    heading.addEventListener('click', event => {
-      if (event.target.closest('button') || event.target === heading || event.target.closest('span')) toggle(event)
-    })
-    heading.querySelector('.section-collapse')?.addEventListener('click', toggle)
+    heading.addEventListener('click', toggle)
     apply()
   })
 
