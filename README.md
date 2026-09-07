@@ -50,69 +50,122 @@ The goal is to let users assemble brick/Technic-style mechanisms, simulate them,
 - `.bricklab` JSON export/import using project format v2 with persisted connections.
 - Backward restore support for old v1 local projects.
 
-### Physics and drivetrain
+## Physics and drivetrain
 
 `SIMULATE` is an actual Rapier-backed physics mode:
 
 - Rapier 3D compatibility build is loaded only when simulation starts.
-- Gravity and a ground collider are created in-browser.
-- Fixed brick assemblies and rigid keyed shaft assemblies are merged into compound rigid bodies.
+- Gravity and ground collision run in-browser.
+- Fixed brick assemblies and rigid keyed shafts are merged into compound rigid bodies.
 - `hinge` and `bearing` links become revolute joints.
-- A Lab Motor output becomes a motorized revolute joint and currently targets 120 RPM.
-- The motor has four bottom tube mounting points so it can be fixed to a plate/chassis.
-- Wheel colliders use higher-friction cylinders.
-- Gear colliders are kept inside the pitch circle because tooth interaction is handled semantically.
+- Wheels use higher-friction cylindrical colliders.
+- Gear collision is deliberately kept inside the pitch circle because tooth interaction is semantic.
 - Play / Pause / Reset controls.
 - Simulation is non-destructive: returning to BUILD restores the pre-simulation project state.
+
+### Finite motor torque
+
+The Lab Motor no longer acts like an unlimited velocity controller.
+
+BrickLab now applies finite motor torque through Rapier and reads the actual relative shaft RPM back from physics. The simplified prototype motor curve uses:
+
+```text
+no-load speed: 120 RPM
+stall torque:  5.5 BrickLab torque units
+```
+
+Torque is highest near zero speed and falls as the output approaches its target RPM. Reaction torque is applied back into the motor housing, so a poorly supported or overloaded build can physically react instead of being magically locked in place.
+
+Motor telemetry shows:
+
+- actual RPM;
+- load %;
+- currently applied torque;
+- estimated current;
+- `STALL` state.
+
+BrickLab torque units are intentionally not labelled N·m yet; the world mass/length scale still needs calibration.
 
 ### Drivetrain graph
 
 `drivetrain.js` analyzes the mechanical build before simulation:
 
-- all rigid axle/axle-hole connections are grouped into shafts;
-- Lab Motor connections seed shaft RPM;
-- nearby coplanar spur gears are automatically detected as meshed using their pitch radii;
+- rigid axle/axle-hole connections are grouped into shafts;
+- Lab Motor connections seed the drivetrain;
+- nearby coplanar spur gears are automatically detected as meshed;
 - tooth count determines speed ratio and direction;
 - RPM propagates through multiple gear stages;
+- torque capacity propagates inversely with speed ratio and includes prototype mesh efficiency;
 - incompatible motor / gear loops are reported as drivetrain conflicts.
 
 Example:
 
 ```text
-Motor + 8T gear:  +120 RPM
-        ↓ 8:24
-24T output gear:   -40 RPM
+Motor + 8T:   +120 RPM
+       ↓ 8:24
+24T output:    -40 RPM
 ```
 
-Gear-driven shafts currently receive Rapier angular-velocity targets. This is a practical browser simulation preview, not yet a torque-conserving tooth-force model.
+An 8T → 24T reduction also multiplies available torque by roughly 3× before mesh losses.
 
-### SIMULATE telemetry
+Detected gear pairs now exchange limited physical torque instead of forcing the output rigid body with `setAngvel()`. This allows load on the output to feed back into actual shaft speed.
 
-Entering SIMULATE opens a drivetrain panel with:
+### Gear pitch
 
-- motor count;
+Prototype gear pitch is aligned to the editor grid:
+
+```text
+pitch radius = teeth / 16 stud
+```
+
+So common pairs such as 8T + 24T and 16T + 16T sit at exactly 2 stud center distance.
+
+## Live telemetry
+
+SIMULATE opens a drivetrain panel with:
+
+- motor RPM / load / torque / stall;
 - powered shaft count;
+- target and actual shaft RPM;
+- shaft torque capacity;
+- transmission ratio;
 - detected gear meshes;
-- target shaft RPM;
-- actual shaft RPM measured from the Rapier rigid body's angular velocity;
-- visual warning when actual RPM differs materially from the target;
-- ratio relative to the motor;
-- detected tooth-count ratios;
 - drivetrain conflicts;
-- ground speed for every Off-road Wheel;
-- wheel slip estimated from wheel rim speed versus translational rolling speed.
+- whole-build/chassis speed;
+- acceleration;
+- wheel ground speed;
+- wheel slip estimated from rim speed versus translational rolling speed.
 
-Wheel speed is currently shown in BrickLab world units per second (`u/s`). Slip is a first horizontal-ground estimate intended for vehicle and hill-climb testing; more advanced contact-patch telemetry will come later.
+Wheel speed is currently shown in BrickLab world units per second (`u/s`).
+
+## TEST — Hill Climb
+
+TEST is now a real physics scenario rather than only a decorative course.
+
+The first test is **Hill Climb 22°**:
+
+- visible Three.js ramp;
+- matching static Rapier collider;
+- 18-unit climb;
+- finish gate near the top;
+- body speed and acceleration;
+- progress and altitude;
+- drivetrain load;
+- `RUNNING`, `STALLED`, or `PASSED` result.
+
+The course rises along world +Z, matching the natural forward direction of a vehicle whose wheel axles run along X.
+
+TEST reuses the same non-destructive simulation runtime, so returning to BUILD restores the original construction.
 
 ## GitHub Pages
 
 BrickLab follows the same no-build Pages deployment pattern used by the portfolio repository:
 
-1. The production site is plain browser-ready HTML/CSS/JS in the repository root.
-2. `index.html` loads `app.js` with relative paths.
+1. Production is plain browser-ready HTML/CSS/JS in the repository root.
+2. `index.html` loads `app.js` and `testlab.js` with relative paths.
 3. Three.js is pinned to `0.180.0` and loaded as ES modules through jsDelivr.
 4. Lucide is pinned to `1.42.0` and loaded as a vanilla browser bundle.
-5. Rapier is lazy-loaded only when SIMULATE starts.
+5. Rapier is lazy-loaded only when physics starts.
 6. `.nojekyll` is included.
 7. `.github/workflows/pages.yml` uploads the repository root directly — no `npm install` and no Vite build are required for deployment.
 
@@ -176,13 +229,15 @@ Snap + orientation engine
     ↓
 Persistent connection graph
     ↓
-Shaft graph + automatic gear mesh analysis
+Shaft graph + gear analysis
     ↓
-Rapier physics adapter
+Finite torque drivetrain
     ↓
-Target / actual RPM + wheel-slip telemetry
+Rapier physics
     ↓
-Test scenarios / challenges
+RPM / load / speed / slip telemetry
+    ↓
+TEST scenarios
 ```
 
 See:
@@ -193,52 +248,35 @@ See:
 
 ## Roadmap
 
-### Connection graph
+### Implemented foundation
 
-Implemented:
-- Persistent connections.
-- Exclusive connectors.
-- Automatic connector-axis orientation.
-- Bearings and keyed shaft semantics.
-- Undo / redo.
-
-### Physics
-
-Implemented foundation:
-- Rapier lazy loading.
-- Dynamic compound rigid bodies and ground collision.
-- Revolute hinge / bearing joints.
-- Motorized output shaft.
-- Rigid shaft grouping.
-- Wheel and gear collider specializations.
-- Actual shaft RPM measurement.
-- Wheel ground-speed and slip telemetry.
-- Play / pause / reset.
-- Non-destructive simulation state.
-
-Next:
-- Torque limits and motor stall behaviour.
-- Vehicle/chassis speed and acceleration telemetry.
-- Suspension springs / dampers.
-- More accurate per-part collider metadata.
-
-### Drivetrain lab
-
-Implemented foundation:
-- Shaft graph.
+- Persistent connection graph and connector occupancy.
+- Bearings and keyed shafts.
+- Undo / redo and multi-selection.
+- Rapier compound rigid bodies.
+- Finite motor torque and stall detection.
 - Automatic spur-gear meshing.
-- Tooth-count ratios.
-- Rotation direction propagation.
-- Multi-stage RPM propagation.
-- Drivetrain conflict detection.
-- Target / actual RPM telemetry panel.
-- Wheel-slip preview.
+- Multi-stage RPM and torque propagation.
+- Physical limited gear coupling.
+- Target / actual RPM telemetry.
+- Chassis speed and acceleration.
+- Wheel slip telemetry.
+- Hill Climb TEST.
 
-Next:
-- Torque propagation.
+### Next drivetrain work
+
 - Differential.
-- Clutch and selectable gearbox relationships.
-- RPM / torque sensors and time-series graphs.
+- Clutch / neutral / selectable gearbox relationships.
+- RPM and torque sensors as placeable parts.
+- Time-series graphs.
+
+### Next vehicle physics work
+
+- Suspension springs / dampers.
+- Contact-aware tyre grip.
+- Explicit mass / collider metadata per part.
+- Calibrated physical units.
+- More TEST worlds: obstacle course, pull/torque bench, gearbox bench.
 
 ### Geometry / LDraw track
 
@@ -246,14 +284,6 @@ Next:
 - Small curated packed-part set first, not the entire official library.
 - Proper LDraw attribution/license notice in-app before redistributing library files.
 - Expand the curated catalog after loader, caching and performance are proven.
-
-### Test worlds
-
-- Hill climb.
-- Obstacle course.
-- Pull / torque bench.
-- Gearbox bench.
-- Build constraints and challenges.
 
 ## Trademark / LDraw note
 
