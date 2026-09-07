@@ -1,6 +1,6 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: PV2-FIX4 · cache-busted module graph.
-const V = 'pv2-fix4-20260908-0046'
+// BUILD: MULTI-1 · multi-selection transform.
+const V = 'multi-1-20260908-0054'
 
 // Diagnostics must exist before any runtime/app module can fail.
 await import(`./physics-error-ui.js?v=${V}`)
