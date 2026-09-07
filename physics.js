@@ -8,6 +8,7 @@ import {
 
 const RAPIER_CDN = 'https://cdn.skypack.dev/@dimforge/rapier3d-compat@0.20.0'
 let rapierPromise = null
+const WORLD_UP = new THREE.Vector3(0, 1, 0)
 
 async function loadRapier() {
   if (!rapierPromise) {
@@ -180,6 +181,7 @@ export class PhysicsSession {
     this.drivetrain = null
     this.gearVelocityTargets = []
     this.shaftMonitors = []
+    this.wheelMonitors = []
     this.telemetryTick = 0
   }
 
@@ -206,6 +208,7 @@ export class PhysicsSession {
     this.drivetrain = analyzeDrivetrain(this.objects, this.connections)
     this.buildGearVelocityTargets()
     this.buildShaftMonitors()
+    this.buildWheelMonitors()
     this.mountTelemetry()
   }
 
@@ -380,6 +383,35 @@ export class PhysicsSession {
     }
   }
 
+  buildWheelMonitors() {
+    this.wheelMonitors = []
+    if (!this.drivetrain) return
+
+    let index = 1
+    for (const object of this.objects) {
+      const definition = findPart(object.userData.partId)
+      const wheel = definition?.mechanics?.wheel
+      if (!wheel) continue
+
+      const shaft = this.drivetrain.shaftByPart.get(object.userData.instanceId)
+      const member = this.members.get(object.userData.instanceId)
+      if (!shaft || !member) continue
+
+      const localAxis = shaft.axisWorld
+        .clone()
+        .applyQuaternion(member.component.bodyWorldRotation.clone().invert())
+        .normalize()
+
+      this.wheelMonitors.push({
+        id: `wheel-${index++}`,
+        name: definition.name,
+        body: member.body,
+        localAxis,
+        radius: wheel.radius,
+      })
+    }
+  }
+
   mountTelemetry() {
     document.getElementById('drivetrainTelemetry')?.remove()
     if (!document.querySelector('link[data-bricklab-drivetrain]')) {
@@ -408,6 +440,14 @@ export class PhysicsSession {
       return `<div class="telemetry-gear"><span>${mesh.a.teeth}T</span><i data-lucide="move-right"></i><span>${mesh.b.teeth}T</span><b>${ratio.toFixed(2)}:1</b></div>`
     }).join('')
 
+    const wheelRows = this.wheelMonitors.slice(0, 6).map(wheel => `
+      <div class="telemetry-wheel" data-wheel-id="${wheel.id}">
+        <span>${wheel.name}</span>
+        <b data-wheel-speed>0.00 u/s</b>
+        <small data-wheel-slip>0%</small>
+      </div>
+    `).join('')
+
     panel.innerHTML = `
       <div class="telemetry-head">
         <div><small>DRIVETRAIN</small><strong>Target / Actual RPM</strong></div>
@@ -425,6 +465,10 @@ export class PhysicsSession {
       <div class="telemetry-section">
         <label>GEARS</label>
         ${gearRows || '<div class="telemetry-empty">Place two powered gears at their pitch distance to mesh them automatically.</div>'}
+      </div>
+      <div class="telemetry-section">
+        <label>WHEELS · GROUND SPEED · SLIP</label>
+        ${wheelRows || '<div class="telemetry-empty">Add an Off-road Wheel to measure rolling speed and slip.</div>'}
       </div>
       ${this.drivetrain.conflicts.length ? `<div class="telemetry-warning">${this.drivetrain.conflicts.length} drivetrain conflict${this.drivetrain.conflicts.length === 1 ? '' : 's'} detected</div>` : ''}
     `
@@ -473,6 +517,41 @@ export class PhysicsSession {
       const tolerance = Math.max(5, Math.abs(monitor.targetRpm) * 0.12)
       actual.classList.toggle('off-target', Math.abs(actualRpm - monitor.targetRpm) > tolerance)
       actual.title = `Actual ${actualRpm.toFixed(1)} RPM · target ${monitor.targetRpm.toFixed(1)} RPM`
+    }
+
+    for (const wheel of this.wheelMonitors) {
+      const angularVelocity = wheel.body.angvel()
+      const linearVelocity = wheel.body.linvel()
+      const rotation = wheel.body.rotation()
+      const bodyRotation = new THREE.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w)
+      const worldAxis = wheel.localAxis.clone().applyQuaternion(bodyRotation).normalize()
+      const angular = new THREE.Vector3(angularVelocity.x, angularVelocity.y, angularVelocity.z)
+      const projectedRadians = angular.dot(worldAxis)
+      const rimSpeed = projectedRadians * wheel.radius
+
+      const rollingDirection = worldAxis.clone().cross(WORLD_UP)
+      let groundSpeed = 0
+      if (rollingDirection.lengthSq() > 0.001) {
+        rollingDirection.normalize()
+        groundSpeed = new THREE.Vector3(
+          linearVelocity.x,
+          linearVelocity.y,
+          linearVelocity.z,
+        ).dot(rollingDirection)
+      }
+
+      const referenceSpeed = Math.max(Math.abs(rimSpeed), Math.abs(groundSpeed), 0.25)
+      const slipPercent = Math.min(999, Math.abs(rimSpeed - groundSpeed) / referenceSpeed * 100)
+      const row = document.querySelector(`[data-wheel-id="${wheel.id}"]`)
+      const speed = row?.querySelector('[data-wheel-speed]')
+      const slip = row?.querySelector('[data-wheel-slip]')
+      if (!speed || !slip) continue
+
+      speed.textContent = `${groundSpeed >= 0 ? '+' : ''}${groundSpeed.toFixed(2)} u/s`
+      speed.title = `Ground speed ${groundSpeed.toFixed(2)} units/s · rim speed ${rimSpeed.toFixed(2)} units/s`
+      slip.textContent = `${Math.round(slipPercent)}%`
+      slip.classList.toggle('slipping', slipPercent > 25 && Math.abs(rimSpeed) > 0.5)
+      slip.title = `Wheel slip ${slipPercent.toFixed(1)}%`
     }
   }
 
@@ -532,6 +611,7 @@ export class PhysicsSession {
     this.components = []
     this.gearVelocityTargets = []
     this.shaftMonitors = []
+    this.wheelMonitors = []
   }
 
   get telemetry() {
@@ -556,9 +636,10 @@ export class PhysicsSession {
             rpm: motor.rpm,
             shaftId: motor.shaftId,
           })),
+          wheels: this.wheelMonitors.map(wheel => ({ id: wheel.id, radius: wheel.radius })),
           conflicts: [...this.drivetrain.conflicts],
         }
-      : { shafts: [], gearMeshes: [], motors: [], conflicts: [] }
+      : { shafts: [], gearMeshes: [], motors: [], wheels: [], conflicts: [] }
   }
 
   get stats() {
@@ -584,6 +665,7 @@ export class PhysicsSession {
       gearMeshes: drivetrainStats.gearMeshes,
       drivetrainConflicts: drivetrainStats.conflicts,
       gearVelocityTargets: this.gearVelocityTargets.length,
+      wheels: this.wheelMonitors.length,
     }
   }
 }
