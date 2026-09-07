@@ -100,8 +100,13 @@ PhysicsSession.prototype.updateTelemetryReadings = function updateTorqueBenchTel
   const result = previousTelemetryUpdate.apply(this, args)
   if (this.scenario !== 'torque-pull' || !this.scenarioData) return result
 
+  const test = document.querySelector('.telemetry-test')
   const altitude = document.querySelector('[data-test-altitude]')
   const percent = document.querySelector('[data-test-percent]')
+  if (test) {
+    test.dataset.testForce = this.scenarioData.currentForce.toFixed(4)
+    test.dataset.testMaxForce = this.scenarioData.maxForce.toFixed(4)
+  }
   if (altitude) altitude.textContent = `${this.scenarioData.currentForce.toFixed(1)} F`
   if (percent) percent.textContent = `${Math.round((this.chassisMonitor?.progress ?? 0) * 100)}% load`
   return result
