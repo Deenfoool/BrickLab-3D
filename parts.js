@@ -48,10 +48,10 @@ function axleConnectors(length) {
 function motorConnectors() {
   return [
     { id: 'output', type: 'axle', position: [1.75, 0.9, 0], axis: [1, 0, 0] },
-    { id: 'mount-0', type: 'tube', position: [-0.75, 0, -0.5], axis: [0, -1, 0] },
-    { id: 'mount-1', type: 'tube', position: [0.75, 0, -0.5], axis: [0, -1, 0] },
-    { id: 'mount-2', type: 'tube', position: [-0.75, 0, 0.5], axis: [0, -1, 0] },
-    { id: 'mount-3', type: 'tube', position: [0.75, 0, 0.5], axis: [0, -1, 0] },
+    { id: 'mount-0', type: 'tube', position: [-0.5, 0, -0.5], axis: [0, -1, 0] },
+    { id: 'mount-1', type: 'tube', position: [0.5, 0, -0.5], axis: [0, -1, 0] },
+    { id: 'mount-2', type: 'tube', position: [-0.5, 0, 0.5], axis: [0, -1, 0] },
+    { id: 'mount-3', type: 'tube', position: [0.5, 0, 0.5], axis: [0, -1, 0] },
   ]
 }
 
@@ -73,6 +73,44 @@ function createBrick(id, width, depth, height, color) {
   body.position.y = height / 2
   g.add(body)
   addStuds(g, width, depth, height + 0.09, color)
+  return g
+}
+
+function technicBrickConnectors(length) {
+  const connectors = []
+  for (let i = 0; i < length; i += 1) {
+    const x = i - (length - 1) / 2
+    connectors.push({ id: `stud-${i}`, type: 'stud', position: [x, BRICK_HEIGHT, 0], axis: [0, 1, 0] })
+    connectors.push({ id: `tube-${i}`, type: 'tube', position: [x, 0, 0], axis: [0, -1, 0] })
+  }
+  for (let i = 0; i < length - 1; i += 1) {
+    connectors.push({
+      id: `side-hole-${i}`,
+      type: 'pin-hole',
+      position: [i - (length - 2) / 2, BRICK_HEIGHT / 2, 0],
+      axis: [0, 0, 1],
+    })
+  }
+  return connectors
+}
+
+function createTechnicBrick(id, length, color) {
+  const g = group(id, color)
+  const body = new THREE.Mesh(new THREE.BoxGeometry(length - 0.08, BRICK_HEIGHT, 0.92), material(color))
+  body.position.y = BRICK_HEIGHT / 2
+  g.add(body)
+  addStuds(g, length, 1, BRICK_HEIGHT + 0.09, color)
+
+  const holeGeo = new THREE.TorusGeometry(0.22, 0.085, 12, 20)
+  const holeMat = new THREE.MeshStandardMaterial({ color: 0x17191b, roughness: 0.9 })
+  for (let i = 0; i < length - 1; i += 1) {
+    const x = i - (length - 2) / 2
+    const front = new THREE.Mesh(holeGeo, holeMat)
+    front.position.set(x, BRICK_HEIGHT / 2, 0.47)
+    const back = front.clone()
+    back.position.z = -0.47
+    g.add(front, back)
+  }
   return g
 }
 
@@ -190,6 +228,7 @@ function createMotor(id, color) {
 export const PARTS = [
   { id: 'brick-2x4', name: 'Brick 2×4', category: 'Bricks', icon: '▦', description: 'Classic 2×4 brick', defaultColor: 0xd7263d, connectors: brickConnectors(4, 2, BRICK_HEIGHT), create: c => createBrick('brick-2x4', 4, 2, BRICK_HEIGHT, c) },
   { id: 'plate-2x4', name: 'Plate 2×4', category: 'Bricks', icon: '▤', description: 'Low-profile 2×4 plate', defaultColor: 0xf6c945, connectors: brickConnectors(4, 2, PLATE_HEIGHT), create: c => createBrick('plate-2x4', 4, 2, PLATE_HEIGHT, c) },
+  { id: 'technic-brick-1x6', name: 'Technic Brick 1×6', category: 'Beams', icon: '▥', description: 'Studded chassis brick with five side bearing holes', defaultColor: 0x2d69c4, connectors: technicBrickConnectors(6), create: c => createTechnicBrick('technic-brick-1x6', 6, c) },
   { id: 'beam-5', name: 'Technic Beam 1×5', category: 'Beams', icon: '•••••', description: 'Five bearing / pin holes', defaultColor: 0xd7263d, connectors: beamConnectors(5), create: c => createBeam('beam-5', 5, c) },
   { id: 'beam-9', name: 'Technic Beam 1×9', category: 'Beams', icon: '•••••••••', description: 'Nine bearing / pin holes', defaultColor: 0x2d69c4, connectors: beamConnectors(9), create: c => createBeam('beam-9', 9, c) },
   { id: 'axle-3', name: 'Axle 3L', category: 'Axles', icon: '━', description: 'Short cross axle', defaultColor: 0xadb5bd, mechanics: { shaft: true }, connectors: axleConnectors(3), create: c => createAxle('axle-3', 3, c) },
