@@ -1,0 +1,46 @@
+{
+  "version": 2,
+  "name": "FNR Powertrain Bench",
+  "savedAt": "2026-09-07T15:10:00.000Z",
+  "parts": [
+    { "instanceId": "bench-plate-motor", "partId": "plate-2x4", "color": 16238917, "groupId": null, "position": [0, 0, 0], "rotation": [0, 0, 0] },
+    { "instanceId": "bench-motor", "partId": "motor", "color": 7304832, "groupId": null, "position": [0, 0.4, 0], "rotation": [0, 0, 0] },
+    { "instanceId": "bench-plate-bearing-in", "partId": "plate-2x4", "color": 16238917, "groupId": null, "position": [3.75, 0, 0], "rotation": [0, 0, 0] },
+    { "instanceId": "bench-bearing-in", "partId": "bearing-block", "color": 5857900, "groupId": null, "position": [3.75, 0.4, 0], "rotation": [0, 0, 0] },
+    { "instanceId": "bench-axle-in", "partId": "axle-5", "color": 11382189, "groupId": null, "position": [3.75, 0.96, 0], "rotation": [0, 0, 0] },
+    { "instanceId": "bench-plate-gearbox", "partId": "plate-2x4", "color": 16238917, "groupId": null, "position": [7.4, 0, 0], "rotation": [0, 0, 0] },
+    { "instanceId": "bench-gearbox", "partId": "gearbox-fnr", "color": 5857900, "groupId": null, "position": [7.4, 0.4, 0], "rotation": [0, 0, 0] },
+    { "instanceId": "bench-plate-bearing-out", "partId": "plate-2x4", "color": 16238917, "groupId": null, "position": [11.05, 0, 0], "rotation": [0, 0, 0] },
+    { "instanceId": "bench-bearing-out", "partId": "bearing-block", "color": 5857900, "groupId": null, "position": [11.05, 0.4, 0], "rotation": [0, 0, 0] },
+    { "instanceId": "bench-axle-out", "partId": "axle-5", "color": 11382189, "groupId": null, "position": [11.05, 0.96, 0], "rotation": [0, 0, 0] },
+    { "instanceId": "bench-wheel", "partId": "wheel", "color": 12041411, "groupId": null, "position": [13.05, 0.15, 0], "rotation": [0, 0, 0] }
+  ],
+  "connections": [
+    { "id": "bench-motor-m0", "kind": "fixed", "a": { "instanceId": "bench-plate-motor", "connectorId": "stud-1-0", "connectorType": "stud" }, "b": { "instanceId": "bench-motor", "connectorId": "mount-0-0", "connectorType": "tube" } },
+    { "id": "bench-motor-m1", "kind": "fixed", "a": { "instanceId": "bench-plate-motor", "connectorId": "stud-2-0", "connectorType": "stud" }, "b": { "instanceId": "bench-motor", "connectorId": "mount-1-0", "connectorType": "tube" } },
+    { "id": "bench-motor-m2", "kind": "fixed", "a": { "instanceId": "bench-plate-motor", "connectorId": "stud-1-1", "connectorType": "stud" }, "b": { "instanceId": "bench-motor", "connectorId": "mount-0-1", "connectorType": "tube" } },
+    { "id": "bench-motor-m3", "kind": "fixed", "a": { "instanceId": "bench-plate-motor", "connectorId": "stud-2-1", "connectorType": "stud" }, "b": { "instanceId": "bench-motor", "connectorId": "mount-1-1", "connectorType": "tube" } },
+
+    { "id": "bench-bearing-in-m0", "kind": "fixed", "a": { "instanceId": "bench-plate-bearing-in", "connectorId": "stud-1-0", "connectorType": "stud" }, "b": { "instanceId": "bench-bearing-in", "connectorId": "mount-0-0", "connectorType": "tube" } },
+    { "id": "bench-bearing-in-m1", "kind": "fixed", "a": { "instanceId": "bench-plate-bearing-in", "connectorId": "stud-2-0", "connectorType": "stud" }, "b": { "instanceId": "bench-bearing-in", "connectorId": "mount-1-0", "connectorType": "tube" } },
+    { "id": "bench-bearing-in-m2", "kind": "fixed", "a": { "instanceId": "bench-plate-bearing-in", "connectorId": "stud-1-1", "connectorType": "stud" }, "b": { "instanceId": "bench-bearing-in", "connectorId": "mount-0-1", "connectorType": "tube" } },
+    { "id": "bench-bearing-in-m3", "kind": "fixed", "a": { "instanceId": "bench-plate-bearing-in", "connectorId": "stud-2-1", "connectorType": "stud" }, "b": { "instanceId": "bench-bearing-in", "connectorId": "mount-1-1", "connectorType": "tube" } },
+
+    { "id": "bench-gearbox-m0", "kind": "fixed", "a": { "instanceId": "bench-plate-gearbox", "connectorId": "stud-1-0", "connectorType": "stud" }, "b": { "instanceId": "bench-gearbox", "connectorId": "mount-0-0", "connectorType": "tube" } },
+    { "id": "bench-gearbox-m1", "kind": "fixed", "a": { "instanceId": "bench-plate-gearbox", "connectorId": "stud-2-0", "connectorType": "stud" }, "b": { "instanceId": "bench-gearbox", "connectorId": "mount-1-0", "connectorType": "tube" } },
+    { "id": "bench-gearbox-m2", "kind": "fixed", "a": { "instanceId": "bench-plate-gearbox", "connectorId": "stud-1-1", "connectorType": "stud" }, "b": { "instanceId": "bench-gearbox", "connectorId": "mount-0-1", "connectorType": "tube" } },
+    { "id": "bench-gearbox-m3", "kind": "fixed", "a": { "instanceId": "bench-plate-gearbox", "connectorId": "stud-2-1", "connectorType": "stud" }, "b": { "instanceId": "bench-gearbox", "connectorId": "mount-1-1", "connectorType": "tube" } },
+
+    { "id": "bench-bearing-out-m0", "kind": "fixed", "a": { "instanceId": "bench-plate-bearing-out", "connectorId": "stud-1-0", "connectorType": "stud" }, "b": { "instanceId": "bench-bearing-out", "connectorId": "mount-0-0", "connectorType": "tube" } },
+    { "id": "bench-bearing-out-m1", "kind": "fixed", "a": { "instanceId": "bench-plate-bearing-out", "connectorId": "stud-2-0", "connectorType": "stud" }, "b": { "instanceId": "bench-bearing-out", "connectorId": "mount-1-0", "connectorType": "tube" } },
+    { "id": "bench-bearing-out-m2", "kind": "fixed", "a": { "instanceId": "bench-plate-bearing-out", "connectorId": "stud-1-1", "connectorType": "stud" }, "b": { "instanceId": "bench-bearing-out", "connectorId": "mount-0-1", "connectorType": "tube" } },
+    { "id": "bench-bearing-out-m3", "kind": "fixed", "a": { "instanceId": "bench-plate-bearing-out", "connectorId": "stud-2-1", "connectorType": "stud" }, "b": { "instanceId": "bench-bearing-out", "connectorId": "mount-1-1", "connectorType": "tube" } },
+
+    { "id": "bench-drive-motor", "kind": "axle", "a": { "instanceId": "bench-motor", "connectorId": "output", "connectorType": "axle" }, "b": { "instanceId": "bench-axle-in", "connectorId": "axle-0", "connectorType": "axle" } },
+    { "id": "bench-bearing-in-link", "kind": "bearing", "a": { "instanceId": "bench-axle-in", "connectorId": "axle-2", "connectorType": "axle" }, "b": { "instanceId": "bench-bearing-in", "connectorId": "bearing", "connectorType": "pin-hole" } },
+    { "id": "bench-gearbox-input", "kind": "axle", "a": { "instanceId": "bench-axle-in", "connectorId": "axle-4", "connectorType": "axle" }, "b": { "instanceId": "bench-gearbox", "connectorId": "input", "connectorType": "axle-hole" } },
+    { "id": "bench-gearbox-output", "kind": "axle", "a": { "instanceId": "bench-gearbox", "connectorId": "output", "connectorType": "axle-hole" }, "b": { "instanceId": "bench-axle-out", "connectorId": "axle-0", "connectorType": "axle" } },
+    { "id": "bench-bearing-out-link", "kind": "bearing", "a": { "instanceId": "bench-axle-out", "connectorId": "axle-2", "connectorType": "axle" }, "b": { "instanceId": "bench-bearing-out", "connectorId": "bearing", "connectorType": "pin-hole" } },
+    { "id": "bench-wheel-link", "kind": "axle", "a": { "instanceId": "bench-axle-out", "connectorId": "axle-4", "connectorType": "axle" }, "b": { "instanceId": "bench-wheel", "connectorId": "axle-hole", "connectorType": "axle-hole" } }
+  ]
+}
