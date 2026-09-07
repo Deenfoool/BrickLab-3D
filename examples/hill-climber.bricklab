@@ -1,0 +1,91 @@
+{
+  "version": 2,
+  "name": "Starter Hill Climber",
+  "savedAt": "2026-09-07T14:50:00.000Z",
+  "parts": [
+    {
+      "instanceId": "demo-plate",
+      "partId": "plate-2x4",
+      "color": 16238917,
+      "groupId": "demo-chassis",
+      "position": [-1.75, 0.1, 0],
+      "rotation": [0, 0, 0]
+    },
+    {
+      "instanceId": "demo-motor",
+      "partId": "motor",
+      "color": 7304832,
+      "groupId": "demo-chassis",
+      "position": [-1.75, 0.5, 0],
+      "rotation": [0, 0, 0]
+    },
+    {
+      "instanceId": "demo-axle",
+      "partId": "axle-7",
+      "color": 11382189,
+      "groupId": null,
+      "position": [0, 1.08, 0],
+      "rotation": [0, 0, 0]
+    },
+    {
+      "instanceId": "demo-wheel-left",
+      "partId": "wheel",
+      "color": 12041411,
+      "groupId": null,
+      "position": [-3, 0.25, 0],
+      "rotation": [0, 0, 0]
+    },
+    {
+      "instanceId": "demo-wheel-right",
+      "partId": "wheel",
+      "color": 12041411,
+      "groupId": null,
+      "position": [3, 0.25, 0],
+      "rotation": [0, 0, 0]
+    }
+  ],
+  "connections": [
+    {
+      "id": "demo-mount-0",
+      "kind": "fixed",
+      "a": { "instanceId": "demo-plate", "connectorId": "stud-1-0", "connectorType": "stud" },
+      "b": { "instanceId": "demo-motor", "connectorId": "mount-0", "connectorType": "tube" }
+    },
+    {
+      "id": "demo-mount-1",
+      "kind": "fixed",
+      "a": { "instanceId": "demo-plate", "connectorId": "stud-2-0", "connectorType": "stud" },
+      "b": { "instanceId": "demo-motor", "connectorId": "mount-1", "connectorType": "tube" }
+    },
+    {
+      "id": "demo-mount-2",
+      "kind": "fixed",
+      "a": { "instanceId": "demo-plate", "connectorId": "stud-1-1", "connectorType": "stud" },
+      "b": { "instanceId": "demo-motor", "connectorId": "mount-2", "connectorType": "tube" }
+    },
+    {
+      "id": "demo-mount-3",
+      "kind": "fixed",
+      "a": { "instanceId": "demo-plate", "connectorId": "stud-2-1", "connectorType": "stud" },
+      "b": { "instanceId": "demo-motor", "connectorId": "mount-3", "connectorType": "tube" }
+    },
+    {
+      "id": "demo-drive",
+      "kind": "axle",
+      "a": { "instanceId": "demo-motor", "connectorId": "output", "connectorType": "axle" },
+      "b": { "instanceId": "demo-axle", "connectorId": "axle-3", "connectorType": "axle" }
+    },
+    {
+      "id": "demo-wheel-link-left",
+      "kind": "axle",
+      "a": { "instanceId": "demo-axle", "connectorId": "axle-0", "connectorType": "axle" },
+      "b": { "instanceId": "demo-wheel-left", "connectorId": "axle-hole", "connectorType": "axle-hole" }
+    },
+    {
+      "id": "demo-wheel-link-right",
+      "kind": "axle",
+      "a": { "instanceId": "demo-axle", "connectorId": "axle-6", "connectorType": "axle" },
+      "b": { "instanceId": "demo-wheel-right", "connectorId": "axle-hole", "connectorType": "axle-hole" }
+    }
+  ]
+}
