@@ -3,6 +3,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { PARTS, findPart } from './parts.js'
 import { applySnap, connectorWorldPosition, findSnapCandidate } from './snapping.js'
+import {
+  connectionsForPart,
+  createConnection,
+  isEndpointOccupied,
+  removeConnectionsForPart,
+} from './connections.js'
 
 const $ = selector => document.querySelector(selector)
 const app = $('#app')
@@ -21,9 +27,18 @@ app.innerHTML = `
   </aside>
   <main class="viewport-wrap">
     <div id="viewport" class="viewport"></div>
-    <div class="viewport-toolbar"><button id="moveTool" class="tool active">↔ <span>Move</span></button><button id="rotateTool" class="tool">↻ <span>Rotate</span></button><span class="divider"></span><button id="duplicateBtn" class="tool">⧉ <span>Duplicate</span></button><button id="deleteBtn" class="tool danger">⌫ <span>Delete</span></button></div>
-    <div class="scene-status"><span class="dot"></span><span id="statusText">BUILD MODE · Connector snap enabled</span></div>
-    <div class="help">LMB select · RMB orbit · Wheel zoom · W move · E rotate · Del remove</div><div id="toast" class="toast"></div>
+    <div class="viewport-toolbar">
+      <button id="moveTool" class="tool active">↔ <span>Move</span></button>
+      <button id="rotateTool" class="tool">↻ <span>Rotate</span></button>
+      <span class="divider"></span>
+      <button id="undoBtn" class="tool" title="Undo (Ctrl+Z)">↶ <span>Undo</span></button>
+      <button id="redoBtn" class="tool" title="Redo (Ctrl+Shift+Z)">↷ <span>Redo</span></button>
+      <span class="divider"></span>
+      <button id="duplicateBtn" class="tool">⧉ <span>Duplicate</span></button>
+      <button id="deleteBtn" class="tool danger">⌫ <span>Delete</span></button>
+    </div>
+    <div class="scene-status"><span class="dot"></span><span id="statusText">BUILD MODE · Connector graph enabled</span></div>
+    <div class="help">LMB select · RMB orbit · Wheel zoom · W move · E rotate · Ctrl+Z undo · Del remove</div><div id="toast" class="toast"></div>
   </main>
   <aside class="sidebar inspector-panel">
     <div class="panel-title">PROPERTIES</div>
@@ -33,9 +48,15 @@ app.innerHTML = `
       <section><h3>TRANSFORM</h3><div class="vector-grid" id="positionFields"></div></section>
       <section><h3>ROTATION</h3><div class="vector-grid" id="rotationFields"></div></section>
       <section><h3>APPEARANCE</h3><label class="color-row">Color <input id="colorInput" type="color" value="#d7263d" /></label></section>
-      <section><h3>MECHANICS</h3><div class="stat-row"><span>Connectors</span><b id="connectorState">0 points</b></div><div class="stat-row"><span>Physics body</span><b>Planned</b></div></section>
+      <section>
+        <h3>MECHANICS</h3>
+        <div class="stat-row"><span>Connectors used</span><b id="connectorState">0 / 0</b></div>
+        <div class="stat-row"><span>Graph links</span><b id="connectionState">0</b></div>
+        <div id="connectionsList" class="connections-list"></div>
+        <button id="disconnectBtn" class="ghost small connection-action">Disconnect all</button>
+      </section>
     </div>
-    <div class="project-box"><div><small>PROJECT</small><strong id="projectName">Untitled Build</strong></div><button id="importBtn" class="ghost small">Import</button><input id="importFile" type="file" accept="application/json,.bricklab" hidden /></div>
+    <div class="project-box"><div><small>PROJECT</small><strong id="projectName">Untitled Build</strong><span id="projectStats">0 parts · 0 links</span></div><button id="importBtn" class="ghost small">Import</button><input id="importFile" type="file" accept="application/json,.bricklab" hidden /></div>
   </aside>
 </div>`
 
@@ -81,10 +102,14 @@ scene.add(grid)
 const buildRoot = new THREE.Group()
 const testRoot = new THREE.Group()
 const connectorRoot = new THREE.Group()
-scene.add(buildRoot, testRoot, connectorRoot)
+const connectionRoot = new THREE.Group()
+scene.add(buildRoot, testRoot, connectorRoot, connectionRoot)
 
 const connectorGeometry = new THREE.SphereGeometry(0.09, 12, 12)
-const connectorMaterial = new THREE.MeshBasicMaterial({ color: 0x69a9ff, depthTest: false, transparent: true, opacity: 0.85 })
+const freeConnectorMaterial = new THREE.MeshBasicMaterial({ color: 0x69a9ff, depthTest: false, transparent: true, opacity: 0.85 })
+const occupiedConnectorMaterial = new THREE.MeshBasicMaterial({ color: 0xffb65c, depthTest: false, transparent: true, opacity: 0.95 })
+const connectionMarkerGeometry = new THREE.SphereGeometry(0.135, 14, 14)
+const connectionMarkerMaterial = new THREE.MeshBasicMaterial({ color: 0x74e6a6, depthTest: false })
 const snapMarker = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 16), new THREE.MeshBasicMaterial({ color: 0x74e6a6, depthTest: false }))
 snapMarker.visible = false
 scene.add(snapMarker)
@@ -101,7 +126,12 @@ let snapCandidate = null
 let mode = 'build'
 let category = 'All'
 let projectName = 'Untitled Build'
+let connections = []
+let history = []
+let historyIndex = -1
 let toastTimer = 0
+let isDragging = false
+let detachedDuringDrag = false
 
 function toast(text) {
   const el = $('#toast')
@@ -109,6 +139,22 @@ function toast(text) {
   el.classList.add('show')
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => el.classList.remove('show'), 2200)
+}
+
+function cloneState(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
+function objectByInstanceId(instanceId) {
+  return buildRoot.children.find(object => object.userData.instanceId === instanceId) ?? null
+}
+
+function connectorById(object, connectorId) {
+  return findPart(object?.userData.partId)?.connectors?.find(connector => connector.id === connectorId) ?? null
+}
+
+function connectorAvailable(object, connector) {
+  return !isEndpointOccupied(connections, object.userData.instanceId, connector.id)
 }
 
 function makePart(partId, color) {
@@ -135,12 +181,37 @@ function clearSelectionBox() {
   selectionBox = null
 }
 
+function updateProjectStats() {
+  $('#projectStats').textContent = `${buildRoot.children.length} parts · ${connections.length} links`
+  if (mode === 'build') $('#statusText').textContent = `BUILD MODE · ${buildRoot.children.length} parts · ${connections.length} connections`
+}
+
+function updateConnectionVisuals() {
+  connectionRoot.clear()
+  if (mode !== 'build') return
+
+  for (const connection of connections) {
+    const object = objectByInstanceId(connection.a.instanceId)
+    const connector = connectorById(object, connection.a.connectorId)
+    if (!object || !connector) continue
+
+    const marker = new THREE.Mesh(connectionMarkerGeometry, connectionMarkerMaterial)
+    marker.position.copy(connectorWorldPosition(object, connector))
+    marker.renderOrder = 11
+    connectionRoot.add(marker)
+  }
+}
+
 function connectorGuides() {
   connectorRoot.clear()
   if (!selected || mode !== 'build') return
+
   const def = findPart(selected.userData.partId)
   for (const connector of def?.connectors ?? []) {
-    const point = new THREE.Mesh(connectorGeometry, connectorMaterial)
+    const point = new THREE.Mesh(
+      connectorGeometry,
+      connectorAvailable(selected, connector) ? freeConnectorMaterial : occupiedConnectorMaterial,
+    )
     point.position.copy(connectorWorldPosition(selected, connector))
     point.renderOrder = 10
     connectorRoot.add(point)
@@ -148,7 +219,9 @@ function connectorGuides() {
 }
 
 function refreshSnap() {
-  snapCandidate = selected && mode === 'build' ? findSnapCandidate(selected, buildRoot.children) : null
+  snapCandidate = selected && mode === 'build'
+    ? findSnapCandidate(selected, buildRoot.children, { isAvailable: connectorAvailable })
+    : null
   snapMarker.visible = Boolean(snapCandidate)
   if (snapCandidate) snapMarker.position.copy(snapCandidate.targetWorld)
 }
@@ -157,11 +230,13 @@ function select(object) {
   clearSelectionBox()
   selected = object
   transform.detach()
+
   if (object && mode === 'build') {
     transform.attach(object)
     selectionBox = new THREE.BoxHelper(object, 0x74e6a6)
     scene.add(selectionBox)
   }
+
   updateInspector()
   connectorGuides()
   refreshSnap()
@@ -174,6 +249,7 @@ function snapGrid() {
     Math.max(0, Math.round(selected.position.y * 2) / 2),
     Math.round(selected.position.z * 2) / 2,
   )
+
   const q = Math.PI / 2
   selected.rotation.set(
     Math.round(selected.rotation.x / q) * q,
@@ -182,25 +258,187 @@ function snapGrid() {
   )
 }
 
-transform.addEventListener('dragging-changed', event => { orbit.enabled = !event.value })
-transform.addEventListener('objectChange', () => {
-  selectionBox?.update()
+function detachPartConnections(object, silent = false) {
+  if (!object) return 0
+  const before = connections.length
+  connections = removeConnectionsForPart(connections, object.userData.instanceId)
+  const removed = before - connections.length
+
+  if (removed) {
+    updateConnectionVisuals()
+    updateProjectStats()
+    connectorGuides()
+    if (!silent) toast(`Disconnected ${removed} link${removed === 1 ? '' : 's'}`)
+  }
+  return removed
+}
+
+function attachSnapConnection(candidate) {
+  if (!selected || !candidate) return null
+  if (!connectorAvailable(selected, candidate.source) || !connectorAvailable(candidate.targetObject, candidate.target)) return null
+
+  const connection = createConnection(selected, candidate.source, candidate.targetObject, candidate.target)
+  connections.push(connection)
+  updateConnectionVisuals()
+  updateProjectStats()
+  return connection
+}
+
+function projectState() {
+  return {
+    version: 2,
+    name: projectName,
+    parts: buildRoot.children.map(object => ({
+      instanceId: object.userData.instanceId,
+      partId: object.userData.partId,
+      color: object.userData.color,
+      position: object.position.toArray(),
+      rotation: [object.rotation.x, object.rotation.y, object.rotation.z],
+    })),
+    connections: cloneState(connections),
+  }
+}
+
+function serializeProject() {
+  return { ...projectState(), savedAt: new Date().toISOString() }
+}
+
+function saveLocal() {
+  try {
+    localStorage.setItem('bricklab.project.v2', JSON.stringify(serializeProject()))
+  } catch (error) {
+    console.warn(error)
+  }
+}
+
+function updateHistoryButtons() {
+  $('#undoBtn').disabled = historyIndex <= 0
+  $('#redoBtn').disabled = historyIndex < 0 || historyIndex >= history.length - 1
+}
+
+function commitHistory() {
+  const next = projectState()
+  const previous = history[historyIndex]
+
+  if (previous && JSON.stringify(previous) === JSON.stringify(next)) {
+    saveLocal()
+    updateHistoryButtons()
+    return
+  }
+
+  history = history.slice(0, historyIndex + 1)
+  history.push(cloneState(next))
+  if (history.length > 60) history.shift()
+  historyIndex = history.length - 1
+  saveLocal()
+  updateHistoryButtons()
+}
+
+function resetHistory() {
+  history = [cloneState(projectState())]
+  historyIndex = 0
+  saveLocal()
+  updateHistoryButtons()
+}
+
+function connectionIsValid(connection, usedEndpoints) {
+  if (!connection?.a?.instanceId || !connection?.a?.connectorId || !connection?.b?.instanceId || !connection?.b?.connectorId) return false
+  const objectA = objectByInstanceId(connection.a.instanceId)
+  const objectB = objectByInstanceId(connection.b.instanceId)
+  const connectorA = connectorById(objectA, connection.a.connectorId)
+  const connectorB = connectorById(objectB, connection.b.connectorId)
+  if (!objectA || !objectB || !connectorA || !connectorB) return false
+
+  const keyA = `${connection.a.instanceId}::${connection.a.connectorId}`
+  const keyB = `${connection.b.instanceId}::${connection.b.connectorId}`
+  if (usedEndpoints.has(keyA) || usedEndpoints.has(keyB)) return false
+  usedEndpoints.add(keyA)
+  usedEndpoints.add(keyB)
+  return true
+}
+
+function applyProject(data, { reset = false } = {}) {
+  if (!data || !Array.isArray(data.parts)) throw new Error('Invalid BrickLab project')
+
+  select(null)
+  buildRoot.clear()
+  connections = []
+  projectName = data.name || 'Imported Build'
+  $('#projectName').textContent = projectName
+
+  for (const item of data.parts) {
+    const object = makePart(item.partId, item.color)
+    if (!object) continue
+    object.userData.instanceId = item.instanceId || crypto.randomUUID()
+    if (Array.isArray(item.position)) object.position.fromArray(item.position)
+    if (Array.isArray(item.rotation)) object.rotation.set(...item.rotation)
+    buildRoot.add(object)
+  }
+
+  const usedEndpoints = new Set()
+  for (const connection of Array.isArray(data.connections) ? data.connections : []) {
+    if (connectionIsValid(connection, usedEndpoints)) connections.push(cloneState(connection))
+  }
+
+  updateConnectionVisuals()
+  updateProjectStats()
   updateInspector()
   connectorGuides()
   refreshSnap()
+
+  if (reset) resetHistory()
+  else saveLocal()
+}
+
+function undo() {
+  if (historyIndex <= 0) return
+  historyIndex -= 1
+  applyProject(history[historyIndex])
+  updateHistoryButtons()
+  toast('Undo')
+}
+
+function redo() {
+  if (historyIndex >= history.length - 1) return
+  historyIndex += 1
+  applyProject(history[historyIndex])
+  updateHistoryButtons()
+  toast('Redo')
+}
+
+transform.addEventListener('dragging-changed', event => {
+  isDragging = Boolean(event.value)
+  orbit.enabled = !isDragging
+  if (isDragging) detachedDuringDrag = false
 })
-transform.addEventListener('mouseUp', () => {
-  snapGrid()
-  refreshSnap()
-  if (selected && snapCandidate) {
-    applySnap(selected, snapCandidate)
-    toast(`Snapped ${snapCandidate.source.type} → ${snapCandidate.target.type}`)
+
+transform.addEventListener('objectChange', () => {
+  if (isDragging && selected && !detachedDuringDrag) {
+    detachedDuringDrag = detachPartConnections(selected, true) > 0
   }
   selectionBox?.update()
   updateInspector()
   connectorGuides()
   refreshSnap()
-  saveLocal()
+})
+
+transform.addEventListener('mouseUp', () => {
+  snapGrid()
+  refreshSnap()
+
+  if (selected && snapCandidate) {
+    applySnap(selected, snapCandidate)
+    const connection = attachSnapConnection(snapCandidate)
+    if (connection) toast(`Connected ${connection.kind}: ${snapCandidate.source.type} → ${snapCandidate.target.type}`)
+  }
+
+  selectionBox?.update()
+  updateInspector()
+  connectorGuides()
+  refreshSnap()
+  updateConnectionVisuals()
+  commitHistory()
+  detachedDuringDrag = false
 })
 
 function addPart(partId) {
@@ -210,15 +448,20 @@ function addPart(partId) {
   object.position.set((n % 6 - 2.5) * 1.5, 0, Math.floor(n / 6) * 1.5)
   buildRoot.add(object)
   select(object)
-  saveLocal()
+  updateProjectStats()
+  commitHistory()
   toast(`${findPart(partId)?.name ?? 'Part'} added`)
 }
 
 function removeSelected() {
   if (!selected) return
-  buildRoot.remove(selected)
+  const object = selected
+  detachPartConnections(object, true)
+  buildRoot.remove(object)
   select(null)
-  saveLocal()
+  updateConnectionVisuals()
+  updateProjectStats()
+  commitHistory()
   toast('Part removed')
 }
 
@@ -230,8 +473,19 @@ function duplicateSelected() {
   copy.rotation.copy(selected.rotation)
   buildRoot.add(copy)
   select(copy)
-  saveLocal()
+  updateProjectStats()
+  commitHistory()
   toast('Part duplicated')
+}
+
+function disconnectSelected() {
+  if (!selected) return
+  const count = detachPartConnections(selected, true)
+  if (!count) return
+  updateInspector()
+  refreshSnap()
+  commitHistory()
+  toast(`Disconnected ${count} link${count === 1 ? '' : 's'}`)
 }
 
 function setTransformMode(next) {
@@ -252,13 +506,23 @@ renderer.domElement.addEventListener('pointerdown', event => {
 })
 
 function renderCatalog() {
-  const categories = ['All', ...new Set(PARTS.map(p => p.category))]
-  $('#categoryTabs').innerHTML = categories.map(c => `<button class="category ${c === category ? 'active' : ''}" data-cat="${c}">${c}</button>`).join('')
-  document.querySelectorAll('.category').forEach(button => button.onclick = () => { category = button.dataset.cat || 'All'; renderCatalog() })
+  const categories = ['All', ...new Set(PARTS.map(part => part.category))]
+  $('#categoryTabs').innerHTML = categories.map(item => `<button class="category ${item === category ? 'active' : ''}" data-cat="${item}">${item}</button>`).join('')
+  document.querySelectorAll('.category').forEach(button => {
+    button.onclick = () => {
+      category = button.dataset.cat || 'All'
+      renderCatalog()
+    }
+  })
+
   const query = $('#partSearch').value.trim().toLowerCase()
-  const list = PARTS.filter(p => (category === 'All' || p.category === category) && (!query || `${p.name} ${p.description}`.toLowerCase().includes(query)))
+  const list = PARTS.filter(part =>
+    (category === 'All' || part.category === category) &&
+    (!query || `${part.name} ${part.description}`.toLowerCase().includes(query))
+  )
+
   $('#partCount').textContent = list.length
-  $('#partsList').innerHTML = list.map(p => `<button class="part-card" data-part="${p.id}"><span class="part-icon">${p.icon}</span><span><strong>${p.name}</strong><small>${p.description}</small></span><span class="plus">+</span></button>`).join('') || '<div class="no-results">No matching parts</div>'
+  $('#partsList').innerHTML = list.map(part => `<button class="part-card" data-part="${part.id}"><span class="part-icon">${part.icon}</span><span><strong>${part.name}</strong><small>${part.description}</small></span><span class="plus">+</span></button>`).join('') || '<div class="no-results">No matching parts</div>'
   document.querySelectorAll('.part-card').forEach(button => button.onclick = () => addPart(button.dataset.part))
 }
 
@@ -266,39 +530,79 @@ function updateInspector() {
   $('#emptyInspector').classList.toggle('hidden', Boolean(selected))
   $('#inspector').classList.toggle('hidden', !selected)
   if (!selected) return
+
   const def = findPart(selected.userData.partId)
+  const partConnections = connectionsForPart(connections, selected.userData.instanceId)
+  const usedConnectors = (def?.connectors ?? []).filter(connector => !connectorAvailable(selected, connector)).length
+
   $('#selectedName').textContent = def?.name ?? 'Unknown part'
   $('#selectedId').textContent = selected.userData.instanceId.slice(0, 8)
   $('#selectedIcon').textContent = def?.icon ?? '◇'
-  $('#connectorState').textContent = `${def?.connectors?.length ?? 0} points`
+  $('#connectorState').textContent = `${usedConnectors} / ${def?.connectors?.length ?? 0}`
+  $('#connectionState').textContent = String(partConnections.length)
+  $('#disconnectBtn').disabled = partConnections.length === 0
+
+  $('#connectionsList').innerHTML = partConnections.length
+    ? partConnections.map(connection => {
+        const other = connection.a.instanceId === selected.userData.instanceId ? connection.b : connection.a
+        const otherObject = objectByInstanceId(other.instanceId)
+        const otherDef = findPart(otherObject?.userData.partId)
+        return `<div class="connection-chip"><span>${connection.kind}</span><b>${otherDef?.name ?? 'Part'} · ${other.connectorType}</b></div>`
+      }).join('')
+    : '<div class="connection-empty">No graph links</div>'
+
   const axes = ['x', 'y', 'z']
-  $('#positionFields').innerHTML = axes.map(a => `<label><span>${a.toUpperCase()}</span><input data-pos="${a}" value="${selected.position[a].toFixed(2)}"></label>`).join('')
-  $('#rotationFields').innerHTML = axes.map(a => `<label><span>${a.toUpperCase()}</span><input data-rot="${a}" value="${Math.round(THREE.MathUtils.radToDeg(selected.rotation[a]))}°"></label>`).join('')
-  document.querySelectorAll('[data-pos]').forEach(input => input.onchange = () => {
-    if (!selected) return
-    const n = Number(input.value)
-    if (Number.isFinite(n)) selected.position[input.dataset.pos] = n
-    snapGrid(); selectionBox?.update(); connectorGuides(); refreshSnap(); saveLocal(); updateInspector()
+  $('#positionFields').innerHTML = axes.map(axis => `<label><span>${axis.toUpperCase()}</span><input data-pos="${axis}" value="${selected.position[axis].toFixed(2)}"></label>`).join('')
+  $('#rotationFields').innerHTML = axes.map(axis => `<label><span>${axis.toUpperCase()}</span><input data-rot="${axis}" value="${Math.round(THREE.MathUtils.radToDeg(selected.rotation[axis]))}°"></label>`).join('')
+
+  document.querySelectorAll('[data-pos]').forEach(input => {
+    input.onchange = () => {
+      if (!selected) return
+      detachPartConnections(selected, true)
+      const n = Number(input.value)
+      if (Number.isFinite(n)) selected.position[input.dataset.pos] = n
+      snapGrid()
+      selectionBox?.update()
+      connectorGuides()
+      refreshSnap()
+      updateConnectionVisuals()
+      updateInspector()
+      commitHistory()
+    }
   })
-  document.querySelectorAll('[data-rot]').forEach(input => input.onchange = () => {
-    if (!selected) return
-    const n = Number(input.value.replace('°', ''))
-    if (Number.isFinite(n)) selected.rotation[input.dataset.rot] = THREE.MathUtils.degToRad(n)
-    snapGrid(); selectionBox?.update(); connectorGuides(); refreshSnap(); saveLocal(); updateInspector()
+
+  document.querySelectorAll('[data-rot]').forEach(input => {
+    input.onchange = () => {
+      if (!selected) return
+      detachPartConnections(selected, true)
+      const n = Number(input.value.replace('°', ''))
+      if (Number.isFinite(n)) selected.rotation[input.dataset.rot] = THREE.MathUtils.degToRad(n)
+      snapGrid()
+      selectionBox?.update()
+      connectorGuides()
+      refreshSnap()
+      updateConnectionVisuals()
+      updateInspector()
+      commitHistory()
+    }
   })
+
   $('#colorInput').value = `#${Number(selected.userData.color).toString(16).padStart(6, '0')}`
 }
 
-function setPartColor(hex) {
+function setPartColor(hex, commit = false) {
   if (!selected) return
   const color = Number.parseInt(hex.slice(1), 16)
   selected.userData.color = color
   selected.traverse(child => {
     if (!child.isMesh || !child.material) return
-    const mats = Array.isArray(child.material) ? child.material : [child.material]
-    for (const mat of mats) if (mat.color && mat.color.getHex() !== 0x222426 && mat.color.getHex() !== 0x17191b) mat.color.setHex(color)
+    const materials = Array.isArray(child.material) ? child.material : [child.material]
+    for (const material of materials) {
+      if (material.color && material.color.getHex() !== 0x222426 && material.color.getHex() !== 0x17191b) material.color.setHex(color)
+    }
   })
-  saveLocal()
+  if (commit) commitHistory()
+  else saveLocal()
 }
 
 function buildTestCourse() {
@@ -308,6 +612,7 @@ function buildTestCourse() {
   ramp.position.set(9, 1.25, -5)
   ramp.rotation.z = -THREE.MathUtils.degToRad(14)
   testRoot.add(ramp)
+
   for (let i = 0; i < 5; i++) {
     const h = 0.8 + i * 0.28
     const obstacle = new THREE.Mesh(new THREE.BoxGeometry(1.2, h, 6), mat)
@@ -318,17 +623,23 @@ function buildTestCourse() {
 
 function setMode(next) {
   mode = next
-  document.querySelectorAll('.mode').forEach(b => b.classList.toggle('active', b.dataset.mode === next))
+  document.querySelectorAll('.mode').forEach(button => button.classList.toggle('active', button.dataset.mode === next))
   $('.viewport-toolbar').classList.toggle('disabled', next !== 'build')
-  testRoot.clear(); connectorRoot.clear(); snapMarker.visible = false
+  testRoot.clear()
+  connectorRoot.clear()
+  connectionRoot.clear()
+  snapMarker.visible = false
+
   if (next === 'build') {
-    $('#statusText').textContent = 'BUILD MODE · Connector snap enabled'
     if (selected) transform.attach(selected)
-    connectorGuides(); refreshSnap()
+    connectorGuides()
+    refreshSnap()
+    updateConnectionVisuals()
+    updateProjectStats()
   } else if (next === 'simulate') {
-    $('#statusText').textContent = 'SIMULATE PREVIEW · Physics coming next'
+    $('#statusText').textContent = `SIMULATE PREVIEW · ${connections.length} graph links ready for physics`
     select(null)
-    toast('Rapier physics is the next milestone')
+    toast('Connection graph is ready for Rapier joints')
   } else {
     $('#statusText').textContent = 'TEST LAB · Prototype obstacle course'
     select(null)
@@ -336,47 +647,19 @@ function setMode(next) {
   }
 }
 
-function serializeProject() {
-  return {
-    version: 1,
-    name: projectName,
-    savedAt: new Date().toISOString(),
-    parts: buildRoot.children.map(object => ({
-      instanceId: object.userData.instanceId,
-      partId: object.userData.partId,
-      color: object.userData.color,
-      position: object.position.toArray(),
-      rotation: [object.rotation.x, object.rotation.y, object.rotation.z],
-    })),
-  }
-}
-
-function loadProject(data) {
-  if (!data || !Array.isArray(data.parts)) throw new Error('Invalid BrickLab project')
-  select(null)
-  buildRoot.clear()
-  projectName = data.name || 'Imported Build'
-  $('#projectName').textContent = projectName
-  for (const item of data.parts) {
-    const object = makePart(item.partId, item.color)
-    if (!object) continue
-    object.userData.instanceId = item.instanceId || crypto.randomUUID()
-    if (Array.isArray(item.position)) object.position.fromArray(item.position)
-    if (Array.isArray(item.rotation)) object.rotation.set(...item.rotation)
-    buildRoot.add(object)
-  }
-  saveLocal()
-}
-
-function saveLocal() {
-  try { localStorage.setItem('bricklab.project.v1', JSON.stringify(serializeProject())) } catch (error) { console.warn(error) }
-}
-
 function loadLocal() {
   try {
-    const raw = localStorage.getItem('bricklab.project.v1')
-    if (raw) loadProject(JSON.parse(raw))
-  } catch (error) { console.warn('Could not restore project', error) }
+    const rawV2 = localStorage.getItem('bricklab.project.v2')
+    const rawV1 = localStorage.getItem('bricklab.project.v1')
+    const raw = rawV2 || rawV1
+    if (raw) {
+      applyProject(JSON.parse(raw), { reset: true })
+      return
+    }
+  } catch (error) {
+    console.warn('Could not restore project', error)
+  }
+  resetHistory()
 }
 
 function exportProject() {
@@ -386,34 +669,69 @@ function exportProject() {
   a.download = `${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'bricklab'}.bricklab`
   a.click()
   URL.revokeObjectURL(a.href)
-  toast('Project exported')
+  toast('Project exported with connection graph')
 }
 
 $('#partSearch').addEventListener('input', renderCatalog)
 $('#moveTool').onclick = () => setTransformMode('translate')
 $('#rotateTool').onclick = () => setTransformMode('rotate')
+$('#undoBtn').onclick = undo
+$('#redoBtn').onclick = redo
 $('#duplicateBtn').onclick = duplicateSelected
 $('#deleteBtn').onclick = removeSelected
+$('#disconnectBtn').onclick = disconnectSelected
 $('#saveBtn').onclick = () => { saveLocal(); toast('Saved in this browser') }
 $('#exportBtn').onclick = exportProject
-$('#newBtn').onclick = () => { select(null); buildRoot.clear(); projectName = 'Untitled Build'; $('#projectName').textContent = projectName; saveLocal(); toast('New build') }
-$('#colorInput').addEventListener('input', event => setPartColor(event.target.value))
+$('#newBtn').onclick = () => {
+  select(null)
+  buildRoot.clear()
+  connections = []
+  projectName = 'Untitled Build'
+  $('#projectName').textContent = projectName
+  updateConnectionVisuals()
+  updateProjectStats()
+  commitHistory()
+  toast('New build')
+}
+$('#colorInput').addEventListener('input', event => setPartColor(event.target.value, false))
+$('#colorInput').addEventListener('change', event => setPartColor(event.target.value, true))
 $('#importBtn').onclick = () => $('#importFile').click()
 $('#importFile').addEventListener('change', async event => {
   const file = event.target.files?.[0]
   if (!file) return
-  try { loadProject(JSON.parse(await file.text())); toast('Project imported') } catch (error) { console.error(error); toast('Could not import project') }
+  try {
+    applyProject(JSON.parse(await file.text()), { reset: true })
+    toast('Project imported')
+  } catch (error) {
+    console.error(error)
+    toast('Could not import project')
+  }
   event.target.value = ''
 })
+
 document.querySelectorAll('.mode').forEach(button => button.onclick = () => setMode(button.dataset.mode))
 
 window.addEventListener('keydown', event => {
   if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '')) return
-  if (event.key.toLowerCase() === 'w') setTransformMode('translate')
-  if (event.key.toLowerCase() === 'e') setTransformMode('rotate')
+
+  const key = event.key.toLowerCase()
+  if (key === 'w') setTransformMode('translate')
+  if (key === 'e') setTransformMode('rotate')
   if (event.key === 'Delete' || event.key === 'Backspace') removeSelected()
   if (event.key === 'Escape') select(null)
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') { event.preventDefault(); duplicateSelected() }
+
+  if ((event.ctrlKey || event.metaKey) && key === 'd') {
+    event.preventDefault()
+    duplicateSelected()
+  }
+  if ((event.ctrlKey || event.metaKey) && key === 'z' && !event.shiftKey) {
+    event.preventDefault()
+    undo()
+  }
+  if ((event.ctrlKey || event.metaKey) && ((key === 'z' && event.shiftKey) || key === 'y')) {
+    event.preventDefault()
+    redo()
+  }
 })
 
 function resize() {
@@ -434,5 +752,7 @@ function animate() {
 
 renderCatalog()
 loadLocal()
+updateProjectStats()
+updateHistoryButtons()
 resize()
 animate()
