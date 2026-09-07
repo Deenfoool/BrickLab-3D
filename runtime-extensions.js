@@ -1,6 +1,6 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: WELD-1 · automatic stud/tube structural welding for Physics v2.
-const V = 'weld-1-20260908-0104'
+// BUILD: CONTROL-1 · per-instance motor RPM, key bindings and live F/N/R control.
+const V = 'control-1-20260908-0118'
 
 await import(`./three-cycle-guard.js?v=${V}`)
 await import(`./multi-transform-patch.js?v=${V}`)
@@ -17,6 +17,7 @@ await import(`./powertrain-physics-v2.js?v=${V}`)
 await import(`./drivetrain-stress-v2.js?v=${V}`)
 await import(`./surface-v2.js?v=${V}`)
 await import(`./suspension-v2.js?v=${V}`)
+await import(`./mechanism-controls-core.js?v=${V}`)
 await import(`./physics-v2-telemetry.js?v=${V}`)
 await import(`./dyno-v2.js?v=${V}`)
 await import(`./surface-telemetry-v2.js?v=${V}`)
