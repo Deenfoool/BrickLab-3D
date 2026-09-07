@@ -29,23 +29,31 @@ The `Open Differential` exposes:
 - left half-shaft output;
 - right half-shaft output.
 
-The first implementation creates two torque-limited output couplings. With the default configuration:
+The drivetrain layer gives each branch its own shaft and torque budget. The physics extension then applies one differential constraint across both output shafts instead of treating them as two locked 1:1 drives.
+
+The controlled relationship is the open-differential average-speed equation:
 
 ```text
-input speed × 1.0 → left output
-input speed × 1.0 → right output
-available input torque × 0.5 → each branch
+(ω_left / ratio_left + ω_right / ratio_right) / 2 = ω_input
 ```
 
-The differential has prototype efficiency `0.92` and a `0.5 / 0.5` torque split.
-
-This is intentionally a simplified open-differential model. It gives independent output shafts and proper torque budgeting, but it does not yet implement the exact spider-gear constraint:
+For the current 1:1 prototype this reduces to:
 
 ```text
-ω_left + ω_right = 2 × ω_carrier
+ω_left + ω_right = 2 × ω_input
 ```
 
-That exact constraint will become important once asymmetric tyre traction and one-wheel-slip tests are implemented.
+That means the left and right half-shafts may run at different speeds while their average still follows the carrier/input speed.
+
+The default torque budget is split 50/50 across both output branches with prototype efficiency `0.92`. If only one half-shaft is connected, the patch does not create a fake locked drive through the remaining side.
+
+SIMULATE adds differential telemetry:
+
+- left output RPM;
+- right output RPM;
+- absolute RPM difference (`ΔRPM`).
+
+A non-zero `ΔRPM` is therefore expected during differential action rather than automatically treated as an error.
 
 ## Semantic housings
 
