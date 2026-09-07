@@ -1,5 +1,5 @@
-const BUILD_ID = 'MULTI-1'
-const BUILD_TAG = 'multi-1-20260908-0054'
+const BUILD_ID = 'WELD-1'
+const BUILD_TAG = 'weld-1-20260908-0104'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG} · multi-selection transform enabled`
+  badge.title = `BrickLab production build ${BUILD_TAG} · structural auto-weld enabled`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -73,6 +73,7 @@ window.__bricklabPhysicsDiagnostics = () => ({
   buildId: BUILD_ID,
   buildTag: BUILD_TAG,
   buildStage: window.__bricklabPhysicsStage ?? null,
+  autoWeld: window.__bricklabLastAutoWeldStats ?? null,
   lastError: window.__bricklabPhysicsLastError ?? null,
   rapierSource: window.__bricklabRapierSource ?? null,
 })
