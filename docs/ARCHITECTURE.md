@@ -4,47 +4,93 @@
 
 A rendered part and a mechanical part are not the same thing. Geometry answers “what does it look like?”, while metadata answers “how can it connect and behave?”.
 
-## Planned part schema
+The production runtime is currently browser-native ES modules in the repository root so GitHub Pages can serve it without a build step.
 
-```ts
-type ConnectorType =
-  | 'stud'
-  | 'tube'
-  | 'pin'
-  | 'pin-hole'
-  | 'axle'
-  | 'axle-hole'
-  | 'gear'
-  | 'wheel-hub'
-  | 'motor-output'
+## Part schema
 
-type Connector = {
-  id: string
-  type: ConnectorType
-  position: [number, number, number]
-  axis: [number, number, number]
+Current connector types:
+
+```js
+stud
+tube
+pin
+pin-hole
+axle
+axle-hole
+```
+
+Each connector has:
+
+```js
+{
+  id: 'hole-3',
+  type: 'pin-hole',
+  position: [x, y, z],
+  axis: [x, y, z]
 }
 ```
 
-Each part definition will eventually include:
+A part definition contains visual geometry plus connector metadata. Later it will also include collision geometry, mass properties and drivetrain metadata.
 
-- render geometry or LDraw source;
-- collision geometry;
-- mass and center of mass;
-- compatible connectors;
-- optional gear tooth count / pitch radius;
-- optional motor torque and RPM curve;
-- optional break force / break torque.
+## Connection graph
+
+Snapping no longer ends at a transform operation. A successful snap creates an explicit graph edge.
+
+```js
+{
+  id: '<uuid>',
+  kind: 'fixed' | 'hinge' | 'axle',
+  a: {
+    instanceId: '<part uuid>',
+    connectorId: '<connector id>',
+    connectorType: '...'
+  },
+  b: {
+    instanceId: '<part uuid>',
+    connectorId: '<connector id>',
+    connectorType: '...'
+  }
+}
+```
+
+Current connection mapping:
+
+- `stud ↔ tube` → `fixed`
+- `pin ↔ pin-hole` → `hinge`
+- `axle ↔ axle-hole` → `axle`
+
+Connector endpoints are exclusive. Once an endpoint participates in a graph edge it is considered occupied and the snap engine will not reuse it.
 
 ## Connection pipeline
 
 1. User drags a part.
-2. Nearby compatible connectors are queried.
-3. Candidate connectors are scored by distance and axis alignment.
-4. Best candidate is previewed in the viewport.
-5. On release, transform snaps to the candidate.
-6. Connection is added to the build graph.
-7. Simulation converts the connection graph into rigid bodies and Rapier joints.
+2. Existing links belonging to that moved part are detached once the transform actually changes.
+3. Nearby compatible **free** connectors are queried.
+4. Candidates are scored by connector distance and axis alignment.
+5. Best candidate is previewed in the viewport.
+6. On release, the selected part is automatically oriented to the target connector axis.
+7. Connector positions are snapped together.
+8. A persistent connection edge is created.
+9. The new state is committed to undo/redo history and browser autosave.
+10. Future simulation will translate graph edges into Rapier rigid groups and joints.
+
+## Visual connector states
+
+- Blue: free connector on selected part.
+- Orange: occupied connector on selected part.
+- Green: saved connection point / current snap candidate.
+
+## History model
+
+The editor keeps bounded project snapshots for undo/redo. A snapshot includes:
+
+- all part instances;
+- transforms;
+- colors;
+- project name;
+- complete connection graph.
+
+This is intentionally project-state history rather than mesh history, which keeps it independent from the eventual geometry source.
 
 ## Geometry strategy
 
@@ -53,9 +99,26 @@ The current MVP uses procedural geometry to validate the editor. LDraw will be i
 ```text
 PartDefinition
      |
-     +-- ProceduralGeometryAdapter
+     +-- ProceduralGeometryAdapter (current)
      |
-     +-- LDrawGeometryAdapter
+     +-- LDrawGeometryAdapter (next)
 ```
 
-This keeps selection, snapping, save files and physics metadata stable while the visual asset source evolves.
+Selection, snapping, connection graph, project files and physics metadata should remain stable while visual meshes are replaced.
+
+## Physics adapter target
+
+The connection graph is deliberately shaped to become physics input:
+
+```text
+fixed graph components
+       ↓
+rigid body groups
+       ↓
+hinge edges ──→ revolute joints
+axle edges  ──→ drivetrain / revolute constraints
+       ↓
+Rapier world
+```
+
+The next physics milestone should not infer mechanical relationships from mesh overlap. It should consume explicit graph edges.
