@@ -1,5 +1,5 @@
-const BUILD_ID = 'WELD-1'
-const BUILD_TAG = 'weld-1-20260908-0104'
+const BUILD_ID = 'CONTROL-1'
+const BUILD_TAG = 'control-1-20260908-0118'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG} · structural auto-weld enabled`
+  badge.title = `BrickLab production build ${BUILD_TAG} · per-instance mechanism controls enabled`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -74,6 +74,7 @@ window.__bricklabPhysicsDiagnostics = () => ({
   buildTag: BUILD_TAG,
   buildStage: window.__bricklabPhysicsStage ?? null,
   autoWeld: window.__bricklabLastAutoWeldStats ?? null,
+  controls: window.BrickLabControls?.getRuntimeEntries?.() ?? [],
   lastError: window.__bricklabPhysicsLastError ?? null,
   rapierSource: window.__bricklabRapierSource ?? null,
 })
