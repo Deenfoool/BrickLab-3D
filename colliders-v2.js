@@ -52,7 +52,10 @@ function collisionMask(def, selfCollision) {
   let filter = GROUP.WORLD
   if (selfCollision === 'full') filter = ALL
   else if (selfCollision === 'mechanical') {
-    if (membership === GROUP.STRUCTURE) filter |= GROUP.WHEEL | GROUP.MECHANICAL
+    // Separate structural rigid bodies must still collide. Parts welded into the
+    // same compound body do not self-collide in Rapier, so this is safe and
+    // prevents loose bricks from falling through plates when no fixed weld exists.
+    if (membership === GROUP.STRUCTURE) filter |= GROUP.STRUCTURE | GROUP.WHEEL | GROUP.MECHANICAL
     else if (membership === GROUP.WHEEL || membership === GROUP.MECHANICAL) filter |= GROUP.STRUCTURE | GROUP.WHEEL | GROUP.MECHANICAL
   }
   return pack(membership, filter)
