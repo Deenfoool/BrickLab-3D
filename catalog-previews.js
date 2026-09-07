@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { PARTS, findPart } from './parts.js'
 
-const PREVIEW_SIZE = { width: 180, height: 120 }
+const PREVIEW_SIZE = { width: 200, height: 132 }
 const cache = new Map()
 let renderer = null
 let scene = null
@@ -20,25 +20,25 @@ function ensureRenderer() {
       preserveDrawingBuffer: true,
       powerPreference: 'low-power',
     })
-    renderer.setPixelRatio(1)
+    renderer.setPixelRatio(1.4)
     renderer.setSize(PREVIEW_SIZE.width, PREVIEW_SIZE.height, false)
     renderer.setClearColor(0x000000, 0)
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.05
+    renderer.toneMappingExposure = 1.08
     renderer.outputColorSpace = THREE.SRGBColorSpace
 
     scene = new THREE.Scene()
     scene.userData.bricklabPreview = true
-    camera = new THREE.PerspectiveCamera(32, PREVIEW_SIZE.width / PREVIEW_SIZE.height, 0.01, 100)
+    camera = new THREE.PerspectiveCamera(31, PREVIEW_SIZE.width / PREVIEW_SIZE.height, 0.01, 100)
 
     lightRig = new THREE.Group()
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x31363a, 1.8)
-    const key = new THREE.DirectionalLight(0xffffff, 3.1)
-    key.position.set(4, 7, 6)
-    const fill = new THREE.DirectionalLight(0x9ebcff, 1.15)
-    fill.position.set(-5, 3, -4)
-    const rim = new THREE.DirectionalLight(0xffd9b5, 0.8)
-    rim.position.set(4, 2, -5)
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x2b3035, 1.65)
+    const key = new THREE.DirectionalLight(0xfffbf4, 3.25)
+    key.position.set(4.5, 7.5, 6)
+    const fill = new THREE.DirectionalLight(0xa8c2ff, 1.2)
+    fill.position.set(-5, 3.5, -4)
+    const rim = new THREE.DirectionalLight(0xffd6ad, 0.88)
+    rim.position.set(4, 3, -5)
     lightRig.add(hemi, key, fill, rim)
     scene.add(lightRig)
     return true
@@ -66,6 +66,7 @@ function renderPreview(partId) {
 
   let object = null
   let wrapper = null
+  let shadow = null
   try {
     object = definition.create(definition.defaultColor)
     wrapper = new THREE.Group()
@@ -79,7 +80,7 @@ function renderPreview(partId) {
     const maxDimension = Math.max(size.x, size.y, size.z, 0.8)
 
     object.position.sub(center)
-    wrapper.rotation.set(-0.22, -0.66, 0)
+    wrapper.rotation.set(-0.2, -0.68, 0.02)
     wrapper.updateMatrixWorld(true)
 
     const framed = new THREE.Box3().setFromObject(wrapper)
@@ -88,10 +89,22 @@ function renderPreview(partId) {
     const framedMax = Math.max(framedSize.x, framedSize.y, framedSize.z, maxDimension)
 
     wrapper.position.sub(framedCenter)
-    camera.position.set(framedMax * 1.35, framedMax * 0.95, framedMax * 2.25)
+    wrapper.updateMatrixWorld(true)
+    const finalBounds = new THREE.Box3().setFromObject(wrapper)
+    const finalSize = finalBounds.getSize(new THREE.Vector3())
+
+    const shadowGeometry = new THREE.CircleGeometry(1, 48)
+    const shadowMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.2, depthWrite: false })
+    shadow = new THREE.Mesh(shadowGeometry, shadowMaterial)
+    shadow.rotation.x = -Math.PI / 2
+    shadow.scale.set(Math.max(0.45, finalSize.x * 0.42), Math.max(0.35, finalSize.z * 0.42), 1)
+    shadow.position.set(0, finalBounds.min.y - 0.025, 0)
+    scene.add(shadow)
+
+    camera.position.set(framedMax * 1.38, framedMax * 0.98, framedMax * 2.28)
     camera.near = Math.max(0.01, framedMax / 100)
     camera.far = Math.max(30, framedMax * 12)
-    camera.lookAt(0, 0, 0)
+    camera.lookAt(0, 0.03, 0)
     camera.updateProjectionMatrix()
 
     renderer.render(scene, camera)
@@ -103,6 +116,11 @@ function renderPreview(partId) {
     return null
   } finally {
     if (wrapper) scene.remove(wrapper)
+    if (shadow) {
+      scene.remove(shadow)
+      shadow.geometry?.dispose?.()
+      shadow.material?.dispose?.()
+    }
     if (object) disposeObject(object)
   }
 }
@@ -163,11 +181,12 @@ function installCatalogPreviews() {
     const style = document.createElement('style')
     style.id = 'bricklabPreviewStyles'
     style.textContent = `
-      .part-icon.has-preview{padding:0!important;overflow:hidden;background:radial-gradient(circle at 50% 35%,#30373d 0,#20252a 58%,#171b1f 100%)!important}
-      .part-icon.has-preview img{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;user-select:none;filter:drop-shadow(0 5px 5px rgba(0,0,0,.32))}
-      .parts-panel.catalog-grid .part-icon.has-preview{height:72px;background:radial-gradient(circle at 50% 38%,#343b42 0,#22282d 54%,#181c20 100%)!important}
-      .parts-panel.catalog-grid .part-icon.has-preview img{transform:scale(1.08)}
-      @media(max-width:800px){.parts-panel.catalog-grid .part-icon.has-preview{height:36px}}
+      .part-icon.has-preview{padding:0!important;overflow:hidden;background:radial-gradient(circle at 50% 32%,#374048 0,#242a30 55%,#171b1f 100%)!important}
+      .part-icon.has-preview img{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none;user-select:none;filter:drop-shadow(0 6px 7px rgba(0,0,0,.38));image-rendering:auto}
+      .parts-panel.catalog-grid .part-icon.has-preview{height:82px;background:radial-gradient(circle at 50% 34%,#3a434b 0,#252c32 53%,#181c20 100%)!important}
+      .parts-panel.catalog-grid .part-icon.has-preview img{transform:scale(1.05)}
+      .parts-panel.catalog-grid .part-card{min-height:132px}
+      @media(max-width:800px){.parts-panel.catalog-grid .part-icon.has-preview{height:38px}.parts-panel.catalog-grid .part-card{min-height:auto}}
     `
     document.head.append(style)
   }
