@@ -7,6 +7,10 @@ function material(color) {
   return new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.04 })
 }
 
+function darkMaterial() {
+  return new THREE.MeshStandardMaterial({ color: 0x17191b, roughness: 0.9 })
+}
+
 function group(partId, color) {
   const g = new THREE.Group()
   g.userData.partId = partId
@@ -16,8 +20,8 @@ function group(partId, color) {
 
 function brickConnectors(width, depth, height) {
   const connectors = []
-  for (let x = 0; x < width; x++) {
-    for (let z = 0; z < depth; z++) {
+  for (let x = 0; x < width; x += 1) {
+    for (let z = 0; z < depth; z += 1) {
       const px = x - (width - 1) / 2
       const pz = z - (depth - 1) / 2
       connectors.push({ id: `stud-${x}-${z}`, type: 'stud', position: [px, height, pz], axis: [0, 1, 0] })
@@ -45,21 +49,33 @@ function axleConnectors(length) {
   }))
 }
 
+function bottomTubeMounts(width = 2, depth = 2, y = 0) {
+  const mounts = []
+  for (let x = 0; x < width; x += 1) {
+    for (let z = 0; z < depth; z += 1) {
+      mounts.push({
+        id: `mount-${x}-${z}`,
+        type: 'tube',
+        position: [x - (width - 1) / 2, y, z - (depth - 1) / 2],
+        axis: [0, -1, 0],
+      })
+    }
+  }
+  return mounts
+}
+
 function motorConnectors() {
   return [
     { id: 'output', type: 'axle', position: [1.75, 0.9, 0], axis: [1, 0, 0] },
-    { id: 'mount-0', type: 'tube', position: [-0.5, 0, -0.5], axis: [0, -1, 0] },
-    { id: 'mount-1', type: 'tube', position: [0.5, 0, -0.5], axis: [0, -1, 0] },
-    { id: 'mount-2', type: 'tube', position: [-0.5, 0, 0.5], axis: [0, -1, 0] },
-    { id: 'mount-3', type: 'tube', position: [0.5, 0, 0.5], axis: [0, -1, 0] },
+    ...bottomTubeMounts(2, 2),
   ]
 }
 
 function addStuds(g, width, depth, y, color) {
   const geo = new THREE.CylinderGeometry(0.3, 0.3, 0.18, 20)
   const mat = material(color)
-  for (let x = 0; x < width; x++) {
-    for (let z = 0; z < depth; z++) {
+  for (let x = 0; x < width; x += 1) {
+    for (let z = 0; z < depth; z += 1) {
       const stud = new THREE.Mesh(geo, mat)
       stud.position.set(x - (width - 1) / 2, y, z - (depth - 1) / 2)
       g.add(stud)
@@ -102,7 +118,7 @@ function createTechnicBrick(id, length, color) {
   addStuds(g, length, 1, BRICK_HEIGHT + 0.09, color)
 
   const holeGeo = new THREE.TorusGeometry(0.22, 0.085, 12, 20)
-  const holeMat = new THREE.MeshStandardMaterial({ color: 0x17191b, roughness: 0.9 })
+  const holeMat = darkMaterial()
   for (let i = 0; i < length - 1; i += 1) {
     const x = i - (length - 2) / 2
     const front = new THREE.Mesh(holeGeo, holeMat)
@@ -120,8 +136,8 @@ function createBeam(id, length, color) {
   body.position.y = 0.45
   g.add(body)
   const holeGeo = new THREE.TorusGeometry(0.22, 0.085, 12, 20)
-  const holeMat = new THREE.MeshStandardMaterial({ color: 0x17191b, roughness: 0.9 })
-  for (let i = 0; i < length; i++) {
+  const holeMat = darkMaterial()
+  for (let i = 0; i < length; i += 1) {
     const x = i - (length - 1) / 2
     const front = new THREE.Mesh(holeGeo, holeMat)
     front.position.set(x, 0.45, 0.42)
@@ -147,10 +163,7 @@ function createAxleCoupler(id, color) {
   const body = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 1.5, 24), material(color))
   body.rotation.z = Math.PI / 2
   body.position.y = 0.38
-  const bore = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.19, 0.19, 1.54, 20),
-    new THREE.MeshStandardMaterial({ color: 0x17191b, roughness: 0.9 }),
-  )
+  const bore = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 1.54, 20), darkMaterial())
   bore.rotation.z = Math.PI / 2
   bore.position.y = 0.38
   g.add(body, bore)
@@ -179,12 +192,13 @@ function createGear(id, teeth, color) {
   const radius = gearPitchRadius(teeth)
   const shape = new THREE.Shape()
   const points = teeth * 2
-  for (let i = 0; i < points; i++) {
+  for (let i = 0; i < points; i += 1) {
     const angle = i / points * Math.PI * 2
     const r = i % 2 === 0 ? radius * 1.12 : radius * 0.92
     const x = Math.cos(angle) * r
     const y = Math.sin(angle) * r
-    if (!i) shape.moveTo(x, y); else shape.lineTo(x, y)
+    if (!i) shape.moveTo(x, y)
+    else shape.lineTo(x, y)
   }
   shape.closePath()
   const hole = new THREE.Path()
@@ -225,15 +239,58 @@ function createMotor(id, color) {
   return g
 }
 
+function createGearbox(id, color) {
+  const g = group(id, color)
+  const body = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.7, 2.2), material(color))
+  body.position.y = 0.85
+  g.add(body)
+
+  const ringGeo = new THREE.TorusGeometry(0.28, 0.09, 12, 24)
+  const ringMat = darkMaterial()
+  for (const x of [-1.63, 1.63]) {
+    const ring = new THREE.Mesh(ringGeo, ringMat)
+    ring.rotation.y = Math.PI / 2
+    ring.position.set(x, 0.88, 0)
+    g.add(ring)
+  }
+
+  const selector = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.5, 0.34), material(0x74e6a6))
+  selector.position.set(0, 1.8, 0)
+  g.add(selector)
+  return g
+}
+
+function createDifferential(id, color) {
+  const g = group(id, color)
+  const housing = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 1.7, 32), material(color))
+  housing.rotation.z = Math.PI / 2
+  housing.position.y = 1.0
+  g.add(housing)
+
+  const ringGeo = new THREE.TorusGeometry(0.25, 0.08, 12, 24)
+  const ringMat = darkMaterial()
+  for (const x of [-0.88, 0.88]) {
+    const ring = new THREE.Mesh(ringGeo, ringMat)
+    ring.rotation.y = Math.PI / 2
+    ring.position.set(x, 1.0, 0)
+    g.add(ring)
+  }
+  const inputRing = new THREE.Mesh(ringGeo, ringMat)
+  inputRing.rotation.x = Math.PI / 2
+  inputRing.position.set(0, 1.0, 1.08)
+  g.add(inputRing)
+  return g
+}
+
 export const PARTS = [
   { id: 'brick-2x4', name: 'Brick 2×4', category: 'Bricks', icon: '▦', description: 'Classic 2×4 brick', defaultColor: 0xd7263d, connectors: brickConnectors(4, 2, BRICK_HEIGHT), create: c => createBrick('brick-2x4', 4, 2, BRICK_HEIGHT, c) },
   { id: 'plate-2x4', name: 'Plate 2×4', category: 'Bricks', icon: '▤', description: 'Low-profile 2×4 plate', defaultColor: 0xf6c945, connectors: brickConnectors(4, 2, PLATE_HEIGHT), create: c => createBrick('plate-2x4', 4, 2, PLATE_HEIGHT, c) },
   { id: 'technic-brick-1x6', name: 'Technic Brick 1×6', category: 'Beams', icon: '▥', description: 'Studded chassis brick with five side bearing holes', defaultColor: 0x2d69c4, connectors: technicBrickConnectors(6), create: c => createTechnicBrick('technic-brick-1x6', 6, c) },
   { id: 'beam-5', name: 'Technic Beam 1×5', category: 'Beams', icon: '•••••', description: 'Five bearing / pin holes', defaultColor: 0xd7263d, connectors: beamConnectors(5), create: c => createBeam('beam-5', 5, c) },
   { id: 'beam-9', name: 'Technic Beam 1×9', category: 'Beams', icon: '•••••••••', description: 'Nine bearing / pin holes', defaultColor: 0x2d69c4, connectors: beamConnectors(9), create: c => createBeam('beam-9', 9, c) },
-  { id: 'axle-3', name: 'Axle 3L', category: 'Axles', icon: '━', description: '3 attachment slots across the shaft', defaultColor: 0xadb5bd, mechanics: { shaft: true }, connectors: axleConnectors(3), create: c => createAxle('axle-3', 3, c) },
-  { id: 'axle-5', name: 'Axle 5L', category: 'Axles', icon: '━━', description: '5 attachment slots for bearings, gears and wheels', defaultColor: 0x2b2d31, mechanics: { shaft: true }, connectors: axleConnectors(5), create: c => createAxle('axle-5', 5, c) },
-  { id: 'axle-7', name: 'Axle 7L', category: 'Axles', icon: '━━━', description: 'Long shaft with 7 attachment slots', defaultColor: 0xadb5bd, mechanics: { shaft: true }, connectors: axleConnectors(7), create: c => createAxle('axle-7', 7, c) },
+  { id: 'axle-3', name: 'Axle 3L', category: 'Axles', icon: '━', description: 'Short cross axle with 3 attachment slots', defaultColor: 0xadb5bd, mechanics: { shaft: true }, connectors: axleConnectors(3), create: c => createAxle('axle-3', 3, c) },
+  { id: 'axle-5', name: 'Axle 5L', category: 'Axles', icon: '━━', description: 'Medium cross axle with 5 attachment slots', defaultColor: 0x2b2d31, mechanics: { shaft: true }, connectors: axleConnectors(5), create: c => createAxle('axle-5', 5, c) },
+  { id: 'axle-7', name: 'Axle 7L', category: 'Axles', icon: '━━━', description: 'Long cross axle with 7 attachment slots', defaultColor: 0x2b2d31, mechanics: { shaft: true }, connectors: axleConnectors(7), create: c => createAxle('axle-7', 7, c) },
   {
     id: 'axle-coupler',
     name: 'Axle Coupler',
@@ -258,11 +315,58 @@ export const PARTS = [
     name: 'Lab Motor',
     category: 'Power',
     icon: 'M',
-    description: '120 RPM motor with finite torque and plate mounts',
+    description: '120 RPM torque-limited drivetrain motor',
     defaultColor: 0x6f7680,
-    mechanics: { motor: { connectorId: 'output', rpm: 120, direction: 1, stallTorque: 5.5, freeCurrent: 0.15, stallCurrent: 2.2 } },
+    mechanics: { motor: { connectorId: 'output', rpm: 120, direction: 1, damping: 1.0, stallTorque: 5.5, freeCurrent: 0.15, stallCurrent: 2.2 } },
     connectors: motorConnectors(),
     create: c => createMotor('motor', c),
+  },
+  {
+    id: 'gearbox-fnr',
+    name: 'F/N/R Gearbox',
+    category: 'Power',
+    icon: 'FNR',
+    description: 'Selectable forward / neutral / reverse transmission',
+    defaultColor: 0x59626c,
+    mechanics: {
+      transmission: {
+        inputConnectorId: 'input',
+        outputConnectorId: 'output',
+        modes: { forward: 1, neutral: 0, reverse: -1 },
+        efficiency: 0.9,
+      },
+    },
+    connectors: [
+      { id: 'input', type: 'axle-hole', position: [-1.65, 0.88, 0], axis: [1, 0, 0] },
+      { id: 'output', type: 'axle-hole', position: [1.65, 0.88, 0], axis: [1, 0, 0] },
+      ...bottomTubeMounts(2, 2),
+    ],
+    create: c => createGearbox('gearbox-fnr', c),
+  },
+  {
+    id: 'open-differential',
+    name: 'Open Differential',
+    category: 'Power',
+    icon: 'DIFF',
+    description: 'One input, two half-shaft outputs with torque split',
+    defaultColor: 0x6b747e,
+    mechanics: {
+      differential: {
+        inputConnectorId: 'input',
+        leftConnectorId: 'left',
+        rightConnectorId: 'right',
+        ratio: 1,
+        efficiency: 0.92,
+        torqueSplit: 0.5,
+      },
+    },
+    connectors: [
+      { id: 'input', type: 'axle-hole', position: [0, 1.0, 1.1], axis: [0, 0, 1] },
+      { id: 'left', type: 'axle-hole', position: [-0.9, 1.0, 0], axis: [1, 0, 0] },
+      { id: 'right', type: 'axle-hole', position: [0.9, 1.0, 0], axis: [1, 0, 0] },
+      ...bottomTubeMounts(2, 2),
+    ],
+    create: c => createDifferential('open-differential', c),
   },
 ]
 
