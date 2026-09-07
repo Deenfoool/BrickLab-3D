@@ -51,9 +51,14 @@ function ensureRenderer() {
 
 function disposeObject(object) {
   object.traverse(child => {
-    child.geometry?.dispose?.()
-    if (Array.isArray(child.material)) child.material.forEach(item => item?.dispose?.())
-    else child.material?.dispose?.()
+    if (!child.geometry?.userData?.bricklabSharedVisual) child.geometry?.dispose?.()
+    if (Array.isArray(child.material)) {
+      child.material.forEach(item => {
+        if (!item?.userData?.bricklabSharedVisual) item?.dispose?.()
+      })
+    } else if (!child.material?.userData?.bricklabSharedVisual) {
+      child.material?.dispose?.()
+    }
   })
 }
 
