@@ -1,15 +1,17 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: CONTROL-1 · per-instance motor RPM, key bindings and live F/N/R control.
-const V = 'control-1-20260908-0118'
+// BUILD: CATALOG-2 · expanded basic parts + catalog-wide visual quality pass.
+const V = 'catalog-2-20260908-0138'
 
 await import(`./three-cycle-guard.js?v=${V}`)
 await import(`./multi-transform-patch.js?v=${V}`)
 await import(`./render-quality.js?v=${V}`)
+await import(`./basic-parts-pack.js?v=${V}`)
 await import(`./lab-parts.js?v=${V}`)
 await import(`./physical-parts.js?v=${V}`)
 await import(`./suspension-patch.js?v=${V}`)
 await import(`./differential-patch.js?v=${V}`)
 await import(`./sensors-patch.js?v=${V}`)
+await import(`./part-visual-v3.js?v=${V}`)
 await import(`./physics-v2.js?v=${V}`)
 await import(`./colliders-v2.js?v=${V}`)
 await import(`./structural-auto-weld-v2.js?v=${V}`)
