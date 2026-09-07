@@ -1,6 +1,6 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: PV2-FIX2 · each extension is cache-busted so GitHub Pages/CDN cannot mix generations.
-const V = 'pv2-fix2-20260907-2133'
+// BUILD: PV2-FIX3 · each extension is cache-busted so GitHub Pages/CDN cannot mix generations.
+const V = 'pv2-fix3-20260908-0038'
 
 await import(`./render-quality.js?v=${V}`)
 await import(`./lab-parts.js?v=${V}`)
