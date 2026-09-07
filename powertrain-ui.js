@@ -1,48 +1,49 @@
-const MODE_KEY = 'bricklab.transmission.mode.v1'
 const PROJECT_KEY = 'bricklab.project.v2'
 const BENCH_BACKUP_KEY = 'bricklab.powertrain.backup.v1'
 const MODES = ['forward', 'neutral', 'reverse']
 
-function readMode() {
-  const saved = localStorage.getItem(MODE_KEY)
-  return MODES.includes(saved) ? saved : 'forward'
+function api() { return window.BrickLabControls }
+function readProject() { try { return JSON.parse(localStorage.getItem(PROJECT_KEY) || 'null') } catch { return null } }
+
+function transmissionEntries() {
+  const controls = api()
+  if (!controls) return []
+  const runtime = controls.getRuntimeEntries().filter(([, state]) => state.type === 'transmission')
+  if (runtime.length) return runtime.map(([id, state]) => ({ id, mode: state.mode, runtime: true }))
+  return controls.getObjects().map(object => {
+    const config = controls.getConfig(object.userData.instanceId)
+    return config?.type === 'transmission' ? { id: object.userData.instanceId, mode: config.transmission.initialMode, runtime: false } : null
+  }).filter(Boolean)
 }
 
-function readProject() {
-  try {
-    return JSON.parse(localStorage.getItem(PROJECT_KEY) || 'null')
-  } catch {
-    return null
-  }
+function currentMasterMode() {
+  const entries = transmissionEntries()
+  if (!entries.length) return 'forward'
+  const first = entries[0].mode
+  return entries.every(item => item.mode === first) ? first : 'mixed'
 }
 
-function readProjectParts() {
-  const project = readProject()
-  return Array.isArray(project?.parts) ? project.parts : []
-}
-
-let mode = readMode()
-window.__bricklabTransmissionMode = mode
-
-function setMode(next, { restart = true } = {}) {
-  if (!MODES.includes(next)) return
-  mode = next
-  window.__bricklabTransmissionMode = next
-  localStorage.setItem(MODE_KEY, next)
-
+function syncButtons() {
+  const mode = currentMasterMode()
   document.querySelectorAll('[data-transmission-mode]').forEach(button => {
-    button.classList.toggle('active', button.dataset.transmissionMode === next)
+    button.classList.toggle('active', button.dataset.transmissionMode === mode)
   })
+  document.getElementById('transmissionControl')?.classList.toggle('mixed', mode === 'mixed')
   decorateTelemetry()
+}
 
-  if (!restart) return
-  if (document.body.dataset.bricklabTest) {
-    document.querySelector('.mode[data-mode="test"]')?.click()
-    return
+function setMasterMode(next) {
+  if (!MODES.includes(next) || !api()) return
+  const runtime = api().getRuntimeEntries().filter(([, state]) => state.type === 'transmission')
+  if (runtime.length) {
+    api().setAllTransmissions(next)
+  } else {
+    for (const object of api().getObjects()) {
+      const config = api().getConfig(object.userData.instanceId)
+      if (config?.type === 'transmission') api().updateConfig(object.userData.instanceId, { transmission: { initialMode: next } })
+    }
   }
-
-  const simulate = document.querySelector('.mode[data-mode="simulate"]')
-  if (simulate?.classList.contains('active')) document.getElementById('simReset')?.click()
+  syncButtons()
 }
 
 async function toggleBench() {
@@ -63,7 +64,6 @@ async function toggleBench() {
     if (!response.ok) throw new Error(`Powertrain bench HTTP ${response.status}`)
     const bench = await response.json()
     localStorage.setItem(PROJECT_KEY, JSON.stringify(bench))
-    localStorage.setItem(MODE_KEY, 'forward')
     location.reload()
   } catch (error) {
     console.error('Could not load FNR Powertrain Bench', error)
@@ -73,10 +73,7 @@ async function toggleBench() {
 function installControls() {
   const actions = document.querySelector('.top-actions')
   const shortcutButton = document.getElementById('shortcutsBtn')
-  if (!actions || !shortcutButton) {
-    requestAnimationFrame(installControls)
-    return
-  }
+  if (!actions || !shortcutButton || !api()) return requestAnimationFrame(installControls)
   if (document.getElementById('transmissionControl')) return
 
   const project = readProject()
@@ -84,7 +81,7 @@ function installControls() {
   const control = document.createElement('div')
   control.id = 'transmissionControl'
   control.className = 'transmission-control'
-  control.title = 'F/N/R gearbox mode. Applies to F/N/R Gearbox parts.'
+  control.title = 'Master F/N/R control for all F/N/R Gearbox parts. Individual bindings live in Properties.'
   control.innerHTML = `
     <span class="transmission-icon"><i data-lucide="git-branch"></i></span>
     <div class="transmission-modes" role="group" aria-label="Transmission mode">
@@ -92,63 +89,48 @@ function installControls() {
       <button type="button" data-transmission-mode="neutral" aria-label="Neutral">N</button>
       <button type="button" data-transmission-mode="reverse" aria-label="Reverse">R</button>
     </div>
-    <button type="button" class="transmission-bench" data-powertrain-bench title="${showingBench ? 'Restore build from before powertrain bench' : 'Load F/N/R Powertrain Bench'}" aria-label="Powertrain bench">
-      <i data-lucide="${showingBench ? 'history' : 'wrench'}"></i>
-    </button>
-  `
+    <button type="button" class="transmission-bench" data-powertrain-bench title="${showingBench ? 'Restore build from before powertrain bench' : 'Load F/N/R Powertrain Bench'}" aria-label="Powertrain bench"><i data-lucide="${showingBench ? 'history' : 'wrench'}"></i></button>`
 
   actions.insertBefore(control, shortcutButton)
-  control.querySelectorAll('[data-transmission-mode]').forEach(button => {
-    button.onclick = () => setMode(button.dataset.transmissionMode)
-  })
+  control.querySelectorAll('[data-transmission-mode]').forEach(button => { button.onclick = () => setMasterMode(button.dataset.transmissionMode) })
   control.querySelector('[data-powertrain-bench]').onclick = toggleBench
-  setMode(mode, { restart: false })
+  syncButtons()
   window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } })
 }
 
 function decorateTelemetry() {
   const panel = document.getElementById('drivetrainTelemetry')
-  if (!panel) return
-
-  const parts = readProjectParts()
-  const gearboxCount = parts.filter(part => part.partId === 'gearbox-fnr').length
-  const differentialCount = parts.filter(part => part.partId === 'open-differential').length
+  if (!panel || !api()) return
+  const gearboxes = api().getObjects().filter(object => api().getConfig(object.userData.instanceId)?.type === 'transmission')
+  const differentials = api().getObjects().filter(object => object.userData.partId === 'open-differential')
   const summary = panel.querySelector('.telemetry-summary')
   const physicalMeshCount = Number(summary?.querySelector('span:nth-child(3) b')?.textContent || 0)
-  const gearSection = [...panel.querySelectorAll('.telemetry-section')]
-    .find(section => section.querySelector('label')?.textContent?.trim() === 'GEARS')
+  const gearSection = [...panel.querySelectorAll('.telemetry-section')].find(section => section.querySelector('label')?.textContent?.trim() === 'GEARS')
+  if (!gearSection) return
 
-  if (gearSection) {
-    const rows = [...gearSection.querySelectorAll('.telemetry-gear')]
-    rows.forEach((row, index) => row.classList.toggle('semantic-hidden', index >= physicalMeshCount))
+  const rows = [...gearSection.querySelectorAll('.telemetry-gear')]
+  rows.forEach((row, index) => row.classList.toggle('semantic-hidden', index >= physicalMeshCount))
+  gearSection.querySelector('.powertrain-badge')?.remove()
+  if (!gearboxes.length && !differentials.length) return
 
-    gearSection.querySelector('.powertrain-badge')?.remove()
-    if (gearboxCount || differentialCount) {
-      const badge = document.createElement('div')
-      badge.className = 'powertrain-badge'
-      const modeLabel = mode === 'forward' ? 'F' : mode === 'neutral' ? 'N' : 'R'
-      const modeClass = mode === 'neutral' ? 'neutral' : mode === 'reverse' ? 'reverse' : ''
-      badge.innerHTML = `
-        ${gearboxCount ? `<span>GEARBOX <b class="${modeClass}">${modeLabel}</b>${gearboxCount > 1 ? ` ×${gearboxCount}` : ''}</span>` : ''}
-        ${differentialCount ? `<span>DIFF <b>OPEN</b>${differentialCount > 1 ? ` ×${differentialCount}` : ''}</span>` : ''}
-      `
-      gearSection.append(badge)
-    }
-  }
+  const badge = document.createElement('div')
+  badge.className = 'powertrain-badge'
+  const mode = currentMasterMode()
+  const modeLabel = mode === 'forward' ? 'F' : mode === 'neutral' ? 'N' : mode === 'reverse' ? 'R' : 'MIX'
+  const modeClass = mode === 'neutral' ? 'neutral' : mode === 'reverse' ? 'reverse' : mode === 'mixed' ? 'mixed' : ''
+  badge.innerHTML = `${gearboxes.length ? `<span>GEARBOX <b class="${modeClass}">${modeLabel}</b>${gearboxes.length > 1 ? ` ×${gearboxes.length}` : ''}</span>` : ''}${differentials.length ? `<span>DIFF <b>OPEN</b>${differentials.length > 1 ? ` ×${differentials.length}` : ''}</span>` : ''}`
+  gearSection.append(badge)
 }
 
 installControls()
-
-let decorateQueued = false
+let queued = false
 new MutationObserver(() => {
-  if (decorateQueued) return
-  decorateQueued = true
-  requestAnimationFrame(() => {
-    decorateQueued = false
-    decorateTelemetry()
-  })
+  if (queued) return
+  queued = true
+  requestAnimationFrame(() => { queued = false; syncButtons() })
 }).observe(document.body, { childList: true, subtree: true })
 
-window.addEventListener('bricklab:set-transmission', event => {
-  setMode(event.detail?.mode)
-})
+window.addEventListener('bricklab:control-runtime-change', syncButtons)
+window.addEventListener('bricklab:controls-runtime-reset', syncButtons)
+window.addEventListener('bricklab:control-config-change', syncButtons)
+window.addEventListener('bricklab:set-transmission', event => setMasterMode(event.detail?.mode))
