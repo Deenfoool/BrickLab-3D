@@ -19,13 +19,16 @@ function installTestLab() {
   }
 
   const originalBuild = buildButton.onclick
+  const originalSimulate = simulateButton.onclick
+
   buildButton.onclick = event => {
     clearTestUi()
     originalBuild?.call(buildButton, event)
   }
 
-  const originalSimulate = simulateButton.onclick
   simulateButton.onclick = event => {
+    const leavingTest = document.body.dataset.bricklabTest === 'hill-climb'
+    if (leavingTest) originalBuild?.call(buildButton, event)
     clearTestUi()
     originalSimulate?.call(simulateButton, event)
   }
@@ -33,7 +36,7 @@ function installTestLab() {
   testButton.onclick = () => {
     // TEST reuses the non-destructive SIMULATE runtime, but asks PhysicsSession
     // to build a Hill Climb environment before the world starts.
-    if (!buildButton.classList.contains('active')) buildButton.click()
+    if (!buildButton.classList.contains('active')) originalBuild?.call(buildButton, new Event('click'))
     window.__bricklabNextScenario = 'hill-climb'
     originalSimulate?.call(simulateButton, new Event('click'))
     markTestUi()
@@ -41,6 +44,12 @@ function installTestLab() {
 
   const observer = new MutationObserver(() => {
     if (document.body.dataset.bricklabTest !== 'hill-climb') return
+
+    if (status.textContent.startsWith('BUILD')) {
+      clearTestUi()
+      return
+    }
+
     if (status.textContent.startsWith('SIMULATE')) {
       status.textContent = status.textContent.replace(/^SIMULATE/, 'TEST · HILL CLIMB')
     }
