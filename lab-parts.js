@@ -16,7 +16,6 @@ function migrateProjectKey(key) {
     if (!Array.isArray(project?.connections) || !Array.isArray(project?.parts)) return
     const motorIds = new Set(project.parts.filter(part => part.partId === 'motor').map(part => part.instanceId))
     let changed = false
-
     for (const connection of project.connections) {
       for (const side of ['a', 'b']) {
         const endpoint = connection?.[side]
@@ -27,7 +26,6 @@ function migrateProjectKey(key) {
         changed = true
       }
     }
-
     if (changed) localStorage.setItem(key, JSON.stringify(project))
   } catch (error) {
     console.warn(`BrickLab could not migrate ${key}`, error)
@@ -53,11 +51,9 @@ function createBearingBlock(color) {
   const g = new THREE.Group()
   g.userData.partId = 'bearing-block'
   g.userData.color = color
-
   const body = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.35, 1.2), material(color))
   body.position.y = 0.675
   g.add(body)
-
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.1, 14, 28), darkMaterial())
   ring.rotation.y = Math.PI / 2
   ring.position.set(0, 0.9, 0.61)
@@ -71,11 +67,9 @@ function createSuspensionArm(color) {
   const g = new THREE.Group()
   g.userData.partId = 'suspension-arm-5'
   g.userData.color = color
-
   const body = new THREE.Mesh(new THREE.BoxGeometry(4.9, 0.72, 0.72), material(color))
   body.position.set(0, 0.45, 0)
   g.add(body)
-
   const holeGeo = new THREE.TorusGeometry(0.22, 0.08, 12, 22)
   const holeMat = darkMaterial()
   for (const x of [-1, 0, 1, 2]) {
@@ -85,11 +79,24 @@ function createSuspensionArm(color) {
     back.position.z = -0.37
     g.add(front, back)
   }
-
   const pivot = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 1.05, 20), material(0xadb5bd))
   pivot.rotation.x = Math.PI / 2
   pivot.position.set(-2, 0.45, 0)
   g.add(pivot)
+  return g
+}
+
+function createShaftSensor(id, color, accent) {
+  const g = new THREE.Group()
+  g.userData.partId = id
+  g.userData.color = color
+  const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.55, 28), material(color))
+  housing.rotation.z = Math.PI / 2
+  housing.position.y = 0.55
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.09, 12, 24), material(accent))
+  ring.rotation.y = Math.PI / 2
+  ring.position.y = 0.55
+  g.add(housing, ring)
   return g
 }
 
@@ -118,14 +125,7 @@ addPart({
   icon: '⌁',
   description: 'Spring-loaded control arm with integrated pivot pin',
   defaultColor: 0xd7263d,
-  mechanics: {
-    suspensionArm: {
-      pivotConnectorId: 'pivot',
-      restAngle: 0,
-      stiffness: 7.5,
-      damping: 1.25,
-    },
-  },
+  mechanics: { suspensionArm: { pivotConnectorId: 'pivot', restAngle: 0, stiffness: 7.5, damping: 1.25 } },
   connectors: [
     { id: 'pivot', type: 'pin', position: [-2, 0.45, 0], axis: [0, 0, 1] },
     { id: 'hole-1', type: 'pin-hole', position: [-1, 0.45, 0], axis: [0, 0, 1] },
@@ -134,6 +134,30 @@ addPart({
     { id: 'hole-4', type: 'pin-hole', position: [2, 0.45, 0], axis: [0, 0, 1] },
   ],
   create: createSuspensionArm,
+})
+
+addPart({
+  id: 'rpm-sensor',
+  name: 'RPM Sensor',
+  category: 'Power',
+  icon: 'RPM',
+  description: 'Inline shaft sensor for actual RPM history',
+  defaultColor: 0x2f7f8f,
+  mechanics: { shaft: true, sensor: { kind: 'rpm' } },
+  connectors: [{ id: 'axle-hole', type: 'axle-hole', position: [0, 0.55, 0], axis: [1, 0, 0] }],
+  create: color => createShaftSensor('rpm-sensor', color, 0x74e6a6),
+})
+
+addPart({
+  id: 'torque-sensor',
+  name: 'Torque Sensor',
+  category: 'Power',
+  icon: 'TQ',
+  description: 'Inline shaft sensor for available torque telemetry',
+  defaultColor: 0x8a6338,
+  mechanics: { shaft: true, sensor: { kind: 'torque' } },
+  connectors: [{ id: 'axle-hole', type: 'axle-hole', position: [0, 0.55, 0], axis: [1, 0, 0] }],
+  create: color => createShaftSensor('torque-sensor', color, 0xffb65c),
 })
 
 document.getElementById('partSearch')?.dispatchEvent(new Event('input', { bubbles: true }))
