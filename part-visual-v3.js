@@ -4,6 +4,9 @@ import { PARTS } from './parts.js'
 const darkMat = new THREE.MeshStandardMaterial({ color: 0x101316, roughness: 0.78, metalness: 0.05 })
 const metalMat = new THREE.MeshStandardMaterial({ color: 0xaeb6be, roughness: 0.24, metalness: 0.78 })
 const linerGeometry = new THREE.TorusGeometry(0.246, 0.018, 6, 30)
+darkMat.userData.bricklabSharedVisual = true
+metalMat.userData.bricklabSharedVisual = true
+linerGeometry.userData.bricklabSharedVisual = true
 
 function visualOnly(object) {
   object.userData.physicsIgnore = true
