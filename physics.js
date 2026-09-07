@@ -203,6 +203,7 @@ export class PhysicsSession {
 
     this.drivetrain = analyzeDrivetrain(this.objects, this.connections)
     this.buildGearVelocityTargets()
+    this.mountTelemetry()
   }
 
   createCompoundBody(objects) {
@@ -350,6 +351,56 @@ export class PhysicsSession {
     }
   }
 
+  mountTelemetry() {
+    document.getElementById('drivetrainTelemetry')?.remove()
+    const host = document.querySelector('.viewport-wrap')
+    if (!host || !this.drivetrain) return
+
+    const panel = document.createElement('div')
+    panel.id = 'drivetrainTelemetry'
+    panel.className = 'drivetrain-telemetry'
+
+    const driven = this.drivetrain.shafts.filter(shaft => shaft.rpm != null)
+    const shaftRows = driven.slice(0, 8).map(shaft => {
+      const rpm = Math.round(shaft.rpm)
+      const ratio = shaft.ratioFromMotor == null ? '—' : `${shaft.ratioFromMotor >= 0 ? '+' : ''}${shaft.ratioFromMotor.toFixed(2)}×`
+      return `<div class="telemetry-row"><span>${shaft.id}</span><b>${rpm >= 0 ? '+' : ''}${rpm} RPM</b><small>${ratio}</small></div>`
+    }).join('')
+
+    const gearRows = this.drivetrain.gearMeshes.slice(0, 5).map(mesh => {
+      const ratio = Math.abs(mesh.ratioAB)
+      return `<div class="telemetry-gear"><span>${mesh.a.teeth}T</span><i data-lucide="move-right"></i><span>${mesh.b.teeth}T</span><b>${ratio.toFixed(2)}:1</b></div>`
+    }).join('')
+
+    panel.innerHTML = `
+      <div class="telemetry-head">
+        <div><small>DRIVETRAIN</small><strong>Live targets</strong></div>
+        <i data-lucide="gauge"></i>
+      </div>
+      <div class="telemetry-summary">
+        <span><b>${this.drivetrain.stats.motors}</b> motors</span>
+        <span><b>${this.drivetrain.stats.drivenShafts}</b> driven shafts</span>
+        <span><b>${this.drivetrain.stats.gearMeshes}</b> gear meshes</span>
+      </div>
+      <div class="telemetry-section">
+        <label>SHAFT RPM</label>
+        ${shaftRows || '<div class="telemetry-empty">No powered shaft. Connect a Lab Motor output to an axle-hole.</div>'}
+      </div>
+      <div class="telemetry-section">
+        <label>GEARS</label>
+        ${gearRows || '<div class="telemetry-empty">Place two powered gears at their pitch distance to mesh them automatically.</div>'}
+      </div>
+      ${this.drivetrain.conflicts.length ? `<div class="telemetry-warning">${this.drivetrain.conflicts.length} drivetrain conflict${this.drivetrain.conflicts.length === 1 ? '' : 's'} detected</div>` : ''}
+    `
+
+    host.append(panel)
+    window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } })
+  }
+
+  removeTelemetry() {
+    document.getElementById('drivetrainTelemetry')?.remove()
+  }
+
   enforceGearVelocityTargets() {
     for (const target of this.gearVelocityTargets) {
       const rotation = target.body.rotation()
@@ -410,6 +461,7 @@ export class PhysicsSession {
     } catch (error) {
       console.warn('Could not free Rapier world', error)
     }
+    this.removeTelemetry()
     this.world = null
     this.members.clear()
     this.components = []
