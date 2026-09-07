@@ -3,5 +3,6 @@
 await import('./runtime-extensions.js')
 await import('./app.js')
 await import('./overlay-ui.js')
+await import('./catalog-ui.js')
 await import('./testlab.js')
 await import('./powertrain-ui.js')
