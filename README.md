@@ -9,11 +9,12 @@ The goal is to let users assemble brick/Technic-style mechanisms, simulate them,
 ### Builder
 
 - Three.js 3D viewport with orbit camera, lighting, shadows and grid.
-- Searchable catalog with 12 procedural prototype parts.
-- Bricks, plates, Technic-style beams, axles, pin, gears, wheel and motor placeholder.
+- Searchable catalog with 13 procedural prototype parts.
+- Bricks, plates, Technic-style beams, axles, axle coupler, pin, gears, wheel and Lab Motor.
 - Move / rotate gizmos with optional grid snapping and 90° rotation snapping.
 - Mechanical connector metadata for `stud`, `tube`, `pin`, `pin-hole`, `axle`, and `axle-hole`.
 - Compatible connector snapping with automatic axis orientation before attachment.
+- Beam holes accept pins as hinges and axles as rotational bearings.
 - Free connector guides are blue, occupied connectors are orange, saved graph connections are green.
 - Perspective and orthographic camera modes plus front / side / top views.
 - World / local transform-space switching.
@@ -30,7 +31,11 @@ The goal is to let users assemble brick/Technic-style mechanisms, simulate them,
 
 ### Connection graph
 
-- Explicit persistent graph edges with `fixed`, `hinge`, and `axle` kinds.
+- Explicit persistent graph edges with `fixed`, `hinge`, `bearing`, and `axle` kinds.
+- `fixed`: stud/tube rigid attachment.
+- `hinge`: pin through a normal Technic hole.
+- `bearing`: axle through a normal Technic hole; the shaft is supported but can rotate.
+- `axle`: keyed axle/axle-hole coupling that transmits rotation.
 - Exclusive connector occupancy: an already-used connector cannot be snapped a second time.
 - Moving a connected part breaks its existing links before a new connection is created.
 - Inspector shows connector usage and links for the selected part.
@@ -45,20 +50,53 @@ The goal is to let users assemble brick/Technic-style mechanisms, simulate them,
 - `.bricklab` JSON export/import using project format v2 with persisted connections.
 - Backward restore support for old v1 local projects.
 
-### Physics preview
+### Physics and drivetrain
 
-`SIMULATE` is an actual Rapier-backed physics mode rather than a placeholder:
+`SIMULATE` is an actual Rapier-backed physics mode:
 
 - Rapier 3D compatibility build is loaded only when simulation starts.
 - Gravity and a ground collider are created in-browser.
-- Fixed graph components are merged into compound rigid bodies for stability and performance.
-- `hinge` and `axle` graph links are translated into revolute joints between rigid groups.
-- First motor metadata and motorized axle-joint support are present.
+- Fixed brick assemblies and rigid keyed shaft assemblies are merged into compound rigid bodies.
+- `hinge` and `bearing` links become revolute joints.
+- A Lab Motor output becomes a motorized revolute joint and currently targets 120 RPM.
+- The motor has four bottom tube mounting points so it can be fixed to a plate/chassis.
+- Wheel colliders use higher-friction cylinders.
+- Gear colliders are kept inside the pitch circle because tooth interaction is handled semantically.
 - Play / Pause / Reset controls.
 - Simulation is non-destructive: returning to BUILD restores the pre-simulation project state.
-- Failed experimental joints are skipped and reported instead of crashing the whole editor.
 
-The current collision shapes are intentionally approximate. More accurate per-part collision metadata, wheel behaviour, drivetrain propagation and suspension are still in progress.
+### Drivetrain graph
+
+`drivetrain.js` now analyzes the mechanical build before simulation:
+
+- all rigid axle/axle-hole connections are grouped into shafts;
+- Lab Motor connections seed shaft RPM;
+- nearby coplanar spur gears are automatically detected as meshed using their pitch radii;
+- tooth count determines speed ratio and direction;
+- RPM propagates through multiple gear stages;
+- incompatible motor / gear loops are reported as drivetrain conflicts.
+
+Example:
+
+```text
+Motor + 8T gear:  +120 RPM
+        ↓ 8:24
+24T output gear:   -40 RPM
+```
+
+Gear-driven shafts currently receive Rapier angular-velocity targets. This is a practical browser simulation preview, not yet a torque-conserving tooth-force model.
+
+### SIMULATE telemetry
+
+Entering SIMULATE now opens a drivetrain panel with:
+
+- motor count;
+- powered shaft count;
+- detected gear meshes;
+- target shaft RPM;
+- ratio relative to the motor;
+- detected tooth-count ratios;
+- drivetrain conflicts.
 
 ## GitHub Pages
 
@@ -68,8 +106,9 @@ BrickLab follows the same no-build Pages deployment pattern used by the portfoli
 2. `index.html` loads `app.js` with relative paths.
 3. Three.js is pinned to `0.180.0` and loaded as ES modules through jsDelivr.
 4. Lucide is pinned to `1.42.0` and loaded as a vanilla browser bundle.
-5. `.nojekyll` is included.
-6. `.github/workflows/pages.yml` uploads the repository root directly — no `npm install` and no Vite build are required for deployment.
+5. Rapier is lazy-loaded only when SIMULATE starts.
+6. `.nojekyll` is included.
+7. `.github/workflows/pages.yml` uploads the repository root directly — no `npm install` and no Vite build are required for deployment.
 
 Expected Pages URL:
 
@@ -83,7 +122,6 @@ The root browser modules are the production runtime. The earlier TypeScript/Vite
 | --- | --- |
 | Move | `M` |
 | Rotate | `R` |
-| Scale | `S` — reserved |
 | Quick move | `G` |
 | Delete | `X` / `Delete` / `Backspace` |
 | Duplicate | `Ctrl/Cmd + D` |
@@ -132,9 +170,11 @@ Snap + orientation engine
     ↓
 Persistent connection graph
     ↓
+Shaft graph + automatic gear mesh analysis
+    ↓
 Rapier physics adapter
     ↓
-Drivetrain systems + telemetry
+Drivetrain telemetry
     ↓
 Test scenarios / challenges
 ```
@@ -153,6 +193,7 @@ Implemented:
 - Persistent connections.
 - Exclusive connectors.
 - Automatic connector-axis orientation.
+- Bearings and keyed shaft semantics.
 - Undo / redo.
 
 ### Physics
@@ -160,17 +201,36 @@ Implemented:
 Implemented foundation:
 - Rapier lazy loading.
 - Dynamic compound rigid bodies and ground collision.
-- Revolute graph joints.
-- Initial motorized axle support.
+- Revolute hinge / bearing joints.
+- Motorized output shaft.
+- Rigid shaft grouping.
+- Wheel and gear collider specializations.
 - Play / pause / reset.
 - Non-destructive simulation state.
 
 Next:
-- Better per-part collider metadata.
-- Validate hinge/axle local frames for all orientations.
-- Wheel friction and wheel hubs.
-- Drivetrain RPM / torque propagation.
+- Torque limits and motor stall behaviour.
+- Actual-vs-target RPM measurement.
+- Wheel slip telemetry.
 - Suspension springs / dampers.
+- More accurate per-part collider metadata.
+
+### Drivetrain lab
+
+Implemented foundation:
+- Shaft graph.
+- Automatic spur-gear meshing.
+- Tooth-count ratios.
+- Rotation direction propagation.
+- Multi-stage RPM propagation.
+- Drivetrain conflict detection.
+- SIMULATE telemetry panel.
+
+Next:
+- Torque propagation.
+- Differential.
+- Clutch and selectable gearbox relationships.
+- RPM / torque sensors and time-series graphs.
 
 ### Geometry / LDraw track
 
@@ -178,12 +238,6 @@ Next:
 - Small curated packed-part set first, not the entire official library.
 - Proper LDraw attribution/license notice in-app before redistributing library files.
 - Expand the curated catalog after loader, caching and performance are proven.
-
-### Drivetrain lab
-
-- Gear meshing and tooth-count ratios.
-- Differential and gearbox building.
-- RPM / torque sensors and telemetry.
 
 ### Test worlds
 
