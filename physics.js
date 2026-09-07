@@ -1,5 +1,10 @@
 import * as THREE from 'three'
 import { findPart } from './parts.js'
+import {
+  analyzeDrivetrain,
+  isRigidAxleConnection,
+  motorConnectionInfo,
+} from './drivetrain.js'
 
 const RAPIER_CDN = 'https://cdn.skypack.dev/@dimforge/rapier3d-compat@0.20.0'
 let rapierPromise = null
@@ -55,6 +60,7 @@ function localColliderSpecs(object) {
       radius: wheel.radius,
       center: new THREE.Vector3(0, 1.15, 0),
       rotation: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI / 2)),
+      friction: 1.35,
     }]
   }
 
@@ -63,14 +69,15 @@ function localColliderSpecs(object) {
     return [{
       shape: 'cylinder',
       halfHeight: 0.18,
-      radius: Math.max(0.65, gear.teeth * 0.045) * 1.12,
+      radius: (gear.pitchRadius ?? Math.max(0.45, gear.teeth * 0.055)) * 0.7,
       center: new THREE.Vector3(0, 0.4, 0),
       rotation: new THREE.Quaternion(),
+      friction: 0.5,
     }]
   }
 
   const { size, center } = localBounds(object)
-  return [{ shape: 'cuboid', size, center, rotation: new THREE.Quaternion() }]
+  return [{ shape: 'cuboid', size, center, rotation: new THREE.Quaternion(), friction: 0.9 }]
 }
 
 function createColliderDescriptor(RAPIER, spec, relativeMatrix, relativeRotation, relativeScale) {
@@ -95,12 +102,12 @@ function createColliderDescriptor(RAPIER, spec, relativeMatrix, relativeRotation
   return collider
     .setTranslation(center.x, center.y, center.z)
     .setRotation(quaternion(rotation))
-    .setFriction(0.9)
+    .setFriction(spec.friction ?? 0.9)
     .setRestitution(0.03)
     .setDensity(0.7)
 }
 
-function buildFixedComponents(objects, connections) {
+function buildRigidComponents(objects, connections) {
   const byId = new Map(objects.map(object => [object.userData.instanceId, object]))
   const parent = new Map([...byId.keys()].map(id => [id, id]))
 
@@ -125,7 +132,8 @@ function buildFixedComponents(objects, connections) {
   }
 
   for (const connection of connections) {
-    if (connection.kind !== 'fixed') continue
+    const rigid = connection.kind === 'fixed' || isRigidAxleConnection(connection, byId)
+    if (!rigid) continue
     if (!byId.has(connection.a.instanceId) || !byId.has(connection.b.instanceId)) continue
     union(connection.a.instanceId, connection.b.instanceId)
   }
@@ -168,6 +176,9 @@ export class PhysicsSession {
     this.failedJointCount = 0
     this.internalJointCount = 0
     this.motorCount = 0
+    this.bearingCount = 0
+    this.drivetrain = null
+    this.gearVelocityTargets = []
   }
 
   build() {
@@ -177,17 +188,21 @@ export class PhysicsSession {
 
     const ground = RAPIER.ColliderDesc.cuboid(40, 0.12, 40)
       .setTranslation(0, -0.12, 0)
-      .setFriction(1.0)
+      .setFriction(1.1)
       .setRestitution(0.02)
     this.world.createCollider(ground)
 
-    const groups = buildFixedComponents(this.objects, this.connections)
+    const groups = buildRigidComponents(this.objects, this.connections)
     for (const objects of groups) this.createCompoundBody(objects)
 
     for (const connection of this.connections) {
       if (connection.kind === 'fixed') continue
+      if (isRigidAxleConnection(connection, this.objects)) continue
       this.createJoint(connection)
     }
+
+    this.drivetrain = analyzeDrivetrain(this.objects, this.connections)
+    this.buildGearVelocityTargets()
   }
 
   createCompoundBody(objects) {
@@ -205,6 +220,7 @@ export class PhysicsSession {
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(bodyPosition.x, bodyPosition.y, bodyPosition.z)
       .setRotation(quaternion(bodyRotation))
+      .setCanSleep(false)
     const body = this.world.createRigidBody(bodyDesc)
 
     const component = {
@@ -219,8 +235,9 @@ export class PhysicsSession {
     for (const object of objects) {
       const relativeMatrix = bodyWorldInverse.clone().multiply(object.matrixWorld)
       const { rotation: relativeRotation, scale: relativeScale } = matrixPose(relativeMatrix)
+
       for (const spec of localColliderSpecs(object)) {
-        const colliderDesc = createColliderDescriptor(RAPIER, spec, relativeMatrix, relativeRotation, relativeScale)
+        const colliderDesc = createColliderDescriptor(this.RAPIER, spec, relativeMatrix, relativeRotation, relativeScale)
         this.world.createCollider(colliderDesc, body)
       }
 
@@ -264,14 +281,18 @@ export class PhysicsSession {
       const axisA = this.bodyLocalAxis(memberA, connectorA)
 
       let params = null
-      if (connection.kind === 'hinge' || connection.kind === 'axle') {
+      if (connection.kind === 'hinge' || connection.kind === 'bearing') {
+        params = RAPIER.JointData.revolute(vector3(anchorA), vector3(anchorB), vector3(axisA))
+      } else if (connection.kind === 'axle' && motorConnectionInfo(connection, this.objects)) {
         params = RAPIER.JointData.revolute(vector3(anchorA), vector3(anchorB), vector3(axisA))
       }
 
       if (!params) return
       const joint = this.world.createImpulseJoint(params, memberA.body, memberB.body, true)
       joint.setContactsEnabled?.(false)
-      this.configureMotor(connection, memberA, memberB, connectorA, connectorB, axisA, joint)
+
+      if (connection.kind === 'bearing') this.bearingCount += 1
+      if (connection.kind === 'axle') this.configureMotor(connection, memberA, memberB, connectorA, connectorB, axisA, joint)
       this.jointCount += 1
     } catch (error) {
       this.failedJointCount += 1
@@ -280,30 +301,16 @@ export class PhysicsSession {
   }
 
   configureMotor(connection, memberA, memberB, connectorA, connectorB, axisA, joint) {
-    if (connection.kind !== 'axle' || !joint?.configureMotorVelocity) return
+    if (!joint?.configureMotorVelocity) return
 
-    const definitionA = findPart(memberA.object.userData.partId)
-    const definitionB = findPart(memberB.object.userData.partId)
-    const motorA = definitionA?.mechanics?.motor
-    const motorB = definitionB?.mechanics?.motor
+    const info = motorConnectionInfo(connection, this.objects)
+    if (!info) return
 
-    let motor = null
-    let motorMember = null
-    let motorConnector = null
-    let motorIsA = false
-
-    if (motorA && connection.a.connectorId === motorA.connectorId) {
-      motor = motorA
-      motorMember = memberA
-      motorConnector = connectorA
-      motorIsA = true
-    } else if (motorB && connection.b.connectorId === motorB.connectorId) {
-      motor = motorB
-      motorMember = memberB
-      motorConnector = connectorB
-    }
-
-    if (!motor || !motorMember || !motorConnector) return
+    const motorIsA = info.motorObject.userData.instanceId === memberA.object.userData.instanceId
+    const motorMember = motorIsA ? memberA : memberB
+    const motorConnector = motorIsA ? connectorA : connectorB
+    const motor = findPart(motorMember.object.userData.partId)?.mechanics?.motor
+    if (!motor) return
 
     const jointAxisWorld = axisA.clone().applyQuaternion(memberA.component.bodyWorldRotation).normalize()
     const motorObjectRotation = motorMember.object.getWorldQuaternion(new THREE.Quaternion())
@@ -317,8 +324,46 @@ export class PhysicsSession {
     this.motorCount += 1
   }
 
+  buildGearVelocityTargets() {
+    this.gearVelocityTargets = []
+    if (!this.drivetrain) return
+
+    for (const shaft of this.drivetrain.shafts) {
+      if (shaft.rpm == null || shaft.sourceType !== 'gear') continue
+
+      const member = shaft.memberIds
+        .map(instanceId => this.members.get(instanceId))
+        .find(Boolean)
+      if (!member) continue
+
+      const localAxis = shaft.axisWorld
+        .clone()
+        .applyQuaternion(member.component.bodyWorldRotation.clone().invert())
+        .normalize()
+
+      this.gearVelocityTargets.push({
+        shaftId: shaft.id,
+        body: member.body,
+        localAxis,
+        rpm: shaft.rpm,
+      })
+    }
+  }
+
+  enforceGearVelocityTargets() {
+    for (const target of this.gearVelocityTargets) {
+      const rotation = target.body.rotation()
+      const bodyRotation = new THREE.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w)
+      const worldAxis = target.localAxis.clone().applyQuaternion(bodyRotation).normalize()
+      const radiansPerSecond = target.rpm * Math.PI * 2 / 60
+      const angularVelocity = worldAxis.multiplyScalar(radiansPerSecond)
+      target.body.setAngvel(vector3(angularVelocity), true)
+    }
+  }
+
   step() {
     if (!this.world || !this.running) return
+    this.enforceGearVelocityTargets()
     this.world.step()
     this.syncObjects()
   }
@@ -368,17 +413,59 @@ export class PhysicsSession {
     this.world = null
     this.members.clear()
     this.components = []
+    this.gearVelocityTargets = []
+  }
+
+  get telemetry() {
+    return this.drivetrain
+      ? {
+          shafts: this.drivetrain.shafts.map(shaft => ({
+            id: shaft.id,
+            rpm: shaft.rpm,
+            ratioFromMotor: shaft.ratioFromMotor,
+            memberIds: shaft.memberIds,
+            sourceType: shaft.sourceType,
+          })),
+          gearMeshes: this.drivetrain.gearMeshes.map(mesh => ({
+            id: mesh.id,
+            teethA: mesh.a.teeth,
+            teethB: mesh.b.teeth,
+            ratio: mesh.ratioAB,
+            error: mesh.error,
+          })),
+          motors: this.drivetrain.motors.map(motor => ({
+            id: motor.id,
+            rpm: motor.rpm,
+            shaftId: motor.shaftId,
+          })),
+          conflicts: [...this.drivetrain.conflicts],
+        }
+      : { shafts: [], gearMeshes: [], motors: [], conflicts: [] }
   }
 
   get stats() {
+    const drivetrainStats = this.drivetrain?.stats ?? {
+      shafts: 0,
+      drivenShafts: 0,
+      motors: 0,
+      gearMeshes: 0,
+      conflicts: 0,
+    }
+
     return {
       parts: this.objects.length,
       bodies: this.components.length,
-      fixedMerged: Math.max(0, this.objects.length - this.components.length),
+      rigidMerged: Math.max(0, this.objects.length - this.components.length),
       joints: this.jointCount,
       failedJoints: this.failedJointCount,
       internalJoints: this.internalJointCount,
       motors: this.motorCount,
+      bearings: this.bearingCount,
+      shafts: drivetrainStats.shafts,
+      drivenShafts: drivetrainStats.drivenShafts,
+      gearMeshes: drivetrainStats.gearMeshes,
+      drivetrainConflicts: drivetrainStats.conflicts,
+      gearVelocityTargets: this.gearVelocityTargets.length,
     }
   }
 }
