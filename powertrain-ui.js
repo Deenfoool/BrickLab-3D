@@ -1,5 +1,6 @@
 const MODE_KEY = 'bricklab.transmission.mode.v1'
 const PROJECT_KEY = 'bricklab.project.v2'
+const BENCH_BACKUP_KEY = 'bricklab.powertrain.backup.v1'
 const MODES = ['forward', 'neutral', 'reverse']
 
 function readMode() {
@@ -7,13 +8,17 @@ function readMode() {
   return MODES.includes(saved) ? saved : 'forward'
 }
 
-function readProjectParts() {
+function readProject() {
   try {
-    const project = JSON.parse(localStorage.getItem(PROJECT_KEY) || 'null')
-    return Array.isArray(project?.parts) ? project.parts : []
+    return JSON.parse(localStorage.getItem(PROJECT_KEY) || 'null')
   } catch {
-    return []
+    return null
   }
+}
+
+function readProjectParts() {
+  const project = readProject()
+  return Array.isArray(project?.parts) ? project.parts : []
 }
 
 let mode = readMode()
@@ -41,6 +46,31 @@ function setMode(next, { restart = true } = {}) {
   if (simulate?.classList.contains('active')) document.getElementById('simReset')?.click()
 }
 
+async function toggleBench() {
+  const project = readProject()
+  const backup = localStorage.getItem(BENCH_BACKUP_KEY)
+  const showingBench = project?.name === 'FNR Powertrain Bench' && backup
+
+  if (showingBench) {
+    localStorage.setItem(PROJECT_KEY, backup)
+    localStorage.removeItem(BENCH_BACKUP_KEY)
+    location.reload()
+    return
+  }
+
+  if (project?.parts?.length) localStorage.setItem(BENCH_BACKUP_KEY, JSON.stringify(project))
+  try {
+    const response = await fetch('./examples/powertrain-bench.bricklab', { cache: 'no-store' })
+    if (!response.ok) throw new Error(`Powertrain bench HTTP ${response.status}`)
+    const bench = await response.json()
+    localStorage.setItem(PROJECT_KEY, JSON.stringify(bench))
+    localStorage.setItem(MODE_KEY, 'forward')
+    location.reload()
+  } catch (error) {
+    console.error('Could not load FNR Powertrain Bench', error)
+  }
+}
+
 function installControls() {
   const actions = document.querySelector('.top-actions')
   const shortcutButton = document.getElementById('shortcutsBtn')
@@ -50,6 +80,8 @@ function installControls() {
   }
   if (document.getElementById('transmissionControl')) return
 
+  const project = readProject()
+  const showingBench = project?.name === 'FNR Powertrain Bench' && localStorage.getItem(BENCH_BACKUP_KEY)
   const control = document.createElement('div')
   control.id = 'transmissionControl'
   control.className = 'transmission-control'
@@ -61,12 +93,16 @@ function installControls() {
       <button type="button" data-transmission-mode="neutral" aria-label="Neutral">N</button>
       <button type="button" data-transmission-mode="reverse" aria-label="Reverse">R</button>
     </div>
+    <button type="button" class="transmission-bench" data-powertrain-bench title="${showingBench ? 'Restore build from before powertrain bench' : 'Load F/N/R Powertrain Bench'}" aria-label="Powertrain bench">
+      <i data-lucide="${showingBench ? 'history' : 'wrench'}"></i>
+    </button>
   `
 
   actions.insertBefore(control, shortcutButton)
   control.querySelectorAll('[data-transmission-mode]').forEach(button => {
     button.onclick = () => setMode(button.dataset.transmissionMode)
   })
+  control.querySelector('[data-powertrain-bench]').onclick = toggleBench
   setMode(mode, { restart: false })
   window.lucide?.createIcons?.({ attrs: { 'stroke-width': 1.8, 'aria-hidden': 'true' } })
 }
