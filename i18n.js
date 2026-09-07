@@ -152,7 +152,11 @@ const EN_RU = {
   'Obstacle Course': 'Полоса препятствий',
   'TEST · HILL CLIMB': 'ТЕСТ · ПОДЪЁМ',
   'TEST · TORQUE PULL': 'ТЕСТ · ТЯГА',
+  'TEST · PULL / TORQUE': 'ТЕСТ · ТЯГА / МОМЕНТ',
   'TEST · OBSTACLE COURSE': 'ТЕСТ · ПРЕПЯТСТВИЯ',
+  'HILL CLIMB': 'ПОДЪЁМ',
+  'PULL / TORQUE': 'ТЯГА / МОМЕНТ',
+  'OBSTACLE COURSE': 'ПОЛОСА ПРЕПЯТСТВИЙ',
   GEARBOX: 'КОРОБКА',
   DIFF: 'ДИФФ',
   OPEN: 'ОТКРЫТЫЙ',
@@ -225,11 +229,12 @@ function dynamicToRu(text) {
   if ((match = text.match(/^Actual ([-+\d.]+) RPM · target ([-+\d.]+) RPM$/))) return `Факт ${match[1]} RPM · цель ${match[2]} RPM`
   if ((match = text.match(/^([-+\d.]+) A estimated · ([-+\d.]+) stall torque$/))) return `Оценка ${match[1]} A · момент остановки ${match[2]}`
   if ((match = text.match(/^TEST scenario: (.+)\. Click to switch\.$/))) return `Сценарий теста: ${translateCore(match[1], 'ru')}. Нажмите для переключения.`
+  if ((match = text.match(/^Hide (Parts|Properties)$/))) return match[1] === 'Parts' ? 'Скрыть каталог деталей' : 'Скрыть свойства'
+  if ((match = text.match(/^Scale is reserved.*$/))) return 'Масштабирование пока отключено — размеры деталей должны оставаться механически точными'
+  if ((match = text.match(/^Select at least two parts to group$/))) return 'Выберите минимум две детали для группировки'
+  if ((match = text.match(/^Selected parts are not grouped$/))) return 'Выбранные детали не сгруппированы'
   if (text === 'Rotation reset') return 'Вращение сброшено'
   if (text === 'Position reset') return 'Позиция сброшена'
-  if (text === 'Select at least two parts to group') return 'Выберите минимум две детали для группировки'
-  if (text === 'Selected parts are not grouped') return 'Выбранные детали не сгруппированы'
-  if (text.startsWith('Scale is reserved')) return 'Масштабирование пока отключено — размеры деталей должны оставаться механически точными'
   return null
 }
 
@@ -261,8 +266,27 @@ function dynamicToEn(text) {
   return null
 }
 
+function translatePartText(text, target) {
+  for (const part of PARTS) {
+    const translated = PART_TRANSLATIONS[part.id]
+    if (!translated) continue
+    const englishName = part.__i18nEnglishName ?? part.name
+    const englishDescription = part.__i18nEnglishDescription ?? part.description
+    if (target === 'ru') {
+      if (text === englishName) return translated[0]
+      if (text === englishDescription) return translated[1]
+    } else {
+      if (text === translated[0]) return englishName
+      if (text === translated[1]) return englishDescription
+    }
+  }
+  return null
+}
+
 function translateCore(text, target = language) {
   if (!text) return text
+  const partText = translatePartText(text, target)
+  if (partText) return partText
   if (target === 'ru') return EN_RU[text] ?? dynamicToRu(text) ?? text
   return RU_EN[text] ?? dynamicToEn(text) ?? text
 }
@@ -335,10 +359,12 @@ function updateSwitcher() {
   switcher.querySelectorAll('[data-language]').forEach(button => {
     const active = button.dataset.language === language
     button.classList.toggle('active', active)
-    button.setAttribute('aria-pressed', String(active))
+    const pressed = String(active)
+    if (button.getAttribute('aria-pressed') !== pressed) button.setAttribute('aria-pressed', pressed)
   })
-  switcher.title = language === 'ru' ? 'Язык интерфейса' : 'Interface language'
-  switcher.setAttribute('aria-label', switcher.title)
+  const label = language === 'ru' ? 'Язык интерфейса' : 'Interface language'
+  if (switcher.title !== label) switcher.title = label
+  if (switcher.getAttribute('aria-label') !== label) switcher.setAttribute('aria-label', label)
 }
 
 function scheduleTranslate() {
