@@ -45,12 +45,52 @@ function connectorFor(object, connectorId) {
   return findPart(object?.userData.partId)?.connectors?.find(connector => connector.id === connectorId) ?? null
 }
 
-function localFramePreservingCurrentRotation(objectA, objectB) {
-  const qa = objectA.getWorldQuaternion(new THREE.Quaternion())
-  const qb = objectB.getWorldQuaternion(new THREE.Quaternion())
-  const frameA = new THREE.Quaternion()
-  const frameB = qb.clone().invert().multiply(qa)
-  return { frameA, frameB }
+function buildFixedComponents(objects, connections) {
+  const byId = new Map(objects.map(object => [object.userData.instanceId, object]))
+  const parent = new Map([...byId.keys()].map(id => [id, id]))
+
+  const find = id => {
+    let root = parent.get(id)
+    if (!root) return null
+    while (root !== parent.get(root)) root = parent.get(root)
+    let cursor = id
+    while (cursor !== root) {
+      const next = parent.get(cursor)
+      parent.set(cursor, root)
+      cursor = next
+    }
+    return root
+  }
+
+  const union = (a, b) => {
+    const rootA = find(a)
+    const rootB = find(b)
+    if (!rootA || !rootB || rootA === rootB) return
+    parent.set(rootB, rootA)
+  }
+
+  for (const connection of connections) {
+    if (connection.kind !== 'fixed') continue
+    if (!byId.has(connection.a.instanceId) || !byId.has(connection.b.instanceId)) continue
+    union(connection.a.instanceId, connection.b.instanceId)
+  }
+
+  const groups = new Map()
+  for (const object of objects) {
+    const root = find(object.userData.instanceId)
+    if (!groups.has(root)) groups.set(root, [])
+    groups.get(root).push(object)
+  }
+
+  return [...groups.values()]
+}
+
+function matrixPose(matrix) {
+  const position = new THREE.Vector3()
+  const rotation = new THREE.Quaternion()
+  const scale = new THREE.Vector3()
+  matrix.decompose(position, rotation, scale)
+  return { position, rotation, scale }
 }
 
 export class PhysicsSession {
@@ -66,10 +106,12 @@ export class PhysicsSession {
     this.objects = objects
     this.connections = connections
     this.world = null
-    this.bodies = new Map()
+    this.members = new Map()
+    this.components = []
     this.running = true
     this.jointCount = 0
     this.failedJointCount = 0
+    this.internalJointCount = 0
   }
 
   build() {
@@ -83,63 +125,107 @@ export class PhysicsSession {
       .setRestitution(0.02)
     this.world.createCollider(ground)
 
-    for (const object of this.objects) {
-      object.updateWorldMatrix(true, false)
-      const position = object.getWorldPosition(new THREE.Vector3())
-      const rotation = object.getWorldQuaternion(new THREE.Quaternion())
-      const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
-        .setTranslation(position.x, position.y, position.z)
-        .setRotation(quaternion(rotation))
-      const body = this.world.createRigidBody(bodyDesc)
-
-      const { size, center } = localBounds(object)
-      const colliderDesc = RAPIER.ColliderDesc.cuboid(size.x / 2, size.y / 2, size.z / 2)
-        .setTranslation(center.x, center.y, center.z)
-        .setFriction(0.85)
-        .setRestitution(0.03)
-        .setDensity(0.7)
-
-      this.world.createCollider(colliderDesc, body)
-      this.bodies.set(object.userData.instanceId, { body, object })
-    }
+    const groups = buildFixedComponents(this.objects, this.connections)
+    for (const objects of groups) this.createCompoundBody(objects)
 
     for (const connection of this.connections) {
+      if (connection.kind === 'fixed') continue
       this.createJoint(connection)
     }
   }
 
+  createCompoundBody(objects) {
+    const RAPIER = this.RAPIER
+    const rootObject = objects[0]
+    if (!rootObject) return
+
+    for (const object of objects) object.updateWorldMatrix(true, false)
+    rootObject.updateWorldMatrix(true, false)
+
+    const bodyWorldMatrix = rootObject.matrixWorld.clone()
+    const bodyWorldInverse = bodyWorldMatrix.clone().invert()
+    const { position: bodyPosition, rotation: bodyRotation } = matrixPose(bodyWorldMatrix)
+
+    const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(bodyPosition.x, bodyPosition.y, bodyPosition.z)
+      .setRotation(quaternion(bodyRotation))
+    const body = this.world.createRigidBody(bodyDesc)
+
+    const component = {
+      id: rootObject.userData.instanceId,
+      body,
+      bodyWorldMatrix,
+      bodyWorldInverse,
+      bodyWorldRotation: bodyRotation.clone(),
+      members: [],
+    }
+
+    for (const object of objects) {
+      const relativeMatrix = bodyWorldInverse.clone().multiply(object.matrixWorld)
+      const { rotation: relativeRotation, scale: relativeScale } = matrixPose(relativeMatrix)
+      const { size, center } = localBounds(object)
+
+      const colliderCenter = center.clone().applyMatrix4(relativeMatrix)
+      const halfExtents = new THREE.Vector3(
+        size.x * Math.abs(relativeScale.x) / 2,
+        size.y * Math.abs(relativeScale.y) / 2,
+        size.z * Math.abs(relativeScale.z) / 2,
+      )
+
+      const colliderDesc = RAPIER.ColliderDesc.cuboid(halfExtents.x, halfExtents.y, halfExtents.z)
+        .setTranslation(colliderCenter.x, colliderCenter.y, colliderCenter.z)
+        .setRotation(quaternion(relativeRotation))
+        .setFriction(0.85)
+        .setRestitution(0.03)
+        .setDensity(0.7)
+      this.world.createCollider(colliderDesc, body)
+
+      const member = { object, body, component, relativeMatrix }
+      component.members.push(member)
+      this.members.set(object.userData.instanceId, member)
+    }
+
+    this.components.push(component)
+  }
+
+  bodyLocalPoint(member, connector) {
+    const worldPoint = new THREE.Vector3(...connector.position).applyMatrix4(member.object.matrixWorld)
+    return worldPoint.applyMatrix4(member.component.bodyWorldInverse)
+  }
+
+  bodyLocalAxis(member, connector) {
+    const objectWorldRotation = member.object.getWorldQuaternion(new THREE.Quaternion())
+    const worldAxis = new THREE.Vector3(...connector.axis).normalize().applyQuaternion(objectWorldRotation)
+    return worldAxis.applyQuaternion(member.component.bodyWorldRotation.clone().invert()).normalize()
+  }
+
   createJoint(connection) {
     const RAPIER = this.RAPIER
-    const entryA = this.bodies.get(connection.a.instanceId)
-    const entryB = this.bodies.get(connection.b.instanceId)
-    if (!entryA || !entryB) return
+    const memberA = this.members.get(connection.a.instanceId)
+    const memberB = this.members.get(connection.b.instanceId)
+    if (!memberA || !memberB) return
 
-    const connectorA = connectorFor(entryA.object, connection.a.connectorId)
-    const connectorB = connectorFor(entryB.object, connection.b.connectorId)
+    if (memberA.body === memberB.body) {
+      this.internalJointCount += 1
+      return
+    }
+
+    const connectorA = connectorFor(memberA.object, connection.a.connectorId)
+    const connectorB = connectorFor(memberB.object, connection.b.connectorId)
     if (!connectorA || !connectorB) return
 
     try {
-      let params = null
+      const anchorA = this.bodyLocalPoint(memberA, connectorA)
+      const anchorB = this.bodyLocalPoint(memberB, connectorB)
+      const axisA = this.bodyLocalAxis(memberA, connectorA)
 
-      if (connection.kind === 'fixed') {
-        const { frameA, frameB } = localFramePreservingCurrentRotation(entryA.object, entryB.object)
-        params = RAPIER.JointData.fixed(
-          { x: connectorA.position[0], y: connectorA.position[1], z: connectorA.position[2] },
-          quaternion(frameA),
-          { x: connectorB.position[0], y: connectorB.position[1], z: connectorB.position[2] },
-          quaternion(frameB),
-        )
-      } else if (connection.kind === 'hinge' || connection.kind === 'axle') {
-        const axis = new THREE.Vector3(...connectorA.axis).normalize()
-        params = RAPIER.JointData.revolute(
-          { x: connectorA.position[0], y: connectorA.position[1], z: connectorA.position[2] },
-          { x: connectorB.position[0], y: connectorB.position[1], z: connectorB.position[2] },
-          vector3(axis),
-        )
+      let params = null
+      if (connection.kind === 'hinge' || connection.kind === 'axle') {
+        params = RAPIER.JointData.revolute(vector3(anchorA), vector3(anchorB), vector3(axisA))
       }
 
       if (!params) return
-      this.world.createImpulseJoint(params, entryA.body, entryB.body, true)
+      this.world.createImpulseJoint(params, memberA.body, memberB.body, true)
       this.jointCount += 1
     } catch (error) {
       this.failedJointCount += 1
@@ -154,22 +240,34 @@ export class PhysicsSession {
   }
 
   syncObjects() {
-    for (const { body, object } of this.bodies.values()) {
-      const translation = body.translation()
-      const rotation = body.rotation()
-      const worldPosition = new THREE.Vector3(translation.x, translation.y, translation.z)
-      const worldQuaternion = new THREE.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w)
+    for (const component of this.components) {
+      const translation = component.body.translation()
+      const rotation = component.body.rotation()
+      const bodyWorldMatrix = new THREE.Matrix4().compose(
+        new THREE.Vector3(translation.x, translation.y, translation.z),
+        new THREE.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w),
+        new THREE.Vector3(1, 1, 1),
+      )
 
-      if (!object.parent) {
-        object.position.copy(worldPosition)
-        object.quaternion.copy(worldQuaternion)
-        continue
+      for (const member of component.members) {
+        const objectWorldMatrix = bodyWorldMatrix.clone().multiply(member.relativeMatrix)
+        const parent = member.object.parent
+
+        if (!parent) {
+          const { position, rotation: worldRotation, scale } = matrixPose(objectWorldMatrix)
+          member.object.position.copy(position)
+          member.object.quaternion.copy(worldRotation)
+          member.object.scale.copy(scale)
+          continue
+        }
+
+        parent.updateWorldMatrix(true, false)
+        const localMatrix = parent.matrixWorld.clone().invert().multiply(objectWorldMatrix)
+        const { position, rotation: localRotation, scale } = matrixPose(localMatrix)
+        member.object.position.copy(position)
+        member.object.quaternion.copy(localRotation)
+        member.object.scale.copy(scale)
       }
-
-      object.parent.updateWorldMatrix(true, false)
-      const parentWorldQuaternion = object.parent.getWorldQuaternion(new THREE.Quaternion())
-      object.position.copy(object.parent.worldToLocal(worldPosition.clone()))
-      object.quaternion.copy(parentWorldQuaternion.invert().multiply(worldQuaternion))
     }
   }
 
@@ -184,14 +282,18 @@ export class PhysicsSession {
       console.warn('Could not free Rapier world', error)
     }
     this.world = null
-    this.bodies.clear()
+    this.members.clear()
+    this.components = []
   }
 
   get stats() {
     return {
-      bodies: this.bodies.size,
+      parts: this.objects.length,
+      bodies: this.components.length,
+      fixedMerged: Math.max(0, this.objects.length - this.components.length),
       joints: this.jointCount,
       failedJoints: this.failedJointCount,
+      internalJoints: this.internalJointCount,
     }
   }
 }
