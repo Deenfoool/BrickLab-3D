@@ -36,8 +36,7 @@ function setMode(next, { restart = true } = {}) {
   decorateTelemetry()
 
   if (!restart) return
-  const inHillClimb = document.body.dataset.bricklabTest === 'hill-climb'
-  if (inHillClimb) {
+  if (document.body.dataset.bricklabTest) {
     document.querySelector('.mode[data-mode="test"]')?.click()
     return
   }
