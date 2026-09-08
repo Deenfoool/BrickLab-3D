@@ -1,5 +1,5 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: CONNECT-3 · Connector System v3 + mechanical axle recovery.
+// BUILD: PHYSICS-6 · SI joint anchors + metre↔stud render sync + Connector System v3.
 // All module URLs are versioned once by the import map in index.html.
 
 // Diagnostics must exist before any runtime/app module can fail.
