@@ -8,10 +8,14 @@ await import('./render-quality.js')
 await import('./basic-parts-pack.js')
 await import('./technic-parts-pack-v2.js')
 await import('./lab-parts.js')
-// Normalize saved/imported projects before app.js restores their connection graph.
+
+// Connector System v3 owns compatibility, project migration, validation and physics graph integrity.
+// The legacy app still imports ./connections.js and ./snapping.js; index.html aliases those
+// specifiers to the authoritative v3 modules for backwards-compatible call sites.
 await import('./connector-project-migration-v3.js')
 await import('./connector-import-v3.js')
-await import('./connector-validation.js')
+await import('./connector-validation-v3.js')
+
 await import('./physical-parts.js')
 await import('./suspension-patch.js')
 await import('./differential-patch.js')
@@ -19,9 +23,9 @@ await import('./sensors-patch.js')
 await import('./part-visual-v3.js')
 await import('./physics-v2.js')
 await import('./colliders-v2.js')
-// Import-map alias resolves this legacy specifier to connector-physics-v3.js.
-await import('./structural-auto-weld-v2.js')
+await import('./connector-physics-v3.js')
 await import('./powertrain-physics-v2.js')
+
 // Must load before stress/surface wrappers so they decorate the stabilized solvers.
 await import('./physics-stability-v3.js')
 await import('./drivetrain-stress-v2.js')
@@ -35,6 +39,7 @@ await import('./physics-debug-v2.js')
 await import('./test-world-visuals-v2.js')
 await import('./physics-stage-diagnostics.js')
 await import('./rapier-loader-v2.js')
+
 // Runtime UI + command-RPM motor controller.
 await import('./simulation-runtime-v2.js')
 // PhysicsSession owns its clock directly; extensions must not replace step.
