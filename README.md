@@ -50,16 +50,17 @@ Physics v2 includes:
 - corrected transformed colliders for rotated wheels/gears;
 - physical hinge/bearing joints;
 - finite motor torque and reaction torque;
-- bounded gear/gearbox/differential torque transfer;
-- wheel contact, normal load, slip ratio and slip angle;
-- load-sensitive longitudinal/lateral grip;
+- inertia-aware gear/gearbox/differential torque transfer that cannot overshoot light shafts by one microstep;
+- wheel contact, normal load, slip ratio and slip angle without double-counting wheel rotation;
+- load-sensitive longitudinal/lateral grip with impulse correction and a combined friction ellipse;
 - rolling resistance and approximate weight transfer;
 - surface presets: concrete, asphalt, dirt, gravel, mud and ice;
-- suspension compression/rebound damping, bump stop and simple anti-roll coupling.
+- suspension compression/rebound damping, bump stop and simple anti-roll coupling;
+- finite-state validation after every Rapier microstep without runtime speed clamps.
 
 The **Physics** menu exposes quality, self collision, debug, surface override and Mass/COM overlay. `F8` toggles Physics Debug.
 
-See [`docs/PHYSICS_V2.md`](docs/PHYSICS_V2.md).
+See [`docs/PHYSICS_V2.md`](docs/PHYSICS_V2.md) and [`docs/PHYSICS_STABILITY.md`](docs/PHYSICS_STABILITY.md).
 
 ## Motor and drivetrain
 
@@ -160,8 +161,8 @@ runtime-extensions.js
   ├─ catalog-wide Visual v3
   ├─ Physics v2
   ├─ corrected colliders
-  ├─ bounded powertrain
-  ├─ surfaces / tyres
+  ├─ inertia-aware drivetrain stability
+  ├─ impulse-limited surface / tyre solver
   ├─ suspension v2
   ├─ SI telemetry / Dyno
   └─ physics debug + TEST visuals
@@ -199,6 +200,7 @@ Expected GitHub Pages URL:
 ## Documentation
 
 - [`docs/PHYSICS_V2.md`](docs/PHYSICS_V2.md)
+- [`docs/PHYSICS_STABILITY.md`](docs/PHYSICS_STABILITY.md)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/PROJECT_FORMAT.md`](docs/PROJECT_FORMAT.md)
 - [`docs/POWERTRAIN.md`](docs/POWERTRAIN.md)
