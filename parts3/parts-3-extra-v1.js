@@ -78,12 +78,16 @@ function createFrame(color) {
   const g = root('technic-frame-5x7', color)
   const width = 7, height = 5, depth = 0.78
   const outer = roundedRect(width - 0.10, height - 0.10, 0.42)
+  // A real open center plus real perimeter pin bores: the connector locations
+  // and the visible geometry now describe the same mechanical part.
   const inner = roundedRect(width - 1.90, height - 1.90, 0.28)
   outer.holes.push(inner)
+  const framePoints = frameHoleCoordinates(width, height)
+  for (const [x, row] of framePoints) outer.holes.push(hole(x, row - (height - 1) / 2, 0.245))
   const geo = new THREE.ExtrudeGeometry(outer, { depth, bevelEnabled: true, bevelSegments: 2, bevelSize: 0.02, bevelThickness: 0.02, curveSegments: 24 })
   geo.translate(0, 0, -depth / 2)
   const mesh = new THREE.Mesh(geo, mat(color)); mesh.position.y = 2.45; g.add(mesh)
-  const holes = frameHoleCoordinates(width, height).map(([x, row]) => [x, 0.45 + row, 0.245])
+  const holes = framePoints.map(([x, row]) => [x, 0.45 + row, 0.245])
   liners(g, holes, depth, 0)
   return g
 }
