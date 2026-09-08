@@ -1,4 +1,4 @@
-export const VEHICLE_MODEL_VERSION = 'vehicle-model-v4'
+export const VEHICLE_MODEL_VERSION = 'vehicle-model-v5'
 
 const EPS = 1e-9
 
@@ -60,13 +60,6 @@ export function resolveDriveRequest({ throttle = 0, longitudinalSpeed = 0, rever
   }
 }
 
-/**
- * Deterministic fixed-step driver policy.
- * Direction changes have two gates:
- * 1) if the chassis is moving against the requested direction, cut torque and brake;
- * 2) after speed is safe, the smoothed throttle must pass through neutral before
- *    opposite torque is allowed. This prevents a brief forward kick before reverse.
- */
 export function stepDriveCommand({
   currentThrottle = 0,
   targetThrottle = 0,
@@ -97,8 +90,6 @@ export function stepDriveCommand({
     nextThrottle = approachVehicle(current, target, Math.max(0, throttleRate) * step)
   }
 
-  // During motion interlock use the driver's requested direction so the brake gate
-  // engages immediately. During a neutral crossing command no motor torque at all.
   const commandThrottle = !armed
     ? 0
     : reversingAgainstMotion
@@ -113,6 +104,66 @@ export function stepDriveCommand({
   })
 
   return { nextThrottle, reversingAgainstMotion, crossingNeutral, command }
+}
+
+/**
+ * Traction control scales the requested motor setpoint using previous-step wheel
+ * slip. It never injects forces and never touches free/accessory motors.
+ */
+export function stepTractionControl({
+  currentScale = 1,
+  maxSlipRatio = 0,
+  throttle = 0,
+  dt = 0,
+  enabled = true,
+  slipStart = 0.18,
+  slipFull = 0.55,
+  minimumScale = 0.25,
+  cutRate = 10,
+  recoverRate = 2.5,
+} = {}) {
+  const slip = Math.max(0, Math.abs(Number(maxSlipRatio) || 0))
+  const demand = Math.max(0, Number(throttle) || 0)
+  const span = Math.max(EPS, slipFull - slipStart)
+  const reduction = clampVehicle((slip - slipStart) / span, 0, 1)
+  const target = !enabled || demand <= EPS
+    ? 1
+    : 1 - reduction * (1 - clampVehicle(minimumScale, 0, 1))
+  const current = clampVehicle(currentScale, 0, 1)
+  const rate = target < current ? cutRate : recoverRate
+  const scale = approachVehicle(current, target, Math.max(0, Number(dt) || 0) * Math.max(0, rate))
+  return {
+    scale,
+    targetScale: target,
+    active: Boolean(enabled && demand > EPS && target < 0.999),
+    maxSlipRatio: slip,
+  }
+}
+
+/**
+ * ABS modulates service-brake demand from wheel slip. Parking brake is handled
+ * separately and intentionally remains mechanical/unassisted.
+ */
+export function absBrakeCommand({
+  brakeInput = 0,
+  maxSlipRatio = 0,
+  groundSpeed = 0,
+  contact = true,
+  enabled = true,
+  minimumSpeed = 0.08,
+  slipStart = 0.18,
+  slipFull = 0.70,
+  minimumScale = 0.22,
+} = {}) {
+  const demand = clampVehicle(brakeInput, 0, 1)
+  const speed = Math.abs(Number(groundSpeed) || 0)
+  const slip = Math.max(0, Math.abs(Number(maxSlipRatio) || 0))
+  if (!enabled || !contact || demand <= EPS || speed < minimumSpeed || slip <= slipStart) {
+    return { input: demand, scale: 1, active: false, maxSlipRatio: slip }
+  }
+  const reduction = clampVehicle((slip - slipStart) / Math.max(EPS, slipFull - slipStart), 0, 1)
+  const scale = 1 - reduction * (1 - clampVehicle(minimumScale, 0, 1))
+  return { input: demand * scale, scale, active: scale < 0.999, maxSlipRatio: slip }
 }
 
 export function classifyDrivenWheels(wheels = [], shafts = []) {
