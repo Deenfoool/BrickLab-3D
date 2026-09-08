@@ -1,5 +1,5 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: PARTS-4 · articulated driveline + bevel gears + worm reduction + PARTS-3 catalog.
+// BUILD: PARTS-4 · articulated driveline + physical rack steering + telescopic shocks.
 // Root module URLs are versioned by the import map in index.html; package submodules
 // carry explicit cache tags because they live outside the root import-map inventory.
 
@@ -16,6 +16,7 @@ await import('./parts3/parts-3-wheel-dimensions.js?v=parts-3-20260908-mechanical
 await import('./parts3/parts-3-visual-normalize.js?v=parts-3-20260908-mechanical-v1')
 await import('./parts3/parts-3-steering-upgrade.js?v=parts-3-20260908-mechanical-v1')
 await import('./parts4/mechanical-driveline-v1.js?v=parts-4-20260908-driveline-v1')
+await import('./parts4/steering-suspension-v1.js?v=parts-4-20260908-driveline-v1')
 
 // Connector System v3 owns compatibility, project migration, validation and physics graph integrity.
 await import('./connector-project-migration-v3.js')
@@ -40,7 +41,7 @@ await import('./collider-clearance-v3.js')
 await import('./connector-physics-v3.js')
 await import('./connector-mechanical-recovery-v4.js')
 // joint-stability-v4.js is retained as the stable import path; it now exports
-// joint-stability-v5 and owns both stabilized revolute and articulated spherical joints.
+// joint-stability-v5 and owns stabilized revolute, spherical and prismatic joints.
 await import('./joint-stability-v4.js')
 await import('./powertrain-physics-v2.js')
 
@@ -53,6 +54,9 @@ await import('./parts4/articulated-driveline-physics-v1.js?v=parts-4-20260908-dr
 await import('./surface-v2.js')
 await import('./suspension-v2.js')
 await import('./vehicle-system-v1.js')
+// Loaded after Vehicle System so a complete rack/tie-rod linkage becomes the
+// steering actuator instead of fighting the direct steering-knuckle servos.
+await import('./parts4/steering-suspension-physics-v1.js?v=parts-4-20260908-driveline-v1')
 await import('./vehicle-performance-v1.js')
 
 // Mechanism controls own motor/transmission runtime state. Vehicle Drive v2 consumes
