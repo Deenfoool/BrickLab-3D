@@ -11,7 +11,6 @@ function activeRuntime() {
 
 function api() { return globalThis.BrickLabVehicle }
 function performanceApi() { return globalThis.BrickLabVehiclePerformance }
-function steeringApi() { return globalThis.BrickLabPhysicalSteering }
 
 function applyKeys() {
   if (!activeRuntime() || !api()) return
@@ -107,7 +106,6 @@ function render() {
   const deck = document.getElementById('vehicleControlDeck')
   const state = api()?.getState?.()
   const performance = performanceApi()?.get?.()
-  const steering = steeringApi()?.diagnostics?.()
   const visible = activeRuntime() && Boolean(state?.enabled)
   deck?.classList.toggle('hidden', !visible)
 
@@ -129,7 +127,11 @@ function render() {
     const performanceEl = deck.querySelector('[data-vehicle-performance]')
     if (motion) motion.textContent = `${(state.speedMps || 0).toFixed(2)} m/s · ${(state.accelerationMps2 || 0).toFixed(2)} m/s²`
     if (steer) steer.textContent = `${(state.centerSteerDeg || 0).toFixed(1)}° · L ${(state.leftSteerDeg || 0).toFixed(1)}° / R ${(state.rightSteerDeg || 0).toFixed(1)}°`
-    if (mode) mode.textContent = steering?.mode === 'physical-knuckle' ? `PHYSICAL · ${steering.joints?.length || 0} JOINTS` : 'VIRTUAL TIRE'
+    if (mode) {
+      const names = { physical: 'PHYSICAL', mixed: 'MIXED', virtual: 'VIRTUAL TIRE' }
+      const base = names[state.steeringMode] ?? String(state.steeringMode || 'VIRTUAL TIRE').toUpperCase()
+      mode.textContent = state.physicalSteeringJoints ? `${base} · ${state.physicalSteeringJoints} JOINTS` : base
+    }
     if (brake) brake.textContent = `${Math.round((state.brakeInput || 0) * 100)}%${state.parkingBrake ? ' · PARK' : ''}`
     if (size) size.textContent = `${(state.wheelbaseM || 0).toFixed(3)} / ${(state.trackM || 0).toFixed(3)} m`
     if (mass) {
