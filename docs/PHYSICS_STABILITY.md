@@ -1,8 +1,52 @@
-# Physics stability — RUNTIME-5
+# Physics stability — PHYSICS-6
 
-RUNTIME-5 stabilizes the mechanical drivetrain without hiding failures behind arbitrary velocity clamps.
+PHYSICS-6 keeps the RUNTIME-5 drivetrain stability work and fixes the SI/editor unit boundary used by rigid bodies and joints.
 
-## Root causes fixed
+## PHYSICS-6: stud ↔ metre boundary
+
+BrickLab edits mechanisms in **studs**, while Rapier runs in SI units:
+
+```text
+1 stud = 0.008 m
+```
+
+Two transforms must therefore always cross an explicit unit boundary:
+
+```text
+Editor/connector position (stud) -> Rapier body/joint (m) : * 0.008
+Rapier body translation (m)      -> Three.js editor (stud): / 0.008
+```
+
+Before PHYSICS-6, `colliders-v2.js` correctly converted rigid-body translations and collider dimensions to metres, but two inherited paths in `physics.js` still used editor units directly:
+
+1. `bodyLocalPoint()` passed connector anchors such as a motor output at `1.75 stud` to Rapier as if the value were `1.75 m`. The correct anchor is `0.014 m`.
+2. `syncObjects()` copied Rapier translations in metres directly back into Three.js transforms expressed in studs. A body at `2.5 stud` (`0.02 m`) could therefore be rendered around `0.02 stud` on the first physics sync.
+
+This mismatch was especially visible on assemblies such as:
+
+```text
+motor -> axle coupler -> axle -> wheel
+```
+
+Separate drivetrain bodies appeared to jump apart when SIMULATE started, while Reset restored the original BUILD snapshot and made the jump look like a reset-induced rotation.
+
+PHYSICS-6 makes `colliders-v2.js` the explicit SI boundary owner:
+
+- all Rapier rigid-body translations are metres;
+- all collider dimensions/offsets are metres;
+- all joint anchors are metres;
+- all Three.js/editor object transforms are studs;
+- Rapier translations are divided by `studMeters` before syncing back to the editor scene.
+
+Runtime diagnostics expose the boundary contract through:
+
+```js
+window.__bricklabPhysicsDiagnostics().units
+```
+
+Expected values include `studMeters: 0.008`, `jointAnchors: "meters"`, `rapierTranslations: "meters"`, and `editorTransforms: "studs"`.
+
+## RUNTIME-5 root causes fixed
 
 ### 1. Gear coupling ignored angular inertia
 
@@ -54,7 +98,7 @@ window.BrickLabPhysicsStability.diagnostics()
 
 including peak linear speed, peak angular RPM and any numerical fault.
 
-The standard diagnostics also include the stability section:
+The standard diagnostics also include:
 
 ```js
 window.__bricklabPhysicsDiagnostics()
@@ -63,7 +107,7 @@ window.__bricklabTimeDebug()
 
 ## Regression suite
 
-`npm run test:physics` now runs both Time Scale and stability tests.
+`npm run test:physics` runs Time Scale and stability tests.
 
 The stability suite covers:
 
