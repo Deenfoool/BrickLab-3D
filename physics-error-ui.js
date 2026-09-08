@@ -1,5 +1,5 @@
-const BUILD_ID = 'CONNECT-2'
-const BUILD_TAG = 'connect-2-20260908-1204'
+const BUILD_ID = 'CONNECT-3'
+const BUILD_TAG = 'connect-3-20260908-1224'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG} · Connector System v3 · strict snapping · graph integrity · legacy migration`
+  badge.title = `BrickLab production build ${BUILD_TAG} · Connector System v3 · axle recovery · graph integrity`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -74,6 +74,7 @@ window.__bricklabPhysicsDiagnostics = () => ({
   buildTag: BUILD_TAG,
   buildStage: window.__bricklabPhysicsStage ?? null,
   autoWeld: window.__bricklabLastAutoWeldStats ?? null,
+  mechanicalRecovery: window.__bricklabMechanicalRecovery ?? null,
   controls: window.BrickLabControls?.getRuntimeEntries?.() ?? [],
   requestedTimeScale: window.__bricklabRequestedTimeScale ?? 1,
   appliedTimeScale: window.BrickLabSimulationTime?.getApplied?.() ?? 1,
