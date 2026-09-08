@@ -1,5 +1,5 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: PHYSICS-10 · stable local joint axes + passive wheel settling + sleep-safe physics.
+// BUILD: VEHICLE-1 · centralized physics pipeline + Ackermann steering + brakes.
 // All module URLs are versioned once by the import map in index.html.
 
 // Diagnostics must exist before any runtime/app module can fail.
@@ -12,6 +12,7 @@ await import('./catalog-previews.js')
 await import('./inspector-ui.js')
 await import('./physical-inspector-v2.js')
 await import('./mechanism-controls-ui.js')
+await import('./vehicle-controls-ui-v1.js')
 await import('./testlab-v2.js')
 await import('./powertrain-ui.js')
 await import('./physics-v2-ui.js')
@@ -21,9 +22,6 @@ await import('./i18n-runtime-patch.js')
 await import('./i18n-physics-v2.js')
 await import('./i18n-physics-v2-extra.js')
 
-const { PhysicsSession } = await import('./physics.js')
-const { STEP_OWNER } = await import('./simulation-time.js')
-if (PhysicsSession.prototype.step.__bricklabOwner !== STEP_OWNER) {
-  throw new Error('Physics runner was replaced during bootstrap')
-}
+const { assertPhysicsRuntimeContract } = await import('./physics-ownership-v1.js')
+assertPhysicsRuntimeContract()
 window.__bricklabRuntimeReady = true
