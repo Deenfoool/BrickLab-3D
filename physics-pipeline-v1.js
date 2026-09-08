@@ -1,10 +1,11 @@
-export const PHYSICS_PIPELINE_VERSION = 'physics-pipeline-v1'
+export const PHYSICS_PIPELINE_VERSION = 'physics-pipeline-v2'
 
 export const PHYSICS_PHASES = Object.freeze([
   'clear-accumulators',
   'motor',
   'suspension',
   'vehicle-controls',
+  'vehicle-drive',
   'drivetrain',
   'tires',
   'scenario',
@@ -39,6 +40,7 @@ export function runPhysicsMicrostep(session, dt, { advanceTestPhase } = {}) {
   call(session, 'applyMotorTorques', dt)
   call(session, 'updateSuspensionV2', dt)
   call(session, 'updateVehicleControlsV1', dt)
+  call(session, 'updateVehicleDriveV2', dt)
   call(session, 'applyGearCouplingTorques', dt)
   call(session, 'applyTireForcesV2', dt)
   call(session, 'applyScenarioForcesV2', dt)
