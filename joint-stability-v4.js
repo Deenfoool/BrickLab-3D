@@ -109,6 +109,19 @@ if (!PhysicsSession.prototype[marker]) {
       state.createdRevolute += 1
       state.pairs.push({ pairKey, kind: connection.kind, action: 'create', mismatchStud })
       globalThis.__bricklabJointStability = { ...state, pairs: [...state.pairs] }
+
+      // Subsystems such as physical steering may register a stable revolute handle
+      // without replacing this authoritative joint builder or creating duplicates.
+      this.onRevoluteJointCreated?.(connection, joint, {
+        memberA,
+        memberB,
+        connectorA,
+        connectorB,
+        axisA: axisA.clone(),
+        anchorA: anchorA.clone(),
+        anchorB: anchorB.clone(),
+      })
+      return joint
     } catch (error) {
       this.failedJointCount += 1
       console.warn('BrickLab could not create stabilized revolute joint', connection, error)
