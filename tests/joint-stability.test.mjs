@@ -66,7 +66,7 @@ const bearing = (axleConnectorId, holeConnectorId) => ({
   b: { instanceId: 'frame', connectorId: holeConnectorId },
 })
 
-test('multiple bearings between the same rigid bodies create one revolute joint', () => {
+test('multiple bearings between the same rigid bodies create and register one revolute joint', () => {
   const { session, created } = makeSession()
 
   session.createJoint(bearing('axle-0', 'hole-0'))
@@ -76,16 +76,19 @@ test('multiple bearings between the same rigid bodies create one revolute joint'
   assert.equal(created.length, 1)
   assert.equal(session.jointCount, 1)
   assert.equal(session.bearingCount, 1)
+  assert.equal(session.revoluteJoints.length, 1)
+  assert.equal(session.revoluteJoints[0].connection.kind, 'bearing')
   assert.equal(session.__bricklabJointStability.redundantRevoluteSkipped, 2)
 })
 
-test('revolute anchors use one shared midpoint and start with zero positional error', () => {
+test('revolute anchors use one shared midpoint and registry keeps the stabilized anchors', () => {
   const { session, created } = makeSession()
   session.createJoint(bearing('axle-0', 'hole-0'))
 
   assert.equal(created.length, 1)
   const { anchorA, anchorB } = created[0]
   assert.deepEqual(anchorA, anchorB)
+  assert.deepEqual(session.revoluteJoints[0].anchorA, session.revoluteJoints[0].anchorB)
   assert.ok(session.__bricklabJointStability.maxInitialMismatchStud > 0)
   assert.ok(session.__bricklabJointStability.maxInitialMismatchStud <= 0.20)
 })
