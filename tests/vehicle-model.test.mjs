@@ -4,7 +4,9 @@ import {
   ackermannAngles,
   approachVehicle,
   boundedBrakeTorque,
+  classifyDrivenWheels,
   classifyWheelAxles,
+  resolveDriveRequest,
 } from '../vehicle-model-v1.js'
 
 test('Ackermann gives the inner front wheel a larger angle', () => {
@@ -39,6 +41,24 @@ test('vehicle steering input approaches the target at a finite rate', () => {
   assert.equal(approachVehicle(0, -1, 0.4), -0.4)
 })
 
+test('reverse drive request brakes before changing motor direction', () => {
+  const forward = resolveDriveRequest({ throttle: 1, longitudinalSpeed: 0 })
+  assert.equal(forward.direction, 1)
+  assert.equal(forward.throttle, 1)
+  assert.equal(forward.autoBrake, 0)
+  assert.equal(forward.reverseInterlock, false)
+
+  const interlocked = resolveDriveRequest({ throttle: -1, longitudinalSpeed: 0.45, reverseSpeedThreshold: 0.08 })
+  assert.equal(interlocked.direction, 0)
+  assert.equal(interlocked.throttle, 0)
+  assert.equal(interlocked.autoBrake, 1)
+  assert.equal(interlocked.reverseInterlock, true)
+
+  const slowEnough = resolveDriveRequest({ throttle: -1, longitudinalSpeed: 0.03, reverseSpeedThreshold: 0.08 })
+  assert.equal(slowEnough.direction, -1)
+  assert.equal(slowEnough.autoBrake, 0)
+})
+
 test('four wheel layout classifies front/rear and left/right axles', () => {
   const layout = classifyWheelAxles([
     { id: 'fl', x: -0.04, z: 0.06 },
@@ -55,4 +75,22 @@ test('four wheel layout classifies front/rear and left/right axles', () => {
   assert.equal(byId.rr.axle, 'rear')
   assert.equal(byId.fl.side, 'left')
   assert.equal(byId.fr.side, 'right')
+})
+
+test('drive layout follows only motors that actually reach wheel shafts', () => {
+  const drive = classifyDrivenWheels([
+    { id: 'fl', instanceId: 'wheel-fl', axle: 'front' },
+    { id: 'fr', instanceId: 'wheel-fr', axle: 'front' },
+    { id: 'rl', instanceId: 'wheel-rl', axle: 'rear' },
+    { id: 'rr', instanceId: 'wheel-rr', axle: 'rear' },
+  ], [
+    { id: 'shaft-front', memberIds: ['wheel-fl', 'wheel-fr', 'axle-front'], sourceMotorId: 'drive-motor' },
+    { id: 'shaft-rear', memberIds: ['wheel-rl', 'wheel-rr', 'axle-rear'], sourceMotorId: null },
+    { id: 'accessory-shaft', memberIds: ['fan'], sourceMotorId: 'accessory-motor' },
+  ])
+
+  assert.equal(drive.layout, 'FWD')
+  assert.equal(drive.drivenWheelCount, 2)
+  assert.deepEqual(drive.motorIds, ['drive-motor'])
+  assert.equal(drive.wheels.find(w => w.id === 'rl').driven, false)
 })
