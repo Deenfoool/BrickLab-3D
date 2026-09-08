@@ -1,5 +1,5 @@
-const BUILD_ID = 'RUNTIME-2'
-const BUILD_TAG = 'runtime-2-20260908-0845'
+const BUILD_ID = 'RUNTIME-3'
+const BUILD_TAG = 'runtime-3-20260908-0848'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG} · authoritative physics time scale + command RPM motor physics`
+  badge.title = `BrickLab production build ${BUILD_TAG} · physical-dt time scale + command RPM motor physics`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -76,9 +76,12 @@ window.__bricklabPhysicsDiagnostics = () => ({
   autoWeld: window.__bricklabLastAutoWeldStats ?? null,
   controls: window.BrickLabControls?.getRuntimeEntries?.() ?? [],
   requestedTimeScale: window.__bricklabRequestedTimeScale ?? 1,
-  appliedTimeScale: window.BrickLabSimulationTime?.getApplied?.() ?? 1,
+  appliedTimeScale: window.__bricklabAppliedPhysicalTimeScale ?? window.BrickLabSimulationTime?.getApplied?.() ?? 1,
+  timeIntegrator: window.__bricklabTimeIntegrator ?? null,
   realElapsed: window.__bricklabPhysicsSession?.realElapsedTime ?? 0,
   simElapsed: window.__bricklabPhysicsSession?.actualSimulationElapsed ?? window.__bricklabPhysicsSession?.simulationTime ?? 0,
+  nominalSteps: window.__bricklabPhysicsSession?.lastPhysicsSteps ?? 0,
+  microSteps: window.__bricklabPhysicsSession?.lastPhysicsMicroSteps ?? 0,
   lastError: window.__bricklabPhysicsLastError ?? null,
   rapierSource: window.__bricklabRapierSource ?? null,
 })
