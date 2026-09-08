@@ -1,5 +1,5 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: CONNECT-2 · authoritative Connector System v3 + 80-part catalog.
+// BUILD: CONNECT-3 · mechanical connector recovery + Connector System v3.
 // All module URLs are versioned by the import map in index.html.
 
 await import('./three-cycle-guard.js')
@@ -24,6 +24,9 @@ await import('./part-visual-v3.js')
 await import('./physics-v2.js')
 await import('./colliders-v2.js')
 await import('./connector-physics-v3.js')
+// Recover visually aligned axle ↔ axle-hole interfaces before the authoritative
+// connector-physics build sanitizes the graph and creates rigid shaft components.
+await import('./connector-mechanical-recovery-v4.js')
 await import('./powertrain-physics-v2.js')
 
 // Must load before stress/surface wrappers so they decorate the stabilized solvers.
