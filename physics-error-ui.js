@@ -1,5 +1,5 @@
-const BUILD_ID = 'PHYSICS-9'
-const BUILD_TAG = 'physics-9-20260908-1840'
+const BUILD_ID = 'PHYSICS-10'
+const BUILD_TAG = 'physics-10-20260908-wheel-settle'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG} · stable revolute joints · zero-error anchors · clearance colliders · SI boundary`
+  badge.title = `BrickLab production build ${BUILD_TAG} · stable revolute joints · passive wheel settling · sleep-safe physics`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
