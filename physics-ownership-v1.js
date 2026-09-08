@@ -2,8 +2,8 @@ import { PhysicsSession } from './physics.js'
 import { STEP_OWNER } from './simulation-time.js'
 import { PHYSICS_PIPELINE_VERSION } from './physics-pipeline-v1.js'
 
-export const PHYSICS_OWNERSHIP_VERSION = 'physics-ownership-v2'
-const JOINT_OWNER = 'joint-stability-v4'
+export const PHYSICS_OWNERSHIP_VERSION = 'physics-ownership-v3'
+const JOINT_OWNER = 'joint-stability-v5'
 const VEHICLE_OWNER = 'vehicle-system-v1'
 const DRIVE_OWNER = 'vehicle-drive-v2'
 
