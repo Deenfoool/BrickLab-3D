@@ -3,6 +3,8 @@ import { findPart } from './parts.js'
 import { CONNECTOR_RULE_VERSION, connectorRule, endpointKey } from './connections.js'
 
 const PROJECT_KEYS = ['bricklab.project.v2', 'bricklab.demo.backup.v1']
+const PRIMARY_DISTANCE_TOLERANCE = 0.18
+let lastNormalization = null
 
 function partMatrix(part) {
   const position = new THREE.Vector3().fromArray(Array.isArray(part.position) ? part.position : [0, 0, 0])
@@ -20,7 +22,7 @@ function ref(parts, endpoint) {
   const definition = findPart(part.partId)
   const connector = definition?.connectors?.find(item => item.id === endpoint.connectorId)
   if (!connector) return null
-  return { part, connector, ...partMatrix(part) }
+  return { part, definition, connector, ...partMatrix(part) }
 }
 
 function worldPosition(reference) {
@@ -43,95 +45,132 @@ function contactSignature(a, b) {
   return [endpointKey(a.instanceId, a.connectorId), endpointKey(b.instanceId, b.connectorId)].sort().join('<>')
 }
 
-function hydrateFixed(project, parts, connection, owners) {
-  const partA = parts.get(connection.a?.instanceId)
-  const partB = parts.get(connection.b?.instanceId)
-  if (!partA || !partB) return false
-  const defA = findPart(partA.partId)
-  const defB = findPart(partB.partId)
-  if (!defA || !defB) return false
+function geometryValid(referenceA, referenceB, rule, maxDistance = PRIMARY_DISTANCE_TOLERANCE) {
+  const distance = worldPosition(referenceA).distanceTo(worldPosition(referenceB))
+  if (distance > maxDistance) return false
+  const dot = worldAxis(referenceA).dot(worldAxis(referenceB))
+  if (rule.axis === 'opposed') return dot <= -(rule.contactAlignment ?? rule.minAlignment ?? 0.9)
+  return Math.abs(dot) >= (rule.minAlignment ?? 0.9)
+}
 
-  const primaryA = ref(parts, connection.a)
-  const primaryB = ref(parts, connection.b)
-  if (!primaryA || !primaryB) return false
-  const primaryRule = connectorRule(primaryA.connector.type, primaryB.connector.type)
-  if (primaryRule?.kind !== 'fixed') return false
-
-  connection.a = normalizedEndpoint(primaryA)
-  connection.b = normalizedEndpoint(primaryB)
-  connection.kind = 'fixed'
-  connection.ruleVersion = CONNECTOR_RULE_VERSION
-  connection.schemaVersion = 3
-
+function fixedExtras(parts, partA, partB, occupied, primaryA, primaryB) {
+  const definitionA = findPart(partA.partId)
+  const definitionB = findPart(partB.partId)
+  const primaryKeyA = endpointKey(primaryA.instanceId, primaryA.connectorId)
+  const primaryKeyB = endpointKey(primaryB.instanceId, primaryB.connectorId)
+  const primarySignature = contactSignature(primaryA, primaryB)
   const candidates = []
-  for (const connectorA of defA.connectors ?? []) {
-    for (const connectorB of defB.connectors ?? []) {
+
+  for (const connectorA of definitionA?.connectors ?? []) {
+    for (const connectorB of definitionB?.connectors ?? []) {
       const rule = connectorRule(connectorA.type, connectorB.type)
       if (rule?.kind !== 'fixed') continue
-      const refA = ref(parts, { instanceId: partA.instanceId, connectorId: connectorA.id })
-      const refB = ref(parts, { instanceId: partB.instanceId, connectorId: connectorB.id })
+      const referenceA = ref(parts, { instanceId: partA.instanceId, connectorId: connectorA.id })
+      const referenceB = ref(parts, { instanceId: partB.instanceId, connectorId: connectorB.id })
+      if (!referenceA || !referenceB) continue
       const keyA = endpointKey(partA.instanceId, connectorA.id)
       const keyB = endpointKey(partB.instanceId, connectorB.id)
-      const ownerA = owners.get(keyA)
-      const ownerB = owners.get(keyB)
-      if ((ownerA && ownerA !== connection.id) || (ownerB && ownerB !== connection.id)) continue
-      const distance = worldPosition(refA).distanceTo(worldPosition(refB))
-      if (distance > (rule.contactTolerance ?? 0.105)) continue
-      if (worldAxis(refA).dot(worldAxis(refB)) > -(rule.contactAlignment ?? 0.96)) continue
-      candidates.push({ refA, refB, keyA, keyB, distance })
+      if (keyA === primaryKeyA || keyB === primaryKeyB) continue
+      if (occupied.has(keyA) || occupied.has(keyB)) continue
+      if (!geometryValid(referenceA, referenceB, rule, rule.contactTolerance ?? 0.105)) continue
+      candidates.push({
+        a: normalizedEndpoint(referenceA),
+        b: normalizedEndpoint(referenceB),
+        keyA,
+        keyB,
+        distance: worldPosition(referenceA).distanceTo(worldPosition(referenceB)),
+      })
     }
   }
-  candidates.sort((a, b) => a.distance - b.distance)
 
-  const primarySignature = contactSignature(connection.a, connection.b)
+  candidates.sort((a, b) => a.distance - b.distance)
   const localUsed = new Set()
   const extras = []
   for (const candidate of candidates) {
     if (localUsed.has(candidate.keyA) || localUsed.has(candidate.keyB)) continue
+    if (contactSignature(candidate.a, candidate.b) === primarySignature) continue
     localUsed.add(candidate.keyA)
     localUsed.add(candidate.keyB)
-    const a = normalizedEndpoint(candidate.refA)
-    const b = normalizedEndpoint(candidate.refB)
-    if (contactSignature(a, b) === primarySignature) continue
-    extras.push({ a, b })
-    owners.set(candidate.keyA, connection.id)
-    owners.set(candidate.keyB, connection.id)
+    occupied.add(candidate.keyA)
+    occupied.add(candidate.keyB)
+    extras.push({ a: candidate.a, b: candidate.b })
   }
-
-  if (extras.length) connection.contacts = extras
-  else delete connection.contacts
-  connection.contactCount = 1 + extras.length
-  return true
+  return extras
 }
 
 export function normalizeProjectConnections(project) {
-  if (!project || !Array.isArray(project.parts) || !Array.isArray(project.connections)) return project
+  if (!project || !Array.isArray(project.parts)) return project
+  if (!Array.isArray(project.connections)) project.connections = []
+
   const parts = new Map(project.parts.filter(part => part?.instanceId).map(part => [part.instanceId, part]))
-  const owners = new Map()
-
-  for (const connection of project.connections) {
-    for (const endpoint of [connection?.a, connection?.b]) {
-      if (endpoint?.instanceId && endpoint?.connectorId) owners.set(endpointKey(endpoint.instanceId, endpoint.connectorId), connection.id)
-    }
+  const occupied = new Set()
+  const normalized = []
+  const stats = {
+    inputConnections: project.connections.length,
+    keptConnections: 0,
+    hydratedContacts: 0,
+    droppedMissing: 0,
+    droppedIncompatible: 0,
+    droppedGeometry: 0,
+    endpointConflicts: 0,
   }
 
-  for (const connection of project.connections) {
-    const refA = ref(parts, connection?.a)
-    const refB = ref(parts, connection?.b)
-    if (!refA || !refB) continue
-    const rule = connectorRule(refA.connector.type, refB.connector.type)
-    connection.a = normalizedEndpoint(refA)
-    connection.b = normalizedEndpoint(refB)
-    if (!rule) continue
-    connection.kind = rule.kind
-    connection.ruleVersion = CONNECTOR_RULE_VERSION
-    connection.schemaVersion = 3
-    if (rule.multiContact) hydrateFixed(project, parts, connection, owners)
-    else {
-      delete connection.contacts
+  for (const raw of project.connections) {
+    const referenceA = ref(parts, raw?.a)
+    const referenceB = ref(parts, raw?.b)
+    if (!referenceA || !referenceB || referenceA.part === referenceB.part) {
+      stats.droppedMissing += 1
+      continue
+    }
+
+    const rule = connectorRule(referenceA.connector.type, referenceB.connector.type)
+    if (!rule) {
+      stats.droppedIncompatible += 1
+      continue
+    }
+    if (!geometryValid(referenceA, referenceB, rule)) {
+      stats.droppedGeometry += 1
+      continue
+    }
+
+    const a = normalizedEndpoint(referenceA)
+    const b = normalizedEndpoint(referenceB)
+    const keyA = endpointKey(a.instanceId, a.connectorId)
+    const keyB = endpointKey(b.instanceId, b.connectorId)
+    if (occupied.has(keyA) || occupied.has(keyB)) {
+      stats.endpointConflicts += 1
+      continue
+    }
+
+    occupied.add(keyA)
+    occupied.add(keyB)
+    const connection = {
+      ...raw,
+      id: raw?.id || `migrated:${contactSignature(a, b)}`,
+      schemaVersion: 3,
+      ruleVersion: CONNECTOR_RULE_VERSION,
+      kind: rule.kind,
+      a,
+      b,
+    }
+
+    if (rule.multiContact) {
+      const extras = fixedExtras(parts, referenceA.part, referenceB.part, occupied, a, b)
+      connection.contactCount = 1 + extras.length
+      if (extras.length) connection.contacts = extras
+      else delete connection.contacts
+      stats.hydratedContacts += extras.length
+    } else {
       connection.contactCount = 1
+      delete connection.contacts
     }
+
+    normalized.push(connection)
   }
+
+  project.connections = normalized
+  stats.keptConnections = normalized.length
+  lastNormalization = stats
   return project
 }
 
@@ -159,4 +198,5 @@ globalThis.BrickLabProjectConnectors = Object.freeze({
   version: CONNECTOR_RULE_VERSION,
   normalizeProject: normalizeProjectConnections,
   migratedStoredProjects: migrated,
+  get lastNormalization() { return lastNormalization },
 })
