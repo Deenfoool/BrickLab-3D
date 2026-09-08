@@ -2,15 +2,17 @@ import { PARTS } from '../parts.js'
 
 export const PARTS3_I18N_VERSION = 'parts-3-i18n-v1'
 
-// axle-2 / axle-9 / bush / half-bush already live in i18n-basic-parts-v1.
-// Keep this table limited to genuinely new PARTS-3 ids so the base translator
-// remains the single owner of legacy English/Russian names.
+// axle-2 / axle-9 / bush / half-bush and the newly restored beam/brick sizes
+// already live in i18n-basic-parts-v1. Keep this table limited to genuinely new
+// PARTS-3 ids so the base translator remains the single owner of legacy names.
 const RU = Object.freeze({
   'steering-tie-rod-5': ['Рулевая тяга 5L', 'Жёсткая рулевая тяга 5L с вертикальными шарнирными проушинами'],
   'wheel-hub': ['Ступица колеса', 'Свободно вращающаяся ступица с подшипником и крестовой осью под колесо'],
   'wheel-narrow': ['Узкое колесо', 'Узкая дорожная шина с низким сопротивлением качению'],
   'wheel-offroad-large': ['Большое внедорожное колесо', 'Крупная внедорожная шина с глубоким чередующимся протектором'],
   'wheel-tractor': ['Тракторное колесо', 'Очень крупная сельскохозяйственная шина с агрессивными грунтозацепами'],
+  'technic-frame-5x7': ['Technic-рама 5×7', 'Жёсткая прямоугольная рама 5×7 для шасси, редукторов и подвески'],
+  'pin-frictionless': ['Гладкий пин 2L', 'Гладкий шарнирный пин 2L без фрикционных рёбер'],
 })
 
 function isRussian() {
