@@ -100,9 +100,14 @@ function buildTopology(session) {
 function ensureState(session) {
   if (session.vehicleDriveV2) return session.vehicleDriveV2
   const topology = buildTopology(session)
+  if (session.vehicleControlV1) session.vehicleControlV1.manualBrakeInput ??= 0
   session.vehicleDriveV2 = {
     version: VEHICLE_DRIVE_VERSION,
     ...topology,
+    // Existing projects keep their configured motor Auto-start behavior until the
+    // driver actually requests W/S. Once armed, Vehicle Drive owns only motors
+    // whose drivetrain reaches a wheel shaft; accessory motors remain untouched.
+    armed: false,
     throttleTarget: 0,
     throttleInput: 0,
     commandedDirection: 0,
@@ -115,6 +120,7 @@ function ensureState(session) {
 }
 
 function commandMotors(state, command) {
+  if (!state.armed) return
   const controls = globalThis.BrickLabControls
   if (!controls) return
   for (const motor of state.motors) {
@@ -135,19 +141,21 @@ PhysicsSession.prototype.updateVehicleDriveV2 = function updateVehicleDriveV2(dt
   state.longitudinalSpeedMps = longitudinalSpeed(this)
 
   const command = resolveDriveRequest({
-    throttle: state.throttleInput,
+    throttle: state.armed ? state.throttleInput : 0,
     longitudinalSpeed: state.longitudinalSpeedMps,
     reverseSpeedThreshold: REVERSE_SPEED_THRESHOLD,
   })
   state.commandedDirection = command.direction
-  state.commandedRpm = state.motors.length ? Math.max(...state.motors.map(motor => motor.commandRpm * command.throttle), 0) : 0
-  state.reverseInterlock = command.reverseInterlock
-  state.autoBrake = command.autoBrake
+  state.commandedRpm = state.armed && state.motors.length
+    ? Math.max(...state.motors.map(motor => motor.commandRpm * command.throttle), 0)
+    : 0
+  state.reverseInterlock = state.armed && command.reverseInterlock
+  state.autoBrake = state.armed ? command.autoBrake : 0
 
   commandMotors(state, command)
 
-  const manualBrake = clampVehicle(this.vehicleControlV1?.manualBrakeInput ?? this.vehicleControlV1?.brakeInput ?? 0, 0, 1)
-  if (this.vehicleControlV1) this.vehicleControlV1.brakeInput = Math.max(manualBrake, command.autoBrake)
+  const manualBrake = clampVehicle(this.vehicleControlV1?.manualBrakeInput ?? 0, 0, 1)
+  if (this.vehicleControlV1) this.vehicleControlV1.brakeInput = Math.max(manualBrake, state.autoBrake)
 }
 PhysicsSession.prototype.updateVehicleDriveV2.__bricklabOwner = VEHICLE_DRIVE_VERSION
 
@@ -156,7 +164,10 @@ function currentSession() { return globalThis.__bricklabPhysicsSession ?? null }
 function setThrottle(value) {
   const session = currentSession()
   if (!session) return false
-  ensureState(session).throttleTarget = clampVehicle(value, -1, 1)
+  const state = ensureState(session)
+  const requested = clampVehicle(value, -1, 1)
+  if (Math.abs(requested) > EPS && state.motors.length) state.armed = true
+  state.throttleTarget = requested
   return true
 }
 
@@ -165,7 +176,7 @@ function setManualBrake(value) {
   const control = session?.vehicleControlV1
   if (!control) return false
   control.manualBrakeInput = clampVehicle(value, 0, 1)
-  control.brakeInput = control.manualBrakeInput
+  control.brakeInput = Math.max(control.manualBrakeInput, session?.vehicleDriveV2?.autoBrake ?? 0)
   return true
 }
 
@@ -175,6 +186,7 @@ function getState() {
   const state = ensureState(session)
   return {
     version: state.version,
+    armed: state.armed,
     layout: state.layout,
     motorIds: [...state.motorIds],
     motorCount: state.motorIds.length,
