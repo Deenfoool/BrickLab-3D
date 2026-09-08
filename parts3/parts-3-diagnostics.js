@@ -1,7 +1,10 @@
 import { PARTS } from '../parts.js'
 
 export const PARTS3_DIAGNOSTICS_VERSION = 'parts-3-diagnostics-v1'
-const TARGETS = new Set(globalThis.BrickLabParts3?.added ?? [])
+const TARGETS = new Set([
+  ...(globalThis.BrickLabParts3?.added ?? []),
+  ...(globalThis.BrickLabParts3Extra?.added ?? []),
+])
 
 function finite3(value) { return Array.isArray(value) && value.length === 3 && value.every(Number.isFinite) }
 
@@ -23,9 +26,17 @@ export function inspectParts3() {
     }
     if (part.mechanics?.wheel && !(part.mechanics.wheel.radius > 0)) failures.push(`${part.id}: invalid wheel radius`)
     if (part.mechanics?.gear && !(part.mechanics.gear.teeth > 0)) failures.push(`${part.id}: invalid gear teeth`)
+    if (!part.physics?.massKg || !(part.physics.massKg > 0)) warnings.push(`${part.id}: using default or missing explicit mass`)
   }
 
-  const result = { version: PARTS3_DIAGNOSTICS_VERSION, checked, failures, warnings, ok: failures.length === 0 }
+  const result = {
+    version: PARTS3_DIAGNOSTICS_VERSION,
+    checked,
+    targetCount: TARGETS.size,
+    failures,
+    warnings,
+    ok: failures.length === 0,
+  }
   globalThis.__bricklabParts3Diagnostics = result
   if (failures.length) console.error('BrickLab PARTS-3 validation failed', result)
   return result
