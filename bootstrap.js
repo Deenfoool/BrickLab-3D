@@ -1,5 +1,5 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: PARTS-3 · upgraded Technic geometry + expanded mechanical catalog + Vehicle Drive v2.
+// BUILD: PARTS-4 · articulated driveline + bevel gears + worm reduction + Vehicle Drive v2.
 // All root module URLs are versioned once by the import map in index.html.
 
 // Diagnostics must exist before any runtime/app module can fail.
@@ -20,6 +20,7 @@ await import('./i18n.js')
 await import('./i18n-basic-parts-v1.js')
 await import('./parts3/i18n-parts-3.js?v=parts-3-20260908-mechanical-v1')
 await import('./parts3/parts-3-catalog-ui.js?v=parts-3-20260908-mechanical-v1')
+await import('./parts4/i18n-parts-4.js?v=parts-4-20260908-driveline-v1')
 await import('./i18n-runtime-patch.js')
 await import('./i18n-physics-v2.js')
 await import('./i18n-physics-v2-extra.js')
