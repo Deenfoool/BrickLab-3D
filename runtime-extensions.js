@@ -1,5 +1,5 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: CONNECT-3 · mechanical connector recovery + Connector System v3.
+// BUILD: PHYSICS-6 · SI joint anchors + metre↔stud render sync + Connector System v3.
 // All module URLs are versioned by the import map in index.html.
 
 await import('./three-cycle-guard.js')
@@ -22,6 +22,7 @@ await import('./differential-patch.js')
 await import('./sensors-patch.js')
 await import('./part-visual-v3.js')
 await import('./physics-v2.js')
+// SI boundary owner: colliders, joint anchors and Rapier->editor transform sync.
 await import('./colliders-v2.js')
 await import('./connector-physics-v3.js')
 // Recover visually aligned axle ↔ axle-hole interfaces before the authoritative
