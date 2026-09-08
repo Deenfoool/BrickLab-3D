@@ -1,5 +1,5 @@
-const BUILD_ID = 'RUNTIME-5'
-const BUILD_TAG = 'runtime-5-20260908-1000'
+const BUILD_ID = 'VISUAL-4'
+const BUILD_TAG = 'runtime-6-20260908-1030'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG} · inertia-aware drivetrain + impulse-limited tires + fixed-step Time Scale`
+  badge.title = `BrickLab production build ${BUILD_TAG} · realistic molded-part visuals + studio PBR lighting + Physics v2 stability`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -82,6 +82,7 @@ window.__bricklabPhysicsDiagnostics = () => ({
   simElapsed: window.__bricklabPhysicsSession?.actualSimulationElapsed ?? window.__bricklabPhysicsSession?.simulationTime ?? 0,
   nominalSteps: window.__bricklabPhysicsSession?.lastPhysicsSteps ?? 0,
   stability: window.BrickLabPhysicsStability?.diagnostics?.() ?? null,
+  visualQuality: window.BrickLabVisualQuality ?? null,
   lastError: window.__bricklabPhysicsLastError ?? null,
   rapierSource: window.__bricklabRapierSource ?? null,
 })
