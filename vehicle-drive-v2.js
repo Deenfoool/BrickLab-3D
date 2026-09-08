@@ -1,10 +1,9 @@
 import * as THREE from 'three'
 import { PhysicsSession } from './physics.js'
 import {
-  approachVehicle,
   classifyDrivenWheels,
   clampVehicle,
-  resolveDriveRequest,
+  stepDriveCommand,
 } from './vehicle-model-v1.js'
 
 export const VEHICLE_DRIVE_VERSION = 'vehicle-drive-v2'
@@ -131,33 +130,21 @@ function commandMotors(state, command) {
 
 PhysicsSession.prototype.updateVehicleDriveV2 = function updateVehicleDriveV2(dt) {
   const state = ensureState(this)
-  const target = clampVehicle(state.throttleTarget, -1, 1)
   state.longitudinalSpeedMps = longitudinalSpeed(this)
 
-  const targetDirection = Math.abs(target) < EPS ? 0 : Math.sign(target)
-  const motionDirection = Math.abs(state.longitudinalSpeedMps) > REVERSE_SPEED_THRESHOLD
-    ? Math.sign(state.longitudinalSpeedMps)
-    : 0
-  const reversingAgainstMotion = state.armed
-    && targetDirection !== 0
-    && motionDirection !== 0
-    && targetDirection !== motionDirection
-
-  // During a forward↔reverse request, remove drive torque first and brake to
-  // the interlock threshold. Once slow enough, throttle ramps up from zero in
-  // the requested direction instead of flipping a loaded drivetrain instantly.
-  if (reversingAgainstMotion) {
-    state.throttleInput = approachVehicle(state.throttleInput, 0, RELEASE_RATE * Math.max(0, dt))
-  } else {
-    const rate = Math.abs(target) < EPS ? RELEASE_RATE : THROTTLE_RATE
-    state.throttleInput = approachVehicle(state.throttleInput, target, rate * Math.max(0, dt))
-  }
-
-  const command = resolveDriveRequest({
-    throttle: state.armed ? (reversingAgainstMotion ? target : state.throttleInput) : 0,
+  const step = stepDriveCommand({
+    currentThrottle: state.throttleInput,
+    targetThrottle: state.throttleTarget,
     longitudinalSpeed: state.longitudinalSpeedMps,
+    dt,
+    throttleRate: THROTTLE_RATE,
+    releaseRate: RELEASE_RATE,
     reverseSpeedThreshold: REVERSE_SPEED_THRESHOLD,
+    armed: state.armed,
   })
+  state.throttleInput = step.nextThrottle
+  const command = step.command
+
   state.commandedDirection = command.direction
   state.commandedRpm = state.armed && state.motors.length
     ? Math.max(...state.motors.map(motor => motor.commandRpm * command.throttle), 0)
