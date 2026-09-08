@@ -20,6 +20,7 @@ await import('../technic-parts-pack-v2.js')
 await import('../vehicle-parts-v1.js')
 await import('../parts3/mechanical-parts-pack-v3.js')
 await import('../parts3/parts-3-extra-v1.js')
+await import('../parts3/parts-3-visual-normalize.js')
 await import('../physical-parts.js')
 await import('../parts3/parts-3-physics.js')
 
@@ -56,6 +57,15 @@ test('new tyre sizes carry real wheel physics metadata', () => {
   assert.ok(narrow.mechanics.wheel.radius < offroad.mechanics.wheel.radius)
   assert.ok(offroad.mechanics.wheel.radius < tractor.mechanics.wheel.radius)
   assert.ok(narrow.mechanics.wheel.tire.rollingResistanceScale < tractor.mechanics.wheel.tire.rollingResistanceScale)
+})
+
+test('PARTS-3 tyre visual width is applied along the axle axis, not the tyre radius', () => {
+  const object = findPart('wheel-offroad-large').create(0xb7bcc3)
+  assert.equal(object.userData.parts3WheelProfileNormalized, true)
+  const tyre = object.children.find(child => child.geometry?.type === 'TorusGeometry' && Math.abs(child.scale.z - 1) > 1e-6)
+  assert.ok(tyre, 'scaled tyre torus found')
+  assert.ok(Math.abs(tyre.scale.x - 1) < 1e-9)
+  assert.ok(tyre.scale.z > 1)
 })
 
 test('new structural and connector inventory has explicit physical classes', () => {
