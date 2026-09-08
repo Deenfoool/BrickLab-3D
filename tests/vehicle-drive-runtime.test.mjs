@@ -1,4 +1,4 @@
-import { test } from 'node:test'
+import { after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import * as THREE from 'three'
 
@@ -81,7 +81,7 @@ test('vehicle drive preserves configured auto-start until W/S takes ownership', 
   assert.ok(!writes.some(([, id]) => id === 'accessory-motor'))
 })
 
-test('reverse request applies service brake before motor direction flips', () => {
+test('reverse request brakes, crosses neutral, then flips motor direction', () => {
   writes.length = 0
   runtimes.set('drive-motor', { type: 'motor', rpm: 120, direction: 1 })
   const session = makeSession()
@@ -92,16 +92,23 @@ test('reverse request applies service brake before motor direction flips', () =>
 
   session.chassisMonitor.body._linvel.z = 0.4
   globalThis.BrickLabVehicleDrive.setThrottle(-1)
-  for (let i = 0; i < 80; i += 1) session.updateVehicleDriveV2(1 / 120)
+  session.updateVehicleDriveV2(1 / 120)
   assert.equal(session.vehicleDriveV2.reverseInterlock, true)
   assert.equal(session.vehicleControlV1.brakeInput, 1)
   assert.equal(runtimes.get('drive-motor').direction, 0)
 
+  // Once vehicle speed is safe, the old positive throttle still has to decay to
+  // neutral. During that transition the motor must remain neutral, never kick forward.
   session.chassisMonitor.body._linvel.z = 0.02
-  session.updateVehicleDriveV2(1 / 120)
+  let sawForwardKick = false
+  for (let i = 0; i < 80 && runtimes.get('drive-motor').direction !== -1; i += 1) {
+    session.updateVehicleDriveV2(1 / 120)
+    if (runtimes.get('drive-motor').direction === 1) sawForwardKick = true
+  }
+  assert.equal(sawForwardKick, false)
   assert.equal(session.vehicleDriveV2.reverseInterlock, false)
   assert.equal(session.vehicleControlV1.brakeInput, 0)
   assert.equal(runtimes.get('drive-motor').direction, -1)
 })
 
-test.after(() => { globalThis.__bricklabPhysicsSession = null })
+after(() => { globalThis.__bricklabPhysicsSession = null })
