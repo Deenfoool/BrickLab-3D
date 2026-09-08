@@ -1,5 +1,5 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: CATALOG-3 · 80-part Technic library + asset-browser catalog.
+// BUILD: CONNECT-1 · Connector System v2 + 80-part Technic library.
 // All module URLs are versioned once by the import map in index.html.
 
 // Diagnostics must exist before any runtime/app module can fail.
