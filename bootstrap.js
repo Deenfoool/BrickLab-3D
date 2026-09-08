@@ -1,5 +1,5 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: PHYSICS-8 · stable revolute joints + clearance-aware colliders + SI boundary.
+// BUILD: PHYSICS-9 · independent local joint axes + clearance-aware colliders + SI boundary.
 // All module URLs are versioned once by the import map in index.html.
 
 // Diagnostics must exist before any runtime/app module can fail.
