@@ -103,3 +103,52 @@ PhysicsSession.prototype.createCompoundBody = function createCompoundBodyV2(obje
   }
   this.components.push(component)
 }
+
+// Connector definitions and editor transforms are expressed in studs, while
+// Rapier joint anchors are local rigid-body coordinates in metres. Keeping this
+// conversion here makes every hinge/bearing/motor joint use the same SI boundary
+// as body translations and colliders above.
+PhysicsSession.prototype.bodyLocalPoint = function bodyLocalPointV2(member, connector) {
+  return new THREE.Vector3(...connector.position)
+    .applyMatrix4(member.object.matrixWorld)
+    .applyMatrix4(member.component.bodyWorldInverse)
+    .multiplyScalar(STUD)
+}
+
+// Rapier body translations are metres. Three.js/editor transforms are studs.
+// The old base sync copied metre values directly into editor coordinates, which
+// moved every separate rigid component toward the origin by 125x on the first
+// physics step. This is especially visible on motor -> coupler -> axle -> wheel
+// assemblies and makes Reset look like it is rotating/breaking the mechanism.
+PhysicsSession.prototype.syncObjects = function syncObjectsV2() {
+  for (const component of this.components) {
+    const translation = component.body.translation()
+    const rotation = component.body.rotation()
+    const bodyWorldMatrix = new THREE.Matrix4().compose(
+      new THREE.Vector3(translation.x / STUD, translation.y / STUD, translation.z / STUD),
+      new THREE.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w),
+      new THREE.Vector3(1, 1, 1),
+    )
+
+    for (const member of component.members) {
+      const objectWorldMatrix = bodyWorldMatrix.clone().multiply(member.relativeMatrix)
+      const parent = member.object.parent
+      const localMatrix = parent
+        ? parent.matrixWorld.clone().invert().multiply(objectWorldMatrix)
+        : objectWorldMatrix
+      const localPose = pose(localMatrix)
+      member.object.position.copy(localPose.position)
+      member.object.quaternion.copy(localPose.rotation)
+      member.object.scale.copy(localPose.scale)
+      member.object.updateMatrixWorld(true)
+    }
+  }
+}
+
+globalThis.BrickLabPhysicsUnits = Object.freeze({
+  studMeters: STUD,
+  jointAnchors: 'meters',
+  rapierTranslations: 'meters',
+  editorTransforms: 'studs',
+  syncOwner: 'colliders-v2-si-boundary-v2',
+})
