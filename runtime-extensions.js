@@ -1,5 +1,5 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: RUNTIME-5 · inertia-aware drivetrain + impulse-limited tires.
+// BUILD: VISUAL-4 · realistic molded-part rendering + stabilized Physics v2.
 // All module URLs are versioned once by the import map in index.html.
 
 await import('./three-cycle-guard.js')
