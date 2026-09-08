@@ -1,6 +1,6 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: RUNTIME-1 · simulation time scale + command-RPM motor physics.
-const V = 'runtime-1-20260908-0539'
+// BUILD: RUNTIME-2 · authoritative physics time scale + command-RPM motor physics.
+const V = 'runtime-2-20260908-0845'
 
 await import(`./three-cycle-guard.js?v=${V}`)
 await import(`./multi-transform-patch.js?v=${V}`)
