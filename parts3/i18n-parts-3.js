@@ -2,11 +2,10 @@ import { PARTS } from '../parts.js'
 
 export const PARTS3_I18N_VERSION = 'parts-3-i18n-v1'
 
+// axle-2 / axle-9 / bush / half-bush already live in i18n-basic-parts-v1.
+// Keep this table limited to genuinely new PARTS-3 ids so the base translator
+// remains the single owner of legacy English/Russian names.
 const RU = Object.freeze({
-  'axle-2': ['Ось 2L', 'Короткая крестовая ось 2L с фасками на торцах'],
-  'axle-9': ['Ось 9L', 'Длинная крестовая ось 9L с фасками на торцах'],
-  bush: ['Втулка оси', 'Полноразмерный фиксатор и проставка для крестовой оси'],
-  'half-bush': ['Полувтулка', 'Компактный фиксатор и проставка половинной ширины'],
   'steering-tie-rod-5': ['Рулевая тяга 5L', 'Жёсткая рулевая тяга 5L с вертикальными шарнирными проушинами'],
   'wheel-hub': ['Ступица колеса', 'Свободно вращающаяся ступица с подшипником и крестовой осью под колесо'],
   'wheel-narrow': ['Узкое колесо', 'Узкая дорожная шина с низким сопротивлением качению'],
