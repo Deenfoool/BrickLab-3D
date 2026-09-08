@@ -13,9 +13,10 @@ Core loop: **build → simulate → test → inspect telemetry → modify → te
 ### Builder
 
 - Three.js scene with improved lighting, shadows and procedural part geometry.
-- 37 prototype parts including an expanded basic construction pack: multiple brick/plate sizes, Technic beams 3L/5L/7L/9L/11L, Technic bricks, Axle 2L/3L/5L/7L/9L, bushes, pins, gears, wheel, Lab Motor, F/N/R Gearbox, Open Differential, Bearing Block, Suspension Arm and sensors.
-- Catalog-wide Visual v3 pass: refined ABS/metal/rubber materials, Technic hole liners, axle detail bands, gear-face detail, power-unit fasteners, wheel sidewall detail and improved shadows.
-- Decorative Visual v3 meshes are excluded from Physics v2 collider bounds, so visual detail does not change simulation geometry.
+- **80 prototype parts** covering bricks/plates, studded Technic bricks, full and thin liftarms, bent beams, axles, pins/connectors, spur gears, multiple wheel sizes, Lab Motor, F/N/R Gearbox, Open Differential, Bearing Block, Suspension Arm and sensors.
+- New Parts asset browser: default grid view, category chips with counts, Favorites, Recent parts, full-text/tag/ID search, `Ctrl/Cmd + K` search focus and persistent list/grid preference.
+- Catalog-wide realistic molded-part visual pass: refined ABS/metal/rubber materials, Technic hole liners, axle detail bands, gear-face detail, power-unit fasteners, wheel sidewall/tread detail and studio PBR lighting.
+- Decorative visual meshes are excluded from Physics v2 collider bounds, so visual detail does not change simulation geometry.
 - Connector types: `stud`, `tube`, `pin`, `pin-hole`, `axle`, `axle-hole`.
 - Connector snapping, grid snapping, persistent connection graph, bearings and keyed shafts.
 - Undo/redo, autosave, `.bricklab` v2 import/export, multi-select and logical grouping.
@@ -156,9 +157,9 @@ index.html
 bootstrap.js
   ↓
 runtime-extensions.js
-  ├─ basic parts pack
+  ├─ basic + expanded Technic part packs
   ├─ physical part DB
-  ├─ catalog-wide Visual v3
+  ├─ realistic catalog-wide visuals
   ├─ Physics v2
   ├─ corrected colliders
   ├─ inertia-aware drivetrain stability
@@ -193,6 +194,7 @@ Expected GitHub Pages URL:
 | Disconnect | `D` |
 | Play / pause / reset physics | `Space` / `Shift + Space` |
 | BUILD ↔ SIMULATE | `Tab` |
+| Catalog search | `Ctrl/Cmd + K` |
 | Physics Debug | `F8` |
 | Save / export / import | `Ctrl/Cmd + S` / `Ctrl/Cmd + Shift + S` / `Ctrl/Cmd + O` |
 | Shortcut palette | `?` |
