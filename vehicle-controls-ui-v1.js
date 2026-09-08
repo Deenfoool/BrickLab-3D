@@ -4,6 +4,26 @@ let installed = false
 let parking = false
 let wasVisible = false
 
+const TEXT = {
+  en: {
+    title: 'VEHICLE', hint: 'A / D · SPACE · P', left: 'Steer left', center: 'Center steering', right: 'Steer right',
+    brakeButton: 'BRAKE', brakeTitle: 'Service brake', parkingTitle: 'Parking brake', speed: 'Speed / accel', steering: 'Steering',
+    mode: 'Mode', brake: 'Brake', size: 'Wheelbase / track', mass: 'Mass / CoG', metrics: 'Test metrics',
+    physical: 'PHYSICAL', mixed: 'MIXED', virtual: 'VIRTUAL TIRE', joints: 'JOINTS', park: 'PARK', brakeMetric: 'brake',
+  },
+  ru: {
+    title: 'МАШИНА', hint: 'A / D · ПРОБЕЛ · P', left: 'Руль влево', center: 'Руль прямо', right: 'Руль вправо',
+    brakeButton: 'ТОРМОЗ', brakeTitle: 'Рабочий тормоз', parkingTitle: 'Стояночный тормоз', speed: 'Скорость / ускорение', steering: 'Руль',
+    mode: 'Режим', brake: 'Тормоз', size: 'База / колея', mass: 'Масса / ЦТ', metrics: 'Метрики',
+    physical: 'ФИЗИЧЕСКИЙ', mixed: 'СМЕШАННЫЙ', virtual: 'ВИРТУАЛЬНЫЙ', joints: 'ШАРНИРА', park: 'РУЧНИК', brakeMetric: 'тормоз',
+  },
+}
+
+function lang() {
+  return document.documentElement.lang === 'ru' || localStorage.getItem('bricklab.ui.language.v1') === 'ru' ? 'ru' : 'en'
+}
+function t(key) { return TEXT[lang()][key] ?? TEXT.en[key] ?? key }
+
 function activeRuntime() {
   const mode = document.querySelector('.mode.active')?.dataset.mode
   return mode === 'simulate' || mode === 'test'
@@ -31,6 +51,27 @@ function installStyle() {
   document.head.append(style)
 }
 
+function applyLanguage(deck) {
+  if (!deck || deck.dataset.vehicleLang === lang()) return
+  deck.dataset.vehicleLang = lang()
+  deck.querySelector('[data-vehicle-title]').textContent = t('title')
+  deck.querySelector('[data-vehicle-hint]').textContent = t('hint')
+  const left = deck.querySelector('[data-steer="1"]')
+  const center = deck.querySelector('[data-steer="0"]')
+  const right = deck.querySelector('[data-steer="-1"]')
+  if (left) left.title = t('left')
+  if (center) center.title = t('center')
+  if (right) right.title = t('right')
+  const brake = deck.querySelector('[data-brake]')
+  if (brake) { brake.textContent = t('brakeButton'); brake.title = t('brakeTitle') }
+  const parkingButton = deck.querySelector('[data-parking]')
+  if (parkingButton) parkingButton.title = t('parkingTitle')
+  for (const key of ['speed','steering','mode','brake','size','mass','metrics']) {
+    const label = deck.querySelector(`[data-vehicle-label="${key}"]`)
+    if (label) label.textContent = t(key)
+  }
+}
+
 function install() {
   if (installed) return
   const viewport = document.querySelector('.viewport-wrap')
@@ -41,22 +82,23 @@ function install() {
   deck.id = 'vehicleControlDeck'
   deck.className = 'vehicle-control-deck hidden'
   deck.innerHTML = `
-    <div class="vehicle-control-title"><strong>VEHICLE</strong><small>A / D · SPACE · P</small></div>
-    <button type="button" data-steer="1" title="Steer left">A ◀</button>
-    <button type="button" data-steer="0" title="Center steering">●</button>
-    <button type="button" data-steer="-1" title="Steer right">▶ D</button>
-    <button type="button" class="vehicle-brake" data-brake title="Service brake">BRAKE</button>
-    <button type="button" class="vehicle-parking" data-parking title="Parking brake">P</button>
+    <div class="vehicle-control-title"><strong data-vehicle-title>VEHICLE</strong><small data-vehicle-hint>A / D · SPACE · P</small></div>
+    <button type="button" data-steer="1">A ◀</button>
+    <button type="button" data-steer="0">●</button>
+    <button type="button" data-steer="-1">▶ D</button>
+    <button type="button" class="vehicle-brake" data-brake>BRAKE</button>
+    <button type="button" class="vehicle-parking" data-parking>P</button>
     <div class="vehicle-control-readout">
-      <span>Speed / accel</span><b data-vehicle-motion>0.00 m/s · 0.00 m/s²</b>
-      <span>Steering</span><b data-vehicle-steer>0°</b>
-      <span>Mode</span><b data-vehicle-mode>VIRTUAL TIRE</b>
-      <span>Brake</span><b data-vehicle-brake>0%</b>
-      <span>Wheelbase / track</span><b data-vehicle-size>—</b>
-      <span>Mass / CoG</span><b data-vehicle-mass>—</b>
-      <span>Test metrics</span><b data-vehicle-performance>—</b>
+      <span data-vehicle-label="speed">Speed / accel</span><b data-vehicle-motion>0.00 m/s · 0.00 m/s²</b>
+      <span data-vehicle-label="steering">Steering</span><b data-vehicle-steer>0°</b>
+      <span data-vehicle-label="mode">Mode</span><b data-vehicle-mode>VIRTUAL TIRE</b>
+      <span data-vehicle-label="brake">Brake</span><b data-vehicle-brake>0%</b>
+      <span data-vehicle-label="size">Wheelbase / track</span><b data-vehicle-size>—</b>
+      <span data-vehicle-label="mass">Mass / CoG</span><b data-vehicle-mass>—</b>
+      <span data-vehicle-label="metrics">Test metrics</span><b data-vehicle-performance>—</b>
     </div>`
   viewport.append(deck)
+  applyLanguage(deck)
 
   const stopSteer = () => api()?.setSteering(0)
   deck.querySelectorAll('[data-steer]').forEach(button => {
@@ -104,6 +146,7 @@ window.addEventListener('keyup', event => {
 function render() {
   install()
   const deck = document.getElementById('vehicleControlDeck')
+  applyLanguage(deck)
   const state = api()?.getState?.()
   const performance = performanceApi()?.get?.()
   const visible = activeRuntime() && Boolean(state?.enabled)
@@ -128,11 +171,11 @@ function render() {
     if (motion) motion.textContent = `${(state.speedMps || 0).toFixed(2)} m/s · ${(state.accelerationMps2 || 0).toFixed(2)} m/s²`
     if (steer) steer.textContent = `${(state.centerSteerDeg || 0).toFixed(1)}° · L ${(state.leftSteerDeg || 0).toFixed(1)}° / R ${(state.rightSteerDeg || 0).toFixed(1)}°`
     if (mode) {
-      const names = { physical: 'PHYSICAL', mixed: 'MIXED', virtual: 'VIRTUAL TIRE' }
-      const base = names[state.steeringMode] ?? String(state.steeringMode || 'VIRTUAL TIRE').toUpperCase()
-      mode.textContent = state.physicalSteeringJoints ? `${base} · ${state.physicalSteeringJoints} JOINTS` : base
+      const names = { physical: t('physical'), mixed: t('mixed'), virtual: t('virtual') }
+      const base = names[state.steeringMode] ?? String(state.steeringMode || t('virtual')).toUpperCase()
+      mode.textContent = state.physicalSteeringJoints ? `${base} · ${state.physicalSteeringJoints} ${t('joints')}` : base
     }
-    if (brake) brake.textContent = `${Math.round((state.brakeInput || 0) * 100)}%${state.parkingBrake ? ' · PARK' : ''}`
+    if (brake) brake.textContent = `${Math.round((state.brakeInput || 0) * 100)}%${state.parkingBrake ? ` · ${t('park')}` : ''}`
     if (size) size.textContent = `${(state.wheelbaseM || 0).toFixed(3)} / ${(state.trackM || 0).toFixed(3)} m`
     if (mass) {
       const cog = Array.isArray(state.comStud) ? state.comStud.map(v => Number(v).toFixed(1)).join(',') : '—'
@@ -142,7 +185,7 @@ function render() {
       const top = performance?.topSpeedMps ?? 0
       const accel = performance?.accelTimeToTarget
       const brakeDistance = performance?.lastBrakingDistanceM
-      performanceEl.textContent = `Vmax ${top.toFixed(2)} · 0→${(performance?.accelTargetMps ?? .5).toFixed(1)} ${accel == null ? '—' : `${accel.toFixed(2)}s`} · brake ${brakeDistance == null ? '—' : `${brakeDistance.toFixed(3)}m`}`
+      performanceEl.textContent = `Vmax ${top.toFixed(2)} · 0→${(performance?.accelTargetMps ?? .5).toFixed(1)} ${accel == null ? '—' : `${accel.toFixed(2)}s`} · ${t('brakeMetric')} ${brakeDistance == null ? '—' : `${brakeDistance.toFixed(3)}m`}`
     }
     deck.querySelector('[data-parking]')?.classList.toggle('active', Boolean(state.parkingBrake))
   }
