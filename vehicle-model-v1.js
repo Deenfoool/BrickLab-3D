@@ -1,4 +1,4 @@
-export const VEHICLE_MODEL_VERSION = 'vehicle-model-v1'
+export const VEHICLE_MODEL_VERSION = 'vehicle-model-v2'
 
 const EPS = 1e-9
 
@@ -56,6 +56,70 @@ export function boundedBrakeTorque({ omega = 0, input = 0, maxTorque = 0, invers
   if (Math.abs(w) < EPS || capacity < EPS || invI < EPS || step < EPS) return 0
   const zeroingTorque = Math.abs(w) / (invI * step)
   return -Math.sign(w) * Math.min(capacity, zeroingTorque)
+}
+
+/**
+ * Converts a signed driver throttle request into a safe drive command.
+ * Reversing direction while the chassis is still moving first requests braking;
+ * the motor direction is allowed to flip only below reverseSpeedThreshold.
+ */
+export function resolveDriveRequest({ throttle = 0, longitudinalSpeed = 0, reverseSpeedThreshold = 0.08 } = {}) {
+  const requested = clampVehicle(throttle, -1, 1)
+  const requestedDirection = Math.abs(requested) < EPS ? 0 : Math.sign(requested)
+  const speed = Number(longitudinalSpeed) || 0
+  const threshold = Math.max(0, Number(reverseSpeedThreshold) || 0)
+  const movingDirection = Math.abs(speed) > threshold ? Math.sign(speed) : 0
+  const reverseInterlock = requestedDirection !== 0 && movingDirection !== 0 && requestedDirection !== movingDirection
+
+  return {
+    requested,
+    requestedDirection,
+    direction: reverseInterlock ? 0 : requestedDirection,
+    throttle: reverseInterlock ? 0 : Math.abs(requested),
+    autoBrake: reverseInterlock ? 1 : 0,
+    reverseInterlock,
+  }
+}
+
+/**
+ * Maps wheel members to the motor that reaches their drivetrain shaft.
+ * Only motors that actually propagate through the drivetrain to a wheel are
+ * returned, so accessory motors are never treated as vehicle drive motors.
+ */
+export function classifyDrivenWheels(wheels = [], shafts = []) {
+  const shaftByMember = new Map()
+  for (const shaft of shafts ?? []) {
+    for (const memberId of shaft?.memberIds ?? []) shaftByMember.set(memberId, shaft)
+  }
+
+  const resolved = (wheels ?? []).map(wheel => {
+    const memberId = wheel?.instanceId ?? wheel?.memberId ?? wheel?.id ?? null
+    const shaft = memberId ? shaftByMember.get(memberId) : null
+    const sourceMotorId = shaft?.sourceMotorId ?? null
+    return {
+      ...wheel,
+      memberId,
+      shaftId: shaft?.id ?? null,
+      sourceMotorId,
+      driven: Boolean(sourceMotorId),
+    }
+  })
+
+  const motorIds = [...new Set(resolved.map(wheel => wheel.sourceMotorId).filter(Boolean))]
+  const driven = resolved.filter(wheel => wheel.driven)
+  const axleRoles = new Set(driven.map(wheel => wheel.axle).filter(Boolean))
+  let layout = 'FREE'
+  if (axleRoles.has('front') && axleRoles.has('rear')) layout = 'AWD'
+  else if (axleRoles.has('front')) layout = 'FWD'
+  else if (axleRoles.has('rear')) layout = 'RWD'
+  else if (driven.length) layout = 'MULTI'
+
+  return {
+    wheels: resolved,
+    motorIds,
+    drivenWheelCount: driven.length,
+    layout,
+  }
 }
 
 export function classifyWheelAxles(wheels = []) {
