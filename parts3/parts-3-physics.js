@@ -12,6 +12,8 @@ const PHYSICAL = Object.freeze({
   'wheel-narrow': { massKg: 0.0055, material: 'rubber', collisionClass: 'wheel' },
   'wheel-offroad-large': { massKg: 0.0140, material: 'rubber', collisionClass: 'wheel' },
   'wheel-tractor': { massKg: 0.0210, material: 'rubber', collisionClass: 'wheel' },
+  'technic-frame-5x7': { massKg: 0.0064, material: 'abs', collisionClass: 'structure' },
+  'pin-frictionless': { massKg: 0.00034, material: 'abs', collisionClass: 'mechanical' },
 })
 
 for (const part of PARTS) {
