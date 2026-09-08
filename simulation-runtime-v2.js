@@ -8,17 +8,11 @@ const TAU = Math.PI * 2
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0))
 const rpmToRad = rpm => rpm * TAU / 60
-const radToRpm = radians => radians * 60 / TAU
 const vec = value => ({ x: value.x, y: value.y, z: value.z })
 
 function bodyRotation(body) {
   const q = body.rotation()
   return new THREE.Quaternion(q.x, q.y, q.z, q.w)
-}
-
-function bodyAngular(body) {
-  const v = body.angvel()
-  return new THREE.Vector3(v.x, v.y, v.z)
 }
 
 function normalizeTimeScale(value) {
@@ -32,9 +26,10 @@ function readTimeScale() {
 }
 
 let preferredTimeScale = readTimeScale()
+window.__bricklabRequestedTimeScale = preferredTimeScale
 
 function isTestSession(session) {
-  return Boolean(session?.scenarioData) || Boolean(session?.scenario && session.scenario !== 'flat')
+  return Boolean(session?.scenarioData) || Boolean(session?.scenario && session.scenario !== 'flat') || Boolean(document.body.dataset.bricklabTest)
 }
 
 function currentSession() {
@@ -44,16 +39,18 @@ function currentSession() {
 function setTimeScale(value, { persist = true } = {}) {
   const requested = normalizeTimeScale(value)
   preferredTimeScale = requested
+  window.__bricklabRequestedTimeScale = requested
   if (persist) {
     try { localStorage.setItem(TIME_SCALE_KEY, String(requested)) } catch {}
   }
 
   const session = currentSession()
-  if (session) session.timeScale = isTestSession(session) ? 1 : requested
+  const applied = session && isTestSession(session) ? 1 : requested
+  if (session) session.timeScale = applied
   window.dispatchEvent(new CustomEvent('bricklab:timescalechange', {
-    detail: { requested, applied: session && isTestSession(session) ? 1 : requested },
+    detail: { requested, applied },
   }))
-  return session && isTestSession(session) ? 1 : requested
+  return applied
 }
 
 function syncDriveCommand(drive) {
@@ -76,9 +73,7 @@ function motorVoltage(session, drive) {
   return voltage
 }
 
-// Final Physics v2 motor controller. BUILD/runtime RPM is a real speed command,
-// not merely a direction flag. The motor follows a DC-style torque-speed curve:
-// full stall torque at zero speed, falling toward zero as ACTUAL approaches SET.
+// Final motor controller: runtime RPM is a real command/setpoint.
 PhysicsSession.prototype.applyMotorTorques = function applyCommandRpmMotorTorques(dt) {
   const testBlocked = this.scenarioData && this.scenarioData.phase !== 'RUN'
 
@@ -114,14 +109,8 @@ PhysicsSession.prototype.applyMotorTorques = function applyCommandRpmMotorTorque
     const errorRpm = targetRpm - actualRpm
     const errorScale = Math.max(commandAbs * 0.08, 4)
     const controller = clamp(Math.abs(errorRpm) / errorScale, 0, 1)
-
-    // When the shaft overspeeds the command, provide bounded electrical braking.
-    // This makes lowering the runtime RPM behave like a speed command rather than
-    // waiting indefinitely for the mechanism to coast down.
     const overspeed = actualAlongCommand > commandAbs && Math.sign(actualRpm) === targetSign
-    const torqueLimit = overspeed
-      ? stallTorque * 0.38
-      : motoringLimit
+    const torqueLimit = overspeed ? stallTorque * 0.38 : motoringLimit
     const torqueMagnitude = torqueLimit * controller
     const torqueSign = Math.sign(errorRpm)
 
@@ -146,25 +135,38 @@ PhysicsSession.prototype.applyMotorTorques = function applyCommandRpmMotorTorque
   }
 }
 
-// Final fixed-step runner. Rapier timestep remains fixed; time scale changes how
-// much simulated time is accumulated per real second. TEST is always locked 1x.
-PhysicsSession.prototype.step = function stepWithTimeScale() {
+// Time scaling lives at the source of truth: the physics loop itself. It reads a
+// global command every frame, so the UI cannot become detached from the active
+// session. Rapier's dt stays fixed; only the amount of simulated time accumulated
+// per real second changes. TEST remains deterministic at 1x.
+PhysicsSession.prototype.step = function stepWithAuthoritativeTimeScale() {
   if (!this.world || !this.running) return
 
   const dt = 1 / this.quality.hz
   const now = performance.now() / 1000
-  const realFrame = clamp(now - (this.physicsLastTime || now), 0, 0.05)
+  const previous = this.physicsLastTime || now
+  const realFrame = clamp(now - previous, 0, 0.1)
   this.physicsLastTime = now
 
   const lockedToTest = isTestSession(this)
-  const scale = lockedToTest ? 1 : normalizeTimeScale(this.timeScale ?? preferredTimeScale)
+  const requested = normalizeTimeScale(window.__bricklabRequestedTimeScale ?? preferredTimeScale)
+  const scale = lockedToTest ? 1 : requested
   this.timeScale = scale
+
+  this.realElapsedTime = (this.realElapsedTime ?? 0) + realFrame
   const scaledFrame = realFrame * scale
-  const maxCatchup = dt * this.quality.maxSubsteps
-  this.physicsAccumulator = (this.physicsAccumulator || 0) + Math.min(scaledFrame, maxCatchup)
+  this.requestedSimulationElapsed = (this.requestedSimulationElapsed ?? 0) + scaledFrame
+  this.physicsAccumulator = (this.physicsAccumulator || 0) + scaledFrame
+
+  // At accelerated time we must permit proportionally more fixed physics steps.
+  // Otherwise low render FPS silently clamps 2x/3x back toward 1x.
+  const baseMax = Math.max(1, this.quality.maxSubsteps || 1)
+  const maxSteps = Math.max(baseMax, Math.ceil(baseMax * Math.max(1, scale)))
+  const hardAccumulatorLimit = dt * maxSteps * 2
+  if (this.physicsAccumulator > hardAccumulatorLimit) this.physicsAccumulator = hardAccumulatorLimit
 
   let steps = 0
-  while (this.physicsAccumulator >= dt && steps < this.quality.maxSubsteps) {
+  while (this.physicsAccumulator >= dt && steps < maxSteps) {
     this.simulationTime += dt
 
     if (this.scenarioData) {
@@ -197,6 +199,12 @@ PhysicsSession.prototype.step = function stepWithTimeScale() {
     steps += 1
   }
 
+  this.lastPhysicsSteps = steps
+  this.actualSimulationElapsed = this.simulationTime ?? 0
+  this.effectiveTimeScale = this.realElapsedTime > 0
+    ? this.actualSimulationElapsed / this.realElapsedTime
+    : scale
+
   if (steps) {
     this.syncObjects()
     this.updateTelemetryReadings()
@@ -220,8 +228,9 @@ function installStyles() {
     .sim-time-scale button:disabled{cursor:not-allowed;opacity:.32}
     .sim-time-scale.test-locked button[data-time-scale="1"]{opacity:1}
     .sim-time-lock{font-size:9px;color:#f4c86a;white-space:nowrap}
+    .sim-time-readout{font-size:9px;color:#9eabb5;white-space:nowrap;font-variant-numeric:tabular-nums;margin-left:3px}
     .control-runtime-motor output{min-width:155px;text-align:right}
-    @media(max-width:800px){.sim-time-scale>span,.sim-time-lock{display:none}.sim-time-scale button{min-width:31px;padding:0 5px}.control-runtime-motor output{min-width:110px}}
+    @media(max-width:900px){.sim-time-scale>span,.sim-time-lock,.sim-time-readout{display:none}.sim-time-scale button{min-width:31px;padding:0 5px}.control-runtime-motor output{min-width:110px}}
   `
   document.head.append(style)
 }
@@ -236,7 +245,7 @@ function installTimeScaleUi() {
   const group = document.createElement('div')
   group.id = 'simTimeScale'
   group.className = 'sim-time-scale'
-  group.innerHTML = `<span>TIME</span>${TIME_SCALES.map(scale => `<button type="button" data-time-scale="${scale}">${scale}×</button>`).join('')}<small class="sim-time-lock" hidden></small>`
+  group.innerHTML = `<span>TIME</span>${TIME_SCALES.map(scale => `<button type="button" data-time-scale="${scale}">${scale}×</button>`).join('')}<small class="sim-time-lock" hidden></small><small class="sim-time-readout" data-time-readout>REAL 0.0 · SIM 0.0</small>`
   controls.insertBefore(group, state)
 
   group.addEventListener('click', event => {
@@ -264,9 +273,6 @@ function refreshMotorDeck() {
     output.textContent = lang() === 'ru'
       ? `ЗАД ${Math.round(setRpm)} · ФАКТ ${Math.round(actual)} об/мин · ${load}%`
       : `SET ${Math.round(setRpm)} · ACT ${Math.round(actual)} RPM · ${load}%`
-    output.title = lang() === 'ru'
-      ? `Заданная скорость ${Math.round(setRpm)} об/мин · фактическая ${Math.round(actual)} об/мин · нагрузка ${load}%`
-      : `Command ${Math.round(setRpm)} RPM · actual ${Math.round(actual)} RPM · load ${load}%`
   }
 }
 
@@ -274,19 +280,32 @@ function refreshRuntimeUi() {
   const group = document.getElementById('simTimeScale')
   if (!group) return
   const session = currentSession()
-  const test = isTestSession(session) || Boolean(document.body.dataset.bricklabTest)
-  const applied = test ? 1 : normalizeTimeScale(session?.timeScale ?? preferredTimeScale)
+  const test = isTestSession(session)
+  const requested = normalizeTimeScale(window.__bricklabRequestedTimeScale ?? preferredTimeScale)
+  const applied = test ? 1 : requested
+
   group.classList.toggle('test-locked', test)
   group.querySelectorAll('[data-time-scale]').forEach(button => {
     const value = Number(button.dataset.timeScale)
     button.classList.toggle('active', value === applied)
     button.disabled = test && value !== 1
   })
+
   const lock = group.querySelector('.sim-time-lock')
   if (lock) {
     lock.hidden = !test
     lock.textContent = lang() === 'ru' ? 'ТЕСТ · 1×' : 'TEST · 1×'
   }
+
+  const readout = group.querySelector('[data-time-readout]')
+  if (readout) {
+    const real = Number(session?.realElapsedTime) || 0
+    const sim = Number(session?.actualSimulationElapsed ?? session?.simulationTime) || 0
+    const effective = real > 0 ? sim / real : applied
+    readout.textContent = `REAL ${real.toFixed(1)} · SIM ${sim.toFixed(1)} · ${effective.toFixed(2)}×`
+    readout.title = `Requested ${applied}× · effective ${effective.toFixed(2)}× · last ${session?.lastPhysicsSteps ?? 0} fixed steps`
+  }
+
   if (session) session.timeScale = applied
   refreshMotorDeck()
 }
@@ -295,11 +314,11 @@ installTimeScaleUi()
 window.addEventListener('bricklab:timescalechange', refreshRuntimeUi)
 window.addEventListener('bricklab:controls-runtime-reset', refreshRuntimeUi)
 window.addEventListener('bricklab:control-runtime-change', refreshRuntimeUi)
-setInterval(refreshRuntimeUi, 180)
+setInterval(refreshRuntimeUi, 100)
 
 window.BrickLabSimulationTime = {
   scales: [...TIME_SCALES],
   getPreferred: () => preferredTimeScale,
-  getApplied: () => isTestSession(currentSession()) ? 1 : normalizeTimeScale(currentSession()?.timeScale ?? preferredTimeScale),
+  getApplied: () => isTestSession(currentSession()) ? 1 : normalizeTimeScale(window.__bricklabRequestedTimeScale ?? preferredTimeScale),
   set: setTimeScale,
 }
