@@ -4,6 +4,10 @@
 
 Core loop: **build → simulate → test → inspect telemetry → modify → test again**.
 
+[**Open BrickLab 3D**](https://deenfoool.github.io/BrickLab-3D/)
+
+![BrickLab 3D interface](portfolio/cover.png)
+
 ## Current state
 
 ### Builder
