@@ -1,5 +1,5 @@
-const BUILD_ID = 'RUNTIME-4'
-const BUILD_TAG = 'runtime-4-20260908-01'
+const BUILD_ID = 'RUNTIME-5'
+const BUILD_TAG = 'runtime-5-20260908-1000'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG} · fixed-step time scale + command RPM motor physics`
+  badge.title = `BrickLab production build ${BUILD_TAG} · inertia-aware drivetrain + impulse-limited tires + fixed-step Time Scale`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -76,12 +76,12 @@ window.__bricklabPhysicsDiagnostics = () => ({
   autoWeld: window.__bricklabLastAutoWeldStats ?? null,
   controls: window.BrickLabControls?.getRuntimeEntries?.() ?? [],
   requestedTimeScale: window.__bricklabRequestedTimeScale ?? 1,
-  appliedTimeScale: window.__bricklabAppliedPhysicalTimeScale ?? window.BrickLabSimulationTime?.getApplied?.() ?? 1,
-  timeIntegrator: window.__bricklabTimeIntegrator ?? null,
+  appliedTimeScale: window.BrickLabSimulationTime?.getApplied?.() ?? 1,
+  timeIntegrator: window.__bricklabTimeIntegrator ?? 'simulation-time-authoritative-v4',
   realElapsed: window.__bricklabPhysicsSession?.realElapsedTime ?? 0,
   simElapsed: window.__bricklabPhysicsSession?.actualSimulationElapsed ?? window.__bricklabPhysicsSession?.simulationTime ?? 0,
   nominalSteps: window.__bricklabPhysicsSession?.lastPhysicsSteps ?? 0,
-  microSteps: window.__bricklabPhysicsSession?.lastPhysicsMicroSteps ?? 0,
+  stability: window.BrickLabPhysicsStability?.diagnostics?.() ?? null,
   lastError: window.__bricklabPhysicsLastError ?? null,
   rapierSource: window.__bricklabRapierSource ?? null,
 })
