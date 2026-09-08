@@ -1,5 +1,5 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: PHYSICS-7 · clearance-aware colliders + SI boundary + Connector System v3.
+// BUILD: PHYSICS-8 · stable revolute joints + clearance-aware colliders + SI boundary.
 // All module URLs are versioned by the import map in index.html.
 
 await import('./three-cycle-guard.js')
@@ -31,6 +31,9 @@ await import('./connector-physics-v3.js')
 // Recover visually aligned axle ↔ axle-hole interfaces before the authoritative
 // connector-physics build sanitizes the graph and creates rigid shaft components.
 await import('./connector-mechanical-recovery-v4.js')
+// One revolute constraint per rigid-body pair and zero-error shared anchors.
+// Prevents multi-bearing shafts from injecting a huge solver impulse on frame 1.
+await import('./joint-stability-v4.js')
 await import('./powertrain-physics-v2.js')
 
 // Must load before stress/surface wrappers so they decorate the stabilized solvers.
