@@ -3,12 +3,14 @@ import { PhysicsSession } from './physics.js'
 import { findPart } from './parts.js'
 import { SURFACES } from './physical-parts.js'
 
-export const PHYSICS_STABILITY_VERSION = 'physics-stability-v3'
+export const PHYSICS_STABILITY_VERSION = 'physics-stability-v4'
 const COUPLING_OWNER = 'inertia-aware-coupling-v3'
-const TIRE_OWNER = 'impulse-limited-tire-v3'
+const TIRE_OWNER = 'passive-settling-tire-v4'
+const SLEEP_OWNER = 'passive-sleep-v1'
 const TAU = Math.PI * 2
 const G = 9.81
 const EPS = 1e-10
+const ROLLING_RESISTANCE_TRANSITION = 0.0025
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0))
 const vec = value => ({ x: value.x, y: value.y, z: value.z })
@@ -210,6 +212,13 @@ PhysicsSession.prototype.applyGearCouplingTorques = function applyInertiaAwareCo
 }
 PhysicsSession.prototype.applyGearCouplingTorques.__bricklabOwner = COUPLING_OWNER
 
+// Clearing accumulated torque is bookkeeping, not an external interaction.
+// Passing wakeUp=true here kept every passive chassis awake forever.
+PhysicsSession.prototype.resetCustomTorques = function resetCustomTorquesPreservingSleep() {
+  for (const component of this.components ?? []) component.body.resetTorques?.(false)
+}
+PhysicsSession.prototype.resetCustomTorques.__bricklabOwner = SLEEP_OWNER
+
 function wheelCenter(wheel) {
   if (!wheel.member) return null
   return new THREE.Vector3(0, 1.15, 0)
@@ -246,7 +255,7 @@ function impulseLimitedForce(rawForce, relativeSpeed, invEffectiveMass, dt) {
   return clamp(rawForce, -correctiveForce, correctiveForce)
 }
 
-PhysicsSession.prototype.applyTireForcesV2 = function applyImpulseLimitedTireForcesV3(dt = 1 / (this.quality?.hz ?? 120)) {
+PhysicsSession.prototype.applyTireForcesV2 = function applyPassiveSettlingTireForcesV4(dt = 1 / (this.quality?.hz ?? 120)) {
   const surface = SURFACES[this.scenarioData?.surface ?? 'concrete'] ?? SURFACES.concrete
   this.debugContacts = []
 
@@ -267,6 +276,7 @@ PhysicsSession.prototype.applyTireForcesV2 = function applyImpulseLimitedTireFor
       wheel.normalLoadN = 0
       wheel.longitudinalForceN = 0
       wheel.lateralForceN = 0
+      wheel.rollingResistanceN = 0
       continue
     }
 
@@ -278,9 +288,8 @@ PhysicsSession.prototype.applyTireForcesV2 = function applyImpulseLimitedTireFor
     rolling.normalize()
     const lateral = normal.clone().cross(rolling).normalize()
 
-    // Use center velocity for v and omega*r. The previous implementation used
-    // velocityAtPoint(contact), which already includes omega x r, and then added
-    // omega*r again. That doubled wheel rotation in the slip calculation.
+    // Center velocity and omega*r are distinct terms. Contact-point velocity is
+    // used only for the actual no-slip error, so pure rolling produces zero drive.
     const centerVelocityRaw = wheel.body.velocityAtPoint?.(vec(center)) ?? wheel.body.linvel()
     const centerVelocity = new THREE.Vector3(centerVelocityRaw.x, centerVelocityRaw.y, centerVelocityRaw.z)
     const contactVelocityRaw = wheel.body.velocityAtPoint?.(vec(point)) ?? wheel.body.linvel()
@@ -304,15 +313,13 @@ PhysicsSession.prototype.applyTireForcesV2 = function applyImpulseLimitedTireFor
     let longForce = Math.tanh(slipRatio * (tire.longitudinalStiffness ?? 7.2)) * maxLong
     let lateralForce = -Math.tanh(slipAngle * (tire.lateralStiffness ?? 5)) * maxLat
 
-    // A tire force is also bounded by the impulse needed to remove the current
-    // contact slip in this microstep. This is a mass/inertia/dt limit, not an
-    // arbitrary speed clamp, so it cannot inject energy by overshooting zero slip.
+    // A tire force is bounded by the impulse needed to remove the current contact
+    // slip in this microstep, so traction cannot overshoot through zero slip.
     const invLong = effectiveInverseMassAtPoint(wheel.body, point, rolling)
     const invLat = effectiveInverseMassAtPoint(wheel.body, point, lateral)
     longForce = impulseLimitedForce(longForce, slipSpeed, invLong, dt)
     lateralForce = impulseLimitedForce(lateralForce, lateralSlipSpeed, invLat, dt)
 
-    // Combined longitudinal/lateral grip must stay inside a friction ellipse.
     const ellipse = Math.hypot(
       maxLong > EPS ? longForce / maxLong : 0,
       maxLat > EPS ? lateralForce / maxLat : 0,
@@ -322,19 +329,33 @@ PhysicsSession.prototype.applyTireForcesV2 = function applyImpulseLimitedTireFor
       lateralForce /= ellipse
     }
 
-    const rollingResistance = Math.abs(longitudinalSpeed) > 0.01
-      ? -Math.sign(longitudinalSpeed) * surface.rollingResistance * load * (tire.rollingResistanceScale ?? 1)
-      : 0
-    const totalForce = rolling.clone().multiplyScalar(longForce + rollingResistance)
-      .add(lateral.clone().multiplyScalar(lateralForce))
-    wheel.body.addForceAtPoint?.(vec(totalForce), vec(point), true)
+    // The old 0.01 m/s cutoff created a permanent coasting band: any numerical
+    // settling velocity below 1 cm/s had zero rolling resistance, wheel friction
+    // was intentionally tiny, and sleeping was disabled. Use smooth resistance
+    // all the way to rest, apply it at the wheel center so it always removes
+    // translational energy, and impulse-limit it so it cannot reverse velocity.
+    const rawRollingResistance = -Math.tanh(longitudinalSpeed / ROLLING_RESISTANCE_TRANSITION)
+      * surface.rollingResistance * load * (tire.rollingResistanceScale ?? 1)
+    const invRolling = effectiveInverseMassAtPoint(wheel.body, center, rolling)
+    const rollingResistance = impulseLimitedForce(rawRollingResistance, longitudinalSpeed, invRolling, dt)
 
+    const contactForce = rolling.clone().multiplyScalar(longForce)
+      .add(lateral.clone().multiplyScalar(lateralForce))
+    const rollingDrag = rolling.clone().multiplyScalar(rollingResistance)
+
+    // Tire forces are consequences of an already-active contact. They must not
+    // wake a chassis that Rapier has legitimately put to sleep on a flat floor.
+    if (contactForce.lengthSq() > EPS * EPS) wheel.body.addForceAtPoint?.(vec(contactForce), vec(point), false)
+    if (rollingDrag.lengthSq() > EPS * EPS) wheel.body.addForceAtPoint?.(vec(rollingDrag), vec(center), false)
+
+    const totalForce = contactForce.clone().add(rollingDrag)
     Object.assign(wheel, {
       normalLoadN: load,
       slipRatio,
       slipAngleDeg: THREE.MathUtils.radToDeg(slipAngle),
       longitudinalForceN: longForce,
       lateralForceN: lateralForce,
+      rollingResistanceN: rollingResistance,
       groundSpeed: longitudinalSpeed,
       rimSpeed,
       contactSlipSpeed: slipSpeed,
@@ -372,6 +393,7 @@ window.BrickLabPhysicsStability = {
   version: PHYSICS_STABILITY_VERSION,
   couplingOwner: COUPLING_OWNER,
   tireOwner: TIRE_OWNER,
+  sleepOwner: SLEEP_OWNER,
   diagnostics: () => ({
     version: PHYSICS_STABILITY_VERSION,
     session: window.__bricklabPhysicsSession?.physicsStabilityMetrics ?? null,
