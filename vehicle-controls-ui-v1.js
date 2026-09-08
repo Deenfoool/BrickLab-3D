@@ -14,7 +14,7 @@ const TEXT = {
     physical: 'PHYSICAL', mixed: 'MIXED', virtual: 'VIRTUAL TIRE', free: 'FREE',
     reverseBrake: 'REV BRAKE', park: 'PARK', motors: 'motors', wheels: 'wheels', brakeMetric: 'brake',
     forward: 'Drive forward', reverse: 'Drive reverse', left: 'Steer left', center: 'Center steering', right: 'Steer right',
-    brakeTitle: 'Service brake', parkingTitle: 'Parking brake',
+    brakeTitle: 'Service brake', parkingTitle: 'Parking brake', mechanism: 'MECHANISM', manual: 'DRIVER',
   },
   ru: {
     title: 'МАШИНА', hint: 'W / S · A / D · ПРОБЕЛ · P',
@@ -23,7 +23,7 @@ const TEXT = {
     physical: 'ФИЗИЧЕСКИЙ', mixed: 'СМЕШАННЫЙ', virtual: 'ВИРТУАЛЬНЫЙ', free: 'СВОБОДНЫЙ',
     reverseBrake: 'ТОРМОЖЕНИЕ R', park: 'РУЧНИК', motors: 'мот.', wheels: 'кол.', brakeMetric: 'тормоз',
     forward: 'Тяга вперёд', reverse: 'Тяга назад', left: 'Руль влево', center: 'Руль прямо', right: 'Руль вправо',
-    brakeTitle: 'Рабочий тормоз', parkingTitle: 'Стояночный тормоз',
+    brakeTitle: 'Рабочий тормоз', parkingTitle: 'Стояночный тормоз', mechanism: 'МЕХАНИЗМ', manual: 'ВОДИТЕЛЬ',
   },
 }
 
@@ -71,7 +71,7 @@ function installStyle() {
   style.dataset.bricklabVehicleControls = UI_VERSION
   style.textContent = `
     .vehicle-control-deck{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:28;display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid rgba(116,230,166,.22);border-radius:12px;background:rgba(13,17,19,.88);backdrop-filter:blur(14px);box-shadow:0 10px 30px rgba(0,0,0,.28);color:#dfe8e3;font:700 11px/1.2 system-ui;user-select:none}
-    .vehicle-control-deck.hidden{display:none}.vehicle-control-deck button{height:32px;min-width:36px;border:1px solid #324039;border-radius:8px;background:#1a211e;color:#dfe8e3;font:800 12px system-ui;cursor:pointer}.vehicle-control-deck button.active,.vehicle-control-deck button:active{border-color:#74e6a6;background:#20352b;color:#91f3bb}.vehicle-control-deck .vehicle-throttle{min-width:42px}.vehicle-control-deck .vehicle-reverse{border-color:#4a3b34}.vehicle-control-deck .vehicle-brake{min-width:64px}.vehicle-control-deck .vehicle-parking.active{border-color:#ffb65c;color:#ffcf8c;background:#382b1d}.vehicle-control-readout{display:grid;grid-template-columns:auto auto;gap:2px 8px;min-width:285px;padding:0 6px}.vehicle-control-readout span{color:#82928a;font-weight:650}.vehicle-control-readout b{text-align:right;color:#dfe8e3}.vehicle-control-readout b.warn{color:#ffcf8c}.vehicle-control-title{display:flex;flex-direction:column;gap:2px;padding-right:6px;border-right:1px solid #29332f}.vehicle-control-title strong{font-size:10px;letter-spacing:.08em;color:#74e6a6}.vehicle-control-title small{font-size:8px;color:#77847e;font-weight:600}
+    .vehicle-control-deck.hidden{display:none}.vehicle-control-deck button{height:32px;min-width:36px;border:1px solid #324039;border-radius:8px;background:#1a211e;color:#dfe8e3;font:800 12px system-ui;cursor:pointer}.vehicle-control-deck button.active,.vehicle-control-deck button:active{border-color:#74e6a6;background:#20352b;color:#91f3bb}.vehicle-control-deck .vehicle-throttle{min-width:42px}.vehicle-control-deck .vehicle-reverse{border-color:#4a3b34}.vehicle-control-deck .vehicle-brake{min-width:64px}.vehicle-control-deck .vehicle-parking.active{border-color:#ffb65c;color:#ffcf8c;background:#382b1d}.vehicle-control-readout{display:grid;grid-template-columns:auto auto;gap:2px 8px;min-width:300px;padding:0 6px}.vehicle-control-readout span{color:#82928a;font-weight:650}.vehicle-control-readout b{text-align:right;color:#dfe8e3}.vehicle-control-readout b.warn{color:#ffcf8c}.vehicle-control-title{display:flex;flex-direction:column;gap:2px;padding-right:6px;border-right:1px solid #29332f}.vehicle-control-title strong{font-size:10px;letter-spacing:.08em;color:#74e6a6}.vehicle-control-title small{font-size:8px;color:#77847e;font-weight:600}
   `
   document.head.append(style)
 }
@@ -173,7 +173,8 @@ function render() {
     const throttle = deck.querySelector('[data-throttle-readout]')
     throttle.textContent = driveState?.reverseInterlock ? t('reverseBrake') : `${(driveState?.throttleInput ?? 0) < -0.01 ? 'R ' : (driveState?.throttleInput ?? 0) > 0.01 ? 'F ' : ''}${Math.round(Math.abs(driveState?.throttleInput ?? 0) * 100)}%`
     throttle.classList.toggle('warn', Boolean(driveState?.reverseInterlock))
-    deck.querySelector('[data-drive]').textContent = `${driveState?.layout === 'FREE' ? t('free') : driveState?.layout ?? t('free')} · ${driveState?.motorCount ?? 0} ${t('motors')} / ${driveState?.drivenWheelCount ?? 0} ${t('wheels')}`
+    const driveMode = driveState?.armed ? t('manual') : t('mechanism')
+    deck.querySelector('[data-drive]').textContent = `${driveState?.layout === 'FREE' ? t('free') : driveState?.layout ?? t('free')} · ${driveMode} · ${driveState?.motorCount ?? 0} ${t('motors')} / ${driveState?.drivenWheelCount ?? 0} ${t('wheels')}`
     deck.querySelector('[data-steering]').textContent = `${(state.centerSteerDeg || 0).toFixed(1)}° · L ${(state.leftSteerDeg || 0).toFixed(1)}° / R ${(state.rightSteerDeg || 0).toFixed(1)}°`
     const modeName = { physical: t('physical'), mixed: t('mixed'), virtual: t('virtual') }[state.steeringMode] ?? t('virtual')
     deck.querySelector('[data-mode]').textContent = state.physicalSteeringJoints ? `${modeName} · ${state.physicalSteeringJoints}` : modeName
