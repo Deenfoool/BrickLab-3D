@@ -14,7 +14,7 @@ test('all production PARTS-3 dynamic imports exist and carry one release tag', a
   const runtime = await readFile(new URL('runtime-extensions.js', root), 'utf8')
   const bootstrap = await readFile(new URL('bootstrap.js', root), 'utf8')
   const imports = [...parts3Imports(runtime), ...parts3Imports(bootstrap)]
-  assert.ok(imports.length >= 7, 'PARTS-3 production modules are explicitly loaded')
+  assert.ok(imports.length >= 9, 'PARTS-3 production modules are explicitly loaded')
 
   for (const item of imports) {
     assert.equal(item.tag, TAG, `${item.specifier} uses the PARTS-3 cache tag`)
@@ -28,4 +28,12 @@ test('production entrypoint and build badge agree on PARTS-3 tag', async () => {
   assert.match(html, new RegExp(`bootstrap\\.js\\?v=${TAG}`))
   assert.match(badge, /const BUILD_ID = 'PARTS-3'/)
   assert.match(badge, new RegExp(`const BUILD_TAG = '${TAG}'`))
+})
+
+test('authoritative wheel collider consumes mechanics width instead of a fixed legacy half-width', async () => {
+  const collider = await readFile(new URL('collider-clearance-v3.js', root), 'utf8')
+  assert.match(collider, /Number\(wheel\?\.width\)/)
+  assert.match(collider, /halfWidthMeters/)
+  assert.doesNotMatch(collider, /\.34\s*\*\s*STUD\s*\*\s*Math\.abs\(relative\.scale\.x/)
+  assert.match(collider, /radius\+width-aware cylinder proxies/)
 })
