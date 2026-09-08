@@ -8,6 +8,7 @@ await import('./render-quality.js')
 await import('./basic-parts-pack.js')
 await import('./technic-parts-pack-v2.js')
 await import('./lab-parts.js')
+await import('./vehicle-parts-v1.js')
 
 // Connector System v3 owns compatibility, project migration, validation and physics graph integrity.
 // The legacy app still imports ./connections.js and ./snapping.js; index.html aliases those
