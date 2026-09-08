@@ -1,4 +1,4 @@
-export const VEHICLE_MODEL_VERSION = 'vehicle-model-v3'
+export const VEHICLE_MODEL_VERSION = 'vehicle-model-v4'
 
 const EPS = 1e-9
 
@@ -60,6 +60,13 @@ export function resolveDriveRequest({ throttle = 0, longitudinalSpeed = 0, rever
   }
 }
 
+/**
+ * Deterministic fixed-step driver policy.
+ * Direction changes have two gates:
+ * 1) if the chassis is moving against the requested direction, cut torque and brake;
+ * 2) after speed is safe, the smoothed throttle must pass through neutral before
+ *    opposite torque is allowed. This prevents a brief forward kick before reverse.
+ */
 export function stepDriveCommand({
   currentThrottle = 0,
   targetThrottle = 0,
@@ -75,17 +82,37 @@ export function stepDriveCommand({
   const speed = Number(longitudinalSpeed) || 0
   const step = Math.max(0, Number(dt) || 0)
   const targetDirection = Math.abs(target) < EPS ? 0 : Math.sign(target)
+  const currentDirection = Math.abs(current) < EPS ? 0 : Math.sign(current)
   const motionDirection = Math.abs(speed) > reverseSpeedThreshold ? Math.sign(speed) : 0
   const reversingAgainstMotion = Boolean(armed && targetDirection !== 0 && motionDirection !== 0 && targetDirection !== motionDirection)
-  const nextThrottle = reversingAgainstMotion
-    ? approachVehicle(current, 0, Math.max(0, releaseRate) * step)
-    : approachVehicle(current, target, Math.max(0, Math.abs(target) < EPS ? releaseRate : throttleRate) * step)
+  const crossingNeutral = Boolean(
+    armed && !reversingAgainstMotion && targetDirection !== 0 && currentDirection !== 0 && targetDirection !== currentDirection,
+  )
+
+  let nextThrottle
+  if (!armed) nextThrottle = approachVehicle(current, 0, Math.max(0, releaseRate) * step)
+  else if (reversingAgainstMotion || crossingNeutral || targetDirection === 0) {
+    nextThrottle = approachVehicle(current, 0, Math.max(0, releaseRate) * step)
+  } else {
+    nextThrottle = approachVehicle(current, target, Math.max(0, throttleRate) * step)
+  }
+
+  // During motion interlock use the driver's requested direction so the brake gate
+  // engages immediately. During a neutral crossing command no motor torque at all.
+  const commandThrottle = !armed
+    ? 0
+    : reversingAgainstMotion
+      ? target
+      : crossingNeutral
+        ? 0
+        : nextThrottle
   const command = resolveDriveRequest({
-    throttle: armed ? (reversingAgainstMotion ? target : nextThrottle) : 0,
+    throttle: commandThrottle,
     longitudinalSpeed: speed,
     reverseSpeedThreshold,
   })
-  return { nextThrottle, reversingAgainstMotion, command }
+
+  return { nextThrottle, reversingAgainstMotion, crossingNeutral, command }
 }
 
 export function classifyDrivenWheels(wheels = [], shafts = []) {
