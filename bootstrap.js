@@ -1,6 +1,6 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: PHYSICS-12 · centralized physics + Ackermann + W/S drivetrain control.
-// All module URLs are versioned once by the import map in index.html.
+// BUILD: PARTS-3 · upgraded Technic geometry + expanded mechanical catalog + Vehicle Drive v2.
+// All root module URLs are versioned once by the import map in index.html.
 
 // Diagnostics must exist before any runtime/app module can fail.
 await import('./physics-error-ui.js')
