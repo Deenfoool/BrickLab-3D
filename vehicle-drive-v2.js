@@ -1,12 +1,14 @@
 import * as THREE from 'three'
 import { PhysicsSession } from './physics.js'
 import {
+  absBrakeCommand,
   classifyDrivenWheels,
   clampVehicle,
   stepDriveCommand,
+  stepTractionControl,
 } from './vehicle-model-v1.js'
 
-export const VEHICLE_DRIVE_VERSION = 'vehicle-drive-v2'
+export const VEHICLE_DRIVE_VERSION = 'vehicle-drive-v3'
 const THROTTLE_RATE = 2.8
 const RELEASE_RATE = 4.5
 const REVERSE_SPEED_THRESHOLD = 0.08
@@ -110,8 +112,38 @@ function ensureState(session) {
     reverseInterlock: false,
     autoBrake: 0,
     longitudinalSpeedMps: 0,
+    tractionControlEnabled: true,
+    tractionScale: 1,
+    tractionActive: false,
+    maxDrivenSlipRatio: 0,
+    absEnabled: true,
+    absActive: false,
+    absScale: 1,
+    maxBrakeSlipRatio: 0,
   }
   return session.vehicleDriveV2
+}
+
+function wheelFeedback(session, state) {
+  const byMember = new Map((session.wheelMonitors ?? []).map(wheel => [wheel.object?.userData?.instanceId, wheel]))
+  let drivenSlip = 0
+  let brakeSlip = 0
+  let groundSpeed = 0
+  let contactCount = 0
+
+  for (const wheel of session.wheelMonitors ?? []) {
+    if (!wheel.contact) continue
+    contactCount += 1
+    brakeSlip = Math.max(brakeSlip, Math.abs(Number(wheel.slipRatio) || 0))
+    groundSpeed = Math.max(groundSpeed, Math.abs(Number(wheel.groundSpeed) || 0))
+  }
+  for (const item of state.wheels ?? []) {
+    if (!item.driven) continue
+    const wheel = byMember.get(item.memberId)
+    if (!wheel?.contact) continue
+    drivenSlip = Math.max(drivenSlip, Math.abs(Number(wheel.slipRatio) || 0))
+  }
+  return { drivenSlip, brakeSlip, groundSpeed, contactCount }
 }
 
 function commandMotors(state, command) {
@@ -128,7 +160,7 @@ function commandMotors(state, command) {
   }
 }
 
-PhysicsSession.prototype.updateVehicleDriveV2 = function updateVehicleDriveV2(dt) {
+PhysicsSession.prototype.updateVehicleDriveV2 = function updateVehicleDriveV3(dt) {
   const state = ensureState(this)
   state.longitudinalSpeedMps = longitudinalSpeed(this)
 
@@ -143,19 +175,44 @@ PhysicsSession.prototype.updateVehicleDriveV2 = function updateVehicleDriveV2(dt
     armed: state.armed,
   })
   state.throttleInput = step.nextThrottle
-  const command = step.command
 
+  const feedback = wheelFeedback(this, state)
+  const traction = stepTractionControl({
+    currentScale: state.tractionScale,
+    maxSlipRatio: feedback.drivenSlip,
+    throttle: step.command.throttle,
+    dt,
+    enabled: state.tractionControlEnabled && state.armed && !step.command.reverseInterlock,
+  })
+  state.tractionScale = traction.scale
+  state.tractionActive = traction.active
+  state.maxDrivenSlipRatio = traction.maxSlipRatio
+
+  const command = {
+    ...step.command,
+    throttle: step.command.throttle * state.tractionScale,
+  }
   state.commandedDirection = command.direction
   state.commandedRpm = state.armed && state.motors.length
     ? Math.max(...state.motors.map(motor => motor.commandRpm * command.throttle), 0)
     : 0
   state.reverseInterlock = state.armed && command.reverseInterlock
   state.autoBrake = state.armed ? command.autoBrake : 0
-
   commandMotors(state, command)
 
   const manualBrake = clampVehicle(this.vehicleControlV1?.manualBrakeInput ?? 0, 0, 1)
-  if (this.vehicleControlV1) this.vehicleControlV1.brakeInput = Math.max(manualBrake, state.autoBrake)
+  const brakeDemand = Math.max(manualBrake, state.autoBrake)
+  const abs = absBrakeCommand({
+    brakeInput: brakeDemand,
+    maxSlipRatio: feedback.brakeSlip,
+    groundSpeed: feedback.groundSpeed,
+    contact: feedback.contactCount > 0,
+    enabled: state.absEnabled,
+  })
+  state.absActive = abs.active
+  state.absScale = abs.scale
+  state.maxBrakeSlipRatio = abs.maxSlipRatio
+  if (this.vehicleControlV1) this.vehicleControlV1.brakeInput = abs.input
 }
 PhysicsSession.prototype.updateVehicleDriveV2.__bricklabOwner = VEHICLE_DRIVE_VERSION
 
@@ -176,7 +233,20 @@ function setManualBrake(value) {
   const control = session?.vehicleControlV1
   if (!control) return false
   control.manualBrakeInput = clampVehicle(value, 0, 1)
-  control.brakeInput = Math.max(control.manualBrakeInput, session?.vehicleDriveV2?.autoBrake ?? 0)
+  return true
+}
+
+function setTractionControl(value) {
+  const session = currentSession()
+  if (!session) return false
+  ensureState(session).tractionControlEnabled = Boolean(value)
+  return true
+}
+
+function setAbs(value) {
+  const session = currentSession()
+  if (!session) return false
+  ensureState(session).absEnabled = Boolean(value)
   return true
 }
 
@@ -198,6 +268,14 @@ function getState() {
     reverseInterlock: state.reverseInterlock,
     autoBrake: state.autoBrake,
     longitudinalSpeedMps: state.longitudinalSpeedMps,
+    tractionControlEnabled: state.tractionControlEnabled,
+    tractionScale: state.tractionScale,
+    tractionActive: state.tractionActive,
+    maxDrivenSlipRatio: state.maxDrivenSlipRatio,
+    absEnabled: state.absEnabled,
+    absScale: state.absScale,
+    absActive: state.absActive,
+    maxBrakeSlipRatio: state.maxBrakeSlipRatio,
     motors: state.motors.map(motor => ({ ...motor })),
   }
 }
@@ -206,5 +284,7 @@ globalThis.BrickLabVehicleDrive = {
   version: VEHICLE_DRIVE_VERSION,
   setThrottle,
   setManualBrake,
+  setTractionControl,
+  setAbs,
   getState,
 }
