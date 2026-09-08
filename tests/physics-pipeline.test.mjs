@@ -4,7 +4,7 @@ import { PHYSICS_PHASES, PHYSICS_PIPELINE_VERSION, runPhysicsMicrostep } from '.
 
 test('physics microstep has one explicit subsystem order', () => {
   assert.deepEqual(PHYSICS_PHASES, [
-    'clear-accumulators', 'motor', 'suspension', 'vehicle-controls', 'vehicle-drive', 'drivetrain',
+    'clear-accumulators', 'vehicle-controls', 'vehicle-drive', 'motor', 'suspension', 'drivetrain',
     'tires', 'scenario', 'rapier-step', 'validation', 'metrics', 'vehicle-performance',
   ])
 
@@ -32,7 +32,7 @@ test('physics microstep has one explicit subsystem order', () => {
   assert.equal(session.simulationTime, 1 / 120)
   assert.equal(session.physicsPipelineMetrics.version, PHYSICS_PIPELINE_VERSION)
   assert.deepEqual(calls, [
-    'phase', 'torque-reset', 'force:false', 'motor', 'suspension', 'vehicle', 'drive',
+    'phase', 'torque-reset', 'force:false', 'vehicle', 'drive', 'motor', 'suspension',
     'drivetrain', 'tires', 'scenario', 'world', 'validate', 'metrics', 'performance',
   ])
 })
