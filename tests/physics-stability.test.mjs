@@ -167,9 +167,10 @@ test('assembled 120 RPM powertrain does not reproduce runaway 287 m/s / 88000 RP
 })
 
 test('stability layer is installed and exposes diagnostics', () => {
-  assert.equal(window.BrickLabPhysicsStability?.version, 'physics-stability-v3')
+  assert.equal(window.BrickLabPhysicsStability?.version, 'physics-stability-v4')
   assert.equal(window.BrickLabPhysicsStability?.couplingOwner, 'inertia-aware-coupling-v3')
-  assert.equal(window.BrickLabPhysicsStability?.tireOwner, 'impulse-limited-tire-v3')
+  assert.equal(window.BrickLabPhysicsStability?.tireOwner, 'passive-settling-tire-v4')
+  assert.equal(window.BrickLabPhysicsStability?.sleepOwner, 'passive-sleep-v1')
 })
 
 await dom.happyDOM.close()
