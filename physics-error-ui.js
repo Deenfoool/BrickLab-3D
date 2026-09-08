@@ -80,7 +80,7 @@ window.__bricklabPhysicsDiagnostics = () => ({
   mechanicalRecovery: window.__bricklabMechanicalRecovery ?? null,
   controls: window.BrickLabControls?.getRuntimeEntries?.() ?? [],
   vehicle: window.BrickLabVehicle?.getState?.() ?? null,
-  vehicleDrive: window.BrickLabVehicleControlsUI?.getDriveState?.() ?? null,
+  vehicleDrive: window.BrickLabVehicleDrive?.getState?.() ?? null,
   vehiclePerformance: window.BrickLabVehiclePerformance?.get?.() ?? null,
   pipeline: window.BrickLabPhysicsPipeline ?? null,
   ownership: window.BrickLabPhysicsOwnership?.snapshot?.() ?? window.__bricklabPhysicsOwnership ?? null,
