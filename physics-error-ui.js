@@ -86,6 +86,7 @@ window.__bricklabPhysicsDiagnostics = () => ({
     version: window.BrickLabConnectors?.version ?? window.BrickLabConnectorDiagnostics?.version ?? null,
     catalog: window.BrickLabConnectorDiagnostics ?? null,
     migratedStoredProjects: window.BrickLabProjectConnectors?.migratedStoredProjects ?? 0,
+    lastNormalization: window.BrickLabProjectConnectors?.lastNormalization ?? null,
   },
   visualQuality: window.BrickLabVisualQuality ?? null,
   lastError: window.__bricklabPhysicsLastError ?? null,
