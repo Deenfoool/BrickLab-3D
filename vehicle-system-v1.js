@@ -16,6 +16,8 @@ const EPS = 1e-10
 const DEFAULT_MAX_STEER_DEG = 34
 const DEFAULT_STEER_RATE = 2.8 // normalized input per second
 const DEFAULT_BRAKE_GRIP = 1.15
+const VISUAL_PIVOT = new THREE.Vector3(0, 1.15, 0)
+const VISUAL_UP = new THREE.Vector3(0, 1, 0)
 
 function bodyRotation(body) {
   const q = body.rotation()
@@ -47,9 +49,8 @@ function wheelPositionInChassis(session, wheel) {
   const center = wheelCenter(wheel)
   const chassis = session.chassisMonitor?.body
   if (!center || !chassis) return null
-  const local = center.sub(bodyPosition(chassis))
+  return center.sub(bodyPosition(chassis))
     .applyQuaternion(bodyRotation(chassis).invert())
-  return local
 }
 
 function inverseInertiaQuadratic(body, worldVector) {
@@ -81,11 +82,44 @@ function steeredLocalAxis(session, wheel) {
   return worldAxis.applyQuaternion(bodyQ.clone().invert()).normalize()
 }
 
+function captureWheelVisual(wheel) {
+  if (!wheel.object || wheel.vehicleVisualBase) return
+  wheel.vehicleVisualBase = wheel.object.children.map(child => ({
+    child,
+    position: child.position.clone(),
+    quaternion: child.quaternion.clone(),
+  }))
+}
+
+function applyWheelVisual(wheel, angle) {
+  captureWheelVisual(wheel)
+  if (!wheel.vehicleVisualBase) return
+  const steerQ = new THREE.Quaternion().setFromAxisAngle(VISUAL_UP, angle)
+  for (const entry of wheel.vehicleVisualBase) {
+    const offset = entry.position.clone().sub(VISUAL_PIVOT).applyQuaternion(steerQ)
+    entry.child.position.copy(VISUAL_PIVOT).add(offset)
+    entry.child.quaternion.copy(steerQ).multiply(entry.quaternion)
+  }
+}
+
+function resetWheelVisual(wheel) {
+  if (!wheel.vehicleVisualBase) return
+  for (const entry of wheel.vehicleVisualBase) {
+    entry.child.position.copy(entry.position)
+    entry.child.quaternion.copy(entry.quaternion)
+  }
+}
+
 function applyWheelBrakes(session, dt) {
   const control = session.vehicleControlV1
   if (!control?.enabled) return
   const service = clampVehicle(control.brakeInput, 0, 1)
   const parking = control.parkingBrake ? 1 : 0
+
+  for (const wheel of session.wheelMonitors ?? []) {
+    wheel.brakeTorqueNm = 0
+    wheel.brakeInput = 0
+  }
   if (service <= 0 && parking <= 0) return
 
   const rearBoost = 1.25
@@ -113,6 +147,7 @@ PhysicsSession.prototype.initializeVehicleSystemV1 = function initializeVehicleS
     const p = wheelPositionInChassis(this, wheel)
     if (!p) continue
     wheel.vehicleBaseLocalAxis = wheel.localAxis.clone()
+    captureWheelVisual(wheel)
     wheelEntries.push({ id: wheel.id, x: p.x, z: p.z, wheel })
   }
 
@@ -174,6 +209,14 @@ PhysicsSession.prototype.updateVehicleControlsV1 = function updateVehicleControl
   }
 }
 
+PhysicsSession.prototype.updateVehicleVisualsV1 = function updateVehicleVisualsV1() {
+  for (const wheel of this.wheelMonitors ?? []) applyWheelVisual(wheel, wheel.steerAngle ?? 0)
+}
+
+PhysicsSession.prototype.resetVehicleVisualsV1 = function resetVehicleVisualsV1() {
+  for (const wheel of this.wheelMonitors ?? []) resetWheelVisual(wheel)
+}
+
 const previousBuildChassisMonitor = PhysicsSession.prototype.buildChassisMonitor
 PhysicsSession.prototype.buildChassisMonitor = function buildChassisWithVehicleSystem(...args) {
   const result = previousBuildChassisMonitor.apply(this, args)
@@ -224,9 +267,16 @@ function setParkingBrake(value) {
   return true
 }
 
+function resetVisuals() {
+  const session = currentSession()
+  session?.resetVehicleVisualsV1?.()
+}
+
 function diagnostics() {
   const session = currentSession()
   const control = session?.vehicleControlV1
+  const chassis = session?.chassisMonitor
+  const velocity = chassis?.body?.linvel?.()
   return {
     version: VEHICLE_SYSTEM_VERSION,
     model: VEHICLE_MODEL_VERSION,
@@ -239,10 +289,12 @@ function diagnostics() {
     turnRadiusM: Number.isFinite(control?.turnRadiusM) ? control.turnRadiusM : null,
     brakeInput: control?.brakeInput ?? 0,
     parkingBrake: Boolean(control?.parkingBrake),
+    speedMps: velocity ? Math.hypot(velocity.x, velocity.z) : 0,
+    accelerationMps2: chassis?.acceleration ?? 0,
     wheelbaseM: control?.wheelbaseM ?? 0,
     trackM: control?.trackM ?? 0,
-    massKg: session?.chassisMonitor?.totalMassKg ?? session?.vehicleMassKg ?? 0,
-    comStud: session?.chassisMonitor?.comStud?.toArray?.() ?? null,
+    massKg: chassis?.totalMassKg ?? session?.vehicleMassKg ?? 0,
+    comStud: chassis?.comStud?.toArray?.() ?? null,
     wheels: (session?.wheelMonitors ?? []).map(wheel => ({
       id: wheel.id,
       side: wheel.side,
@@ -260,5 +312,6 @@ globalThis.BrickLabVehicle = {
   setSteering,
   setBrake,
   setParkingBrake,
+  resetVisuals,
   getState: diagnostics,
 }
