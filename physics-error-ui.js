@@ -1,5 +1,5 @@
-const BUILD_ID = 'PHYSICS-6'
-const BUILD_TAG = 'physics-6-20260908-1240'
+const BUILD_ID = 'PHYSICS-7'
+const BUILD_TAG = 'physics-7-20260908-1515'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG} · SI joint anchors · metre↔stud render sync · Connector System v3`
+  badge.title = `BrickLab production build ${BUILD_TAG} · clearance-aware colliders · open Technic holes · SI boundary · Connector System v3`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -74,6 +74,7 @@ window.__bricklabPhysicsDiagnostics = () => ({
   buildTag: BUILD_TAG,
   buildStage: window.__bricklabPhysicsStage ?? null,
   units: window.BrickLabPhysicsUnits ?? null,
+  colliders: window.BrickLabColliderModel ?? null,
   autoWeld: window.__bricklabLastAutoWeldStats ?? null,
   mechanicalRecovery: window.__bricklabMechanicalRecovery ?? null,
   controls: window.BrickLabControls?.getRuntimeEntries?.() ?? [],
