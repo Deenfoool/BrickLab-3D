@@ -19,12 +19,14 @@ const { PARTS, findPart } = await import('../parts.js')
 await import('../technic-parts-pack-v2.js')
 await import('../vehicle-parts-v1.js')
 await import('../parts3/mechanical-parts-pack-v3.js')
+await import('../parts3/parts-3-extra-v1.js')
 await import('../physical-parts.js')
 await import('../parts3/parts-3-physics.js')
 
 const newIds = [
   'axle-2', 'axle-9', 'bush', 'half-bush', 'steering-tie-rod-5', 'wheel-hub',
   'wheel-narrow', 'wheel-offroad-large', 'wheel-tractor',
+  'beam-3', 'beam-7', 'beam-11', 'technic-brick-1x4', 'technic-frame-5x7', 'pin-frictionless',
 ]
 
 test('PARTS-3 registers its mechanical inventory exactly once', () => {
@@ -56,16 +58,30 @@ test('new tyre sizes carry real wheel physics metadata', () => {
   assert.ok(narrow.mechanics.wheel.tire.rollingResistanceScale < tractor.mechanics.wheel.tire.rollingResistanceScale)
 })
 
+test('new structural and connector inventory has explicit physical classes', () => {
+  assert.equal(findPart('technic-frame-5x7').physics.collisionClass, 'structure')
+  assert.equal(findPart('pin-frictionless').physics.collisionClass, 'mechanical')
+  assert.equal(findPart('wheel-hub').physics.collisionClass, 'mechanical')
+  assert.ok(findPart('technic-frame-5x7').physics.massKg > 0)
+})
+
 test('steering knuckle exposes a real linkage pin for tie rods', () => {
   const knuckle = findPart('steering-knuckle')
   const connector = knuckle.connectors.find(item => item.id === 'steering-arm')
   assert.ok(connector)
   assert.equal(connector.type, 'pin')
   assert.deepEqual(connector.axis, [0, 1, 0])
+
+  const tieRod = findPart('steering-tie-rod-5')
+  assert.equal(tieRod.connectors.filter(item => item.type === 'pin-hole').length, 2)
+  assert.ok(tieRod.connectors.every(item => item.axis[1] === 1))
 })
 
 test('upgraded representative parts create finite Three.js geometry', () => {
-  for (const id of ['beam-8', 'technic-brick-1x8', 'axle-8', 'gear-24', 'wheel-medium', 'wheel-hub']) {
+  for (const id of [
+    'beam-8', 'beam-11', 'technic-brick-1x8', 'technic-brick-1x4', 'technic-frame-5x7',
+    'axle-8', 'gear-24', 'wheel-medium', 'wheel-hub', 'pin-frictionless',
+  ]) {
     const part = findPart(id)
     const object = part.create(part.defaultColor)
     object.updateMatrixWorld(true)
