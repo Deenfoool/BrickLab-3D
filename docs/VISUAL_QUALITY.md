@@ -1,54 +1,72 @@
 # BrickLab visual quality
 
-BrickLab keeps visual meshes separate from connector semantics and physics behavior. The visual overhaul therefore changes how parts look without changing part IDs, connector IDs, grid spacing, shaft grouping, gear pitch, or saved-project compatibility.
+BrickLab keeps visual meshes separate from connector semantics and physics behavior. Visual upgrades therefore do not change part IDs, connector IDs, stud pitch, shaft grouping, gear pitch, saved projects, or Rapier collider geometry.
 
-## Procedural visual system
+## Realistic molded-part pass
 
-Standard prototype parts now use higher-quality browser-native geometry:
+The current renderer uses a brand-neutral construction-brick look inspired by real injection-molded ABS parts without copying molded logos or trademarks.
+
+The catalog-wide visual wrapper now adds:
+
+- polished molded-plastic response with physically based clearcoat/specular tuning;
+- subtle top mold lines around bricks and plates;
+- refined stud edge rims;
+- dark underside socket depth and shallow reinforcement ribs;
+- actual dark inner bore surfaces for Technic pin holes instead of flat painted circles;
+- finer axle bands and end detailing;
+- layered gear face/hub rings;
+- dense instanced off-road tyre tread, sidewall rings and bead detail;
+- molded housing panels, vents and fasteners on Motor/Gearbox/Differential parts;
+- sensor face-ring detail;
+- differentiated ABS, rubber and metal reflection response.
+
+Repeated details use `THREE.InstancedMesh` where practical, so visual quality can increase without turning each stud or tread block into a separate draw-call-heavy object tree.
+
+Every detail added by the realism layer carries `userData.physicsIgnore = true`. `colliders-v2.js` ignores those meshes when computing bounds, so visual detailing cannot enlarge or otherwise change physical collision shapes.
+
+## Procedural base geometry
+
+Standard parts remain browser-native procedural geometry:
 
 - rounded plastic bodies via Three.js `RoundedBoxGeometry`;
-- `MeshPhysicalMaterial` for slightly polished molded plastic;
+- `MeshPhysicalMaterial` for molded plastic;
 - differentiated rubber, dark insert, and metal materials;
-- refined studs and underside tube details;
-- open Technic beam/brick hole geometry instead of dark rings painted onto solid boxes;
+- studs and underside tube details;
+- open Technic beam/brick hole geometry;
 - extruded cross-profile axles;
 - cross-shaped axle-hole faces;
-- multi-point spur-gear tooth profiles and beveled gear edges;
-- 24T gear lightening holes;
-- off-road tyre tread blocks, spokes, rim barrel, and hub detailing;
-- detailed Lab Motor housing, bearing, vents, feet, top panel, and cross output shaft;
-- refined gearbox and differential housings.
+- multi-point spur-gear tooth profiles;
+- off-road wheel, rim and hub geometry;
+- detailed Lab Motor, gearbox and differential housings;
+- Bearing Block, Suspension Arm and RPM/Torque sensor geometry.
 
-BrickLab-specific prototype parts were upgraded to the same visual language:
+This keeps the project lightweight and lets colors/connectors remain fully procedural instead of requiring one heavy GLB asset per part.
 
-- Bearing Block with an open bearing ring and mounting feet;
-- Suspension Arm with open holes and a separate metal pivot;
-- RPM/Torque sensors with end caps, cross-hole faces, accent rings, and status indicators.
+## Studio rendering
 
-## Rendering quality
-
-`render-quality.js` configures the editor renderer before normal scene rendering:
+`render-quality.js` configures the editor renderer with:
 
 - ACES filmic tone mapping;
-- soft PCF shadows;
-- tuned key light and hemisphere intensity;
-- extra fill and rim lights;
+- sRGB output;
+- physically based lighting;
+- a PMREM-filtered `RoomEnvironment` studio reflection source;
+- 2048px soft directional shadows;
+- tuned key, hemisphere, fill and rim lighting;
 - improved shadow bias/normal bias;
-- darker neutral workspace background;
-- softened grid presentation.
+- dark neutral workspace and softened grid presentation.
 
-The rendering extension is isolated from the main editor module and skips dedicated catalog-preview scenes.
+The environment is generated locally by Three.js; no remote HDR texture is required.
 
 ## Catalog previews
 
-`catalog-previews.js` generates real model previews for Parts cards.
+`catalog-previews.js` renders the actual procedural parts with a dedicated off-screen WebGL renderer.
 
-A single off-screen WebGL renderer is reused for every preview. Preview generation is scheduled through `requestIdleCallback` where available, cached as data URLs for the current page session, and falls back to the original text/icon representation if WebGL preview rendering fails.
+The preview pipeline now uses the same studio-style `RoomEnvironment`, higher 240×158 source frames, ACES tone mapping and balanced key/fill/rim lights. Preview generation is still idle-scheduled and cached as data URLs for the current page session.
 
-The Parts Grid view therefore behaves more like an asset browser: cards show the actual procedural mesh rather than only symbols such as `⚙`, `▦`, or `M`.
+Shared realism geometries/materials are marked with `bricklabSharedVisual`, preventing preview cleanup from disposing resources that are reused by scene parts.
 
 ## Physics remains independent
 
-The visual overhaul intentionally does not redefine mechanical semantics. Gear interaction still uses semantic pitch data, wheels still use dedicated cylindrical colliders, and connector snapping still uses explicit connector metadata rather than rendered mesh surfaces.
+The visual system does not redefine mechanical semantics. Gear interaction uses semantic pitch data, wheels use dedicated physical colliders, connector snapping uses explicit connector metadata, and visual-only meshes never participate in Physics v2 bounds.
 
-Future LDraw integration can replace standard-part visual meshes while keeping the same connector/physics layers.
+If a future imported asset pipeline (for example LDraw-compatible geometry) is added, it can replace only the render layer while retaining the same connector and physics definitions.
