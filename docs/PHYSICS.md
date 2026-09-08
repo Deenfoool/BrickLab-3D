@@ -1,5 +1,8 @@
 # BrickLab physics layer
 
+See [Time Scale RUNTIME-4](TIME_SCALE.md) for runner ownership, clock diagnostics,
+acceptance measurements and manual publication.
+
 ## Runtime
 
 BrickLab is deployed without a bundler, so physics uses the Rapier 3D compatibility package and loads it lazily when a physics session starts.

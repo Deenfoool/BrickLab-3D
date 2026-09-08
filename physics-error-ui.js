@@ -1,5 +1,5 @@
-const BUILD_ID = 'RUNTIME-3'
-const BUILD_TAG = 'runtime-3-20260908-0848'
+const BUILD_ID = 'RUNTIME-4'
+const BUILD_TAG = 'runtime-4-20260908-01'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG} · physical-dt time scale + command RPM motor physics`
+  badge.title = `BrickLab production build ${BUILD_TAG} · fixed-step time scale + command RPM motor physics`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',

@@ -1,9 +1,9 @@
+import { TIME_SCALES, normalizeTimeScale, isTestSession, getTimeDiagnostics } from './simulation-time.js'
 import * as THREE from 'three'
 import { PhysicsSession } from './physics.js'
 import { findPart } from './parts.js'
 
 const TIME_SCALE_KEY = 'bricklab.sim.timeScale.v1'
-const TIME_SCALES = [0.5, 1, 2, 3]
 const TAU = Math.PI * 2
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0))
@@ -15,11 +15,6 @@ function bodyRotation(body) {
   return new THREE.Quaternion(q.x, q.y, q.z, q.w)
 }
 
-function normalizeTimeScale(value) {
-  const number = Number(value)
-  return TIME_SCALES.includes(number) ? number : 1
-}
-
 function readTimeScale() {
   try { return normalizeTimeScale(localStorage.getItem(TIME_SCALE_KEY) ?? 1) }
   catch { return 1 }
@@ -27,10 +22,6 @@ function readTimeScale() {
 
 let preferredTimeScale = readTimeScale()
 window.__bricklabRequestedTimeScale = preferredTimeScale
-
-function isTestSession(session) {
-  return Boolean(session?.scenarioData) || Boolean(session?.scenario && session.scenario !== 'flat') || Boolean(document.body.dataset.bricklabTest)
-}
 
 function currentSession() {
   return window.__bricklabPhysicsSession ?? null
@@ -63,6 +54,17 @@ function syncDriveCommand(drive) {
   drive.targetRpm = userCommand * (drive.controlAxisSign ?? 1)
   drive.nominalRpm = Math.abs(userCommand)
   drive.controlRunning = Boolean(state.running && state.direction && state.rpm > 0)
+}
+
+// Inverse inertia along the shaft axis, including the housing reaction.
+// Limit the per-tick angular impulse so a light axle cannot overshoot its RPM
+// command by hundreds of RPM in one safe but finite Rapier microstep.
+function inverseInertiaAlong(body, axis) {
+  if (!body.isDynamic()) return 0
+  const frame = bodyRotation(body).multiply(new THREE.Quaternion().copy(body.principalInertiaLocalFrame()))
+  const local = axis.clone().applyQuaternion(frame.invert())
+  const inverse = body.invPrincipalInertia()
+  return local.x ** 2 * inverse.x + local.y ** 2 * inverse.y + local.z ** 2 * inverse.z
 }
 
 function motorVoltage(session, drive) {
@@ -111,11 +113,15 @@ PhysicsSession.prototype.applyMotorTorques = function applyCommandRpmMotorTorque
     const controller = clamp(Math.abs(errorRpm) / errorScale, 0, 1)
     const overspeed = actualAlongCommand > commandAbs && Math.sign(actualRpm) === targetSign
     const torqueLimit = overspeed ? stallTorque * 0.38 : motoringLimit
-    const torqueMagnitude = torqueLimit * controller
+    const axis = drive.localAxisA.clone().applyQuaternion(bodyRotation(drive.bodyA)).normalize()
+    const inverseInertia = inverseInertiaAlong(drive.bodyA, axis) + inverseInertiaAlong(drive.bodyB, axis)
+    const stepTorqueLimit = inverseInertia > 0 && dt > 0
+      ? Math.abs(rpmToRad(errorRpm)) / (inverseInertia * dt)
+      : 0
+    const torqueMagnitude = Math.min(torqueLimit * controller, stepTorqueLimit)
     const torqueSign = Math.sign(errorRpm)
 
     if (torqueMagnitude > 0 && torqueSign) {
-      const axis = drive.localAxisA.clone().applyQuaternion(bodyRotation(drive.bodyA)).normalize()
       const torqueVector = axis.multiplyScalar(torqueMagnitude * torqueSign)
       drive.bodyB.addTorque(vec(torqueVector), true)
       drive.bodyA.addTorque(vec(torqueVector.clone().multiplyScalar(-1)), true)
@@ -135,81 +141,7 @@ PhysicsSession.prototype.applyMotorTorques = function applyCommandRpmMotorTorque
   }
 }
 
-// Time scaling lives at the source of truth: the physics loop itself. It reads a
-// global command every frame, so the UI cannot become detached from the active
-// session. Rapier's dt stays fixed; only the amount of simulated time accumulated
-// per real second changes. TEST remains deterministic at 1x.
-PhysicsSession.prototype.step = function stepWithAuthoritativeTimeScale() {
-  if (!this.world || !this.running) return
-
-  const dt = 1 / this.quality.hz
-  const now = performance.now() / 1000
-  const previous = this.physicsLastTime || now
-  const realFrame = clamp(now - previous, 0, 0.1)
-  this.physicsLastTime = now
-
-  const lockedToTest = isTestSession(this)
-  const requested = normalizeTimeScale(window.__bricklabRequestedTimeScale ?? preferredTimeScale)
-  const scale = lockedToTest ? 1 : requested
-  this.timeScale = scale
-
-  this.realElapsedTime = (this.realElapsedTime ?? 0) + realFrame
-  const scaledFrame = realFrame * scale
-  this.requestedSimulationElapsed = (this.requestedSimulationElapsed ?? 0) + scaledFrame
-  this.physicsAccumulator = (this.physicsAccumulator || 0) + scaledFrame
-
-  // At accelerated time we must permit proportionally more fixed physics steps.
-  // Otherwise low render FPS silently clamps 2x/3x back toward 1x.
-  const baseMax = Math.max(1, this.quality.maxSubsteps || 1)
-  const maxSteps = Math.max(baseMax, Math.ceil(baseMax * Math.max(1, scale)))
-  const hardAccumulatorLimit = dt * maxSteps * 2
-  if (this.physicsAccumulator > hardAccumulatorLimit) this.physicsAccumulator = hardAccumulatorLimit
-
-  let steps = 0
-  while (this.physicsAccumulator >= dt && steps < maxSteps) {
-    this.simulationTime += dt
-
-    if (this.scenarioData) {
-      const settle = this.scenarioData.warmupSeconds || 0.5
-      const countdown = this.scenarioData.countdownSeconds || 3
-      if (this.simulationTime < settle) {
-        this.scenarioData.phase = 'SETTLE'
-        this.scenarioData.countdown = countdown
-      } else if (this.simulationTime < settle + countdown) {
-        this.scenarioData.phase = 'COUNTDOWN'
-        this.scenarioData.countdown = Math.max(1, Math.ceil(settle + countdown - this.simulationTime))
-      } else {
-        this.scenarioData.phase = 'RUN'
-        this.scenarioData.countdown = 0
-        this.testElapsed += dt
-      }
-    }
-
-    this.resetCustomTorques()
-    for (const component of this.components) component.body.resetForces?.(true)
-    this.applyMotorTorques(dt)
-    this.applyGearCouplingTorques()
-    this.applyTireForcesV2()
-    this.applyScenarioForcesV2(dt)
-    this.world.timestep = dt
-    this.world.step()
-    this.updateVehicleMetrics(dt)
-
-    this.physicsAccumulator -= dt
-    steps += 1
-  }
-
-  this.lastPhysicsSteps = steps
-  this.actualSimulationElapsed = this.simulationTime ?? 0
-  this.effectiveTimeScale = this.realElapsedTime > 0
-    ? this.actualSimulationElapsed / this.realElapsedTime
-    : scale
-
-  if (steps) {
-    this.syncObjects()
-    this.updateTelemetryReadings()
-  }
-}
+window.__bricklabTimeDebug = () => getTimeDiagnostics(currentSession(), PhysicsSession.prototype.step)
 
 function lang() {
   return document.documentElement.lang === 'ru' || localStorage.getItem('bricklab.ui.language.v1') === 'ru' ? 'ru' : 'en'
@@ -280,7 +212,7 @@ function refreshRuntimeUi() {
   const group = document.getElementById('simTimeScale')
   if (!group) return
   const session = currentSession()
-  const test = isTestSession(session)
+  const test = isTestSession(session) || (!session && Boolean(document.body.dataset.bricklabTest))
   const requested = normalizeTimeScale(window.__bricklabRequestedTimeScale ?? preferredTimeScale)
   const applied = test ? 1 : requested
 

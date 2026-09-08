@@ -6,13 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:physics": "node --test tests/time-scale.test.mjs",
+    "version:runtime": "node scripts/version-runtime.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"
   },
   "devDependencies": {
+    "@dimforge/rapier3d-compat": "0.20.0",
     "@types/three": "^0.180.0",
+    "happy-dom": "^20.14.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.4"
   }

@@ -23,7 +23,7 @@ PhysicsSession.prototype.buildGearCouplers = function buildBoundedCouplers(...ar
 const oldApply = PhysicsSession.prototype.applyGearCouplingTorques
 PhysicsSession.prototype.applyGearCouplingTorques = function applyStressAwareCouplers(...args) {
   const result = oldApply.apply(this, args)
-  const mode = readMode(), dt = 1 / (this.quality?.hz ?? 120)
+  const mode = readMode(), dt = args[0] ?? 1 / (this.quality?.hz ?? 120)
   for (const coupling of this.gearCouplers ?? []) {
     const limit = Math.max(.0001, coupling.failureLimitNm ?? Math.min(coupling.maxTorqueA ?? .06, coupling.maxTorqueB ?? .06))
     const request = coupling.requestedTorque ?? 0

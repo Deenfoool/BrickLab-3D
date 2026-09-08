@@ -1,3 +1,4 @@
+import { stepPhysicsSession, STEP_OWNER } from './simulation-time.js'
 import * as THREE from 'three'
 import { findPart } from './parts.js'
 import {
@@ -203,6 +204,7 @@ export class PhysicsSession {
     this.objects = objects
     this.connections = connections
     this.scenario = scenario
+    this.isTestSession = scenario !== 'flat' || Boolean(document.body.dataset.bricklabTest)
     this.world = null
     this.members = new Map()
     this.components = []
@@ -771,17 +773,8 @@ export class PhysicsSession {
     }
   }
 
-  step() {
-    if (!this.world || !this.running) return
-    const dt = this.world.timestep || 1 / 60
-    this.simulationTime += dt
-    this.resetCustomTorques()
-    this.applyMotorTorques(dt)
-    this.applyGearCouplingTorques()
-    this.world.step()
-    this.syncObjects()
-    this.updateVehicleMetrics(dt)
-    this.updateTelemetryReadings()
+  step(now = performance.now() / 1000) {
+    return stepPhysicsSession(this, now)
   }
 
   syncObjects() {
@@ -815,6 +808,7 @@ export class PhysicsSession {
   }
 
   setRunning(running) {
+    this.physicsLastTime = performance.now() / 1000
     this.running = Boolean(running)
   }
 
@@ -908,3 +902,5 @@ export class PhysicsSession {
     }
   }
 }
+
+PhysicsSession.prototype.step.__bricklabOwner = STEP_OWNER

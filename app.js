@@ -1047,7 +1047,9 @@ function toggleSimulationRunning() {
 
 function resetSimulation() {
   if (!simulationStartState) return
+  const scenario = physicsSession?.scenario ?? document.body.dataset.bricklabTest ?? 'flat'
   stopSimulation({ restore: true })
+  window.__bricklabNextScenario = scenario
   mode = 'simulate'
   startSimulation({ preserveStartState: true })
 }

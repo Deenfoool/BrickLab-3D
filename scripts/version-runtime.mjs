@@ -1,0 +1,26 @@
+// One canonical versioned URL per module, shared by static and dynamic imports.
+import { readdir, readFile, writeFile } from 'node:fs/promises'
+const root = new URL('../', import.meta.url)
+const tag = process.argv[2] ?? 'runtime-4-20260908-01'
+if (!/^runtime-\d+-[a-z0-9-]+$/.test(tag)) throw new Error('Invalid runtime tag')
+const id = tag.match(/^runtime-\d+/)[0].toUpperCase()
+const files = (await readdir(root)).filter(name => name.endsWith('.js')).sort()
+const imports = {
+  three: 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js',
+  'three/addons/': 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/',
+  ...Object.fromEntries(files.map(name => [`./${name}`, `./${name}?v=${tag}`])),
+}
+let html = await readFile(new URL('index.html', root), 'utf8')
+html = html.replace(/(<script type="importmap">)[\s\S]*?(<\/script>)/, `$1\n${JSON.stringify({imports}, null, 2)}\n    $2`)
+html = html.replace(/bootstrap\.js\?v=[^"]+/g, `bootstrap.js?v=${tag}`)
+await writeFile(new URL('index.html', root), html)
+let badge = await readFile(new URL('physics-error-ui.js', root), 'utf8')
+badge = badge.replace(/const BUILD_ID = '[^']+'/, `const BUILD_ID = '${id}'`).replace(/const BUILD_TAG = '[^']+'/, `const BUILD_TAG = '${tag}'`).replace('physical-dt time scale', 'fixed-step time scale')
+await writeFile(new URL('physics-error-ui.js', root), badge)
+console.log(`${id}: ${files.length} canonical module URLs (${tag})`)
+
+const acceptance = new URL('tests/time-scale-browser.html', root)
+let testHtml = await readFile(acceptance, 'utf8')
+testHtml = testHtml.replace(/(<script type="importmap">)[\s\S]*?(<\/script>)/, `$1\n${JSON.stringify({imports}, null, 2)}\n$2`)
+testHtml = testHtml.replace(/time-scale-browser\.js(?:\?v=[^"]+)?/, `time-scale-browser.js?v=${tag}`)
+await writeFile(acceptance, testHtml)
