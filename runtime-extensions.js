@@ -1,5 +1,5 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: CONNECT-1 · Connector System v2 + 80-part catalog.
+// BUILD: CONNECT-2 · authoritative Connector System v3 + 80-part catalog.
 // All module URLs are versioned by the import map in index.html.
 
 await import('./three-cycle-guard.js')
@@ -8,6 +8,9 @@ await import('./render-quality.js')
 await import('./basic-parts-pack.js')
 await import('./technic-parts-pack-v2.js')
 await import('./lab-parts.js')
+// Normalize saved/imported projects before app.js restores their connection graph.
+await import('./connector-project-migration-v3.js')
+await import('./connector-import-v3.js')
 await import('./connector-validation.js')
 await import('./physical-parts.js')
 await import('./suspension-patch.js')
@@ -16,6 +19,7 @@ await import('./sensors-patch.js')
 await import('./part-visual-v3.js')
 await import('./physics-v2.js')
 await import('./colliders-v2.js')
+// Import-map alias resolves this legacy specifier to connector-physics-v3.js.
 await import('./structural-auto-weld-v2.js')
 await import('./powertrain-physics-v2.js')
 // Must load before stress/surface wrappers so they decorate the stabilized solvers.
