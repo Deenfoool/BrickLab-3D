@@ -1,6 +1,6 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: RUNTIME-2 · authoritative simulation time scale + command-RPM motor physics.
-const V = 'runtime-2-20260908-0845'
+// BUILD: RUNTIME-3 · physical-dt simulation time scale + command-RPM motor physics.
+const V = 'runtime-3-20260908-0848'
 
 // Diagnostics must exist before any runtime/app module can fail.
 await import(`./physics-error-ui.js?v=${V}`)
