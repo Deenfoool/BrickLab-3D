@@ -45,6 +45,9 @@ await import('./joint-stability-v4.js')
 await import('./powertrain-physics-v2.js')
 
 await import('./physics-stability-v3.js')
+// Layer PARTS-4 articulation kinematics on top of the inertia-aware coupling solver.
+// CV remains constant-velocity; the universal joint gets the Cardan phase variation.
+await import('./parts4/articulated-driveline-physics-v1.js?v=parts-4-20260908-driveline-v1')
 await import('./drivetrain-stress-v2.js')
 await import('./surface-v2.js')
 await import('./suspension-v2.js')
