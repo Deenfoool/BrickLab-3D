@@ -74,6 +74,7 @@ export function stepPhysicsSession(session, now = performance.now() / 1000) {
   session.effectiveTimeScale = session.realElapsedTime > 0 ? session.simulationTime / session.realElapsedTime : scale
   if (steps) {
     session.syncObjects()
+    session.updateVehicleVisualsV1?.()
     session.updateTelemetryReadings()
   }
 }
