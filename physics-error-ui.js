@@ -1,5 +1,5 @@
-const BUILD_ID = 'PHYSICS-10'
-const BUILD_TAG = 'physics-10-20260908-wheel-settle'
+const BUILD_ID = 'PHYSICS-11'
+const BUILD_TAG = 'physics-11-20260908-vehicle-v1'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG} · stable revolute joints · passive wheel settling · sleep-safe physics`
+  badge.title = `BrickLab production build ${BUILD_TAG} · centralized physics pipeline · physical/virtual Ackermann steering · service/parking brakes`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -79,9 +79,14 @@ window.__bricklabPhysicsDiagnostics = () => ({
   autoWeld: window.__bricklabLastAutoWeldStats ?? null,
   mechanicalRecovery: window.__bricklabMechanicalRecovery ?? null,
   controls: window.BrickLabControls?.getRuntimeEntries?.() ?? [],
+  vehicle: window.BrickLabVehicle?.getState?.() ?? null,
+  physicalSteering: window.BrickLabPhysicalSteering?.diagnostics?.() ?? null,
+  vehiclePerformance: window.BrickLabVehiclePerformance?.get?.() ?? null,
+  pipeline: window.BrickLabPhysicsPipeline ?? null,
+  ownership: window.BrickLabPhysicsOwnership?.snapshot?.() ?? window.__bricklabPhysicsOwnership ?? null,
   requestedTimeScale: window.__bricklabRequestedTimeScale ?? 1,
   appliedTimeScale: window.BrickLabSimulationTime?.getApplied?.() ?? 1,
-  timeIntegrator: window.__bricklabTimeIntegrator ?? 'simulation-time-authoritative-v4',
+  timeIntegrator: window.__bricklabTimeIntegrator ?? 'simulation-time-authoritative-v5',
   realElapsed: window.__bricklabPhysicsSession?.realElapsedTime ?? 0,
   simElapsed: window.__bricklabPhysicsSession?.actualSimulationElapsed ?? window.__bricklabPhysicsSession?.simulationTime ?? 0,
   nominalSteps: window.__bricklabPhysicsSession?.lastPhysicsSteps ?? 0,

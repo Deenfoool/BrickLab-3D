@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { PhysicsSession } from './physics.js'
 import { findPart } from './parts.js'
 
+export const JOINT_STABILITY_VERSION = 'joint-stability-v4'
 const STUD = globalThis.BrickLabPhysicsUnits?.studMeters ?? 0.008
 const MAX_JOINT_MISMATCH_STUD = 0.20
 const originalCreateJoint = PhysicsSession.prototype.createJoint
@@ -28,7 +29,7 @@ function sharedLocalAnchor(member, worldMidpointStud) {
 function diagnostics(session) {
   if (!session.__bricklabJointStability) {
     session.__bricklabJointStability = {
-      version: 'joint-stability-v4',
+      version: JOINT_STABILITY_VERSION,
       createdRevolute: 0,
       redundantRevoluteSkipped: 0,
       rejectedLargeMismatch: 0,
@@ -37,6 +38,14 @@ function diagnostics(session) {
     }
   }
   return session.__bricklabJointStability
+}
+
+function registerRevolute(session, connection, joint, context) {
+  session.revoluteJoints ??= []
+  const record = { connection, joint, ...context }
+  session.revoluteJoints.push(record)
+  session.onRevoluteJointCreated?.(connection, joint, record)
+  return record
 }
 
 if (!PhysicsSession.prototype[marker]) {
@@ -109,11 +118,27 @@ if (!PhysicsSession.prototype[marker]) {
       state.createdRevolute += 1
       state.pairs.push({ pairKey, kind: connection.kind, action: 'create', mismatchStud })
       globalThis.__bricklabJointStability = { ...state, pairs: [...state.pairs] }
+
+      // Authoritative joint creation stops here. Specialized systems (suspension,
+      // steering, telemetry) consume this registry instead of creating duplicates.
+      registerRevolute(this, connection, joint, {
+        memberA,
+        memberB,
+        connectorA,
+        connectorB,
+        axisA: axisA.clone(),
+        anchorA: anchorA.clone(),
+        anchorB: anchorB.clone(),
+        pairKey,
+        mismatchStud,
+      })
+      return joint
     } catch (error) {
       this.failedJointCount += 1
       console.warn('BrickLab could not create stabilized revolute joint', connection, error)
     }
   }
+  PhysicsSession.prototype.createJoint.__bricklabOwner = JOINT_STABILITY_VERSION
 
   Object.defineProperty(PhysicsSession.prototype, marker, {
     value: true,
@@ -122,5 +147,3 @@ if (!PhysicsSession.prototype[marker]) {
     writable: false,
   })
 }
-
-export const JOINT_STABILITY_VERSION = 'joint-stability-v4'

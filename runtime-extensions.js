@@ -1,5 +1,5 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: PHYSICS-10 · stable local joint axes + passive wheel settling + sleep-safe physics.
+// BUILD: VEHICLE-1 · centralized microstep pipeline + Ackermann steering + brakes.
 // All module URLs are versioned by the import map in index.html.
 
 await import('./three-cycle-guard.js')
@@ -8,6 +8,7 @@ await import('./render-quality.js')
 await import('./basic-parts-pack.js')
 await import('./technic-parts-pack-v2.js')
 await import('./lab-parts.js')
+await import('./vehicle-parts-v1.js')
 
 // Connector System v3 owns compatibility, project migration, validation and physics graph integrity.
 // The legacy app still imports ./connections.js and ./snapping.js; index.html aliases those
@@ -25,23 +26,24 @@ await import('./physics-v2.js')
 // SI boundary owner: joint anchors and Rapier->editor transform sync.
 await import('./colliders-v2.js')
 // Replace the old one-box-per-part collider builder with clearance-aware profiles.
-// This must load after colliders-v2 so PHYSICS-6 unit fixes remain authoritative.
 await import('./collider-clearance-v3.js')
 await import('./connector-physics-v3.js')
-// Recover visually aligned axle ↔ axle-hole interfaces before the authoritative
-// connector-physics build sanitizes the graph and creates rigid shaft components.
+// Recover visually aligned axle ↔ axle-hole interfaces before connector-physics builds bodies.
 await import('./connector-mechanical-recovery-v4.js')
 // One revolute constraint per rigid-body pair and zero-error shared anchors.
-// Prevents multi-bearing shafts from injecting a huge solver impulse on frame 1.
 await import('./joint-stability-v4.js')
 await import('./powertrain-physics-v2.js')
 
-// Must load before stress/surface wrappers so they decorate the stabilized solvers.
-// The filename stays v3 for import compatibility; it now exports PHYSICS stability v4.
+// Stable drivetrain/tire solver first; wrappers below decorate this implementation.
 await import('./physics-stability-v3.js')
 await import('./drivetrain-stress-v2.js')
 await import('./surface-v2.js')
 await import('./suspension-v2.js')
+// Vehicle System v1 is the sole steering/braking owner. It consumes the stabilized
+// revolute registry for real Steering Knuckle joints and falls back to virtual tire
+// heading only when a build has no physical steering hardware.
+await import('./vehicle-system-v1.js')
+await import('./vehicle-performance-v1.js')
 await import('./mechanism-controls-core.js')
 await import('./physics-v2-telemetry.js')
 await import('./dyno-v2.js')
@@ -53,4 +55,4 @@ await import('./rapier-loader-v2.js')
 
 // Runtime UI + command-RPM motor controller.
 await import('./simulation-runtime-v2.js')
-// PhysicsSession owns its clock directly; extensions must not replace step.
+// simulation-time-v5 schedules fixed steps; physics-pipeline-v1 owns microstep subsystem order.

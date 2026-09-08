@@ -2,7 +2,7 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises'
 
 const root = new URL('../', import.meta.url)
-const tag = process.argv[2] ?? 'physics-10-20260908-wheel-settle'
+const tag = process.argv[2] ?? 'physics-11-20260908-vehicle-v1'
 if (!/^(?:runtime|connect|physics)-\d+-[a-z0-9-]+$/.test(tag)) throw new Error('Invalid runtime tag')
 const id = tag.match(/^(?:runtime|connect|physics)-\d+/)[0].toUpperCase()
 const files = (await readdir(root)).filter(name => name.endsWith('.js')).sort()

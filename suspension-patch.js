@@ -6,10 +6,6 @@ function objectById(session, instanceId) {
   return session.objects.find(object => object.userData.instanceId === instanceId) ?? null
 }
 
-function connectorFor(object, connectorId) {
-  return findPart(object?.userData.partId)?.connectors?.find(connector => connector.id === connectorId) ?? null
-}
-
 function suspensionInfo(session, connection) {
   if (connection?.kind !== 'hinge') return null
   for (const side of ['a', 'b']) {
@@ -22,44 +18,29 @@ function suspensionInfo(session, connection) {
   return null
 }
 
-const originalCreateJoint = PhysicsSession.prototype.createJoint
-PhysicsSession.prototype.createJoint = function createJointWithSuspension(connection) {
-  const info = suspensionInfo(this, connection)
-  if (!info) return originalCreateJoint.call(this, connection)
+PhysicsSession.prototype.initializeSuspensionJointsV1 = function initializeSuspensionJointsV1() {
+  if (this.__bricklabSuspensionRegistryReady) return this.suspensionJoints ?? []
+  this.__bricklabSuspensionRegistryReady = true
+  this.suspensionJoints = []
 
-  const memberA = this.members.get(connection.a.instanceId)
-  const memberB = this.members.get(connection.b.instanceId)
-  if (!memberA || !memberB) return
-  if (memberA.body === memberB.body) {
-    this.internalJointCount += 1
-    return
-  }
-
-  const connectorA = connectorFor(memberA.object, connection.a.connectorId)
-  const connectorB = connectorFor(memberB.object, connection.b.connectorId)
-  if (!connectorA || !connectorB) return
-
-  try {
-    const anchorA = this.bodyLocalPoint(memberA, connectorA)
-    const anchorB = this.bodyLocalPoint(memberB, connectorB)
-    const axisA = this.bodyLocalAxis(memberA, connectorA)
-    const params = this.revoluteJointData(memberA, memberB, anchorA, anchorB, axisA)
-    const joint = this.world.createImpulseJoint(params, memberA.body, memberB.body, true)
-    joint.setContactsEnabled?.(false)
+  for (const record of this.revoluteJoints ?? []) {
+    const info = suspensionInfo(this, record.connection)
+    if (!info?.object || !record.joint) continue
 
     const stiffness = info.suspension.stiffness ?? 7.5
     const damping = info.suspension.damping ?? 1.25
     const restAngle = info.suspension.restAngle ?? 0
     const maxAngle = info.suspension.maxAngle ?? THREE.MathUtils.degToRad(55)
-    joint.configureMotorModel?.(this.RAPIER.MotorModel?.ForceBased ?? 1)
-    joint.configureMotorPosition?.(restAngle, stiffness, damping)
-    joint.setLimits?.(-maxAngle, maxAngle)
 
-    this.suspensionJoints ??= []
+    record.joint.configureMotorModel?.(this.RAPIER.MotorModel?.ForceBased ?? 1)
+    record.joint.configureMotorPosition?.(restAngle, stiffness, damping)
+    record.joint.setLimits?.(-maxAngle, maxAngle)
+
     this.suspensionJoints.push({
       id: info.object.userData.instanceId,
       object: info.object,
-      joint,
+      joint: record.joint,
+      connection: record.connection,
       stiffness,
       damping,
       restAngle,
@@ -67,15 +48,16 @@ PhysicsSession.prototype.createJoint = function createJointWithSuspension(connec
       initialQuaternion: info.object.getWorldQuaternion(new THREE.Quaternion()),
       travelDegrees: 0,
     })
-    this.jointCount += 1
-  } catch (error) {
-    this.failedJointCount += 1
-    console.warn('BrickLab could not create suspension pivot', connection, error)
   }
+
+  return this.suspensionJoints
 }
 
 const originalMountTelemetry = PhysicsSession.prototype.mountTelemetry
 PhysicsSession.prototype.mountTelemetry = function mountTelemetryWithSuspension(...args) {
+  // Joint-stability-v4 is the only revolute creator. Suspension decorates its
+  // already-created joint here instead of bypassing the stable shared-anchor path.
+  this.initializeSuspensionJointsV1?.()
   const result = originalMountTelemetry.apply(this, args)
   if (!this.suspensionJoints?.length) return result
 
@@ -122,5 +104,6 @@ const originalDispose = PhysicsSession.prototype.dispose
 PhysicsSession.prototype.dispose = function disposeWithSuspension(...args) {
   const result = originalDispose.apply(this, args)
   this.suspensionJoints = []
+  this.__bricklabSuspensionRegistryReady = false
   return result
 }
