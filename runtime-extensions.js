@@ -28,6 +28,9 @@ await import('./suspension-patch.js')
 await import('./differential-patch.js')
 await import('./sensors-patch.js')
 await import('./part-visual-v3.js')
+// part-visual-v3 predates the expanded wheel ids; restore matte rubber semantics
+// after its material tuning wrapper has been installed.
+await import('./parts3/parts-3-wheel-materials.js?v=parts-3-20260908-mechanical-v1')
 await import('./physics-v2.js')
 await import('./colliders-v2.js')
 await import('./collider-clearance-v3.js')
