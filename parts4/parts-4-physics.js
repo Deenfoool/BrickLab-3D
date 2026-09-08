@@ -8,6 +8,10 @@ const PHYSICAL = Object.freeze({
   'worm-drive-8': { massKg: 0.0180, material: 'mixed', collisionClass: 'structure' },
   'bevel-gear-12': { massKg: 0.00085, material: 'pom', collisionClass: 'mechanical' },
   'bevel-gear-20': { massKg: 0.00145, material: 'pom', collisionClass: 'mechanical' },
+  'steering-rack-guide': { massKg: 0.0065, material: 'abs', collisionClass: 'structure' },
+  'steering-rack-7': { massKg: 0.0042, material: 'mixed', collisionClass: 'mechanical' },
+  'shock-body-5': { massKg: 0.0037, material: 'mixed', collisionClass: 'mechanical' },
+  'shock-rod-5': { massKg: 0.0026, material: 'mixed', collisionClass: 'mechanical' },
 })
 
 for (const part of PARTS) {
