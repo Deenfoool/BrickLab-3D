@@ -56,13 +56,15 @@ const originalBuildGearCouplers = PhysicsSession.prototype.buildGearCouplers
 PhysicsSession.prototype.buildGearCouplers = function buildGearCouplersWithArticulationMetadata(...args) {
   const result = originalBuildGearCouplers.apply(this, args)
   const meshById = new Map((this.drivetrain?.gearMeshes ?? []).map(mesh => [mesh.id, mesh]))
+  const objectById = new Map((this.objects ?? []).map(object => [object.userData?.instanceId, object]))
 
   for (const coupling of this.gearCouplers ?? []) {
     const mesh = meshById.get(coupling.id)
     if (!mesh) continue
     coupling.kind = mesh.kind ?? 'gear'
     coupling.housingId = mesh.housingId ?? null
-    coupling.partId = mesh.partId ?? null
+    const housing = coupling.housingId ? objectById.get(coupling.housingId) : null
+    coupling.partId = mesh.partId ?? housing?.userData?.partId ?? null
     coupling.baseFactor = Number(mesh.ratioAB) || coupling.factor
     coupling.factor = coupling.baseFactor
     coupling.articulationDeg = 0
