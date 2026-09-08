@@ -1,5 +1,5 @@
-const BUILD_ID = 'CONNECT-1'
-const BUILD_TAG = 'runtime-8-20260908-1145'
+const BUILD_ID = 'CONNECT-2'
+const BUILD_TAG = 'connect-2-20260908-1204'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG} · Connector System v2 + grouped stud contacts + strict mechanical snapping`
+  badge.title = `BrickLab production build ${BUILD_TAG} · Connector System v3 · strict snapping · graph integrity · legacy migration`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -82,7 +82,11 @@ window.__bricklabPhysicsDiagnostics = () => ({
   simElapsed: window.__bricklabPhysicsSession?.actualSimulationElapsed ?? window.__bricklabPhysicsSession?.simulationTime ?? 0,
   nominalSteps: window.__bricklabPhysicsSession?.lastPhysicsSteps ?? 0,
   stability: window.BrickLabPhysicsStability?.diagnostics?.() ?? null,
-  connectorSystem: window.BrickLabConnectorDiagnostics ?? null,
+  connectorSystem: {
+    version: window.BrickLabConnectors?.version ?? window.BrickLabConnectorDiagnostics?.version ?? null,
+    catalog: window.BrickLabConnectorDiagnostics ?? null,
+    migratedStoredProjects: window.BrickLabProjectConnectors?.migratedStoredProjects ?? 0,
+  },
   visualQuality: window.BrickLabVisualQuality ?? null,
   lastError: window.__bricklabPhysicsLastError ?? null,
   rapierSource: window.__bricklabRapierSource ?? null,
