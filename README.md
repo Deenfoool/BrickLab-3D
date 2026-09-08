@@ -18,7 +18,7 @@ Core loop: **build → simulate → test → inspect telemetry → modify → te
 - Catalog-wide realistic molded-part visual pass: refined ABS/metal/rubber materials, Technic hole liners, axle detail bands, gear-face detail, power-unit fasteners, wheel sidewall/tread detail and studio PBR lighting.
 - Decorative visual meshes are excluded from Physics v2 collider bounds, so visual detail does not change simulation geometry.
 - Connector types: `stud`, `tube`, `pin`, `pin-hole`, `axle`, `axle-hole`.
-- **Connector System v3**: centralized compatibility rules, strict/sticky snapping, grouped stud contacts, keyed axle twist, endpoint occupancy, legacy project migration and physics graph integrity checks.
+- Connector System v3: strict snapping, keyed axles, multi-contact stud/tube links, graph validation, legacy migration and physics-side mechanical recovery.
 - Undo/redo, autosave, `.bricklab` v2 import/export, multi-select and logical grouping.
 - Floating Parts / Properties windows with drag, resize, List/Grid, collapsible inspector sections, Focus Scene and mobile drawers.
 - RU / EN interface switch.
@@ -41,6 +41,7 @@ power   = W
 
 Physics v2 includes:
 
+- explicit PHYSICS-6 stud↔metre boundary for bodies, colliders, joint anchors and render sync;
 - per-part prototype masses and material/collision classes;
 - inertia derived from collider mass/shape;
 - weighted center of mass and approximate front/rear + left/right weight distribution;
@@ -158,10 +159,10 @@ bootstrap.js
   ↓
 runtime-extensions.js
   ├─ basic + expanded Technic part packs
-  ├─ Connector System v3 + project migration
   ├─ physical part DB
   ├─ realistic catalog-wide visuals
-  ├─ Physics v2 + connector graph integrity
+  ├─ Physics v2 + explicit stud↔metre boundary
+  ├─ Connector System v3 + mechanical recovery
   ├─ corrected colliders
   ├─ inertia-aware drivetrain stability
   ├─ impulse-limited surface / tyre solver
@@ -202,9 +203,9 @@ Expected GitHub Pages URL:
 
 ## Documentation
 
-- [`docs/CONNECTORS.md`](docs/CONNECTORS.md)
 - [`docs/PHYSICS_V2.md`](docs/PHYSICS_V2.md)
 - [`docs/PHYSICS_STABILITY.md`](docs/PHYSICS_STABILITY.md)
+- [`docs/CONNECTORS.md`](docs/CONNECTORS.md)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/PROJECT_FORMAT.md`](docs/PROJECT_FORMAT.md)
 - [`docs/POWERTRAIN.md`](docs/POWERTRAIN.md)
