@@ -1,5 +1,5 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: PHYSICS-8 · stable revolute joints + clearance-aware colliders + SI boundary.
+// BUILD: PHYSICS-10 · stable local joint axes + passive wheel settling + sleep-safe physics.
 // All module URLs are versioned by the import map in index.html.
 
 await import('./three-cycle-guard.js')
@@ -37,6 +37,7 @@ await import('./joint-stability-v4.js')
 await import('./powertrain-physics-v2.js')
 
 // Must load before stress/surface wrappers so they decorate the stabilized solvers.
+// The filename stays v3 for import compatibility; it now exports PHYSICS stability v4.
 await import('./physics-stability-v3.js')
 await import('./drivetrain-stress-v2.js')
 await import('./surface-v2.js')
