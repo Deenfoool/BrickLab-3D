@@ -7,10 +7,10 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test:physics": "node --import ./tests/runtime-import-map.mjs --test tests/time-scale.test.mjs tests/physics-stability.test.mjs tests/joint-stability.test.mjs tests/axle-stability.test.mjs tests/passive-wheel-stability.test.mjs tests/vehicle-model.test.mjs tests/physics-pipeline.test.mjs tests/vehicle-steering-runtime.test.mjs tests/vehicle-drive-runtime.test.mjs tests/parts-v3.test.mjs tests/parts3-runtime-integrity.test.mjs tests/parts4-driveline.test.mjs tests/import-map-integrity.test.mjs",
+    "test:physics": "node --import ./tests/runtime-import-map.mjs --test tests/time-scale.test.mjs tests/physics-stability.test.mjs tests/joint-stability.test.mjs tests/axle-stability.test.mjs tests/passive-wheel-stability.test.mjs tests/vehicle-model.test.mjs tests/physics-pipeline.test.mjs tests/vehicle-steering-runtime.test.mjs tests/vehicle-drive-runtime.test.mjs tests/parts-v3.test.mjs tests/parts3-runtime-integrity.test.mjs tests/parts4-driveline.test.mjs tests/parts4-runtime-integrity.test.mjs tests/import-map-integrity.test.mjs",
     "test:vehicle": "node --import ./tests/runtime-import-map.mjs --test tests/vehicle-model.test.mjs tests/physics-pipeline.test.mjs tests/vehicle-steering-runtime.test.mjs tests/vehicle-drive-runtime.test.mjs tests/import-map-integrity.test.mjs",
-    "test:parts": "node --import ./tests/runtime-import-map.mjs --test tests/parts-v3.test.mjs tests/parts3-runtime-integrity.test.mjs tests/parts4-driveline.test.mjs tests/import-map-integrity.test.mjs",
-    "test:parts4": "node --import ./tests/runtime-import-map.mjs --test tests/parts4-driveline.test.mjs tests/import-map-integrity.test.mjs",
+    "test:parts": "node --import ./tests/runtime-import-map.mjs --test tests/parts-v3.test.mjs tests/parts3-runtime-integrity.test.mjs tests/parts4-driveline.test.mjs tests/parts4-runtime-integrity.test.mjs tests/import-map-integrity.test.mjs",
+    "test:parts4": "node --import ./tests/runtime-import-map.mjs --test tests/parts4-driveline.test.mjs tests/parts4-runtime-integrity.test.mjs tests/import-map-integrity.test.mjs",
     "version:runtime": "node scripts/version-runtime.mjs"
   },
   "dependencies": {
