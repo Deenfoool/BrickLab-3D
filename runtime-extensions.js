@@ -1,6 +1,7 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: VEHICLE-2 · centralized pipeline + drive controls + Ackermann steering + brakes.
-// All module URLs are versioned by the import map in index.html.
+// BUILD: PARTS-3 · upgraded Technic geometry + mechanical expansion + Vehicle Drive v2.
+// Root module URLs are versioned by the import map in index.html; PARTS-3 submodules
+// carry an explicit cache tag because they live outside the root import-map inventory.
 
 await import('./three-cycle-guard.js')
 await import('./multi-transform-patch.js')
@@ -9,6 +10,8 @@ await import('./basic-parts-pack.js')
 await import('./technic-parts-pack-v2.js')
 await import('./lab-parts.js')
 await import('./vehicle-parts-v1.js')
+await import('./parts3/mechanical-parts-pack-v3.js?v=parts-3-20260908-mechanical-v1')
+await import('./parts3/i18n-parts-3.js?v=parts-3-20260908-mechanical-v1')
 
 // Connector System v3 owns compatibility, project migration, validation and physics graph integrity.
 await import('./connector-project-migration-v3.js')
@@ -16,6 +19,10 @@ await import('./connector-import-v3.js')
 await import('./connector-validation-v3.js')
 
 await import('./physical-parts.js')
+// physical-parts owns the shared defaults. PARTS-3 applies explicit mass/collision
+// metadata for its new inventory after those defaults have been installed.
+await import('./parts3/parts-3-physics.js?v=parts-3-20260908-mechanical-v1')
+await import('./parts3/parts-3-diagnostics.js?v=parts-3-20260908-mechanical-v1')
 await import('./suspension-patch.js')
 await import('./differential-patch.js')
 await import('./sensors-patch.js')
