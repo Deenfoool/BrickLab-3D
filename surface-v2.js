@@ -6,12 +6,12 @@ const VALID = new Set(['auto', ...Object.keys(SURFACES)])
 const read = () => { const value = localStorage.getItem(KEY) || 'auto'; return VALID.has(value) ? value : 'auto' }
 
 const originalTires = PhysicsSession.prototype.applyTireForcesV2
-PhysicsSession.prototype.applyTireForcesV2 = function applySelectedSurface() {
+PhysicsSession.prototype.applyTireForcesV2 = function applySelectedSurface(...args) {
   const selected = read()
-  if (selected === 'auto') return originalTires.call(this)
+  if (selected === 'auto') return originalTires.apply(this, args)
   const original = this.scenarioData
   this.scenarioData = original ? { ...original, surface: selected } : { surface: selected, __surfaceOnly: true }
-  const result = originalTires.call(this)
+  const result = originalTires.apply(this, args)
   this.scenarioData = original
   this.surfaceOverride = selected
   return result
