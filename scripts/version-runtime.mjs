@@ -1,7 +1,7 @@
 // One canonical versioned URL per module, shared by static and dynamic imports.
 import { readdir, readFile, writeFile } from 'node:fs/promises'
 const root = new URL('../', import.meta.url)
-const tag = process.argv[2] ?? 'runtime-4-20260908-01'
+const tag = process.argv[2] ?? 'runtime-5-20260908-1000'
 if (!/^runtime-\d+-[a-z0-9-]+$/.test(tag)) throw new Error('Invalid runtime tag')
 const id = tag.match(/^runtime-\d+/)[0].toUpperCase()
 const files = (await readdir(root)).filter(name => name.endsWith('.js')).sort()
@@ -15,7 +15,7 @@ html = html.replace(/(<script type="importmap">)[\s\S]*?(<\/script>)/, `$1\n${JS
 html = html.replace(/bootstrap\.js\?v=[^"]+/g, `bootstrap.js?v=${tag}`)
 await writeFile(new URL('index.html', root), html)
 let badge = await readFile(new URL('physics-error-ui.js', root), 'utf8')
-badge = badge.replace(/const BUILD_ID = '[^']+'/, `const BUILD_ID = '${id}'`).replace(/const BUILD_TAG = '[^']+'/, `const BUILD_TAG = '${tag}'`).replace('physical-dt time scale', 'fixed-step time scale')
+badge = badge.replace(/const BUILD_ID = '[^']+'/, `const BUILD_ID = '${id}'`).replace(/const BUILD_TAG = '[^']+'/, `const BUILD_TAG = '${tag}'`)
 await writeFile(new URL('physics-error-ui.js', root), badge)
 console.log(`${id}: ${files.length} canonical module URLs (${tag})`)
 
