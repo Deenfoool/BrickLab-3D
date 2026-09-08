@@ -1,42 +1,29 @@
-import {
-  approachVehicle,
-  classifyDrivenWheels,
-  resolveDriveRequest,
-} from './vehicle-model-v1.js'
-
-const UI_VERSION = 'vehicle-controls-ui-v2'
+const UI_VERSION = 'vehicle-controls-ui-v3'
 const held = new Set()
 let installed = false
 let parking = false
-let wasVisible = false
-let pointerBrake = false
 let pointerThrottle = 0
-let driveArmed = false
-let throttleInput = 0
-let lastFrameSeconds = 0
-let cachedSession = null
-let cachedDrive = null
-
-const THROTTLE_RATE = 3.0
-const THROTTLE_RELEASE_RATE = 4.5
-const REVERSE_SPEED_THRESHOLD = 0.08
+let pointerBrake = false
+let wasVisible = false
 
 const TEXT = {
   en: {
-    title: 'VEHICLE', hint: 'W / S · A / D · SPACE · P', left: 'Steer left', center: 'Center steering', right: 'Steer right',
-    forward: 'Drive forward', reverse: 'Drive reverse', brakeButton: 'BRAKE', brakeTitle: 'Service brake', parkingTitle: 'Parking brake',
-    speed: 'Speed / accel', throttle: 'Throttle', drive: 'Drive', steering: 'Steering', mode: 'Steering mode', brake: 'Brake',
-    size: 'Wheelbase / track', mass: 'Mass / CoG', metrics: 'Test metrics', physical: 'PHYSICAL', mixed: 'MIXED',
-    virtual: 'VIRTUAL TIRE', joints: 'JOINTS', park: 'PARK', brakeMetric: 'brake', manualDrive: 'MANUAL', mechanismDrive: 'MECHANISM',
-    reverseBrake: 'REV BRAKE', motors: 'motors', wheels: 'wheels', noDrive: 'FREE',
+    title: 'VEHICLE', hint: 'W / S · A / D · SPACE · P',
+    speed: 'Speed / accel', throttle: 'Throttle', drive: 'Drive', steering: 'Steering', mode: 'Steering mode',
+    brake: 'Brake', size: 'Wheelbase / track', mass: 'Mass / CoG', metrics: 'Test metrics',
+    physical: 'PHYSICAL', mixed: 'MIXED', virtual: 'VIRTUAL TIRE', free: 'FREE',
+    reverseBrake: 'REV BRAKE', park: 'PARK', motors: 'motors', wheels: 'wheels', brakeMetric: 'brake',
+    forward: 'Drive forward', reverse: 'Drive reverse', left: 'Steer left', center: 'Center steering', right: 'Steer right',
+    brakeTitle: 'Service brake', parkingTitle: 'Parking brake',
   },
   ru: {
-    title: 'МАШИНА', hint: 'W / S · A / D · ПРОБЕЛ · P', left: 'Руль влево', center: 'Руль прямо', right: 'Руль вправо',
-    forward: 'Тяга вперёд', reverse: 'Тяга назад', brakeButton: 'ТОРМОЗ', brakeTitle: 'Рабочий тормоз', parkingTitle: 'Стояночный тормоз',
-    speed: 'Скорость / ускорение', throttle: 'Газ', drive: 'Привод', steering: 'Руль', mode: 'Режим руля', brake: 'Тормоз',
-    size: 'База / колея', mass: 'Масса / ЦТ', metrics: 'Метрики', physical: 'ФИЗИЧЕСКИЙ', mixed: 'СМЕШАННЫЙ',
-    virtual: 'ВИРТУАЛЬНЫЙ', joints: 'ШАРНИРА', park: 'РУЧНИК', brakeMetric: 'тормоз', manualDrive: 'РУЧНОЙ', mechanismDrive: 'МЕХАНИЗМ',
-    reverseBrake: 'ТОРМОЖЕНИЕ R', motors: 'мот.', wheels: 'кол.', noDrive: 'СВОБОДНЫЙ',
+    title: 'МАШИНА', hint: 'W / S · A / D · ПРОБЕЛ · P',
+    speed: 'Скорость / ускорение', throttle: 'Газ', drive: 'Привод', steering: 'Руль', mode: 'Режим руля',
+    brake: 'Тормоз', size: 'База / колея', mass: 'Масса / ЦТ', metrics: 'Метрики',
+    physical: 'ФИЗИЧЕСКИЙ', mixed: 'СМЕШАННЫЙ', virtual: 'ВИРТУАЛЬНЫЙ', free: 'СВОБОДНЫЙ',
+    reverseBrake: 'ТОРМОЖЕНИЕ R', park: 'РУЧНИК', motors: 'мот.', wheels: 'кол.', brakeMetric: 'тормоз',
+    forward: 'Тяга вперёд', reverse: 'Тяга назад', left: 'Руль влево', center: 'Руль прямо', right: 'Руль вправо',
+    brakeTitle: 'Рабочий тормоз', parkingTitle: 'Стояночный тормоз',
   },
 }
 
@@ -44,129 +31,38 @@ function lang() {
   return document.documentElement.lang === 'ru' || localStorage.getItem('bricklab.ui.language.v1') === 'ru' ? 'ru' : 'en'
 }
 function t(key) { return TEXT[lang()][key] ?? TEXT.en[key] ?? key }
-
+function vehicle() { return globalThis.BrickLabVehicle }
+function drive() { return globalThis.BrickLabVehicleDrive }
+function performanceApi() { return globalThis.BrickLabVehiclePerformance }
 function activeRuntime() {
   const mode = document.querySelector('.mode.active')?.dataset.mode
   return mode === 'simulate' || mode === 'test'
 }
 
-function api() { return globalThis.BrickLabVehicle }
-function performanceApi() { return globalThis.BrickLabVehiclePerformance }
-function mechanismApi() { return globalThis.BrickLabControls }
-function session() { return globalThis.__bricklabPhysicsSession ?? null }
-
-function currentThrottleTarget() {
+function throttleTarget() {
   const forward = held.has('KeyW') || held.has('ArrowUp')
   const reverse = held.has('KeyS') || held.has('ArrowDown')
-  if (forward !== reverse) return forward ? 1 : -1
-  return pointerThrottle
+  return forward === reverse ? pointerThrottle : forward ? 1 : -1
 }
+function brakeTarget() { return pointerBrake || held.has('Space') ? 1 : 0 }
 
-function manualBrakeInput() {
-  return pointerBrake || held.has('Space') ? 1 : 0
-}
-
-function applyKeys() {
-  if (!activeRuntime() || !api()) return
+function applyInputs() {
+  if (!activeRuntime()) return
   const left = held.has('KeyA') || held.has('ArrowLeft')
   const right = held.has('KeyD') || held.has('ArrowRight')
-  api().setSteering(left === right ? 0 : left ? 1 : -1)
+  vehicle()?.setSteering(left === right ? 0 : left ? 1 : -1)
+  drive()?.setThrottle(throttleTarget())
+  drive()?.setManualBrake(brakeTarget())
 }
 
-function horizontalLongitudinalSpeed(activeSession) {
-  const body = activeSession?.chassisMonitor?.body
-  const velocity = body?.linvel?.()
-  const q = body?.rotation?.()
-  if (!velocity || !q) return 0
-
-  // Local +Z is the vehicle forward direction used by wheel axle classification.
-  const fx = 2 * (q.x * q.z + q.w * q.y)
-  const fz = 1 - 2 * (q.x * q.x + q.y * q.y)
-  const length = Math.hypot(fx, fz)
-  if (length < 1e-8) return 0
-  return (velocity.x * fx + velocity.z * fz) / length
-}
-
-function buildDriveInfo(activeSession) {
-  if (!activeSession) return { layout: 'FREE', motorIds: [], drivenWheelCount: 0, motors: [], wheels: [] }
-  const controls = mechanismApi()
-  const wheels = (activeSession.wheelMonitors ?? []).map(wheel => ({
-    id: wheel.id,
-    instanceId: wheel.object?.userData?.instanceId ?? null,
-    axle: wheel.axleRole ?? 'middle',
-  }))
-  const classified = classifyDrivenWheels(wheels, activeSession.drivetrain?.shafts ?? [])
-  const motors = classified.motorIds.map(id => {
-    const config = controls?.getConfig?.(id)
-    const runtime = controls?.getRuntime?.(id)
-    if (config?.type !== 'motor' || runtime?.type !== 'motor') return null
-    return {
-      id,
-      forwardDirection: config.motor?.initialDirection === -1 ? -1 : 1,
-      fullRpm: Math.max(0, Number(config.motor?.baseRpm) || 0),
-    }
-  }).filter(Boolean)
-
-  return { ...classified, motors }
-}
-
-function driveInfo() {
-  const activeSession = session()
-  if (activeSession !== cachedSession) {
-    cachedSession = activeSession
-    cachedDrive = buildDriveInfo(activeSession)
-  }
-  return cachedDrive ?? buildDriveInfo(activeSession)
-}
-
-function commandDrive(info, command) {
-  if (!driveArmed || !info?.motors?.length) return
-  const controls = mechanismApi()
-  if (!controls) return
-
-  for (const motor of info.motors) {
-    const runtime = controls.getRuntime?.(motor.id)
-    if (!runtime || runtime.type !== 'motor') continue
-    const desiredDirection = command.direction === 0 ? 0 : motor.forwardDirection * command.direction
-    const desiredRpm = Math.max(0, motor.fullRpm * command.throttle)
-    if (Math.abs((runtime.rpm ?? 0) - desiredRpm) > 0.5) controls.setMotorRpm?.(motor.id, desiredRpm)
-    if ((runtime.direction ?? 0) !== desiredDirection) controls.setMotorDirection?.(motor.id, desiredDirection)
-  }
-}
-
-function stopManualDrive() {
-  if (!driveArmed) return
-  const controls = mechanismApi()
-  for (const motor of driveInfo()?.motors ?? []) {
-    controls?.setMotorRpm?.(motor.id, 0)
-    controls?.setMotorDirection?.(motor.id, 0)
-  }
-  throttleInput = 0
-}
-
-function updateDrive(nowSeconds) {
-  const activeSession = session()
-  const info = driveInfo()
-  const dt = lastFrameSeconds > 0 ? Math.min(0.1, Math.max(0, nowSeconds - lastFrameSeconds)) : 0
-  lastFrameSeconds = nowSeconds
-  const target = currentThrottleTarget()
-  if (target !== 0 && info.motors.length) driveArmed = true
-
-  const rate = target === 0 ? THROTTLE_RELEASE_RATE : THROTTLE_RATE
-  throttleInput = approachVehicle(throttleInput, target, rate * dt)
-
-  const command = resolveDriveRequest({
-    throttle: driveArmed ? throttleInput : 0,
-    longitudinalSpeed: horizontalLongitudinalSpeed(activeSession),
-    reverseSpeedThreshold: REVERSE_SPEED_THRESHOLD,
-  })
-  commandDrive(info, command)
-
-  const effectiveBrake = Math.max(manualBrakeInput(), driveArmed ? command.autoBrake : 0)
-  const currentBrake = Number(api()?.getState?.()?.brakeInput) || 0
-  if (Math.abs(currentBrake - effectiveBrake) > 0.01) api()?.setBrake(effectiveBrake)
-
-  return { info, command }
+function clearInputs() {
+  held.clear()
+  pointerThrottle = 0
+  pointerBrake = false
+  drive()?.setThrottle(0)
+  drive()?.setManualBrake(0)
+  vehicle()?.setSteering(0)
+  vehicle()?.resetVisuals?.()
 }
 
 function installStyle() {
@@ -183,26 +79,19 @@ function installStyle() {
 function applyLanguage(deck) {
   if (!deck || deck.dataset.vehicleLang === lang()) return
   deck.dataset.vehicleLang = lang()
-  deck.querySelector('[data-vehicle-title]').textContent = t('title')
-  deck.querySelector('[data-vehicle-hint]').textContent = t('hint')
-  const forward = deck.querySelector('[data-throttle="1"]')
-  const reverse = deck.querySelector('[data-throttle="-1"]')
-  const left = deck.querySelector('[data-steer="1"]')
-  const center = deck.querySelector('[data-steer="0"]')
-  const right = deck.querySelector('[data-steer="-1"]')
-  if (forward) forward.title = t('forward')
-  if (reverse) reverse.title = t('reverse')
-  if (left) left.title = t('left')
-  if (center) center.title = t('center')
-  if (right) right.title = t('right')
-  const brake = deck.querySelector('[data-brake]')
-  if (brake) { brake.textContent = t('brakeButton'); brake.title = t('brakeTitle') }
-  const parkingButton = deck.querySelector('[data-parking]')
-  if (parkingButton) parkingButton.title = t('parkingTitle')
+  deck.querySelector('[data-title]').textContent = t('title')
+  deck.querySelector('[data-hint]').textContent = t('hint')
   for (const key of ['speed','throttle','drive','steering','mode','brake','size','mass','metrics']) {
-    const label = deck.querySelector(`[data-vehicle-label="${key}"]`)
+    const label = deck.querySelector(`[data-label="${key}"]`)
     if (label) label.textContent = t(key)
   }
+  deck.querySelector('[data-throttle="1"]').title = t('forward')
+  deck.querySelector('[data-throttle="-1"]').title = t('reverse')
+  deck.querySelector('[data-steer="1"]').title = t('left')
+  deck.querySelector('[data-steer="0"]').title = t('center')
+  deck.querySelector('[data-steer="-1"]').title = t('right')
+  deck.querySelector('[data-brake]').title = t('brakeTitle')
+  deck.querySelector('[data-parking]').title = t('parkingTitle')
 }
 
 function install() {
@@ -215,169 +104,89 @@ function install() {
   deck.id = 'vehicleControlDeck'
   deck.className = 'vehicle-control-deck hidden'
   deck.innerHTML = `
-    <div class="vehicle-control-title"><strong data-vehicle-title>VEHICLE</strong><small data-vehicle-hint>W / S · A / D · SPACE · P</small></div>
-    <button type="button" class="vehicle-throttle" data-throttle="1">W ▲</button>
-    <button type="button" class="vehicle-throttle vehicle-reverse" data-throttle="-1">S ▼</button>
-    <button type="button" data-steer="1">A ◀</button>
-    <button type="button" data-steer="0">●</button>
-    <button type="button" data-steer="-1">▶ D</button>
-    <button type="button" class="vehicle-brake" data-brake>BRAKE</button>
-    <button type="button" class="vehicle-parking" data-parking>P</button>
+    <div class="vehicle-control-title"><strong data-title>VEHICLE</strong><small data-hint>W / S · A / D · SPACE · P</small></div>
+    <button class="vehicle-throttle" data-throttle="1">W ▲</button><button class="vehicle-throttle vehicle-reverse" data-throttle="-1">S ▼</button>
+    <button data-steer="1">A ◀</button><button data-steer="0">●</button><button data-steer="-1">▶ D</button>
+    <button class="vehicle-brake" data-brake>BRAKE</button><button class="vehicle-parking" data-parking>P</button>
     <div class="vehicle-control-readout">
-      <span data-vehicle-label="speed">Speed / accel</span><b data-vehicle-motion>0.00 m/s · 0.00 m/s²</b>
-      <span data-vehicle-label="throttle">Throttle</span><b data-vehicle-throttle>0%</b>
-      <span data-vehicle-label="drive">Drive</span><b data-vehicle-drive>FREE</b>
-      <span data-vehicle-label="steering">Steering</span><b data-vehicle-steer>0°</b>
-      <span data-vehicle-label="mode">Steering mode</span><b data-vehicle-mode>VIRTUAL TIRE</b>
-      <span data-vehicle-label="brake">Brake</span><b data-vehicle-brake>0%</b>
-      <span data-vehicle-label="size">Wheelbase / track</span><b data-vehicle-size>—</b>
-      <span data-vehicle-label="mass">Mass / CoG</span><b data-vehicle-mass>—</b>
-      <span data-vehicle-label="metrics">Test metrics</span><b data-vehicle-performance>—</b>
+      <span data-label="speed">Speed / accel</span><b data-motion>0.00 m/s · 0.00 m/s²</b>
+      <span data-label="throttle">Throttle</span><b data-throttle-readout>0%</b>
+      <span data-label="drive">Drive</span><b data-drive>FREE</b>
+      <span data-label="steering">Steering</span><b data-steering>0°</b>
+      <span data-label="mode">Steering mode</span><b data-mode>VIRTUAL TIRE</b>
+      <span data-label="brake">Brake</span><b data-brake-readout>0%</b>
+      <span data-label="size">Wheelbase / track</span><b data-size>—</b>
+      <span data-label="mass">Mass / CoG</span><b data-mass>—</b>
+      <span data-label="metrics">Test metrics</span><b data-metrics>—</b>
     </div>`
   viewport.append(deck)
   applyLanguage(deck)
 
   deck.querySelectorAll('[data-throttle]').forEach(button => {
-    const release = () => { pointerThrottle = 0; button.classList.remove('active') }
-    button.addEventListener('pointerdown', event => {
-      event.preventDefault()
-      pointerThrottle = Number(button.dataset.throttle)
-      if (driveInfo().motors.length) driveArmed = true
-      button.classList.add('active')
-      button.setPointerCapture?.(event.pointerId)
-    })
+    const release = () => { pointerThrottle = 0; applyInputs() }
+    button.addEventListener('pointerdown', event => { event.preventDefault(); pointerThrottle = Number(button.dataset.throttle); applyInputs(); button.setPointerCapture?.(event.pointerId) })
     button.addEventListener('pointerup', release)
     button.addEventListener('pointercancel', release)
   })
-
-  const stopSteer = () => api()?.setSteering(0)
   deck.querySelectorAll('[data-steer]').forEach(button => {
-    button.addEventListener('pointerdown', event => {
-      event.preventDefault()
-      api()?.setSteering(Number(button.dataset.steer))
-      button.setPointerCapture?.(event.pointerId)
-    })
-    button.addEventListener('pointerup', stopSteer)
-    button.addEventListener('pointercancel', stopSteer)
+    button.addEventListener('pointerdown', event => { event.preventDefault(); vehicle()?.setSteering(Number(button.dataset.steer)); button.setPointerCapture?.(event.pointerId) })
+    const release = () => vehicle()?.setSteering(0)
+    button.addEventListener('pointerup', release)
+    button.addEventListener('pointercancel', release)
   })
-
   const brake = deck.querySelector('[data-brake]')
-  brake.addEventListener('pointerdown', event => {
-    event.preventDefault(); pointerBrake = true; brake.classList.add('active')
-    brake.setPointerCapture?.(event.pointerId)
-  })
-  const releaseBrake = () => { pointerBrake = false; brake.classList.remove('active') }
+  brake.addEventListener('pointerdown', event => { event.preventDefault(); pointerBrake = true; applyInputs(); brake.setPointerCapture?.(event.pointerId) })
+  const releaseBrake = () => { pointerBrake = false; applyInputs() }
   brake.addEventListener('pointerup', releaseBrake)
   brake.addEventListener('pointercancel', releaseBrake)
-
-  deck.querySelector('[data-parking]').addEventListener('click', event => {
-    parking = !parking
-    api()?.setParkingBrake(parking)
-    event.currentTarget.classList.toggle('active', parking)
-  })
+  deck.querySelector('[data-parking]').addEventListener('click', event => { parking = !parking; vehicle()?.setParkingBrake(parking); event.currentTarget.classList.toggle('active', parking) })
 }
 
 window.addEventListener('keydown', event => {
   if (!activeRuntime() || event.repeat || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) return
-  const drivingKey = ['KeyW','KeyS','ArrowUp','ArrowDown','KeyA','KeyD','ArrowLeft','ArrowRight','Space'].includes(event.code)
-  if (drivingKey) {
+  if (['KeyW','KeyS','ArrowUp','ArrowDown','KeyA','KeyD','ArrowLeft','ArrowRight','Space'].includes(event.code)) {
     held.add(event.code)
-    if (['KeyW','KeyS','ArrowUp','ArrowDown'].includes(event.code) && driveInfo().motors.length) driveArmed = true
     if (event.code.startsWith('Arrow') || event.code === 'Space') event.preventDefault()
-    applyKeys()
+    applyInputs()
   } else if (event.code === 'KeyP') {
     parking = !parking
-    api()?.setParkingBrake(parking)
+    vehicle()?.setParkingBrake(parking)
     event.preventDefault()
   }
 })
+window.addEventListener('keyup', event => { if (held.delete(event.code)) applyInputs() })
 
-window.addEventListener('keyup', event => {
-  if (!held.delete(event.code)) return
-  applyKeys()
-})
-
-function render(nowMs = performance.now()) {
+function render() {
   install()
   const deck = document.getElementById('vehicleControlDeck')
   applyLanguage(deck)
-  const state = api()?.getState?.()
-  const performance = performanceApi()?.get?.()
+  const state = vehicle()?.getState?.()
+  const driveState = drive()?.getState?.()
+  const perf = performanceApi()?.get?.()
   const visible = activeRuntime() && Boolean(state?.enabled)
   deck?.classList.toggle('hidden', !visible)
-
-  if (!visible && wasVisible) {
-    held.clear()
-    pointerThrottle = 0
-    pointerBrake = false
-    stopManualDrive()
-    driveArmed = false
-    api()?.setSteering(0)
-    api()?.setBrake(0)
-    api()?.resetVisuals?.()
-    cachedSession = null
-    cachedDrive = null
-  }
+  if (!visible && wasVisible) clearInputs()
   wasVisible = visible
 
-  const drive = visible ? updateDrive(nowMs / 1000) : { info: driveInfo(), command: resolveDriveRequest() }
-
   if (visible && deck) {
-    const steer = deck.querySelector('[data-vehicle-steer]')
-    const mode = deck.querySelector('[data-vehicle-mode]')
-    const brake = deck.querySelector('[data-vehicle-brake]')
-    const mass = deck.querySelector('[data-vehicle-mass]')
-    const motion = deck.querySelector('[data-vehicle-motion]')
-    const throttle = deck.querySelector('[data-vehicle-throttle]')
-    const driveEl = deck.querySelector('[data-vehicle-drive]')
-    const size = deck.querySelector('[data-vehicle-size]')
-    const performanceEl = deck.querySelector('[data-vehicle-performance]')
-
-    if (motion) motion.textContent = `${(state.speedMps || 0).toFixed(2)} m/s · ${(state.accelerationMps2 || 0).toFixed(2)} m/s²`
-    if (throttle) {
-      const sign = throttleInput > 0.01 ? 'F ' : throttleInput < -0.01 ? 'R ' : ''
-      throttle.textContent = drive.command.reverseInterlock ? t('reverseBrake') : `${sign}${Math.round(Math.abs(throttleInput) * 100)}%`
-      throttle.classList.toggle('warn', Boolean(drive.command.reverseInterlock))
-    }
-    if (driveEl) {
-      const controlMode = driveArmed ? t('manualDrive') : t('mechanismDrive')
-      const layout = drive.info.layout === 'FREE' ? t('noDrive') : drive.info.layout
-      driveEl.textContent = `${layout} · ${controlMode} · ${drive.info.motors.length} ${t('motors')} / ${drive.info.drivenWheelCount} ${t('wheels')}`
-    }
-    if (steer) steer.textContent = `${(state.centerSteerDeg || 0).toFixed(1)}° · L ${(state.leftSteerDeg || 0).toFixed(1)}° / R ${(state.rightSteerDeg || 0).toFixed(1)}°`
-    if (mode) {
-      const names = { physical: t('physical'), mixed: t('mixed'), virtual: t('virtual') }
-      const base = names[state.steeringMode] ?? String(state.steeringMode || t('virtual')).toUpperCase()
-      mode.textContent = state.physicalSteeringJoints ? `${base} · ${state.physicalSteeringJoints} ${t('joints')}` : base
-    }
-    if (brake) brake.textContent = `${Math.round((state.brakeInput || 0) * 100)}%${state.parkingBrake ? ` · ${t('park')}` : ''}`
-    if (size) size.textContent = `${(state.wheelbaseM || 0).toFixed(3)} / ${(state.trackM || 0).toFixed(3)} m`
-    if (mass) {
-      const cog = Array.isArray(state.comStud) ? state.comStud.map(v => Number(v).toFixed(1)).join(',') : '—'
-      mass.textContent = `${(state.massKg || 0).toFixed(3)} kg · [${cog}]`
-    }
-    if (performanceEl) {
-      const top = performance?.topSpeedMps ?? 0
-      const accel = performance?.accelTimeToTarget
-      const brakeDistance = performance?.lastBrakingDistanceM
-      performanceEl.textContent = `Vmax ${top.toFixed(2)} · 0→${(performance?.accelTargetMps ?? .5).toFixed(1)} ${accel == null ? '—' : `${accel.toFixed(2)}s`} · ${t('brakeMetric')} ${brakeDistance == null ? '—' : `${brakeDistance.toFixed(3)}m`}`
-    }
-
-    deck.querySelector('[data-throttle="1"]')?.classList.toggle('active', currentThrottleTarget() > 0)
-    deck.querySelector('[data-throttle="-1"]')?.classList.toggle('active', currentThrottleTarget() < 0)
+    deck.querySelector('[data-motion]').textContent = `${(state.speedMps || 0).toFixed(2)} m/s · ${(state.accelerationMps2 || 0).toFixed(2)} m/s²`
+    const throttle = deck.querySelector('[data-throttle-readout]')
+    throttle.textContent = driveState?.reverseInterlock ? t('reverseBrake') : `${(driveState?.throttleInput ?? 0) < -0.01 ? 'R ' : (driveState?.throttleInput ?? 0) > 0.01 ? 'F ' : ''}${Math.round(Math.abs(driveState?.throttleInput ?? 0) * 100)}%`
+    throttle.classList.toggle('warn', Boolean(driveState?.reverseInterlock))
+    deck.querySelector('[data-drive]').textContent = `${driveState?.layout === 'FREE' ? t('free') : driveState?.layout ?? t('free')} · ${driveState?.motorCount ?? 0} ${t('motors')} / ${driveState?.drivenWheelCount ?? 0} ${t('wheels')}`
+    deck.querySelector('[data-steering]').textContent = `${(state.centerSteerDeg || 0).toFixed(1)}° · L ${(state.leftSteerDeg || 0).toFixed(1)}° / R ${(state.rightSteerDeg || 0).toFixed(1)}°`
+    const modeName = { physical: t('physical'), mixed: t('mixed'), virtual: t('virtual') }[state.steeringMode] ?? t('virtual')
+    deck.querySelector('[data-mode]').textContent = state.physicalSteeringJoints ? `${modeName} · ${state.physicalSteeringJoints}` : modeName
+    deck.querySelector('[data-brake-readout]').textContent = `${Math.round((state.brakeInput || 0) * 100)}%${state.parkingBrake ? ` · ${t('park')}` : ''}`
+    deck.querySelector('[data-size]').textContent = `${(state.wheelbaseM || 0).toFixed(3)} / ${(state.trackM || 0).toFixed(3)} m`
+    const cog = Array.isArray(state.comStud) ? state.comStud.map(v => Number(v).toFixed(1)).join(',') : '—'
+    deck.querySelector('[data-mass]').textContent = `${(state.massKg || 0).toFixed(3)} kg · [${cog}]`
+    deck.querySelector('[data-metrics]').textContent = `Vmax ${(perf?.topSpeedMps ?? 0).toFixed(2)} · 0→${(perf?.accelTargetMps ?? .5).toFixed(1)} ${perf?.accelTimeToTarget == null ? '—' : `${perf.accelTimeToTarget.toFixed(2)}s`} · ${t('brakeMetric')} ${perf?.lastBrakingDistanceM == null ? '—' : `${perf.lastBrakingDistanceM.toFixed(3)}m`}`
     deck.querySelector('[data-parking]')?.classList.toggle('active', Boolean(state.parkingBrake))
-    deck.querySelector('[data-brake]')?.classList.toggle('active', manualBrakeInput() > 0 || drive.command.autoBrake > 0)
+    deck.querySelector('[data-brake]')?.classList.toggle('active', brakeTarget() > 0 || (driveState?.autoBrake ?? 0) > 0)
   }
   requestAnimationFrame(render)
 }
 
 render()
-globalThis.BrickLabVehicleControlsUI = {
-  version: UI_VERSION,
-  getDriveState: () => ({
-    armed: driveArmed,
-    throttleInput,
-    throttleTarget: currentThrottleTarget(),
-    ...driveInfo(),
-  }),
-}
+globalThis.BrickLabVehicleControlsUI = { version: UI_VERSION }
