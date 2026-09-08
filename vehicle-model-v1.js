@@ -70,7 +70,7 @@ export function classifyWheelAxles(wheels = []) {
   const centerZ = (minZ + maxZ) / 2
   const wheelbase = Math.max(0, maxZ - minZ)
   const track = Math.max(0, maxX - minX)
-  const axleTolerance = Math.max(0.08 * Math.max(wheelbase, 1), 0.002)
+  const axleTolerance = Math.max(0.08 * wheelbase, 0.002)
 
   return {
     wheelbase,
