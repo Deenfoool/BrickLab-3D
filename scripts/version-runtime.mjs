@@ -1,7 +1,7 @@
 // One canonical versioned URL per module, shared by static and dynamic imports.
 import { readdir, readFile, writeFile } from 'node:fs/promises'
 const root = new URL('../', import.meta.url)
-const tag = process.argv[2] ?? 'runtime-5-20260908-1000'
+const tag = process.argv[2] ?? 'runtime-6-20260908-1030'
 if (!/^runtime-\d+-[a-z0-9-]+$/.test(tag)) throw new Error('Invalid runtime tag')
 const id = tag.match(/^runtime-\d+/)[0].toUpperCase()
 const files = (await readdir(root)).filter(name => name.endsWith('.js')).sort()
