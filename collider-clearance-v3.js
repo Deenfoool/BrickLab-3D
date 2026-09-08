@@ -80,7 +80,7 @@ PhysicsSession.prototype.createCompoundBody = function createCompoundBodyClearan
   const bodyDesc = this.RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(bodyPose.position.x * STUD, bodyPose.position.y * STUD, bodyPose.position.z * STUD)
     .setRotation(quat(bodyPose.rotation))
-    .setCanSleep(false)
+    .setCanSleep(true)
 
   bodyDesc.setCcdEnabled?.(this.quality?.ccd ?? true)
   bodyDesc.setAdditionalSolverIterations?.(Math.max(0, (this.quality?.solverIterations ?? 6) - 4))
