@@ -15,6 +15,7 @@ export function resetPhysicsClock(session, now = performance.now() / 1000) {
   session.lastPhysicsSteps = 0
   session.simulationTime = 0
   session.testElapsed = 0
+  session.physicsStabilityMetrics = { peakLinearSpeed: 0, peakAngularRpm: 0 }
 }
 
 function advanceTestPhase(session, dt) {
@@ -49,6 +50,9 @@ function runPhysicsStep(session, dt) {
   session.applyTireForcesV2?.(dt)
   session.applyScenarioForcesV2?.(dt)
   session.world.step()
+  // Stability layer never clamps finite velocities; it only rejects NaN/Infinity
+  // and records peaks so regressions are visible in tests/diagnostics.
+  session.validatePhysicsState?.()
   session.updateVehicleMetrics(dt)
 }
 
@@ -108,5 +112,6 @@ export function getTimeDiagnostics(session, step) {
     test: isTestSession(session), running: Boolean(session?.running),
     requestedSimulationElapsed: session?.requestedSimulationElapsed ?? 0,
     droppedSimulationTime: session?.droppedSimulationTime ?? 0,
+    stability: session?.physicsStabilityMetrics ?? null,
   }
 }
