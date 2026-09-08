@@ -1,5 +1,5 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: PHYSICS-6 · SI joint anchors + metre↔stud render sync + Connector System v3.
+// BUILD: PHYSICS-7 · clearance-aware colliders + SI boundary + Connector System v3.
 // All module URLs are versioned once by the import map in index.html.
 
 // Diagnostics must exist before any runtime/app module can fail.
