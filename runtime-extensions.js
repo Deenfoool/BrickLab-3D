@@ -1,6 +1,6 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: CATALOG-2 · expanded basic parts + catalog-wide visual quality pass.
-const V = 'catalog-2-20260908-0138'
+// BUILD: RUNTIME-1 · simulation time scale + command-RPM motor physics.
+const V = 'runtime-1-20260908-0539'
 
 await import(`./three-cycle-guard.js?v=${V}`)
 await import(`./multi-transform-patch.js?v=${V}`)
@@ -27,3 +27,5 @@ await import(`./physics-debug-v2.js?v=${V}`)
 await import(`./test-world-visuals-v2.js?v=${V}`)
 await import(`./physics-stage-diagnostics.js?v=${V}`)
 await import(`./rapier-loader-v2.js?v=${V}`)
+// Keep this last: it intentionally owns the final PhysicsSession.step and motor controller.
+await import(`./simulation-runtime-v2.js?v=${V}`)
