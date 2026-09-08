@@ -57,8 +57,9 @@ test('all local production imports resolve to one cache-busted URL', async () =>
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8')
   const {imports} = JSON.parse(html.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1])
   const entry = html.match(/src="\.\/bootstrap.js\?v=([^"]+)/)[1]
+  const aliases = {'connections.js':'connections-v3.js','snapping.js':'snapping-v3.js','connector-validation.js':'connector-validation-v3.js','structural-auto-weld-v2.js':'connector-physics-v3.js'}
   for (const name of (await readdir(new URL('../', import.meta.url))).filter(n=>n.endsWith('.js'))) {
-    assert.equal(imports[`./${name}`], `./${name}?v=${entry}`, name)
+    assert.equal(imports[`./${name}`], `./${aliases[name] ?? name}?v=${entry}`, name)
     const code = await readFile(new URL(`../${name}`, import.meta.url), 'utf8')
     assert.doesNotMatch(code, /(?:from\s*|import\s*\()[`'"]\.\/[^'"`]+\?v=/, name)
     assert.doesNotMatch(code, /PhysicsSession\.prototype\.step\s*=/, name)
@@ -134,12 +135,16 @@ test('TEST ignores requested scales; phase countdown and timers use simulation s
 const bench = JSON.parse(await readFile(new URL('../examples/powertrain-bench.bricklab', import.meta.url),'utf8'))
 function motorSession(rpm, scale, fps=60, config={}) {
   window.__bricklabRequestedTimeScale=scale
-  const objects=bench.parts.filter(p=>['bench-motor','bench-axle-in'].includes(p.instanceId)).map(p=>{
-    const o=findPart(p.partId).create(p.color);o.userData.partId=p.partId;o.userData.instanceId=p.instanceId;o.position.fromArray(p.position);o.rotation.fromArray(p.rotation);return o
+  // Connector v3 requires an actual socket between two male axle ends.
+  const objects=[['motor','bench-motor',[0,100,0]],['axle-coupler','coupler',[2.5,100.52,0]],['axle-5','bench-axle-in',[5.25,100.58,0]]].map(([partId,id,position])=>{
+    const o=findPart(partId).create(0xabcdef);Object.assign(o.userData,{partId,instanceId:id});o.position.fromArray(position);return o
   })
   window.BrickLabControls.resetRuntimeForObjects(objects)
   window.BrickLabControls.updateConfig('bench-motor',{motor:{baseRpm:rpm,maxRpm:300,stepRpm:15,autoStart:true,initialDirection:1,...config}})
-  const s=new PhysicsSession(RAPIER,objects,bench.connections.filter(c=>c.id==='bench-drive-motor'))
+  const s=new PhysicsSession(RAPIER,objects,[
+    {id:'motor-coupler',kind:'axle',a:{instanceId:'bench-motor',connectorId:'output'},b:{instanceId:'coupler',connectorId:'hole-left'}},
+    {id:'coupler-shaft',kind:'axle',a:{instanceId:'coupler',connectorId:'hole-right'},b:{instanceId:'bench-axle-in',connectorId:'axle-0'}},
+  ])
   s.build(); resetPhysicsClock(s,0)
   // Isolated shaft test: pin housing; both bodies retain the same gravity at every scale.
   s.members.get('bench-motor').body.setBodyType(RAPIER.RigidBodyType.Fixed,true)

@@ -1,6 +1,6 @@
 <!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><base href="../"><title>BrickLab — Time Scale acceptance</title>
-<style>body{background:#101214;color:#e2e8e5;font:16px system-ui;max-width:1000px;margin:40px auto;padding:24px}button{padding:12px 22px;cursor:pointer}pre{white-space:pre-wrap;font-size:13px}table{border-collapse:collapse;width:100%;margin:24px 0}td,th{text-align:left;padding:10px;border-bottom:1px solid #354139}.pass{color:#74e6a6}.fail{color:#ff8b8b}#simControls{display:none}</style>
+<html lang="ru"><head><meta charset="utf-8"><base href="../"><title>BrickLab — axle acceptance</title>
+<style>body{background:#101214;color:#e2e8e5;font:16px system-ui;max-width:1100px;margin:30px auto;padding:24px}button{padding:12px 22px;cursor:pointer}pre{white-space:pre-wrap;font-size:12px}table{border-collapse:collapse;width:100%;margin:24px 0}td,th{text-align:left;padding:8px;border-bottom:1px solid #354139}.pass{color:#74e6a6}.fail{color:#ff8b8b}#simControls{display:none}</style>
 <script type="importmap">
 {
   "imports": {
@@ -77,13 +77,11 @@
     "./tests/axle-fixtures.js": "./tests/axle-fixtures.js?v=physics-9-20260908-1800"
   }
 }
-</script>
-</head><body>
-<h1>Проверка Time Scale на реальном Rapier</h1>
-<p>Один Brick 2×4 на высоте 900 studs (7,2 м), без соединений. Перед каждым падением создаётся новый мир. Замер по performance.now() и координате rigid body. WebGL не требуется.</p>
-<p>Загружаются production-расширения и затем Physics UI — именно этот поздний импорт раньше заменял runner.</p>
-<button id="run">Запустить четыре падения</button><p id="status">Готов к проверке</p>
-<table><thead><tr><th>Scale</th><th>Реальное время</th><th>Время симуляции</th><th>Координата Y, м</th><th>Отношение к 1×</th></tr></thead><tbody id="results"></tbody></table>
-<pre id="diagnostics"></pre><div id="simControls"><span id="simState"></span></div>
-<script type="module" src="./tests/time-scale-browser.js?v=physics-9-20260908-1800"></script>
-</body></html>
+</script></head><body>
+<h1>Axle / Technic brick: физическая проверка</h1>
+<p>Настоящие детали каталога, production-модули и Rapier 0.20.0. 60 шагов по 1/120 с. Без моторов. Значения считываются непосредственно из rigid bodies. Рендерер WebGL не требуется.</p>
+<button id="run">Проверить оси и раму</button><p id="status">Готово к запуску</p>
+<table><thead><tr><th>Сцена</th><th>Тел / шарниров</th><th>Начальная ошибка оси</th><th>Макс. ω за 60 шагов</th><th>Энергия после шага 1 / до</th></tr></thead><tbody id="results"></tbody></table>
+<details><summary>Позиции, массы, инерция, AABB, контакты и шарниры</summary><pre id="diagnostics"></pre></details>
+<p><a href="tests/time-scale-browser.html">Отдельная проверка Time Scale по реальному времени падения</a></p>
+<script type="module" src="./tests/axle-browser.js?v=physics-9-20260908-1800"></script></body></html>

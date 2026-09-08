@@ -2,10 +2,6 @@ import * as THREE from 'three'
 import { PhysicsSession } from './physics.js'
 import { findPart } from './parts.js'
 
-function vec(value) {
-  return { x: value.x, y: value.y, z: value.z }
-}
-
 function objectById(session, instanceId) {
   return session.objects.find(object => object.userData.instanceId === instanceId) ?? null
 }
@@ -47,7 +43,7 @@ PhysicsSession.prototype.createJoint = function createJointWithSuspension(connec
     const anchorA = this.bodyLocalPoint(memberA, connectorA)
     const anchorB = this.bodyLocalPoint(memberB, connectorB)
     const axisA = this.bodyLocalAxis(memberA, connectorA)
-    const params = this.RAPIER.JointData.revolute(vec(anchorA), vec(anchorB), vec(axisA))
+    const params = this.revoluteJointData(memberA, memberB, anchorA, anchorB, axisA)
     const joint = this.world.createImpulseJoint(params, memberA.body, memberB.body, true)
     joint.setContactsEnabled?.(false)
 

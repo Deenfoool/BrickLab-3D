@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test:physics": "node --test tests/time-scale.test.mjs tests/physics-stability.test.mjs tests/joint-stability.test.mjs",
+    "test:physics": "node --import ./tests/runtime-import-map.mjs --test tests/time-scale.test.mjs tests/physics-stability.test.mjs tests/joint-stability.test.mjs tests/axle-stability.test.mjs",
     "version:runtime": "node scripts/version-runtime.mjs"
   },
   "dependencies": {

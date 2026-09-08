@@ -25,10 +25,6 @@ function sharedLocalAnchor(member, worldMidpointStud) {
     .multiplyScalar(STUD)
 }
 
-function vector3(value) {
-  return { x: value.x, y: value.y, z: value.z }
-}
-
 function diagnostics(session) {
   if (!session.__bricklabJointStability) {
     session.__bricklabJointStability = {
@@ -103,11 +99,7 @@ if (!PhysicsSession.prototype[marker]) {
       const anchorA = sharedLocalAnchor(memberA, midpoint)
       const anchorB = sharedLocalAnchor(memberB, midpoint)
       const axisA = this.bodyLocalAxis(memberA, connectorA)
-      const params = this.RAPIER.JointData.revolute(
-        vector3(anchorA),
-        vector3(anchorB),
-        vector3(axisA),
-      )
+      const params = this.revoluteJointData(memberA, memberB, anchorA, anchorB, axisA)
       const joint = this.world.createImpulseJoint(params, memberA.body, memberB.body, true)
       joint.setContactsEnabled?.(false)
 

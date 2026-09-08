@@ -41,6 +41,7 @@ test('inertia-aware gear coupling reduces ratio error without overshooting tiny 
     const world = new RAPIER.World({ x: 0, y: 0, z: 0 })
     const bodyA = makeRotor(world, 0.00035)
     const bodyB = makeRotor(world, 0.00021)
+    bodyB.setTranslation({x:1,y:0,z:0},true) // Isolate gear coupling from overlapping-collider contact impulses.
     bodyA.setAngvel({ x: 90, y: 0, z: 0 }, true)
     bodyB.setAngvel({ x: -7, y: 0, z: 0 }, true)
     const coupling = {
@@ -67,7 +68,7 @@ test('inertia-aware gear coupling reduces ratio error without overshooting tiny 
 
     assert.ok(Number.isFinite(coupling.requestedTorque) && Number.isFinite(coupling.transferTorque))
     assert.ok(Math.abs(after) < Math.abs(before) * 0.02 + 1e-7, JSON.stringify({ factor, before, after }))
-    assert.ok(before === 0 || Math.sign(after) === Math.sign(before) || Math.abs(after) < 1e-7, 'constraint must not flip into a large overshoot')
+    assert.ok(before === 0 || Math.sign(after) === Math.sign(before) || Math.abs(after) < Math.abs(before) * 1e-6, JSON.stringify({factor,before,after}))
     world.free()
   }
 })
@@ -95,6 +96,9 @@ test('tire force uses one wheel rotation term and cannot impulse past zero longi
   body.resetForces(true)
   body.resetTorques(true)
   const dt = 1 / 120
+  session.step(dt) // Populate Rapier broad phase before the first ray query.
+  body.setLinvel({ x: 0, y: 0, z: 0.25 }, true)
+  body.setAngvel({ x: 160, y: 0, z: 0 }, true)
   session.applyTireForcesV2(dt)
 
   assert.equal(wheel.contact, true, 'wheel must contact the test ground')

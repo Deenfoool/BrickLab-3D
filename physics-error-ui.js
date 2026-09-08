@@ -1,5 +1,5 @@
-const BUILD_ID = 'PHYSICS-8'
-const BUILD_TAG = 'physics-8-20260908-1545'
+const BUILD_ID = 'PHYSICS-9'
+const BUILD_TAG = 'physics-9-20260908-1800'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 

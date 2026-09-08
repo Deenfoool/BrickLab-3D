@@ -22,8 +22,8 @@ function fakeObject(partId) {
 
 function makeSession() {
   const session = Object.create(PhysicsSession.prototype)
-  const shaftBody = {}
-  const frameBody = {}
+  const shaftBody = { rotation: () => new THREE.Quaternion() }
+  const frameBody = { rotation: () => new THREE.Quaternion() }
   const identity = new THREE.Matrix4()
   session.members = new Map([
     ['shaft', {
@@ -46,8 +46,8 @@ function makeSession() {
   const created = []
   session.RAPIER = {
     JointData: {
-      revolute(anchorA, anchorB, axis) {
-        return { anchorA, anchorB, axis }
+      revoluteWithAxes(anchorA, anchorB, axis, axisB) {
+        return { anchorA, anchorB, axis, axisB }
       },
     },
   }

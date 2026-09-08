@@ -374,6 +374,19 @@ export class PhysicsSession {
       .normalize()
   }
 
+  revoluteJointData(memberA, memberB, anchorA, anchorB, axisA) {
+    // Rapier's three-argument revolute interprets its axis in BOTH body frames.
+    // Connector-local X on an axle can be world-aligned with local Z on a brick.
+    // Express one physical axis independently in each rigid body's local frame.
+    const axisB = axisA.clone()
+      .applyQuaternion(new THREE.Quaternion().copy(memberA.body.rotation()))
+      .applyQuaternion(new THREE.Quaternion().copy(memberB.body.rotation()).invert())
+      .normalize()
+    return this.RAPIER.JointData.revoluteWithAxes(
+      vector3(anchorA), vector3(anchorB), vector3(axisA), vector3(axisB),
+    )
+  }
+
   createJoint(connection) {
     const memberA = this.members.get(connection.a.instanceId)
     const memberB = this.members.get(connection.b.instanceId)
@@ -394,9 +407,9 @@ export class PhysicsSession {
       let params = null
 
       if (connection.kind === 'hinge' || connection.kind === 'bearing') {
-        params = this.RAPIER.JointData.revolute(vector3(anchorA), vector3(anchorB), vector3(axisA))
+        params = this.revoluteJointData(memberA, memberB, anchorA, anchorB, axisA)
       } else if (connection.kind === 'axle' && motorConnectionInfo(connection, this.objects)) {
-        params = this.RAPIER.JointData.revolute(vector3(anchorA), vector3(anchorB), vector3(axisA))
+        params = this.revoluteJointData(memberA, memberB, anchorA, anchorB, axisA)
       }
       if (!params) return
 
