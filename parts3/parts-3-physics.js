@@ -16,28 +16,13 @@ const PHYSICAL = Object.freeze({
   'pin-frictionless': { massKg: 0.00034, material: 'abs', collisionClass: 'mechanical' },
 })
 
-const WHEEL_WIDTH_STUD = Object.freeze({
-  wheel: 0.76,
-  'wheel-small': 0.58,
-  'wheel-medium': 0.66,
-  'wheel-road': 0.62,
-  'wheel-narrow': 0.42,
-  'wheel-offroad-large': 0.92,
-  'wheel-tractor': 1.12,
-})
-
 for (const part of PARTS) {
   const physical = PHYSICAL[part.id]
-  if (physical) part.physics = { ...(part.physics ?? {}), ...physical, parts3: true }
-
-  const width = WHEEL_WIDTH_STUD[part.id]
-  if (width && part.mechanics?.wheel) {
-    part.mechanics.wheel = { ...part.mechanics.wheel, width }
-  }
+  if (!physical) continue
+  part.physics = { ...(part.physics ?? {}), ...physical, parts3: true }
 }
 
 globalThis.BrickLabParts3Physics = Object.freeze({
   version: PARTS3_PHYSICS_VERSION,
   definitions: PHYSICAL,
-  wheelWidthStud: WHEEL_WIDTH_STUD,
 })
