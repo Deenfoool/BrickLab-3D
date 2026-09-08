@@ -8,6 +8,7 @@ const METHODS = [
   'build',
   'createCompoundBody',
   'createJoint',
+  'onRevoluteJointCreated',
   'step',
   'syncObjects',
   'resetCustomTorques',
@@ -51,7 +52,13 @@ export function assertPhysicsRuntimeContract() {
   if (!String(tireOwner).startsWith('vehicle-system-v1')) {
     failures.push(`tire owner: expected vehicle-system-v1 outer layer, got ${tireOwner || 'unknown'}`)
   }
-  if (typeof PhysicsSession.prototype.updateVehicleControlsV1 !== 'function') failures.push('vehicle control phase missing')
+  const steeringOwner = PhysicsSession.prototype.updateVehicleControlsV1?.__bricklabOwner ?? ''
+  if (steeringOwner !== 'physical-steering-v1') {
+    failures.push(`steering owner: expected physical-steering-v1, got ${steeringOwner || 'unknown'}`)
+  }
+  if (PhysicsSession.prototype.onRevoluteJointCreated?.__bricklabOwner !== 'physical-steering-v1') {
+    failures.push('physical steering revolute registration hook missing')
+  }
   if (typeof PhysicsSession.prototype.updateVehiclePerformanceV1 !== 'function') failures.push('vehicle performance phase missing')
 
   const snapshot = getPhysicsOwnershipSnapshot()
