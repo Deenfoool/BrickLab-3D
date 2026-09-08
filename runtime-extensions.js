@@ -1,11 +1,12 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: VISUAL-4 · realistic molded-part rendering + stabilized Physics v2.
+// BUILD: CATALOG-3 · expanded Technic library + asset-browser catalog.
 // All module URLs are versioned once by the import map in index.html.
 
 await import('./three-cycle-guard.js')
 await import('./multi-transform-patch.js')
 await import('./render-quality.js')
 await import('./basic-parts-pack.js')
+await import('./technic-parts-pack-v2.js')
 await import('./lab-parts.js')
 await import('./physical-parts.js')
 await import('./suspension-patch.js')
