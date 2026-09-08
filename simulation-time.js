@@ -1,5 +1,7 @@
-// The only clock and world.step() owner. No prototype patches or DOM timers.
-export const STEP_OWNER = 'simulation-time-authoritative-v4'
+// The only clock and world.step() scheduler. Physics subsystem order lives in physics-pipeline-v1.
+import { PHYSICS_PIPELINE_VERSION, runPhysicsMicrostep } from './physics-pipeline-v1.js'
+
+export const STEP_OWNER = 'simulation-time-authoritative-v5'
 export const TIME_SCALES = Object.freeze([0.5, 1, 2, 3])
 export const MAX_REAL_FRAME = 0.25
 export const normalizeTimeScale = value => TIME_SCALES.includes(Number(value)) ? Number(value) : 1
@@ -16,6 +18,7 @@ export function resetPhysicsClock(session, now = performance.now() / 1000) {
   session.simulationTime = 0
   session.testElapsed = 0
   session.physicsStabilityMetrics = { peakLinearSpeed: 0, peakAngularRpm: 0 }
+  session.physicsPipelineMetrics = { steps: 0, version: PHYSICS_PIPELINE_VERSION }
 }
 
 function advanceTestPhase(session, dt) {
@@ -35,27 +38,6 @@ function advanceTestPhase(session, dt) {
     session.testElapsed += dt
   }
   scenario.elapsed = session.testElapsed
-}
-
-function runPhysicsStep(session, dt) {
-  // Set dt before any force/controller reads it; Rapier integrates this same dt.
-  session.world.timestep = dt
-  session.simulationTime += dt
-  advanceTestPhase(session, dt)
-  session.resetCustomTorques()
-  // Clearing an accumulator must not wake a body that Rapier already put to sleep.
-  // Real motors/contacts/scenario forces explicitly wake bodies when they act.
-  for (const component of session.components) component.body.resetForces?.(false)
-  session.applyMotorTorques(dt)
-  session.updateSuspensionV2?.(dt)
-  session.applyGearCouplingTorques(dt)
-  session.applyTireForcesV2?.(dt)
-  session.applyScenarioForcesV2?.(dt)
-  session.world.step()
-  // Stability layer never clamps finite velocities; it only rejects NaN/Infinity
-  // and records peaks so regressions are visible in tests/diagnostics.
-  session.validatePhysicsState?.()
-  session.updateVehicleMetrics(dt)
 }
 
 export function stepPhysicsSession(session, now = performance.now() / 1000) {
@@ -83,7 +65,7 @@ export function stepPhysicsSession(session, now = performance.now() / 1000) {
   )
   let steps = 0
   while (session.physicsAccumulator + dt * 1e-9 >= dt && steps < maxSteps) {
-    runPhysicsStep(session, dt)
+    runPhysicsMicrostep(session, dt, { advanceTestPhase })
     session.physicsAccumulator = Math.max(0, session.physicsAccumulator - dt)
     steps += 1
   }
@@ -115,5 +97,6 @@ export function getTimeDiagnostics(session, step) {
     requestedSimulationElapsed: session?.requestedSimulationElapsed ?? 0,
     droppedSimulationTime: session?.droppedSimulationTime ?? 0,
     stability: session?.physicsStabilityMetrics ?? null,
+    pipeline: session?.physicsPipelineMetrics ?? { version: PHYSICS_PIPELINE_VERSION, steps: 0 },
   }
 }
