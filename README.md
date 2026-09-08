@@ -18,7 +18,7 @@ Core loop: **build → simulate → test → inspect telemetry → modify → te
 - Catalog-wide realistic molded-part visual pass: refined ABS/metal/rubber materials, Technic hole liners, axle detail bands, gear-face detail, power-unit fasteners, wheel sidewall/tread detail and studio PBR lighting.
 - Decorative visual meshes are excluded from Physics v2 collider bounds, so visual detail does not change simulation geometry.
 - Connector types: `stud`, `tube`, `pin`, `pin-hole`, `axle`, `axle-hole`.
-- Connector snapping, grid snapping, persistent connection graph, bearings and keyed shafts.
+- **Connector System v3**: centralized compatibility rules, strict/sticky snapping, grouped stud contacts, keyed axle twist, endpoint occupancy, legacy project migration and physics graph integrity checks.
 - Undo/redo, autosave, `.bricklab` v2 import/export, multi-select and logical grouping.
 - Floating Parts / Properties windows with drag, resize, List/Grid, collapsible inspector sections, Focus Scene and mobile drawers.
 - RU / EN interface switch.
@@ -158,9 +158,10 @@ bootstrap.js
   ↓
 runtime-extensions.js
   ├─ basic + expanded Technic part packs
+  ├─ Connector System v3 + project migration
   ├─ physical part DB
   ├─ realistic catalog-wide visuals
-  ├─ Physics v2
+  ├─ Physics v2 + connector graph integrity
   ├─ corrected colliders
   ├─ inertia-aware drivetrain stability
   ├─ impulse-limited surface / tyre solver
@@ -201,6 +202,7 @@ Expected GitHub Pages URL:
 
 ## Documentation
 
+- [`docs/CONNECTORS.md`](docs/CONNECTORS.md)
 - [`docs/PHYSICS_V2.md`](docs/PHYSICS_V2.md)
 - [`docs/PHYSICS_STABILITY.md`](docs/PHYSICS_STABILITY.md)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
