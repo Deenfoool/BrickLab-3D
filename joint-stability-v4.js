@@ -32,9 +32,11 @@ function diagnostics(session) {
       version: JOINT_STABILITY_VERSION,
       createdRevolute: 0,
       createdSpherical: 0,
+      createdPrismatic: 0,
       createdSemanticBearings: 0,
       redundantRevoluteSkipped: 0,
       redundantSphericalSkipped: 0,
+      redundantPrismaticSkipped: 0,
       rejectedLargeMismatch: 0,
       maxInitialMismatchStud: 0,
       pairs: [],
@@ -56,6 +58,14 @@ function registerSpherical(session, connection, joint, context) {
   const record = { connection, joint, ...context }
   session.sphericalJoints.push(record)
   session.onSphericalJointCreated?.(connection, joint, record)
+  return record
+}
+
+function registerPrismatic(session, connection, joint, context) {
+  session.prismaticJoints ??= []
+  const record = { connection, joint, ...context }
+  session.prismaticJoints.push(record)
+  session.onPrismaticJointCreated?.(connection, joint, record)
   return record
 }
 
@@ -126,9 +136,10 @@ if (!PhysicsSession.prototype[marker]) {
     const memberB = this.members.get(connection?.b?.instanceId)
     const articulated = memberA && memberB ? articulatedConnectionInfo(connection, memberA, memberB) : null
     const semanticBearing = memberA && memberB ? semanticBearingConnectionInfo(connection, memberA, memberB) : null
+    const isPrismatic = connection?.kind === 'prismatic'
     const isRevolute = connection?.kind === 'bearing' || connection?.kind === 'hinge' || Boolean(semanticBearing)
 
-    if (!isRevolute && !articulated) {
+    if (!isRevolute && !isPrismatic && !articulated) {
       return originalCreateJoint.call(this, connection)
     }
 
@@ -193,6 +204,51 @@ if (!PhysicsSession.prototype[marker]) {
       } catch (error) {
         this.failedJointCount += 1
         console.warn('BrickLab could not create stabilized spherical joint', connection, error)
+        return
+      }
+    }
+
+    if (isPrismatic) {
+      this.__bricklabPrismaticPairs ??= new Set()
+      if (this.__bricklabPrismaticPairs.has(pairKey)) {
+        state.redundantPrismaticSkipped += 1
+        state.pairs.push({ pairKey, kind: 'prismatic', action: 'skip-redundant' })
+        this.internalJointCount += 1
+        globalThis.__bricklabJointStability = { ...state, pairs: [...state.pairs] }
+        return
+      }
+
+      try {
+        const axisA = this.bodyLocalAxis(memberA, connectorA)
+        const params = this.RAPIER.JointData.prismatic(
+          { x: anchorA.x, y: anchorA.y, z: anchorA.z },
+          { x: anchorB.x, y: anchorB.y, z: anchorB.z },
+          { x: axisA.x, y: axisA.y, z: axisA.z },
+        )
+        const joint = this.world.createImpulseJoint(params, memberA.body, memberB.body, true)
+        joint.setContactsEnabled?.(false)
+
+        this.__bricklabPrismaticPairs.add(pairKey)
+        this.jointCount += 1
+        state.createdPrismatic += 1
+        state.pairs.push({ pairKey, kind: 'prismatic', action: 'create', mismatchStud })
+        globalThis.__bricklabJointStability = { ...state, pairs: [...state.pairs] }
+
+        registerPrismatic(this, connection, joint, {
+          memberA,
+          memberB,
+          connectorA,
+          connectorB,
+          axisA: axisA.clone(),
+          anchorA: anchorA.clone(),
+          anchorB: anchorB.clone(),
+          pairKey,
+          mismatchStud,
+        })
+        return joint
+      } catch (error) {
+        this.failedJointCount += 1
+        console.warn('BrickLab could not create stabilized prismatic joint', connection, error)
         return
       }
     }
