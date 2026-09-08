@@ -43,7 +43,9 @@ function runPhysicsStep(session, dt) {
   session.simulationTime += dt
   advanceTestPhase(session, dt)
   session.resetCustomTorques()
-  for (const component of session.components) component.body.resetForces?.(true)
+  // Clearing an accumulator must not wake a body that Rapier already put to sleep.
+  // Real motors/contacts/scenario forces explicitly wake bodies when they act.
+  for (const component of session.components) component.body.resetForces?.(false)
   session.applyMotorTorques(dt)
   session.updateSuspensionV2?.(dt)
   session.applyGearCouplingTorques(dt)
