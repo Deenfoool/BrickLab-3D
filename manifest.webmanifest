@@ -1,0 +1,27 @@
+{
+  "name": "BrickLab 3D — Mechanical Construction Sandbox",
+  "short_name": "BrickLab 3D",
+  "description": "Browser-based mechanical brick construction sandbox for building, simulating and testing mechanisms.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#101214",
+  "theme_color": "#101214",
+  "lang": "en",
+  "categories": ["education", "games", "utilities"],
+  "icons": [
+    {
+      "src": "assets/images/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/images/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
