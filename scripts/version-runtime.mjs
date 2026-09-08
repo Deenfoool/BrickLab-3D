@@ -15,7 +15,9 @@ html = html.replace(/(<script type="importmap">)[\s\S]*?(<\/script>)/, `$1\n${JS
 html = html.replace(/bootstrap\.js\?v=[^"]+/g, `bootstrap.js?v=${tag}`)
 await writeFile(new URL('index.html', root), html)
 let badge = await readFile(new URL('physics-error-ui.js', root), 'utf8')
-badge = badge.replace(/const BUILD_TAG = '[^']+'/, `const BUILD_TAG = '${tag}'`)
+badge = badge
+  .replace(/const BUILD_ID = '[^']+'/, `const BUILD_ID = '${id}'`)
+  .replace(/const BUILD_TAG = '[^']+'/, `const BUILD_TAG = '${tag}'`)
 await writeFile(new URL('physics-error-ui.js', root), badge)
 console.log(`${id}: ${files.length} canonical module URLs (${tag})`)
 
