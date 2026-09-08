@@ -67,6 +67,17 @@ function descriptorFromSpec(session, spec, relativeMatrix, relativeRotation, rel
     .setRotation(quat(relativeRotation))
 }
 
+function wheelColliderDimensions(wheel, relativeScale) {
+  const widthStud = Math.max(0.12, Number(wheel?.width) || 0.68)
+  const radiusStud = Math.max(0.12, Number(wheel?.radius) || 0.5)
+  return {
+    widthStud,
+    radiusStud,
+    halfWidthMeters: widthStud * 0.5 * STUD * Math.abs(relativeScale.x || 1),
+    radiusMeters: radiusStud * STUD * Math.max(Math.abs(relativeScale.y || 1), Math.abs(relativeScale.z || 1)),
+  }
+}
+
 PhysicsSession.prototype.createCompoundBody = function createCompoundBodyClearanceV3(objects) {
   const root = objects[0]
   if (!root) return
@@ -110,15 +121,17 @@ PhysicsSession.prototype.createCompoundBody = function createCompoundBodyClearan
     )
     const colliders = []
     let proxyKind = 'special'
+    let colliderDimensions = null
 
     if (wheel) {
       const localCenter = new THREE.Vector3(0, 1.15, 0).applyMatrix4(relativeMatrix).multiplyScalar(STUD)
       const localRotation = relative.rotation.clone()
         .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI / 2)))
+      const dimensions = wheelColliderDimensions(wheel, relative.scale)
       const descriptor = this.RAPIER.ColliderDesc
         .cylinder(
-          .34 * STUD * Math.abs(relative.scale.x || 1),
-          wheel.radius * STUD * Math.max(Math.abs(relative.scale.y || 1), Math.abs(relative.scale.z || 1)),
+          dimensions.halfWidthMeters,
+          dimensions.radiusMeters,
         )
         .setTranslation(localCenter.x, localCenter.y, localCenter.z)
         .setRotation(quat(localRotation))
@@ -128,6 +141,10 @@ PhysicsSession.prototype.createCompoundBody = function createCompoundBodyClearan
         .setCollisionGroups(collisionMask(definition, this.physicsSettings?.selfCollision ?? 'mechanical'))
       colliders.push(this.world.createCollider(descriptor, body))
       proxyKind = 'wheel-cylinder'
+      colliderDimensions = {
+        widthStud: dimensions.widthStud,
+        radiusStud: dimensions.radiusStud,
+      }
     } else if (gear) {
       const localCenter = new THREE.Vector3(0, .4, 0).applyMatrix4(relativeMatrix).multiplyScalar(STUD)
       const descriptor = this.RAPIER.ColliderDesc
@@ -168,6 +185,7 @@ PhysicsSession.prototype.createCompoundBody = function createCompoundBodyClearan
       collider: colliders[0] ?? null,
       colliders,
       colliderProxy: proxyKind,
+      colliderDimensions,
       component,
       relativeMatrix,
       massKg,
@@ -185,5 +203,6 @@ globalThis.BrickLabColliderModel = Object.freeze({
   studdedBodies: 'core-only; studs do not fill air between studs',
   technicHoles: 'open compound rail/post proxies for straight pin-hole rows',
   shafts: 'axial cylinder proxy where applicable',
+  wheels: 'radius+width-aware cylinder proxies from mechanics.wheel metadata',
   holeClearanceStud: HOLE_CLEARANCE_STUD,
 })
