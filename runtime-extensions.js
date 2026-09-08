@@ -1,7 +1,7 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: PARTS-3 · upgraded Technic geometry + mechanical expansion + Vehicle Drive v2.
-// Root module URLs are versioned by the import map in index.html; PARTS-3 submodules
-// carry an explicit cache tag because they live outside the root import-map inventory.
+// BUILD: PARTS-4 · articulated driveline + bevel gears + worm reduction + PARTS-3 catalog.
+// Root module URLs are versioned by the import map in index.html; package submodules
+// carry explicit cache tags because they live outside the root import-map inventory.
 
 await import('./three-cycle-guard.js')
 await import('./multi-transform-patch.js')
@@ -15,6 +15,7 @@ await import('./parts3/parts-3-extra-v1.js?v=parts-3-20260908-mechanical-v1')
 await import('./parts3/parts-3-wheel-dimensions.js?v=parts-3-20260908-mechanical-v1')
 await import('./parts3/parts-3-visual-normalize.js?v=parts-3-20260908-mechanical-v1')
 await import('./parts3/parts-3-steering-upgrade.js?v=parts-3-20260908-mechanical-v1')
+await import('./parts4/mechanical-driveline-v1.js?v=parts-4-20260908-driveline-v1')
 
 // Connector System v3 owns compatibility, project migration, validation and physics graph integrity.
 await import('./connector-project-migration-v3.js')
@@ -22,10 +23,10 @@ await import('./connector-import-v3.js')
 await import('./connector-validation-v3.js')
 
 await import('./physical-parts.js')
-// physical-parts owns the shared defaults. PARTS-3 applies explicit mass/collision
-// metadata for its new inventory after those defaults have been installed.
+// Shared defaults are installed first, then package-specific physical metadata.
 await import('./parts3/parts-3-physics.js?v=parts-3-20260908-mechanical-v1')
 await import('./parts3/parts-3-diagnostics.js?v=parts-3-20260908-mechanical-v1')
+await import('./parts4/parts-4-physics.js?v=parts-4-20260908-driveline-v1')
 await import('./suspension-patch.js')
 await import('./differential-patch.js')
 await import('./sensors-patch.js')
@@ -38,6 +39,8 @@ await import('./colliders-v2.js')
 await import('./collider-clearance-v3.js')
 await import('./connector-physics-v3.js')
 await import('./connector-mechanical-recovery-v4.js')
+// joint-stability-v4.js is retained as the stable import path; it now exports
+// joint-stability-v5 and owns both stabilized revolute and articulated spherical joints.
 await import('./joint-stability-v4.js')
 await import('./powertrain-physics-v2.js')
 
