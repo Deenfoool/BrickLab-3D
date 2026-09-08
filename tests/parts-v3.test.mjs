@@ -20,6 +20,7 @@ await import('../technic-parts-pack-v2.js')
 await import('../vehicle-parts-v1.js')
 await import('../parts3/mechanical-parts-pack-v3.js')
 await import('../parts3/parts-3-extra-v1.js')
+await import('../parts3/parts-3-wheel-dimensions.js')
 await import('../parts3/parts-3-visual-normalize.js')
 await import('../parts3/parts-3-steering-upgrade.js')
 await import('../physical-parts.js')
@@ -58,6 +59,24 @@ test('new tyre sizes carry real wheel physics metadata', () => {
   assert.ok(narrow.mechanics.wheel.radius < offroad.mechanics.wheel.radius)
   assert.ok(offroad.mechanics.wheel.radius < tractor.mechanics.wheel.radius)
   assert.ok(narrow.mechanics.wheel.tire.rollingResistanceScale < tractor.mechanics.wheel.tire.rollingResistanceScale)
+})
+
+test('every wheel carries one canonical physical width matching catalog dimensions', () => {
+  const expected = {
+    wheel: 0.76,
+    'wheel-small': 0.58,
+    'wheel-medium': 0.66,
+    'wheel-road': 0.62,
+    'wheel-narrow': 0.42,
+    'wheel-offroad-large': 0.92,
+    'wheel-tractor': 1.12,
+  }
+  for (const [id, width] of Object.entries(expected)) {
+    const part = findPart(id)
+    assert.ok(part, `${id} exists`)
+    assert.equal(part.mechanics.wheel.width, width, `${id} mechanics width`)
+    assert.equal(part.dimensions.widthStud, width, `${id} catalog width`)
+  }
 })
 
 test('PARTS-3 tyre visual width is applied along the axle axis, not the tyre radius', () => {
