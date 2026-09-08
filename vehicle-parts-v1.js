@@ -63,7 +63,8 @@ addPart({
   icon: '↟',
   description: 'Stud-mounted vertical steering pivot socket',
   defaultColor: 0x59626c,
-  mechanics: { steeringBase: true },
+  physics: { massKg: 0.0048, collisionClass: 'structure' },
+  mechanics: { steeringBase: { pivotConnectorId: 'pivot-hole' } },
   connectors: [
     { id: 'pivot-hole', type: 'pin-hole', position: [0, 0.88, 0], axis: [0, 1, 0] },
     { id: 'mount-0-0', type: 'tube', position: [-0.5, 0, -0.5], axis: [0, -1, 0] },
@@ -81,7 +82,16 @@ addPart({
   icon: '↻',
   description: 'Vertical steering hinge with a horizontal free-spinning axle bearing',
   defaultColor: 0x2d69c4,
-  mechanics: { steeringKnuckle: { maxSteerDeg: 34, stiffness: 18, damping: 2.6 } },
+  physics: { massKg: 0.0032, collisionClass: 'mechanical' },
+  mechanics: {
+    steeringKnuckle: {
+      pivotConnectorId: 'pivot-pin',
+      bearingConnectorId: 'wheel-bearing',
+      maxSteerDeg: 34,
+      stiffness: 8.5,
+      damping: 1.35,
+    },
+  },
   connectors: [
     { id: 'pivot-pin', type: 'pin', position: [0, 0.88, 0], axis: [0, 1, 0] },
     { id: 'wheel-bearing', type: 'pin-hole', position: [0, 0.55, 0], axis: [1, 0, 0] },
