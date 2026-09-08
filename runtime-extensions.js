@@ -1,6 +1,6 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: CATALOG-3 · expanded Technic library + asset-browser catalog.
-// All module URLs are versioned once by the import map in index.html.
+// BUILD: CONNECT-1 · Connector System v2 + 80-part catalog.
+// All module URLs are versioned by the import map in index.html.
 
 await import('./three-cycle-guard.js')
 await import('./multi-transform-patch.js')
@@ -8,6 +8,7 @@ await import('./render-quality.js')
 await import('./basic-parts-pack.js')
 await import('./technic-parts-pack-v2.js')
 await import('./lab-parts.js')
+await import('./connector-validation.js')
 await import('./physical-parts.js')
 await import('./suspension-patch.js')
 await import('./differential-patch.js')
