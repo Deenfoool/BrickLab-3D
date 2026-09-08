@@ -7,6 +7,7 @@ import {
   classifyDrivenWheels,
   classifyWheelAxles,
   resolveDriveRequest,
+  stepDriveCommand,
 } from '../vehicle-model-v1.js'
 
 test('Ackermann gives the inner front wheel a larger angle', () => {
@@ -57,6 +58,40 @@ test('reverse drive request brakes before changing motor direction', () => {
   const slowEnough = resolveDriveRequest({ throttle: -1, longitudinalSpeed: 0.03, reverseSpeedThreshold: 0.08 })
   assert.equal(slowEnough.direction, -1)
   assert.equal(slowEnough.autoBrake, 0)
+})
+
+test('fixed-step drive policy brakes immediately on forward-to-reverse request', () => {
+  const reversing = stepDriveCommand({
+    currentThrottle: 0.8,
+    targetThrottle: -1,
+    longitudinalSpeed: 0.7,
+    dt: 1 / 120,
+    reverseSpeedThreshold: 0.08,
+  })
+  assert.equal(reversing.reversingAgainstMotion, true)
+  assert.equal(reversing.command.reverseInterlock, true)
+  assert.equal(reversing.command.direction, 0)
+  assert.equal(reversing.command.autoBrake, 1)
+  assert.ok(reversing.nextThrottle < 0.8 && reversing.nextThrottle >= 0)
+
+  const stopped = stepDriveCommand({
+    currentThrottle: 0,
+    targetThrottle: -1,
+    longitudinalSpeed: 0.03,
+    dt: 1 / 120,
+    reverseSpeedThreshold: 0.08,
+  })
+  assert.equal(stopped.reversingAgainstMotion, false)
+  assert.equal(stopped.command.autoBrake, 0)
+  assert.equal(stopped.command.direction, -1)
+  assert.ok(stopped.nextThrottle < 0)
+})
+
+test('fixed-step drive policy releases throttle toward zero', () => {
+  const released = stepDriveCommand({ currentThrottle: 0.6, targetThrottle: 0, longitudinalSpeed: 0.4, dt: 0.1 })
+  assert.ok(released.nextThrottle >= 0)
+  assert.ok(released.nextThrottle < 0.6)
+  assert.equal(released.command.direction, Math.sign(released.nextThrottle))
 })
 
 test('four wheel layout classifies front/rear and left/right axles', () => {
