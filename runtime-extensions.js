@@ -13,6 +13,7 @@ await import('./vehicle-parts-v1.js')
 await import('./parts3/mechanical-parts-pack-v3.js?v=parts-3-20260908-mechanical-v1')
 await import('./parts3/parts-3-extra-v1.js?v=parts-3-20260908-mechanical-v1')
 await import('./parts3/parts-3-visual-normalize.js?v=parts-3-20260908-mechanical-v1')
+await import('./parts3/parts-3-steering-upgrade.js?v=parts-3-20260908-mechanical-v1')
 
 // Connector System v3 owns compatibility, project migration, validation and physics graph integrity.
 await import('./connector-project-migration-v3.js')
