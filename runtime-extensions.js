@@ -41,6 +41,7 @@ await import('./suspension-v2.js')
 // Vehicle System v1 is the outer tire/control layer: Ackermann steering, service brake,
 // parking brake, axle classification and vehicle diagnostics.
 await import('./vehicle-system-v1.js')
+await import('./vehicle-performance-v1.js')
 await import('./mechanism-controls-core.js')
 await import('./physics-v2-telemetry.js')
 await import('./dyno-v2.js')
