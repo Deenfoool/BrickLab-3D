@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { PhysicsSession } from './physics.js'
 import { findPart } from './parts.js'
 
+export const JOINT_STABILITY_VERSION = 'joint-stability-v4'
 const STUD = globalThis.BrickLabPhysicsUnits?.studMeters ?? 0.008
 const MAX_JOINT_MISMATCH_STUD = 0.20
 const originalCreateJoint = PhysicsSession.prototype.createJoint
@@ -28,7 +29,7 @@ function sharedLocalAnchor(member, worldMidpointStud) {
 function diagnostics(session) {
   if (!session.__bricklabJointStability) {
     session.__bricklabJointStability = {
-      version: 'joint-stability-v4',
+      version: JOINT_STABILITY_VERSION,
       createdRevolute: 0,
       redundantRevoluteSkipped: 0,
       rejectedLargeMismatch: 0,
@@ -137,6 +138,7 @@ if (!PhysicsSession.prototype[marker]) {
       console.warn('BrickLab could not create stabilized revolute joint', connection, error)
     }
   }
+  PhysicsSession.prototype.createJoint.__bricklabOwner = JOINT_STABILITY_VERSION
 
   Object.defineProperty(PhysicsSession.prototype, marker, {
     value: true,
@@ -145,5 +147,3 @@ if (!PhysicsSession.prototype[marker]) {
     writable: false,
   })
 }
-
-export const JOINT_STABILITY_VERSION = 'joint-stability-v4'
