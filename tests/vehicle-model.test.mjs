@@ -73,18 +73,37 @@ test('fixed-step drive policy brakes immediately on forward-to-reverse request',
   assert.equal(reversing.command.direction, 0)
   assert.equal(reversing.command.autoBrake, 1)
   assert.ok(reversing.nextThrottle < 0.8 && reversing.nextThrottle >= 0)
+})
 
-  const stopped = stepDriveCommand({
-    currentThrottle: 0,
+test('reverse torque cannot reapply forward torque while throttle crosses neutral', () => {
+  const crossing = stepDriveCommand({
+    currentThrottle: 0.35,
     targetThrottle: -1,
     longitudinalSpeed: 0.03,
     dt: 1 / 120,
     reverseSpeedThreshold: 0.08,
   })
-  assert.equal(stopped.reversingAgainstMotion, false)
-  assert.equal(stopped.command.autoBrake, 0)
-  assert.equal(stopped.command.direction, -1)
-  assert.ok(stopped.nextThrottle < 0)
+  assert.equal(crossing.reversingAgainstMotion, false)
+  assert.equal(crossing.crossingNeutral, true)
+  assert.equal(crossing.command.direction, 0)
+  assert.equal(crossing.command.throttle, 0)
+  assert.ok(crossing.nextThrottle < 0.35 && crossing.nextThrottle >= 0)
+
+  let throttle = crossing.nextThrottle
+  let command = crossing.command
+  for (let i = 0; i < 30 && command.direction === 0; i += 1) {
+    const step = stepDriveCommand({
+      currentThrottle: throttle,
+      targetThrottle: -1,
+      longitudinalSpeed: 0.02,
+      dt: 1 / 120,
+      reverseSpeedThreshold: 0.08,
+    })
+    throttle = step.nextThrottle
+    command = step.command
+  }
+  assert.equal(command.direction, -1)
+  assert.ok(throttle < 0)
 })
 
 test('fixed-step drive policy releases throttle toward zero', () => {
