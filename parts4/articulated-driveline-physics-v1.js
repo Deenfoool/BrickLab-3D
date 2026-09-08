@@ -28,6 +28,21 @@ export function cardanVelocityRatio(betaRadians, inputPhaseRadians) {
   return denominator > EPS ? cosBeta / denominator : 1
 }
 
+function installBearingPorts(partId, kind, connectorIds) {
+  const part = findPart(partId)
+  const mechanics = part?.mechanics?.[kind]
+  if (!mechanics) return false
+  mechanics.bearingConnectorIds = [...connectorIds]
+  return true
+}
+
+// Semantic drivetrain housings need physical bearings as well as mathematical
+// torque coupling. These ports are consumed by joint-stability-v5 at build time,
+// so the shafts stay located inside their housings instead of being free bodies.
+installBearingPorts('worm-drive-8', 'transmission', ['input', 'output'])
+installBearingPorts('gearbox-fnr', 'transmission', ['input', 'output'])
+installBearingPorts('open-differential', 'differential', ['input', 'left', 'right'])
+
 // PARTS-4 v1 models the reduction ratio and efficiency of the worm stage. It does
 // not yet model direction-dependent backdrivability, so do not advertise a
 // self-locking/holding behavior the solver does not actually implement.
@@ -95,4 +110,5 @@ PhysicsSession.prototype.applyGearCouplingTorques.__bricklabOwner = ARTICULATED_
 globalThis.BrickLabArticulatedDriveline = Object.freeze({
   version: ARTICULATED_DRIVELINE_PHYSICS_VERSION,
   cardanVelocityRatio,
+  semanticBearings: ['worm-drive-8', 'gearbox-fnr', 'open-differential'],
 })
