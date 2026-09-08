@@ -39,11 +39,10 @@ await import('./physics-stability-v3.js')
 await import('./drivetrain-stress-v2.js')
 await import('./surface-v2.js')
 await import('./suspension-v2.js')
-// Vehicle System v1 provides a fallback virtual steering model for ordinary wheel layouts.
-// Physical Steering v1 upgrades this to actual Rapier hinge motors when Steering Base +
-// Steering Knuckle parts are present.
+// Vehicle System v1 is the sole steering/braking owner. It consumes the stabilized
+// revolute registry for real Steering Knuckle joints and falls back to virtual tire
+// heading only when a build has no physical steering hardware.
 await import('./vehicle-system-v1.js')
-await import('./physical-steering-v1.js')
 await import('./vehicle-performance-v1.js')
 await import('./mechanism-controls-core.js')
 await import('./physics-v2-telemetry.js')
