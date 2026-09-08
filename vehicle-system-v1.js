@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { PhysicsSession } from './physics.js'
+import { findPart } from './parts.js'
 import { PHYSICS_UNITS } from './physical-parts.js'
 import {
   VEHICLE_MODEL_VERSION,
@@ -16,6 +17,8 @@ const EPS = 1e-10
 const DEFAULT_MAX_STEER_DEG = 34
 const DEFAULT_STEER_RATE = 2.8 // normalized input per second
 const DEFAULT_BRAKE_GRIP = 1.15
+const DEFAULT_STEER_STIFFNESS = 8.5
+const DEFAULT_STEER_DAMPING = 1.35
 const VISUAL_PIVOT = new THREE.Vector3(0, 1.15, 0)
 const VISUAL_UP = new THREE.Vector3(0, 1, 0)
 
@@ -71,6 +74,10 @@ function worldAxisFromLocal(body, localAxis) {
 
 function steeredLocalAxis(session, wheel) {
   const base = wheel.vehicleBaseLocalAxis ?? wheel.localAxis
+  // A real steering knuckle already rotates the wheel rigid body in Rapier.
+  // Applying the virtual yaw again would double the steering angle.
+  if (wheel.physicalSteeringV1) return base.clone()
+
   const angle = Number(wheel.steerAngle) || 0
   if (Math.abs(angle) < 1e-8 || !session.chassisMonitor?.body) return base.clone()
 
@@ -92,6 +99,10 @@ function captureWheelVisual(wheel) {
 }
 
 function applyWheelVisual(wheel, angle) {
+  if (wheel.physicalSteeringV1) {
+    resetWheelVisual(wheel)
+    return
+  }
   captureWheelVisual(wheel)
   if (!wheel.vehicleVisualBase) return
   const steerQ = new THREE.Quaternion().setFromAxisAngle(VISUAL_UP, angle)
@@ -107,6 +118,94 @@ function resetWheelVisual(wheel) {
   for (const entry of wheel.vehicleVisualBase) {
     entry.child.position.copy(entry.position)
     entry.child.quaternion.copy(entry.quaternion)
+  }
+}
+
+function steeringKnuckleRecord(record) {
+  if (record?.connection?.kind !== 'hinge') return null
+  for (const side of ['a', 'b']) {
+    const member = side === 'a' ? record.memberA : record.memberB
+    const endpoint = record.connection[side]
+    const definition = findPart(member?.object?.userData?.partId)
+    const steering = definition?.mechanics?.steeringKnuckle
+    if (!steering) continue
+    const pivotConnectorId = steering.pivotConnectorId ?? 'pivot-pin'
+    if (endpoint?.connectorId !== pivotConnectorId) continue
+    return { side, member, steering, endpoint }
+  }
+  return null
+}
+
+function wheelForKnuckle(session, knuckleId, steering) {
+  const bearingConnectorId = steering.bearingConnectorId ?? 'wheel-bearing'
+  for (const connection of session.connections ?? []) {
+    if (connection?.kind !== 'bearing') continue
+    let otherId = null
+    if (connection.a?.instanceId === knuckleId && connection.a.connectorId === bearingConnectorId) otherId = connection.b?.instanceId
+    else if (connection.b?.instanceId === knuckleId && connection.b.connectorId === bearingConnectorId) otherId = connection.a?.instanceId
+    if (!otherId) continue
+    const otherBody = session.members.get(otherId)?.body
+    if (!otherBody) continue
+    const wheel = (session.wheelMonitors ?? []).find(candidate => candidate.body === otherBody)
+    if (wheel) return wheel
+  }
+  return null
+}
+
+function initializePhysicalSteering(session) {
+  session.steeringJointsV1 = []
+  for (const wheel of session.wheelMonitors ?? []) wheel.physicalSteeringV1 = null
+
+  const chassis = session.chassisMonitor?.body
+  if (!chassis) return session.steeringJointsV1
+  const chassisUp = new THREE.Vector3(0, 1, 0).applyQuaternion(bodyRotation(chassis)).normalize()
+
+  for (const record of session.revoluteJoints ?? []) {
+    const info = steeringKnuckleRecord(record)
+    if (!info || !record.joint) continue
+    const knuckleId = info.member.object.userData.instanceId
+    const wheel = wheelForKnuckle(session, knuckleId, info.steering)
+    if (!wheel) continue
+
+    const maxSteerRadians = THREE.MathUtils.degToRad(info.steering.maxSteerDeg ?? DEFAULT_MAX_STEER_DEG)
+    const stiffness = info.steering.stiffness ?? DEFAULT_STEER_STIFFNESS
+    const damping = info.steering.damping ?? DEFAULT_STEER_DAMPING
+    const axisWorld = worldAxisFromLocal(record.memberA.body, record.axisA)
+    const axisSign = Math.sign(axisWorld.dot(chassisUp)) || 1
+
+    record.joint.configureMotorModel?.(session.RAPIER.MotorModel?.ForceBased ?? 1)
+    record.joint.setLimits?.(-maxSteerRadians, maxSteerRadians)
+    record.joint.configureMotorPosition?.(0, stiffness, damping)
+
+    const steeringJoint = {
+      id: knuckleId,
+      joint: record.joint,
+      connection: record.connection,
+      wheel,
+      knuckle: info.member.object,
+      maxSteerRadians,
+      stiffness,
+      damping,
+      axisSign,
+      targetAngle: 0,
+    }
+    wheel.physicalSteeringV1 = steeringJoint
+    session.steeringJointsV1.push(steeringJoint)
+  }
+
+  return session.steeringJointsV1
+}
+
+function applyPhysicalSteeringTargets(session) {
+  for (const steering of session.steeringJointsV1 ?? []) {
+    const requested = steering.wheel?.axleRole === 'front' ? (steering.wheel.steerAngle ?? 0) : 0
+    const limited = clampVehicle(requested, -steering.maxSteerRadians, steering.maxSteerRadians)
+    steering.targetAngle = limited
+    steering.joint.configureMotorPosition?.(
+      limited * steering.axisSign,
+      steering.stiffness,
+      steering.damping,
+    )
   }
 }
 
@@ -178,7 +277,20 @@ PhysicsSession.prototype.initializeVehicleSystemV1 = function initializeVehicleS
     rightAngle: 0,
     centerAngle: 0,
     turnRadiusM: Infinity,
+    steeringMode: 'virtual',
   }
+
+  const physical = initializePhysicalSteering(this)
+  const physicalFront = physical.filter(item => item.wheel?.axleRole === 'front')
+  if (physicalFront.length) {
+    this.vehicleControlV1.maxSteerRadians = Math.min(
+      this.vehicleControlV1.maxSteerRadians,
+      ...physicalFront.map(item => item.maxSteerRadians),
+    )
+    const frontCount = Math.max(1, this.vehicleControlV1.frontWheelCount)
+    this.vehicleControlV1.steeringMode = physicalFront.length >= frontCount ? 'physical' : 'mixed'
+  }
+
   return this.vehicleControlV1
 }
 
@@ -207,6 +319,7 @@ PhysicsSession.prototype.updateVehicleControlsV1 = function updateVehicleControl
       ? (wheel.side === 'left' ? steering.left : steering.right)
       : 0
   }
+  applyPhysicalSteeringTargets(this)
 }
 
 PhysicsSession.prototype.updateVehicleVisualsV1 = function updateVehicleVisualsV1() {
@@ -281,6 +394,8 @@ function diagnostics() {
     version: VEHICLE_SYSTEM_VERSION,
     model: VEHICLE_MODEL_VERSION,
     enabled: Boolean(control?.enabled),
+    steeringMode: control?.steeringMode ?? 'virtual',
+    physicalSteeringJoints: session?.steeringJointsV1?.length ?? 0,
     steeringInput: control?.steeringInput ?? 0,
     steeringTarget: control?.steeringTarget ?? 0,
     centerSteerDeg: THREE.MathUtils.radToDeg(control?.centerAngle ?? 0),
@@ -299,6 +414,7 @@ function diagnostics() {
       id: wheel.id,
       side: wheel.side,
       axle: wheel.axleRole,
+      steering: wheel.physicalSteeringV1 ? 'physical' : 'virtual',
       steerDeg: THREE.MathUtils.radToDeg(wheel.steerAngle ?? 0),
       brakeTorqueNm: wheel.brakeTorqueNm ?? 0,
       contact: Boolean(wheel.contact),
