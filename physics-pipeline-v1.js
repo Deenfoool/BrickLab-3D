@@ -1,10 +1,11 @@
-export const PHYSICS_PIPELINE_VERSION = 'physics-pipeline-v1'
+export const PHYSICS_PIPELINE_VERSION = 'physics-pipeline-v2'
 
 export const PHYSICS_PHASES = Object.freeze([
   'clear-accumulators',
+  'vehicle-controls',
+  'vehicle-drive',
   'motor',
   'suspension',
-  'vehicle-controls',
   'drivetrain',
   'tires',
   'scenario',
@@ -23,7 +24,8 @@ function call(session, name, ...args) {
 /**
  * Authoritative order of one fixed physics microstep.
  * The clock owns WHEN a step happens; this pipeline owns WHAT happens inside it.
- * Subsystems remain replaceable, but they cannot silently reorder integration.
+ * Driver commands are resolved before motor torque so the current fixed step sees
+ * the current throttle/brake request instead of one-step-old control state.
  */
 export function runPhysicsMicrostep(session, dt, { advanceTestPhase } = {}) {
   if (!session?.world || !(dt > 0)) return
@@ -36,9 +38,10 @@ export function runPhysicsMicrostep(session, dt, { advanceTestPhase } = {}) {
   // Clearing force accumulators is bookkeeping and must not wake sleeping bodies.
   for (const component of session.components ?? []) component.body.resetForces?.(false)
 
+  call(session, 'updateVehicleControlsV1', dt)
+  call(session, 'updateVehicleDriveV2', dt)
   call(session, 'applyMotorTorques', dt)
   call(session, 'updateSuspensionV2', dt)
-  call(session, 'updateVehicleControlsV1', dt)
   call(session, 'applyGearCouplingTorques', dt)
   call(session, 'applyTireForcesV2', dt)
   call(session, 'applyScenarioForcesV2', dt)

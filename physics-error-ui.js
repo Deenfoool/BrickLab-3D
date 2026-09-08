@@ -1,5 +1,5 @@
-const BUILD_ID = 'PHYSICS-11'
-const BUILD_TAG = 'physics-11-20260908-vehicle-v1'
+const BUILD_ID = 'PHYSICS-12'
+const BUILD_TAG = 'physics-12-20260908-drive-v2'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG} · centralized physics pipeline · physical/virtual Ackermann steering · service/parking brakes`
+  badge.title = `BrickLab production build ${BUILD_TAG} · centralized physics pipeline · Ackermann steering · W/S drivetrain control · safe reverse braking`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -80,7 +80,7 @@ window.__bricklabPhysicsDiagnostics = () => ({
   mechanicalRecovery: window.__bricklabMechanicalRecovery ?? null,
   controls: window.BrickLabControls?.getRuntimeEntries?.() ?? [],
   vehicle: window.BrickLabVehicle?.getState?.() ?? null,
-  physicalSteering: window.BrickLabPhysicalSteering?.diagnostics?.() ?? null,
+  vehicleDrive: window.BrickLabVehicleDrive?.getState?.() ?? null,
   vehiclePerformance: window.BrickLabVehiclePerformance?.get?.() ?? null,
   pipeline: window.BrickLabPhysicsPipeline ?? null,
   ownership: window.BrickLabPhysicsOwnership?.snapshot?.() ?? window.__bricklabPhysicsOwnership ?? null,

@@ -1,5 +1,5 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: VEHICLE-1 · centralized physics pipeline + Ackermann steering + brakes.
+// BUILD: PHYSICS-12 · centralized physics + Ackermann + W/S drivetrain control.
 // All module URLs are versioned once by the import map in index.html.
 
 // Diagnostics must exist before any runtime/app module can fail.

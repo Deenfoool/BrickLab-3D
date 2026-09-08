@@ -4,7 +4,10 @@ import {
   ackermannAngles,
   approachVehicle,
   boundedBrakeTorque,
+  classifyDrivenWheels,
   classifyWheelAxles,
+  resolveDriveRequest,
+  stepDriveCommand,
 } from '../vehicle-model-v1.js'
 
 test('Ackermann gives the inner front wheel a larger angle', () => {
@@ -39,6 +42,77 @@ test('vehicle steering input approaches the target at a finite rate', () => {
   assert.equal(approachVehicle(0, -1, 0.4), -0.4)
 })
 
+test('reverse drive request brakes before changing motor direction', () => {
+  const forward = resolveDriveRequest({ throttle: 1, longitudinalSpeed: 0 })
+  assert.equal(forward.direction, 1)
+  assert.equal(forward.throttle, 1)
+  assert.equal(forward.autoBrake, 0)
+  assert.equal(forward.reverseInterlock, false)
+
+  const interlocked = resolveDriveRequest({ throttle: -1, longitudinalSpeed: 0.45, reverseSpeedThreshold: 0.08 })
+  assert.equal(interlocked.direction, 0)
+  assert.equal(interlocked.throttle, 0)
+  assert.equal(interlocked.autoBrake, 1)
+  assert.equal(interlocked.reverseInterlock, true)
+
+  const slowEnough = resolveDriveRequest({ throttle: -1, longitudinalSpeed: 0.03, reverseSpeedThreshold: 0.08 })
+  assert.equal(slowEnough.direction, -1)
+  assert.equal(slowEnough.autoBrake, 0)
+})
+
+test('fixed-step drive policy brakes immediately on forward-to-reverse request', () => {
+  const reversing = stepDriveCommand({
+    currentThrottle: 0.8,
+    targetThrottle: -1,
+    longitudinalSpeed: 0.7,
+    dt: 1 / 120,
+    reverseSpeedThreshold: 0.08,
+  })
+  assert.equal(reversing.reversingAgainstMotion, true)
+  assert.equal(reversing.command.reverseInterlock, true)
+  assert.equal(reversing.command.direction, 0)
+  assert.equal(reversing.command.autoBrake, 1)
+  assert.ok(reversing.nextThrottle < 0.8 && reversing.nextThrottle >= 0)
+})
+
+test('reverse torque cannot reapply forward torque while throttle crosses neutral', () => {
+  const crossing = stepDriveCommand({
+    currentThrottle: 0.35,
+    targetThrottle: -1,
+    longitudinalSpeed: 0.03,
+    dt: 1 / 120,
+    reverseSpeedThreshold: 0.08,
+  })
+  assert.equal(crossing.reversingAgainstMotion, false)
+  assert.equal(crossing.crossingNeutral, true)
+  assert.equal(crossing.command.direction, 0)
+  assert.equal(crossing.command.throttle, 0)
+  assert.ok(crossing.nextThrottle < 0.35 && crossing.nextThrottle >= 0)
+
+  let throttle = crossing.nextThrottle
+  let command = crossing.command
+  for (let i = 0; i < 30 && command.direction === 0; i += 1) {
+    const step = stepDriveCommand({
+      currentThrottle: throttle,
+      targetThrottle: -1,
+      longitudinalSpeed: 0.02,
+      dt: 1 / 120,
+      reverseSpeedThreshold: 0.08,
+    })
+    throttle = step.nextThrottle
+    command = step.command
+  }
+  assert.equal(command.direction, -1)
+  assert.ok(throttle < 0)
+})
+
+test('fixed-step drive policy releases throttle toward zero', () => {
+  const released = stepDriveCommand({ currentThrottle: 0.6, targetThrottle: 0, longitudinalSpeed: 0.4, dt: 0.1 })
+  assert.ok(released.nextThrottle >= 0)
+  assert.ok(released.nextThrottle < 0.6)
+  assert.equal(released.command.direction, Math.sign(released.nextThrottle))
+})
+
 test('four wheel layout classifies front/rear and left/right axles', () => {
   const layout = classifyWheelAxles([
     { id: 'fl', x: -0.04, z: 0.06 },
@@ -55,4 +129,22 @@ test('four wheel layout classifies front/rear and left/right axles', () => {
   assert.equal(byId.rr.axle, 'rear')
   assert.equal(byId.fl.side, 'left')
   assert.equal(byId.fr.side, 'right')
+})
+
+test('drive layout follows only motors that actually reach wheel shafts', () => {
+  const drive = classifyDrivenWheels([
+    { id: 'fl', instanceId: 'wheel-fl', axle: 'front' },
+    { id: 'fr', instanceId: 'wheel-fr', axle: 'front' },
+    { id: 'rl', instanceId: 'wheel-rl', axle: 'rear' },
+    { id: 'rr', instanceId: 'wheel-rr', axle: 'rear' },
+  ], [
+    { id: 'shaft-front', memberIds: ['wheel-fl', 'wheel-fr', 'axle-front'], sourceMotorId: 'drive-motor' },
+    { id: 'shaft-rear', memberIds: ['wheel-rl', 'wheel-rr', 'axle-rear'], sourceMotorId: null },
+    { id: 'accessory-shaft', memberIds: ['fan'], sourceMotorId: 'accessory-motor' },
+  ])
+
+  assert.equal(drive.layout, 'FWD')
+  assert.equal(drive.drivenWheelCount, 2)
+  assert.deepEqual(drive.motorIds, ['drive-motor'])
+  assert.equal(drive.wheels.find(w => w.id === 'rl').driven, false)
 })
