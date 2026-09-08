@@ -1,5 +1,5 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: RUNTIME-4 · fixed-step time scale + command-RPM motor physics.
+// BUILD: PHYSICS-5 · inertia-aware drivetrain + impulse-limited tires.
 // All module URLs are versioned once by the import map in index.html.
 
 await import('./three-cycle-guard.js')
@@ -16,6 +16,8 @@ await import('./physics-v2.js')
 await import('./colliders-v2.js')
 await import('./structural-auto-weld-v2.js')
 await import('./powertrain-physics-v2.js')
+// Must load before stress/surface wrappers so they decorate the stabilized solvers.
+await import('./physics-stability-v3.js')
 await import('./drivetrain-stress-v2.js')
 await import('./surface-v2.js')
 await import('./suspension-v2.js')
