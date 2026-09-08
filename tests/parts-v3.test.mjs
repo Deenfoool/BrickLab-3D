@@ -21,6 +21,7 @@ await import('../vehicle-parts-v1.js')
 await import('../parts3/mechanical-parts-pack-v3.js')
 await import('../parts3/parts-3-extra-v1.js')
 await import('../parts3/parts-3-visual-normalize.js')
+await import('../parts3/parts-3-steering-upgrade.js')
 await import('../physical-parts.js')
 await import('../parts3/parts-3-physics.js')
 
@@ -75,22 +76,27 @@ test('new structural and connector inventory has explicit physical classes', () 
   assert.ok(findPart('technic-frame-5x7').physics.massKg > 0)
 })
 
-test('steering knuckle exposes a real linkage pin for tie rods', () => {
+test('steering knuckle, tie rod and hub expose compatible physical linkage connectors', () => {
   const knuckle = findPart('steering-knuckle')
-  const connector = knuckle.connectors.find(item => item.id === 'steering-arm')
-  assert.ok(connector)
-  assert.equal(connector.type, 'pin')
-  assert.deepEqual(connector.axis, [0, 1, 0])
+  const arm = knuckle.connectors.find(item => item.id === 'steering-arm')
+  assert.ok(arm)
+  assert.equal(arm.type, 'pin')
+  assert.deepEqual(arm.axis, [0, 1, 0])
 
   const tieRod = findPart('steering-tie-rod-5')
   assert.equal(tieRod.connectors.filter(item => item.type === 'pin-hole').length, 2)
   assert.ok(tieRod.connectors.every(item => item.axis[1] === 1))
+
+  const hub = findPart('wheel-hub')
+  assert.equal(hub.connectors.find(item => item.id === 'bearing')?.type, 'axle')
+  assert.equal(hub.connectors.find(item => item.id === 'wheel-stub')?.type, 'axle')
+  assert.equal(knuckle.connectors.find(item => item.id === 'wheel-bearing')?.type, 'pin-hole')
 })
 
 test('upgraded representative parts create finite Three.js geometry', () => {
   for (const id of [
     'beam-8', 'beam-11', 'technic-brick-1x8', 'technic-brick-1x4', 'technic-frame-5x7',
-    'axle-8', 'gear-24', 'wheel-medium', 'wheel-hub', 'pin-frictionless',
+    'axle-8', 'gear-24', 'wheel-medium', 'wheel-hub', 'pin-frictionless', 'steering-knuckle',
   ]) {
     const part = findPart(id)
     const object = part.create(part.defaultColor)
