@@ -18,6 +18,8 @@ const METHODS = [
   'applyTireForcesV2',
   'applyScenarioForcesV2',
   'validatePhysicsState',
+  'updateVehicleMetrics',
+  'updateVehiclePerformanceV1',
 ]
 
 function methodInfo(name) {
@@ -50,6 +52,7 @@ export function assertPhysicsRuntimeContract() {
     failures.push(`tire owner: expected vehicle-system-v1 outer layer, got ${tireOwner || 'unknown'}`)
   }
   if (typeof PhysicsSession.prototype.updateVehicleControlsV1 !== 'function') failures.push('vehicle control phase missing')
+  if (typeof PhysicsSession.prototype.updateVehiclePerformanceV1 !== 'function') failures.push('vehicle performance phase missing')
 
   const snapshot = getPhysicsOwnershipSnapshot()
   globalThis.__bricklabPhysicsOwnership = { ...snapshot, failures: [...failures] }
