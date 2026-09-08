@@ -11,6 +11,7 @@ export const PHYSICS_PHASES = Object.freeze([
   'rapier-step',
   'validation',
   'metrics',
+  'vehicle-performance',
 ])
 
 function call(session, name, ...args) {
@@ -45,6 +46,7 @@ export function runPhysicsMicrostep(session, dt, { advanceTestPhase } = {}) {
   session.world.step()
   call(session, 'validatePhysicsState')
   call(session, 'updateVehicleMetrics', dt)
+  call(session, 'updateVehiclePerformanceV1', dt)
 
   session.physicsPipelineMetrics ??= { steps: 0, version: PHYSICS_PIPELINE_VERSION }
   session.physicsPipelineMetrics.steps += 1
