@@ -1,11 +1,11 @@
 import { PhysicsSession } from './physics.js'
 import { findPart } from './parts.js'
-import { connectorWorldAxis, connectorWorldPosition } from './snapping.js'
+import { connectorWorldAxis, connectorWorldPosition } from './snapping-v3.js'
 import {
   CONNECTOR_RULE_VERSION,
   connectionEndpoints,
   endpointKey,
-} from './connections.js'
+} from './connections-v3.js'
 
 const RECOVERY_DISTANCE_STUD = 0.12
 const RECOVERY_ALIGNMENT = 0.985
