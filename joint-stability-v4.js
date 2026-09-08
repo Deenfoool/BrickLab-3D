@@ -39,6 +39,14 @@ function diagnostics(session) {
   return session.__bricklabJointStability
 }
 
+function registerRevolute(session, connection, joint, context) {
+  session.revoluteJoints ??= []
+  const record = { connection, joint, ...context }
+  session.revoluteJoints.push(record)
+  session.onRevoluteJointCreated?.(connection, joint, record)
+  return record
+}
+
 if (!PhysicsSession.prototype[marker]) {
   PhysicsSession.prototype.createJoint = function createStableJointV4(connection) {
     if (connection?.kind !== 'bearing' && connection?.kind !== 'hinge') {
@@ -110,9 +118,9 @@ if (!PhysicsSession.prototype[marker]) {
       state.pairs.push({ pairKey, kind: connection.kind, action: 'create', mismatchStud })
       globalThis.__bricklabJointStability = { ...state, pairs: [...state.pairs] }
 
-      // Subsystems such as physical steering may register a stable revolute handle
-      // without replacing this authoritative joint builder or creating duplicates.
-      this.onRevoluteJointCreated?.(connection, joint, {
+      // Authoritative joint creation stops here. Specialized systems (suspension,
+      // steering, telemetry) consume this registry instead of creating duplicates.
+      registerRevolute(this, connection, joint, {
         memberA,
         memberB,
         connectorA,
@@ -120,6 +128,8 @@ if (!PhysicsSession.prototype[marker]) {
         axisA: axisA.clone(),
         anchorA: anchorA.clone(),
         anchorB: anchorB.clone(),
+        pairKey,
+        mismatchStud,
       })
       return joint
     } catch (error) {
