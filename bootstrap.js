@@ -1,5 +1,5 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: VISUAL-4 · realistic molded-part visuals + studio PBR lighting.
+// BUILD: CATALOG-3 · 80-part Technic library + asset-browser catalog.
 // All module URLs are versioned once by the import map in index.html.
 
 // Diagnostics must exist before any runtime/app module can fail.
