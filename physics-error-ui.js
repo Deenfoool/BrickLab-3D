@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG} · articulated U/CV joints · perpendicular bevel gears · worm reduction · PARTS-3 catalog`
+  badge.title = `BrickLab production build ${BUILD_TAG} · U/CV joints · bevel/worm driveline · physical steering rack · telescopic shocks`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -86,6 +86,9 @@ window.__bricklabPhysicsDiagnostics = () => ({
   parts4: {
     driveline: window.BrickLabParts4Driveline ?? null,
     physics: window.BrickLabParts4Physics ?? null,
+    steeringSuspension: window.BrickLabParts4SteeringSuspension ?? null,
+    linearMechanisms: window.BrickLabParts4LinearMechanisms?.getState?.() ?? window.__bricklabParts4LinearMechanisms ?? null,
+    catalog: window.BrickLabParts4Catalog ?? null,
   },
   pipeline: window.BrickLabPhysicsPipeline ?? null,
   ownership: window.BrickLabPhysicsOwnership?.snapshot?.() ?? window.__bricklabPhysicsOwnership ?? null,
