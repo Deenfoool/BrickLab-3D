@@ -16,11 +16,14 @@ test('structural shell v11 upgrades Technic bricks and the 5x7 frame', () => {
 test('Technic bricks are hollow molded shells with actual side bores and underside tubes', () => {
   assert.match(source, /technic-brick-side-shell/)
   assert.match(source, /technic-brick-top-deck/)
+  assert.match(source, /new RoundedBoxGeometry\(width, 0\.20, depth/)
+  assert.match(source, /topDeck\.position\.set\(0, 1\.10, 0\)/)
   assert.match(source, /technic-brick-end-wall/)
   assert.match(source, /technic-brick-underside-tube-v11/)
   assert.match(source, /technic-brick-underside-web-v11/)
   assert.match(source, /technic-brick-side-hole-bore-liner/)
   assert.match(source, /openUnderside: true/)
+  assert.match(source, /studDeckContinuous: true/)
 })
 
 test('5x7 frame keeps a real center opening and true connector-aligned perimeter bores', () => {
