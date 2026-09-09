@@ -26,6 +26,7 @@ await import('../parts5/structural-refinement-v2.js')
 await import('../parts5/detail-refinement-v3.js')
 await import('../parts6/realism-refinement-v1.js')
 await import('../parts6/precision-refinement-v2.js')
+await import('../parts6/mechanical-realism-v1.js')
 
 const { PARTS, findPart } = await import('../parts.js')
 
@@ -68,6 +69,14 @@ test('PARTS-6 becomes the final visual owner for core molded families', () => {
     ['wheel-road', 'parts-6-road-wheel-v2'],
     ['wheel-offroad-large', 'parts-6-offroad-wheel-v2'],
     ['wheel-tractor', 'parts-6-tractor-wheel-v2'],
+    ['steering-base', 'parts-6-steering-base-molded'],
+    ['steering-knuckle', 'parts-6-steering-knuckle-molded'],
+    ['steering-tie-rod-5', 'parts-6-molded-tie-rod'],
+    ['wheel-hub', 'parts-6-wheel-hub-carrier'],
+    ['shock-body-5', 'parts-6-shock-body-realism'],
+    ['shock-rod-5', 'parts-6-metal-coil-shock'],
+    ['universal-joint-30', 'parts-6-pom-universal-joint'],
+    ['cv-joint-30', 'parts-6-compact-cv-joint'],
   ])
   for (const [id, quality] of expected) {
     const part = findPart(id)
@@ -123,11 +132,27 @@ test('wheel families keep authoritative radius/width while gaining detailed tyre
   }
 })
 
+test('steering and suspension realism keeps connector identities intact', () => {
+  const base = findPart('steering-base')
+  const knuckle = findPart('steering-knuckle')
+  const tie = findPart('steering-tie-rod-5')
+  const body = findPart('shock-body-5')
+  const rod = findPart('shock-rod-5')
+  assert.ok(base.connectors.some(item => item.id === 'pivot-hole' && item.type === 'pin-hole'))
+  assert.ok(knuckle.connectors.some(item => item.id === 'wheel-bearing' && item.type === 'pin-hole'))
+  assert.ok(knuckle.connectors.some(item => item.id === 'steering-arm' && item.type === 'pin'))
+  assert.equal(tie.connectors.filter(item => item.type === 'pin-hole').length, 2)
+  assert.ok(body.connectors.some(item => item.id === 'rail' && item.type === 'slider-rail'))
+  assert.ok(rod.connectors.some(item => item.id === 'slider' && item.type === 'slider'))
+})
+
 test('PARTS-6 visual details remain physics-safe by convention', async () => {
   const realism = await import('../parts6/realism-refinement-v1.js')
   const precision = await import('../parts6/precision-refinement-v2.js')
+  const mechanical = await import('../parts6/mechanical-realism-v1.js')
   assert.equal(realism.PARTS6_REALISM_VERSION, 'parts-6-realism-refinement-v1')
   assert.equal(precision.PARTS6_PRECISION_VERSION, 'parts-6-precision-refinement-v2')
+  assert.equal(mechanical.PARTS6_MECHANICAL_REALISM_VERSION, 'parts-6-mechanical-realism-v1')
   const wheel = findPart('wheel-tractor')
   const object = wheel.create(wheel.defaultColor)
   let ignoredDetails = 0
