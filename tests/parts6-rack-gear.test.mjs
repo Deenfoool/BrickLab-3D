@@ -36,14 +36,15 @@ const { findPart } = await import('../parts.js')
 const { GEAR_MODULE_STUD, GEAR_PRESSURE_ANGLE_DEG, gearMetrics } = await import('../parts5/part-geometry-metrics-v1.js')
 
 const rackBefore = findPart('steering-rack-7')
-const metadataBefore = JSON.stringify({
-  connectors: rackBefore.connectors,
-  mechanics: rackBefore.mechanics,
-  physics: rackBefore.physics,
-})
+const guideBefore = findPart('steering-rack-guide')
+const rackContractBefore = JSON.stringify({ connectors: rackBefore.connectors, mechanics: rackBefore.mechanics })
+const guideContractBefore = JSON.stringify({ connectors: guideBefore.connectors, mechanics: guideBefore.mechanics })
+const rackPhysicalBefore = { massKg: rackBefore.physics?.massKg, material: rackBefore.physics?.material, collisionClass: rackBefore.physics?.collisionClass }
+const guidePhysicalBefore = { massKg: guideBefore.physics?.massKg, material: guideBefore.physics?.material, collisionClass: guideBefore.physics?.collisionClass }
 
 const rackModule = await import('../parts6/rack-gear-fidelity-v1.js')
 const rack = findPart('steering-rack-7')
+const guide = findPart('steering-rack-guide')
 const LINEAR_PITCH = Math.PI * GEAR_MODULE_STUD
 
 function rackFeatures(object, feature = null) {
@@ -68,18 +69,35 @@ function finiteGeometry(object) {
   return finite
 }
 
-test('rack fidelity pass preserves steering mechanics, connectors and physical metadata', () => {
-  assert.equal(
-    JSON.stringify({ connectors: rack.connectors, mechanics: rack.mechanics, physics: rack.physics }),
-    metadataBefore,
-  )
+test('rack/guide fidelity preserves connector and steering-mechanics contracts', () => {
+  assert.equal(JSON.stringify({ connectors: rack.connectors, mechanics: rack.mechanics }), rackContractBefore)
+  assert.equal(JSON.stringify({ connectors: guide.connectors, mechanics: guide.mechanics }), guideContractBefore)
   assert.equal(rack.mechanics.steeringRack.maxTravelStud, 1)
   assert.ok(rack.connectors.some(item => item.id === 'slider' && item.type === 'slider'))
+  assert.ok(guide.connectors.some(item => item.id === 'rail' && item.type === 'slider-rail'))
   assert.equal(rack.connectors.filter(item => item.type === 'pin').length, 2)
+  assert.equal(guide.connectors.filter(item => item.type === 'tube').length, 8)
+})
+
+test('explicit rack/guide collider proxies preserve previous physical envelopes', () => {
+  for (const [part, before] of [[rack, rackPhysicalBefore], [guide, guidePhysicalBefore]]) {
+    assert.equal(part.physics.massKg, before.massKg)
+    assert.equal(part.physics.material, before.material)
+    assert.equal(part.physics.collisionClass, before.collisionClass)
+    assert.equal(part.physics.colliderProfile.specs.length, 1)
+    assert.equal(part.physics.colliderProfile.specs[0].type, 'box')
+  }
+  assert.equal(rack.physics.colliderProfile.version, 'parts-6-preserve-steering-rack-bounds-v1')
+  assert.deepEqual(rack.physics.colliderProfile.specs[0].center, [0, 0.695, 0.4425])
+  assert.deepEqual(rack.physics.colliderProfile.specs[0].size, [6.21, 0.43, 1.265])
+  assert.equal(guide.physics.colliderProfile.version, 'parts-6-preserve-steering-rack-guide-bounds-v1')
+  assert.deepEqual(guide.physics.colliderProfile.specs[0].center, [0, 0.62, 0])
+  assert.deepEqual(guide.physics.colliderProfile.specs[0].size, [6.70, 1.06, 1.18])
 })
 
 test('rack uses the exact spur-gear module, pressure angle and circular pitch', () => {
-  assert.equal(rack.visualQuality, 'parts-6-module-matched-steering-rack-v3')
+  assert.equal(rack.visualQuality, 'parts-6-module-matched-steering-rack-v4')
+  assert.equal(guide.visualQuality, 'parts-6-matched-rack-guide-v1')
   assert.equal(rack.rackVisualMetrics.moduleStud, GEAR_MODULE_STUD)
   assert.equal(rack.rackVisualMetrics.pressureAngleDeg, GEAR_PRESSURE_ANGLE_DEG)
   assert.ok(Math.abs(rack.rackVisualMetrics.linearPitchStud - LINEAR_PITCH) < 1e-12)
@@ -107,15 +125,26 @@ test('rack teeth are instanced at exactly one circular pitch', () => {
   assert.equal(finiteGeometry(object), true)
 })
 
-test('full-depth rack tooth envelope fits the existing guide opening', () => {
-  const object = rack.create(rack.defaultColor)
-  const metrics = object.userData.rackGearMetrics
-  assert.ok(metrics.rootLineY > 0.31, 'root clears guide lower shell')
-  assert.ok(metrics.tipLineY < 0.93, 'tooth tip clears guide upper shell')
+test('full-depth rack tooth envelope fits the rebuilt guide opening', () => {
+  const rackObject = rack.create(rack.defaultColor)
+  const guideObject = guide.create(guide.defaultColor)
+  const metrics = rackObject.userData.rackGearMetrics
+  const opening = guideObject.userData.rackGuideMetrics
+  assert.ok(metrics.rootLineY > opening.lowerOpeningY, 'root clears guide lower shell')
+  assert.ok(metrics.tipLineY < opening.upperOpeningY, 'tooth tip clears guide upper shell')
   assert.ok(metrics.rootLineY < metrics.pitchLineY)
   assert.ok(metrics.pitchLineY < metrics.tipLineY)
   assert.ok(Math.abs((metrics.pitchLineY - metrics.rootLineY) - gearMetrics(12).dedendum) < 1e-12)
   assert.ok(Math.abs((metrics.tipLineY - metrics.pitchLineY) - gearMetrics(12).addendum) < 1e-12)
+  assert.equal(opening.mountTubeCount, 8)
+  assert.equal(finiteGeometry(guideObject), true)
+})
+
+test('rack guide exposes real mounting tubes, wear strips and molded stiffening ribs', () => {
+  const object = guide.create(guide.defaultColor)
+  assert.equal(rackFeatures(object, 'guide-mount-tube').length, 8)
+  assert.equal(rackFeatures(object, 'guide-wear-strip').length, 2)
+  assert.equal(rackFeatures(object, 'guide-stiffening-rib').length, 7)
 })
 
 test('rack tie pins are centered on the actual hinge connector coordinates', () => {
@@ -132,19 +161,22 @@ test('rack tie pins are centered on the actual hinge connector coordinates', () 
   }
 })
 
-test('rack teeth and pin finish cannot enlarge bounds-derived physics', () => {
-  const object = rack.create(rack.defaultColor)
-  const features = rackFeatures(object)
-  assert.ok(features.length >= 5)
-  for (const node of features) assert.equal(node.userData.physicsIgnore, true)
+test('rack/guide detail meshes cannot enlarge preserved collider proxies', () => {
+  for (const part of [rack, guide]) {
+    const object = part.create(part.defaultColor)
+    const features = rackFeatures(object)
+    assert.ok(features.length >= 5)
+    for (const node of features) assert.equal(node.userData.physicsIgnore, true)
+  }
 })
 
 test('rack exports pitch-line diagnostics for visual pinion review', () => {
   const state = globalThis.BrickLabParts6RackGearFidelity
-  assert.equal(rackModule.PARTS6_RACK_GEAR_FIDELITY_VERSION, 'parts-6-rack-gear-fidelity-v3')
+  assert.equal(rackModule.PARTS6_RACK_GEAR_FIDELITY_VERSION, 'parts-6-rack-gear-fidelity-v4')
   assert.equal(state.moduleStud, GEAR_MODULE_STUD)
   assert.equal(state.pressureAngleDeg, GEAR_PRESSURE_ANGLE_DEG)
   assert.ok(Math.abs(state.linearPitchStud - LINEAR_PITCH) < 1e-12)
+  assert.deepEqual(state.upgraded.sort(), ['steering-rack-7', 'steering-rack-guide'].sort())
   const object = rack.create(rack.defaultColor)
   assert.ok(object.userData.rackGearMetrics.pitchLineY > 0.75)
   assert.ok(object.userData.rackGearMetrics.pitchLineY < 0.82)
