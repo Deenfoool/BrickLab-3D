@@ -55,6 +55,9 @@ await import('./parts6/nominal-dimension-fidelity-v1.js?v=parts-6-20260909-reali
 await import('./parts6/connector-fidelity-v1.js?v=parts-6-20260909-realism-v1')
 await import('./parts6/interface-fit-refinement-v2.js?v=parts-6-20260909-realism-v1')
 await import('./parts6/interface-physics-safety-v1.js?v=parts-6-20260909-realism-v1')
+// Rack teeth use the same module/pressure angle as the spur gear family. This is
+// the final steering-rack visual owner and intentionally leaves rack mechanics intact.
+await import('./parts6/rack-gear-fidelity-v1.js?v=parts-6-20260909-realism-v1')
 await import('./physics-v2.js')
 await import('./colliders-v2.js')
 await import('./collider-clearance-v3.js')
