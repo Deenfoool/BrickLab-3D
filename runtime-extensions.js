@@ -49,7 +49,11 @@ await import('./parts5/detail-refinement-v3.js?v=parts-5-20260909-visual-v2')
 await import('./parts6/realism-refinement-v1.js?v=parts-6-20260909-realism-v1')
 await import('./parts6/precision-refinement-v2.js?v=parts-6-20260909-realism-v1')
 await import('./parts6/mechanical-realism-v1.js?v=parts-6-20260909-realism-v1')
+// Nominal dimensions are the last geometry owner for core pin/axle/hole/gear families.
+await import('./parts6/nominal-dimension-fidelity-v1.js?v=parts-6-20260909-realism-v1')
+// Connector fidelity wraps the final factories and adds visible semantic ports.
 await import('./parts6/connector-fidelity-v1.js?v=parts-6-20260909-realism-v1')
+await import('./parts6/interface-fit-refinement-v2.js?v=parts-6-20260909-realism-v1')
 await import('./physics-v2.js')
 await import('./colliders-v2.js')
 await import('./collider-clearance-v3.js')
