@@ -76,6 +76,9 @@ await import('./parts6/hero-micro-detail-v5.js?v=parts-6-20260909-realism-v1')
 await import('./parts6/connector-fidelity-v1.js?v=parts-6-20260909-realism-v1')
 await import('./parts6/interface-fit-refinement-v2.js?v=parts-6-20260909-realism-v1')
 await import('./parts6/interface-physics-safety-v1.js?v=parts-6-20260909-realism-v1')
+// Remove generic connector/interface overlays that would duplicate steering-carrier v8
+// port surfaces. The hub keeps the canonical inboard bearing axle from interface-fit.
+await import('./parts6/steering-carrier-port-dedup-v8.js?v=parts-6-20260909-realism-v1')
 // Rack teeth use the same module/pressure angle as the spur gear family. This is
 // the final steering-rack visual owner and intentionally leaves rack mechanics intact.
 await import('./parts6/rack-gear-fidelity-v1.js?v=parts-6-20260909-realism-v1')
