@@ -23,6 +23,7 @@ await import('../parts6/nominal-dimension-fidelity-v1.js')
 await import('../parts6/hero-mechanical-fidelity-v2.js')
 await import('../parts6/fine-mechanical-detail-v3.js')
 await import('../parts6/core-molded-fidelity-v4.js')
+await import('../parts6/hero-micro-detail-v5.js')
 await import('../parts6/connector-fidelity-v1.js')
 await import('../parts6/interface-fit-refinement-v2.js')
 await import('../parts6/interface-physics-safety-v1.js')
@@ -249,6 +250,7 @@ globalThis.BrickLabParts5VisualQA = Object.freeze({
   heroMechanicalFidelity: globalThis.BrickLabParts6HeroMechanicalFidelity ?? null,
   fineMechanicalDetail: globalThis.BrickLabParts6FineMechanicalDetail ?? null,
   coreMoldedFidelity: globalThis.BrickLabParts6CoreMoldedFidelity ?? null,
+  heroMicroDetail: globalThis.BrickLabParts6HeroMicroDetail ?? null,
   connectorFidelity: globalThis.BrickLabParts6ConnectorFidelity ?? null,
   interfaceFit: globalThis.BrickLabParts6InterfaceFit ?? null,
   interfacePhysicsSafety: globalThis.BrickLabParts6InterfacePhysicsSafety ?? null,
