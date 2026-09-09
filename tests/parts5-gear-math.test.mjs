@@ -10,15 +10,17 @@ import {
   evaluateBevelMesh,
   evaluateSpurMesh,
   solveBevelSnap,
+  solveSpurPhaseAlignment,
   solveSpurSnap,
 } from '../parts5/gear-mesh-math-v1.js'
 
-function spur(teeth, x, y = 0, z = 0) {
+function spur(teeth, x, y = 0, z = 0, reference = new THREE.Vector3(1, 0, 0)) {
   return {
     teeth,
     pitchRadius: gearPitchRadius(teeth),
     center: new THREE.Vector3(x, y, z),
     axis: new THREE.Vector3(0, 1, 0),
+    reference: reference.clone(),
   }
 }
 
@@ -57,12 +59,34 @@ for (const [aTeeth, bTeeth] of [[8, 24], [12, 12], [12, 20]]) {
   })
 }
 
+test('spur phase solver turns a tooth-to-tooth contact into tooth-to-gap', () => {
+  const fixed = spur(20, 0)
+  const target = gearPitchRadius(12) + gearPitchRadius(20)
+  const moving = spur(12, target)
+  const radial = new THREE.Vector3(1, 0, 0)
+  const phase = solveSpurPhaseAlignment(moving, fixed, radial)
+  assert.ok(phase)
+  assert.ok(Math.abs(Math.abs(phase.correction) - Math.PI / 12) < 1e-9)
+  assert.ok(Math.abs(phase.fixedPhase) < 1e-9)
+  assert.ok(Math.abs(phase.movingPhaseAfter - 0.5) < 1e-9)
+})
+
+test('spur snap carries phase correction from the same contact line', () => {
+  const fixed = spur(24, 0)
+  const target = gearPitchRadius(8) + gearPitchRadius(24)
+  const moving = spur(8, target + 0.12, 0.02, 0.01)
+  const solution = solveSpurSnap(moving, fixed, { captureDistance: 0.4 })
+  assert.ok(solution)
+  assert.ok(solution.phase)
+  assert.ok(Number.isFinite(solution.phaseCorrection))
+  assert.ok(solution.phaseAxis.distanceTo(new THREE.Vector3(0, 1, 0)) < 1e-9)
+})
+
 test('bevel 12T ↔ 20T snap solves one exact shared pitch-cone apex', () => {
   const moving = {
     teeth: 12,
     pitchRadius: gearPitchRadius(12),
-    // Close to the valid center (+1.25, 0, +0.75) for this perpendicular pair.
-    center: new THREE.Vector3(1.30, 0.05, 0.68),
+    center: new THREE.Vector3(1.30, 0.07, 0.02),
     axis: new THREE.Vector3(1, 0, 0),
   }
   const fixed = {
