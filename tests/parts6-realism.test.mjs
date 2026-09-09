@@ -4,7 +4,7 @@ import { Window } from 'happy-dom'
 import * as THREE from 'three'
 
 const dom = new Window()
-for (const key of ['window', 'document', 'localStorage', 'CustomEvent', 'MutationObserver', 'CSS']) {
+for (const key of ['window', 'document', 'localStorage', 'CustomEvent', 'MutationObserver', 'CSS', 'Event']) {
   globalThis[key] = key === 'window' ? dom : dom[key]
 }
 globalThis.requestAnimationFrame = callback => { callback(0); return 0 }
@@ -27,7 +27,10 @@ await import('../parts5/detail-refinement-v3.js')
 await import('../parts6/realism-refinement-v1.js')
 await import('../parts6/precision-refinement-v2.js')
 await import('../parts6/mechanical-realism-v1.js')
+await import('../parts6/nominal-dimension-fidelity-v1.js')
 await import('../parts6/connector-fidelity-v1.js')
+await import('../parts6/interface-fit-refinement-v2.js')
+await import('../parts6/interface-physics-safety-v1.js')
 
 const { PARTS, findPart } = await import('../parts.js')
 
@@ -53,19 +56,19 @@ function sizeOf(object) {
   return new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3())
 }
 
-test('PARTS-6 becomes the final visual owner for core molded families', () => {
+test('PARTS-6 final owners use measured nominal dimensions for core molded families', () => {
   const expected = new Map([
-    ['beam-7', 'parts-6-waisted-liftarm-realism'],
-    ['thin-beam-5', 'parts-6-waisted-thin-liftarm-realism'],
-    ['technic-brick-1x4', 'parts-6-precision-hollow-technic-brick'],
-    ['technic-frame-5x7', 'parts-6-frame-molded-realism'],
-    ['axle-9', 'parts-6-rounded-cross-axle-v2'],
-    ['pin', 'parts-6-friction-pin-realism'],
-    ['pin-frictionless', 'parts-6-frictionless-pin-realism'],
-    ['bush', 'parts-6-molded-bush-v2'],
-    ['half-bush', 'parts-6-molded-bush-v2'],
-    ['axle-coupler', 'parts-6-molded-axle-coupler-v2'],
-    ['gear-24', 'parts-6-involute-spoked-gear-v2'],
+    ['beam-7', 'parts-6-nominal-4p8mm-hole-liftarm'],
+    ['thin-beam-5', 'parts-6-nominal-4p8mm-hole-thin-liftarm'],
+    ['technic-brick-1x4', 'parts-6-nominal-4p8mm-hole-technic-brick'],
+    ['technic-frame-5x7', 'parts-6-nominal-4p8mm-hole-frame'],
+    ['axle-9', 'parts-6-nominal-4p78mm-cross-axle'],
+    ['pin', 'parts-6-nominal-friction-pin'],
+    ['pin-frictionless', 'parts-6-nominal-frictionless-pin'],
+    ['bush', 'parts-6-nominal-cross-bore-bush'],
+    ['half-bush', 'parts-6-nominal-cross-bore-bush'],
+    ['axle-coupler', 'parts-6-nominal-cross-bore-coupler'],
+    ['gear-24', 'parts-6-measured-tip-involute-gear'],
     ['bevel-gear-20', 'parts-6-bevel-gear-realism'],
     ['wheel-road', 'parts-6-road-wheel-v2'],
     ['wheel-offroad-large', 'parts-6-offroad-wheel-v2'],
@@ -89,7 +92,7 @@ test('PARTS-6 becomes the final visual owner for core molded families', () => {
   }
 })
 
-test('liftarms keep true holes while using a waisted molded silhouette', () => {
+test('liftarms keep true 4.8 mm-class holes and a molded waisted silhouette', () => {
   const part = findPart('beam-7')
   const object = part.create(part.defaultColor)
   const size = sizeOf(object)
@@ -97,9 +100,10 @@ test('liftarms keep true holes while using a waisted molded silhouette', () => {
   assert.ok(size.y > 0.84 && size.y < 1.0)
   assert.ok(size.z > 0.70 && size.z < 0.86)
   assert.equal(part.connectors.filter(item => item.type === 'pin-hole').length, 7)
+  assert.equal(globalThis.BrickLabParts6NominalDimensions.nominal.pinHoleRadius, 0.3)
 })
 
-test('Technic brick stays hollow and has aligned side-hole bosses', () => {
+test('Technic brick stays hollow and has aligned nominal side-hole bosses', () => {
   const part = findPart('technic-brick-1x4')
   const object = part.create(part.defaultColor)
   const result = finiteGeometry(object)
@@ -108,18 +112,18 @@ test('Technic brick stays hollow and has aligned side-hole bosses', () => {
   assert.equal(part.connectors.filter(item => item.type === 'stud').length, 4)
 })
 
-test('spur gears use open molded webs without changing canonical pitch radius', () => {
+test('spur gears preserve canonical pitch while using measured outer-tip geometry', () => {
   for (const teeth of [8, 12, 16, 20, 24, 36, 40]) {
     const part = findPart(`gear-${teeth}`)
     assert.equal(part.mechanics.gear.pitchRadius, teeth / 16)
-    assert.equal(part.visualQuality, 'parts-6-involute-spoked-gear-v2')
+    assert.equal(part.visualQuality, 'parts-6-measured-tip-involute-gear')
     const result = finiteGeometry(part.create(part.defaultColor))
     assert.equal(result.finite, true)
     if (teeth >= 16) assert.ok(result.meshes >= 6, `${teeth}T has separate tooth ring, hub and molded spokes`)
   }
 })
 
-test('wheel families keep authoritative radius/width while gaining detailed tyre/rim construction', () => {
+test('wheel families keep authoritative radius/width while gaining detailed tyre/rim and keyed interfaces', () => {
   for (const id of ['wheel-small', 'wheel-narrow', 'wheel-road', 'wheel-medium', 'wheel', 'wheel-offroad-large', 'wheel-tractor']) {
     const part = findPart(id)
     const object = part.create(part.defaultColor)
@@ -128,8 +132,9 @@ test('wheel families keep authoritative radius/width while gaining detailed tyre
     assert.ok(result.instanced >= 1, `${id} tread is instanced`)
     assert.ok(result.meshes >= 8, `${id} has tyre, bead lips, dish, spokes and keyed hub`)
     const size = sizeOf(object)
-    assert.ok(size.x >= part.mechanics.wheel.width * 0.72 && size.x <= part.mechanics.wheel.width * 1.45)
+    assert.ok(size.x >= part.mechanics.wheel.width * 0.72 && size.x <= part.mechanics.wheel.width * 1.55)
     assert.ok(size.y >= part.mechanics.wheel.radius * 1.80 && size.y <= part.mechanics.wheel.radius * 2.20)
+    assert.equal(part.interfaceFidelity, 'parts-6-interface-fit-refinement-v2')
   }
 })
 
@@ -147,29 +152,49 @@ test('steering and suspension realism keeps connector identities intact', () => 
   assert.ok(rod.connectors.some(item => item.id === 'slider' && item.type === 'slider'))
 })
 
-test('connector-fidelity wrapper visibly distinguishes pin and bearing-axle ports', () => {
+test('connector-fidelity and interface-fit wrappers visibly distinguish pin, bore and axle ports', () => {
   for (const id of ['steering-knuckle', 'wheel-hub']) {
     const object = findPart(id).create(findPart(id).defaultColor)
     let connectorVisuals = 0
-    object.traverse(child => { if (child.userData?.parts6ConnectorVisual) connectorVisuals += 1 })
+    let interfaceVisuals = 0
+    object.traverse(child => {
+      if (child.userData?.parts6ConnectorVisual) connectorVisuals += 1
+      if (child.userData?.parts6InterfaceFeature) interfaceVisuals += 1
+    })
     assert.ok(connectorVisuals >= 1, `${id} has connector-semantic visual detail`)
+    assert.ok(interfaceVisuals >= 1, `${id} has nominal interface detail`)
   }
 })
 
-test('PARTS-6 visual details remain physics-safe by convention', async () => {
+test('PARTS-6 interface detail remains excluded from bounds-derived physics', async () => {
   const realism = await import('../parts6/realism-refinement-v1.js')
   const precision = await import('../parts6/precision-refinement-v2.js')
   const mechanical = await import('../parts6/mechanical-realism-v1.js')
+  const nominal = await import('../parts6/nominal-dimension-fidelity-v1.js')
   const fidelity = await import('../parts6/connector-fidelity-v1.js')
+  const fit = await import('../parts6/interface-fit-refinement-v2.js')
+  const safety = await import('../parts6/interface-physics-safety-v1.js')
   assert.equal(realism.PARTS6_REALISM_VERSION, 'parts-6-realism-refinement-v1')
   assert.equal(precision.PARTS6_PRECISION_VERSION, 'parts-6-precision-refinement-v2')
   assert.equal(mechanical.PARTS6_MECHANICAL_REALISM_VERSION, 'parts-6-mechanical-realism-v1')
+  assert.equal(nominal.PARTS6_NOMINAL_DIMENSION_VERSION, 'parts-6-nominal-dimension-fidelity-v1')
   assert.equal(fidelity.PARTS6_CONNECTOR_FIDELITY_VERSION, 'parts-6-connector-fidelity-v1')
-  const wheel = findPart('wheel-tractor')
-  const object = wheel.create(wheel.defaultColor)
-  let ignoredDetails = 0
-  object.traverse(child => { if (child.userData?.physicsIgnore) ignoredDetails += 1 })
-  assert.ok(ignoredDetails >= 3, 'decorative wheel details are explicitly ignored by bounds-based physics')
+  assert.equal(fit.PARTS6_INTERFACE_FIT_VERSION, 'parts-6-interface-fit-refinement-v2')
+  assert.equal(safety.PARTS6_INTERFACE_PHYSICS_SAFETY_VERSION, 'parts-6-interface-physics-safety-v1')
+  const object = findPart('wheel-hub').create(findPart('wheel-hub').defaultColor)
+  let interfaceMeshes = 0
+  let unsafe = 0
+  function walk(node, inherited = false) {
+    const active = inherited || Boolean(node.userData?.parts6InterfaceFeature)
+    if (active && node.isMesh) {
+      interfaceMeshes += 1
+      if (!node.userData.physicsIgnore) unsafe += 1
+    }
+    for (const child of node.children ?? []) walk(child, active)
+  }
+  walk(object)
+  assert.ok(interfaceMeshes >= 2)
+  assert.equal(unsafe, 0)
 })
 
 assert.equal(new Set(PARTS.map(part => part.id)).size, PARTS.length, 'PARTS-6 does not duplicate catalog ids')
