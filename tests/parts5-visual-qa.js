@@ -20,6 +20,7 @@ await import('../parts6/realism-refinement-v1.js')
 await import('../parts6/precision-refinement-v2.js')
 await import('../parts6/mechanical-realism-v1.js')
 await import('../parts6/nominal-dimension-fidelity-v1.js')
+await import('../parts6/hero-mechanical-fidelity-v2.js')
 await import('../parts6/connector-fidelity-v1.js')
 await import('../parts6/interface-fit-refinement-v2.js')
 await import('../parts6/rack-gear-fidelity-v1.js')
@@ -242,6 +243,7 @@ globalThis.BrickLabParts5VisualQA = Object.freeze({
   precisionRefinement: globalThis.BrickLabParts6Precision ?? null,
   mechanicalRealism: globalThis.BrickLabParts6MechanicalRealism ?? null,
   nominalDimensions: globalThis.BrickLabParts6NominalDimensions ?? null,
+  heroMechanicalFidelity: globalThis.BrickLabParts6HeroMechanicalFidelity ?? null,
   connectorFidelity: globalThis.BrickLabParts6ConnectorFidelity ?? null,
   interfaceFit: globalThis.BrickLabParts6InterfaceFit ?? null,
   rackGearFidelity: globalThis.BrickLabParts6RackGearFidelity ?? null,
