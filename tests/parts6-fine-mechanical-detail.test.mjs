@@ -63,6 +63,7 @@ function snapshot(part) {
 const before = new Map(TARGETS.map(id => [id, snapshot(findPart(id))]))
 const source = await readFile(new URL('../parts6/fine-mechanical-detail-v3.js', import.meta.url), 'utf8')
 const fineModule = await import('../parts6/fine-mechanical-detail-v3.js')
+const fineQuality = new Map(TARGETS.map(id => [id, findPart(id)?.visualQuality ?? null]))
 await import('../parts6/connector-fidelity-v1.js')
 await import('../parts6/interface-fit-refinement-v2.js')
 await import('../parts6/interface-physics-safety-v1.js')
@@ -87,12 +88,19 @@ function firstFeature(object, name) {
   return result
 }
 
+function geometrySize(node) {
+  node.geometry.computeBoundingBox()
+  const size = new THREE.Vector3()
+  node.geometry.boundingBox.getSize(size)
+  return size
+}
+
 test('fine detail pass preserves connector, mechanics and physics metadata', () => {
   for (const id of TARGETS) {
     const part = findPart(id)
     assert.ok(part, `missing target ${id}`)
     assert.equal(snapshot(part), before.get(id), `${id} metadata changed during visual pass`)
-    assert.match(part.visualQuality, /^parts-6-fine-/)
+    assert.match(fineQuality.get(id), /^parts-6-fine-/, `${id} was owned by fine-detail pass before later semantic wrappers`)
   }
 })
 
@@ -162,7 +170,7 @@ test('suspension, bearing and connector details are present', () => {
   assert.ok(connectorPart.has('connector-parting-line'))
 })
 
-test('final safety pass keeps bore shadows open and connector parting lines surface-thin', () => {
+test('final safety pass keeps bore shadows open and thin decorative geometry bounded', () => {
   const baseObject = findPart('steering-base').create(findPart('steering-base').defaultColor)
   const bore = firstFeature(baseObject, 'pivot-bore-shadow')
   assert.ok(bore?.isMesh)
@@ -172,11 +180,21 @@ test('final safety pass keeps bore shadows open and connector parting lines surf
     const object = findPart(id).create(findPart(id).defaultColor)
     const line = firstFeature(object, 'connector-parting-line')
     assert.ok(line?.isMesh, `${id} has a parting line`)
-    line.geometry.computeBoundingBox()
-    const size = new THREE.Vector3()
-    line.geometry.boundingBox.getSize(size)
+    const size = geometrySize(line)
     assert.ok(size.z < 0.03, `${id} parting line stays surface-thin`)
     assert.ok(Math.abs(line.position.z) < 0.53, `${id} parting line stays on the molded body surface`)
+  }
+
+  for (const [id, feature, maxThinAxis] of [
+    ['suspension-arm-5', 'suspension-arm-lightening-recess', 0.03],
+    ['motor', 'motor-rear-vent', 0.03],
+    ['worm-drive-8', 'worm-wheel-web', 0.05],
+  ]) {
+    const node = firstFeature(findPart(id).create(findPart(id).defaultColor), feature)
+    assert.ok(node?.isMesh, `${id} has ${feature}`)
+    const size = geometrySize(node)
+    assert.ok(Math.min(size.x, size.y, size.z) < maxThinAxis, `${id}:${feature} retains a valid thin dimension`)
+    for (const value of node.geometry.getAttribute('position').array) assert.equal(Number.isFinite(value), true)
   }
 })
 
