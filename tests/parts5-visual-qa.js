@@ -19,7 +19,9 @@ await import('../parts5/detail-refinement-v3.js')
 await import('../parts6/realism-refinement-v1.js')
 await import('../parts6/precision-refinement-v2.js')
 await import('../parts6/mechanical-realism-v1.js')
+await import('../parts6/nominal-dimension-fidelity-v1.js')
 await import('../parts6/connector-fidelity-v1.js')
+await import('../parts6/interface-fit-refinement-v2.js')
 
 const { findPart } = await import('../parts.js')
 const { gearPitchRadius } = await import('../parts5/part-geometry-metrics-v1.js')
@@ -27,10 +29,10 @@ const { gearPitchRadius } = await import('../parts5/part-geometry-metrics-v1.js'
 const stage = document.getElementById('stage')
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x16191c)
-scene.fog = new THREE.Fog(0x16191c, 52, 88)
+scene.fog = new THREE.Fog(0x16191c, 52, 92)
 
-const camera = new THREE.PerspectiveCamera(43, 1, 0.1, 170)
-camera.position.set(18, 21, 36)
+const camera = new THREE.PerspectiveCamera(43, 1, 0.1, 180)
+camera.position.set(19, 22, 39)
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
@@ -41,9 +43,9 @@ stage.append(renderer.domElement)
 
 const controls = new OrbitControls(camera, renderer.domElement)
 controls.enableDamping = true
-controls.target.set(0.6, 2.0, 6.0)
+controls.target.set(0.6, 2.0, 7.0)
 controls.minDistance = 5
-controls.maxDistance = 72
+controls.maxDistance = 76
 
 scene.add(new THREE.HemisphereLight(0xdde8f2, 0x30363c, 2.15))
 const key = new THREE.DirectionalLight(0xffffff, 3.0)
@@ -59,7 +61,7 @@ rimLight.position.set(4, 7, -18)
 scene.add(rimLight)
 
 const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(58, 58),
+  new THREE.PlaneGeometry(62, 62),
   new THREE.MeshStandardMaterial({ color: 0x20252a, roughness: 0.93, metalness: 0 }),
 )
 floor.rotation.x = -Math.PI / 2
@@ -67,7 +69,7 @@ floor.position.y = -0.02
 floor.receiveShadow = true
 scene.add(floor)
 
-const grid = new THREE.GridHelper(58, 58, 0x3b444c, 0x2b3136)
+const grid = new THREE.GridHelper(62, 62, 0x3b444c, 0x2b3136)
 grid.position.y = 0.005
 grid.material.transparent = true
 grid.material.opacity = 0.35
@@ -189,9 +191,11 @@ addPart('connector-angle', [7.9, 0, 18.3], [0.12, 0.28, 0])
 addPart('bearing-block', [10.0, 0, 18.3], [0, -0.22, 0])
 addPart('suspension-arm-5', [-0.5, 0, 21.1], [0, 0.18, 0])
 
-addPart('motor', [-7.0, 0, 23.4], [0, -0.22, 0])
-addPart('gearbox-fnr', [-1.2, 0, 23.4], [0, -0.22, 0])
-addPart('open-differential', [5.0, 0, 23.4], [0, -0.28, 0])
+addPart('motor', [-8.5, 0, 23.4], [0, -0.22, 0])
+addPart('gearbox-fnr', [-3.0, 0, 23.4], [0, -0.22, 0])
+addPart('open-differential', [3.2, 0, 23.4], [0, -0.28, 0])
+addPart('rpm-sensor', [7.3, 0, 23.4], [0, -0.18, 0])
+addPart('torque-sensor', [9.4, 0, 23.4], [0, 0.18, 0])
 
 function resize() {
   const width = window.innerWidth
@@ -221,5 +225,7 @@ globalThis.BrickLabParts5VisualQA = Object.freeze({
   realismRefinement: globalThis.BrickLabParts6Realism ?? null,
   precisionRefinement: globalThis.BrickLabParts6Precision ?? null,
   mechanicalRealism: globalThis.BrickLabParts6MechanicalRealism ?? null,
+  nominalDimensions: globalThis.BrickLabParts6NominalDimensions ?? null,
   connectorFidelity: globalThis.BrickLabParts6ConnectorFidelity ?? null,
+  interfaceFit: globalThis.BrickLabParts6InterfaceFit ?? null,
 })
