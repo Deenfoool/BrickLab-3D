@@ -5,7 +5,7 @@ import { patchPart } from '../parts3/part-schema-v1.js'
 import { GEAR_MODULE_STUD, GEAR_PRESSURE_ANGLE_DEG, gearMetrics } from '../parts5/part-geometry-metrics-v1.js'
 import { REAL_TECHNIC_NOMINAL } from './nominal-dimension-fidelity-v1.js'
 
-export const PARTS6_RACK_GEAR_FIDELITY_VERSION = 'parts-6-rack-gear-fidelity-v2'
+export const PARTS6_RACK_GEAR_FIDELITY_VERSION = 'parts-6-rack-gear-fidelity-v3'
 
 const N = REAL_TECHNIC_NOMINAL
 const LINEAR_PITCH = Math.PI * GEAR_MODULE_STUD
@@ -84,10 +84,17 @@ function addTiePin(group, connector, color) {
 function createRack(part, color) {
   const group = root(part.id, color)
   const material = pom(color)
+
+  // Keep the full standard tooth depth while fitting the existing rack guide.
+  // The slider connector stays untouched at y=.62; the molded rail sits slightly
+  // lower so the root, pitch and tip lines fit inside the guide opening without
+  // clipping the top shell.
   const railLength = 6.20
   const railHeight = 0.30
-  const railCenterY = 0.62
-  const railTop = railCenterY + railHeight / 2
+  const railCenterY = 0.50
+  const rootLineY = railCenterY + railHeight / 2
+  const pitchLineY = rootLineY + PITCH_LINE_FROM_ROOT
+  const tipLineY = rootLineY + WHOLE_DEPTH
   const rail = new THREE.Mesh(new RoundedBoxGeometry(railLength, railHeight, 0.38, 4, 0.065), material)
   rail.position.y = railCenterY
   group.add(rail)
@@ -100,7 +107,7 @@ function createRack(part, color) {
   const teeth = visualOnly(new THREE.InstancedMesh(toothGeometry, material, toothCount), 'module-matched-teeth')
   const matrix = new THREE.Matrix4()
   for (let i = 0; i < toothCount; i += 1) {
-    matrix.makeTranslation(firstX + i * LINEAR_PITCH, railTop, 0)
+    matrix.makeTranslation(firstX + i * LINEAR_PITCH, rootLineY, 0)
     teeth.setMatrixAt(i, matrix)
   }
   teeth.instanceMatrix.needsUpdate = true
@@ -110,7 +117,7 @@ function createRack(part, color) {
   for (const connector of part.connectors.filter(item => item.type === 'pin')) {
     const x = connector.position[0]
     const arm = new THREE.Mesh(new RoundedBoxGeometry(0.44, 0.28, 1.02, 4, 0.075), armMaterial)
-    arm.position.set(x, railCenterY, 0.42)
+    arm.position.set(x, connector.position[1], 0.42)
     group.add(arm)
     const boss = new THREE.Mesh(new THREE.CylinderGeometry(0.37, 0.37, 0.26, 40), armMaterial)
     boss.position.fromArray(connector.position)
@@ -125,7 +132,9 @@ function createRack(part, color) {
     addendumStud: ADDENDUM,
     dedendumStud: DEDENDUM,
     pitchLineOffsetStud: PITCH_LINE_FROM_ROOT,
-    pitchLineY: railTop + PITCH_LINE_FROM_ROOT,
+    rootLineY,
+    pitchLineY,
+    tipLineY,
     toothCount,
   }
   return group
@@ -135,7 +144,7 @@ const part = PARTS.find(item => item.id === 'steering-rack-7')
 if (part) {
   patchPart(PARTS, part.id, {
     create: color => createRack(part, color),
-    visualQuality: 'parts-6-module-matched-steering-rack-v2',
+    visualQuality: 'parts-6-module-matched-steering-rack-v3',
     rackVisualMetrics: {
       moduleStud: GEAR_MODULE_STUD,
       pressureAngleDeg: GEAR_PRESSURE_ANGLE_DEG,
@@ -155,6 +164,7 @@ globalThis.BrickLabParts6RackGearFidelity = Object.freeze({
   linearPitchStud: LINEAR_PITCH,
   addendumStud: ADDENDUM,
   dedendumStud: DEDENDUM,
+  guideFit: 'full-depth teeth fit the existing guide opening without changing slider/tie connector coordinates',
   physics: 'teeth and tie-pin visual finish are physicsIgnore; existing rack mechanics and travel remain authoritative',
 })
 
