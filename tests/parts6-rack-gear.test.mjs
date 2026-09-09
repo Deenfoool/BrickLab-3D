@@ -19,6 +19,9 @@ await import('../parts3/parts-3-wheel-dimensions.js')
 await import('../parts3/parts-3-steering-upgrade.js')
 await import('../parts4/mechanical-driveline-v1.js')
 await import('../parts4/steering-suspension-v1.js')
+await import('../physical-parts.js')
+await import('../parts3/parts-3-physics.js')
+await import('../parts4/parts-4-physics.js')
 await import('../parts5/visual-overhaul-v1.js')
 await import('../parts5/visual-refinement-v2.js')
 await import('../parts5/driveline-refinement-v2.js')
@@ -80,6 +83,8 @@ test('rack/guide fidelity preserves connector and steering-mechanics contracts',
 })
 
 test('explicit rack/guide collider proxies preserve previous physical envelopes', () => {
+  assert.equal(rackPhysicalBefore.massKg, 0.0042)
+  assert.equal(guidePhysicalBefore.massKg, 0.0065)
   for (const [part, before] of [[rack, rackPhysicalBefore], [guide, guidePhysicalBefore]]) {
     assert.equal(part.physics.massKg, before.massKg)
     assert.equal(part.physics.material, before.material)
