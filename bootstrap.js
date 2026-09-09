@@ -1,11 +1,12 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: PARTS-4 · articulated driveline + physical rack steering + telescopic suspension.
+// BUILD: PARTS-5 · parametric parts + usable gear mesh placement.
 // All root module URLs are versioned once by the import map in index.html.
 
 // Diagnostics must exist before any runtime/app module can fail.
 await import('./physics-error-ui.js')
 await import('./runtime-extensions.js')
 await import('./app.js')
+await import('./parts5/gear-mesh-ui-v1.js?v=parts-5-20260909-visual-v1')
 await import('./overlay-ui.js')
 await import('./catalog-ui.js')
 await import('./catalog-previews.js')
