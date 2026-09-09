@@ -11,5 +11,6 @@ const alias = Object.entries(imports)
 
 export default defineConfig({
   base: '/BrickLab-3D/',
+  build: { rollupOptions: { input: { app: fileURLToPath(new URL('./index.html', import.meta.url)), audioQA: fileURLToPath(new URL('./audio-qa.html', import.meta.url)) } } },
   resolve: { alias },
 })
