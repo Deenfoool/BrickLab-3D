@@ -7,7 +7,7 @@
   <style>
     html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#14171a;color:#e7ece9;font-family:Inter,ui-sans-serif,system-ui,sans-serif}
     #stage{position:fixed;inset:0}
-    #panel{position:fixed;z-index:4;left:14px;top:14px;width:300px;max-height:calc(100vh - 28px);overflow:auto;padding:14px 15px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(14,17,19,.88);backdrop-filter:blur(10px);box-shadow:0 14px 40px rgba(0,0,0,.32)}
+    #panel{position:fixed;z-index:4;left:14px;top:14px;width:310px;max-height:calc(100vh - 28px);overflow:auto;padding:14px 15px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(14,17,19,.88);backdrop-filter:blur(10px);box-shadow:0 14px 40px rgba(0,0,0,.32)}
     h1{font-size:14px;margin:0 0 5px;letter-spacing:.04em}p{font-size:10px;line-height:1.45;color:#98a39d;margin:0 0 12px}.badge{display:inline-flex;padding:3px 6px;border-radius:5px;background:#173023;color:#79e8a8;font-weight:800;font-size:9px;margin-bottom:10px}
     section{border-top:1px solid rgba(255,255,255,.07);padding-top:9px;margin-top:9px}h2{font-size:9px;color:#bdc8c2;letter-spacing:.09em;text-transform:uppercase;margin:0 0 5px}.row{font-size:9px;color:#7f8b85;line-height:1.5}.ok{color:#79e8a8}.hint{position:fixed;right:14px;bottom:14px;z-index:4;padding:8px 10px;border-radius:7px;background:rgba(14,17,19,.78);font-size:9px;color:#87928d;border:1px solid rgba(255,255,255,.08)}
     canvas{display:block;width:100%;height:100%}
@@ -24,15 +24,16 @@
 <body>
   <div id="stage"></div>
   <aside id="panel">
-    <div class="badge">PARTS-5 VISUAL QA</div>
+    <div class="badge">PARTS-5 · REFINEMENT V2</div>
     <h1>BrickLab part gallery</h1>
-    <p>Open this page from the local dev server. It intentionally isolates part visuals from the editor so wheel profiles, gear teeth and silhouettes are easy to compare.</p>
-    <section><h2>Wheels · back row</h2><div class="row">Small · Narrow · Road · Medium · Standard · Off-road Large · Tractor</div></section>
-    <section><h2>Spur gears · middle row</h2><div class="row">8T · 12T · 16T · 20T · 24T · 36T · 40T</div></section>
-    <section><h2>Exact mesh pairs</h2><div class="row"><span class="ok">12T ↔ 20T</span> · <span class="ok">8T ↔ 24T</span> · pitch circles share exact center distance</div></section>
-    <section><h2>Bevel pair</h2><div class="row"><span class="ok">12T ↔ 20T · 90°</span> · shared pitch-cone apex</div></section>
-    <section><h2>Structural details · front row</h2><div class="row">Beam 7L · Technic Brick 1×4 · Axle 9L · Friction Pin</div></section>
-    <section><h2>Review checklist</h2><div class="row">Tyre sidewalls · tread family distinction · rim barrel/spokes · tooth proportions · real axle bores · bevel silhouette · clean holes/facets · no floating details</div></section>
+    <p>Open from the local dev server. This isolates final part factories from the editor so silhouettes, bores, tooth profiles and materials can be judged directly.</p>
+    <section><h2>Wheels · rear row</h2><div class="row">Small · Narrow · Road · Medium · Standard · Off-road Large · Tractor</div></section>
+    <section><h2>Spur gears</h2><div class="row">8T · 12T · 16T · 20T · 24T · 36T · 40T · approximate involute flank from the canonical module</div></section>
+    <section><h2>Exact mesh pairs</h2><div class="row"><span class="ok">12T ↔ 20T</span> · <span class="ok">8T ↔ 24T</span> · exact pitch-circle center distance</div></section>
+    <section><h2>Bevel pair</h2><div class="row"><span class="ok">12T ↔ 20T · 90°</span> · tapered teeth · shared pitch-cone apex</div></section>
+    <section><h2>Structural row</h2><div class="row">Beam 7L · Technic Brick 1×4 · Axle 9L · Friction Pin · Bush</div></section>
+    <section><h2>Steering / suspension row</h2><div class="row">Tie Rod · Wheel Hub · Steering Knuckle · Rack Guide · Steering Rack · Shock Body · Shock Rod / helical spring</div></section>
+    <section><h2>Review checklist</h2><div class="row">Rounded tyre shoulders · distinct tread families · rim barrel/dish/spokes · tooth-root transitions · true cross bores · bevel silhouette · steering-arm proportions · rack teeth · spring coil · no floating/z-fighting details</div></section>
   </aside>
   <div class="hint">LMB orbit · wheel zoom · RMB pan</div>
   <script type="module" src="./parts5-visual-qa.js"></script>
