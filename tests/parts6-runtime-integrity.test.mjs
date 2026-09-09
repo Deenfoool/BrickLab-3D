@@ -13,7 +13,7 @@ function parts6Imports(source) {
 test('PARTS-6 realism modules exist and use one package tag', async () => {
   const runtime = await readFile(new URL('runtime-extensions.js', root), 'utf8')
   const imports = parts6Imports(runtime)
-  assert.equal(imports.length, 3)
+  assert.equal(imports.length, 4)
   for (const item of imports) {
     assert.equal(item.tag, TAG, `${item.specifier} uses PARTS-6 tag`)
     await access(new URL(item.specifier.replace(/^\.\//, ''), root))
@@ -26,25 +26,29 @@ test('PARTS-6 is the final visual owner before physics', async () => {
   const realism = runtime.indexOf(`import('./parts6/realism-refinement-v1.js?v=${TAG}')`)
   const precision = runtime.indexOf(`import('./parts6/precision-refinement-v2.js?v=${TAG}')`)
   const mechanical = runtime.indexOf(`import('./parts6/mechanical-realism-v1.js?v=${TAG}')`)
+  const fidelity = runtime.indexOf(`import('./parts6/connector-fidelity-v1.js?v=${TAG}')`)
   const physics = runtime.indexOf("import('./physics-v2.js')")
   assert.ok(detail >= 0)
   assert.ok(realism > detail)
   assert.ok(precision > realism)
   assert.ok(mechanical > precision)
-  assert.ok(physics > mechanical)
+  assert.ok(fidelity > mechanical)
+  assert.ok(physics > fidelity)
 })
 
 test('PARTS-6 changes visual factories without replacing mechanics metadata', async () => {
   const realism = await readFile(new URL('parts6/realism-refinement-v1.js', root), 'utf8')
   const precision = await readFile(new URL('parts6/precision-refinement-v2.js', root), 'utf8')
   const mechanical = await readFile(new URL('parts6/mechanical-realism-v1.js', root), 'utf8')
-  for (const source of [realism, precision, mechanical]) {
+  const fidelity = await readFile(new URL('parts6/connector-fidelity-v1.js', root), 'utf8')
+  for (const source of [realism, precision, mechanical, fidelity]) {
     assert.doesNotMatch(source, /mechanics\s*:/)
     assert.doesNotMatch(source, /connectors\s*:/)
   }
   assert.match(realism, /patchPart\(PARTS/)
   assert.match(precision, /patchPart\(PARTS/)
   assert.match(mechanical, /patchPart\(PARTS/)
+  assert.match(fidelity, /wrapFactory/)
 })
 
 test('PARTS-6 build metadata and version default agree', async () => {
@@ -61,6 +65,7 @@ test('visual QA page loads all PARTS-6 final owners', async () => {
   assert.match(qa, /parts6\/realism-refinement-v1/)
   assert.match(qa, /parts6\/precision-refinement-v2/)
   assert.match(qa, /parts6\/mechanical-realism-v1/)
+  assert.match(qa, /parts6\/connector-fidelity-v1/)
   assert.match(qa, /technic-frame-5x7/)
   assert.match(qa, /steering-base/)
   assert.match(html, /PARTS-6 REALISM QA/)
