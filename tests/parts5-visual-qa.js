@@ -14,6 +14,7 @@ await import('../parts4/steering-suspension-v1.js')
 await import('../parts5/visual-overhaul-v1.js')
 await import('../parts5/visual-refinement-v2.js')
 await import('../parts5/driveline-refinement-v2.js')
+await import('../parts5/structural-refinement-v2.js')
 
 const { findPart } = await import('../parts.js')
 const { gearPitchRadius } = await import('../parts5/part-geometry-metrics-v1.js')
@@ -206,4 +207,5 @@ globalThis.BrickLabParts5VisualQA = Object.freeze({
   spurTeeth,
   refinement: globalThis.BrickLabParts5Refinement ?? null,
   drivelineRefinement: globalThis.BrickLabParts5DrivelineVisuals ?? null,
+  structuralRefinement: globalThis.BrickLabParts5StructuralVisuals ?? null,
 })
