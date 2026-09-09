@@ -27,6 +27,16 @@ function connectorWorldReference(object, connector) {
   return localReference(connector.axis).applyQuaternion(quaternion).normalize()
 }
 
+function gearWorldReference(object, axis) {
+  const quaternion = object.getWorldQuaternion(new THREE.Quaternion())
+  let reference = new THREE.Vector3(1, 0, 0).applyQuaternion(quaternion).projectOnPlane(axis)
+  if (reference.lengthSq() < 1e-8) {
+    const basis = Math.abs(axis.y) < 0.8 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1)
+    reference = basis.sub(axis.clone().multiplyScalar(basis.dot(axis)))
+  }
+  return reference.normalize()
+}
+
 function desiredAxisForRule(sourceAxis, targetAxis, rule) {
   if (rule.axis === 'opposed') return targetAxis.clone().multiplyScalar(-1)
   return sourceAxis.dot(targetAxis) >= 0 ? targetAxis.clone() : targetAxis.clone().multiplyScalar(-1)
@@ -118,6 +128,7 @@ function gearDescriptor(object) {
   if (!gear) return null
   const connector = definition.connectors?.find(item => item.type === 'axle-hole')
   if (!connector) return null
+  const axis = connectorWorldAxis(object, connector)
   return {
     object,
     definition,
@@ -126,7 +137,8 @@ function gearDescriptor(object) {
     teeth: Number(gear.teeth) || 0,
     pitchRadius: Number(gear.pitchRadius) || (Number(gear.teeth) || 0) / 16,
     center: connectorWorldPosition(object, connector),
-    axis: connectorWorldAxis(object, connector),
+    axis,
+    reference: gearWorldReference(object, axis),
   }
 }
 
@@ -196,6 +208,7 @@ function publishGearCandidate(candidate) {
       errorStud: gearCandidate.distance,
       targetDistanceStud: gearCandidate.meshSolution.targetDistance,
       ratio: gearCandidate.ratio,
+      phaseCorrectionRad: gearCandidate.meshSolution.phaseCorrection ?? 0,
     } : null,
   }))
 }
@@ -360,9 +373,30 @@ function applyWorldDelta(selected, worldDelta) {
   selected.updateMatrixWorld(true)
 }
 
+function applyWorldAxisRotation(selected, worldAxis, angle) {
+  if (!worldAxis || !Number.isFinite(angle) || Math.abs(angle) < 1e-7) return
+  const delta = new THREE.Quaternion().setFromAxisAngle(worldAxis.clone().normalize(), angle)
+  const worldQuaternion = selected.getWorldQuaternion(new THREE.Quaternion())
+  const nextWorldQuaternion = delta.multiply(worldQuaternion)
+
+  if (!selected.parent) selected.quaternion.copy(nextWorldQuaternion)
+  else {
+    const parentWorldQuaternion = selected.parent.getWorldQuaternion(new THREE.Quaternion()).invert()
+    selected.quaternion.copy(parentWorldQuaternion.multiply(nextWorldQuaternion))
+  }
+  selected.updateMatrixWorld(true)
+}
+
 export function applySnap(selected, candidate) {
   if (candidate?.kind === 'gear-mesh') {
     applyWorldDelta(selected, candidate.translation.clone())
+    if (candidate.gearKind === 'spur') {
+      applyWorldAxisRotation(
+        selected,
+        candidate.meshSolution.phaseAxis,
+        candidate.meshSolution.phaseCorrection ?? 0,
+      )
+    }
     suppressNextConnectionForEndpoint(selected.userData.instanceId, candidate.source.id)
     window.dispatchEvent(new CustomEvent('bricklab:gearmeshsnap', {
       detail: {
@@ -374,16 +408,20 @@ export function applySnap(selected, candidate) {
         targetDistanceStud: candidate.meshSolution.targetDistance,
         finalErrorStud: 0,
         ratio: candidate.ratio,
+        phaseAligned: candidate.gearKind === 'spur',
+        phaseCorrectionRad: candidate.meshSolution.phaseCorrection ?? 0,
       },
     }))
     globalThis.__bricklabLastGearMeshSnap = {
-      version: 'parts-5-gear-mesh-snap-v1',
+      version: 'parts-5-gear-mesh-snap-v2',
       kind: candidate.gearKind,
       movingPartId: candidate.movingGear.object.userData.partId,
       fixedPartId: candidate.fixedGear.object.userData.partId,
       movingTeeth: candidate.movingGear.teeth,
       fixedTeeth: candidate.fixedGear.teeth,
       targetDistanceStud: candidate.meshSolution.targetDistance,
+      phaseAligned: candidate.gearKind === 'spur',
+      phaseCorrectionRad: candidate.meshSolution.phaseCorrection ?? 0,
     }
     return
   }
