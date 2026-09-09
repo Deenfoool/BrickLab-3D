@@ -2,10 +2,11 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises'
 
 const root = new URL('../', import.meta.url)
-const tag = process.argv[2] ?? 'parts-6-20260909-realism-v1'
+const tag = process.argv[2] ?? 'parts-6-20260910-audio-v1'
 if (!/^(?:runtime|connect|physics|parts)-\d+-[a-z0-9-]+$/.test(tag)) throw new Error('Invalid runtime tag')
 const id = tag.match(/^(?:runtime|connect|physics|parts)-\d+/)[0].toUpperCase()
 const files = (await readdir(root)).filter(name => name.endsWith('.js')).sort()
+for (const dir of ['audio', 'assets/audio']) for (const name of await readdir(new URL(dir + '/', root))) if (name.endsWith('.js')) files.push(`${dir}/${name}`)
 const versioned = Object.fromEntries(files.map(name => [`./${name}`, `./${name}?v=${tag}`]))
 
 // Keep old call sites stable while Connector System v3 is authoritative.
@@ -48,3 +49,11 @@ let axleHtml = await readFile(axleAcceptance, 'utf8')
 axleHtml = axleHtml.replace(/(<script type="importmap">)[\s\S]*?(<\/script>)/, `$1\n${JSON.stringify({ imports }, null, 2)}\n$2`)
 axleHtml = axleHtml.replace(/axle-browser\.js(?:\?v=[^"]+)?/, `axle-browser.js?v=${tag}`)
 await writeFile(axleAcceptance, axleHtml)
+
+const qa = new URL('audio-qa.html', root)
+let qaHtml = await readFile(qa, 'utf8')
+const map = `<script type="importmap">${JSON.stringify({ imports })}</script>`
+qaHtml = qaHtml.replace(/<script type="importmap">[\s\S]*?<\/script>/, '')
+qaHtml = qaHtml.replace('<script type="module"', map + '\n<script type="module"')
+qaHtml = qaHtml.replace(/src="\.\/audio\/qa\.js(?:\?v=[^"]+)?/, `src="./audio/qa.js?v=${tag}`)
+await writeFile(qa, qaHtml)

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile, readdir, access } from 'node:fs/promises'
 
 const root = new URL('../', import.meta.url)
 
@@ -14,12 +14,11 @@ test('production import map has no dangling local JavaScript targets', async () 
   const match = html.match(/<script type="importmap">([\s\S]*?)<\/script>/)
   assert.ok(match, 'index.html contains an import map')
   const { imports } = JSON.parse(match[1])
-  const rootFiles = new Set(await readdir(root))
 
   for (const [specifier, target] of Object.entries(imports)) {
     const file = localTarget(target)
     if (!file || file.startsWith('tests/')) continue
-    assert.ok(rootFiles.has(file), `${specifier} points to missing ${file}`)
+    await access(new URL(file, root))
   }
 })
 

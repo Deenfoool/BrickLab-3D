@@ -1,3 +1,4 @@
+import { emitAudioEvent } from './audio-events.js'
 export const PHYSICS_PIPELINE_VERSION = 'physics-pipeline-v2'
 
 export const PHYSICS_PHASES = Object.freeze([
@@ -47,6 +48,7 @@ export function runPhysicsMicrostep(session, dt, { advanceTestPhase } = {}) {
   call(session, 'applyScenarioForcesV2', dt)
 
   session.world.step()
+  emitAudioEvent('physics-step', { session, dt })
   call(session, 'validatePhysicsState')
   call(session, 'updateVehicleMetrics', dt)
   call(session, 'updateVehiclePerformanceV1', dt)
