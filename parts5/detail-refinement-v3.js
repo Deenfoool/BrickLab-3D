@@ -5,6 +5,10 @@ import { patchPart } from '../parts3/part-schema-v1.js'
 
 export const PARTS5_DETAIL_REFINEMENT_VERSION = 'parts-5-detail-refinement-v3'
 
+const AXIS_X = new THREE.Vector3(1, 0, 0)
+const AXIS_Y = new THREE.Vector3(0, 1, 0)
+const AXIS_Z = new THREE.Vector3(0, 0, 1)
+
 function absMaterial(color, roughness = 0.40) {
   return new THREE.MeshPhysicalMaterial({
     color,
@@ -125,17 +129,15 @@ function extrudeAlongX(shape, depth, material, options = {}) {
   return mesh
 }
 
-function orientFromZ(mesh, axis) {
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(...axis).normalize())
-  return mesh
+function orientFromZ(object, axis) {
+  object.quaternion.setFromUnitVectors(AXIS_Z, new THREE.Vector3(...axis).normalize())
+  return object
 }
 
 function addBoreFinish(group, position, axis, depth, color, radius = 0.245) {
-  const liner = visualOnly(new THREE.Mesh(
-    new THREE.CylinderGeometry(radius * 0.985, radius * 0.985, depth + 0.010, 32, 1, true),
-    darkMaterial(),
-  ))
-  liner.rotation.x = Math.PI / 2
+  const linerGeometry = new THREE.CylinderGeometry(radius * 0.985, radius * 0.985, depth + 0.010, 32, 1, true)
+  linerGeometry.rotateX(Math.PI / 2)
+  const liner = visualOnly(new THREE.Mesh(linerGeometry, darkMaterial()))
   orientFromZ(liner, axis)
   liner.position.fromArray(position)
   group.add(liner)
@@ -160,13 +162,45 @@ function setExplicitCollider(part, specs) {
   }
 }
 
+function boxSpec(center, size) {
+  return { type: 'box', center, size }
+}
+
+function ringBoxSpecs(axis, center, outer, inner, length) {
+  const [cx, cy, cz] = center
+  const wall = Math.max(0.08, outer - inner)
+  const middle = Math.max(0.08, inner * 2)
+  if (axis === 'x') {
+    return [
+      boxSpec([cx, cy + inner + wall / 2, cz], [length, wall, outer * 2]),
+      boxSpec([cx, cy - inner - wall / 2, cz], [length, wall, outer * 2]),
+      boxSpec([cx, cy, cz + inner + wall / 2], [length, middle, wall]),
+      boxSpec([cx, cy, cz - inner - wall / 2], [length, middle, wall]),
+    ]
+  }
+  if (axis === 'y') {
+    return [
+      boxSpec([cx + inner + wall / 2, cy, cz], [wall, length, outer * 2]),
+      boxSpec([cx - inner - wall / 2, cy, cz], [wall, length, outer * 2]),
+      boxSpec([cx, cy, cz + inner + wall / 2], [middle, length, wall]),
+      boxSpec([cx, cy, cz - inner - wall / 2], [middle, length, wall]),
+    ]
+  }
+  return [
+    boxSpec([cx + inner + wall / 2, cy, cz], [wall, outer * 2, length]),
+    boxSpec([cx - inner - wall / 2, cy, cz], [wall, outer * 2, length]),
+    boxSpec([cx, cy + inner + wall / 2, cz], [middle, wall, length]),
+    boxSpec([cx, cy - inner - wall / 2, cz], [middle, wall, length]),
+  ]
+}
+
 function bentBeamOutline(points, half = 0.44) {
-  const minY = Math.min(...points.map(([x, y]) => y))
-  const maxY = Math.max(...points.map(([x, y]) => y))
-  const horizontal = points.filter(([, y]) => Math.abs(y - minY) < 1e-5)
-  const minX = Math.min(...horizontal.map(([x]) => x))
-  const maxX = Math.max(...horizontal.map(([x]) => x))
-  const verticalX = points.reduce((best, [x]) => x > best ? x : best, -Infinity)
+  const minY = Math.min(...points.map(([, y]) => y))
+  const maxY = Math.max(...points.map(([, y]) => y))
+  const low = points.filter(([, y]) => Math.abs(y - minY) < 1e-5)
+  const minX = Math.min(...low.map(([x]) => x))
+  const maxX = Math.max(...low.map(([x]) => x))
+  const verticalX = Math.max(...points.map(([x]) => x))
 
   const shape = new THREE.Shape()
   shape.moveTo(minX - half, minY - half)
@@ -181,7 +215,8 @@ function bentBeamOutline(points, half = 0.44) {
 }
 
 function createBentBeamRefined(part, color) {
-  const points = part.connectors.filter(connector => connector.type === 'pin-hole').map(connector => [connector.position[0], connector.position[1]])
+  const connectors = part.connectors.filter(connector => connector.type === 'pin-hole')
+  const points = connectors.map(connector => [connector.position[0], connector.position[1]])
   const group = root(part.id, color)
   const depth = 0.78
   const material = absMaterial(color, 0.40)
@@ -191,9 +226,7 @@ function createBentBeamRefined(part, color) {
     bevelThickness: 0.018,
   })
   group.add(body)
-  for (const connector of part.connectors.filter(item => item.type === 'pin-hole')) {
-    addBoreFinish(group, connector.position, connector.axis, depth, color)
-  }
+  for (const connector of connectors) addBoreFinish(group, connector.position, connector.axis, depth, color)
   return group
 }
 
@@ -201,14 +234,28 @@ function bentBeamCollider(part) {
   const points = part.connectors.filter(connector => connector.type === 'pin-hole').map(connector => connector.position)
   const minY = Math.min(...points.map(point => point[1]))
   const maxY = Math.max(...points.map(point => point[1]))
-  const low = points.filter(point => Math.abs(point[1] - minY) < 1e-5)
-  const minX = Math.min(...low.map(point => point[0]))
-  const maxX = Math.max(...low.map(point => point[0]))
   const verticalX = Math.max(...points.map(point => point[0]))
-  return [
-    { type: 'box', center: [(minX + maxX) / 2, minY, 0], size: [maxX - minX + 0.88, 0.38, 0.72] },
-    { type: 'box', center: [verticalX, (minY + maxY) / 2, 0], size: [0.38, maxY - minY + 0.88, 0.72] },
+  const low = points.filter(point => Math.abs(point[1] - minY) < 1e-5).sort((a, b) => a[0] - b[0])
+  const vertical = points.filter(point => Math.abs(point[0] - verticalX) < 1e-5).sort((a, b) => a[1] - b[1])
+  const minX = low[0][0]
+  const maxX = low.at(-1)[0]
+  const horizontalLength = maxX - minX + 0.88
+  const verticalLength = maxY - minY + 0.88
+  const specs = [
+    boxSpec([(minX + maxX) / 2, minY - 0.36, 0], [horizontalLength, 0.16, 0.72]),
+    boxSpec([(minX + maxX) / 2, minY + 0.36, 0], [horizontalLength, 0.16, 0.72]),
+    boxSpec([verticalX - 0.36, (minY + maxY) / 2, 0], [0.16, verticalLength, 0.72]),
+    boxSpec([verticalX + 0.36, (minY + maxY) / 2, 0], [0.16, verticalLength, 0.72]),
   ]
+  for (let i = 0; i < low.length - 1; i += 1) {
+    const gap = Math.max(0.10, low[i + 1][0] - low[i][0] - 0.57)
+    specs.push(boxSpec([(low[i][0] + low[i + 1][0]) / 2, minY, 0], [gap, 0.56, 0.72]))
+  }
+  for (let i = 0; i < vertical.length - 1; i += 1) {
+    const gap = Math.max(0.10, vertical[i + 1][1] - vertical[i][1] - 0.57)
+    specs.push(boxSpec([verticalX, (vertical[i][1] + vertical[i + 1][1]) / 2, 0], [0.56, gap, 0.72]))
+  }
+  return specs
 }
 
 function addPinRibs(group, length, material, friction) {
@@ -239,18 +286,18 @@ function createPinRefined(part, color, length, friction) {
     tip.rotation.x = Math.PI / 2
     tip.position.set(0, 0.28, side * (length / 2 - 0.10))
     group.add(tip)
-
     const slit = visualOnly(new THREE.Mesh(new RoundedBoxGeometry(0.050, 0.12, 0.012, 2, 0.008), darkMaterial()))
     slit.position.set(0, 0.28, side * (length / 2 + 0.007))
     group.add(slit)
   }
 
-  const collar = new THREE.Mesh(new THREE.CylinderGeometry(friction ? 0.263 : 0.235, friction ? 0.263 : 0.235, 0.13, 40), material)
+  const collarRadius = friction ? 0.263 : 0.235
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(collarRadius, collarRadius, 0.13, 40), material)
   collar.rotation.x = Math.PI / 2
   collar.position.y = 0.28
   group.add(collar)
-
   addPinRibs(group, length, material, friction)
+
   if (friction) {
     for (const z of [-length * 0.31, length * 0.31]) {
       const ridge = new THREE.Mesh(new THREE.TorusGeometry(0.172, 0.019, 8, 32), material)
@@ -264,7 +311,6 @@ function createPinRefined(part, color, length, friction) {
 function createAxlePinRefined(part, color) {
   const group = root(part.id, color)
   const material = pomMaterial(color)
-
   const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.164, 0.164, 0.92, 36), material)
   pin.rotation.x = Math.PI / 2
   pin.position.set(0, 0.30, -0.48)
@@ -277,7 +323,6 @@ function createAxlePinRefined(part, color) {
     bevelSize: 0.010,
     bevelThickness: 0.018,
   })
-  axleGeometry.translate(0, 0, 0)
   const axle = new THREE.Mesh(axleGeometry, material)
   axle.position.set(0, 0.30, 0.01)
   group.add(axle)
@@ -286,15 +331,7 @@ function createAxlePinRefined(part, color) {
   collar.rotation.x = Math.PI / 2
   collar.position.set(0, 0.30, 0)
   group.add(collar)
-
-  const ribGeometry = new RoundedBoxGeometry(0.045, 0.045, 0.28, 2, 0.012)
-  for (let i = 0; i < 4; i += 1) {
-    const a = i * Math.PI / 2
-    const rib = new THREE.Mesh(ribGeometry, material)
-    rib.position.set(Math.cos(a) * 0.166, 0.30 + Math.sin(a) * 0.166, -0.58)
-    rib.rotation.z = a
-    group.add(rib)
-  }
+  addPinRibs(group, 1.9, material, true)
   return group
 }
 
@@ -309,18 +346,32 @@ function createTripleConnectorRefined(part, color) {
   return group
 }
 
+function linearHoleCollider(connectors, depth = 0.72, bodyHeight = 0.88) {
+  const points = connectors.map(connector => connector.position).sort((a, b) => a[0] - b[0])
+  const minX = points[0][0] - 0.44
+  const maxX = points.at(-1)[0] + 0.44
+  const y = points[0][1]
+  const specs = [
+    boxSpec([(minX + maxX) / 2, y - 0.36, 0], [maxX - minX, 0.16, depth]),
+    boxSpec([(minX + maxX) / 2, y + 0.36, 0], [maxX - minX, 0.16, depth]),
+  ]
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const gap = Math.max(0.10, points[i + 1][0] - points[i][0] - 0.57)
+    specs.push(boxSpec([(points[i][0] + points[i + 1][0]) / 2, y, 0], [gap, bodyHeight - 0.32, depth]))
+  }
+  return specs
+}
+
 function createPerpendicularConnectorRefined(part, color) {
   const group = root(part.id, color)
   const material = absMaterial(color, 0.41)
   const axleBoss = extrudeAlongX(crossBoreShape(0.38), 1.38, material, { bevelSegments: 3, bevelSize: 0.012, bevelThickness: 0.012 })
   axleBoss.position.y = 0.42
   group.add(axleBoss)
-
   const pinBoss = extrudeShape(annulusShape(0.36, 0.245), 0.94, material, { bevelSegments: 3, bevelSize: 0.012, bevelThickness: 0.012 })
   pinBoss.position.y = 0.42
   group.add(pinBoss)
-
-  const web = new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.62, 0.52, 4, 0.16), material)
+  const web = new THREE.Mesh(new RoundedBoxGeometry(0.56, 0.56, 0.48, 4, 0.14), material)
   web.position.y = 0.42
   group.add(web)
   return group
@@ -331,17 +382,14 @@ function createAngleConnectorRefined(part, color) {
   const material = absMaterial(color, 0.41)
   const a = part.connectors.find(connector => connector.id === 'hole-a')
   const b = part.connectors.find(connector => connector.id === 'hole-b')
-
   const ringA = extrudeShape(annulusShape(0.36, 0.245), 0.62, material, { bevelSegments: 3, bevelSize: 0.012, bevelThickness: 0.012 })
   ringA.position.fromArray(a.position)
   group.add(ringA)
-
   const ringB = extrudeShape(annulusShape(0.36, 0.245), 0.62, material, { bevelSegments: 3, bevelSize: 0.012, bevelThickness: 0.012 })
   orientFromZ(ringB, b.axis)
   ringB.position.fromArray(b.position)
   group.add(ringB)
-
-  const web = new THREE.Mesh(new RoundedBoxGeometry(0.76, 0.48, 0.48, 4, 0.13), material)
+  const web = new THREE.Mesh(new RoundedBoxGeometry(0.72, 0.36, 0.34, 4, 0.10), material)
   web.position.set(0, 0.42, 0)
   web.rotation.z = -0.28
   group.add(web)
@@ -354,17 +402,14 @@ function createBearingBlockRefined(part, color) {
   const base = new THREE.Mesh(new RoundedBoxGeometry(1.42, 0.24, 1.20, 4, 0.09), material)
   base.position.y = 0.12
   group.add(base)
-
   for (const x of [-0.54, 0.54]) {
     const pillar = new THREE.Mesh(new RoundedBoxGeometry(0.32, 0.92, 1.10, 4, 0.10), material)
     pillar.position.set(x, 0.60, 0)
     group.add(pillar)
   }
-
   const bearing = extrudeAlongX(annulusShape(0.45, 0.245), 1.34, material, { bevelSegments: 4, bevelSize: 0.014, bevelThickness: 0.014 })
   bearing.position.y = 0.90
   group.add(bearing)
-
   const liner = visualOnly(extrudeAlongX(annulusShape(0.285, 0.245), 1.39, darkMaterial(), { bevelEnabled: false }))
   liner.position.y = 0.90
   group.add(liner)
@@ -374,13 +419,12 @@ function createBearingBlockRefined(part, color) {
 function createSuspensionArmRefined(part, color) {
   const group = root(part.id, color)
   const material = absMaterial(color, 0.42)
-  const holeConnectors = part.connectors.filter(connector => connector.type === 'pin-hole')
+  const holes = part.connectors.filter(connector => connector.type === 'pin-hole')
   const shape = roundedRectShape(4.86, 0.88, 0.40)
-  for (const connector of holeConnectors) shape.holes.push(circleHole(connector.position[0] - 0.08, 0, 0.245))
+  for (const connector of holes) shape.holes.push(circleHole(connector.position[0] - 0.08, 0, 0.245))
   const body = extrudeShape(shape, 0.70, material, { bevelSegments: 4, bevelSize: 0.016, bevelThickness: 0.016 })
   body.position.set(0.08, 0.45, 0)
   group.add(body)
-
   const pivot = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.34, 0.98, 36), material)
   pivot.rotation.x = Math.PI / 2
   pivot.position.set(-2, 0.45, 0)
@@ -389,8 +433,27 @@ function createSuspensionArmRefined(part, color) {
   pivotPin.rotation.x = Math.PI / 2
   pivotPin.position.set(-2, 0.45, 0)
   group.add(pivotPin)
-  for (const connector of holeConnectors) addBoreFinish(group, connector.position, connector.axis, 0.70, color)
+  for (const connector of holes) addBoreFinish(group, connector.position, connector.axis, 0.70, color)
   return group
+}
+
+function suspensionArmCollider(part) {
+  const holes = part.connectors.filter(connector => connector.type === 'pin-hole').sort((a, b) => a.position[0] - b.position[0])
+  const minX = -2.35
+  const maxX = 2.51
+  const y = 0.45
+  const specs = [
+    boxSpec([(minX + maxX) / 2, y - 0.36, 0], [maxX - minX, 0.16, 0.66]),
+    boxSpec([(minX + maxX) / 2, y + 0.36, 0], [maxX - minX, 0.16, 0.66]),
+    boxSpec([-2.0, y, 0], [0.52, 0.56, 0.66]),
+    { type: 'cylinder-z', center: [-2, y, 0], radius: 0.19, halfLength: 0.56 },
+  ]
+  for (let i = 0; i < holes.length - 1; i += 1) {
+    const a = holes[i].position[0]
+    const b = holes[i + 1].position[0]
+    specs.push(boxSpec([(a + b) / 2, y, 0], [Math.max(0.10, b - a - 0.57), 0.56, 0.66]))
+  }
+  return specs
 }
 
 function createMotorRefined(part, color) {
@@ -399,32 +462,26 @@ function createMotorRefined(part, color) {
   const body = new THREE.Mesh(new RoundedBoxGeometry(2.82, 1.72, 2.02, 5, 0.20), shell)
   body.position.y = 0.88
   group.add(body)
-
   const seam = visualOnly(new THREE.Mesh(new THREE.BoxGeometry(0.025, 1.45, 2.04), darkMaterial()))
   seam.position.set(-0.24, 0.88, 0)
   group.add(seam)
-
   const endBell = extrudeAlongX(annulusShape(0.72, 0.31), 0.18, darkMaterial(), { bevelSegments: 3, bevelSize: 0.010, bevelThickness: 0.010 })
   endBell.position.set(1.45, 0.90, 0)
   group.add(endBell)
-
   const bearing = extrudeAlongX(annulusShape(0.33, 0.205), 0.22, metalMaterial(), { bevelSegments: 2, bevelSize: 0.006, bevelThickness: 0.006 })
   bearing.position.set(1.58, 0.90, 0)
   group.add(bearing)
-
   const shaftGeometry = new THREE.ExtrudeGeometry(crossShape(0.16, 0.065), { depth: 0.52, bevelEnabled: true, bevelSegments: 2, bevelSize: 0.008, bevelThickness: 0.012 })
   shaftGeometry.center()
   shaftGeometry.rotateY(Math.PI / 2)
   const shaft = new THREE.Mesh(shaftGeometry, metalMaterial())
   shaft.position.set(1.86, 0.90, 0)
   group.add(shaft)
-
   for (let i = -2; i <= 2; i += 1) {
     const rib = new THREE.Mesh(new RoundedBoxGeometry(0.08, 0.82, 0.12, 2, 0.025), darkMaterial())
     rib.position.set(-0.72 + i * 0.28, 0.90, 0.99)
     group.add(rib)
   }
-
   for (const x of [-0.58, 0.58]) for (const z of [-0.58, 0.58]) {
     const mount = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.29, 0.12, 28), shell)
     mount.position.set(x, 0.06, z)
@@ -439,25 +496,19 @@ function createGearboxRefined(part, color) {
   const body = new THREE.Mesh(new RoundedBoxGeometry(3.12, 1.62, 2.12, 5, 0.19), shell)
   body.position.y = 0.84
   group.add(body)
-
   const seam = visualOnly(new THREE.Mesh(new THREE.BoxGeometry(3.14, 0.035, 2.14), darkMaterial()))
   seam.position.y = 0.95
   group.add(seam)
-
   for (const x of [-1.58, 1.58]) {
     const carrier = extrudeAlongX(crossBoreShape(0.42), 0.20, shell, { bevelSegments: 3, bevelSize: 0.010, bevelThickness: 0.010 })
     carrier.position.set(x, 0.88, 0)
     group.add(carrier)
   }
-
-  for (const z of [-0.82, 0.82]) {
-    for (const x of [-0.92, 0, 0.92]) {
-      const rib = new THREE.Mesh(new RoundedBoxGeometry(0.10, 1.18, 0.10, 2, 0.025), shell)
-      rib.position.set(x, 0.82, z)
-      group.add(rib)
-    }
+  for (const z of [-0.82, 0.82]) for (const x of [-0.92, 0, 0.92]) {
+    const rib = new THREE.Mesh(new RoundedBoxGeometry(0.10, 1.18, 0.10, 2, 0.025), shell)
+    rib.position.set(x, 0.82, z)
+    group.add(rib)
   }
-
   const gate = new THREE.Mesh(new RoundedBoxGeometry(0.92, 0.08, 0.52, 3, 0.035), darkMaterial())
   gate.position.set(0, 1.68, 0)
   group.add(gate)
@@ -475,16 +526,13 @@ function createDifferentialRefined(part, color) {
   const group = root(part.id, color)
   const shell = absMaterial(color, 0.43)
   const metal = metalMaterial()
-
   const carrier = new THREE.Mesh(new THREE.SphereGeometry(0.98, 52, 32), shell)
   carrier.scale.set(1.20, 0.96, 0.96)
   carrier.position.y = 1.00
   group.add(carrier)
-
   const waist = extrudeAlongX(annulusShape(1.02, 0.90), 0.16, darkMaterial(), { bevelSegments: 2, bevelSize: 0.008, bevelThickness: 0.008 })
   waist.position.y = 1.00
   group.add(waist)
-
   for (const x of [-0.92, 0.92]) {
     const cover = extrudeAlongX(crossBoreShape(0.44), 0.24, shell, { bevelSegments: 3, bevelSize: 0.010, bevelThickness: 0.010 })
     cover.position.set(x, 1.00, 0)
@@ -493,11 +541,9 @@ function createDifferentialRefined(part, color) {
     bearing.position.set(x + Math.sign(x) * 0.13, 1.00, 0)
     group.add(bearing)
   }
-
   const inputBoss = extrudeShape(crossBoreShape(0.43), 0.34, shell, { bevelSegments: 3, bevelSize: 0.010, bevelThickness: 0.010 })
   inputBoss.position.set(0, 1.00, 1.02)
   group.add(inputBoss)
-
   for (let i = 0; i < 10; i += 1) {
     const angle = i / 10 * Math.PI * 2
     const bolt = visualOnly(new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.045, 12), metal))
@@ -531,45 +577,52 @@ for (const [id, length, friction] of [
   upgraded.push(id)
 }
 
+const connectorTriple = PARTS.find(item => item.id === 'connector-triple')
+if (connectorTriple) {
+  patchPart(PARTS, connectorTriple.id, { create: color => createTripleConnectorRefined(connectorTriple, color), visualQuality: 'parts-5-true-hole-triple-v3' })
+  setExplicitCollider(connectorTriple, linearHoleCollider(connectorTriple.connectors))
+  upgraded.push(connectorTriple.id)
+}
+
 for (const [id, factory, quality, colliderSpecs] of [
   ['axle-pin', createAxlePinRefined, 'parts-5-hybrid-axle-pin-v3', [{ type: 'cylinder-z', center: [0, 0.30, 0], radius: 0.19, halfLength: 0.98 }]],
-  ['connector-triple', createTripleConnectorRefined, 'parts-5-true-hole-triple-v3', null],
   ['connector-perpendicular', createPerpendicularConnectorRefined, 'parts-5-orthogonal-boss-v3', [
-    { type: 'cylinder-x', center: [0, 0.42, 0], radius: 0.38, halfLength: 0.69 },
-    { type: 'cylinder-z', center: [0, 0.42, 0], radius: 0.36, halfLength: 0.47 },
+    ...ringBoxSpecs('x', [0, 0.42, 0], 0.38, 0.22, 1.38),
+    ...ringBoxSpecs('z', [0, 0.42, 0], 0.36, 0.245, 0.94),
   ]],
   ['connector-angle', createAngleConnectorRefined, 'parts-5-angle-boss-v3', [
-    { type: 'cylinder-z', center: [-0.45, 0.42, 0], radius: 0.36, halfLength: 0.31 },
-    { type: 'cylinder-y', center: [0.45, 0.42, 0], radius: 0.36, halfLength: 0.31 },
-    { type: 'box', center: [0, 0.42, 0], size: [0.78, 0.44, 0.44] },
+    ...ringBoxSpecs('z', [-0.45, 0.42, 0], 0.36, 0.245, 0.62),
+    ...ringBoxSpecs('y', [0.45, 0.42, 0], 0.36, 0.245, 0.62),
+    boxSpec([0, 0.42, 0], [0.58, 0.26, 0.26]),
   ]],
   ['bearing-block', createBearingBlockRefined, 'parts-5-open-bearing-block-v3', [
-    { type: 'box', center: [0, 0.12, 0], size: [1.42, 0.24, 1.20] },
-    { type: 'box', center: [-0.54, 0.60, 0], size: [0.32, 0.92, 1.10] },
-    { type: 'box', center: [0.54, 0.60, 0], size: [0.32, 0.92, 1.10] },
+    boxSpec([0, 0.12, 0], [1.42, 0.24, 1.20]),
+    boxSpec([-0.54, 0.60, 0], [0.32, 0.92, 1.10]),
+    boxSpec([0.54, 0.60, 0], [0.32, 0.92, 1.10]),
+    ...ringBoxSpecs('x', [0, 0.90, 0], 0.45, 0.245, 1.34),
   ]],
-  ['suspension-arm-5', createSuspensionArmRefined, 'parts-5-forged-suspension-arm-v3', [
-    { type: 'box', center: [0.08, 0.45, 0], size: [4.86, 0.70, 0.70] },
-    { type: 'cylinder-z', center: [-2, 0.45, 0], radius: 0.34, halfLength: 0.49 },
-  ]],
-  ['motor', createMotorRefined, 'parts-5-motor-shell-v3', [{ type: 'box', center: [0, 0.88, 0], size: [2.82, 1.72, 2.02] }]],
-  ['gearbox-fnr', createGearboxRefined, 'parts-5-gearbox-shell-v3', [{ type: 'box', center: [0, 0.84, 0], size: [3.12, 1.62, 2.12] }]],
+  ['suspension-arm-5', createSuspensionArmRefined, 'parts-5-forged-suspension-arm-v3', null],
+  ['motor', createMotorRefined, 'parts-5-motor-shell-v3', [boxSpec([0, 0.88, 0], [2.82, 1.72, 2.02])]],
+  ['gearbox-fnr', createGearboxRefined, 'parts-5-gearbox-shell-v3', [boxSpec([0, 0.84, 0], [3.12, 1.62, 2.12])]],
   ['open-differential', createDifferentialRefined, 'parts-5-differential-carrier-v3', [
-    { type: 'cylinder-x', center: [0, 1.00, 0], radius: 0.94, halfLength: 0.93 },
-    { type: 'cylinder-z', center: [0, 1.00, 0.96], radius: 0.42, halfLength: 0.26 },
+    { type: 'cylinder-x', center: [0, 1.00, 0], radius: 0.94, halfLength: 0.78 },
+    ...ringBoxSpecs('x', [-0.90, 1.00, 0], 0.44, 0.22, 0.24),
+    ...ringBoxSpecs('x', [0.90, 1.00, 0], 0.44, 0.22, 0.24),
+    ...ringBoxSpecs('z', [0, 1.00, 1.02], 0.43, 0.22, 0.34),
   ]],
 ]) {
   const part = PARTS.find(item => item.id === id)
   if (!part) continue
   patchPart(PARTS, id, { create: color => factory(part, color), visualQuality: quality })
-  if (colliderSpecs) setExplicitCollider(part, colliderSpecs)
+  const specs = id === 'suspension-arm-5' ? suspensionArmCollider(part) : colliderSpecs
+  if (specs) setExplicitCollider(part, specs)
   upgraded.push(id)
 }
 
 globalThis.BrickLabParts5DetailRefinement = Object.freeze({
   version: PARTS5_DETAIL_REFINEMENT_VERSION,
   upgraded: [...new Set(upgraded)],
-  colliderProfile: 'explicit geometry-independent proxies for visually complex parts',
+  colliderProfile: 'explicit geometry-independent, hole-safe compound proxies for visually complex parts',
 })
 
 window.dispatchEvent(new CustomEvent('bricklab:partcatalogchange', {
