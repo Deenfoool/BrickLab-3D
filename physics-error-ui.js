@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab ${BUILD_TAG} · high-fidelity wheels/bevels/driveline · tapered suspension arm + rounded bent liftarms · molded micro-detail/service hardware · PARTS-4 mechanics preserved`
+  badge.title = `BrickLab ${BUILD_TAG} · high-fidelity wheels/bevels/driveline · forged steering carrier + tapered suspension arm · molded micro-detail · PARTS-4 mechanics preserved`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -109,6 +109,8 @@ window.__bricklabPhysicsDiagnostics = () => ({
     fineMechanicalDetail: window.BrickLabParts6FineMechanicalDetail ?? null,
     coreMoldedFidelity: window.BrickLabParts6CoreMoldedFidelity ?? null,
     suspensionArmFidelity: window.BrickLabParts6SuspensionArmFidelity ?? null,
+    steeringCarrierFidelity: window.BrickLabParts6SteeringCarrierFidelity ?? null,
+    steeringCarrierPortDedup: window.BrickLabParts6SteeringCarrierPortDedup ?? null,
     bentLiftarmFidelity: window.BrickLabParts6BentLiftarmFidelity ?? null,
     heroMicroDetail: window.BrickLabParts6HeroMicroDetail ?? null,
     connectorFidelity: window.BrickLabParts6ConnectorFidelity ?? null,
