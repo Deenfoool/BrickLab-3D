@@ -18,6 +18,11 @@ function markInterfaceTree(node, inherited = false) {
   for (const child of node?.children ?? []) markInterfaceTree(child, active)
 }
 
+function replaceRoundedBox(node, width, height, depth, radius) {
+  node.geometry?.dispose?.()
+  node.geometry = new RoundedBoxGeometry(width, height, depth, 3, Math.min(radius, width / 3, height / 3, depth / 3))
+}
+
 function hardenFineDetailTree(node, partId) {
   if (node?.userData?.parts6FineFeature && node?.isMesh) {
     node.userData.physicsIgnore = true
@@ -31,12 +36,24 @@ function hardenFineDetailTree(node, partId) {
       node.geometry = new THREE.CylinderGeometry(N.pinHoleRadius * 0.99, N.pinHoleRadius * 0.99, 0.34, 42, 1, true)
     }
 
+    // Very thin molded details need edge radii clamped to their actual thickness.
+    // Otherwise a decorative RoundedBox can self-intersect before it even reaches
+    // the renderer, which is exactly the kind of artifact PARTS-6 is meant to remove.
+    if (node.userData.parts6FineFeature === 'suspension-arm-lightening-recess') {
+      replaceRoundedBox(node, 3.10, 0.24, 0.018, 0.006)
+    }
+    if (node.userData.parts6FineFeature === 'motor-rear-vent') {
+      replaceRoundedBox(node, 0.018, 0.075, 0.24, 0.006)
+    }
+    if (node.userData.parts6FineFeature === 'worm-wheel-web') {
+      replaceRoundedBox(node, 0.035, 0.095, 0.34, 0.010)
+    }
+
     // Connector parting lines are intentionally hairline-thin surface marks. The
     // original decorative strip depth was too large and could visibly float outside
     // the molded connector body. Clamp it to a thin surface line per connector family.
     if (node.userData.parts6FineFeature === 'connector-parting-line') {
-      node.geometry?.dispose?.()
-      node.geometry = new RoundedBoxGeometry(0.70, 0.018, 0.018, 2, 0.006)
+      replaceRoundedBox(node, 0.70, 0.018, 0.018, 0.006)
       node.position.z = partId === 'connector-triple' ? 0.398 : 0.505
     }
   }
@@ -62,7 +79,7 @@ for (const part of PARTS) {
 globalThis.BrickLabParts6InterfacePhysicsSafety = Object.freeze({
   version: PARTS6_INTERFACE_PHYSICS_SAFETY_VERSION,
   protectedParts,
-  rule: 'interface and fine-detail meshes are collider-independent; bore shadows stay open and connector parting lines stay surface-thin',
+  rule: 'interface and fine-detail meshes are collider-independent; bore shadows stay open, thin detail radii stay bounded and connector parting lines stay surface-thin',
 })
 
 window.dispatchEvent(new CustomEvent('bricklab:partcatalogchange', {
