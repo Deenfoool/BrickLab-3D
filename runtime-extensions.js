@@ -60,6 +60,9 @@ await import('./parts6/fine-mechanical-detail-v3.js?v=parts-6-20260909-realism-v
 // Core molded fidelity finishes pins, axles, bushes, liftarms, studded Technic bricks,
 // frames and spur gears after the nominal geometry layer without changing mechanics.
 await import('./parts6/core-molded-fidelity-v4.js?v=parts-6-20260909-realism-v1')
+// Structural shell v11 turns Technic bricks into open underside injection-molded shells
+// and the 5x7 frame into a reinforced true-bore perimeter while retaining old bounds.
+await import('./parts6/structural-shell-fidelity-v11.js?v=parts-6-20260909-realism-v1')
 // The suspension arm becomes a waisted molded control arm with bored eyes, a pivot
 // boss and tapered neck while preserving the PARTS-5 explicit compound collider.
 await import('./parts6/suspension-arm-fidelity-v7.js?v=parts-6-20260909-realism-v1')
