@@ -18,6 +18,53 @@ PARTS-6 is a visual fidelity layer on top of PARTS-5. It deliberately keeps exis
 - steering/suspension parts should visibly distinguish a solid pin/axle from an empty pin-hole/axle-hole;
 - steering-rack teeth should belong to the same module and 20° pressure-angle family as the spur gears.
 
+## Hero mechanical fidelity
+
+`hero-mechanical-fidelity-v2.js` is the high-visibility pass for the models that dominate screenshots and actual builds: wheels, bevel gears, articulated driveline and major housings.
+
+### Wheels
+
+All wheel families keep their authoritative `mechanics.wheel.radius` and `mechanics.wheel.width`. The hero factory rebuilds only the rendering assembly:
+
+- smoother lathed tyre carcass with bead-to-shoulder curvature instead of a thick torus;
+- bead-seat shadows and shallow sidewall mold rings;
+- separate rim barrel, bead lips and recessed face dishes;
+- tapered radial spokes and a keyed central hub;
+- Road: three-row fine tread;
+- Narrow: single narrow alternating tread row;
+- Off-road: staggered centre + shoulder block rows;
+- Tractor: two large opposing diagonal lug rows.
+
+Tread and sidewall finish meshes remain `physicsIgnore`. Wheel collision continues to use radius/width metadata, not render bounds.
+
+### Bevel gears
+
+12T and 20T keep their canonical pitch radii and 90° mesh semantics. The new rendering uses:
+
+- a true conical annular rim;
+- multi-slice tapered tooth bodies derived from the same module/pressure-angle family;
+- separate keyed hub;
+- 4-web 12T and 6-web 20T molded centres;
+- shallow face relief rather than a solid conical puck.
+
+Gear collision/mesh detection remains pitch-metadata driven.
+
+### Cardan / CV
+
+The existing articulated factories remain the bounds owners. PARTS-6 only adds collider-independent detail:
+
+- Universal Joint: four bearing caps, seal rings and connector-aligned yoke collars;
+- CV Joint: ribbed bell collars and an additional cage retainer around the existing six-ball Rzeppa-style centre.
+
+No articulated mechanics, angular limits or transmission ratios are replaced.
+
+### Gearbox / Open Differential
+
+Both parts already had explicit collider profiles from PARTS-5, so their visual shells can be improved without changing simulation geometry.
+
+- F/N/R Gearbox: split case halves, visible case seam, bearing bosses/retainers, casting ribs, case bolts and three selector detents;
+- Open Differential: open carrier ring, external carrier teeth, side hubs/bearing retainers, four cage ribs, spider cross/gears and input bearing boss.
+
 ## Interface fidelity
 
 The nominal dimension layer owns the final core geometry for straight/thin/bent liftarms, Technic bricks, 5×7 frame, free axles, pins, bushes, axle coupler and spur gears.
@@ -45,7 +92,7 @@ These interface finishes are visual only. Their meshes are marked `physicsIgnore
 - rack teeth, tie-pin finishing, wear strips, mounting-tube finish and guide ribs remain `physicsIgnore`;
 - rack slider/tie connectors, guide rail/mount connectors, steering travel and PARTS-4 rack mechanics are unchanged.
 
-The new visible rack and guide no longer determine their colliders through visual bounds. Explicit proxy profiles reproduce the pre-realism rack and guide bounds envelopes, so improving tooth depth, guide clearance or molded details does not silently change simulation geometry.
+The visible rack and guide no longer determine their colliders through visual bounds. Explicit proxy profiles reproduce the pre-realism rack and guide bounds envelopes, so improving tooth depth, guide clearance or molded details does not silently change simulation geometry.
 
 The QA gallery includes a 12T pinion whose pitch circle is tangent to the rack pitch line. This is a visual reference only and does not create a fake connector or drivetrain joint.
 
@@ -64,16 +111,18 @@ Open `tests/parts5-visual-qa.html` in a WebGL-capable browser. The page is title
 
 Review especially:
 
-1. wheel sidewall, rim depth, tread and keyed axle openings on both faces;
+1. all wheel families: sidewall silhouette, bead lip, rim depth, spoke taper and tread family distinction;
 2. 8T–40T spur family consistency, measured tooth-tip silhouette and preserved pitch mesh;
-3. steering rack ↔ 12T pinion pitch-line contact, tooth depth and rebuilt guide clearance;
-4. rack-guide wear strips, ribs and eight mounting tubes;
-5. 12T/20T bevel pair and keyed centre sockets;
-6. straight/thin/bent liftarms and 5×7 frame hole proportions;
-7. Technic brick side bores and underside;
-8. axles, pins, bushes and axle coupler mating proportions;
-9. steering base, knuckle, wheel hub and tie-rod port semantics;
-10. shock body/rod and metal coil spring;
-11. universal/CV/worm/gearbox/differential ports;
-12. RPM/Torque sensor through-holes;
-13. absence of floating detail, z-fighting and accidental collider growth.
+3. 12T/20T bevel pair: conical taper, web openings and keyed sockets;
+4. Universal Joint bearing caps/seals and CV bell/cage detail;
+5. split-shell gearbox bearing bosses/ribs/bolts;
+6. Open Differential ring carrier, spider centre and three axle ports;
+7. steering rack ↔ 12T pinion pitch-line contact, tooth depth and rebuilt guide clearance;
+8. rack-guide wear strips, ribs and eight mounting tubes;
+9. straight/thin/bent liftarms and 5×7 frame hole proportions;
+10. Technic brick side bores and underside;
+11. axles, pins, bushes and axle coupler mating proportions;
+12. steering base, knuckle, wheel hub and tie-rod port semantics;
+13. shock body/rod and metal coil spring;
+14. RPM/Torque sensor through-holes;
+15. absence of floating detail, z-fighting and accidental collider growth.
