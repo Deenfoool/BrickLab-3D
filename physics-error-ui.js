@@ -1,5 +1,5 @@
-const BUILD_ID = 'PARTS-4'
-const BUILD_TAG = 'parts-4-20260908-driveline-v1'
+const BUILD_ID = 'PARTS-5'
+const BUILD_TAG = 'parts-5-20260909-visual-v1'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab production build ${BUILD_TAG} · U/CV joints · bevel/worm driveline · physical steering rack · telescopic shocks`
+  badge.title = `BrickLab ${BUILD_TAG} · profiled wheels · shared-module gears · exact gear mesh snap · PARTS-4 physics preserved`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -89,6 +89,12 @@ window.__bricklabPhysicsDiagnostics = () => ({
     steeringSuspension: window.BrickLabParts4SteeringSuspension ?? null,
     linearMechanisms: window.BrickLabParts4LinearMechanisms?.getState?.() ?? window.__bricklabParts4LinearMechanisms ?? null,
     catalog: window.BrickLabParts4Catalog ?? null,
+  },
+  parts5: {
+    visuals: window.BrickLabParts5Visuals ?? null,
+    gearMeshCandidate: window.__bricklabGearMeshCandidate ?? null,
+    lastGearMeshSnap: window.__bricklabLastGearMeshSnap ?? null,
+    gearMeshUI: window.BrickLabParts5GearMeshUI ?? null,
   },
   pipeline: window.BrickLabPhysicsPipeline ?? null,
   ownership: window.BrickLabPhysicsOwnership?.snapshot?.() ?? window.__bricklabPhysicsOwnership ?? null,
