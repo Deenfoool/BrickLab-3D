@@ -1,5 +1,5 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: PARTS-5 · parametric visual overhaul + deterministic gear mesh placement.
+// BUILD: PARTS-6 · high-fidelity molded-part realism pass on top of PARTS-5.
 // Root module URLs are versioned by the import map in index.html; package submodules
 // carry explicit cache tags because they live outside the root import-map inventory.
 
@@ -38,14 +38,63 @@ await import('./part-visual-v3.js')
 // part-visual-v3 predates the expanded wheel ids; restore matte rubber semantics
 // after its material tuning wrapper has been installed.
 await import('./parts3/parts-3-wheel-materials.js?v=parts-3-20260908-mechanical-v1')
-// PARTS-5 owns the final visual factories. v1 establishes canonical families and
-// dimensions; the following refinement layers rebuild the most visible mechanical
-// families without changing connector positions or authoritative mechanics metadata.
+// PARTS-5 establishes canonical geometry metrics and the first high-quality visual
+// families. PARTS-6 is intentionally loaded last and only replaces visual factories;
+// connector positions, drivetrain semantics and authoritative physics stay unchanged.
 await import('./parts5/visual-overhaul-v1.js?v=parts-5-20260909-visual-v2')
 await import('./parts5/visual-refinement-v2.js?v=parts-5-20260909-visual-v2')
 await import('./parts5/driveline-refinement-v2.js?v=parts-5-20260909-visual-v2')
 await import('./parts5/structural-refinement-v2.js?v=parts-5-20260909-visual-v2')
 await import('./parts5/detail-refinement-v3.js?v=parts-5-20260909-visual-v2')
+await import('./parts6/realism-refinement-v1.js?v=parts-6-20260909-realism-v1')
+await import('./parts6/precision-refinement-v2.js?v=parts-6-20260909-realism-v1')
+await import('./parts6/mechanical-realism-v1.js?v=parts-6-20260909-realism-v1')
+// Nominal dimensions are the last geometry owner for core pin/axle/hole/gear families.
+await import('./parts6/nominal-dimension-fidelity-v1.js?v=parts-6-20260909-realism-v1')
+// Hero mechanical fidelity replaces the highest-visibility wheel, bevel and housing
+// silhouettes while preserving the same connectors, mechanics and collider owners.
+await import('./parts6/hero-mechanical-fidelity-v2.js?v=parts-6-20260909-realism-v1')
+// Fine detail wraps the remaining chassis, steering, suspension and power parts with
+// molded retainers, seals, vents, ribs and case hardware. Every added mesh is visual-only.
+await import('./parts6/fine-mechanical-detail-v3.js?v=parts-6-20260909-realism-v1')
+// Core molded fidelity finishes pins, axles, bushes, liftarms, studded Technic bricks,
+// frames and spur gears after the nominal geometry layer without changing mechanics.
+await import('./parts6/core-molded-fidelity-v4.js?v=parts-6-20260909-realism-v1')
+// Structural shell v11 turns Technic bricks into open underside injection-molded shells
+// and the 5x7 frame into a reinforced true-bore perimeter while retaining old bounds.
+await import('./parts6/structural-shell-fidelity-v11.js?v=parts-6-20260909-realism-v1')
+// Cross-axle v12 replaces intersecting boxes with one measured molded cross section,
+// keeping the nominal explicit cylinder-x axle proxy and connector centres unchanged.
+await import('./parts6/cross-axle-fidelity-v12.js?v=parts-6-20260909-realism-v1')
+// The suspension arm becomes a waisted molded control arm with bored eyes, a pivot
+// boss and tapered neck while preserving the PARTS-5 explicit compound collider.
+await import('./parts6/suspension-arm-fidelity-v7.js?v=parts-6-20260909-realism-v1')
+// Steering carrier v8 rebuilds the pivot base, knuckle, wheel hub, tie rod and bearing
+// carrier around their actual connector centres while freezing the pre-v8 bounds collider.
+await import('./parts6/steering-carrier-fidelity-v8.js?v=parts-6-20260909-realism-v1')
+// Bent liftarms get rounded end caps and a real molded elbow while retaining the
+// explicit PARTS-5 compound collider and every original pin-hole connector centre.
+await import('./parts6/bent-liftarm-fidelity-v6.js?v=parts-6-20260909-realism-v1')
+// Micro-detail adds manufacturing-level cues to hero parts: tyre vent nibs, mold seams,
+// bearing fasteners, seals, plugs and retainers. Every added mesh remains render-only.
+await import('./parts6/hero-micro-detail-v5.js?v=parts-6-20260909-realism-v1')
+// Connector fidelity wraps the final factories and adds visible semantic ports.
+await import('./parts6/connector-fidelity-v1.js?v=parts-6-20260909-realism-v1')
+await import('./parts6/interface-fit-refinement-v2.js?v=parts-6-20260909-realism-v1')
+await import('./parts6/interface-physics-safety-v1.js?v=parts-6-20260909-realism-v1')
+// Shaft hardware v10 is a final visual owner for pins, bushes, axle coupler and compact
+// connector blocks. It keeps the complete pre-v10 render tree hidden as the collider/bounds
+// proxy, so true slots/open bores cannot silently change the physics envelope.
+await import('./parts6/shaft-hardware-fidelity-v10.js?v=parts-6-20260909-realism-v1')
+// Shock v9 is deliberately after generic interface wrappers: it owns the final bored
+// eye surfaces and freezes the previous non-ignored collider envelope before replacement.
+await import('./parts6/shock-fidelity-v9.js?v=parts-6-20260909-realism-v1')
+// Remove generic connector/interface overlays that would duplicate steering-carrier v8
+// port surfaces. The hub keeps the canonical inboard bearing axle from interface-fit.
+await import('./parts6/steering-carrier-port-dedup-v8.js?v=parts-6-20260909-realism-v1')
+// Rack teeth use the same module/pressure angle as the spur gear family. This is
+// the final steering-rack visual owner and intentionally leaves rack mechanics intact.
+await import('./parts6/rack-gear-fidelity-v1.js?v=parts-6-20260909-realism-v1')
 await import('./physics-v2.js')
 await import('./colliders-v2.js')
 await import('./collider-clearance-v3.js')
