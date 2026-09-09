@@ -65,6 +65,36 @@ Both parts already had explicit collider profiles from PARTS-5, so their visual 
 - F/N/R Gearbox: split case halves, visible case seam, bearing bosses/retainers, casting ribs, case bolts and three selector detents;
 - Open Differential: open carrier ring, external carrier teeth, side hubs/bearing retainers, four cage ribs, spider cross/gears and input bearing boss.
 
+## Fine mechanical detail
+
+`fine-mechanical-detail-v3.js` wraps the already-correct core factories instead of replacing their physical envelopes. It targets the smaller realism cues that make mechanical parts read as molded assemblies rather than primitives.
+
+### Steering / wheel carrier
+
+- Steering Pivot Base: dark pivot bushing retainers, connector-aligned mounting seats, cheek gussets and a subtle mold witness;
+- Steering Knuckle: metal bearing races, dark bearing seals, kingpin retainers, steering-arm web and molded reliefs;
+- Tie Rod: eye retainers, centre reinforcing rib and mold witness;
+- Wheel Hub: inboard/outboard seals, snap ring and flange relief pockets.
+
+### Suspension
+
+- Shock Body: spring-seat lips, preload-thread rings, rod seal and lower-eye retainers;
+- Shock Rod: upper-eye retainers, spring-seat lips, bump stop and accordion-style dust-boot ribs;
+- Suspension Arm: hole retainers, pivot washers, shallow lightening recesses and a reinforcing spine;
+- Bearing Block: visible metal races/seals, mounting seats and support gussets.
+
+### Power / instrumentation
+
+- Motor: output bearing retainer/seal, rear endbell, radial vents, cable gland, short cable stub and case fasteners;
+- Worm Drive: input/output bearing races and seals, wheel face/web detail, cross braces and mounting seats;
+- RPM/Torque Sensors: stepped bearing retainers, accent ring, fasteners and molded face witness.
+
+### Connectors
+
+Axle Pin plus Triple / Perpendicular / Angle connectors receive molded retaining lips and parting-line cues while their connector metadata remains authoritative.
+
+Every object added by this pass is marked `physicsIgnore`. It intentionally does not author new collider profiles, connector data, drivetrain behavior or part mass.
+
 ## Interface fidelity
 
 The nominal dimension layer owns the final core geometry for straight/thin/bent liftarms, Technic bricks, 5×7 frame, free axles, pins, bushes, axle coupler and spur gears.
@@ -74,7 +104,7 @@ The interface-fit layers then decorate final factories from connector metadata:
 - wheels and bevel gears receive keyed axle-hole faces;
 - gearbox, differential, Cardan/CV and worm-drive ports follow their axle-hole connector axes;
 - RPM/Torque sensors expose the same through axle-hole family;
-- bearing, steering, shock and connector pin holes share one counterbore family;
+- bearing, steering, shock and connector pin holes share one nominal counterbore family;
 - motor, wheel hub, steering knuckle and axle-pin visibly expose their solid axle/pin semantics.
 
 These interface finishes are visual only. Their meshes are marked `physicsIgnore`, and the safety wrapper recursively protects child meshes so additional detail cannot enlarge a bounds-derived collider.
@@ -117,12 +147,14 @@ Review especially:
 4. Universal Joint bearing caps/seals and CV bell/cage detail;
 5. split-shell gearbox bearing bosses/ribs/bolts;
 6. Open Differential ring carrier, spider centre and three axle ports;
-7. steering rack ↔ 12T pinion pitch-line contact, tooth depth and rebuilt guide clearance;
-8. rack-guide wear strips, ribs and eight mounting tubes;
-9. straight/thin/bent liftarms and 5×7 frame hole proportions;
-10. Technic brick side bores and underside;
-11. axles, pins, bushes and axle coupler mating proportions;
-12. steering base, knuckle, wheel hub and tie-rod port semantics;
-13. shock body/rod and metal coil spring;
-14. RPM/Torque sensor through-holes;
-15. absence of floating detail, z-fighting and accidental collider growth.
+7. steering base pivot bushing, knuckle races/kingpin retainers, tie-rod eye finish and hub seals/snap ring;
+8. shock body preload rings/seal, shock-rod bump stop/dust boot, suspension-arm recesses and bearing-block races;
+9. motor rear endbell, vents, cable gland and output retainer;
+10. worm-drive bearing supports, wheel-face web and housing braces;
+11. sensor retainers and connector molded lips/parting lines;
+12. steering rack ↔ 12T pinion pitch-line contact, tooth depth and rebuilt guide clearance;
+13. rack-guide wear strips, ribs and eight mounting tubes;
+14. straight/thin/bent liftarms and 5×7 frame hole proportions;
+15. Technic brick side bores and underside;
+16. axles, pins, bushes and axle coupler mating proportions;
+17. absence of floating detail, z-fighting and accidental collider growth.
