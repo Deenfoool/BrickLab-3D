@@ -30,14 +30,12 @@
 - F/N/R gearbox is rebuilt as a split-shell ribbed casting with bearing bosses, retainers, case bolts and selector detents while keeping its explicit collider profile;
 - Open Differential is rebuilt as a visible carrier with ring teeth, side hubs, spider cross/gears and input bearing architecture while keeping its explicit collider profile;
 - steering base/knuckle/tie-rod/wheel-hub now add bushing retainers, bearing races/seals, kingpin rings, molded webs, snap-ring and flange relief detail;
-- shocks now add spring-seat lips, preload rings, rod seal, bump stop and accordion dust-boot detail;
 - suspension arm now uses a waisted/tapered bored control-arm silhouette, molded pivot boss, tapered pivot neck and inset face pockets while preserving its PARTS-5 explicit compound collider;
 - bearing block gains visible races/seals, mounting seats and support gussets;
 - motor gains a rear endbell, radial vents, cable gland/stub, case fasteners and output bearing retainer/seal;
 - worm drive gains connector-aligned bearing races/seals, wheel-face webs, housing braces and mounting-seat detail;
 - RPM/Torque sensors gain bearing retainers, accent bands, case fasteners and molded witness detail;
-- axle-pin and connector blocks gain molded retaining lips and parting-line cues;
-- core molded v4 gives pins actual open elastic slots, hollow connector-aligned Technic-brick undersides, axle end finish, bush/coupler shoulders and spur-gear face relief;
+- core molded v4 gives pins open elastic-slot cues, hollow connector-aligned Technic-brick undersides, axle end finish, bush/coupler shoulders and spur-gear face relief;
 - bent-liftarm v6 replaces the blocky L/angle beam silhouette with rounded end caps, a rounded outer elbow, shallow inner fillet and nominal through bores while retaining the existing explicit compound collider;
 - hero micro-detail v5 adds subtle tyre centre mold seams, sidewall vent nibs, rim witnesses/retaining shoulders and bevel face mold finish;
 - Cardan/CV micro-detail adds trunnion snap rings, yoke parting lines, CV bell seam and cage-window depth cues;
@@ -45,5 +43,10 @@
 - differential micro-detail adds bearing bolt circles, axle seals, spider-pin retainers and carrier mold witness detail;
 - steering-carrier v8 rebuilds the pivot base as an open U-bracket, the knuckle as a forged-style upright with a real through-bearing barrel, the wheel hub with six true flange openings, the tie rod as a bored forged link and the bearing block as a molded carrier;
 - steering-carrier v8 samples each pre-v8 non-ignored render envelope before replacement and freezes that exact bounds proxy into an explicit collider profile, so the visual rebuild does not silently alter collision size;
-- every fine/core/micro decorative mesh is collider-independent; connector and mechanics metadata stay unchanged and any new explicit collider metadata only freezes the previous bounds-derived physical envelope;
-- PARTS-6 QA, fit-QA, runtime-integrity, interface-fit, rack-gear, hero-fidelity, fine-detail, core-molded, suspension-arm, steering-carrier, bent-liftarm, hero-micro-detail and geometry regression coverage.
+- shock v9 replaces the generic damper shapes with a tapered monotube body, real bored mounting eyes, threaded preload section/collar, gland and rod seal, chrome rod, progressive bump stop, accordion dust boot and a true helical TubeGeometry spring;
+- shock v9 freezes each pre-v9 non-ignored visual envelope before replacing the factory, keeping PARTS-4 prismatic travel/spring/damper mechanics and connector centres authoritative;
+- shaft-hardware v10 replaces primitive small hardware with split elastic friction/frictionless pin lobes and tapered lead-ins, a true hybrid axle-pin, cross-shaped through bores in bush/half-bush/axle-coupler, and open bored Triple/Perpendicular/Angle connector bodies;
+- shaft-hardware v10 retains the complete pre-v10 render tree invisibly as the non-ignored collider/bounds proxy while every new visible v10 mesh is physicsIgnore and non-semantic;
+- the main visual QA now has a dedicated small-hardware row for pin-half, frictionless pin, half-bush and axle-coupler plus the rebuilt connector family;
+- every fine/core/micro/v10 decorative mesh is collider-independent; connector and mechanics metadata stay unchanged and any explicit physical metadata only preserves a previous physical envelope;
+- PARTS-6 QA, fit-QA, shock-QA, runtime-integrity, interface-fit, rack-gear, hero-fidelity, fine-detail, core-molded, suspension-arm, steering-carrier, shaft-hardware, bent-liftarm, hero-micro-detail and geometry regression coverage.
