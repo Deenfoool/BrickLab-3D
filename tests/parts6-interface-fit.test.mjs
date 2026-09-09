@@ -57,6 +57,12 @@ function featureNodes(object, feature = null) {
   return nodes
 }
 
+function connectorVisualNodes(object) {
+  const nodes = []
+  object.traverse(child => { if (child.userData?.parts6ConnectorVisual) nodes.push(child) })
+  return nodes
+}
+
 function finiteGeometry(object) {
   let meshes = 0
   let finite = true
@@ -115,12 +121,22 @@ test('gearbox, differential and articulated driveline ports are derived from axl
 })
 
 test('pin-hole families receive nominal counterbore finishes without becoming fake connectors', () => {
-  for (const id of ['bearing-block', 'steering-base', 'steering-tie-rod-5', 'shock-body-5', 'shock-rod-5', 'connector-triple', 'suspension-arm-5']) {
+  for (const id of ['bearing-block', 'steering-base', 'shock-body-5', 'shock-rod-5', 'connector-triple', 'suspension-arm-5']) {
     const part = findPart(id)
     const pinHoles = part.connectors.filter(connector => connector.type === 'pin-hole').length
     const object = part.create(part.defaultColor)
     assert.ok(featureNodes(object, 'pin-hole-counterbore').length >= pinHoles, `${id} counterbore finish follows pin-hole metadata`)
   }
+})
+
+test('tie rod uses its real eye-left/eye-right connector ids for nominal eye geometry', () => {
+  const part = findPart('steering-tie-rod-5')
+  assert.ok(part.connectors.some(item => item.id === 'eye-left' && item.type === 'pin-hole'))
+  assert.ok(part.connectors.some(item => item.id === 'eye-right' && item.type === 'pin-hole'))
+  const object = part.create(part.defaultColor)
+  const visuals = connectorVisualNodes(object)
+  assert.ok(visuals.length >= 4, 'two tie-rod eyes have front/back nominal molded rings')
+  assert.equal(visuals.filter(node => node.isMesh && !node.userData.physicsIgnore).length, 0)
 })
 
 test('solid axle and pin connector semantics are visible on motor, hub, knuckle and axle-pin', () => {
@@ -139,7 +155,7 @@ test('solid axle and pin connector semantics are visible on motor, hub, knuckle 
 })
 
 test('every interface-detail mesh is excluded from bounds-derived colliders', () => {
-  for (const id of protectedIds) {
+  for (const id of protectedIds.filter(id => id !== 'steering-tie-rod-5')) {
     const part = findPart(id)
     const object = part.create(part.defaultColor)
     let interfaceMeshes = 0
