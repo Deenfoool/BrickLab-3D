@@ -7,7 +7,7 @@
   <style>
     html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#14171a;color:#e7ece9;font-family:Inter,ui-sans-serif,system-ui,sans-serif}
     #stage{position:fixed;inset:0}
-    #panel{position:fixed;z-index:4;left:14px;top:14px;width:330px;max-height:calc(100vh - 28px);overflow:auto;padding:14px 15px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(14,17,19,.88);backdrop-filter:blur(10px);box-shadow:0 14px 40px rgba(0,0,0,.32)}
+    #panel{position:fixed;z-index:4;left:14px;top:14px;width:342px;max-height:calc(100vh - 28px);overflow:auto;padding:14px 15px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(14,17,19,.88);backdrop-filter:blur(10px);box-shadow:0 14px 40px rgba(0,0,0,.32)}
     h1{font-size:14px;margin:0 0 5px;letter-spacing:.04em}p{font-size:10px;line-height:1.45;color:#98a39d;margin:0 0 12px}.badge{display:inline-flex;padding:3px 6px;border-radius:5px;background:#173023;color:#79e8a8;font-weight:800;font-size:9px;margin-bottom:10px}
     section{border-top:1px solid rgba(255,255,255,.07);padding-top:9px;margin-top:9px}h2{font-size:9px;color:#bdc8c2;letter-spacing:.09em;text-transform:uppercase;margin:0 0 5px}.row{font-size:9px;color:#7f8b85;line-height:1.5}.ok{color:#79e8a8}.hint{position:fixed;right:14px;bottom:14px;z-index:4;padding:8px 10px;border-radius:7px;background:rgba(14,17,19,.78);font-size:9px;color:#87928d;border:1px solid rgba(255,255,255,.08)}
     canvas{display:block;width:100%;height:100%}
@@ -27,17 +27,18 @@
     <div class="badge">PARTS-6 REALISM QA</div>
     <h1>BrickLab high-fidelity part gallery</h1>
     <p>Review molded proportions and, most importantly, whether every visible mating port agrees with the real mechanical connector: pin, pin-hole, axle or axle-hole.</p>
+    <section><h2>Hero fidelity</h2><div class="row"><span class="ok">Wheels · bevel gears · Cardan/CV · gearbox · open differential</span> are the current hero pass. Look for believable tyre carcasses, family-specific tread, recessed rims, tapered bevel teeth, proper bearing caps, split castings and an open differential carrier.</div></section>
     <section><h2>Nominal interfaces</h2><div class="row"><span class="ok">4.8 mm-class pin bores</span> · measured cross-axle profile · shared counterbore sizing · connector-axis driven orientation</div></section>
-    <section><h2>Wheels</h2><div class="row">Small · Narrow · Road · Medium · Standard · Off-road Large · Tractor · keyed axle openings on both rim faces</div></section>
+    <section><h2>Wheels</h2><div class="row">Small · Narrow · Road · Medium · Standard · Off-road Large · Tractor · profiled sidewalls · bead-seat lips · tapered spokes · keyed axle openings on both rim faces</div></section>
     <section><h2>Spur gears</h2><div class="row">8T · 12T · 16T · 20T · 24T · 36T · 40T · measured tip geometry · canonical pitch preserved</div></section>
     <section><h2>Exact mesh pairs</h2><div class="row"><span class="ok">12T ↔ 20T</span> · <span class="ok">8T ↔ 24T</span> · exact pitch center distance</div></section>
     <section><h2>Rack / pinion</h2><div class="row"><span class="ok">Steering Rack ↔ 12T</span> · same module · 20° pressure angle · πm tooth pitch · pinion pitch circle tangent to rack pitch line</div></section>
-    <section><h2>Bevel pair</h2><div class="row"><span class="ok">12T ↔ 20T · 90°</span> · shared pitch-cone apex · keyed axle sockets</div></section>
+    <section><h2>Bevel pair</h2><div class="row"><span class="ok">12T ↔ 20T · 90°</span> · shared pitch-cone apex · tapered tooth body · molded radial webs · keyed axle sockets</div></section>
     <section><h2>Structural</h2><div class="row">Waisted liftarm · hollow/bossed Technic brick · 5×7 frame · nominal cross axle · molded pins/bushes</div></section>
     <section><h2>Steering / suspension</h2><div class="row">Tie Rod eyes · module-matched Rack · Knuckle pin/bearing · Hub axle stubs · Shock mounts · Bearing Block · Suspension Arm</div></section>
     <section><h2>Connectors</h2><div class="row">Axle Pin · Triple · Perpendicular · Angle · visible port type and axis must match connector metadata</div></section>
-    <section><h2>Driveline / housings</h2><div class="row">Universal Joint · CV Joint · Worm Drive · Motor · F/N/R Gearbox · Open Differential · RPM/Torque Sensors</div></section>
-    <section><h2>Review checklist</h2><div class="row">Mating fit · rack/pinion tooth depth · proportions · silhouette · molded edge radii · true holes · material separation · no floating detail · no z-fighting · collider independence</div></section>
+    <section><h2>Driveline / housings</h2><div class="row">Universal Joint bearing caps/seals · CV bell ribs/cage · Worm Drive · Motor · split-shell F/N/R Gearbox · open-carrier Differential · RPM/Torque Sensors</div></section>
+    <section><h2>Review checklist</h2><div class="row">Mating fit · rack/pinion tooth depth · wheel sidewall silhouette · bevel tooth taper · case seams/ribs · material separation · true holes · no floating detail · no z-fighting · collider independence</div></section>
   </aside>
   <div class="hint">LMB orbit · wheel zoom · RMB pan</div>
   <script type="module" src="./parts5-visual-qa.js"></script>
