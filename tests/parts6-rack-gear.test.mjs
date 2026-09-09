@@ -79,7 +79,7 @@ test('rack fidelity pass preserves steering mechanics, connectors and physical m
 })
 
 test('rack uses the exact spur-gear module, pressure angle and circular pitch', () => {
-  assert.equal(rack.visualQuality, 'parts-6-module-matched-steering-rack-v2')
+  assert.equal(rack.visualQuality, 'parts-6-module-matched-steering-rack-v3')
   assert.equal(rack.rackVisualMetrics.moduleStud, GEAR_MODULE_STUD)
   assert.equal(rack.rackVisualMetrics.pressureAngleDeg, GEAR_PRESSURE_ANGLE_DEG)
   assert.ok(Math.abs(rack.rackVisualMetrics.linearPitchStud - LINEAR_PITCH) < 1e-12)
@@ -107,6 +107,17 @@ test('rack teeth are instanced at exactly one circular pitch', () => {
   assert.equal(finiteGeometry(object), true)
 })
 
+test('full-depth rack tooth envelope fits the existing guide opening', () => {
+  const object = rack.create(rack.defaultColor)
+  const metrics = object.userData.rackGearMetrics
+  assert.ok(metrics.rootLineY > 0.31, 'root clears guide lower shell')
+  assert.ok(metrics.tipLineY < 0.93, 'tooth tip clears guide upper shell')
+  assert.ok(metrics.rootLineY < metrics.pitchLineY)
+  assert.ok(metrics.pitchLineY < metrics.tipLineY)
+  assert.ok(Math.abs((metrics.pitchLineY - metrics.rootLineY) - gearMetrics(12).dedendum) < 1e-12)
+  assert.ok(Math.abs((metrics.tipLineY - metrics.pitchLineY) - gearMetrics(12).addendum) < 1e-12)
+})
+
 test('rack tie pins are centered on the actual hinge connector coordinates', () => {
   const object = rack.create(rack.defaultColor)
   const visiblePins = rackFeatures(object, 'tie-pin').sort((a, b) => a.position.x - b.position.x)
@@ -130,13 +141,13 @@ test('rack teeth and pin finish cannot enlarge bounds-derived physics', () => {
 
 test('rack exports pitch-line diagnostics for visual pinion review', () => {
   const state = globalThis.BrickLabParts6RackGearFidelity
-  assert.equal(rackModule.PARTS6_RACK_GEAR_FIDELITY_VERSION, 'parts-6-rack-gear-fidelity-v2')
+  assert.equal(rackModule.PARTS6_RACK_GEAR_FIDELITY_VERSION, 'parts-6-rack-gear-fidelity-v3')
   assert.equal(state.moduleStud, GEAR_MODULE_STUD)
   assert.equal(state.pressureAngleDeg, GEAR_PRESSURE_ANGLE_DEG)
   assert.ok(Math.abs(state.linearPitchStud - LINEAR_PITCH) < 1e-12)
   const object = rack.create(rack.defaultColor)
-  assert.ok(object.userData.rackGearMetrics.pitchLineY > 0.85)
-  assert.ok(object.userData.rackGearMetrics.pitchLineY < 0.95)
+  assert.ok(object.userData.rackGearMetrics.pitchLineY > 0.75)
+  assert.ok(object.userData.rackGearMetrics.pitchLineY < 0.82)
 })
 
 await dom.happyDOM.close()
