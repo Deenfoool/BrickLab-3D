@@ -74,9 +74,9 @@ test('PARTS-6 final owners use measured nominal dimensions for core molded famil
     ['wheel-offroad-large', 'parts-6-offroad-wheel-v2'],
     ['wheel-tractor', 'parts-6-tractor-wheel-v2'],
     ['steering-base', 'parts-6-steering-base-molded'],
-    ['steering-knuckle', 'parts-6-steering-knuckle-pin-fidelity'],
-    ['steering-tie-rod-5', 'parts-6-molded-tie-rod'],
-    ['wheel-hub', 'parts-6-wheel-hub-bearing-port-fidelity'],
+    ['steering-knuckle', 'parts-6-steering-knuckle-pin-fidelity-v2'],
+    ['steering-tie-rod-5', 'parts-6-tie-rod-nominal-eye-fidelity-v2'],
+    ['wheel-hub', 'parts-6-wheel-hub-bearing-port-fidelity-v2'],
     ['shock-body-5', 'parts-6-shock-body-realism'],
     ['shock-rod-5', 'parts-6-metal-coil-shock'],
     ['universal-joint-30', 'parts-6-pom-universal-joint'],
@@ -153,7 +153,7 @@ test('steering and suspension realism keeps connector identities intact', () => 
 })
 
 test('connector-fidelity and interface-fit wrappers visibly distinguish pin, bore and axle ports', () => {
-  for (const id of ['steering-knuckle', 'wheel-hub']) {
+  for (const id of ['steering-knuckle', 'wheel-hub', 'steering-tie-rod-5']) {
     const object = findPart(id).create(findPart(id).defaultColor)
     let connectorVisuals = 0
     let interfaceVisuals = 0
@@ -162,7 +162,7 @@ test('connector-fidelity and interface-fit wrappers visibly distinguish pin, bor
       if (child.userData?.parts6InterfaceFeature) interfaceVisuals += 1
     })
     assert.ok(connectorVisuals >= 1, `${id} has connector-semantic visual detail`)
-    assert.ok(interfaceVisuals >= 1, `${id} has nominal interface detail`)
+    if (id !== 'steering-tie-rod-5') assert.ok(interfaceVisuals >= 1, `${id} has nominal interface detail`)
   }
 })
 
@@ -178,7 +178,7 @@ test('PARTS-6 interface detail remains excluded from bounds-derived physics', as
   assert.equal(precision.PARTS6_PRECISION_VERSION, 'parts-6-precision-refinement-v2')
   assert.equal(mechanical.PARTS6_MECHANICAL_REALISM_VERSION, 'parts-6-mechanical-realism-v1')
   assert.equal(nominal.PARTS6_NOMINAL_DIMENSION_VERSION, 'parts-6-nominal-dimension-fidelity-v1')
-  assert.equal(fidelity.PARTS6_CONNECTOR_FIDELITY_VERSION, 'parts-6-connector-fidelity-v1')
+  assert.equal(fidelity.PARTS6_CONNECTOR_FIDELITY_VERSION, 'parts-6-connector-fidelity-v2')
   assert.equal(fit.PARTS6_INTERFACE_FIT_VERSION, 'parts-6-interface-fit-refinement-v2')
   assert.equal(safety.PARTS6_INTERFACE_PHYSICS_SAFETY_VERSION, 'parts-6-interface-physics-safety-v1')
   const object = findPart('wheel-hub').create(findPart('wheel-hub').defaultColor)
