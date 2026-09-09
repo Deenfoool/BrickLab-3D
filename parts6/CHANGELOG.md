@@ -16,4 +16,9 @@
 - motor, wheel hub, steering knuckle and axle-pin now visibly distinguish solid axle/pin ports from holes;
 - interface detail meshes are explicitly excluded from bounds-derived colliders;
 - connector/mechanics metadata is regression-locked against the visual pass;
-- PARTS-6 QA, runtime-integrity, interface-fit and geometry regression coverage.
+- steering rack rebuilt from the shared spur-gear module and 20° pressure angle;
+- rack addendum/dedendum now come from canonical gear metrics instead of decorative tooth spacing;
+- full-depth rack teeth fit inside the existing guide opening without moving slider/tie connectors;
+- rack tie pins are centred on their real hinge connector coordinates;
+- QA now includes a rack ↔ 12T pitch-line reference pair;
+- PARTS-6 QA, runtime-integrity, interface-fit, rack-gear and geometry regression coverage.
