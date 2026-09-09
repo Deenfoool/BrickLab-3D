@@ -34,15 +34,18 @@ These interface finishes are visual only. Their meshes are marked `physicsIgnore
 
 ## Rack / pinion fidelity
 
-`rack-gear-fidelity-v1.js` is the final visual owner for `steering-rack-7`.
+`rack-gear-fidelity-v1.js` is the final visual owner for both `steering-rack-7` and `steering-rack-guide`.
 
 - rack circular pitch is `π × GEAR_MODULE_STUD`;
 - pressure angle is shared with the spur family;
 - addendum and dedendum come from the same canonical `gearMetrics()` source;
-- the tooth profile keeps its full standard depth while fitting the existing rack-guide opening;
+- the rack keeps full tooth depth and the guide is shaped around the resulting real tooth envelope;
+- the guide remains an open molded channel with POM-like wear strips, stiffening ribs and eight mounting tubes generated from the actual tube connector positions;
 - tie-pin meshes are centred on the actual `tie-left` / `tie-right` connector coordinates;
-- teeth and tie-pin finishing remain `physicsIgnore`;
-- rack slider/tie connector positions, steering travel and PARTS-4 rack physics are unchanged.
+- rack teeth, tie-pin finishing, wear strips, mounting-tube finish and guide ribs remain `physicsIgnore`;
+- rack slider/tie connectors, guide rail/mount connectors, steering travel and PARTS-4 rack mechanics are unchanged.
+
+The new visible rack and guide no longer determine their colliders through visual bounds. Explicit proxy profiles reproduce the pre-realism rack and guide bounds envelopes, so improving tooth depth, guide clearance or molded details does not silently change simulation geometry.
 
 The QA gallery includes a 12T pinion whose pitch circle is tangent to the rack pitch line. This is a visual reference only and does not create a fake connector or drivetrain joint.
 
@@ -63,13 +66,14 @@ Review especially:
 
 1. wheel sidewall, rim depth, tread and keyed axle openings on both faces;
 2. 8T–40T spur family consistency, measured tooth-tip silhouette and preserved pitch mesh;
-3. steering rack ↔ 12T pinion pitch-line contact, tooth depth and guide clearance;
-4. 12T/20T bevel pair and keyed centre sockets;
-5. straight/thin/bent liftarms and 5×7 frame hole proportions;
-6. Technic brick side bores and underside;
-7. axles, pins, bushes and axle coupler mating proportions;
-8. steering base, knuckle, wheel hub and tie-rod port semantics;
-9. shock body/rod and metal coil spring;
-10. universal/CV/worm/gearbox/differential ports;
-11. RPM/Torque sensor through-holes;
-12. absence of floating detail, z-fighting and accidental collider growth.
+3. steering rack ↔ 12T pinion pitch-line contact, tooth depth and rebuilt guide clearance;
+4. rack-guide wear strips, ribs and eight mounting tubes;
+5. 12T/20T bevel pair and keyed centre sockets;
+6. straight/thin/bent liftarms and 5×7 frame hole proportions;
+7. Technic brick side bores and underside;
+8. axles, pins, bushes and axle coupler mating proportions;
+9. steering base, knuckle, wheel hub and tie-rod port semantics;
+10. shock body/rod and metal coil spring;
+11. universal/CV/worm/gearbox/differential ports;
+12. RPM/Torque sensor through-holes;
+13. absence of floating detail, z-fighting and accidental collider growth.
