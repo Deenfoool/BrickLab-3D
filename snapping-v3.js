@@ -1,8 +1,10 @@
 import * as THREE from 'three'
 import { findPart } from './parts.js'
-import { connectorRule, stageConnectionBundle } from './connections.js'
+import { connectorRule, stageConnectionBundle, suppressNextConnectionForEndpoint } from './connections.js'
+import { solveBevelSnap, solveSpurSnap } from './parts5/gear-mesh-math-v1.js'
 
 let stickyKey = ''
+let lastGearEventKey = ''
 
 export function connectorWorldPosition(object, connector) {
   object.updateWorldMatrix(true, false)
@@ -110,6 +112,94 @@ function candidateKey(selected, source, targetObject, target) {
   return `${selected.userData.instanceId}:${source.id}>${targetObject.userData.instanceId}:${target.id}`
 }
 
+function gearDescriptor(object) {
+  const definition = findPart(object?.userData?.partId)
+  const gear = definition?.mechanics?.gear
+  if (!gear) return null
+  const connector = definition.connectors?.find(item => item.type === 'axle-hole')
+  if (!connector) return null
+  return {
+    object,
+    definition,
+    connector,
+    kind: gear.kind ?? 'spur',
+    teeth: Number(gear.teeth) || 0,
+    pitchRadius: Number(gear.pitchRadius) || (Number(gear.teeth) || 0) / 16,
+    center: connectorWorldPosition(object, connector),
+    axis: connectorWorldAxis(object, connector),
+  }
+}
+
+function findGearSnapCandidate(selected, objects) {
+  const moving = gearDescriptor(selected)
+  if (!moving) return null
+
+  let best = null
+  let bestScore = Infinity
+  for (const targetObject of objects) {
+    if (targetObject === selected) continue
+    const fixed = gearDescriptor(targetObject)
+    if (!fixed || fixed.kind !== moving.kind || !moving.teeth || !fixed.teeth) continue
+
+    const solution = moving.kind === 'bevel'
+      ? solveBevelSnap(moving, fixed)
+      : solveSpurSnap(moving, fixed)
+    if (!solution) continue
+
+    const axisPenalty = moving.kind === 'bevel'
+      ? solution.axisOrthogonality / 0.18
+      : (1 - solution.axisAlignment) / 0.035
+    const score = solution.error / Math.max(solution.captureDistance, 1e-6) + Math.max(0, axisPenalty) * 0.08 - 0.10
+    if (score >= bestScore) continue
+
+    const key = `gear-mesh:${selected.userData.instanceId}>${targetObject.userData.instanceId}`
+    bestScore = score
+    best = {
+      kind: 'gear-mesh',
+      gearKind: moving.kind,
+      source: moving.connector,
+      target: fixed.connector,
+      targetObject,
+      targetWorld: solution.contactPoint.clone(),
+      desiredCenter: solution.desiredCenter.clone(),
+      translation: solution.translation.clone(),
+      distance: solution.error,
+      alignment: moving.kind === 'bevel' ? 1 - solution.axisOrthogonality : solution.axisAlignment,
+      score,
+      key,
+      movingGear: moving,
+      fixedGear: fixed,
+      meshSolution: solution,
+      ratio: fixed.teeth ? moving.teeth / fixed.teeth : 0,
+      placementOnly: true,
+    }
+  }
+  return best
+}
+
+function publishGearCandidate(candidate) {
+  const gearCandidate = candidate?.kind === 'gear-mesh' ? candidate : null
+  globalThis.__bricklabGearMeshCandidate = gearCandidate
+  const key = gearCandidate?.key ?? ''
+  if (key === lastGearEventKey) return
+  lastGearEventKey = key
+  window.dispatchEvent(new CustomEvent('bricklab:gearmeshcandidate', {
+    detail: gearCandidate ? {
+      key,
+      kind: gearCandidate.gearKind,
+      movingId: gearCandidate.movingGear.object.userData.instanceId,
+      movingPartId: gearCandidate.movingGear.object.userData.partId,
+      movingTeeth: gearCandidate.movingGear.teeth,
+      fixedId: gearCandidate.fixedGear.object.userData.instanceId,
+      fixedPartId: gearCandidate.fixedGear.object.userData.partId,
+      fixedTeeth: gearCandidate.fixedGear.teeth,
+      errorStud: gearCandidate.distance,
+      targetDistanceStud: gearCandidate.meshSolution.targetDistance,
+      ratio: gearCandidate.ratio,
+    } : null,
+  }))
+}
+
 export function findSnapCandidate(selected, objects, options = {}) {
   if (globalThis.__bricklabMultiTransformActive) return null
   const isAvailable = typeof options === 'object' && options.isAvailable ? options.isAvailable : () => true
@@ -166,17 +256,26 @@ export function findSnapCandidate(selected, objects, options = {}) {
             predictedContactCount: contacts,
             isAvailable,
             key,
+            score,
           }
         }
       }
     }
   }
 
+  const gearCandidate = findGearSnapCandidate(selected, objects)
+  if (gearCandidate && gearCandidate.score < bestScore) {
+    best = gearCandidate
+    bestScore = gearCandidate.score
+  }
+
   stickyKey = best?.key ?? ''
+  publishGearCandidate(best)
   return best
 }
 
 export function orientForSnap(selected, candidate) {
+  if (candidate?.kind === 'gear-mesh') return
   selected.updateWorldMatrix(true, false)
   candidate.targetObject.updateWorldMatrix(true, false)
   const rule = candidate.rule ?? connectorRule(candidate.source.type, candidate.target.type)
@@ -252,17 +351,47 @@ function collectStructuralContacts(selected, candidate) {
   return contacts
 }
 
-export function applySnap(selected, candidate) {
-  const currentSource = connectorWorldPosition(selected, candidate.source)
-  const currentTarget = connectorWorldPosition(candidate.targetObject, candidate.target)
-  const worldDelta = currentTarget.sub(currentSource)
-
+function applyWorldDelta(selected, worldDelta) {
   if (!selected.parent) selected.position.add(worldDelta)
   else {
     const parentRotation = selected.parent.getWorldQuaternion(new THREE.Quaternion()).invert()
     selected.position.add(worldDelta.applyQuaternion(parentRotation))
   }
   selected.updateMatrixWorld(true)
+}
+
+export function applySnap(selected, candidate) {
+  if (candidate?.kind === 'gear-mesh') {
+    applyWorldDelta(selected, candidate.translation.clone())
+    suppressNextConnectionForEndpoint(selected.userData.instanceId, candidate.source.id)
+    window.dispatchEvent(new CustomEvent('bricklab:gearmeshsnap', {
+      detail: {
+        kind: candidate.gearKind,
+        movingPartId: candidate.movingGear.object.userData.partId,
+        movingTeeth: candidate.movingGear.teeth,
+        fixedPartId: candidate.fixedGear.object.userData.partId,
+        fixedTeeth: candidate.fixedGear.teeth,
+        targetDistanceStud: candidate.meshSolution.targetDistance,
+        finalErrorStud: 0,
+        ratio: candidate.ratio,
+      },
+    }))
+    globalThis.__bricklabLastGearMeshSnap = {
+      version: 'parts-5-gear-mesh-snap-v1',
+      kind: candidate.gearKind,
+      movingPartId: candidate.movingGear.object.userData.partId,
+      fixedPartId: candidate.fixedGear.object.userData.partId,
+      movingTeeth: candidate.movingGear.teeth,
+      fixedTeeth: candidate.fixedGear.teeth,
+      targetDistanceStud: candidate.meshSolution.targetDistance,
+    }
+    return
+  }
+
+  const currentSource = connectorWorldPosition(selected, candidate.source)
+  const currentTarget = connectorWorldPosition(candidate.targetObject, candidate.target)
+  const worldDelta = currentTarget.sub(currentSource)
+  applyWorldDelta(selected, worldDelta)
 
   const contacts = collectStructuralContacts(selected, candidate)
   if (contacts.length) {
