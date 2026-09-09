@@ -131,14 +131,14 @@ function createTechnicBrick(part, color, previousFactory) {
     group.add(panel)
   }
 
-  // Top deck and narrow end walls produce a hollow injection-molded shell instead
-  // of a solid rectangular brick with holes subtracted from it.
-  const topDeck = visualOnly(new THREE.Mesh(new RoundedBoxGeometry(width, 0.17, depth, 4, 0.055), material), 'technic-brick-top-deck')
-  topDeck.position.set(0, 1.075, 0)
+  // Top deck reaches the stud connector plane, and the end walls overlap it slightly,
+  // so neither studs nor shell panels float when inspected from a glancing angle.
+  const topDeck = visualOnly(new THREE.Mesh(new RoundedBoxGeometry(width, 0.20, depth, 4, 0.055), material), 'technic-brick-top-deck')
+  topDeck.position.set(0, 1.10, 0)
   group.add(topDeck)
   for (const side of [-1, 1]) {
-    const endWall = visualOnly(new THREE.Mesh(new RoundedBoxGeometry(0.15, 0.88, depth, 4, 0.050), material), 'technic-brick-end-wall')
-    endWall.position.set(side * (width / 2 - 0.075), 0.54, 0)
+    const endWall = visualOnly(new THREE.Mesh(new RoundedBoxGeometry(0.15, 0.94, depth, 4, 0.050), material), 'technic-brick-end-wall')
+    endWall.position.set(side * (width / 2 - 0.075), 0.55, 0)
     group.add(endWall)
   }
 
@@ -178,6 +178,7 @@ function createTechnicBrick(part, color, previousFactory) {
     trueSideBores: holes.length,
     undersideTubes: tubes.length,
     openUnderside: true,
+    studDeckContinuous: true,
   }
   return group
 }
@@ -273,7 +274,7 @@ globalThis.BrickLabParts6StructuralShellFidelity = Object.freeze({
   version: PARTS6_STRUCTURAL_SHELL_FIDELITY_VERSION,
   upgraded,
   proxyParts,
-  geometry: 'hollow studded Technic brick shells with connector-aligned underside tubes + reinforced open 5x7 frame with true perimeter bores',
+  geometry: 'hollow studded Technic brick shells with continuous stud deck and connector-aligned underside tubes + reinforced open 5x7 frame with true perimeter bores',
   physics: 'complete pre-v11 render trees remain invisible non-ignored collider/bounds proxies; every new visible v11 mesh is physicsIgnore and connector/mechanics metadata is untouched',
 })
 
