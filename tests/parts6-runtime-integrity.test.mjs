@@ -13,7 +13,7 @@ function parts6Imports(source) {
 test('PARTS-6 realism modules exist and use one package tag', async () => {
   const runtime = await readFile(new URL('runtime-extensions.js', root), 'utf8')
   const imports = parts6Imports(runtime)
-  assert.equal(imports.length, 15)
+  assert.equal(imports.length, 16)
   for (const item of imports) {
     assert.equal(item.tag, TAG, `${item.specifier} uses PARTS-6 tag`)
     await access(new URL(item.specifier.replace(/^\.\//, ''), root))
@@ -37,6 +37,7 @@ test('PARTS-6 final visual ownership is ordered before physics', async () => {
   const fidelity = runtime.indexOf(`import('./parts6/connector-fidelity-v1.js?v=${TAG}')`)
   const interfaceFit = runtime.indexOf(`import('./parts6/interface-fit-refinement-v2.js?v=${TAG}')`)
   const interfaceSafety = runtime.indexOf(`import('./parts6/interface-physics-safety-v1.js?v=${TAG}')`)
+  const portDedup = runtime.indexOf(`import('./parts6/steering-carrier-port-dedup-v8.js?v=${TAG}')`)
   const rack = runtime.indexOf(`import('./parts6/rack-gear-fidelity-v1.js?v=${TAG}')`)
   const physics = runtime.indexOf("import('./physics-v2.js')")
   assert.ok(detail >= 0)
@@ -54,7 +55,8 @@ test('PARTS-6 final visual ownership is ordered before physics', async () => {
   assert.ok(fidelity > micro)
   assert.ok(interfaceFit > fidelity)
   assert.ok(interfaceSafety > interfaceFit)
-  assert.ok(rack > interfaceSafety)
+  assert.ok(portDedup > interfaceSafety)
+  assert.ok(rack > portDedup)
   assert.ok(physics > rack)
 })
 
@@ -74,6 +76,7 @@ test('PARTS-6 visual layers do not replace connector or mechanics metadata', asy
     'parts6/connector-fidelity-v1.js',
     'parts6/interface-fit-refinement-v2.js',
     'parts6/interface-physics-safety-v1.js',
+    'parts6/steering-carrier-port-dedup-v8.js',
     'parts6/rack-gear-fidelity-v1.js',
   ]
   const sources = await Promise.all(files.map(file => readFile(new URL(file, root), 'utf8')))
@@ -116,9 +119,12 @@ test('PARTS-6 visual layers do not replace connector or mechanics metadata', asy
   assert.match(sources[12], /wrapPart/)
   assert.match(sources[13], /hardenFineDetailTree/)
   assert.match(sources[13], /hardenHeroMicroDetailTree/)
-  assert.match(sources[14], /PARTS6_RACK_GEAR_FIDELITY_VERSION = 'parts-6-rack-gear-fidelity-v4'/)
-  assert.match(sources[14], /LINEAR_PITCH = Math\.PI \* GEAR_MODULE_STUD/)
-  assert.match(sources[14], /freezeLegacyBoundsCollider/)
+  assert.match(sources[14], /PARTS6_STEERING_CARRIER_PORT_DEDUP_VERSION = 'parts-6-steering-carrier-port-dedup-v8'/)
+  assert.match(sources[14], /removeTaggedChildren/)
+  assert.match(sources[14], /nominal-cross-axle-stub/)
+  assert.match(sources[15], /PARTS6_RACK_GEAR_FIDELITY_VERSION = 'parts-6-rack-gear-fidelity-v4'/)
+  assert.match(sources[15], /LINEAR_PITCH = Math\.PI \* GEAR_MODULE_STUD/)
+  assert.match(sources[15], /freezeLegacyBoundsCollider/)
 })
 
 test('nominal, hero and final fidelity layers share authoritative sizing without physics ownership changes', async () => {
@@ -133,6 +139,7 @@ test('nominal, hero and final fidelity layers share authoritative sizing without
   const fit = await readFile(new URL('parts6/interface-fit-refinement-v2.js', root), 'utf8')
   const fidelity = await readFile(new URL('parts6/connector-fidelity-v1.js', root), 'utf8')
   const safety = await readFile(new URL('parts6/interface-physics-safety-v1.js', root), 'utf8')
+  const portDedup = await readFile(new URL('parts6/steering-carrier-port-dedup-v8.js', root), 'utf8')
   const rack = await readFile(new URL('parts6/rack-gear-fidelity-v1.js', root), 'utf8')
   assert.match(nominal, /studMm: 8/)
   assert.match(nominal, /pinHoleRadius: 2\.4 \/ 8/)
@@ -169,6 +176,9 @@ test('nominal, hero and final fidelity layers share authoritative sizing without
   assert.match(safety, /parts6FineFeature/)
   assert.match(safety, /parts6HeroMicroFeature/)
   assert.match(safety, /physicsIgnore = true/)
+  assert.match(portDedup, /parts6InterfaceFeature/)
+  assert.match(portDedup, /parts6ConnectorVisual/)
+  assert.match(portDedup, /hub inboard bearing axle remains canonical/)
   assert.match(rack, /GEAR_MODULE_STUD/)
   assert.match(rack, /GEAR_PRESSURE_ANGLE_DEG/)
   assert.match(rack, /gearMetrics\(12, 'spur'\)/)
@@ -207,6 +217,7 @@ test('visual QA page loads all PARTS-6 final owners', async () => {
   assert.match(qa, /parts6\/connector-fidelity-v1/)
   assert.match(qa, /parts6\/interface-fit-refinement-v2/)
   assert.match(qa, /parts6\/interface-physics-safety-v1/)
+  assert.match(qa, /parts6\/steering-carrier-port-dedup-v8/)
   assert.match(qa, /parts6\/rack-gear-fidelity-v1/)
   assert.match(qa, /technic-frame-5x7/)
   assert.match(qa, /steering-base/)
@@ -218,6 +229,7 @@ test('visual QA page loads all PARTS-6 final owners', async () => {
   assert.match(qa, /coreMoldedFidelity/)
   assert.match(qa, /suspensionArmFidelity/)
   assert.match(qa, /steeringCarrierFidelity/)
+  assert.match(qa, /steeringCarrierPortDedup/)
   assert.match(qa, /bentLiftarmFidelity/)
   assert.match(qa, /heroMicroDetail/)
   assert.match(qa, /rpm-sensor/)
@@ -233,6 +245,8 @@ test('assembled fit QA covers actual mating interfaces, not isolated thumbnails 
   const qa = await readFile(new URL('tests/parts6-fit-qa.js', root), 'utf8')
   const html = await readFile(new URL('tests/parts6-fit-qa.html', root), 'utf8')
   assert.match(qa, /BrickLabParts6FitQA/)
+  assert.match(qa, /steering-carrier-fidelity-v8/)
+  assert.match(qa, /steering-carrier-port-dedup-v8/)
   assert.match(qa, /pinBeam/)
   assert.match(qa, /axleGearBush/)
   assert.match(qa, /steeringHubWheel/)
