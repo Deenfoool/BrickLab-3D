@@ -24,6 +24,7 @@ await import('../parts6/hero-mechanical-fidelity-v2.js')
 await import('../parts6/fine-mechanical-detail-v3.js')
 await import('../parts6/connector-fidelity-v1.js')
 await import('../parts6/interface-fit-refinement-v2.js')
+await import('../parts6/interface-physics-safety-v1.js')
 await import('../parts6/rack-gear-fidelity-v1.js')
 
 const { findPart } = await import('../parts.js')
@@ -248,5 +249,6 @@ globalThis.BrickLabParts5VisualQA = Object.freeze({
   fineMechanicalDetail: globalThis.BrickLabParts6FineMechanicalDetail ?? null,
   connectorFidelity: globalThis.BrickLabParts6ConnectorFidelity ?? null,
   interfaceFit: globalThis.BrickLabParts6InterfaceFit ?? null,
+  interfacePhysicsSafety: globalThis.BrickLabParts6InterfacePhysicsSafety ?? null,
   rackGearFidelity: globalThis.BrickLabParts6RackGearFidelity ?? null,
 })
