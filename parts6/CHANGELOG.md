@@ -29,4 +29,12 @@
 - CV joints gain bell ribs and a cage retainer around the existing Rzeppa-style ball cage;
 - F/N/R gearbox is rebuilt as a split-shell ribbed casting with bearing bosses, retainers, case bolts and selector detents while keeping its explicit collider profile;
 - Open Differential is rebuilt as a visible carrier with ring teeth, side hubs, spider cross/gears and input bearing architecture while keeping its explicit collider profile;
-- PARTS-6 QA, runtime-integrity, interface-fit, rack-gear, hero-fidelity and geometry regression coverage.
+- steering base/knuckle/tie-rod/wheel-hub now add bushing retainers, bearing races/seals, kingpin rings, molded webs, snap-ring and flange relief detail;
+- shocks now add spring-seat lips, preload rings, rod seal, bump stop and accordion dust-boot detail;
+- suspension arm and bearing block gain pivot washers, lightening recesses, reinforcement, visible races/seals and mounting-seat finish;
+- motor gains a rear endbell, radial vents, cable gland/stub, case fasteners and output bearing retainer/seal;
+- worm drive gains connector-aligned bearing races/seals, wheel-face webs, housing braces and mounting-seat detail;
+- RPM/Torque sensors gain bearing retainers, accent bands, case fasteners and molded witness detail;
+- axle-pin and connector blocks gain molded retaining lips and parting-line cues;
+- every fine-detail mesh is `physicsIgnore`; the pass does not author new collider profiles or mechanical metadata;
+- PARTS-6 QA, runtime-integrity, interface-fit, rack-gear, hero-fidelity, fine-detail and geometry regression coverage.
