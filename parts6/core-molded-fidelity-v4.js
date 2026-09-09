@@ -8,9 +8,6 @@ import { gearMetrics } from '../parts5/part-geometry-metrics-v1.js'
 export const PARTS6_CORE_MOLDED_FIDELITY_VERSION = 'parts-6-core-molded-fidelity-v4'
 
 const N = REAL_TECHNIC_NOMINAL
-const X_AXIS = new THREE.Vector3(1, 0, 0)
-const Y_AXIS = new THREE.Vector3(0, 1, 0)
-const Z_AXIS = new THREE.Vector3(0, 0, 1)
 
 function absMaterial(color, roughness = 0.39) {
   return new THREE.MeshPhysicalMaterial({ color, roughness, metalness: 0.004, clearcoat: 0.030, clearcoatRoughness: 0.69, ior: 1.47 })
@@ -100,8 +97,6 @@ function addSplitPinHalf(group, side, length, material, friction) {
     group.add(tip)
   }
 
-  // The actual open split is intentionally geometry, not a black rectangle painted
-  // on top of a solid cylinder. A shallow inner shadow only makes the cavity readable.
   const slot = visualOnly(new THREE.Mesh(
     new RoundedBoxGeometry(N.pinBodyRadius * 1.55, 0.020, Math.max(0.12, shaftLength + tipLength * 0.72), 2, 0.006),
     shade(0x2b2d31, 0.30),
@@ -208,16 +203,20 @@ function addTechnicBrickUnderside(group, part, color) {
 function addLiftarmMoldFinish(group, part, color) {
   const holes = part.connectors.filter(item => item.type === 'pin-hole')
   if (holes.length < 3) return
+  const minY = Math.min(...holes.map(item => item.position[1]))
+  const maxY = Math.max(...holes.map(item => item.position[1]))
+  if (maxY - minY > 0.10) return
   const minX = Math.min(...holes.map(item => item.position[0]))
   const maxX = Math.max(...holes.map(item => item.position[0]))
-  const y = holes.reduce((sum, item) => sum + item.position[1], 0) / holes.length
   if (Math.abs(maxX - minX) < 1.2) return
+  const y = holes.reduce((sum, item) => sum + item.position[1], 0) / holes.length
+  const faceZ = part.id.startsWith('thin-beam-') ? 0.207 : 0.397
   for (const side of [-1, 1]) {
     const lane = visualOnly(new THREE.Mesh(
       new RoundedBoxGeometry(Math.max(0.20, maxX - minX - 1.25), 0.028, 0.010, 2, 0.004),
       shade(color, 0.88),
     ), 'liftarm-face-mold-lane')
-    lane.position.set((minX + maxX) / 2, y, side * 0.397)
+    lane.position.set((minX + maxX) / 2, y, side * faceZ)
     group.add(lane)
   }
 }
@@ -319,8 +318,7 @@ function addFrameFinish(group, part, color) {
   for (const side of [-1, 1]) {
     const topRail = visualOnly(new THREE.Mesh(new RoundedBoxGeometry(4.60, 0.035, 0.010, 2, 0.004), shade(color, 0.86)), 'frame-face-mold-lane')
     topRail.position.set(0, 4.45, side * 0.397)
-    const bottomRail = topRail.clone()
-    bottomRail.userData = { ...topRail.userData }
+    const bottomRail = visualOnly(topRail.clone(), 'frame-face-mold-lane')
     bottomRail.position.y = 0.45
     group.add(topRail, bottomRail)
   }
@@ -356,7 +354,7 @@ for (const part of PARTS.filter(item => /^(?:thin-)?beam-\d+$/.test(item.id))) {
   if (wrapPart(part.id, addLiftarmMoldFinish, 'parts-6-liftarm-mold-finish-v4')) upgraded.push(part.id)
 }
 for (const id of ['beam-l-3x3', 'beam-angle-4x2']) {
-  if (wrapPart(id, addLiftarmMoldFinish, 'parts-6-bent-liftarm-mold-finish-v4')) upgraded.push(id)
+  if (wrapPart(id, addLiftarmMoldFinish, 'parts-6-bent-liftarm-counterbore-only-v4')) upgraded.push(id)
 }
 
 for (const part of PARTS.filter(item => /^axle-\d+$/.test(item.id))) {
@@ -378,7 +376,7 @@ globalThis.BrickLabParts6CoreMoldedFidelity = Object.freeze({
   focus: Object.freeze([
     'real open elastic slots on Technic-like pins',
     'hollow connector-aligned Technic brick undersides',
-    'subtle liftarm/frame molded face finish',
+    'subtle straight liftarm/frame molded face finish with bent-beam floating-detail guard',
     'cross-axle end chamfer caps',
     'bush/coupler shoulders and ribbing',
     'spur gear hub/root face relief',
