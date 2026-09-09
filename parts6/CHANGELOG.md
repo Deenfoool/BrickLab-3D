@@ -9,5 +9,11 @@
 - molded steering base, knuckle, tie rod and wheel hub;
 - metal-coil shock visual treatment;
 - POM-like universal/CV joint visuals;
-- visible steering ports aligned with connector semantics;
-- PARTS-6 QA, runtime-integrity and geometry regression coverage.
+- measured nominal visual dimensions for the 8 mm grid, pin bores and cross axles;
+- keyed axle-hole faces added to every wheel family and bevel gear;
+- gearbox, differential, CV/Cardan, worm drive and inline sensor ports now derive their visible orientation from connector metadata;
+- steering/tie-rod/bearing/shock pin-hole finishes use one nominal counterbore family;
+- motor, wheel hub, steering knuckle and axle-pin now visibly distinguish solid axle/pin ports from holes;
+- interface detail meshes are explicitly excluded from bounds-derived colliders;
+- connector/mechanics metadata is regression-locked against the visual pass;
+- PARTS-6 QA, runtime-integrity, interface-fit and geometry regression coverage.
