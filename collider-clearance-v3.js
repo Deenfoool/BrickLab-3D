@@ -43,16 +43,36 @@ function collisionMask(definition, selfCollision) {
   return pack(membership, filter)
 }
 
+function cylinderAxisSpec(spec, relativeScale) {
+  if (spec.type === 'cylinder-x') {
+    return {
+      axisScale: Math.abs(relativeScale.x || 1),
+      radiusScale: Math.max(Math.abs(relativeScale.y || 1), Math.abs(relativeScale.z || 1)),
+      localRotation: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI / 2)),
+    }
+  }
+  if (spec.type === 'cylinder-z') {
+    return {
+      axisScale: Math.abs(relativeScale.z || 1),
+      radiusScale: Math.max(Math.abs(relativeScale.x || 1), Math.abs(relativeScale.y || 1)),
+      localRotation: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)),
+    }
+  }
+  return {
+    axisScale: Math.abs(relativeScale.y || 1),
+    radiusScale: Math.max(Math.abs(relativeScale.x || 1), Math.abs(relativeScale.z || 1)),
+    localRotation: new THREE.Quaternion(),
+  }
+}
+
 function descriptorFromSpec(session, spec, relativeMatrix, relativeRotation, relativeScale) {
   const localCenter = spec.center.clone().applyMatrix4(relativeMatrix).multiplyScalar(STUD)
 
-  if (spec.type === 'cylinder-x') {
-    const scaleX = Math.abs(relativeScale.x || 1)
-    const scaleRadius = Math.max(Math.abs(relativeScale.y || 1), Math.abs(relativeScale.z || 1))
-    const localRotation = relativeRotation.clone()
-      .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI / 2)))
+  if (['cylinder-x', 'cylinder-y', 'cylinder-z'].includes(spec.type)) {
+    const axis = cylinderAxisSpec(spec, relativeScale)
+    const localRotation = relativeRotation.clone().multiply(axis.localRotation)
     return session.RAPIER.ColliderDesc
-      .cylinder(spec.halfLength * STUD * scaleX, spec.radius * STUD * scaleRadius)
+      .cylinder(spec.halfLength * STUD * axis.axisScale, spec.radius * STUD * axis.radiusScale)
       .setTranslation(localCenter.x, localCenter.y, localCenter.z)
       .setRotation(quat(localRotation))
   }
@@ -78,7 +98,7 @@ function wheelColliderDimensions(wheel, relativeScale) {
   }
 }
 
-PhysicsSession.prototype.createCompoundBody = function createCompoundBodyClearanceV3(objects) {
+PhysicsSession.prototype.createCompoundBody = function createCompoundBodyClearanceV4(objects) {
   const root = objects[0]
   if (!root) return
 
@@ -202,6 +222,7 @@ globalThis.BrickLabColliderModel = Object.freeze({
   version: COLLIDER_PROFILE_VERSION,
   studdedBodies: 'core-only; studs do not fill air between studs',
   technicHoles: 'open compound rail/post proxies for straight pin-hole rows',
+  explicitProfiles: 'visual-independent box/cylinder-x/y/z compound proxies for complex parts',
   shafts: 'axial cylinder proxy where applicable',
   wheels: 'radius+width-aware cylinder proxies from mechanics.wheel metadata',
   holeClearanceStud: HOLE_CLEARANCE_STUD,
