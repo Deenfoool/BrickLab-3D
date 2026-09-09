@@ -15,6 +15,7 @@ await import('../parts5/visual-overhaul-v1.js')
 await import('../parts5/visual-refinement-v2.js')
 await import('../parts5/driveline-refinement-v2.js')
 await import('../parts5/structural-refinement-v2.js')
+await import('../parts5/detail-refinement-v3.js')
 
 const { findPart } = await import('../parts.js')
 const { gearPitchRadius } = await import('../parts5/part-geometry-metrics-v1.js')
@@ -22,10 +23,10 @@ const { gearPitchRadius } = await import('../parts5/part-geometry-metrics-v1.js'
 const stage = document.getElementById('stage')
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x16191c)
-scene.fog = new THREE.Fog(0x16191c, 46, 78)
+scene.fog = new THREE.Fog(0x16191c, 52, 88)
 
-const camera = new THREE.PerspectiveCamera(43, 1, 0.1, 150)
-camera.position.set(16, 18, 30)
+const camera = new THREE.PerspectiveCamera(43, 1, 0.1, 170)
+camera.position.set(18, 21, 36)
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
@@ -36,9 +37,9 @@ stage.append(renderer.domElement)
 
 const controls = new OrbitControls(camera, renderer.domElement)
 controls.enableDamping = true
-controls.target.set(0.6, 2.0, 2.8)
+controls.target.set(0.6, 2.0, 6.0)
 controls.minDistance = 5
-controls.maxDistance = 64
+controls.maxDistance = 72
 
 scene.add(new THREE.HemisphereLight(0xdde8f2, 0x30363c, 2.15))
 const key = new THREE.DirectionalLight(0xffffff, 3.0)
@@ -54,7 +55,7 @@ rimLight.position.set(4, 7, -18)
 scene.add(rimLight)
 
 const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(50, 50),
+  new THREE.PlaneGeometry(58, 58),
   new THREE.MeshStandardMaterial({ color: 0x20252a, roughness: 0.93, metalness: 0 }),
 )
 floor.rotation.x = -Math.PI / 2
@@ -62,7 +63,7 @@ floor.position.y = -0.02
 floor.receiveShadow = true
 scene.add(floor)
 
-const grid = new THREE.GridHelper(50, 50, 0x3b444c, 0x2b3136)
+const grid = new THREE.GridHelper(58, 58, 0x3b444c, 0x2b3136)
 grid.position.y = 0.005
 grid.material.transparent = true
 grid.material.opacity = 0.35
@@ -112,18 +113,14 @@ function addPad(x, z, width, depth = 3.0) {
   scene.add(pad)
 }
 
-// WHEELS — same axle direction/baseline so sidewall profile, tyre width, rim dish
-// and family-specific tread can be compared directly.
 const wheelIds = ['wheel-small', 'wheel-narrow', 'wheel-road', 'wheel-medium', 'wheel', 'wheel-offroad-large', 'wheel-tractor']
 const wheelXs = [-9.2, -6.5, -3.7, -0.7, 2.5, 6.0, 10.0]
 for (let i = 0; i < wheelIds.length; i += 1) addPart(wheelIds[i], [wheelXs[i], 0, -8.4])
 
-// SPUR FAMILY — one module/pitch system across the complete inventory.
 const spurTeeth = [8, 12, 16, 20, 24, 36, 40]
 const spurXs = [-8.2, -5.5, -2.8, 0, 3.0, 6.2, 9.8]
 for (let i = 0; i < spurTeeth.length; i += 1) addPart(`gear-${spurTeeth[i]}`, [spurXs[i], 0, -3.6])
 
-// EXACT 12T ↔ 20T PAIR.
 {
   const a = addPart('gear-12', [-7.4, 0, 1.0])
   const b = addPart('gear-20', [-7.4 + gearPitchRadius(12) + gearPitchRadius(20), 0, 1.0])
@@ -132,7 +129,6 @@ for (let i = 0; i < spurTeeth.length; i += 1) addPart(`gear-${spurTeeth[i]}`, [s
   b.updateMatrixWorld(true)
 }
 
-// EXACT 8T ↔ 24T PAIR.
 {
   const a = addPart('gear-8', [-2.6, 0, 1.0])
   const b = addPart('gear-24', [-2.6 + gearPitchRadius(8) + gearPitchRadius(24), 0, 1.0])
@@ -141,16 +137,12 @@ for (let i = 0; i < spurTeeth.length; i += 1) addPart(`gear-${spurTeeth[i]}`, [s
   b.updateMatrixWorld(true)
 }
 
-// TRUE 90° BEVEL PAIR using one shared pitch-cone apex.
 {
   const fixed = partObject('bevel-gear-20')
   const moving = partObject('bevel-gear-12')
-  fixed.userData.partId = 'bevel-gear-20'
-  moving.userData.partId = 'bevel-gear-12'
   moving.rotation.z = -Math.PI / 2
   fixed.updateMatrixWorld(true)
   moving.updateMatrixWorld(true)
-
   const fixedCenter = new THREE.Vector3(6.8, 0.72, 1.5)
   const apex = fixedCenter.clone().add(new THREE.Vector3(0, gearPitchRadius(12), 0))
   const movingCenter = apex.clone().add(new THREE.Vector3(-gearPitchRadius(20), 0, 0))
@@ -163,14 +155,14 @@ addPad(-6.5, 1.0, 4.4)
 addPad(-1.7, 1.0, 4.0)
 addPad(6.0, 1.5, 5.2)
 
-// STRUCTURAL DETAIL ROW.
+// Structural baseline.
 addPart('beam-7', [-7.8, 0, 5.2])
 addPart('technic-brick-1x4', [-3.0, 0, 5.2])
 addPart('axle-9', [1.0, 0, 5.2], [0, Math.PI / 7, 0])
 addPart('pin', [6.2, 0.15, 5.2], [Math.PI / 2, 0, Math.PI / 5])
 addPart('bush', [9.3, 0.1, 5.2], [0, 0, Math.PI / 2])
 
-// STEERING / SUSPENSION ROW.
+// Steering / suspension.
 addPart('steering-tie-rod-5', [-8.0, 0, 9.7])
 addPart('wheel-hub', [-3.9, 0, 9.7])
 addPart('steering-knuckle', [-1.1, 0, 9.7])
@@ -179,10 +171,26 @@ addPart('steering-rack-7', [3.4, 0, 11.2])
 addPart('shock-body-5', [8.2, 0, 9.3], [0, 0, -0.16])
 addPart('shock-rod-5', [10.0, 0, 9.3], [0, 0, 0.16])
 
-// ARTICULATED DRIVELINE ROW.
+// Articulated driveline.
 addPart('universal-joint-30', [-5.5, 0, 14.0], [0, -0.22, 0])
 addPart('cv-joint-30', [0.0, 0, 14.0], [0, -0.22, 0])
 addPart('worm-drive-8', [6.2, 0, 14.0], [0, -0.28, 0])
+
+// Bent beams, pins, connector blocks and bearing / suspension detail.
+addPart('beam-l-3x3', [-9.0, 0, 18.3], [0, 0.15, 0])
+addPart('beam-angle-4x2', [-5.7, 0, 18.3], [0, -0.10, 0])
+addPart('pin-long', [-1.6, 0.25, 18.3], [Math.PI / 2, 0, 0.35])
+addPart('axle-pin', [0.2, 0.1, 18.3], [0.18, 0.28, 0])
+addPart('connector-triple', [2.5, 0, 18.3])
+addPart('connector-perpendicular', [5.6, 0, 18.3], [0.10, -0.25, 0])
+addPart('connector-angle', [7.9, 0, 18.3], [0.12, 0.28, 0])
+addPart('bearing-block', [10.0, 0, 18.3], [0, -0.22, 0])
+addPart('suspension-arm-5', [-0.5, 0, 21.1], [0, 0.18, 0])
+
+// Mechanism housings.
+addPart('motor', [-7.0, 0, 23.4], [0, -0.22, 0])
+addPart('gearbox-fnr', [-1.2, 0, 23.4], [0, -0.22, 0])
+addPart('open-differential', [5.0, 0, 23.4], [0, -0.28, 0])
 
 function resize() {
   const width = window.innerWidth
@@ -208,4 +216,5 @@ globalThis.BrickLabParts5VisualQA = Object.freeze({
   refinement: globalThis.BrickLabParts5Refinement ?? null,
   drivelineRefinement: globalThis.BrickLabParts5DrivelineVisuals ?? null,
   structuralRefinement: globalThis.BrickLabParts5StructuralVisuals ?? null,
+  detailRefinement: globalThis.BrickLabParts5DetailRefinement ?? null,
 })
