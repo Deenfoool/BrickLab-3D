@@ -1,5 +1,5 @@
 const BUILD_ID = 'PARTS-5'
-const BUILD_TAG = 'parts-5-20260909-visual-v1'
+const BUILD_TAG = 'parts-5-20260909-visual-v2'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab ${BUILD_TAG} · profiled wheels · shared-module gears · exact gear mesh snap · PARTS-4 physics preserved`
+  badge.title = `BrickLab ${BUILD_TAG} · refined wheels/gears · detailed connectors/housings · visual-independent colliders · PARTS-4 mechanics preserved`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -92,6 +92,10 @@ window.__bricklabPhysicsDiagnostics = () => ({
   },
   parts5: {
     visuals: window.BrickLabParts5Visuals ?? null,
+    refinement: window.BrickLabParts5Refinement ?? null,
+    drivelineRefinement: window.BrickLabParts5DrivelineVisuals ?? null,
+    structuralRefinement: window.BrickLabParts5StructuralVisuals ?? null,
+    detailRefinement: window.BrickLabParts5DetailRefinement ?? null,
     gearMeshCandidate: window.__bricklabGearMeshCandidate ?? null,
     lastGearMeshSnap: window.__bricklabLastGearMeshSnap ?? null,
     gearMeshUI: window.BrickLabParts5GearMeshUI ?? null,
