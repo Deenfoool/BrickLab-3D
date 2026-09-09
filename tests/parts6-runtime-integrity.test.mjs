@@ -13,7 +13,7 @@ function parts6Imports(source) {
 test('PARTS-6 realism modules exist and use one package tag', async () => {
   const runtime = await readFile(new URL('runtime-extensions.js', root), 'utf8')
   const imports = parts6Imports(runtime)
-  assert.equal(imports.length, 10)
+  assert.equal(imports.length, 11)
   for (const item of imports) {
     assert.equal(item.tag, TAG, `${item.specifier} uses PARTS-6 tag`)
     await access(new URL(item.specifier.replace(/^\.\//, ''), root))
@@ -29,6 +29,7 @@ test('PARTS-6 final visual ownership is ordered before physics', async () => {
   const nominal = runtime.indexOf(`import('./parts6/nominal-dimension-fidelity-v1.js?v=${TAG}')`)
   const hero = runtime.indexOf(`import('./parts6/hero-mechanical-fidelity-v2.js?v=${TAG}')`)
   const fine = runtime.indexOf(`import('./parts6/fine-mechanical-detail-v3.js?v=${TAG}')`)
+  const core = runtime.indexOf(`import('./parts6/core-molded-fidelity-v4.js?v=${TAG}')`)
   const fidelity = runtime.indexOf(`import('./parts6/connector-fidelity-v1.js?v=${TAG}')`)
   const interfaceFit = runtime.indexOf(`import('./parts6/interface-fit-refinement-v2.js?v=${TAG}')`)
   const interfaceSafety = runtime.indexOf(`import('./parts6/interface-physics-safety-v1.js?v=${TAG}')`)
@@ -41,7 +42,8 @@ test('PARTS-6 final visual ownership is ordered before physics', async () => {
   assert.ok(nominal > mechanical)
   assert.ok(hero > nominal)
   assert.ok(fine > hero)
-  assert.ok(fidelity > fine)
+  assert.ok(core > fine)
+  assert.ok(fidelity > core)
   assert.ok(interfaceFit > fidelity)
   assert.ok(interfaceSafety > interfaceFit)
   assert.ok(rack > interfaceSafety)
@@ -56,6 +58,7 @@ test('PARTS-6 visual layers do not replace connector or mechanics metadata', asy
     'parts6/nominal-dimension-fidelity-v1.js',
     'parts6/hero-mechanical-fidelity-v2.js',
     'parts6/fine-mechanical-detail-v3.js',
+    'parts6/core-molded-fidelity-v4.js',
     'parts6/connector-fidelity-v1.js',
     'parts6/interface-fit-refinement-v2.js',
     'parts6/interface-physics-safety-v1.js',
@@ -78,19 +81,24 @@ test('PARTS-6 visual layers do not replace connector or mechanics metadata', asy
   assert.match(sources[5], /motor-rear-endbell/)
   assert.match(sources[5], /shock-preload-thread/)
   assert.match(sources[5], /physicsIgnore = true/)
-  assert.match(sources[6], /PARTS6_CONNECTOR_FIDELITY_VERSION = 'parts-6-connector-fidelity-v3'/)
-  assert.match(sources[6], /one visual owner per mating port/)
-  assert.match(sources[7], /wrapPart/)
-  assert.match(sources[8], /markInterfaceTree/)
-  assert.match(sources[9], /PARTS6_RACK_GEAR_FIDELITY_VERSION = 'parts-6-rack-gear-fidelity-v4'/)
-  assert.match(sources[9], /LINEAR_PITCH = Math\.PI \* GEAR_MODULE_STUD/)
-  assert.match(sources[9], /freezeLegacyBoundsCollider/)
+  assert.match(sources[6], /PARTS6_CORE_MOLDED_FIDELITY_VERSION = 'parts-6-core-molded-fidelity-v4'/)
+  assert.match(sources[6], /pinLobeGeometry/)
+  assert.match(sources[6], /technic-brick-underside-tube/)
+  assert.match(sources[6], /spur-root-face-relief/)
+  assert.match(sources[7], /PARTS6_CONNECTOR_FIDELITY_VERSION = 'parts-6-connector-fidelity-v3'/)
+  assert.match(sources[7], /one visual owner per mating port/)
+  assert.match(sources[8], /wrapPart/)
+  assert.match(sources[9], /hardenFineDetailTree/)
+  assert.match(sources[10], /PARTS6_RACK_GEAR_FIDELITY_VERSION = 'parts-6-rack-gear-fidelity-v4'/)
+  assert.match(sources[10], /LINEAR_PITCH = Math\.PI \* GEAR_MODULE_STUD/)
+  assert.match(sources[10], /freezeLegacyBoundsCollider/)
 })
 
-test('nominal, hero, fine, connector and rack layers share authoritative sizing without physics ownership changes', async () => {
+test('nominal, hero, fine, core, connector and rack layers share authoritative sizing without physics ownership changes', async () => {
   const nominal = await readFile(new URL('parts6/nominal-dimension-fidelity-v1.js', root), 'utf8')
   const hero = await readFile(new URL('parts6/hero-mechanical-fidelity-v2.js', root), 'utf8')
   const fine = await readFile(new URL('parts6/fine-mechanical-detail-v3.js', root), 'utf8')
+  const core = await readFile(new URL('parts6/core-molded-fidelity-v4.js', root), 'utf8')
   const fit = await readFile(new URL('parts6/interface-fit-refinement-v2.js', root), 'utf8')
   const fidelity = await readFile(new URL('parts6/connector-fidelity-v1.js', root), 'utf8')
   const safety = await readFile(new URL('parts6/interface-physics-safety-v1.js', root), 'utf8')
@@ -105,11 +113,16 @@ test('nominal, hero, fine, connector and rack layers share authoritative sizing 
   assert.match(fine, /REAL_TECHNIC_NOMINAL/)
   assert.match(fine, /physicsIgnore = true/)
   assert.match(fine, /previous core factories and collider owners remain authoritative/)
+  assert.match(core, /REAL_TECHNIC_NOMINAL/)
+  assert.match(core, /gearMetrics/)
+  assert.match(core, /physicsIgnore = true/)
+  assert.match(core, /replacement pin silhouettes stay inside prior nominal envelopes/)
   assert.match(fit, /REAL_TECHNIC_NOMINAL/)
   assert.match(fidelity, /REAL_TECHNIC_NOMINAL/)
   assert.match(fit, /connector\.axis/)
   assert.match(fit, /physicsIgnore = true/)
   assert.match(safety, /parts6InterfaceFeature/)
+  assert.match(safety, /parts6FineFeature/)
   assert.match(safety, /physicsIgnore = true/)
   assert.match(rack, /GEAR_MODULE_STUD/)
   assert.match(rack, /GEAR_PRESSURE_ANGLE_DEG/)
@@ -141,8 +154,10 @@ test('visual QA page loads all PARTS-6 final owners', async () => {
   assert.match(qa, /parts6\/nominal-dimension-fidelity-v1/)
   assert.match(qa, /parts6\/hero-mechanical-fidelity-v2/)
   assert.match(qa, /parts6\/fine-mechanical-detail-v3/)
+  assert.match(qa, /parts6\/core-molded-fidelity-v4/)
   assert.match(qa, /parts6\/connector-fidelity-v1/)
   assert.match(qa, /parts6\/interface-fit-refinement-v2/)
+  assert.match(qa, /parts6\/interface-physics-safety-v1/)
   assert.match(qa, /parts6\/rack-gear-fidelity-v1/)
   assert.match(qa, /technic-frame-5x7/)
   assert.match(qa, /steering-base/)
@@ -151,6 +166,7 @@ test('visual QA page loads all PARTS-6 final owners', async () => {
   assert.match(qa, /open-differential/)
   assert.match(qa, /heroMechanicalFidelity/)
   assert.match(qa, /fineMechanicalDetail/)
+  assert.match(qa, /coreMoldedFidelity/)
   assert.match(qa, /rpm-sensor/)
   assert.match(html, /PARTS-6 REALISM QA/)
   assert.match(html, /Nominal interfaces/)
