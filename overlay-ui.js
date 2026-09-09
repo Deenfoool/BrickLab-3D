@@ -1,3 +1,4 @@
+import { emitAudioEvent } from './audio-events.js'
 const PARTS_STATE_KEY = 'bricklab.ui.parts-overlay.v1'
 const PROPERTIES_STATE_KEY = 'bricklab.ui.properties-overlay.v1'
 const LAYOUT_KEY = 'bricklab.ui.overlay-layout.v2'
@@ -180,6 +181,7 @@ function installOverlayUi() {
   function setOpen(target, open, { persist = true } = {}) {
     if (!(target in state)) return
     if (focusMode && open) focusMode = false
+    if (state[target] !== Boolean(open)) emitAudioEvent('panel', { pitch: open ? 1.1 : .85 })
     state[target] = Boolean(open)
     if (isMobile() && state[target]) {
       const other = target === 'parts' ? 'properties' : 'parts'

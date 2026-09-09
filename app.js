@@ -1,3 +1,5 @@
+import { emitAudioEvent } from './audio-events.js'
+import { installAudio } from './audio/runtime.js'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
@@ -295,6 +297,7 @@ let connectionVisualsVisible = true
 let transformSpace = 'world'
 
 function toast(text) {
+  emitAudioEvent('notification', { text })
   const el = $('#toast')
   el.textContent = text
   el.classList.add('show')
@@ -608,6 +611,7 @@ function undo() {
   historyIndex -= 1
   applyProject(history[historyIndex])
   updateHistoryButtons()
+  emitAudioEvent('undo')
   toast('Undo')
 }
 
@@ -616,6 +620,7 @@ function redo() {
   historyIndex += 1
   applyProject(history[historyIndex])
   updateHistoryButtons()
+  emitAudioEvent('redo')
   toast('Redo')
 }
 
@@ -628,6 +633,7 @@ transform.addEventListener('dragging-changed', event => {
 transform.addEventListener('objectChange', () => {
   if (isDragging && selected && !detachedDuringDrag) {
     detachedDuringDrag = detachPartConnections(selected, true) > 0
+    if (detachedDuringDrag) emitAudioEvent('detach')
   }
   for (const box of selectionBoxes.values()) box.update()
   updateInspector()
@@ -643,9 +649,12 @@ transform.addEventListener('mouseUp', () => {
     orientForSnap(selected, snapCandidate)
     applySnap(selected, snapCandidate)
     const connection = attachSnapConnection(snapCandidate)
+    if (!connection && !snapCandidate.placementOnly) emitAudioEvent('incompatible', { cooldown: 400 })
+    if (connection) emitAudioEvent('connector', { source: snapCandidate.source.type, target: snapCandidate.target.type, sourcePart: selected.userData.partId, targetPart: snapCandidate.targetObject?.userData?.partId })
     if (connection) toast(`Connected ${connection.kind}: ${snapCandidate.source.type} → ${snapCandidate.target.type}`)
   }
 
+  if (!snapCandidate && !globalThis.__bricklabGearMeshCandidate) emitAudioEvent(transform.getMode() === 'rotate' ? 'rotate' : 'move')
   for (const box of selectionBoxes.values()) box.update()
   updateInspector()
   connectorGuides()
@@ -665,11 +674,13 @@ function addPart(partId) {
   select(object)
   updateProjectStats()
   commitHistory()
+  emitAudioEvent('place', { cooldown: 100 })
   toast(`${findPart(partId)?.name ?? 'Part'} added`)
 }
 
 function removeSelected() {
   if (!selectedObjects.size || mode !== 'build') return
+  emitAudioEvent('delete')
   const targets = activeSelection()
   detachSelectionConnections(true)
   for (const object of targets) buildRoot.remove(object)
@@ -710,6 +721,7 @@ function disconnectSelected() {
   updateInspector()
   refreshSnap()
   commitHistory()
+  emitAudioEvent('detach')
   toast(`Disconnected ${count} link${count === 1 ? '' : 's'}`)
 }
 
@@ -741,6 +753,7 @@ function ungroupSelected() {
 function setTransformMode(next) {
   if (mode !== 'build') return
   transform.setMode(next)
+  emitAudioEvent('tool')
   $('#moveTool').classList.toggle('active', next === 'translate')
   $('#rotateTool').classList.toggle('active', next === 'rotate')
 }
@@ -830,6 +843,7 @@ function rotateSelectedQuarter(direction) {
   updateConnectionVisuals()
   updateInspector()
   commitHistory()
+  emitAudioEvent('rotate')
   toast(`Rotated ${direction > 0 ? '+90°' : '−90°'} around ${axis.toUpperCase()}`)
 }
 
@@ -989,6 +1003,7 @@ function setSimPlayButton(running) {
 async function startSimulation({ preserveStartState = false } = {}) {
   if (!preserveStartState || !simulationStartState) simulationStartState = cloneState(projectState())
   const generation = ++simulationGeneration
+  if (physicsSession) emitAudioEvent('stop')
   physicsSession?.dispose()
   physicsSession = null
 
@@ -1015,6 +1030,7 @@ async function startSimulation({ preserveStartState = false } = {}) {
     const stats = session.stats
     $('#simState').textContent = `${stats.bodies} bodies · ${stats.joints} joints${stats.failedJoints ? ` · ${stats.failedJoints} skipped` : ''}`
     $('#statusText').textContent = `SIMULATE · gravity on · ${stats.bodies} bodies · ${stats.joints} joints`
+    emitAudioEvent('start')
     toast('Physics simulation started')
   } catch (error) {
     console.error('Could not start Rapier simulation', error)
@@ -1028,6 +1044,7 @@ async function startSimulation({ preserveStartState = false } = {}) {
 
 function stopSimulation({ restore = true } = {}) {
   simulationGeneration += 1
+  if (physicsSession) emitAudioEvent('stop')
   physicsSession?.dispose()
   physicsSession = null
   $('#simControls').classList.add('hidden')
@@ -1040,6 +1057,7 @@ function toggleSimulationRunning() {
   if (!physicsSession) return
   physicsSession.setRunning(!physicsSession.running)
   setSimPlayButton(physicsSession.running)
+  emitAudioEvent(physicsSession.running ? 'start' : 'stop')
   $('#statusText').textContent = physicsSession.running
     ? `SIMULATE · running · ${physicsSession.stats.joints} joints`
     : 'SIMULATE · paused'
@@ -1077,6 +1095,7 @@ function setMode(next) {
   if (previousMode === 'simulate') stopSimulation({ restore: true })
 
   mode = next
+  emitAudioEvent('mode')
   $$('.mode').forEach(button => button.classList.toggle('active', button.dataset.mode === next))
   $('.viewport-toolbar').classList.toggle('disabled', next !== 'build')
   $('#snapToolbar').classList.toggle('hidden', next !== 'build')
@@ -1452,11 +1471,13 @@ new ResizeObserver(resize).observe(viewport)
 function animate() {
   if (mode === 'simulate' && physicsSession) physicsSession.step()
   orbit.update()
+  emitAudioEvent('frame', { session: physicsSession, mode, camera })
   for (const box of selectionBoxes.values()) box.update()
   renderer.render(scene, camera)
   requestAnimationFrame(animate)
 }
 
+try { installAudio() } catch (error) { console.warn('Optional audio setup unavailable', error) }
 renderCatalog()
 loadLocal()
 updateProjectStats()
