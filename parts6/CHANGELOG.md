@@ -36,9 +36,11 @@
 - worm drive gains connector-aligned bearing races/seals, wheel-face webs, housing braces and mounting-seat detail;
 - RPM/Torque sensors gain bearing retainers, accent bands, case fasteners and molded witness detail;
 - core molded v4 gives pins open elastic-slot cues, hollow connector-aligned Technic-brick undersides, axle end finish, bush/coupler shoulders and spur-gear face relief;
-- structural-shell v11 fully rebuilds every `technic-brick-1xN` factory as an open-underside molded shell with two true bored side walls, connector-aligned hollow underside tubes/webs, a separate top deck/end walls and correctly sized studs;
+- structural-shell v11 fully rebuilds every `technic-brick-1xN` factory as an open-underside molded shell with two true bored side walls, connector-aligned hollow underside tubes/webs, a continuous top deck/end walls and correctly sized studs;
 - structural-shell v11 rebuilds the 5×7 frame around its actual perimeter connector coordinates with a true central opening, true 4.8 mm-class bores/counterbores, rounded outer corners, inner-window reinforcement lips and inset corner gussets;
 - structural-shell v11 retains each complete pre-v11 render tree invisibly as the non-ignored collider/bounds proxy while all new visible shell geometry is `physicsIgnore`, so hollowing the models cannot shrink or reshape physics;
+- cross-axle v12 replaces the old two-intersecting-rounded-box shaft with one extruded measured cross section, preserving the nominal 4.78 mm tip-to-tip interface while adding molded root/tip chamfers and proper end bevels;
+- cross-axle v12 adds subtle end gate witnesses and longitudinal mold-seam cues, keeps the pre-v12 factory invisible as a collider/bounds source, and leaves the existing nominal explicit `cylinder-x` axle physics proxy authoritative;
 - bent-liftarm v6 replaces the blocky L/angle beam silhouette with rounded end caps, a rounded outer elbow, shallow inner fillet and nominal through bores while retaining the existing explicit compound collider;
 - hero micro-detail v5 adds subtle tyre centre mold seams, sidewall vent nibs, rim witnesses/retaining shoulders and bevel face mold finish;
 - Cardan/CV micro-detail adds trunnion snap rings, yoke parting lines, CV bell seam and cage-window depth cues;
@@ -50,6 +52,6 @@
 - shock v9 freezes each pre-v9 non-ignored visual envelope before replacing the factory, keeping PARTS-4 prismatic travel/spring/damper mechanics and connector centres authoritative;
 - shaft-hardware v10 replaces primitive small hardware with split elastic friction/frictionless pin lobes and tapered lead-ins, a true hybrid axle-pin, cross-shaped through bores in bush/half-bush/axle-coupler, and open bored Triple/Perpendicular/Angle connector bodies;
 - shaft-hardware v10 retains the complete pre-v10 render tree invisibly as the non-ignored collider/bounds proxy while every new visible v10 mesh is physicsIgnore and non-semantic;
-- the main visual QA now has a dedicated small-hardware row for pin-half, frictionless pin, half-bush and axle-coupler plus the rebuilt connector family;
-- every fine/core/micro/v10/v11 decorative mesh is collider-independent; connector and mechanics metadata stay unchanged and any explicit physical metadata only preserves a previous physical envelope;
-- PARTS-6 QA, fit-QA, shock-QA, runtime-integrity, interface-fit, rack-gear, hero-fidelity, fine-detail, core-molded, structural-shell, suspension-arm, steering-carrier, shaft-hardware, bent-liftarm, hero-micro-detail and geometry regression coverage.
+- the main visual QA now has a dedicated small-hardware row for pin-half, frictionless pin, half-bush and axle-coupler plus the rebuilt connector family, while the displayed `axle-9` exercises the final v12 cross-section;
+- every fine/core/micro/v10/v11/v12 decorative mesh is collider-independent; connector and mechanics metadata stay unchanged and any explicit physical metadata only preserves a previous physical envelope;
+- PARTS-6 QA, fit-QA, shock-QA, runtime-integrity, interface-fit, rack-gear, hero-fidelity, fine-detail, core-molded, structural-shell, cross-axle, suspension-arm, steering-carrier, shaft-hardware, bent-liftarm, hero-micro-detail and geometry regression coverage.
