@@ -19,6 +19,7 @@ await import('../parts5/detail-refinement-v3.js')
 await import('../parts6/realism-refinement-v1.js')
 await import('../parts6/precision-refinement-v2.js')
 await import('../parts6/mechanical-realism-v1.js')
+await import('../parts6/connector-fidelity-v1.js')
 
 const { findPart } = await import('../parts.js')
 const { gearPitchRadius } = await import('../parts5/part-geometry-metrics-v1.js')
@@ -220,4 +221,5 @@ globalThis.BrickLabParts5VisualQA = Object.freeze({
   realismRefinement: globalThis.BrickLabParts6Realism ?? null,
   precisionRefinement: globalThis.BrickLabParts6Precision ?? null,
   mechanicalRealism: globalThis.BrickLabParts6MechanicalRealism ?? null,
+  connectorFidelity: globalThis.BrickLabParts6ConnectorFidelity ?? null,
 })
