@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { PARTS } from '../parts.js'
 import { patchPart } from '../parts3/part-schema-v1.js'
 
@@ -50,14 +51,20 @@ if (wrapFactory('steering-knuckle', (group, part, color) => {
 if (wrapFactory('wheel-hub', (group, part, color) => {
   const bearing = part.connectors.find(item => item.id === 'bearing' && item.type === 'axle')
   if (!bearing) return
-  // This inboard port is a bearing axle after the PARTS-3 steering upgrade, so it
-  // must visibly protrude into the knuckle instead of reading as another empty bore.
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.165, 0.165, 0.30, 32), pom(color))
-  shaft.rotation.z = Math.PI / 2
-  shaft.position.fromArray(bearing.position)
-  shaft.position.x -= 0.10
-  group.add(shaft)
-  const stop = visualOnly(new THREE.Mesh(new THREE.TorusGeometry(0.170, 0.017, 7, 32), pom(color)))
+  // This inboard port is an axle after the PARTS-3 steering upgrade. Render the
+  // same rounded cross section as the rest of BrickLab axles instead of a smooth pin.
+  const material = pom(color)
+  const length = 0.30
+  const arm = 0.148
+  const diameter = 0.36
+  const shaftA = new THREE.Mesh(new RoundedBoxGeometry(length, arm, diameter, 3, 0.020), material)
+  const shaftB = new THREE.Mesh(new RoundedBoxGeometry(length, diameter, arm, 3, 0.020), material)
+  const center = new THREE.Vector3(...bearing.position)
+  center.x -= 0.10
+  shaftA.position.copy(center)
+  shaftB.position.copy(center)
+  group.add(shaftA, shaftB)
+  const stop = visualOnly(new THREE.Mesh(new THREE.TorusGeometry(0.170, 0.017, 7, 32), material))
   stop.rotation.y = Math.PI / 2
   stop.position.fromArray(bearing.position)
   stop.position.x -= 0.24
