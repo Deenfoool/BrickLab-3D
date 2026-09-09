@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { Window } from 'happy-dom'
+import * as THREE from 'three'
 
 const dom = new Window()
 for (const key of ['window', 'document', 'localStorage', 'CustomEvent', 'MutationObserver', 'CSS', 'Event']) {
@@ -62,6 +63,9 @@ function snapshot(part) {
 const before = new Map(TARGETS.map(id => [id, snapshot(findPart(id))]))
 const source = await readFile(new URL('../parts6/fine-mechanical-detail-v3.js', import.meta.url), 'utf8')
 const fineModule = await import('../parts6/fine-mechanical-detail-v3.js')
+await import('../parts6/connector-fidelity-v1.js')
+await import('../parts6/interface-fit-refinement-v2.js')
+await import('../parts6/interface-physics-safety-v1.js')
 
 function fineFeatures(object) {
   const features = []
@@ -75,6 +79,14 @@ function featureNames(object) {
   return new Set(fineFeatures(object).map(node => node.userData.parts6FineFeature))
 }
 
+function firstFeature(object, name) {
+  let result = null
+  object.traverse(node => {
+    if (!result && node.userData?.parts6FineFeature === name) result = node
+  })
+  return result
+}
+
 test('fine detail pass preserves connector, mechanics and physics metadata', () => {
   for (const id of TARGETS) {
     const part = findPart(id)
@@ -84,13 +96,16 @@ test('fine detail pass preserves connector, mechanics and physics metadata', () 
   }
 })
 
-test('all fine-detail meshes are excluded from physics bounds', () => {
+test('all fine-detail meshes are excluded from physics bounds after final safety wrappers', () => {
   for (const id of TARGETS) {
     const part = findPart(id)
     const object = part.create(part.defaultColor)
     const features = fineFeatures(object)
     assert.ok(features.length > 0, `${id} should expose fine-detail features`)
-    for (const node of features) assert.equal(node.userData.physicsIgnore, true, `${id}:${node.userData.parts6FineFeature}`)
+    for (const node of features) {
+      assert.equal(node.userData.physicsIgnore, true, `${id}:${node.userData.parts6FineFeature}`)
+      assert.equal(node.userData.parts6FinePhysicsSafe, true, `${id}:${node.userData.parts6FineFeature} hardened by final safety pass`)
+    }
   }
 })
 
@@ -147,6 +162,24 @@ test('suspension, bearing and connector details are present', () => {
   assert.ok(connectorPart.has('connector-parting-line'))
 })
 
+test('final safety pass keeps bore shadows open and connector parting lines surface-thin', () => {
+  const baseObject = findPart('steering-base').create(findPart('steering-base').defaultColor)
+  const bore = firstFeature(baseObject, 'pivot-bore-shadow')
+  assert.ok(bore?.isMesh)
+  assert.equal(bore.geometry?.parameters?.openEnded, true, 'pivot bore is a liner rather than a solid plug')
+
+  for (const id of ['connector-triple', 'connector-perpendicular', 'connector-angle']) {
+    const object = findPart(id).create(findPart(id).defaultColor)
+    const line = firstFeature(object, 'connector-parting-line')
+    assert.ok(line?.isMesh, `${id} has a parting line`)
+    line.geometry.computeBoundingBox()
+    const size = new THREE.Vector3()
+    line.geometry.boundingBox.getSize(size)
+    assert.ok(size.z < 0.03, `${id} parting line stays surface-thin`)
+    assert.ok(Math.abs(line.position.z) < 0.53, `${id} parting line stays on the molded body surface`)
+  }
+})
+
 test('fine pass source is visual-only and does not author physical/mechanical metadata', () => {
   assert.equal(fineModule.PARTS6_FINE_MECHANICAL_DETAIL_VERSION, 'parts-6-fine-mechanical-detail-v3')
   assert.doesNotMatch(source, /mechanics\s*:/)
@@ -155,6 +188,7 @@ test('fine pass source is visual-only and does not author physical/mechanical me
   assert.match(source, /physicsIgnore = true/)
   assert.match(source, /wrapPart\(/)
   assert.equal(globalThis.BrickLabParts6FineMechanicalDetail.upgraded.length, TARGETS.length)
+  assert.equal(globalThis.BrickLabParts6InterfacePhysicsSafety?.version, 'parts-6-interface-physics-safety-v2')
 })
 
 await dom.happyDOM.close()
