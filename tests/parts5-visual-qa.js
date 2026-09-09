@@ -18,6 +18,7 @@ await import('../parts5/structural-refinement-v2.js')
 await import('../parts5/detail-refinement-v3.js')
 await import('../parts6/realism-refinement-v1.js')
 await import('../parts6/precision-refinement-v2.js')
+await import('../parts6/mechanical-realism-v1.js')
 
 const { findPart } = await import('../parts.js')
 const { gearPitchRadius } = await import('../parts5/part-geometry-metrics-v1.js')
@@ -157,8 +158,6 @@ addPad(-6.5, 1.0, 4.4)
 addPad(-1.7, 1.0, 4.0)
 addPad(6.0, 1.5, 5.2)
 
-// Structural baseline — includes the frame so the new waisted / molded silhouettes
-// can be judged against one another in the same light.
 addPart('beam-7', [-8.2, 0, 5.2])
 addPart('technic-brick-1x4', [-3.5, 0, 5.2])
 addPart('technic-frame-5x7', [0.7, 0, 5.0], [0, 0.12, 0])
@@ -166,8 +165,8 @@ addPart('axle-9', [5.1, 0, 5.2], [0, Math.PI / 7, 0])
 addPart('pin', [8.0, 0.15, 5.2], [Math.PI / 2, 0, Math.PI / 5])
 addPart('bush', [10.2, 0.1, 5.2], [0, 0, Math.PI / 2])
 
-// Steering / suspension.
-addPart('steering-tie-rod-5', [-8.0, 0, 9.7])
+addPart('steering-base', [-10.0, 0, 9.7])
+addPart('steering-tie-rod-5', [-7.0, 0, 9.7])
 addPart('wheel-hub', [-3.9, 0, 9.7])
 addPart('steering-knuckle', [-1.1, 0, 9.7])
 addPart('steering-rack-guide', [3.4, 0, 9.7])
@@ -175,12 +174,10 @@ addPart('steering-rack-7', [3.4, 0, 11.2])
 addPart('shock-body-5', [8.2, 0, 9.3], [0, 0, -0.16])
 addPart('shock-rod-5', [10.0, 0, 9.3], [0, 0, 0.16])
 
-// Articulated driveline.
 addPart('universal-joint-30', [-5.5, 0, 14.0], [0, -0.22, 0])
 addPart('cv-joint-30', [0.0, 0, 14.0], [0, -0.22, 0])
 addPart('worm-drive-8', [6.2, 0, 14.0], [0, -0.28, 0])
 
-// Bent beams, pins, connector blocks and bearing / suspension detail.
 addPart('beam-l-3x3', [-9.0, 0, 18.3], [0, 0.15, 0])
 addPart('beam-angle-4x2', [-5.7, 0, 18.3], [0, -0.10, 0])
 addPart('pin-long', [-1.6, 0.25, 18.3], [Math.PI / 2, 0, 0.35])
@@ -191,7 +188,6 @@ addPart('connector-angle', [7.9, 0, 18.3], [0.12, 0.28, 0])
 addPart('bearing-block', [10.0, 0, 18.3], [0, -0.22, 0])
 addPart('suspension-arm-5', [-0.5, 0, 21.1], [0, 0.18, 0])
 
-// Mechanism housings.
 addPart('motor', [-7.0, 0, 23.4], [0, -0.22, 0])
 addPart('gearbox-fnr', [-1.2, 0, 23.4], [0, -0.22, 0])
 addPart('open-differential', [5.0, 0, 23.4], [0, -0.28, 0])
@@ -223,4 +219,5 @@ globalThis.BrickLabParts5VisualQA = Object.freeze({
   detailRefinement: globalThis.BrickLabParts5DetailRefinement ?? null,
   realismRefinement: globalThis.BrickLabParts6Realism ?? null,
   precisionRefinement: globalThis.BrickLabParts6Precision ?? null,
+  mechanicalRealism: globalThis.BrickLabParts6MechanicalRealism ?? null,
 })
