@@ -7,7 +7,9 @@ import {
   endpointKey,
 } from './connections.js'
 
-const ALLOWED_TYPES = new Set(['stud', 'tube', 'pin', 'pin-hole', 'axle', 'axle-hole'])
+const ALLOWED_TYPES = new Set([
+  'stud', 'tube', 'pin', 'pin-hole', 'axle', 'axle-hole', 'slider', 'slider-rail',
+])
 
 function finiteVector(value) {
   return Array.isArray(value) && value.length === 3 && value.every(Number.isFinite)
@@ -24,6 +26,10 @@ function mechanicsRequirements(part) {
   add('differential.leftConnectorId', mechanics.differential?.leftConnectorId, 'axle-hole')
   add('differential.rightConnectorId', mechanics.differential?.rightConnectorId, 'axle-hole')
   add('suspensionArm.pivotConnectorId', mechanics.suspensionArm?.pivotConnectorId, 'pin')
+  add('steeringRack.sliderConnectorId', mechanics.steeringRack?.sliderConnectorId, 'slider')
+  add('steeringRackGuide.railConnectorId', mechanics.steeringRackGuide?.railConnectorId, 'slider-rail')
+  add('shockBody.railConnectorId', mechanics.shockBody?.railConnectorId, 'slider-rail')
+  add('shockRod.sliderConnectorId', mechanics.shockRod?.sliderConnectorId, 'slider')
   return requirements
 }
 
