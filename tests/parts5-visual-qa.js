@@ -30,6 +30,7 @@ await import('../parts6/hero-micro-detail-v5.js')
 await import('../parts6/connector-fidelity-v1.js')
 await import('../parts6/interface-fit-refinement-v2.js')
 await import('../parts6/interface-physics-safety-v1.js')
+await import('../parts6/shaft-hardware-fidelity-v10.js')
 await import('../parts6/steering-carrier-port-dedup-v8.js')
 await import('../parts6/rack-gear-fidelity-v1.js')
 
@@ -199,23 +200,31 @@ addPart('connector-triple', [2.5, 0, 18.3])
 addPart('connector-perpendicular', [5.6, 0, 18.3], [0.10, -0.25, 0])
 addPart('connector-angle', [7.9, 0, 18.3], [0.12, 0.28, 0])
 addPart('bearing-block', [10.0, 0, 18.3], [0, -0.22, 0])
-addPart('suspension-arm-5', [-0.5, 0, 21.1], [0, 0.18, 0])
 
-addPart('motor', [-8.5, 0, 23.4], [0, -0.22, 0])
-addPart('gearbox-fnr', [-3.0, 0, 23.4], [0, -0.22, 0])
-addPart('open-differential', [3.2, 0, 23.4], [0, -0.28, 0])
-addPart('rpm-sensor', [7.3, 0, 23.4], [0, -0.18, 0])
-addPart('torque-sensor', [9.4, 0, 23.4], [0, 0.18, 0])
+// Dedicated close-range hardware row: every item here is a final v10 factory, not
+// an old thumbnail. This makes slots, lead-ins and true cross bores easy to inspect.
+addPad(-6.0, 21.1, 10.8, 2.6)
+addPart('pin-half', [-10.0, 0.18, 21.1], [Math.PI / 2, 0, 0.24])
+addPart('pin-frictionless', [-8.0, 0.18, 21.1], [Math.PI / 2, 0, -0.18])
+addPart('half-bush', [-5.9, 0.12, 21.1], [0, 0, Math.PI / 2])
+addPart('axle-coupler', [-3.5, 0.12, 21.1], [0.10, -0.22, Math.PI / 2])
+addPart('suspension-arm-5', [0.7, 0, 21.1], [0, 0.18, 0])
+
+addPart('motor', [-8.5, 0, 23.9], [0, -0.22, 0])
+addPart('gearbox-fnr', [-3.0, 0, 23.9], [0, -0.22, 0])
+addPart('open-differential', [3.2, 0, 23.9], [0, -0.28, 0])
+addPart('rpm-sensor', [7.3, 0, 23.9], [0, -0.18, 0])
+addPart('torque-sensor', [9.4, 0, 23.9], [0, 0.18, 0])
 
 let rackPinionReference = null
 {
-  const rack = addPart('steering-rack-7', [1.8, 0, 27.4])
+  const rack = addPart('steering-rack-7', [1.8, 0, 27.9])
   const pinion = partObject('gear-12')
   pinion.rotation.set(Math.PI / 2, 0, Math.PI / 24)
   const pitchLineY = rack.position.y + rack.userData.rackGearMetrics.pitchLineY
   setConnectorCenter(pinion, new THREE.Vector3(rack.position.x, pitchLineY + gearPitchRadius(12), rack.position.z))
   scene.add(pinion)
-  addPad(1.8, 27.4, 8.6, 3.4)
+  addPad(1.8, 27.9, 8.6, 3.4)
   rackPinionReference = { rack, pinion, pitchLineY }
 }
 
@@ -260,5 +269,6 @@ globalThis.BrickLabParts5VisualQA = Object.freeze({
   connectorFidelity: globalThis.BrickLabParts6ConnectorFidelity ?? null,
   interfaceFit: globalThis.BrickLabParts6InterfaceFit ?? null,
   interfacePhysicsSafety: globalThis.BrickLabParts6InterfacePhysicsSafety ?? null,
+  shaftHardwareFidelity: globalThis.BrickLabParts6ShaftHardwareFidelity ?? null,
   rackGearFidelity: globalThis.BrickLabParts6RackGearFidelity ?? null,
 })
