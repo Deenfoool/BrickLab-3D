@@ -18,7 +18,9 @@
 - connector/mechanics metadata is regression-locked against the visual pass;
 - steering rack rebuilt from the shared spur-gear module and 20° pressure angle;
 - rack addendum/dedendum now come from canonical gear metrics instead of decorative tooth spacing;
-- full-depth rack teeth fit inside the existing guide opening without moving slider/tie connectors;
+- steering-rack guide rebuilt around the real tooth envelope with an open channel, POM-like wear strips, molded ribs and eight connector-aligned mounting tubes;
+- full-depth rack teeth fit inside the guide opening without moving slider/tie connectors;
+- rack and guide use explicit collider proxies that reproduce their pre-realism bounds envelopes;
 - rack tie pins are centred on their real hinge connector coordinates;
 - QA now includes a rack ↔ 12T pitch-line reference pair;
 - PARTS-6 QA, runtime-integrity, interface-fit, rack-gear and geometry regression coverage.
