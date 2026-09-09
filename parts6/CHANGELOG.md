@@ -43,5 +43,7 @@
 - Cardan/CV micro-detail adds trunnion snap rings, yoke parting lines, CV bell seam and cage-window depth cues;
 - gearbox micro-detail adds connector-aligned bearing bolt circles, fill/drain plugs, breather and alignment dowels;
 - differential micro-detail adds bearing bolt circles, axle seals, spider-pin retainers and carrier mold witness detail;
-- every fine/core/micro decorative mesh is collider-independent; no drivetrain, connector or authoritative physics metadata is changed;
-- PARTS-6 QA, fit-QA, runtime-integrity, interface-fit, rack-gear, hero-fidelity, fine-detail, core-molded, suspension-arm, bent-liftarm, hero-micro-detail and geometry regression coverage.
+- steering-carrier v8 rebuilds the pivot base as an open U-bracket, the knuckle as a forged-style upright with a real through-bearing barrel, the wheel hub with six true flange openings, the tie rod as a bored forged link and the bearing block as a molded carrier;
+- steering-carrier v8 samples each pre-v8 non-ignored render envelope before replacement and freezes that exact bounds proxy into an explicit collider profile, so the visual rebuild does not silently alter collision size;
+- every fine/core/micro decorative mesh is collider-independent; connector and mechanics metadata stay unchanged and any new explicit collider metadata only freezes the previous bounds-derived physical envelope;
+- PARTS-6 QA, fit-QA, runtime-integrity, interface-fit, rack-gear, hero-fidelity, fine-detail, core-molded, suspension-arm, steering-carrier, bent-liftarm, hero-micro-detail and geometry regression coverage.
