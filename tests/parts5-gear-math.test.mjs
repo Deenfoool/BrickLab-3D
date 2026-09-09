@@ -61,7 +61,8 @@ test('bevel 12T ↔ 20T snap solves one exact shared pitch-cone apex', () => {
   const moving = {
     teeth: 12,
     pitchRadius: gearPitchRadius(12),
-    center: new THREE.Vector3(1.30, 0.07, 0.02),
+    // Close to the valid center (+1.25, 0, +0.75) for this perpendicular pair.
+    center: new THREE.Vector3(1.30, 0.05, 0.68),
     axis: new THREE.Vector3(1, 0, 0),
   }
   const fixed = {
