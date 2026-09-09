@@ -60,6 +60,9 @@ await import('./parts6/fine-mechanical-detail-v3.js?v=parts-6-20260909-realism-v
 // Core molded fidelity finishes pins, axles, bushes, liftarms, studded Technic bricks,
 // frames and spur gears after the nominal geometry layer without changing mechanics.
 await import('./parts6/core-molded-fidelity-v4.js?v=parts-6-20260909-realism-v1')
+// Bent liftarms get rounded end caps and a real molded elbow while retaining the
+// explicit PARTS-5 compound collider and every original pin-hole connector centre.
+await import('./parts6/bent-liftarm-fidelity-v6.js?v=parts-6-20260909-realism-v1')
 // Micro-detail adds manufacturing-level cues to hero parts: tyre vent nibs, mold seams,
 // bearing fasteners, seals, plugs and retainers. Every added mesh remains render-only.
 await import('./parts6/hero-micro-detail-v5.js?v=parts-6-20260909-realism-v1')
