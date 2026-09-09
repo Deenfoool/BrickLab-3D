@@ -27,6 +27,7 @@ await import('../parts5/detail-refinement-v3.js')
 await import('../parts6/realism-refinement-v1.js')
 await import('../parts6/precision-refinement-v2.js')
 await import('../parts6/mechanical-realism-v1.js')
+await import('../parts6/connector-fidelity-v1.js')
 
 const { PARTS, findPart } = await import('../parts.js')
 
@@ -70,9 +71,9 @@ test('PARTS-6 becomes the final visual owner for core molded families', () => {
     ['wheel-offroad-large', 'parts-6-offroad-wheel-v2'],
     ['wheel-tractor', 'parts-6-tractor-wheel-v2'],
     ['steering-base', 'parts-6-steering-base-molded'],
-    ['steering-knuckle', 'parts-6-steering-knuckle-molded'],
+    ['steering-knuckle', 'parts-6-steering-knuckle-pin-fidelity'],
     ['steering-tie-rod-5', 'parts-6-molded-tie-rod'],
-    ['wheel-hub', 'parts-6-wheel-hub-carrier'],
+    ['wheel-hub', 'parts-6-wheel-hub-bearing-port-fidelity'],
     ['shock-body-5', 'parts-6-shock-body-realism'],
     ['shock-rod-5', 'parts-6-metal-coil-shock'],
     ['universal-joint-30', 'parts-6-pom-universal-joint'],
@@ -146,13 +147,24 @@ test('steering and suspension realism keeps connector identities intact', () => 
   assert.ok(rod.connectors.some(item => item.id === 'slider' && item.type === 'slider'))
 })
 
+test('connector-fidelity wrapper visibly distinguishes pin and bearing-axle ports', () => {
+  for (const id of ['steering-knuckle', 'wheel-hub']) {
+    const object = findPart(id).create(findPart(id).defaultColor)
+    let connectorVisuals = 0
+    object.traverse(child => { if (child.userData?.parts6ConnectorVisual) connectorVisuals += 1 })
+    assert.ok(connectorVisuals >= 1, `${id} has connector-semantic visual detail`)
+  }
+})
+
 test('PARTS-6 visual details remain physics-safe by convention', async () => {
   const realism = await import('../parts6/realism-refinement-v1.js')
   const precision = await import('../parts6/precision-refinement-v2.js')
   const mechanical = await import('../parts6/mechanical-realism-v1.js')
+  const fidelity = await import('../parts6/connector-fidelity-v1.js')
   assert.equal(realism.PARTS6_REALISM_VERSION, 'parts-6-realism-refinement-v1')
   assert.equal(precision.PARTS6_PRECISION_VERSION, 'parts-6-precision-refinement-v2')
   assert.equal(mechanical.PARTS6_MECHANICAL_REALISM_VERSION, 'parts-6-mechanical-realism-v1')
+  assert.equal(fidelity.PARTS6_CONNECTOR_FIDELITY_VERSION, 'parts-6-connector-fidelity-v1')
   const wheel = findPart('wheel-tractor')
   const object = wheel.create(wheel.defaultColor)
   let ignoredDetails = 0
