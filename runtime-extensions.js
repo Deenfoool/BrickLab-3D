@@ -51,6 +51,9 @@ await import('./parts6/precision-refinement-v2.js?v=parts-6-20260909-realism-v1'
 await import('./parts6/mechanical-realism-v1.js?v=parts-6-20260909-realism-v1')
 // Nominal dimensions are the last geometry owner for core pin/axle/hole/gear families.
 await import('./parts6/nominal-dimension-fidelity-v1.js?v=parts-6-20260909-realism-v1')
+// Hero mechanical fidelity replaces the highest-visibility wheel, bevel and housing
+// silhouettes while preserving the same connectors, mechanics and collider owners.
+await import('./parts6/hero-mechanical-fidelity-v2.js?v=parts-6-20260909-realism-v1')
 // Connector fidelity wraps the final factories and adds visible semantic ports.
 await import('./parts6/connector-fidelity-v1.js?v=parts-6-20260909-realism-v1')
 await import('./parts6/interface-fit-refinement-v2.js?v=parts-6-20260909-realism-v1')
