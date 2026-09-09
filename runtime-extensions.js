@@ -54,6 +54,7 @@ await import('./parts6/nominal-dimension-fidelity-v1.js?v=parts-6-20260909-reali
 // Connector fidelity wraps the final factories and adds visible semantic ports.
 await import('./parts6/connector-fidelity-v1.js?v=parts-6-20260909-realism-v1')
 await import('./parts6/interface-fit-refinement-v2.js?v=parts-6-20260909-realism-v1')
+await import('./parts6/interface-physics-safety-v1.js?v=parts-6-20260909-realism-v1')
 await import('./physics-v2.js')
 await import('./colliders-v2.js')
 await import('./collider-clearance-v3.js')
