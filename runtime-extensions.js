@@ -39,10 +39,11 @@ await import('./part-visual-v3.js')
 // after its material tuning wrapper has been installed.
 await import('./parts3/parts-3-wheel-materials.js?v=parts-3-20260908-mechanical-v1')
 // PARTS-5 owns the final visual factories. v1 establishes canonical families and
-// dimensions; v2 refines the highest-visibility parts without changing connectors
-// or authoritative physics metadata.
+// dimensions; the following refinement layers rebuild the most visible mechanical
+// families without changing connector positions or authoritative physics metadata.
 await import('./parts5/visual-overhaul-v1.js?v=parts-5-20260909-visual-v1')
 await import('./parts5/visual-refinement-v2.js?v=parts-5-20260909-visual-v1')
+await import('./parts5/driveline-refinement-v2.js?v=parts-5-20260909-visual-v1')
 await import('./physics-v2.js')
 await import('./colliders-v2.js')
 await import('./collider-clearance-v3.js')
