@@ -36,5 +36,10 @@
 - worm drive gains connector-aligned bearing races/seals, wheel-face webs, housing braces and mounting-seat detail;
 - RPM/Torque sensors gain bearing retainers, accent bands, case fasteners and molded witness detail;
 - axle-pin and connector blocks gain molded retaining lips and parting-line cues;
-- every fine-detail mesh is `physicsIgnore`; the pass does not author new collider profiles or mechanical metadata;
-- PARTS-6 QA, runtime-integrity, interface-fit, rack-gear, hero-fidelity, fine-detail and geometry regression coverage.
+- core molded v4 gives pins actual open elastic slots, hollow connector-aligned Technic-brick undersides, axle end finish, bush/coupler shoulders and spur-gear face relief;
+- hero micro-detail v5 adds subtle tyre centre mold seams, sidewall vent nibs, rim witnesses/retaining shoulders and bevel face mold finish;
+- Cardan/CV micro-detail adds trunnion snap rings, yoke parting lines, CV bell seam and cage-window depth cues;
+- gearbox micro-detail adds connector-aligned bearing bolt circles, fill/drain plugs, breather and alignment dowels;
+- differential micro-detail adds bearing bolt circles, axle seals, spider-pin retainers and carrier mold witness detail;
+- every fine/core/micro decorative mesh is collider-independent; no drivetrain, connector or authoritative physics metadata is changed;
+- PARTS-6 QA, runtime-integrity, interface-fit, rack-gear, hero-fidelity, fine-detail, core-molded, hero-micro-detail and geometry regression coverage.
