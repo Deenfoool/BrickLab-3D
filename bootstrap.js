@@ -1,5 +1,5 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: PARTS-5 · refined mechanical parts + usable gear mesh placement.
+// BUILD: PARTS-6 · molded realism + nominal mating-interface fidelity.
 // All root module URLs are versioned once by the import map in index.html.
 
 // Diagnostics must exist before any runtime/app module can fail.

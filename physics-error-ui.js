@@ -1,5 +1,5 @@
-const BUILD_ID = 'PARTS-5'
-const BUILD_TAG = 'parts-5-20260909-visual-v2'
+const BUILD_ID = 'PARTS-6'
+const BUILD_TAG = 'parts-6-20260909-realism-v1'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab ${BUILD_TAG} · refined wheels/gears · detailed connectors/housings · visual-independent colliders · PARTS-4 mechanics preserved`
+  badge.title = `BrickLab ${BUILD_TAG} · high-fidelity wheels/driveline · hollow structural shells + molded cross axles · forged steering/threaded shocks · split shaft hardware · PARTS-4 mechanics preserved`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -99,6 +99,28 @@ window.__bricklabPhysicsDiagnostics = () => ({
     gearMeshCandidate: window.__bricklabGearMeshCandidate ?? null,
     lastGearMeshSnap: window.__bricklabLastGearMeshSnap ?? null,
     gearMeshUI: window.BrickLabParts5GearMeshUI ?? null,
+  },
+  parts6: {
+    realism: window.BrickLabParts6Realism ?? null,
+    precision: window.BrickLabParts6Precision ?? null,
+    mechanicalRealism: window.BrickLabParts6MechanicalRealism ?? null,
+    nominalDimensions: window.BrickLabParts6NominalDimensions ?? null,
+    heroMechanicalFidelity: window.BrickLabParts6HeroMechanicalFidelity ?? null,
+    fineMechanicalDetail: window.BrickLabParts6FineMechanicalDetail ?? null,
+    coreMoldedFidelity: window.BrickLabParts6CoreMoldedFidelity ?? null,
+    structuralShellFidelity: window.BrickLabParts6StructuralShellFidelity ?? null,
+    crossAxleFidelity: window.BrickLabParts6CrossAxleFidelity ?? null,
+    suspensionArmFidelity: window.BrickLabParts6SuspensionArmFidelity ?? null,
+    steeringCarrierFidelity: window.BrickLabParts6SteeringCarrierFidelity ?? null,
+    steeringCarrierPortDedup: window.BrickLabParts6SteeringCarrierPortDedup ?? null,
+    bentLiftarmFidelity: window.BrickLabParts6BentLiftarmFidelity ?? null,
+    heroMicroDetail: window.BrickLabParts6HeroMicroDetail ?? null,
+    connectorFidelity: window.BrickLabParts6ConnectorFidelity ?? null,
+    interfaceFit: window.BrickLabParts6InterfaceFit ?? null,
+    interfacePhysicsSafety: window.BrickLabParts6InterfacePhysicsSafety ?? null,
+    shaftHardwareFidelity: window.BrickLabParts6ShaftHardwareFidelity ?? null,
+    shockFidelity: window.BrickLabParts6ShockFidelity ?? null,
+    rackGearFidelity: window.BrickLabParts6RackGearFidelity ?? null,
   },
   pipeline: window.BrickLabPhysicsPipeline ?? null,
   ownership: window.BrickLabPhysicsOwnership?.snapshot?.() ?? window.__bricklabPhysicsOwnership ?? null,

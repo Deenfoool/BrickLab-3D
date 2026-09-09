@@ -1,0 +1,212 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import { Window } from 'happy-dom'
+import * as THREE from 'three'
+
+const dom = new Window()
+for (const key of ['window', 'document', 'localStorage', 'CustomEvent', 'MutationObserver', 'CSS', 'Event']) {
+  globalThis[key] = key === 'window' ? dom : dom[key]
+}
+globalThis.requestAnimationFrame = callback => { callback(0); return 0 }
+
+await import('../basic-parts-pack.js')
+await import('../technic-parts-pack-v2.js')
+await import('../lab-parts.js')
+await import('../vehicle-parts-v1.js')
+await import('../parts3/mechanical-parts-pack-v3.js')
+await import('../parts3/parts-3-extra-v1.js')
+await import('../parts3/parts-3-wheel-dimensions.js')
+await import('../parts3/parts-3-steering-upgrade.js')
+await import('../parts4/mechanical-driveline-v1.js')
+await import('../parts4/steering-suspension-v1.js')
+await import('../parts5/visual-overhaul-v1.js')
+await import('../parts5/visual-refinement-v2.js')
+await import('../parts5/driveline-refinement-v2.js')
+await import('../parts5/structural-refinement-v2.js')
+await import('../parts5/detail-refinement-v3.js')
+await import('../parts6/realism-refinement-v1.js')
+await import('../parts6/precision-refinement-v2.js')
+await import('../parts6/mechanical-realism-v1.js')
+await import('../parts6/nominal-dimension-fidelity-v1.js')
+await import('../parts6/hero-mechanical-fidelity-v2.js')
+
+const { findPart } = await import('../parts.js')
+
+const TARGETS = [
+  'steering-base',
+  'steering-knuckle',
+  'steering-tie-rod-5',
+  'wheel-hub',
+  'shock-body-5',
+  'shock-rod-5',
+  'suspension-arm-5',
+  'bearing-block',
+  'motor',
+  'worm-drive-8',
+  'rpm-sensor',
+  'torque-sensor',
+  'connector-triple',
+  'connector-perpendicular',
+  'connector-angle',
+  'axle-pin',
+]
+
+function snapshot(part) {
+  return JSON.stringify({
+    connectors: part?.connectors ?? null,
+    mechanics: part?.mechanics ?? null,
+    physics: part?.physics ?? null,
+  })
+}
+
+const before = new Map(TARGETS.map(id => [id, snapshot(findPart(id))]))
+const source = await readFile(new URL('../parts6/fine-mechanical-detail-v3.js', import.meta.url), 'utf8')
+const fineModule = await import('../parts6/fine-mechanical-detail-v3.js')
+const fineQuality = new Map(TARGETS.map(id => [id, findPart(id)?.visualQuality ?? null]))
+await import('../parts6/connector-fidelity-v1.js')
+await import('../parts6/interface-fit-refinement-v2.js')
+await import('../parts6/interface-physics-safety-v1.js')
+
+function fineFeatures(object) {
+  const features = []
+  object.traverse(node => {
+    if (node.userData?.parts6FineFeature) features.push(node)
+  })
+  return features
+}
+
+function featureNames(object) {
+  return new Set(fineFeatures(object).map(node => node.userData.parts6FineFeature))
+}
+
+function firstFeature(object, name) {
+  let result = null
+  object.traverse(node => {
+    if (!result && node.userData?.parts6FineFeature === name) result = node
+  })
+  return result
+}
+
+function geometrySize(node) {
+  node.geometry.computeBoundingBox()
+  const size = new THREE.Vector3()
+  node.geometry.boundingBox.getSize(size)
+  return size
+}
+
+test('fine detail pass preserves connector, mechanics and physics metadata', () => {
+  for (const id of TARGETS) {
+    const part = findPart(id)
+    assert.ok(part, `missing target ${id}`)
+    assert.equal(snapshot(part), before.get(id), `${id} metadata changed during visual pass`)
+    assert.match(fineQuality.get(id), /^parts-6-fine-/, `${id} was owned by fine-detail pass before later semantic wrappers`)
+  }
+})
+
+test('all fine-detail meshes are excluded from physics bounds after final safety wrappers', () => {
+  for (const id of TARGETS) {
+    const part = findPart(id)
+    const object = part.create(part.defaultColor)
+    const features = fineFeatures(object)
+    assert.ok(features.length > 0, `${id} should expose fine-detail features`)
+    for (const node of features) {
+      assert.equal(node.userData.physicsIgnore, true, `${id}:${node.userData.parts6FineFeature}`)
+      assert.equal(node.userData.parts6FinePhysicsSafe, true, `${id}:${node.userData.parts6FineFeature} hardened by final safety pass`)
+    }
+  }
+})
+
+test('steering and hub parts expose bearing, kingpin and retaining detail', () => {
+  const base = featureNames(findPart('steering-base').create(findPart('steering-base').defaultColor))
+  assert.ok(base.has('pivot-bushing-retainer'))
+  assert.ok(base.has('base-mount-seat'))
+
+  const knuckle = featureNames(findPart('steering-knuckle').create(findPart('steering-knuckle').defaultColor))
+  assert.ok(knuckle.has('wheel-bearing-race'))
+  assert.ok(knuckle.has('kingpin-retainer'))
+
+  const hub = featureNames(findPart('wheel-hub').create(findPart('wheel-hub').defaultColor))
+  assert.ok(hub.has('hub-snap-ring'))
+  assert.ok(hub.has('hub-flange-relief'))
+})
+
+test('shock pair exposes spring-seat, preload, seal and dust-boot detail', () => {
+  const body = featureNames(findPart('shock-body-5').create(findPart('shock-body-5').defaultColor))
+  assert.ok(body.has('shock-spring-seat-lip'))
+  assert.ok(body.has('shock-preload-thread'))
+  assert.ok(body.has('shock-rod-seal'))
+
+  const rod = featureNames(findPart('shock-rod-5').create(findPart('shock-rod-5').defaultColor))
+  assert.ok(rod.has('shock-spring-retainer-lip'))
+  assert.ok(rod.has('shock-bump-stop'))
+  assert.ok(rod.has('shock-dust-boot-rib'))
+})
+
+test('power parts expose believable case and bearing detail', () => {
+  const motor = featureNames(findPart('motor').create(findPart('motor').defaultColor))
+  for (const feature of ['motor-output-bearing-retainer', 'motor-rear-endbell', 'motor-rear-vent', 'motor-cable-gland', 'motor-cable-stub']) {
+    assert.ok(motor.has(feature), `motor missing ${feature}`)
+  }
+
+  const worm = featureNames(findPart('worm-drive-8').create(findPart('worm-drive-8').defaultColor))
+  assert.ok(worm.has('worm-input-bearing-race'))
+  assert.ok(worm.has('worm-output-bearing-race'))
+  assert.ok(worm.has('worm-wheel-face-rim'))
+  assert.ok(worm.has('worm-wheel-web'))
+})
+
+test('suspension, bearing and connector details are present', () => {
+  const suspension = featureNames(findPart('suspension-arm-5').create(findPart('suspension-arm-5').defaultColor))
+  assert.ok(suspension.has('suspension-pivot-washer'))
+  assert.ok(suspension.has('suspension-arm-lightening-recess'))
+
+  const bearing = featureNames(findPart('bearing-block').create(findPart('bearing-block').defaultColor))
+  assert.ok(bearing.has('bearing-block-race'))
+  assert.ok(bearing.has('bearing-block-seal'))
+
+  const connectorPart = featureNames(findPart('connector-perpendicular').create(findPart('connector-perpendicular').defaultColor))
+  assert.ok(connectorPart.has('connector-molded-lip'))
+  assert.ok(connectorPart.has('connector-parting-line'))
+})
+
+test('final safety pass keeps bore shadows open and thin decorative geometry bounded', () => {
+  const baseObject = findPart('steering-base').create(findPart('steering-base').defaultColor)
+  const bore = firstFeature(baseObject, 'pivot-bore-shadow')
+  assert.ok(bore?.isMesh)
+  assert.equal(bore.geometry?.parameters?.openEnded, true, 'pivot bore is a liner rather than a solid plug')
+
+  for (const id of ['connector-triple', 'connector-perpendicular', 'connector-angle']) {
+    const object = findPart(id).create(findPart(id).defaultColor)
+    const line = firstFeature(object, 'connector-parting-line')
+    assert.ok(line?.isMesh, `${id} has a parting line`)
+    const size = geometrySize(line)
+    assert.ok(size.z < 0.03, `${id} parting line stays surface-thin`)
+    assert.ok(Math.abs(line.position.z) < 0.53, `${id} parting line stays on the molded body surface`)
+  }
+
+  for (const [id, feature, maxThinAxis] of [
+    ['suspension-arm-5', 'suspension-arm-lightening-recess', 0.03],
+    ['motor', 'motor-rear-vent', 0.03],
+    ['worm-drive-8', 'worm-wheel-web', 0.05],
+  ]) {
+    const node = firstFeature(findPart(id).create(findPart(id).defaultColor), feature)
+    assert.ok(node?.isMesh, `${id} has ${feature}`)
+    const size = geometrySize(node)
+    assert.ok(Math.min(size.x, size.y, size.z) < maxThinAxis, `${id}:${feature} retains a valid thin dimension`)
+    for (const value of node.geometry.getAttribute('position').array) assert.equal(Number.isFinite(value), true)
+  }
+})
+
+test('fine pass source is visual-only and does not author physical/mechanical metadata', () => {
+  assert.equal(fineModule.PARTS6_FINE_MECHANICAL_DETAIL_VERSION, 'parts-6-fine-mechanical-detail-v3')
+  assert.doesNotMatch(source, /mechanics\s*:/)
+  assert.doesNotMatch(source, /connectors\s*:/)
+  assert.doesNotMatch(source, /colliderProfile\s*:/)
+  assert.match(source, /physicsIgnore = true/)
+  assert.match(source, /wrapPart\(/)
+  assert.equal(globalThis.BrickLabParts6FineMechanicalDetail.upgraded.length, TARGETS.length)
+  assert.equal(globalThis.BrickLabParts6InterfacePhysicsSafety?.version, 'parts-6-interface-physics-safety-v2')
+})
+
+await dom.happyDOM.close()

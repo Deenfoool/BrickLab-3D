@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BrickLab PARTS-6 Shock QA</title>
+  <style>
+    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#14181b;color:#e7ece9;font-family:Inter,ui-sans-serif,system-ui,sans-serif}#stage{position:fixed;inset:0}canvas{display:block;width:100%;height:100%}.panel{position:fixed;z-index:4;left:14px;top:14px;width:315px;padding:13px 14px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(14,17,19,.88);backdrop-filter:blur(10px)}.badge{display:inline-flex;padding:3px 6px;border-radius:5px;background:#173023;color:#79e8a8;font-weight:800;font-size:9px;margin-bottom:8px}h1{font-size:14px;margin:0 0 7px}p{font-size:10px;line-height:1.5;color:#98a39d;margin:0}.ok{color:#79e8a8}.hint{position:fixed;right:14px;bottom:14px;padding:7px 9px;border-radius:7px;background:rgba(14,17,19,.78);font-size:9px;color:#87928d;border:1px solid rgba(255,255,255,.08)}
+  </style>
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}</script>
+</head>
+<body>
+  <div id="stage"></div>
+  <aside class="panel">
+    <div class="badge">PARTS-6 SHOCK V9 QA</div>
+    <h1>Shock absorber fidelity</h1>
+    <p><span class="ok">Check:</span> true lower/upper eye bores, tapered monotube body, threaded preload collar, rod gland/seal, chrome rod, helical spring, bump stop and dust boot. New geometry must not change PARTS-4 prismatic travel or the pre-v9 collider envelope.</p>
+  </aside>
+  <div class="hint">LMB orbit · wheel zoom · RMB pan</div>
+  <script type="module" src="./parts6-shock-qa.js"></script>
+</body>
+</html>

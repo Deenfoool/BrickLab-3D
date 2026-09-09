@@ -16,6 +16,25 @@ await import('../parts5/visual-refinement-v2.js')
 await import('../parts5/driveline-refinement-v2.js')
 await import('../parts5/structural-refinement-v2.js')
 await import('../parts5/detail-refinement-v3.js')
+await import('../parts6/realism-refinement-v1.js')
+await import('../parts6/precision-refinement-v2.js')
+await import('../parts6/mechanical-realism-v1.js')
+await import('../parts6/nominal-dimension-fidelity-v1.js')
+await import('../parts6/hero-mechanical-fidelity-v2.js')
+await import('../parts6/fine-mechanical-detail-v3.js')
+await import('../parts6/core-molded-fidelity-v4.js')
+await import('../parts6/structural-shell-fidelity-v11.js')
+await import('../parts6/cross-axle-fidelity-v12.js')
+await import('../parts6/suspension-arm-fidelity-v7.js')
+await import('../parts6/steering-carrier-fidelity-v8.js')
+await import('../parts6/bent-liftarm-fidelity-v6.js')
+await import('../parts6/hero-micro-detail-v5.js')
+await import('../parts6/connector-fidelity-v1.js')
+await import('../parts6/interface-fit-refinement-v2.js')
+await import('../parts6/interface-physics-safety-v1.js')
+await import('../parts6/shaft-hardware-fidelity-v10.js')
+await import('../parts6/steering-carrier-port-dedup-v8.js')
+await import('../parts6/rack-gear-fidelity-v1.js')
 
 const { findPart } = await import('../parts.js')
 const { gearPitchRadius } = await import('../parts5/part-geometry-metrics-v1.js')
@@ -23,10 +42,10 @@ const { gearPitchRadius } = await import('../parts5/part-geometry-metrics-v1.js'
 const stage = document.getElementById('stage')
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x16191c)
-scene.fog = new THREE.Fog(0x16191c, 52, 88)
+scene.fog = new THREE.Fog(0x16191c, 52, 96)
 
-const camera = new THREE.PerspectiveCamera(43, 1, 0.1, 170)
-camera.position.set(18, 21, 36)
+const camera = new THREE.PerspectiveCamera(43, 1, 0.1, 190)
+camera.position.set(20, 24, 42)
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
@@ -37,9 +56,9 @@ stage.append(renderer.domElement)
 
 const controls = new OrbitControls(camera, renderer.domElement)
 controls.enableDamping = true
-controls.target.set(0.6, 2.0, 6.0)
+controls.target.set(0.6, 2.0, 8.5)
 controls.minDistance = 5
-controls.maxDistance = 72
+controls.maxDistance = 82
 
 scene.add(new THREE.HemisphereLight(0xdde8f2, 0x30363c, 2.15))
 const key = new THREE.DirectionalLight(0xffffff, 3.0)
@@ -55,7 +74,7 @@ rimLight.position.set(4, 7, -18)
 scene.add(rimLight)
 
 const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(58, 58),
+  new THREE.PlaneGeometry(66, 70),
   new THREE.MeshStandardMaterial({ color: 0x20252a, roughness: 0.93, metalness: 0 }),
 )
 floor.rotation.x = -Math.PI / 2
@@ -63,7 +82,7 @@ floor.position.y = -0.02
 floor.receiveShadow = true
 scene.add(floor)
 
-const grid = new THREE.GridHelper(58, 58, 0x3b444c, 0x2b3136)
+const grid = new THREE.GridHelper(66, 66, 0x3b444c, 0x2b3136)
 grid.position.y = 0.005
 grid.material.transparent = true
 grid.material.opacity = 0.35
@@ -155,15 +174,15 @@ addPad(-6.5, 1.0, 4.4)
 addPad(-1.7, 1.0, 4.0)
 addPad(6.0, 1.5, 5.2)
 
-// Structural baseline.
-addPart('beam-7', [-7.8, 0, 5.2])
-addPart('technic-brick-1x4', [-3.0, 0, 5.2])
-addPart('axle-9', [1.0, 0, 5.2], [0, Math.PI / 7, 0])
-addPart('pin', [6.2, 0.15, 5.2], [Math.PI / 2, 0, Math.PI / 5])
-addPart('bush', [9.3, 0.1, 5.2], [0, 0, Math.PI / 2])
+addPart('beam-7', [-8.2, 0, 5.2])
+addPart('technic-brick-1x4', [-3.5, 0, 5.2])
+addPart('technic-frame-5x7', [0.7, 0, 5.0], [0, 0.12, 0])
+addPart('axle-9', [5.1, 0, 5.2], [0, Math.PI / 7, 0])
+addPart('pin', [8.0, 0.15, 5.2], [Math.PI / 2, 0, Math.PI / 5])
+addPart('bush', [10.2, 0.1, 5.2], [0, 0, Math.PI / 2])
 
-// Steering / suspension.
-addPart('steering-tie-rod-5', [-8.0, 0, 9.7])
+addPart('steering-base', [-10.0, 0, 9.7])
+addPart('steering-tie-rod-5', [-7.0, 0, 9.7])
 addPart('wheel-hub', [-3.9, 0, 9.7])
 addPart('steering-knuckle', [-1.1, 0, 9.7])
 addPart('steering-rack-guide', [3.4, 0, 9.7])
@@ -171,12 +190,10 @@ addPart('steering-rack-7', [3.4, 0, 11.2])
 addPart('shock-body-5', [8.2, 0, 9.3], [0, 0, -0.16])
 addPart('shock-rod-5', [10.0, 0, 9.3], [0, 0, 0.16])
 
-// Articulated driveline.
 addPart('universal-joint-30', [-5.5, 0, 14.0], [0, -0.22, 0])
 addPart('cv-joint-30', [0.0, 0, 14.0], [0, -0.22, 0])
 addPart('worm-drive-8', [6.2, 0, 14.0], [0, -0.28, 0])
 
-// Bent beams, pins, connector blocks and bearing / suspension detail.
 addPart('beam-l-3x3', [-9.0, 0, 18.3], [0, 0.15, 0])
 addPart('beam-angle-4x2', [-5.7, 0, 18.3], [0, -0.10, 0])
 addPart('pin-long', [-1.6, 0.25, 18.3], [Math.PI / 2, 0, 0.35])
@@ -185,12 +202,33 @@ addPart('connector-triple', [2.5, 0, 18.3])
 addPart('connector-perpendicular', [5.6, 0, 18.3], [0.10, -0.25, 0])
 addPart('connector-angle', [7.9, 0, 18.3], [0.12, 0.28, 0])
 addPart('bearing-block', [10.0, 0, 18.3], [0, -0.22, 0])
-addPart('suspension-arm-5', [-0.5, 0, 21.1], [0, 0.18, 0])
 
-// Mechanism housings.
-addPart('motor', [-7.0, 0, 23.4], [0, -0.22, 0])
-addPart('gearbox-fnr', [-1.2, 0, 23.4], [0, -0.22, 0])
-addPart('open-differential', [5.0, 0, 23.4], [0, -0.28, 0])
+// Dedicated close-range hardware row: every item here is a final v10 factory, not
+// an old thumbnail. This makes slots, lead-ins and true cross bores easy to inspect.
+addPad(-6.0, 21.1, 10.8, 2.6)
+addPart('pin-half', [-10.0, 0.18, 21.1], [Math.PI / 2, 0, 0.24])
+addPart('pin-frictionless', [-8.0, 0.18, 21.1], [Math.PI / 2, 0, -0.18])
+addPart('half-bush', [-5.9, 0.12, 21.1], [0, 0, Math.PI / 2])
+addPart('axle-coupler', [-3.5, 0.12, 21.1], [0.10, -0.22, Math.PI / 2])
+addPart('suspension-arm-5', [0.7, 0, 21.1], [0, 0.18, 0])
+
+addPart('motor', [-8.5, 0, 23.9], [0, -0.22, 0])
+addPart('gearbox-fnr', [-3.0, 0, 23.9], [0, -0.22, 0])
+addPart('open-differential', [3.2, 0, 23.9], [0, -0.28, 0])
+addPart('rpm-sensor', [7.3, 0, 23.9], [0, -0.18, 0])
+addPart('torque-sensor', [9.4, 0, 23.9], [0, 0.18, 0])
+
+let rackPinionReference = null
+{
+  const rack = addPart('steering-rack-7', [1.8, 0, 27.9])
+  const pinion = partObject('gear-12')
+  pinion.rotation.set(Math.PI / 2, 0, Math.PI / 24)
+  const pitchLineY = rack.position.y + rack.userData.rackGearMetrics.pitchLineY
+  setConnectorCenter(pinion, new THREE.Vector3(rack.position.x, pitchLineY + gearPitchRadius(12), rack.position.z))
+  scene.add(pinion)
+  addPad(1.8, 27.9, 8.6, 3.4)
+  rackPinionReference = { rack, pinion, pitchLineY }
+}
 
 function resize() {
   const width = window.innerWidth
@@ -213,8 +251,28 @@ globalThis.BrickLabParts5VisualQA = Object.freeze({
   renderer,
   wheelIds,
   spurTeeth,
+  rackPinionReference,
   refinement: globalThis.BrickLabParts5Refinement ?? null,
   drivelineRefinement: globalThis.BrickLabParts5DrivelineVisuals ?? null,
   structuralRefinement: globalThis.BrickLabParts5StructuralVisuals ?? null,
   detailRefinement: globalThis.BrickLabParts5DetailRefinement ?? null,
+  realismRefinement: globalThis.BrickLabParts6Realism ?? null,
+  precisionRefinement: globalThis.BrickLabParts6Precision ?? null,
+  mechanicalRealism: globalThis.BrickLabParts6MechanicalRealism ?? null,
+  nominalDimensions: globalThis.BrickLabParts6NominalDimensions ?? null,
+  heroMechanicalFidelity: globalThis.BrickLabParts6HeroMechanicalFidelity ?? null,
+  fineMechanicalDetail: globalThis.BrickLabParts6FineMechanicalDetail ?? null,
+  coreMoldedFidelity: globalThis.BrickLabParts6CoreMoldedFidelity ?? null,
+  structuralShellFidelity: globalThis.BrickLabParts6StructuralShellFidelity ?? null,
+  crossAxleFidelity: globalThis.BrickLabParts6CrossAxleFidelity ?? null,
+  suspensionArmFidelity: globalThis.BrickLabParts6SuspensionArmFidelity ?? null,
+  steeringCarrierFidelity: globalThis.BrickLabParts6SteeringCarrierFidelity ?? null,
+  steeringCarrierPortDedup: globalThis.BrickLabParts6SteeringCarrierPortDedup ?? null,
+  bentLiftarmFidelity: globalThis.BrickLabParts6BentLiftarmFidelity ?? null,
+  heroMicroDetail: globalThis.BrickLabParts6HeroMicroDetail ?? null,
+  connectorFidelity: globalThis.BrickLabParts6ConnectorFidelity ?? null,
+  interfaceFit: globalThis.BrickLabParts6InterfaceFit ?? null,
+  interfacePhysicsSafety: globalThis.BrickLabParts6InterfacePhysicsSafety ?? null,
+  shaftHardwareFidelity: globalThis.BrickLabParts6ShaftHardwareFidelity ?? null,
+  rackGearFidelity: globalThis.BrickLabParts6RackGearFidelity ?? null,
 })
