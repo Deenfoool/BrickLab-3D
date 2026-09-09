@@ -10,6 +10,7 @@ for (const key of ['window', 'document', 'localStorage', 'CustomEvent', 'Mutatio
 globalThis.requestAnimationFrame = () => 0
 
 await import('../parts4/mechanical-driveline-v1.js')
+await import('../parts4/semantic-bearing-upgrade-v1.js')
 await import('../physical-parts.js')
 const { PhysicsSession } = await import('../physics.js')
 await import('../joint-stability-v4.js')
@@ -30,6 +31,11 @@ test('worm, FNR and differential declare physical shaft bearing ports', () => {
   assert.deepEqual(findPart('worm-drive-8').mechanics.transmission.bearingConnectorIds, ['input', 'output'])
   assert.deepEqual(findPart('gearbox-fnr').mechanics.transmission.bearingConnectorIds, ['input', 'output'])
   assert.deepEqual(findPart('open-differential').mechanics.differential.bearingConnectorIds, ['input', 'left', 'right'])
+  assert.deepEqual(globalThis.BrickLabParts4SemanticBearings?.installed, {
+    worm: true,
+    gearbox: true,
+    differential: true,
+  })
 })
 
 test('an axle connected to a semantic worm port receives a stabilized revolute bearing', () => {
