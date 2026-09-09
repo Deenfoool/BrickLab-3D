@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab ${BUILD_TAG} · molded Technic-like realism · waisted liftarms · spoked involute gears · profiled tyres/rims · PARTS-4 mechanics preserved`
+  badge.title = `BrickLab ${BUILD_TAG} · measured Technic-like interfaces · keyed axle ports · nominal pin bores · molded realism · PARTS-4 mechanics preserved`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -103,6 +103,11 @@ window.__bricklabPhysicsDiagnostics = () => ({
   parts6: {
     realism: window.BrickLabParts6Realism ?? null,
     precision: window.BrickLabParts6Precision ?? null,
+    mechanicalRealism: window.BrickLabParts6MechanicalRealism ?? null,
+    nominalDimensions: window.BrickLabParts6NominalDimensions ?? null,
+    connectorFidelity: window.BrickLabParts6ConnectorFidelity ?? null,
+    interfaceFit: window.BrickLabParts6InterfaceFit ?? null,
+    interfacePhysicsSafety: window.BrickLabParts6InterfacePhysicsSafety ?? null,
   },
   pipeline: window.BrickLabPhysicsPipeline ?? null,
   ownership: window.BrickLabPhysicsOwnership?.snapshot?.() ?? window.__bricklabPhysicsOwnership ?? null,
