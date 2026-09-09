@@ -13,6 +13,7 @@ await import('../parts4/mechanical-driveline-v1.js')
 await import('../parts4/steering-suspension-v1.js')
 await import('../parts5/visual-overhaul-v1.js')
 await import('../parts5/visual-refinement-v2.js')
+await import('../parts5/driveline-refinement-v2.js')
 
 const { findPart } = await import('../parts.js')
 const { gearPitchRadius } = await import('../parts5/part-geometry-metrics-v1.js')
@@ -20,10 +21,10 @@ const { gearPitchRadius } = await import('../parts5/part-geometry-metrics-v1.js'
 const stage = document.getElementById('stage')
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x16191c)
-scene.fog = new THREE.Fog(0x16191c, 42, 72)
+scene.fog = new THREE.Fog(0x16191c, 46, 78)
 
-const camera = new THREE.PerspectiveCamera(43, 1, 0.1, 140)
-camera.position.set(15, 16, 27)
+const camera = new THREE.PerspectiveCamera(43, 1, 0.1, 150)
+camera.position.set(16, 18, 30)
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
@@ -34,13 +35,13 @@ stage.append(renderer.domElement)
 
 const controls = new OrbitControls(camera, renderer.domElement)
 controls.enableDamping = true
-controls.target.set(0.6, 1.8, 1.4)
+controls.target.set(0.6, 2.0, 2.8)
 controls.minDistance = 5
-controls.maxDistance = 58
+controls.maxDistance = 64
 
 scene.add(new THREE.HemisphereLight(0xdde8f2, 0x30363c, 2.15))
 const key = new THREE.DirectionalLight(0xffffff, 3.0)
-key.position.set(11, 20, 12)
+key.position.set(11, 22, 13)
 key.castShadow = true
 key.shadow.mapSize.set(2048, 2048)
 scene.add(key)
@@ -52,7 +53,7 @@ rimLight.position.set(4, 7, -18)
 scene.add(rimLight)
 
 const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(48, 44),
+  new THREE.PlaneGeometry(50, 50),
   new THREE.MeshStandardMaterial({ color: 0x20252a, roughness: 0.93, metalness: 0 }),
 )
 floor.rotation.x = -Math.PI / 2
@@ -60,7 +61,7 @@ floor.position.y = -0.02
 floor.receiveShadow = true
 scene.add(floor)
 
-const grid = new THREE.GridHelper(48, 48, 0x3b444c, 0x2b3136)
+const grid = new THREE.GridHelper(50, 50, 0x3b444c, 0x2b3136)
 grid.position.y = 0.005
 grid.material.transparent = true
 grid.material.opacity = 0.35
@@ -168,15 +169,19 @@ addPart('axle-9', [1.0, 0, 5.2], [0, Math.PI / 7, 0])
 addPart('pin', [6.2, 0.15, 5.2], [Math.PI / 2, 0, Math.PI / 5])
 addPart('bush', [9.3, 0.1, 5.2], [0, 0, Math.PI / 2])
 
-// STEERING / SUSPENSION ROW — intentionally exposed because these were among the
-// most primitive-looking PARTS-3/PARTS-4 models.
+// STEERING / SUSPENSION ROW.
 addPart('steering-tie-rod-5', [-8.0, 0, 9.7])
-addPart('wheel-hub', [-3.9, 0, 9.7], [0, 0, 0])
-addPart('steering-knuckle', [-1.1, 0, 9.7], [0, 0, 0])
-addPart('steering-rack-guide', [3.4, 0, 9.7], [0, 0, 0])
-addPart('steering-rack-7', [3.4, 0, 11.2], [0, 0, 0])
+addPart('wheel-hub', [-3.9, 0, 9.7])
+addPart('steering-knuckle', [-1.1, 0, 9.7])
+addPart('steering-rack-guide', [3.4, 0, 9.7])
+addPart('steering-rack-7', [3.4, 0, 11.2])
 addPart('shock-body-5', [8.2, 0, 9.3], [0, 0, -0.16])
 addPart('shock-rod-5', [10.0, 0, 9.3], [0, 0, 0.16])
+
+// ARTICULATED DRIVELINE ROW.
+addPart('universal-joint-30', [-5.5, 0, 14.0], [0, -0.22, 0])
+addPart('cv-joint-30', [0.0, 0, 14.0], [0, -0.22, 0])
+addPart('worm-drive-8', [6.2, 0, 14.0], [0, -0.28, 0])
 
 function resize() {
   const width = window.innerWidth
@@ -200,4 +205,5 @@ globalThis.BrickLabParts5VisualQA = Object.freeze({
   wheelIds,
   spurTeeth,
   refinement: globalThis.BrickLabParts5Refinement ?? null,
+  drivelineRefinement: globalThis.BrickLabParts5DrivelineVisuals ?? null,
 })
