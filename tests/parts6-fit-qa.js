@@ -28,6 +28,7 @@ await import('../parts6/hero-micro-detail-v5.js')
 await import('../parts6/connector-fidelity-v1.js')
 await import('../parts6/interface-fit-refinement-v2.js')
 await import('../parts6/interface-physics-safety-v1.js')
+await import('../parts6/steering-carrier-port-dedup-v8.js')
 await import('../parts6/rack-gear-fidelity-v1.js')
 
 const { findPart } = await import('../parts.js')
