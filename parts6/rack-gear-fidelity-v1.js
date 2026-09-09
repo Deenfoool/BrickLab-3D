@@ -5,7 +5,7 @@ import { patchPart } from '../parts3/part-schema-v1.js'
 import { GEAR_MODULE_STUD, GEAR_PRESSURE_ANGLE_DEG, gearMetrics } from '../parts5/part-geometry-metrics-v1.js'
 import { REAL_TECHNIC_NOMINAL } from './nominal-dimension-fidelity-v1.js'
 
-export const PARTS6_RACK_GEAR_FIDELITY_VERSION = 'parts-6-rack-gear-fidelity-v3'
+export const PARTS6_RACK_GEAR_FIDELITY_VERSION = 'parts-6-rack-gear-fidelity-v4'
 
 const N = REAL_TECHNIC_NOMINAL
 const LINEAR_PITCH = Math.PI * GEAR_MODULE_STUD
@@ -16,8 +16,18 @@ const DEDENDUM = REFERENCE_GEAR.dedendum
 const WHOLE_DEPTH = ADDENDUM + DEDENDUM
 const PITCH_LINE_FROM_ROOT = DEDENDUM
 
+const GUIDE_OPENING = Object.freeze({ lowerY: 0.30, upperY: 0.96, backZ: -0.43 })
+const LEGACY_RACK_COLLIDER = Object.freeze({ center: [0, 0.695, 0.4425], size: [6.21, 0.43, 1.265] })
+const LEGACY_GUIDE_COLLIDER = Object.freeze({ center: [0, 0.62, 0], size: [6.70, 1.06, 1.18] })
+
 function pom(color, roughness = 0.40) {
   return new THREE.MeshStandardMaterial({ color, roughness, metalness: 0.004 })
+}
+function absMaterial(color, roughness = 0.40) {
+  return new THREE.MeshPhysicalMaterial({ color, roughness, metalness: 0.004, clearcoat: 0.045, clearcoatRoughness: 0.62, ior: 1.47 })
+}
+function darkMaterial() {
+  return new THREE.MeshStandardMaterial({ color: 0x17191c, roughness: 0.82, metalness: 0.015 })
 }
 
 function visualOnly(object, feature) {
@@ -33,6 +43,42 @@ function root(id, color) {
   group.userData.color = color
   group.userData.visualVersion = PARTS6_RACK_GEAR_FIDELITY_VERSION
   return group
+}
+
+function circleHole(radius) {
+  const path = new THREE.Path()
+  path.absarc(0, 0, radius, 0, Math.PI * 2, true)
+  return path
+}
+function annulusShape(outer, inner) {
+  const shape = new THREE.Shape()
+  shape.absarc(0, 0, outer, 0, Math.PI * 2, false)
+  shape.holes.push(circleHole(inner))
+  return shape
+}
+function extrudeAlongY(shape, depth, material) {
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: true,
+    bevelSegments: 2,
+    bevelSize: 0.006,
+    bevelThickness: 0.006,
+    curveSegments: 36,
+    steps: 1,
+  })
+  geometry.translate(0, 0, -depth / 2)
+  geometry.rotateX(Math.PI / 2)
+  return new THREE.Mesh(geometry, material)
+}
+
+function freezeLegacyBoundsCollider(part, profile, version) {
+  part.physics = {
+    ...(part.physics ?? {}),
+    colliderProfile: {
+      version,
+      specs: [{ type: 'box', center: [...profile.center], size: [...profile.size] }],
+    },
+  }
 }
 
 // Standard 20° rack profile derived from the same module as the spur gears.
@@ -61,8 +107,6 @@ function rackToothGeometry(depth = 0.38) {
 }
 
 function addTiePin(group, connector, color) {
-  // The connector position is the hinge centre, so the visible pin is centred on
-  // that exact point instead of being artistically offset from the actual joint.
   const pinLength = 0.42
   const pin = visualOnly(new THREE.Mesh(
     new THREE.CylinderGeometry(N.pinBodyRadius, N.pinBodyRadius, pinLength, 40),
@@ -84,17 +128,13 @@ function addTiePin(group, connector, color) {
 function createRack(part, color) {
   const group = root(part.id, color)
   const material = pom(color)
-
-  // Keep the full standard tooth depth while fitting the existing rack guide.
-  // The slider connector stays untouched at y=.62; the molded rail sits slightly
-  // lower so the root, pitch and tip lines fit inside the guide opening without
-  // clipping the top shell.
   const railLength = 6.20
   const railHeight = 0.30
   const railCenterY = 0.50
   const rootLineY = railCenterY + railHeight / 2
   const pitchLineY = rootLineY + PITCH_LINE_FROM_ROOT
   const tipLineY = rootLineY + WHOLE_DEPTH
+
   const rail = new THREE.Mesh(new RoundedBoxGeometry(railLength, railHeight, 0.38, 4, 0.065), material)
   rail.position.y = railCenterY
   group.add(rail)
@@ -140,11 +180,58 @@ function createRack(part, color) {
   return group
 }
 
-const part = PARTS.find(item => item.id === 'steering-rack-7')
-if (part) {
-  patchPart(PARTS, part.id, {
-    create: color => createRack(part, color),
-    visualQuality: 'parts-6-module-matched-steering-rack-v3',
+function createRackGuide(part, color) {
+  const group = root(part.id, color)
+  const shell = absMaterial(color, 0.42)
+  const wear = darkMaterial()
+  const length = 6.70
+  const depth = 1.18
+
+  const bottom = new THREE.Mesh(new RoundedBoxGeometry(length, 0.26, depth, 4, 0.075), shell)
+  bottom.position.y = 0.17
+  const top = new THREE.Mesh(new RoundedBoxGeometry(length, 0.24, depth, 4, 0.075), shell)
+  top.position.y = 1.08
+  const back = new THREE.Mesh(new RoundedBoxGeometry(length, 0.66, 0.18, 4, 0.055), shell)
+  back.position.set(0, 0.63, -0.52)
+  group.add(bottom, top, back)
+
+  const lowerWear = visualOnly(new THREE.Mesh(new RoundedBoxGeometry(6.05, 0.030, 0.50, 2, 0.010), wear), 'guide-wear-strip')
+  lowerWear.position.set(0, GUIDE_OPENING.lowerY + 0.015, -0.08)
+  const upperWear = visualOnly(new THREE.Mesh(new RoundedBoxGeometry(6.05, 0.030, 0.50, 2, 0.010), wear), 'guide-wear-strip')
+  upperWear.position.set(0, GUIDE_OPENING.upperY - 0.015, -0.08)
+  group.add(lowerWear, upperWear)
+
+  // Real mounting tubes are built around the actual tube connector locations.
+  for (const mount of part.connectors.filter(item => item.type === 'tube')) {
+    const tube = visualOnly(extrudeAlongY(annulusShape(0.285, 0.165), 0.12, shell), 'guide-mount-tube')
+    tube.position.fromArray(mount.position)
+    tube.position.y += 0.06
+    group.add(tube)
+  }
+
+  // Molded ribs stiffen the long housing without closing the open front channel.
+  for (const x of [-2.55, -1.70, -0.85, 0, 0.85, 1.70, 2.55]) {
+    const rib = visualOnly(new THREE.Mesh(new RoundedBoxGeometry(0.075, 0.60, 0.16, 2, 0.022), shell), 'guide-stiffening-rib')
+    rib.position.set(x, 0.63, -0.39)
+    group.add(rib)
+  }
+
+  group.userData.rackGuideMetrics = {
+    lowerOpeningY: GUIDE_OPENING.lowerY,
+    upperOpeningY: GUIDE_OPENING.upperY,
+    backOpeningZ: GUIDE_OPENING.backZ,
+    openingHeight: GUIDE_OPENING.upperY - GUIDE_OPENING.lowerY,
+    mountTubeCount: part.connectors.filter(item => item.type === 'tube').length,
+  }
+  return group
+}
+
+const upgraded = []
+const rackPart = PARTS.find(item => item.id === 'steering-rack-7')
+if (rackPart) {
+  patchPart(PARTS, rackPart.id, {
+    create: color => createRack(rackPart, color),
+    visualQuality: 'parts-6-module-matched-steering-rack-v4',
     rackVisualMetrics: {
       moduleStud: GEAR_MODULE_STUD,
       pressureAngleDeg: GEAR_PRESSURE_ANGLE_DEG,
@@ -154,18 +241,32 @@ if (part) {
       pitchLineOffsetStud: PITCH_LINE_FROM_ROOT,
     },
   })
+  freezeLegacyBoundsCollider(rackPart, LEGACY_RACK_COLLIDER, 'parts-6-preserve-steering-rack-bounds-v1')
+  upgraded.push(rackPart.id)
+}
+
+const guidePart = PARTS.find(item => item.id === 'steering-rack-guide')
+if (guidePart) {
+  patchPart(PARTS, guidePart.id, {
+    create: color => createRackGuide(guidePart, color),
+    visualQuality: 'parts-6-matched-rack-guide-v1',
+    rackGuideVisualMetrics: { ...GUIDE_OPENING },
+  })
+  freezeLegacyBoundsCollider(guidePart, LEGACY_GUIDE_COLLIDER, 'parts-6-preserve-steering-rack-guide-bounds-v1')
+  upgraded.push(guidePart.id)
 }
 
 globalThis.BrickLabParts6RackGearFidelity = Object.freeze({
   version: PARTS6_RACK_GEAR_FIDELITY_VERSION,
-  upgraded: part ? [part.id] : [],
+  upgraded,
   moduleStud: GEAR_MODULE_STUD,
   pressureAngleDeg: GEAR_PRESSURE_ANGLE_DEG,
   linearPitchStud: LINEAR_PITCH,
   addendumStud: ADDENDUM,
   dedendumStud: DEDENDUM,
-  guideFit: 'full-depth teeth fit the existing guide opening without changing slider/tie connector coordinates',
-  physics: 'teeth and tie-pin visual finish are physicsIgnore; existing rack mechanics and travel remain authoritative',
+  guideOpening: GUIDE_OPENING,
+  colliderPolicy: 'explicit proxies reproduce the pre-PARTS-6 bounds envelopes while visual geometry gains real rack/guide clearance',
+  physics: 'rack/guide mechanics, slider travel and connector coordinates remain unchanged',
 })
 
 window.dispatchEvent(new CustomEvent('bricklab:partcatalogchange', {
