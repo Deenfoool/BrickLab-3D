@@ -10,24 +10,22 @@ function parts4Imports(source) {
     .map(match => ({ specifier: match[1], tag: match[2] ?? null }))
 }
 
-test('all production PARTS-4 dynamic imports exist and use one release tag', async () => {
+test('all retained PARTS-4 dynamic imports exist and use one package tag', async () => {
   const runtime = await readFile(new URL('runtime-extensions.js', root), 'utf8')
   const bootstrap = await readFile(new URL('bootstrap.js', root), 'utf8')
   const imports = [...parts4Imports(runtime), ...parts4Imports(bootstrap)]
-  assert.ok(imports.length >= 6, 'PARTS-4 production modules are explicitly loaded')
+  assert.ok(imports.length >= 6, 'PARTS-4 package modules are explicitly retained')
 
   for (const item of imports) {
-    assert.equal(item.tag, TAG, `${item.specifier} uses PARTS-4 cache tag`)
+    assert.equal(item.tag, TAG, `${item.specifier} uses PARTS-4 package cache tag`)
     await access(new URL(item.specifier.replace(/^\.\//, ''), root))
   }
 })
 
-test('production entrypoint and build badge agree on PARTS-4 tag', async () => {
-  const html = await readFile(new URL('index.html', root), 'utf8')
+test('PARTS-4 package tag does not pin the newer production build id', async () => {
   const badge = await readFile(new URL('physics-error-ui.js', root), 'utf8')
-  assert.match(html, new RegExp(`bootstrap\\.js\\?v=${TAG}`))
-  assert.match(badge, /const BUILD_ID = 'PARTS-4'/)
-  assert.match(badge, new RegExp(`const BUILD_TAG = '${TAG}'`))
+  assert.match(badge, /const BUILD_ID = 'PARTS-\d+'/)
+  assert.match(badge, /const BUILD_TAG = 'parts-\d+-[a-z0-9-]+'/)
 })
 
 test('PARTS-4 advances joint, coupling and steering ownership deliberately', async () => {
@@ -69,10 +67,12 @@ test('articulated coupling loads after the stress layer so it is the final ratio
   assert.ok(stress >= 0 && articulation > stress)
 })
 
-test('drivetrain source contains distinct spur and bevel mesh solvers', async () => {
+test('drivetrain source retains distinct spur and bevel mesh adapters', async () => {
   const drivetrain = await readFile(new URL('drivetrain.js', root), 'utf8')
   assert.match(drivetrain, /function spurGearMesh/)
   assert.match(drivetrain, /function bevelGearMesh/)
+  assert.match(drivetrain, /evaluateSpurMesh/)
+  assert.match(drivetrain, /evaluateBevelMesh/)
   assert.match(drivetrain, /kind: 'bevel'/)
   assert.match(drivetrain, /kind: definition\?\.mechanics\?\.articulatedCoupler \? 'articulated'/)
 })

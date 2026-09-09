@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-export const COLLIDER_PROFILE_VERSION = 'collider-profiles-v3'
+export const COLLIDER_PROFILE_VERSION = 'collider-profiles-v4'
 export const HOLE_CLEARANCE_STUD = 0.285
 
 function localBounds(object) {
@@ -38,6 +38,51 @@ function addBox(specs, minX, maxX, minY, maxY, minZ, maxZ) {
     size: new THREE.Vector3(width, height, depth),
     volume: width * height * depth,
   })
+}
+
+function finiteVector3(value) {
+  if (value?.isVector3) return value.clone()
+  if (!Array.isArray(value) || value.length !== 3 || !value.every(Number.isFinite)) return null
+  return new THREE.Vector3(...value)
+}
+
+function explicitColliderProfile(definition) {
+  const source = definition?.physics?.colliderProfile
+  if (!source || !Array.isArray(source.specs) || !source.specs.length) return null
+  const specs = []
+
+  for (const raw of source.specs) {
+    if (!raw || typeof raw !== 'object') continue
+    const center = finiteVector3(raw.center ?? [0, 0, 0])
+    if (!center) continue
+
+    if (raw.type === 'box') {
+      const size = finiteVector3(raw.size)
+      if (!size || size.x <= .01 || size.y <= .01 || size.z <= .01) continue
+      specs.push({
+        type: 'box',
+        center,
+        size,
+        volume: size.x * size.y * size.z,
+      })
+      continue
+    }
+
+    if (['cylinder-x', 'cylinder-y', 'cylinder-z'].includes(raw.type)) {
+      const radius = Number(raw.radius)
+      const halfLength = Number(raw.halfLength)
+      if (!(radius > .01) || !(halfLength > .01)) continue
+      specs.push({
+        type: raw.type,
+        center,
+        radius,
+        halfLength,
+        volume: Math.PI * radius * radius * halfLength * 2,
+      })
+    }
+  }
+
+  return specs.length ? { kind: 'explicit', specs, sourceVersion: source.version ?? null } : null
 }
 
 function studdedCore(definition) {
@@ -131,6 +176,9 @@ function rotationalProfile(definition, fallback) {
 }
 
 export function buildColliderProfile(object, definition) {
+  const explicit = explicitColliderProfile(definition)
+  if (explicit) return explicit
+
   const fallback = localBounds(object)
   const holes = linearHoleProfile(definition, fallback)
   if (holes) return { kind: 'hole-aware', specs: holes }

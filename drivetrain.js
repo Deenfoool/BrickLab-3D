@@ -1,6 +1,8 @@
 import * as THREE from 'three'
 import { findPart } from './parts.js'
 import { connectorWorldAxis, connectorWorldPosition } from './snapping.js'
+import { gearPitchRadius } from './parts5/part-geometry-metrics-v1.js'
+import { evaluateBevelMesh, evaluateSpurMesh } from './parts5/gear-mesh-math-v1.js'
 
 const DEFAULT_STALL_TORQUE = 5.5
 const DEFAULT_GEAR_EFFICIENCY = 0.92
@@ -168,7 +170,7 @@ function gearInfo(object, shaftByPart) {
     partId: object.userData.partId,
     kind: gear.kind ?? 'spur',
     teeth: gear.teeth,
-    pitchRadius: gear.pitchRadius ?? gear.teeth / 16,
+    pitchRadius: gear.pitchRadius ?? gearPitchRadius(gear.teeth),
     efficiency: gear.efficiency ?? DEFAULT_GEAR_EFFICIENCY,
     center: connectorWorldPosition(object, connector),
     axis: connectorWorldAxis(object, connector).normalize(),
@@ -177,20 +179,12 @@ function gearInfo(object, shaftByPart) {
 }
 
 function spurGearMesh(a, b, options) {
-  const axisTolerance = options.axisTolerance ?? 0.985
-  const axialTolerance = options.axialTolerance ?? 0.42
-  const axisDot = a.axis.dot(b.axis)
-  if (Math.abs(axisDot) < axisTolerance) return null
-
-  const delta = b.center.clone().sub(a.center)
-  const axialOffset = Math.abs(delta.dot(a.axis))
-  if (axialOffset > axialTolerance) return null
-
-  const radial = delta.clone().sub(a.axis.clone().multiplyScalar(delta.dot(a.axis))).length()
-  const targetDistance = a.pitchRadius + b.pitchRadius
-  const tolerance = options.distanceTolerance ?? Math.max(0.14, Math.min(a.pitchRadius, b.pitchRadius) * 0.22)
-  const error = Math.abs(radial - targetDistance)
-  if (error > tolerance) return null
+  const geometry = evaluateSpurMesh(a, b, {
+    minAlignment: options.axisTolerance ?? 0.985,
+    axialTolerance: options.axialTolerance ?? 0.16,
+    distanceTolerance: options.distanceTolerance ?? 0.08,
+  })
+  if (!geometry.valid) return null
 
   const shaftAxisDot = a.shaft.axisWorld.dot(b.shaft.axisWorld)
   const directionSign = shaftAxisDot >= 0 ? -1 : 1
@@ -205,35 +199,21 @@ function spurGearMesh(a, b, options) {
     ratioBA: directionSign * (b.teeth / a.teeth),
     efficiency: Math.min(a.efficiency, b.efficiency),
     torqueShare: 1,
-    centerDistance: radial,
-    targetDistance,
-    error,
+    centerDistance: geometry.centerDistance,
+    targetDistance: geometry.targetDistance,
+    axialOffset: geometry.axialOffset,
+    error: geometry.distanceError,
   }
 }
 
 function bevelGearMesh(a, b, options) {
-  const axisDotLimit = options.bevelAxisDotTolerance ?? 0.12
-  if (Math.abs(a.axis.dot(b.axis)) > axisDotLimit) return null
+  const geometry = evaluateBevelMesh(a, b, {
+    maxAxisDot: options.bevelAxisDotTolerance ?? 0.12,
+    apexTolerance: options.bevelApexTolerance ?? 0.08,
+  })
+  if (!geometry.valid) return null
 
-  // For a 90° bevel pair the pitch-cone apex lies one mate pitch radius away
-  // along each shaft axis. Trying both axis signs keeps the calculation invariant
-  // to how the user oriented the keyed axle connectors.
-  let best = null
-  for (const signA of [-1, 1]) {
-    const apexA = a.center.clone().addScaledVector(a.axis, signA * b.pitchRadius)
-    for (const signB of [-1, 1]) {
-      const apexB = b.center.clone().addScaledVector(b.axis, signB * a.pitchRadius)
-      const error = apexA.distanceTo(apexB)
-      if (!best || error < best.error) best = { signA, signB, error, apexA, apexB }
-    }
-  }
-
-  const tolerance = options.bevelApexTolerance ?? Math.max(0.16, Math.min(a.pitchRadius, b.pitchRadius) * 0.22)
-  if (!best || best.error > tolerance) return null
-
-  const directionSign = -(best.signA * best.signB)
-  const centerDistance = a.center.distanceTo(b.center)
-  const targetDistance = Math.hypot(a.pitchRadius, b.pitchRadius)
+  const directionSign = -(geometry.signA * geometry.signB)
   return {
     id: `bevel:${a.instanceId}:${b.instanceId}`,
     kind: 'bevel',
@@ -245,10 +225,10 @@ function bevelGearMesh(a, b, options) {
     ratioBA: directionSign * (b.teeth / a.teeth),
     efficiency: Math.min(a.efficiency, b.efficiency),
     torqueShare: 1,
-    centerDistance,
-    targetDistance,
-    apexError: best.error,
-    error: best.error,
+    centerDistance: geometry.centerDistance,
+    targetDistance: geometry.targetDistance,
+    apexError: geometry.apexError,
+    error: geometry.apexError,
   }
 }
 
