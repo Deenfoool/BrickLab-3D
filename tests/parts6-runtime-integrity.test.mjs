@@ -68,8 +68,9 @@ test('PARTS-6 visual layers do not replace connector or mechanics metadata', asy
   assert.match(sources[4], /one visual owner per mating port/)
   assert.match(sources[5], /wrapPart/)
   assert.match(sources[6], /markInterfaceTree/)
-  assert.match(sources[7], /PARTS6_RACK_GEAR_FIDELITY_VERSION = 'parts-6-rack-gear-fidelity-v3'/)
+  assert.match(sources[7], /PARTS6_RACK_GEAR_FIDELITY_VERSION = 'parts-6-rack-gear-fidelity-v4'/)
   assert.match(sources[7], /LINEAR_PITCH = Math\.PI \* GEAR_MODULE_STUD/)
+  assert.match(sources[7], /freezeLegacyBoundsCollider/)
 })
 
 test('nominal, connector and rack layers share the same mechanical sizing sources', async () => {
@@ -90,7 +91,8 @@ test('nominal, connector and rack layers share the same mechanical sizing source
   assert.match(rack, /GEAR_MODULE_STUD/)
   assert.match(rack, /GEAR_PRESSURE_ANGLE_DEG/)
   assert.match(rack, /gearMetrics\(12, 'spur'\)/)
-  assert.match(rack, /full standard tooth depth/)
+  assert.match(rack, /createRackGuide/)
+  assert.match(rack, /guide-mount-tube/)
 })
 
 test('PARTS-6 build metadata, root cache tag and version default agree', async () => {
