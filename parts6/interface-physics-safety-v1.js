@@ -28,17 +28,11 @@ function hardenFineDetailTree(node, partId) {
     node.userData.physicsIgnore = true
     node.userData.parts6FinePhysicsSafe = true
 
-    // A bore shadow must be a liner, never a dark solid plug blocking the visible
-    // Technic hole. Preserve the existing orientation/transform and only replace
-    // the primitive geometry with an open-ended cylinder.
     if (node.userData.parts6FineFeature === 'pivot-bore-shadow') {
       node.geometry?.dispose?.()
       node.geometry = new THREE.CylinderGeometry(N.pinHoleRadius * 0.99, N.pinHoleRadius * 0.99, 0.34, 42, 1, true)
     }
 
-    // Very thin molded details need edge radii clamped to their actual thickness.
-    // Otherwise a decorative RoundedBox can self-intersect before it even reaches
-    // the renderer, which is exactly the kind of artifact PARTS-6 is meant to remove.
     if (node.userData.parts6FineFeature === 'suspension-arm-lightening-recess') {
       replaceRoundedBox(node, 3.10, 0.24, 0.018, 0.006)
     }
@@ -49,15 +43,26 @@ function hardenFineDetailTree(node, partId) {
       replaceRoundedBox(node, 0.035, 0.095, 0.34, 0.010)
     }
 
-    // Connector parting lines are intentionally hairline-thin surface marks. The
-    // original decorative strip depth was too large and could visibly float outside
-    // the molded connector body. Clamp it to a thin surface line per connector family.
     if (node.userData.parts6FineFeature === 'connector-parting-line') {
       replaceRoundedBox(node, 0.70, 0.018, 0.018, 0.006)
       node.position.z = partId === 'connector-triple' ? 0.398 : 0.505
     }
   }
   for (const child of node?.children ?? []) hardenFineDetailTree(child, partId)
+}
+
+function hardenHeroMicroDetailTree(node) {
+  if (node?.userData?.parts6HeroMicroFeature && node?.isMesh) {
+    node.userData.physicsIgnore = true
+    node.userData.parts6HeroMicroPhysicsSafe = true
+
+    // Close-range recess cues must remain geometrically well-conditioned even on
+    // very small parts. Clamp the CV window edge radius to the thin local section.
+    if (node.userData.parts6HeroMicroFeature === 'cv-cage-window-shadow') {
+      replaceRoundedBox(node, 0.030, 0.085, 0.155, 0.008)
+    }
+  }
+  for (const child of node?.children ?? []) hardenHeroMicroDetailTree(child)
 }
 
 const protectedParts = []
@@ -69,6 +74,7 @@ for (const part of PARTS) {
       const object = previous(color)
       markInterfaceTree(object)
       hardenFineDetailTree(object, part.id)
+      hardenHeroMicroDetailTree(object)
       return object
     },
     interfacePhysicsSafety: PARTS6_INTERFACE_PHYSICS_SAFETY_VERSION,
@@ -79,7 +85,7 @@ for (const part of PARTS) {
 globalThis.BrickLabParts6InterfacePhysicsSafety = Object.freeze({
   version: PARTS6_INTERFACE_PHYSICS_SAFETY_VERSION,
   protectedParts,
-  rule: 'interface and fine-detail meshes are collider-independent; bore shadows stay open, thin detail radii stay bounded and connector parting lines stay surface-thin',
+  rule: 'interface, fine-detail and hero micro-detail meshes are collider-independent; bore shadows stay open and thin rounded details remain geometrically bounded',
 })
 
 window.dispatchEvent(new CustomEvent('bricklab:partcatalogchange', {
