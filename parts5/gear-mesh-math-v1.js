@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-export const GEAR_MESH_MATH_VERSION = 'gear-mesh-math-v1'
+export const GEAR_MESH_MATH_VERSION = 'gear-mesh-math-v2'
 
 function stablePerpendicular(axis) {
   const basis = Math.abs(axis.y) < 0.82 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)
@@ -9,6 +9,59 @@ function stablePerpendicular(axis) {
 
 function normalizedAxis(value) {
   return value.clone().normalize()
+}
+
+function signedAngleAround(from, to, axis) {
+  const a = from.clone().projectOnPlane(axis)
+  const b = to.clone().projectOnPlane(axis)
+  if (a.lengthSq() < 1e-10 || b.lengthSq() < 1e-10) return 0
+  a.normalize()
+  b.normalize()
+  return Math.atan2(axis.dot(a.clone().cross(b)), THREE.MathUtils.clamp(a.dot(b), -1, 1))
+}
+
+function positiveModulo(value, period) {
+  return ((value % period) + period) % period
+}
+
+function wrapPeriod(value, period) {
+  return positiveModulo(value + period / 2, period) - period / 2
+}
+
+export function solveSpurPhaseAlignment(moving, fixed, radialDirection) {
+  if (!(moving?.teeth > 0) || !(fixed?.teeth > 0) || !moving.reference || !fixed.reference) return null
+
+  const fixedAxis = normalizedAxis(fixed.axis)
+  const movingAxisRaw = normalizedAxis(moving.axis)
+  // Use the same angular handedness for both gears even when their connector axes
+  // point in opposite directions. The returned axis is also the world rotation axis
+  // to apply to the moving gear.
+  const movingPhaseAxis = movingAxisRaw.dot(fixedAxis) >= 0 ? movingAxisRaw : movingAxisRaw.multiplyScalar(-1)
+  const radial = radialDirection.clone().projectOnPlane(fixedAxis)
+  if (radial.lengthSq() < 1e-10) return null
+  radial.normalize()
+
+  const fixedPeriod = Math.PI * 2 / fixed.teeth
+  const movingPeriod = Math.PI * 2 / moving.teeth
+  const fixedAngle = signedAngleAround(fixed.reference, radial, fixedAxis)
+  const movingContact = radial.clone().multiplyScalar(-1)
+  const movingAngle = signedAngleAround(moving.reference, movingContact, movingPhaseAxis)
+  const fixedPhase = positiveModulo(fixedAngle, fixedPeriod) / fixedPeriod
+
+  // External gears mesh tooth-to-gap. If the fixed gear presents a tooth center at
+  // the contact line (phase 0), the moving gear is rotated by half a tooth pitch.
+  const desiredMovingPhase = positiveModulo(0.5 - fixedPhase, 1)
+  const desiredMovingAngle = desiredMovingPhase * movingPeriod
+  const correction = wrapPeriod(movingAngle - desiredMovingAngle, movingPeriod)
+
+  return {
+    correction,
+    axis: movingPhaseAxis,
+    fixedPhase,
+    movingPhaseBefore: positiveModulo(movingAngle, movingPeriod) / movingPeriod,
+    movingPhaseAfter: desiredMovingPhase,
+    toothPitchRadians: movingPeriod,
+  }
 }
 
 export function evaluateSpurMesh(a, b, options = {}) {
@@ -60,6 +113,7 @@ export function solveSpurSnap(moving, fixed, options = {}) {
   if (error > captureDistance) return null
 
   const contactPoint = fixed.center.clone().addScaledVector(radial, fixed.pitchRadius)
+  const phase = solveSpurPhaseAlignment(moving, fixed, radial)
   return {
     kind: 'spur',
     desiredCenter,
@@ -70,6 +124,9 @@ export function solveSpurSnap(moving, fixed, options = {}) {
     targetDistance,
     contactPoint,
     radialDirection: radial,
+    phaseCorrection: phase?.correction ?? 0,
+    phaseAxis: phase?.axis ?? axisA,
+    phase,
   }
 }
 
