@@ -76,6 +76,9 @@ await import('./parts6/hero-micro-detail-v5.js?v=parts-6-20260909-realism-v1')
 await import('./parts6/connector-fidelity-v1.js?v=parts-6-20260909-realism-v1')
 await import('./parts6/interface-fit-refinement-v2.js?v=parts-6-20260909-realism-v1')
 await import('./parts6/interface-physics-safety-v1.js?v=parts-6-20260909-realism-v1')
+// Shock v9 is deliberately after generic interface wrappers: it owns the final bored
+// eye surfaces and freezes the previous non-ignored collider envelope before replacement.
+await import('./parts6/shock-fidelity-v9.js?v=parts-6-20260909-realism-v1')
 // Remove generic connector/interface overlays that would duplicate steering-carrier v8
 // port surfaces. The hub keeps the canonical inboard bearing axle from interface-fit.
 await import('./parts6/steering-carrier-port-dedup-v8.js?v=parts-6-20260909-realism-v1')
