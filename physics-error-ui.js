@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab ${BUILD_TAG} · measured Technic-like interfaces · keyed axle ports · nominal pin bores · molded realism · PARTS-4 mechanics preserved`
+  badge.title = `BrickLab ${BUILD_TAG} · high-fidelity wheels/bevels/driveline · measured Technic-like interfaces · rack/pinion fidelity · PARTS-4 mechanics preserved`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -105,16 +105,18 @@ window.__bricklabPhysicsDiagnostics = () => ({
     precision: window.BrickLabParts6Precision ?? null,
     mechanicalRealism: window.BrickLabParts6MechanicalRealism ?? null,
     nominalDimensions: window.BrickLabParts6NominalDimensions ?? null,
+    heroMechanicalFidelity: window.BrickLabParts6HeroMechanicalFidelity ?? null,
     connectorFidelity: window.BrickLabParts6ConnectorFidelity ?? null,
     interfaceFit: window.BrickLabParts6InterfaceFit ?? null,
     interfacePhysicsSafety: window.BrickLabParts6InterfacePhysicsSafety ?? null,
+    rackGearFidelity: window.BrickLabParts6RackGearFidelity ?? null,
   },
   pipeline: window.BrickLabPhysicsPipeline ?? null,
   ownership: window.BrickLabPhysicsOwnership?.snapshot?.() ?? window.__bricklabPhysicsOwnership ?? null,
   requestedTimeScale: window.__bricklabRequestedTimeScale ?? 1,
   appliedTimeScale: window.BrickLabSimulationTime?.getApplied?.() ?? 1,
   timeIntegrator: window.__bricklabTimeIntegrator ?? 'simulation-time-authoritative-v5',
-  realElapsed: window.__bricklabPhysicsSession?.realElapsedTime ?? 0,
+  realElapsed: window.__bricklabPhysicsSession?.realElapsedTime ?? window.__bricklabPhysicsSession?.simulationTime ?? 0,
   simElapsed: window.__bricklabPhysicsSession?.actualSimulationElapsed ?? window.__bricklabPhysicsSession?.simulationTime ?? 0,
   nominalSteps: window.__bricklabPhysicsSession?.lastPhysicsSteps ?? 0,
   stability: window.BrickLabPhysicsStability?.diagnostics?.() ?? null,
