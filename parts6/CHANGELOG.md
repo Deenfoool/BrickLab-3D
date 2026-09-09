@@ -31,7 +31,8 @@
 - Open Differential is rebuilt as a visible carrier with ring teeth, side hubs, spider cross/gears and input bearing architecture while keeping its explicit collider profile;
 - steering base/knuckle/tie-rod/wheel-hub now add bushing retainers, bearing races/seals, kingpin rings, molded webs, snap-ring and flange relief detail;
 - shocks now add spring-seat lips, preload rings, rod seal, bump stop and accordion dust-boot detail;
-- suspension arm and bearing block gain pivot washers, lightening recesses, reinforcement, visible races/seals and mounting-seat finish;
+- suspension arm now uses a waisted/tapered bored control-arm silhouette, molded pivot boss, tapered pivot neck and inset face pockets while preserving its PARTS-5 explicit compound collider;
+- bearing block gains visible races/seals, mounting seats and support gussets;
 - motor gains a rear endbell, radial vents, cable gland/stub, case fasteners and output bearing retainer/seal;
 - worm drive gains connector-aligned bearing races/seals, wheel-face webs, housing braces and mounting-seat detail;
 - RPM/Torque sensors gain bearing retainers, accent bands, case fasteners and molded witness detail;
@@ -43,4 +44,4 @@
 - gearbox micro-detail adds connector-aligned bearing bolt circles, fill/drain plugs, breather and alignment dowels;
 - differential micro-detail adds bearing bolt circles, axle seals, spider-pin retainers and carrier mold witness detail;
 - every fine/core/micro decorative mesh is collider-independent; no drivetrain, connector or authoritative physics metadata is changed;
-- PARTS-6 QA, fit-QA, runtime-integrity, interface-fit, rack-gear, hero-fidelity, fine-detail, core-molded, bent-liftarm, hero-micro-detail and geometry regression coverage.
+- PARTS-6 QA, fit-QA, runtime-integrity, interface-fit, rack-gear, hero-fidelity, fine-detail, core-molded, suspension-arm, bent-liftarm, hero-micro-detail and geometry regression coverage.
