@@ -47,7 +47,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab ${BUILD_TAG} · high-fidelity wheels/driveline · forged steering + threaded shocks · split pins/open shaft hardware · PARTS-4 mechanics preserved`
+  badge.title = `BrickLab ${BUILD_TAG} · high-fidelity wheels/driveline · hollow structural shells · forged steering/threaded shocks · split shaft hardware · PARTS-4 mechanics preserved`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -108,6 +108,7 @@ window.__bricklabPhysicsDiagnostics = () => ({
     heroMechanicalFidelity: window.BrickLabParts6HeroMechanicalFidelity ?? null,
     fineMechanicalDetail: window.BrickLabParts6FineMechanicalDetail ?? null,
     coreMoldedFidelity: window.BrickLabParts6CoreMoldedFidelity ?? null,
+    structuralShellFidelity: window.BrickLabParts6StructuralShellFidelity ?? null,
     suspensionArmFidelity: window.BrickLabParts6SuspensionArmFidelity ?? null,
     steeringCarrierFidelity: window.BrickLabParts6SteeringCarrierFidelity ?? null,
     steeringCarrierPortDedup: window.BrickLabParts6SteeringCarrierPortDedup ?? null,
@@ -126,7 +127,7 @@ window.__bricklabPhysicsDiagnostics = () => ({
   appliedTimeScale: window.BrickLabSimulationTime?.getApplied?.() ?? 1,
   timeIntegrator: window.__bricklabTimeIntegrator ?? 'simulation-time-authoritative-v5',
   realElapsed: window.__bricklabPhysicsSession?.realElapsedTime ?? 0,
-  simElapsed: window.__bricklabPhysicsSession?.actualSimulationElapsed ?? window.__bricklabPhysicsSession?.simulationTime ?? 0,
+  simElapsed: window.BrickLabPhysicsSession?.actualSimulationElapsed ?? window.__bricklabPhysicsSession?.simulationTime ?? 0,
   nominalSteps: window.__bricklabPhysicsSession?.lastPhysicsSteps ?? 0,
   stability: window.BrickLabPhysicsStability?.diagnostics?.() ?? null,
   connectorSystem: {
