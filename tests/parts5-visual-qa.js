@@ -22,6 +22,7 @@ await import('../parts6/mechanical-realism-v1.js')
 await import('../parts6/nominal-dimension-fidelity-v1.js')
 await import('../parts6/connector-fidelity-v1.js')
 await import('../parts6/interface-fit-refinement-v2.js')
+await import('../parts6/rack-gear-fidelity-v1.js')
 
 const { findPart } = await import('../parts.js')
 const { gearPitchRadius } = await import('../parts5/part-geometry-metrics-v1.js')
@@ -29,10 +30,10 @@ const { gearPitchRadius } = await import('../parts5/part-geometry-metrics-v1.js'
 const stage = document.getElementById('stage')
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x16191c)
-scene.fog = new THREE.Fog(0x16191c, 52, 92)
+scene.fog = new THREE.Fog(0x16191c, 52, 96)
 
-const camera = new THREE.PerspectiveCamera(43, 1, 0.1, 180)
-camera.position.set(19, 22, 39)
+const camera = new THREE.PerspectiveCamera(43, 1, 0.1, 190)
+camera.position.set(20, 24, 42)
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
@@ -43,9 +44,9 @@ stage.append(renderer.domElement)
 
 const controls = new OrbitControls(camera, renderer.domElement)
 controls.enableDamping = true
-controls.target.set(0.6, 2.0, 7.0)
+controls.target.set(0.6, 2.0, 8.5)
 controls.minDistance = 5
-controls.maxDistance = 76
+controls.maxDistance = 82
 
 scene.add(new THREE.HemisphereLight(0xdde8f2, 0x30363c, 2.15))
 const key = new THREE.DirectionalLight(0xffffff, 3.0)
@@ -61,7 +62,7 @@ rimLight.position.set(4, 7, -18)
 scene.add(rimLight)
 
 const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(62, 62),
+  new THREE.PlaneGeometry(66, 70),
   new THREE.MeshStandardMaterial({ color: 0x20252a, roughness: 0.93, metalness: 0 }),
 )
 floor.rotation.x = -Math.PI / 2
@@ -69,7 +70,7 @@ floor.position.y = -0.02
 floor.receiveShadow = true
 scene.add(floor)
 
-const grid = new THREE.GridHelper(62, 62, 0x3b444c, 0x2b3136)
+const grid = new THREE.GridHelper(66, 66, 0x3b444c, 0x2b3136)
 grid.position.y = 0.005
 grid.material.transparent = true
 grid.material.opacity = 0.35
@@ -197,6 +198,20 @@ addPart('open-differential', [3.2, 0, 23.4], [0, -0.28, 0])
 addPart('rpm-sensor', [7.3, 0, 23.4], [0, -0.18, 0])
 addPart('torque-sensor', [9.4, 0, 23.4], [0, 0.18, 0])
 
+// Rack/pinion visual reference. The pinion pitch circle is tangent to the rack's
+// pitch line; this is QA-only and does not create a fake drivetrain or connector.
+let rackPinionReference = null
+{
+  const rack = addPart('steering-rack-7', [1.8, 0, 27.4])
+  const pinion = partObject('gear-12')
+  pinion.rotation.set(Math.PI / 2, 0, Math.PI / 24)
+  const pitchLineY = rack.position.y + rack.userData.rackGearMetrics.pitchLineY
+  setConnectorCenter(pinion, new THREE.Vector3(rack.position.x, pitchLineY + gearPitchRadius(12), rack.position.z))
+  scene.add(pinion)
+  addPad(1.8, 27.4, 8.6, 3.4)
+  rackPinionReference = { rack, pinion, pitchLineY }
+}
+
 function resize() {
   const width = window.innerWidth
   const height = window.innerHeight
@@ -218,6 +233,7 @@ globalThis.BrickLabParts5VisualQA = Object.freeze({
   renderer,
   wheelIds,
   spurTeeth,
+  rackPinionReference,
   refinement: globalThis.BrickLabParts5Refinement ?? null,
   drivelineRefinement: globalThis.BrickLabParts5DrivelineVisuals ?? null,
   structuralRefinement: globalThis.BrickLabParts5StructuralVisuals ?? null,
@@ -228,4 +244,5 @@ globalThis.BrickLabParts5VisualQA = Object.freeze({
   nominalDimensions: globalThis.BrickLabParts6NominalDimensions ?? null,
   connectorFidelity: globalThis.BrickLabParts6ConnectorFidelity ?? null,
   interfaceFit: globalThis.BrickLabParts6InterfaceFit ?? null,
+  rackGearFidelity: globalThis.BrickLabParts6RackGearFidelity ?? null,
 })
