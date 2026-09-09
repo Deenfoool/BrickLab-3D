@@ -19,6 +19,14 @@ function semanticHousing(object) {
   return Boolean(mechanics?.transmission || mechanics?.differential)
 }
 
+function rigidSemanticPort(object, endpoint) {
+  const transmission = mechanicsFor(object)?.transmission
+  return Boolean(
+    transmission?.rigidConnectorId &&
+    endpoint?.connectorId === transmission.rigidConnectorId,
+  )
+}
+
 export function currentTransmissionMode() {
   const mode = globalThis.__bricklabTransmissionMode
   return TRANSMISSION_MODES.has(mode) ? mode : 'forward'
@@ -56,7 +64,17 @@ export function isRigidAxleConnection(connection, objectsOrMap) {
   const objectA = endpointObject(connection, 'a', byId)
   const objectB = endpointObject(connection, 'b', byId)
   if (!objectA || !objectB) return false
-  if (semanticHousing(objectA) || semanticHousing(objectB)) return false
+
+  const housingA = semanticHousing(objectA)
+  const housingB = semanticHousing(objectB)
+  if (housingA || housingB) {
+    // Most semantic gearboxes are housings and must not weld their input/output
+    // shafts together. Articulated couplers are different: their input yoke is
+    // physically part of the input shaft while the output remains a separate body.
+    if (housingA && !rigidSemanticPort(objectA, connection.a)) return false
+    if (housingB && !rigidSemanticPort(objectB, connection.b)) return false
+  }
+
   return !motorConnectionInfo(connection, byId)
 }
 
@@ -148,6 +166,7 @@ function gearInfo(object, shaftByPart) {
     object,
     instanceId: object.userData.instanceId,
     partId: object.userData.partId,
+    kind: gear.kind ?? 'spur',
     teeth: gear.teeth,
     pitchRadius: gear.pitchRadius ?? gear.teeth / 16,
     efficiency: gear.efficiency ?? DEFAULT_GEAR_EFFICIENCY,
@@ -157,9 +176,83 @@ function gearInfo(object, shaftByPart) {
   }
 }
 
-export function detectGearMeshes(objects, shaftByPart, options = {}) {
+function spurGearMesh(a, b, options) {
   const axisTolerance = options.axisTolerance ?? 0.985
   const axialTolerance = options.axialTolerance ?? 0.42
+  const axisDot = a.axis.dot(b.axis)
+  if (Math.abs(axisDot) < axisTolerance) return null
+
+  const delta = b.center.clone().sub(a.center)
+  const axialOffset = Math.abs(delta.dot(a.axis))
+  if (axialOffset > axialTolerance) return null
+
+  const radial = delta.clone().sub(a.axis.clone().multiplyScalar(delta.dot(a.axis))).length()
+  const targetDistance = a.pitchRadius + b.pitchRadius
+  const tolerance = options.distanceTolerance ?? Math.max(0.14, Math.min(a.pitchRadius, b.pitchRadius) * 0.22)
+  const error = Math.abs(radial - targetDistance)
+  if (error > tolerance) return null
+
+  const shaftAxisDot = a.shaft.axisWorld.dot(b.shaft.axisWorld)
+  const directionSign = shaftAxisDot >= 0 ? -1 : 1
+  return {
+    id: `gear:${a.instanceId}:${b.instanceId}`,
+    kind: 'gear',
+    a,
+    b,
+    shaftA: a.shaft.id,
+    shaftB: b.shaft.id,
+    ratioAB: directionSign * (a.teeth / b.teeth),
+    ratioBA: directionSign * (b.teeth / a.teeth),
+    efficiency: Math.min(a.efficiency, b.efficiency),
+    torqueShare: 1,
+    centerDistance: radial,
+    targetDistance,
+    error,
+  }
+}
+
+function bevelGearMesh(a, b, options) {
+  const axisDotLimit = options.bevelAxisDotTolerance ?? 0.12
+  if (Math.abs(a.axis.dot(b.axis)) > axisDotLimit) return null
+
+  // For a 90° bevel pair the pitch-cone apex lies one mate pitch radius away
+  // along each shaft axis. Trying both axis signs keeps the calculation invariant
+  // to how the user oriented the keyed axle connectors.
+  let best = null
+  for (const signA of [-1, 1]) {
+    const apexA = a.center.clone().addScaledVector(a.axis, signA * b.pitchRadius)
+    for (const signB of [-1, 1]) {
+      const apexB = b.center.clone().addScaledVector(b.axis, signB * a.pitchRadius)
+      const error = apexA.distanceTo(apexB)
+      if (!best || error < best.error) best = { signA, signB, error, apexA, apexB }
+    }
+  }
+
+  const tolerance = options.bevelApexTolerance ?? Math.max(0.16, Math.min(a.pitchRadius, b.pitchRadius) * 0.22)
+  if (!best || best.error > tolerance) return null
+
+  const directionSign = -(best.signA * best.signB)
+  const centerDistance = a.center.distanceTo(b.center)
+  const targetDistance = Math.hypot(a.pitchRadius, b.pitchRadius)
+  return {
+    id: `bevel:${a.instanceId}:${b.instanceId}`,
+    kind: 'bevel',
+    a,
+    b,
+    shaftA: a.shaft.id,
+    shaftB: b.shaft.id,
+    ratioAB: directionSign * (a.teeth / b.teeth),
+    ratioBA: directionSign * (b.teeth / a.teeth),
+    efficiency: Math.min(a.efficiency, b.efficiency),
+    torqueShare: 1,
+    centerDistance,
+    targetDistance,
+    apexError: best.error,
+    error: best.error,
+  }
+}
+
+export function detectGearMeshes(objects, shaftByPart, options = {}) {
   const gears = objects.map(object => gearInfo(object, shaftByPart)).filter(Boolean)
   const meshes = []
 
@@ -168,38 +261,12 @@ export function detectGearMeshes(objects, shaftByPart, options = {}) {
       const a = gears[i]
       const b = gears[j]
       if (!a.shaft || !b.shaft || a.shaft.id === b.shaft.id) continue
+      if (a.kind !== b.kind) continue
 
-      const axisDot = a.axis.dot(b.axis)
-      if (Math.abs(axisDot) < axisTolerance) continue
-
-      const delta = b.center.clone().sub(a.center)
-      const axialOffset = Math.abs(delta.dot(a.axis))
-      if (axialOffset > axialTolerance) continue
-
-      const radial = delta.clone().sub(a.axis.clone().multiplyScalar(delta.dot(a.axis))).length()
-      const targetDistance = a.pitchRadius + b.pitchRadius
-      const tolerance = options.distanceTolerance ?? Math.max(0.14, Math.min(a.pitchRadius, b.pitchRadius) * 0.22)
-      const error = Math.abs(radial - targetDistance)
-      if (error > tolerance) continue
-
-      const shaftAxisDot = a.shaft.axisWorld.dot(b.shaft.axisWorld)
-      const directionSign = shaftAxisDot >= 0 ? -1 : 1
-      const efficiency = Math.min(a.efficiency, b.efficiency)
-      meshes.push({
-        id: `gear:${a.instanceId}:${b.instanceId}`,
-        kind: 'gear',
-        a,
-        b,
-        shaftA: a.shaft.id,
-        shaftB: b.shaft.id,
-        ratioAB: directionSign * (a.teeth / b.teeth),
-        ratioBA: directionSign * (b.teeth / a.teeth),
-        efficiency,
-        torqueShare: 1,
-        centerDistance: radial,
-        targetDistance,
-        error,
-      })
+      const mesh = a.kind === 'bevel'
+        ? bevelGearMesh(a, b, options)
+        : spurGearMesh(a, b, options)
+      if (mesh) meshes.push(mesh)
     }
   }
 
@@ -268,7 +335,7 @@ function transmissionCouplers(objects, connections, shaftByPart, byId) {
     const efficiency = transmission.efficiency ?? 0.9
     couplers.push({
       id: `transmission:${object.userData.instanceId}`,
-      kind: 'transmission',
+      kind: definition?.mechanics?.articulatedCoupler ? 'articulated' : (definition?.mechanics?.wormDrive ? 'worm' : 'transmission'),
       housingId: object.userData.instanceId,
       mode,
       a: semanticEnd(input.shaft, input.object),

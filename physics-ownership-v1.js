@@ -2,9 +2,11 @@ import { PhysicsSession } from './physics.js'
 import { STEP_OWNER } from './simulation-time.js'
 import { PHYSICS_PIPELINE_VERSION } from './physics-pipeline-v1.js'
 
-export const PHYSICS_OWNERSHIP_VERSION = 'physics-ownership-v2'
-const JOINT_OWNER = 'joint-stability-v4'
+export const PHYSICS_OWNERSHIP_VERSION = 'physics-ownership-v5'
+const JOINT_OWNER = 'joint-stability-v5'
+const COUPLING_OWNER = 'articulated-driveline-physics-v1'
 const VEHICLE_OWNER = 'vehicle-system-v1'
+const STEERING_OWNER = 'steering-suspension-physics-v1'
 const DRIVE_OWNER = 'vehicle-drive-v2'
 
 const METHODS = [
@@ -16,6 +18,8 @@ const METHODS = [
   'resetCustomTorques',
   'applyMotorTorques',
   'updateSuspensionV2',
+  'buildChassisMonitor',
+  'initializeParts4LinearMechanisms',
   'updateVehicleControlsV1',
   'updateVehicleDriveV2',
   'applyGearCouplingTorques',
@@ -54,12 +58,21 @@ export function assertPhysicsRuntimeContract() {
   if (PhysicsSession.prototype.createJoint?.__bricklabOwner !== JOINT_OWNER) {
     failures.push(`joint owner: expected ${JOINT_OWNER}, got ${PhysicsSession.prototype.createJoint?.__bricklabOwner ?? 'unknown'}`)
   }
+  if (PhysicsSession.prototype.applyGearCouplingTorques?.__bricklabOwner !== COUPLING_OWNER) {
+    failures.push(`coupling owner: expected ${COUPLING_OWNER}, got ${PhysicsSession.prototype.applyGearCouplingTorques?.__bricklabOwner ?? 'unknown'}`)
+  }
   const tireOwner = PhysicsSession.prototype.applyTireForcesV2?.__bricklabOwner ?? ''
   if (!String(tireOwner).startsWith(VEHICLE_OWNER)) {
     failures.push(`tire owner: expected ${VEHICLE_OWNER} outer layer, got ${tireOwner || 'unknown'}`)
   }
-  if (PhysicsSession.prototype.updateVehicleControlsV1?.name !== 'updateVehicleControlsV1') {
-    failures.push(`steering owner: expected unified ${VEHICLE_OWNER}, got ${PhysicsSession.prototype.updateVehicleControlsV1?.name || 'missing'}`)
+  if (PhysicsSession.prototype.updateVehicleControlsV1?.__bricklabOwner !== STEERING_OWNER) {
+    failures.push(`steering owner: expected ${STEERING_OWNER}, got ${PhysicsSession.prototype.updateVehicleControlsV1?.__bricklabOwner ?? 'missing'}`)
+  }
+  if (PhysicsSession.prototype.buildChassisMonitor?.__bricklabOwner !== STEERING_OWNER) {
+    failures.push(`linear mechanism init owner: expected ${STEERING_OWNER}, got ${PhysicsSession.prototype.buildChassisMonitor?.__bricklabOwner ?? 'missing'}`)
+  }
+  if (typeof PhysicsSession.prototype.initializeParts4LinearMechanisms !== 'function') {
+    failures.push('PARTS-4 linear mechanism registry missing')
   }
   if (PhysicsSession.prototype.updateVehicleDriveV2?.__bricklabOwner !== DRIVE_OWNER) {
     failures.push(`drive owner: expected ${DRIVE_OWNER}, got ${PhysicsSession.prototype.updateVehicleDriveV2?.__bricklabOwner ?? 'missing'}`)

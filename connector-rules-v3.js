@@ -5,6 +5,7 @@ const rules = new Map([
   ['pin|pin-hole', { kind: 'hinge', axis: 'parallel', captureDistance: 0.40, minAlignment: 0.92 }],
   ['axle|pin-hole', { kind: 'bearing', axis: 'parallel', captureDistance: 0.38, minAlignment: 0.94 }],
   ['axle|axle-hole', { kind: 'axle', axis: 'parallel', captureDistance: 0.36, minAlignment: 0.95, keyed: true, twistStep: Math.PI / 2 }],
+  ['slider|slider-rail', { kind: 'prismatic', axis: 'parallel', captureDistance: 0.40, minAlignment: 0.98, keyed: true, twistStep: Math.PI }],
 ])
 
 const keyFor = (a, b) => [a, b].sort().join('|')
