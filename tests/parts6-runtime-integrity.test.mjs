@@ -12,6 +12,7 @@ const FINAL_MODULES = [
   'hero-mechanical-fidelity-v2',
   'fine-mechanical-detail-v3',
   'core-molded-fidelity-v4',
+  'structural-shell-fidelity-v11',
   'suspension-arm-fidelity-v7',
   'steering-carrier-fidelity-v8',
   'bent-liftarm-fidelity-v6',
@@ -69,6 +70,7 @@ test('highest-risk realism owners expose their required geometry and physics gua
   const nominal = await source('nominal-dimension-fidelity-v1')
   const hero = await source('hero-mechanical-fidelity-v2')
   const core = await source('core-molded-fidelity-v4')
+  const structural = await source('structural-shell-fidelity-v11')
   const suspension = await source('suspension-arm-fidelity-v7')
   const carrier = await source('steering-carrier-fidelity-v8')
   const bent = await source('bent-liftarm-fidelity-v6')
@@ -87,6 +89,12 @@ test('highest-risk realism owners expose their required geometry and physics gua
   assert.match(core, /pinLobeGeometry/)
   assert.match(core, /technic-brick-underside-tube/)
   assert.match(core, /spur-root-face-relief/)
+
+  assert.match(structural, /PARTS6_STRUCTURAL_SHELL_FIDELITY_VERSION = 'parts-6-structural-shell-fidelity-v11'/)
+  assert.match(structural, /technic-brick-side-shell/)
+  assert.match(structural, /technic-brick-underside-tube-v11/)
+  assert.match(structural, /technic-frame-main-shell-v11/)
+  assert.match(structural, /parts6-v11-legacy-structural-collider-proxy/)
 
   assert.match(suspension, /PARTS6_SUSPENSION_ARM_FIDELITY_VERSION = 'parts-6-suspension-arm-fidelity-v7'/)
   assert.match(suspension, /PARTS-5 explicit suspension-arm compound collider/)
@@ -129,7 +137,7 @@ test('PARTS-6 build metadata and root cache tag agree', async () => {
   assert.match(bootstrap, /BUILD: PARTS-6/)
 })
 
-test('visual and assembled-fit QA cover final steering/shock/small-hardware owners', async () => {
+test('visual and assembled-fit QA cover final structural/steering/shock/hardware owners', async () => {
   const visual = await readFile(new URL('tests/parts5-visual-qa.js', root), 'utf8')
   const fit = await readFile(new URL('tests/parts6-fit-qa.js', root), 'utf8')
   const shockQa = await readFile(new URL('tests/parts6-shock-qa.js', root), 'utf8')
@@ -141,6 +149,8 @@ test('visual and assembled-fit QA cover final steering/shock/small-hardware owne
     assert.match(visual, new RegExp(marker))
     assert.match(fit, new RegExp(marker))
   }
+  assert.match(visual, /structural-shell-fidelity-v11/)
+  assert.match(visual, /structuralShellFidelity/)
   assert.match(visual, /shaft-hardware-fidelity-v10/)
   assert.match(visual, /shaftHardwareFidelity/)
   assert.match(visual, /steeringCarrierFidelity/)
@@ -151,6 +161,7 @@ test('visual and assembled-fit QA cover final steering/shock/small-hardware owne
   assert.match(shockQa, /BrickLabParts6ShockQA/)
   assert.match(shockQa, /shockFidelity/)
   assert.match(visualHtml, /PARTS-6 REALISM QA/)
+  assert.match(visualHtml, /Shaft hardware v10/)
   assert.match(fitHtml, /PARTS-6 FIT QA/)
   assert.match(shockHtml, /PARTS-6 SHOCK V9 QA/)
 })
