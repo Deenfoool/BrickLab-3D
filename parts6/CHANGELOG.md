@@ -37,9 +37,10 @@
 - RPM/Torque sensors gain bearing retainers, accent bands, case fasteners and molded witness detail;
 - axle-pin and connector blocks gain molded retaining lips and parting-line cues;
 - core molded v4 gives pins actual open elastic slots, hollow connector-aligned Technic-brick undersides, axle end finish, bush/coupler shoulders and spur-gear face relief;
+- bent-liftarm v6 replaces the blocky L/angle beam silhouette with rounded end caps, a rounded outer elbow, shallow inner fillet and nominal through bores while retaining the existing explicit compound collider;
 - hero micro-detail v5 adds subtle tyre centre mold seams, sidewall vent nibs, rim witnesses/retaining shoulders and bevel face mold finish;
 - Cardan/CV micro-detail adds trunnion snap rings, yoke parting lines, CV bell seam and cage-window depth cues;
 - gearbox micro-detail adds connector-aligned bearing bolt circles, fill/drain plugs, breather and alignment dowels;
 - differential micro-detail adds bearing bolt circles, axle seals, spider-pin retainers and carrier mold witness detail;
 - every fine/core/micro decorative mesh is collider-independent; no drivetrain, connector or authoritative physics metadata is changed;
-- PARTS-6 QA, runtime-integrity, interface-fit, rack-gear, hero-fidelity, fine-detail, core-molded, hero-micro-detail and geometry regression coverage.
+- PARTS-6 QA, fit-QA, runtime-integrity, interface-fit, rack-gear, hero-fidelity, fine-detail, core-molded, bent-liftarm, hero-micro-detail and geometry regression coverage.
