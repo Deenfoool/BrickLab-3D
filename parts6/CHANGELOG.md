@@ -23,4 +23,10 @@
 - rack and guide use explicit collider proxies that reproduce their pre-realism bounds envelopes;
 - rack tie pins are centred on their real hinge connector coordinates;
 - QA now includes a rack ↔ 12T pitch-line reference pair;
-- PARTS-6 QA, runtime-integrity, interface-fit, rack-gear and geometry regression coverage.
+- hero wheel pass adds smoother carcass curvature, bead-seat lips, sidewall mold rings, recessed dishes, tapered spokes and genuinely different road/narrow/off-road/tractor tread layouts;
+- bevel 12T/20T now use tapered multi-slice tooth bodies, conical rims and molded open webs while preserving canonical pitch radii;
+- Cardan joints gain four bearing caps/seals and connector-aligned collars without replacing their existing articulated bounds;
+- CV joints gain bell ribs and a cage retainer around the existing Rzeppa-style ball cage;
+- F/N/R gearbox is rebuilt as a split-shell ribbed casting with bearing bosses, retainers, case bolts and selector detents while keeping its explicit collider profile;
+- Open Differential is rebuilt as a visible carrier with ring teeth, side hubs, spider cross/gears and input bearing architecture while keeping its explicit collider profile;
+- PARTS-6 QA, runtime-integrity, interface-fit, rack-gear, hero-fidelity and geometry regression coverage.
