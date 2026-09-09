@@ -121,22 +121,26 @@ test('PARTS-6 build metadata and root cache tag agree', async () => {
   assert.match(bootstrap, /BUILD: PARTS-6/)
 })
 
-test('visual and assembled-fit QA load the final steering/shock owners', async () => {
+test('visual and assembled-fit QA cover final steering owners and dedicated shock v9 review', async () => {
   const visual = await readFile(new URL('tests/parts5-visual-qa.js', root), 'utf8')
   const fit = await readFile(new URL('tests/parts6-fit-qa.js', root), 'utf8')
+  const shockQa = await readFile(new URL('tests/parts6-shock-qa.js', root), 'utf8')
   const visualHtml = await readFile(new URL('tests/parts5-visual-qa.html', root), 'utf8')
   const fitHtml = await readFile(new URL('tests/parts6-fit-qa.html', root), 'utf8')
+  const shockHtml = await readFile(new URL('tests/parts6-shock-qa.html', root), 'utf8')
 
   for (const marker of ['steering-carrier-fidelity-v8', 'steering-carrier-port-dedup-v8']) {
     assert.match(visual, new RegExp(marker))
     assert.match(fit, new RegExp(marker))
   }
-  assert.match(visual, /shock-fidelity-v9/)
   assert.match(visual, /steeringCarrierFidelity/)
   assert.match(visual, /steeringCarrierPortDedup/)
-  assert.match(visual, /shockFidelity/)
   assert.match(fit, /steeringHubWheel/)
   assert.match(fit, /tieRodKnuckle/)
+  assert.match(shockQa, /shock-fidelity-v9/)
+  assert.match(shockQa, /BrickLabParts6ShockQA/)
+  assert.match(shockQa, /shockFidelity/)
   assert.match(visualHtml, /PARTS-6 REALISM QA/)
   assert.match(fitHtml, /PARTS-6 FIT QA/)
+  assert.match(shockHtml, /PARTS-6 SHOCK V9 QA/)
 })
