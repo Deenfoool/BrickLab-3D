@@ -46,10 +46,21 @@ function ratioLabel(a, b) {
   return `${value.toFixed(value < 1 ? 3 : 2)}×`
 }
 
-function showCandidate(detail) {
+function publicCandidate(candidate) {
+  if (!candidate) return null
+  if (candidate.movingTeeth != null) return candidate
+  return {
+    kind: candidate.gearKind,
+    movingTeeth: candidate.movingGear?.teeth,
+    fixedTeeth: candidate.fixedGear?.teeth,
+  }
+}
+
+function showCandidate(value) {
+  const detail = publicCandidate(value)
   const hint = ensureHint()
   if (!hint) return
-  if (!detail) {
+  if (!detail?.movingTeeth || !detail?.fixedTeeth) {
     hint.hidden = true
     hint.textContent = ''
     return
@@ -79,11 +90,7 @@ function showSnap(detail) {
 
 window.addEventListener('bricklab:gearmeshcandidate', event => showCandidate(event.detail))
 window.addEventListener('bricklab:gearmeshsnap', event => showSnap(event.detail))
-window.addEventListener('bricklab:languagechange', () => showCandidate(globalThis.__bricklabGearMeshCandidate ? {
-  kind: globalThis.__bricklabGearMeshCandidate.gearKind,
-  movingTeeth: globalThis.__bricklabGearMeshCandidate.movingGear?.teeth,
-  fixedTeeth: globalThis.__bricklabGearMeshCandidate.fixedGear?.teeth,
-} : null))
+window.addEventListener('bricklab:languagechange', () => showCandidate(globalThis.__bricklabGearMeshCandidate))
 
 globalThis.BrickLabParts5GearMeshUI = Object.freeze({
   version: PARTS5_GEAR_MESH_UI_VERSION,
