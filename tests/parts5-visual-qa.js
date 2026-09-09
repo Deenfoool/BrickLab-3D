@@ -24,6 +24,7 @@ await import('../parts6/hero-mechanical-fidelity-v2.js')
 await import('../parts6/fine-mechanical-detail-v3.js')
 await import('../parts6/core-molded-fidelity-v4.js')
 await import('../parts6/structural-shell-fidelity-v11.js')
+await import('../parts6/cross-axle-fidelity-v12.js')
 await import('../parts6/suspension-arm-fidelity-v7.js')
 await import('../parts6/steering-carrier-fidelity-v8.js')
 await import('../parts6/bent-liftarm-fidelity-v6.js')
@@ -263,6 +264,7 @@ globalThis.BrickLabParts5VisualQA = Object.freeze({
   fineMechanicalDetail: globalThis.BrickLabParts6FineMechanicalDetail ?? null,
   coreMoldedFidelity: globalThis.BrickLabParts6CoreMoldedFidelity ?? null,
   structuralShellFidelity: globalThis.BrickLabParts6StructuralShellFidelity ?? null,
+  crossAxleFidelity: globalThis.BrickLabParts6CrossAxleFidelity ?? null,
   suspensionArmFidelity: globalThis.BrickLabParts6SuspensionArmFidelity ?? null,
   steeringCarrierFidelity: globalThis.BrickLabParts6SteeringCarrierFidelity ?? null,
   steeringCarrierPortDedup: globalThis.BrickLabParts6SteeringCarrierPortDedup ?? null,
