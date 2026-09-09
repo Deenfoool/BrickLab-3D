@@ -5,7 +5,9 @@ export const CONNECTOR_SCHEMA_VERSION = 3
 export const CONNECTOR_RULES = CONNECTOR_RULES_V3
 
 const pendingBundles = new Map()
+const placementSuppressions = new Map()
 const BUNDLE_TTL_MS = 1200
+const PLACEMENT_SUPPRESSION_TTL_MS = 250
 const nowMs = () => globalThis.performance?.now?.() ?? Date.now()
 
 export function endpointKey(instanceId, connectorId) {
@@ -68,6 +70,30 @@ function pruneBundles(now = nowMs()) {
   for (const [key, bundle] of pendingBundles) {
     if (!bundle || now - bundle.createdAt > BUNDLE_TTL_MS) pendingBundles.delete(key)
   }
+  for (const [key, createdAt] of placementSuppressions) {
+    if (!Number.isFinite(createdAt) || now - createdAt > PLACEMENT_SUPPRESSION_TTL_MS) placementSuppressions.delete(key)
+  }
+}
+
+// Some editor snaps are placement constraints rather than mechanical links. A
+// gear mesh is the important example: gears must be moved to exact pitch geometry
+// but must never gain a fake axle/joint connection to one another. The legacy app
+// asks `isEndpointOccupied` immediately before creating a snap connection, so a
+// one-shot endpoint suppression lets the snapping layer explicitly veto that
+// single connection attempt without changing project connection semantics.
+export function suppressNextConnectionForEndpoint(instanceId, connectorId) {
+  if (!instanceId || !connectorId) return false
+  pruneBundles()
+  placementSuppressions.set(endpointKey(instanceId, connectorId), nowMs())
+  return true
+}
+
+function consumePlacementSuppression(instanceId, connectorId) {
+  const key = endpointKey(instanceId, connectorId)
+  pruneBundles()
+  if (!placementSuppressions.has(key)) return false
+  placementSuppressions.delete(key)
+  return true
 }
 
 export function stageConnectionBundle(sourceObject, sourceConnector, targetObject, targetConnector, contacts = []) {
@@ -96,6 +122,7 @@ function consumeConnectionBundle(sourceObject, sourceConnector, targetObject, ta
 }
 
 export function isEndpointOccupied(connections, instanceId, connectorId) {
+  if (consumePlacementSuppression(instanceId, connectorId)) return true
   const wanted = endpointKey(instanceId, connectorId)
   return (connections ?? []).some(connection => connectionEndpointKeys(connection).includes(wanted))
 }
