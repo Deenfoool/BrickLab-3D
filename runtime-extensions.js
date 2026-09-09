@@ -60,6 +60,9 @@ await import('./parts6/fine-mechanical-detail-v3.js?v=parts-6-20260909-realism-v
 // Core molded fidelity finishes pins, axles, bushes, liftarms, studded Technic bricks,
 // frames and spur gears after the nominal geometry layer without changing mechanics.
 await import('./parts6/core-molded-fidelity-v4.js?v=parts-6-20260909-realism-v1')
+// Micro-detail adds manufacturing-level cues to hero parts: tyre vent nibs, mold seams,
+// bearing fasteners, seals, plugs and retainers. Every added mesh remains render-only.
+await import('./parts6/hero-micro-detail-v5.js?v=parts-6-20260909-realism-v1')
 // Connector fidelity wraps the final factories and adds visible semantic ports.
 await import('./parts6/connector-fidelity-v1.js?v=parts-6-20260909-realism-v1')
 await import('./parts6/interface-fit-refinement-v2.js?v=parts-6-20260909-realism-v1')
