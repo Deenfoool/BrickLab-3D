@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises'
 const root = new URL('../', import.meta.url)
 
 const source = await readFile(new URL('parts6/steering-carrier-fidelity-v8.js', root), 'utf8')
+const dedup = await readFile(new URL('parts6/steering-carrier-port-dedup-v8.js', root), 'utf8')
 
 test('steering carrier v8 rebuilds the five high-visibility steering/bearing parts', () => {
   assert.match(source, /PARTS6_STEERING_CARRIER_FIDELITY_VERSION = 'parts-6-steering-carrier-fidelity-v8'/)
@@ -55,12 +56,27 @@ test('steering carrier v8 marks micro finish collider-independent', () => {
   }
 })
 
-test('runtime loads steering carrier v8 before connector/interface wrappers and physics', async () => {
+test('final steering carrier dedup removes overlapping generic port finish without deleting canonical hub bearing axle', () => {
+  assert.match(dedup, /PARTS6_STEERING_CARRIER_PORT_DEDUP_VERSION = 'parts-6-steering-carrier-port-dedup-v8'/)
+  assert.match(dedup, /parts6InterfaceFeature/)
+  assert.match(dedup, /parts6ConnectorVisual/)
+  assert.match(dedup, /feature === 'nominal-cross-axle-stub'/)
+  assert.match(dedup, /Number\(node\.position\?\.x \?\? 0\) > 0/)
+  assert.match(dedup, /hub inboard bearing axle remains canonical/)
+  assert.doesNotMatch(dedup, /mechanics\s*:/)
+  assert.doesNotMatch(dedup, /connectors\s*:/)
+})
+
+test('runtime loads steering carrier v8, then generic wrappers, then dedup before physics', async () => {
   const runtime = await readFile(new URL('runtime-extensions.js', root), 'utf8')
   const carrier = runtime.indexOf("import('./parts6/steering-carrier-fidelity-v8.js?v=parts-6-20260909-realism-v1')")
   const fidelity = runtime.indexOf("import('./parts6/connector-fidelity-v1.js?v=parts-6-20260909-realism-v1')")
+  const safety = runtime.indexOf("import('./parts6/interface-physics-safety-v1.js?v=parts-6-20260909-realism-v1')")
+  const dedupOwner = runtime.indexOf("import('./parts6/steering-carrier-port-dedup-v8.js?v=parts-6-20260909-realism-v1')")
   const physics = runtime.indexOf("import('./physics-v2.js')")
   assert.ok(carrier >= 0)
   assert.ok(fidelity > carrier)
-  assert.ok(physics > fidelity)
+  assert.ok(safety > fidelity)
+  assert.ok(dedupOwner > safety)
+  assert.ok(physics > dedupOwner)
 })
