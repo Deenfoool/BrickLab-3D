@@ -1,5 +1,5 @@
 // BrickLab production mechanics and rendering extensions.
-// BUILD: PARTS-4 · articulated driveline + physical rack steering + telescopic shocks.
+// BUILD: PARTS-5 · parametric visual overhaul + deterministic gear mesh placement.
 // Root module URLs are versioned by the import map in index.html; package submodules
 // carry explicit cache tags because they live outside the root import-map inventory.
 
@@ -20,6 +20,9 @@ await import('./parts4/steering-suspension-v1.js?v=parts-4-20260908-driveline-v1
 // Semantic gearbox housings need explicit free-spinning shaft ports. Install this
 // metadata before connector validation and before the physics graph is built.
 await import('./parts4/semantic-bearing-upgrade-v1.js?v=parts-4-20260908-driveline-v1')
+// PARTS-5 is an override layer: all legacy definitions remain stable, while their
+// visual builders and canonical gear/wheel dimensions are upgraded in one place.
+await import('./parts5/visual-overhaul-v1.js?v=parts-5-20260909-visual-v1')
 
 // Connector System v3 owns compatibility, project migration, validation and physics graph integrity.
 await import('./connector-project-migration-v3.js')
