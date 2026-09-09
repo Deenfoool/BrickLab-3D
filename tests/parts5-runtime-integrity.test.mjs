@@ -53,6 +53,16 @@ test('editor snap and drivetrain detection consume the same gear mesh math', asy
   assert.match(snapping, /gearWorldReference/)
 })
 
+test('gear mesh preview renders pitch circles without becoming physics meshes', async () => {
+  const ui = await readFile(new URL('parts5/gear-mesh-ui-v1.js', root), 'utf8')
+  assert.match(ui, /parts-5-gear-mesh-ui-v2/)
+  assert.match(ui, /new THREE\.LineLoop/)
+  assert.match(ui, /pitchRadius/)
+  assert.match(ui, /parts5GearMeshGuide/)
+  assert.match(ui, /TOOTH PHASE/)
+  assert.doesNotMatch(ui, /new THREE\.Mesh\([^\n]*pitch/i)
+})
+
 test('gear mesh placement explicitly blocks a fake connector/joint', async () => {
   const snapping = await readFile(new URL('snapping-v3.js', root), 'utf8')
   const connections = await readFile(new URL('connections-v3.js', root), 'utf8')
@@ -109,6 +119,7 @@ test('visual QA gallery loads all refinement layers and exposes critical models'
   const qa = await readFile(new URL('tests/parts5-visual-qa.js', root), 'utf8')
   assert.match(qa, /visual-refinement-v2/)
   assert.match(qa, /driveline-refinement-v2/)
+  assert.match(qa, /structural-refinement-v2/)
   assert.match(qa, /wheel-tractor/)
   assert.match(qa, /gear-40/)
   assert.match(qa, /gear-12/)
