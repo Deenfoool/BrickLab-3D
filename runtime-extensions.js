@@ -17,6 +17,9 @@ await import('./parts3/parts-3-visual-normalize.js?v=parts-3-20260908-mechanical
 await import('./parts3/parts-3-steering-upgrade.js?v=parts-3-20260908-mechanical-v1')
 await import('./parts4/mechanical-driveline-v1.js?v=parts-4-20260908-driveline-v1')
 await import('./parts4/steering-suspension-v1.js?v=parts-4-20260908-driveline-v1')
+// Semantic gearbox housings need explicit free-spinning shaft ports. Install this
+// metadata before connector validation and before the physics graph is built.
+await import('./parts4/semantic-bearing-upgrade-v1.js?v=parts-4-20260908-driveline-v1')
 
 // Connector System v3 owns compatibility, project migration, validation and physics graph integrity.
 await import('./connector-project-migration-v3.js')
