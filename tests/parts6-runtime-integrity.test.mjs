@@ -13,7 +13,7 @@ function parts6Imports(source) {
 test('PARTS-6 realism modules exist and use one package tag', async () => {
   const runtime = await readFile(new URL('runtime-extensions.js', root), 'utf8')
   const imports = parts6Imports(runtime)
-  assert.equal(imports.length, 7)
+  assert.equal(imports.length, 8)
   for (const item of imports) {
     assert.equal(item.tag, TAG, `${item.specifier} uses PARTS-6 tag`)
     await access(new URL(item.specifier.replace(/^\.\//, ''), root))
@@ -30,6 +30,7 @@ test('PARTS-6 final visual ownership is ordered before physics', async () => {
   const fidelity = runtime.indexOf(`import('./parts6/connector-fidelity-v1.js?v=${TAG}')`)
   const interfaceFit = runtime.indexOf(`import('./parts6/interface-fit-refinement-v2.js?v=${TAG}')`)
   const interfaceSafety = runtime.indexOf(`import('./parts6/interface-physics-safety-v1.js?v=${TAG}')`)
+  const rack = runtime.indexOf(`import('./parts6/rack-gear-fidelity-v1.js?v=${TAG}')`)
   const physics = runtime.indexOf("import('./physics-v2.js')")
   assert.ok(detail >= 0)
   assert.ok(realism > detail)
@@ -39,7 +40,8 @@ test('PARTS-6 final visual ownership is ordered before physics', async () => {
   assert.ok(fidelity > nominal)
   assert.ok(interfaceFit > fidelity)
   assert.ok(interfaceSafety > interfaceFit)
-  assert.ok(physics > interfaceSafety)
+  assert.ok(rack > interfaceSafety)
+  assert.ok(physics > rack)
 })
 
 test('PARTS-6 visual layers do not replace connector or mechanics metadata', async () => {
@@ -51,6 +53,7 @@ test('PARTS-6 visual layers do not replace connector or mechanics metadata', asy
     'parts6/connector-fidelity-v1.js',
     'parts6/interface-fit-refinement-v2.js',
     'parts6/interface-physics-safety-v1.js',
+    'parts6/rack-gear-fidelity-v1.js',
   ]
   const sources = await Promise.all(files.map(file => readFile(new URL(file, root), 'utf8')))
   for (const source of sources) {
@@ -65,13 +68,16 @@ test('PARTS-6 visual layers do not replace connector or mechanics metadata', asy
   assert.match(sources[4], /one visual owner per mating port/)
   assert.match(sources[5], /wrapPart/)
   assert.match(sources[6], /markInterfaceTree/)
+  assert.match(sources[7], /PARTS6_RACK_GEAR_FIDELITY_VERSION = 'parts-6-rack-gear-fidelity-v2'/)
+  assert.match(sources[7], /LINEAR_PITCH = Math\.PI \* GEAR_MODULE_STUD/)
 })
 
-test('nominal and interface-fit layers share one Technic sizing source', async () => {
+test('nominal, connector and rack layers share the same mechanical sizing sources', async () => {
   const nominal = await readFile(new URL('parts6/nominal-dimension-fidelity-v1.js', root), 'utf8')
   const fit = await readFile(new URL('parts6/interface-fit-refinement-v2.js', root), 'utf8')
   const fidelity = await readFile(new URL('parts6/connector-fidelity-v1.js', root), 'utf8')
   const safety = await readFile(new URL('parts6/interface-physics-safety-v1.js', root), 'utf8')
+  const rack = await readFile(new URL('parts6/rack-gear-fidelity-v1.js', root), 'utf8')
   assert.match(nominal, /studMm: 8/)
   assert.match(nominal, /pinHoleRadius: 2\.4 \/ 8/)
   assert.match(nominal, /axleTipRadius: 4\.78 \/ 16/)
@@ -81,6 +87,9 @@ test('nominal and interface-fit layers share one Technic sizing source', async (
   assert.match(fit, /physicsIgnore = true/)
   assert.match(safety, /parts6InterfaceFeature/)
   assert.match(safety, /physicsIgnore = true/)
+  assert.match(rack, /GEAR_MODULE_STUD/)
+  assert.match(rack, /GEAR_PRESSURE_ANGLE_DEG/)
+  assert.match(rack, /gearMetrics\(12, 'spur'\)/)
 })
 
 test('PARTS-6 build metadata, root cache tag and version default agree', async () => {
@@ -106,8 +115,10 @@ test('visual QA page loads all PARTS-6 final owners', async () => {
   assert.match(qa, /parts6\/nominal-dimension-fidelity-v1/)
   assert.match(qa, /parts6\/connector-fidelity-v1/)
   assert.match(qa, /parts6\/interface-fit-refinement-v2/)
+  assert.match(qa, /parts6\/rack-gear-fidelity-v1/)
   assert.match(qa, /technic-frame-5x7/)
   assert.match(qa, /steering-base/)
+  assert.match(qa, /steering-rack-7/)
   assert.match(qa, /rpm-sensor/)
   assert.match(html, /PARTS-6 REALISM QA/)
   assert.match(html, /Nominal interfaces/)
