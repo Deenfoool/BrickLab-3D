@@ -116,7 +116,7 @@ window.__bricklabPhysicsDiagnostics = () => ({
   requestedTimeScale: window.__bricklabRequestedTimeScale ?? 1,
   appliedTimeScale: window.BrickLabSimulationTime?.getApplied?.() ?? 1,
   timeIntegrator: window.__bricklabTimeIntegrator ?? 'simulation-time-authoritative-v5',
-  realElapsed: window.__bricklabPhysicsSession?.realElapsedTime ?? window.__bricklabPhysicsSession?.simulationTime ?? 0,
+  realElapsed: window.__bricklabPhysicsSession?.realElapsedTime ?? 0,
   simElapsed: window.__bricklabPhysicsSession?.actualSimulationElapsed ?? window.__bricklabPhysicsSession?.simulationTime ?? 0,
   nominalSteps: window.__bricklabPhysicsSession?.lastPhysicsSteps ?? 0,
   stability: window.BrickLabPhysicsStability?.diagnostics?.() ?? null,
