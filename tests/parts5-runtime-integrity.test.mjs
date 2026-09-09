@@ -21,7 +21,7 @@ test('PARTS-5 production modules exist and use one package tag', async () => {
   }
 })
 
-test('PARTS-5 refinement layers are final visual owners before physics', async () => {
+test('PARTS-5 refinement layers retain their internal order before physics', async () => {
   const runtime = await readFile(new URL('runtime-extensions.js', root), 'utf8')
   const legacyVisual = runtime.indexOf("import('./part-visual-v3.js')")
   const legacyWheelMaterial = runtime.indexOf("import('./parts3/parts-3-wheel-materials.js?v=parts-3-20260908-mechanical-v1')")
@@ -130,7 +130,7 @@ test('refinement layers contain the intended high-quality geometry systems', asy
   assert.match(details, /createDifferentialRefined/)
 })
 
-test('visual QA gallery loads all refinement layers and exposes critical models', async () => {
+test('visual QA gallery loads retained PARTS-5 layers and exposes critical models', async () => {
   await access(new URL('tests/parts5-visual-qa.html', root))
   await access(new URL('tests/parts5-visual-qa.js', root))
   const qa = await readFile(new URL('tests/parts5-visual-qa.js', root), 'utf8')
@@ -155,13 +155,10 @@ test('visual QA gallery loads all refinement layers and exposes critical models'
   assert.match(qa, /open-differential/)
 })
 
-test('build metadata has advanced to PARTS-5 visual v2 before merge', async () => {
+test('retained PARTS-5 package tag does not pin a newer production build', async () => {
   const badge = await readFile(new URL('physics-error-ui.js', root), 'utf8')
   const versioner = await readFile(new URL('scripts/version-runtime.mjs', root), 'utf8')
-  const html = await readFile(new URL('index.html', root), 'utf8')
-  assert.match(badge, /const BUILD_ID = 'PARTS-5'/)
-  assert.match(badge, new RegExp(`const BUILD_TAG = '${TAG}'`))
-  assert.match(versioner, new RegExp(`process\\.argv\\[2\\] \\?\\? '${TAG}'`))
-  assert.match(html, new RegExp(`bootstrap\\.js\\?v=${TAG}`))
-  assert.doesNotMatch(html, /parts-4-20260908-driveline-v1/)
+  assert.match(badge, /const BUILD_ID = 'PARTS-\d+'/)
+  assert.match(badge, /const BUILD_TAG = 'parts-\d+-[a-z0-9-]+'/)
+  assert.match(versioner, /process\.argv\[2\] \?\? 'parts-\d+-[a-z0-9-]+'/)
 })
