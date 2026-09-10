@@ -71,12 +71,12 @@ await import('./connectors-v4/runtime-v4.js?v=connector-v4-20260910-v5')
 await import('./connectors-v4/physics-guard-v4.js?v=connector-v4-20260910-v5')
 // History synchronization must be installed before app.js performs its first loadLocal
 // / resetHistory write. It tracks graph-only actions as first-class Undo/Redo steps.
-await import('./connectors-v4/history-sync-v4.js?v=connector-v4-20260910-v5')
+// Native projectState/applyProject now snapshot the V4 graph, including graph-only history.
 
 await import('./app.js')
 // app.js remains the authoritative project/editor owner. This bridge only preserves
 // the V4 extension graph on import/export/new-project without duplicating app logic.
-await import('./connectors-v4/project-bridge-v4.js?v=connector-v4-20260910-v5')
+// Native import/export/new use the same serialized V4 graph as Undo/Redo.
 
 for (const [key, value] of hiddenProjectEntries) {
   try { localStorage.setItem(key, value) } catch { /* storage may be unavailable */ }

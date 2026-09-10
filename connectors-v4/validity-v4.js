@@ -20,7 +20,7 @@ function signedAngleAround(from, to, axis) {
 }
 
 function keyedTwistError(frameA, frameB, symmetry) {
-  if (!Number.isFinite(symmetry) || symmetry <= 1) return 0
+  if (!Number.isFinite(symmetry)) return 0
   const angle = signedAngleAround(frameA.reference, frameB.reference, frameB.axis)
   const step = Math.PI * 2 / symmetry
   return Math.abs(angle - Math.round(angle / step) * step)
@@ -40,6 +40,11 @@ export function validateConnectedGeometryV4(objectA, connectorA, objectB, connec
     return { valid:false, reason:'world-frame-error', error:String(error?.message || error), match }
   }
 
+  const freeOrientation = match.kinematicHint === 'spherical' || (match.family === 'generic' && match.editorMotion?.freeOrientation)
+  if (freeOrientation) {
+    const error = frameA.position.distanceTo(frameB.position)
+    return {valid:error<=limits.maxLateralErrorStud, reason:error<=limits.maxLateralErrorStud?'connected-geometry-valid':'center',match,lateralErrorStud:error,axialOffsetStud:0}
+  }
   const axisDot = frameA.axis.dot(frameB.axis)
   if (axisDot < limits.minAxisDot) return { valid:false, reason:'axis', axisDot, match }
 
@@ -52,12 +57,14 @@ export function validateConnectedGeometryV4(objectA, connectorA, objectB, connec
   }
 
   let axial = null
-  if (connectorA.family === 'cylinder' && connectorB.family === 'cylinder') {
+  if (['cylinder','clip-cylinder'].includes(match.family)) {
     axial = evaluateAxialOffsetV4(connectorA, connectorB, axialOffsetStud * 20)
     if (!axial.valid) {
       return { valid:false, reason:`axial:${axial.reason}`, axisDot, axialOffsetStud, lateralErrorStud, axial, match }
     }
   }
+
+  if (!['cylinder','clip-cylinder'].includes(match.family) && Math.abs(axialOffsetStud)>limits.maxLateralErrorStud) return {valid:false,reason:'center',match}
 
   const twistErrorRad = match.keyed ? keyedTwistError(frameA, frameB, match.rotationalSymmetry) : 0
   if (match.keyed && twistErrorRad > limits.maxKeyedTwistErrorRad) {

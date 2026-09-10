@@ -51,8 +51,8 @@ function isLDrawPart(object) {
 function v4OwnsLegacyCandidate(selected, legacy) {
   if (!legacy || legacy.kind === 'gear-mesh') return false
   if (!isLDrawPart(selected) && !isLDrawPart(legacy.targetObject)) return false
-  const types = new Set([legacy.source?.type, legacy.target?.type])
-  return types.has('axle') && types.has('axle-hole')
+  // All LDraw structural pairs require Shadow certification. Gear contact remains separate.
+  return true
 }
 
 export function findSnapCandidate(selected, objects, options = {}) {

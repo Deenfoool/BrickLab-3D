@@ -466,11 +466,12 @@ function snapGrid() {
   )
 }
 
-function detachPartConnections(object, silent = false) {
+function detachPartConnections(object, silent = false, preserveV4 = true) {
   if (!object) return 0
   const before = connections.length
-  connections = removeConnectionsForPart(connections, object.userData.instanceId)
-  const removed = before - connections.length
+  const v4Before = globalThis.BrickLabConnectorV4?.projectConnections().length ?? 0
+  connections = removeConnectionsForPart(connections, object.userData.instanceId, {preserveV4})
+  const removed = before - connections.length + v4Before - (globalThis.BrickLabConnectorV4?.projectConnections().length ?? 0)
 
   if (removed) {
     updateConnectionVisuals()
@@ -481,9 +482,9 @@ function detachPartConnections(object, silent = false) {
   return removed
 }
 
-function detachSelectionConnections(silent = true) {
+function detachSelectionConnections(silent = true, preserveV4 = true) {
   let count = 0
-  for (const object of activeSelection()) count += detachPartConnections(object, silent)
+  for (const object of activeSelection()) count += detachPartConnections(object, silent, preserveV4)
   return count
 }
 
@@ -499,6 +500,7 @@ function attachSnapConnection(candidate) {
 }
 
 function projectState() {
+  if (mode === 'build') globalThis.BrickLabConnectorV4?.reconcileGraph(buildRoot.children, {persist:false})
   return {
     version: 2,
     name: projectName,
@@ -511,6 +513,8 @@ function projectState() {
       rotation: [object.rotation.x, object.rotation.y, object.rotation.z],
     })),
     connections: cloneState(connections),
+    connectorSystemV4:{version:4},
+    connectionsV4:globalThis.BrickLabConnectorV4?.projectConnections() ?? [],
   }
 }
 
@@ -576,6 +580,7 @@ function applyProject(data, { reset = false, persist = true } = {}) {
   if (!data || !Array.isArray(data.parts)) throw new Error('Invalid BrickLab project')
 
   select(null)
+  globalThis.BrickLabConnectorV4?.clearGraph()
   buildRoot.clear()
   connections = []
   projectName = data.name || 'Imported Build'
@@ -591,6 +596,7 @@ function applyProject(data, { reset = false, persist = true } = {}) {
     buildRoot.add(object)
   }
 
+  globalThis.BrickLabConnectorV4?.restoreConnections(data.connectionsV4 ?? [])
   const usedEndpoints = new Set()
   for (const connection of Array.isArray(data.connections) ? data.connections : []) {
     if (connectionIsValid(connection, usedEndpoints)) connections.push(cloneState(connection))
@@ -716,7 +722,7 @@ function duplicateSelected() {
 
 function disconnectSelected() {
   if (!selectedObjects.size || mode !== 'build') return
-  const count = detachSelectionConnections(true)
+  const count = detachSelectionConnections(true, false)
   if (!count) return
   updateInspector()
   refreshSnap()
@@ -1154,6 +1160,7 @@ function exportProject() {
 function newProject() {
   if (mode === 'simulate') setMode('build')
   select(null)
+  globalThis.BrickLabConnectorV4?.clearGraph()
   buildRoot.clear()
   connections = []
   projectName = 'Untitled Build'
@@ -1470,12 +1477,15 @@ new ResizeObserver(resize).observe(viewport)
 
 function animate() {
   if (mode === 'simulate' && physicsSession) physicsSession.step()
+  if (mode === 'build' && !isDragging) globalThis.BrickLabConnectorV4?.updateEditor(performance.now())
   orbit.update()
   emitAudioEvent('frame', { session: physicsSession, mode, camera })
   for (const box of selectionBoxes.values()) box.update()
   renderer.render(scene, camera)
   requestAnimationFrame(animate)
 }
+
+globalThis.BrickLabConnectorV4?.attachEditor(() => buildRoot.children)
 
 try { installAudio() } catch (error) { console.warn('Optional audio setup unavailable', error) }
 renderCatalog()

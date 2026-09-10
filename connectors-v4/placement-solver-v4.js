@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { matchConnectorV4 } from './matcher-v4.js?v=connector-v4-20260910-v3'
-import { nearestAxialOffsetV4 } from './axial-fit-v4.js?v=connector-v4-20260910-v1'
+import { nearestAxialOffsetV4, evaluateAxialOffsetV4 } from './axial-fit-v4.js?v=connector-v4-20260910-v1'
 
 export const PLACEMENT_SOLVER_VERSION_V4 = 'placement-solver-v4.1.0'
 const EPS = 1e-8
@@ -30,6 +30,9 @@ function frameFromWorldMatrix(matrix) {
 export function connectorWorldFrameV4(object, connector) {
   if (!object?.matrixWorld) throw new TypeError('A Three.js object is required')
   object.updateWorldMatrix?.(true,false)
+  const e = object.matrixWorld.elements
+  const axes = [new THREE.Vector3(e[0],e[1],e[2]),new THREE.Vector3(e[4],e[5],e[6]),new THREE.Vector3(e[8],e[9],e[10])]
+  if (axes.some(a=>Math.abs(a.length()-1)>1e-5) || Math.abs(axes[0].dot(axes[1]))>1e-5 || Math.abs(axes[0].dot(axes[2]))>1e-5 || Math.abs(axes[1].dot(axes[2]))>1e-5 || object.matrixWorld.determinant()<0) throw new Error('V4 requires rigid unit-scale object transforms')
   const matrix = object.matrixWorld.clone().multiply(matrixFromConnector(connector))
   return frameFromWorldMatrix(matrix)
 }
@@ -83,7 +86,11 @@ function toParentLocalPose(object, worldPosition, worldQuaternion) {
 }
 
 function solveAxialOffset(movingConnector,targetConnector,match,movingFrame,targetFrame,options) {
-  if (match.family !== 'cylinder' || !match.editorMotion?.axialSlide) return { offsetStud:0, offsetLdu:0, clamped:false, windows:null }
+  if (!['cylinder','clip-cylinder'].includes(match.family)) return { offsetStud:0, offsetLdu:0, clamped:false, windows:null }
+  if (!match.editorMotion?.axialSlide) {
+    const fit = evaluateAxialOffsetV4(movingConnector,targetConnector,0)
+    return {offsetStud:0,offsetLdu:0,clamped:false,rejected:!fit.valid,fit}
+  }
   const requestedStud = Number.isFinite(options.axialOffsetStud)
     ? options.axialOffsetStud
     : movingFrame.position.clone().sub(targetFrame.position).dot(targetFrame.axis)

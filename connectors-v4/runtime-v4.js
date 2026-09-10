@@ -9,7 +9,7 @@ import { createConnectionGraphV4, createConnectionProposalV4 } from './connectio
 import { auditConnectorDefinitionV4 } from './audit-v4.js'
 import { proposeConstraintV4 } from './constraints-v4.js'
 import { createAxialOccupancyV4 } from './occupancy-v4.js'
-import { ACTIVATION_POLICY_VERSION_V4, certifyCandidateV4, certifyConnectivityV4 } from './activation-v4.js'
+import { ACTIVATION_POLICY_VERSION_V4, certifyCandidateV4, certifyConnectivityV4, activationForMatchV4 } from './activation-v4.js'
 import { runConnectorV4SelfTest } from './selftest-v4.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 import {
@@ -23,11 +23,16 @@ import {
 
 const LDRAW_RAW_ROOT = 'https://raw.githubusercontent.com/pybricks/ldraw/master/'
 const SHADOW_RAW_ROOT = `https://raw.githubusercontent.com/${SHADOW_SOURCE_V4.repository}/${SHADOW_SOURCE_V4.commit}/`
-const SHADOW_TREE_URL = `https://api.github.com/repos/${SHADOW_SOURCE_V4.repository}/git/trees/${SHADOW_SOURCE_V4.commit}?recursive=1`
+// Pinned manifest is bundled; geometry and connector resolution remain lazy.
+const UNUSED_SHADOW_TREE_URL = `https://api.github.com/repos/${SHADOW_SOURCE_V4.repository}/git/trees/${SHADOW_SOURCE_V4.commit}?recursive=1`
 const hydration = new Map()
 const status = new Map()
 const lastRoots = new Map()
 const wrappedDefinitions = new WeakSet()
+const counters = {invalidatedConnections:0,occupancyConflicts:0,failedTransactions:0,releasedConnections:0}
+let editorObjects = () => []
+let lastEditorCheck=0
+let lastTransformSignature=null
 const occupancy = createAxialOccupancyV4()
 const connectionGraph = createConnectionGraphV4()
 const selfTest = runConnectorV4SelfTest()
@@ -127,7 +132,7 @@ function instrumentDefinition(def) {
   def.create = function connectorV4ObservedCreate(...args) {
     const root = originalCreate.apply(this, args)
     if (root) {
-      lastRoots.set(def.id, root)
+      lastRoots.set(def.id, new WeakRef(root))
       queueMicrotask(() => { if (def.ldraw?.ready) void hydrateConnectorV4(def, root) })
     }
     return root
@@ -232,7 +237,9 @@ function reconcileGraph(objects, { persist = true } = {}) {
   let pending = 0
   const removed = [...pruned.reasons]
 
-  for (const record of connectionGraph.list()) {
+  const staged = createConnectionGraphV4()
+  let updated = 0
+  for (const record of connectionGraph.list().sort((a,b)=>a.id.localeCompare(b.id))) {
     const objectA = byId.get(record.a.instanceId)
     const objectB = byId.get(record.b.instanceId)
     if (!objectA || !objectB) continue
@@ -240,6 +247,7 @@ function reconcileGraph(objects, { persist = true } = {}) {
     const defB = findPart(objectB.userData.partId)
     if (defA?.connectivityV4?.status !== 'ready' || defB?.connectivityV4?.status !== 'ready') {
       pending += 1
+      staged.add({...record,physicsReady:false})
       continue
     }
     const connectorA = connectorForEndpoint(objectA.userData.partId, record.a.endpointId)
@@ -251,17 +259,30 @@ function reconcileGraph(objects, { persist = true } = {}) {
       continue
     }
     const validity = validateConnectedGeometryV4(objectA, connectorA, objectB, connectorB)
-    if (!validity.valid) {
+    const activation = activationForMatchV4(connectorA,connectorB,validity.match)
+    if (!validity.valid || !activation.active || !certifyConnectivityV4(defA).pass || !certifyConnectivityV4(defB).pass) {
       connectionGraph.remove(record.id)
       invalidGeometry += 1
       removed.push({ connectionId:record.id, reason:`geometry:${validity.reason}` })
+      continue
     }
+    const fresh = createConnectionProposalV4({source:connectorA,target:connectorB,sourceObject:objectA,targetObject:objectB,
+      match:validity.match,solution:{valid:true,solverVersion:record.placement?.solverVersion,placementMode:record.placement?.placementMode,
+        axial:{offsetLdu:validity.axialOffsetStud*20}}}, {metadata:record.metadata})
+    fresh.activation=activation
+    if (fresh.id !== record.id || !fresh.occupancyReady || !staged.add(fresh).accepted) {
+      removed.push({connectionId:record.id,reason:'occupancy-or-identity'})
+      counters.occupancyConflicts++
+    } else if (JSON.stringify(fresh.occupancy)!==JSON.stringify(record.occupancy)) updated++
   }
-
-  if (persist && removed.length) persistGraphV4(connectionGraph)
+  connectionGraph.clear()
+  for (const fresh of staged.list()) connectionGraph.add(fresh)
+  counters.invalidatedConnections += removed.length
+  if (persist && (removed.length || updated)) persistGraphV4(connectionGraph)
   if (removed.length) publishRuntime('bricklab:connectorv4reconcile', { removed:clone(removed) })
   return {
     removed:removed.length,
+    updated,
     staleObjects:pruned.removed,
     missingEndpoint,
     invalidGeometry,
@@ -275,7 +296,7 @@ const candidateOptions = options => ({ ...options, getDefinition:findPart })
 
 function certifiedCandidate(movingObject, targetObjects, options = {}) {
   if (!selfTest.pass) return null
-  reconcileGraph([movingObject, ...(targetObjects ?? [])])
+  // Candidate targets may be a spatial subset: only the project owner prunes the graph.
   const candidates = findPlacementCandidatesV4(movingObject, targetObjects, candidateOptions({ ...options, maxResults:Math.max(24, options.maxResults ?? 0) }))
   for (const candidate of candidates) {
     const certification = certifyCandidateV4(candidate, findPart)
@@ -305,6 +326,9 @@ function restorePose(object, position, quaternion) {
 
 function commitCertifiedCandidate(candidate) {
   if (!selfTest.pass || !candidate?.v4Active) return { accepted:false, reason:'v4-not-active' }
+  // Preview transforms can be stale by pointer-up; solve once more atomically.
+  candidate = {...candidate,solution:solvePlacementV4(candidate.sourceObject,candidate.source,candidate.targetObject,candidate.target)}
+  candidate.match=candidate.solution.match
   const certification = certifyCandidateV4(candidate, findPart)
   if (!certification.pass) return { accepted:false, reason:`certification:${certification.reason}`, certification }
 
@@ -327,6 +351,7 @@ function commitCertifiedCandidate(candidate) {
   const object = candidate.sourceObject
   const previousPosition = object.position.toArray()
   const previousQuaternion = object.quaternion.toArray()
+  const committedIds=[]
   try {
     applyPlacementV4(object, candidate.solution)
     const validity = validateConnectedGeometryV4(candidate.sourceObject, candidate.source, candidate.targetObject, candidate.target)
@@ -339,14 +364,29 @@ function commitCertifiedCandidate(candidate) {
       restorePose(object, previousPosition, previousQuaternion)
       return { accepted:false, reason:added.reason || 'graph-rejected', conflicts:added.conflicts || [] }
     }
+    committedIds.push(added.connection.id)
+    if (certification.activation.family === 'stud-anti-stud') {
+      const aligned=findPlacementCandidatesV4(object,[candidate.targetObject],candidateOptions({captureDistanceStud:1e-5,maxResults:4096}))
+      for (const contact of aligned) {
+        if (contact.solution.diagnostics.rotationRad>1e-5 || !certifyCandidateV4(contact,findPart).pass) continue
+        const policy=activationForMatchV4(contact.source,contact.target,contact.match)
+        if (policy.family!=='stud-anti-stud') continue
+        const next=createConnectionProposalV4(contact,{metadata:{activation:policy}})
+        next.activation=policy
+        if (connectionGraph.add(next).accepted) committedIds.push(next.id)
+      }
+    }
     persistGraphV4(connectionGraph)
     publishRuntime('bricklab:connectorv4commit', {
       connectionId:added.connection.id,
+      connectionIds:committedIds,
       family:certification.activation.family,
       physicsReady:Boolean(added.connection.physicsReady),
     })
     return { accepted:true, connection:added.connection, validity, certification }
   } catch (error) {
+    for (const id of committedIds) connectionGraph.remove(id)
+    counters.failedTransactions++
     restorePose(object, previousPosition, previousQuaternion)
     return { accepted:false, reason:'commit-error', error:String(error?.message || error) }
   }
@@ -413,7 +453,20 @@ export const BrickLabConnectorV4 = Object.freeze({
   commitActiveCandidate:commitCertifiedCandidate,
   proposeConnection(candidate, options = {}) { return createConnectionProposalV4(candidate, options) },
   proposeConstraint:proposeConstraintV4,
-  audit:auditConnectorDefinitionV4,
+  audit(partId) { return auditConnectorDefinitionV4(typeof partId==='string'?findPart(partId):partId) },
+  batchAudit(ids=[]) { return ids.map(id=>({partId:id,audit:auditConnectorDefinitionV4(findPart(id))})) },
+  attachEditor(getObjects) { editorObjects=getObjects },
+  objects() { return editorObjects() },
+  updateEditor(now=0) {
+    if (now-lastEditorCheck<150 || !connectionGraph.stats().connections) return
+    lastEditorCheck=now
+    const ids=new Set(connectionGraph.list().flatMap(c=>[c.a.instanceId,c.b.instanceId]))
+    const signature=editorObjects().filter(o=>ids.has(o.userData.instanceId)).map(o=>{
+      o.updateWorldMatrix(true,false)
+      return `${o.userData.instanceId}:${o.matrixWorld.elements.join(',')}`
+    }).join('|')
+    if (signature!==lastTransformSignature) {lastTransformSignature=signature;reconcileGraph(editorObjects())}
+  },
   reconcileGraph,
   removePartConnections(instanceId) {
     const removed = connectionGraph.removePart(instanceId)
@@ -421,6 +474,7 @@ export const BrickLabConnectorV4 = Object.freeze({
     return removed
   },
   clearGraph() {
+    lastRoots.clear()
     connectionGraph.clear()
     clearPersistedGraphV4()
   },
@@ -443,7 +497,12 @@ export const BrickLabConnectorV4 = Object.freeze({
       systemVersion:CONNECTOR_SYSTEM_VERSION_V4,
       activationPolicyVersion:ACTIVATION_POLICY_VERSION_V4,
       selfTest:{ pass:selfTest.pass, passed:selfTest.passed, failed:selfTest.failed },
-      readyParts:ready.length,
+      ...counters,
+      readyParts:ready.filter(def=>certifyConnectivityV4(def).pass).length,
+      totalEndpoints:ready.reduce((n,d)=>n+d.connectivityV4.connectors.length,0),
+      activeFamilies:[...new Set(connectionGraph.list().map(c=>c.activation?.family).filter(Boolean))],
+      physicsReadyConnections:connectionGraph.list().filter(c=>c.physicsReady).length,
+      editorOnlyConnections:connectionGraph.list().filter(c=>!c.physicsReady).length,
       connectors:ready.reduce((sum, def) => sum + (def.connectivityV4.connectors?.length || 0), 0),
       warnings:ready.reduce((sum, def) => sum + (def.connectivityV4.warnings?.length || 0), 0),
       deduplicated:ready.reduce((sum, def) => sum + (def.connectivityV4.stats?.deduplicated || 0), 0),

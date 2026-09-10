@@ -1,3 +1,5 @@
+import * as THREE from 'three'
+import { totalProfileLengthV4 } from './schema-v4.js'
 import { solvePlacementV4 } from './placement-solver-v4.js?v=connector-v4-20260910-v3'
 
 export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.0.0'
@@ -43,10 +45,21 @@ export function findPlacementCandidatesV4(movingObject,targets,{
   const sources=definitionConnectors(movingDef)
   if (!sources.length) return []
 
+  const bounds=new WeakMap()
+  const extent=def=>{
+    if (!bounds.has(def)) bounds.set(def,Math.max(0,...definitionConnectors(def).map(c=>new THREE.Vector3(...c.frame.positionStud).length()+totalProfileLengthV4(c)/20+1)))
+    return bounds.get(def)
+  }
+  const center=movingObject.getWorldPosition(new THREE.Vector3())
+  const nearby=(targets??[]).filter(o=>{
+    if (!o || o===movingObject) return false
+    const def=getDefinition(o.userData?.partId)
+    return def && definitionConnectors(def).length && center.distanceTo(o.getWorldPosition(new THREE.Vector3())) <= extent(movingDef)+extent(def)+captureDistanceStud
+  })
   const results=[]
   for (const source of sources) {
     if (!source?.endpointId || !isAvailable(movingObject,source)) continue
-    for (const targetObject of targets ?? []) {
+    for (const targetObject of nearby) {
       if (!targetObject || targetObject === movingObject) continue
       const targetDef=getDefinition(targetObject.userData?.partId)
       for (const target of definitionConnectors(targetDef)) {

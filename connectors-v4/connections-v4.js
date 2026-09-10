@@ -1,3 +1,4 @@
+import { axialConnectorV4 } from './axial-fit-v4.js'
 import { axialSpanV4 } from './schema-v4.js?v=connector-v4-20260910-v3'
 import { proposeConstraintV4 } from './constraints-v4.js?v=connector-v4-20260910-v1'
 import { axialOverlapV4, createAxialOccupancyV4 } from './occupancy-v4.js?v=connector-v4-20260910-v1'
@@ -24,8 +25,8 @@ function endpointFrom(object,connector) {
 }
 
 function maleFemaleCandidate(candidate) {
-  const a=candidate?.source
-  const b=candidate?.target
+  const a=axialConnectorV4(candidate?.source)
+  const b=axialConnectorV4(candidate?.target)
   if (a?.family !== 'cylinder' || b?.family !== 'cylinder') return null
   if (a.gender==='male' && b.gender==='female') return {male:a,female:b,maleObject:candidate.sourceObject,femaleObject:candidate.targetObject,movingMale:true}
   if (b.gender==='male' && a.gender==='female') return {male:b,female:a,maleObject:candidate.targetObject,femaleObject:candidate.sourceObject,movingMale:false}
@@ -103,8 +104,9 @@ export function createConnectionProposalV4(candidate,{metadata=null}={}) {
     },
     constraint,
     occupancy:reservation,
-    occupancyReady:Boolean(reservation || candidate.match.family!=='cylinder'),
+    occupancyReady:Boolean(reservation || !['cylinder','clip-cylinder'].includes(candidate.match.family)),
     exclusiveEndpointKeys:exclusiveEndpoints.map(endpoint=>endpointKeyV4(endpoint.instanceId,endpoint.endpointId)),
+    provenance:{a:candidate.source.source ?? null,b:candidate.target.source ?? null},
     metadata:metadata && typeof metadata==='object'?structuredClone(metadata):null,
   }
 }
@@ -184,6 +186,16 @@ export function createConnectionGraphV4() {
     version:CONNECTION_GRAPH_VERSION_V4,
     canAdd(proposal){const conflicts=conflictsFor(proposal);return{accepted:conflicts.length===0,conflicts}},
     add,
+    replace(proposal) {
+      const previous=connections.get(proposal?.id)
+      if (!previous) return {accepted:false,reason:'missing-connection'}
+      const conflicts=conflictsFor(proposal)
+      if (conflicts.length) return {accepted:false,reason:'occupied',conflicts}
+      const backup=clone(previous)
+      remove(proposal.id)
+      try { const result=add(proposal); if (!result.accepted) add(backup); return result }
+      catch(error) { add(backup); throw error }
+    },
     remove,
     removePart,
     get(id){const value=connections.get(id);return value?clone(value):null},

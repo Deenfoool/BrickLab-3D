@@ -14,10 +14,19 @@ function sectionCompatible(male, female) {
   if (male.radiusLdu > female.radiusLdu + MATCHER_TOLERANCES_V4.radiusLdu) return false
   const m = rigidShape(male)
   const f = rigidShape(female)
-  if (m === 'R') return f === 'R'
+  if (m === 'R') return f === 'R' || f === 'S'
   if (m === 'A') return f === 'A' || f === 'R'
   if (m === 'S') return f === 'S' || f === 'R'
   return false
+}
+
+// A clip is an open round female interval, not a zero-length snap point.
+export function axialConnectorV4(connector) {
+  if (connector?.family !== 'clip') return connector
+  return {...connector, family:'cylinder', gender:'female', geometry:{
+    sections:[{shape:'R',radiusLdu:connector.geometry.radiusLdu,lengthLdu:connector.geometry.lengthLdu}],
+    centered:connector.geometry.centered, caps:'none',
+  }}
 }
 
 function connectorSegments(connector) {
@@ -28,7 +37,10 @@ function connectorSegments(connector) {
     const start = cursor
     const end = cursor + section.lengthLdu
     cursor = end
-    return { ...section, index, start, end }
+    const adjacent = connector.geometry.sections[index + (section.shape === 'L_' ? 1 : -1)]
+    // Elastic extensions compress only to the referenced neighbouring section.
+    const compressed = ['L_','_L'].includes(section.shape) && adjacent && !['L_','_L'].includes(adjacent.shape)
+    return { ...section, ...(compressed ? {shape:adjacent.shape,radiusLdu:Math.min(section.radiusLdu,adjacent.radiusLdu)} : {}), index, start, end }
   })
 }
 
@@ -83,6 +95,9 @@ function evaluateMaleOffset(male, female, offsetLdu) {
     return { valid:false, engagementLdu:0, reason:'female-cap' }
   }
 
+  const maleCaps = normalizedCaps(male)
+  if ((maleCaps.a && femaleSpan[0] < maleSpan[0] - EPS) || (maleCaps.b && femaleSpan[1] > maleSpan[1] + EPS)) return {valid:false,engagementLdu:0,reason:'male-cap'}
+
   let engagementLdu = 0
   for (const m of maleSegments) {
     const ms = m.start + offsetLdu
@@ -112,7 +127,7 @@ function refineBoundary(male, female, lo, hi, seekValidAtHigh, iterations = 32) 
 }
 
 function mergeWindows(windows, epsilon = 1e-5) {
-  const sorted = windows.filter(w => w[1] - w[0] > epsilon).sort((a,b) => a[0]-b[0])
+  const sorted = windows.filter(w => w[1] >= w[0]).sort((a,b) => a[0]-b[0])
   const result = []
   for (const window of sorted) {
     const last = result.at(-1)
@@ -123,6 +138,7 @@ function mergeWindows(windows, epsilon = 1e-5) {
 }
 
 export function cylinderAxialWindowsV4(moving, target) {
+  moving = axialConnectorV4(moving); target = axialConnectorV4(target)
   const pair = maleFemale(moving, target)
   if (!pair || moving?.family !== 'cylinder' || target?.family !== 'cylinder') {
     return { valid:false, reason:'not-cylinder-male-female', movingWindows:[], maleWindows:[] }
@@ -136,7 +152,7 @@ export function cylinderAxialWindowsV4(moving, target) {
   // Extend by the engagement threshold because the valid region can start/end
   // slightly inside a pure topology breakpoint.
   const candidates = [breaks[0] - MIN_ENGAGEMENT_LDU_V4, ...breaks, breaks.at(-1) + MIN_ENGAGEMENT_LDU_V4]
-  const windows = []
+  const windows = breaks.filter(p => evaluateMaleOffset(pair.male,pair.female,p).valid).map(p => [p,p])
   for (let i=0; i<candidates.length-1; i += 1) {
     const lo = candidates[i]
     const hi = candidates[i+1]
@@ -181,7 +197,9 @@ export function nearestAxialOffsetV4(moving, target, requestedOffsetLdu = 0) {
 }
 
 export function evaluateAxialOffsetV4(moving, target, movingOffsetLdu = 0) {
+  moving = axialConnectorV4(moving); target = axialConnectorV4(target)
   const pair = maleFemale(moving, target)
+  if (!Number.isFinite(movingOffsetLdu)) return {valid:false,engagementLdu:0,reason:'non-finite-offset'}
   if (!pair) return { valid:false, engagementLdu:0, reason:'gender' }
   const maleOffset = pair.movingIsMale ? movingOffsetLdu : -movingOffsetLdu
   return evaluateMaleOffset(pair.male, pair.female, maleOffset)

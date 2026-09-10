@@ -8,11 +8,11 @@ function snapshot(v4) {
   try { return v4?.projectConnections?.() ?? [] } catch { return [] }
 }
 
-export function removeConnectionsForPart(connections, instanceId) {
+export function removeConnectionsForPart(connections, instanceId, {preserveV4=false}={}) {
   try {
     const v4 = globalThis.BrickLabConnectorV4
     const before = snapshot(v4)
-    const removed = v4?.removePartConnections?.(instanceId) ?? 0
+    const removed = preserveV4 ? 0 : (v4?.removePartConnections?.(instanceId) ?? 0)
     if (removed > 0) {
       const after = snapshot(v4)
       window.dispatchEvent(new CustomEvent('bricklab:connectorv4graphchange', {

@@ -9,7 +9,7 @@ function storageOrNull(storage) {
 
 function validRecord(record) {
   return Boolean(
-    record && record.schemaVersion === 4 && typeof record.id === 'string' && record.id &&
+    record && (!record.graphVersion || record.graphVersion === 'connection-graph-v4.0.1') && record.schemaVersion === 4 && typeof record.id === 'string' && record.id &&
     record.a?.instanceId && record.a?.endpointId && record.b?.instanceId && record.b?.endpointId &&
     record.a.instanceId !== record.b.instanceId
   )
@@ -47,7 +47,7 @@ export function restoreRecordsIntoGraphV4(graph, records, { replace = true } = {
   for (const record of list) {
     if (!validRecord(record)) { rejected += 1; continue }
     try {
-      const result = graph.add(record)
+      const result = graph.add({...record,physicsReady:false,constraint:{...record.constraint,physicsReady:false,status:'geometry-hint'}})
       if (result?.accepted) restored += 1
       else { rejected += 1; errors.push(`${record.id}:${result?.reason || 'rejected'}`) }
     } catch (error) {

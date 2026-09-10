@@ -29,7 +29,7 @@ function sectionFit(male, female) {
   const fShape = rigidShape(female)
   const radialFit = male.radiusLdu <= female.radiusLdu + RADIUS_TOLERANCE_LDU
   if (!radialFit) return { compatible: false, keyed: false, mode: 'radius' }
-  if (mShape === 'R' && fShape === 'R') return { compatible: true, keyed: false, mode: 'round-round' }
+  if (mShape === 'R' && ['R','S'].includes(fShape)) return { compatible: true, keyed: false, mode: 'round-round' }
   if (mShape === 'A' && fShape === 'A') return { compatible: true, keyed: true, symmetry: 4, mode: 'axle-axle' }
   if (mShape === 'S' && fShape === 'S') return { compatible: true, keyed: true, symmetry: 4, mode: 'square-square' }
   // Axle/square profiles can sit inside a sufficiently large round bore. This is
@@ -86,7 +86,7 @@ function clipCylinderMatch(a, b) {
   const roundSections = (cylinder.geometry.sections ?? []).filter(section => rigidShape(section) === 'R')
   const fit = roundSections
     .map(section => ({ section, clearance: clip.geometry.radiusLdu - section.radiusLdu }))
-    .filter(candidate => candidate.clearance >= -RADIUS_TOLERANCE_LDU)
+    .filter(candidate => Math.abs(candidate.clearance) <= RADIUS_TOLERANCE_LDU)
     .sort((x, y) => Math.abs(x.clearance) - Math.abs(y.clearance))[0]
   if (!fit) return { compatible: false, reason: 'clip-radius' }
   const slideSnap = Boolean(clip.snap?.slide || cylinder.snap?.slide)

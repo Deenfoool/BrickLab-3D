@@ -143,6 +143,30 @@ export function activationForMatchV4(source, target, match) {
     }
   }
 
+  if (match?.compatible) {
+    let family = null
+    let kind = match.kinematicHint
+    if (roles.has('technic-axle') && roles.has('technic-round-hole')) family='technic-axle-round-hole'
+    else if (roles.has('stud') && roles.has('anti-stud')) family='stud-anti-stud'
+    else if (match.family === 'cylinder' && Math.abs(match.fit?.clearanceLdu ?? Infinity) <= PROFILE_EPS_LDU) {
+      const m=match.male, f=match.female
+      if (m.geometry.sections.some(s=>s.elastic) && roles.has('technic-round-hole')) family='technic-pin-hole'
+      else if (m.geometry.sections.every(s=>s.shape==='R' && approx(s.radiusLdu,4)) && f.geometry.sections.every(s=>s.shape==='R')) family='bar-round-hole'
+      else if (m.geometry.sections.every(s=>s.shape==='A') && f.geometry.sections.every(s=>s.shape==='A')) family='keyed-shaft-interface'
+    }
+    else if (match.family === 'clip-cylinder') family='bar-clip'
+    else if (match.kinematicHint === 'spherical') {
+      const ra=source.geometry.radiusLdu ?? source.geometry.bounding?.radiusLdu
+      const rb=target.geometry.radiusLdu ?? target.geometry.bounding?.radiusLdu
+      if (approx(ra,rb)) family='ball-socket'
+    }
+    else if (match.family === 'fingers') family='hinge-fingers'
+    else if (match.family === 'generic' && source.group && source.group===target.group) family='generic-group'
+    if (family) return {active:true,family,editor:true,graph:true,physics:false,
+      physicsReason:'requires-physical-policy-and-collider-preflight',constraintKind:kind,
+      evidence:'ldcad-shadow:shape-profile',sourceRole,targetRole}
+  }
+
   return {
     active:false,
     family:null,
