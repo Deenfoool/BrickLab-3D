@@ -1,5 +1,5 @@
 const BUILD_ID = 'PARTS-6'
-const BUILD_TAG = 'parts-6-20260910-audio-v1'
+const BUILD_TAG = 'parts-6-20260910-connector-v4-physics-v4'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -136,6 +136,18 @@ window.__bricklabPhysicsDiagnostics = () => ({
     catalog: window.BrickLabConnectorDiagnostics ?? null,
     migratedStoredProjects: window.BrickLabProjectConnectors?.migratedStoredProjects ?? 0,
     lastNormalization: window.BrickLabProjectConnectors?.lastNormalization ?? null,
+  },
+  connectorV4: {
+    runtime: window.BrickLabConnectorV4?.stats?.() ?? null,
+    physicsGuard: window.BrickLabConnectorV4PhysicsGuard ? {
+      version: window.BrickLabConnectorV4PhysicsGuard.version,
+      policyVersion: window.BrickLabConnectorV4PhysicsGuard.policyVersion,
+      adapterVersion: window.BrickLabConnectorV4PhysicsGuard.adapterVersion,
+      lastPlan: window.BrickLabConnectorV4PhysicsGuard.lastPlan?.() ?? null,
+      lastFailure: window.BrickLabConnectorV4PhysicsGuard.lastFailure?.() ?? null,
+    } : null,
+    session: window.__bricklabPhysicsSession?.connectorV4Physics ?? null,
+    drivetrain: window.__bricklabPhysicsSession?.connectorV4Drivetrain ?? null,
   },
   visualQuality: window.BrickLabVisualQuality ?? null,
   lastError: window.__bricklabPhysicsLastError ?? null,
