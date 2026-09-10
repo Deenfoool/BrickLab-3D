@@ -16,7 +16,7 @@ Core loop: **build → simulate → test → inspect telemetry → modify → te
 - **80 prototype parts** covering bricks/plates, studded Technic bricks, full and thin liftarms, bent beams, axles, pins/connectors, spur gears, multiple wheel sizes, Lab Motor, F/N/R Gearbox, Open Differential, Bearing Block, Suspension Arm and sensors.
 - **LDraw Parts Library integration:** a remote on-demand parts browser searches LDraw Design IDs, loads real `.dat` geometry lazily, registers selected pieces in the normal BrickLab catalog and preserves them through local saves and `.bricklab` import/export.
 - **Connector System V4 for LDraw parts:** pinned LDCad Shadow metadata is resolved into shape-aware endpoints, axial occupancy, certified snapping and fail-closed Rapier constraints.
-- Connector V4 supports current production families such as stud/anti-stud, Technic axle/keyed or round holes, pin/hole, bar/hole, bar/clip, round rotational/sliding interfaces, ball/socket and ordinary finger hinges. Ambiguous generic groups and locking/click hinges remain physics-blocked until an explicit physical rule exists.
+- Connector V4 BUILD recognizes families including stud/anti-stud, Technic axle/keyed or round holes, pin/hole, bar/hole, bar/clip, round rotational/sliding interfaces, ball/socket and finger hinges. SIMULATE is intentionally stricter: only families with a proven DOF/retention model are accepted automatically; ball/socket, unconstrained hinge/round-revolute mechanisms, captured clips, generic groups and locking/click hinges remain physics-blocked unless an explicit bounded override supplies evidence.
 - Connector V3 remains as a compatibility layer for native/procedural parts and established mechanics code; gear mesh remains a separate drivetrain contact solver.
 - New Parts asset browser: default grid view, category chips with counts, Favorites, Recent parts, full-text/tag/ID search, `Ctrl/Cmd + K` search focus and persistent list/grid preference.
 - Catalog-wide realistic molded-part visual pass: refined ABS/metal/rubber materials, Technic hole liners, axle detail bands, gear-face detail, power-unit fasteners, wheel sidewall/tread detail and studio PBR lighting.
@@ -60,7 +60,10 @@ BUILD connection graph + axial occupancy
         ↓
 SIMULATE live recertification
         ↓
-Rapier fixed / revolute / prismatic / cylindrical / spherical constraints
+physics safety gate + explicit overrides where required
+        ↓
+Rapier certified fixed / prismatic / cylindrical constraints
++ bounded revolute constraints only when evidence is supplied
 ```
 
 Important safety properties:
@@ -69,7 +72,8 @@ Important safety properties:
 - V4-owned LDraw structural pairs fail closed instead of silently falling back to a coarse V3 connection;
 - multiple distinct stud contacts between the same two parts become one rigid physics constraint instead of competing Rapier joints;
 - open axle/pin/bar profiles can dynamically disengage after leaving their valid axial engagement window;
-- locking/click/detent hinges and generic grouped connectors do not receive guessed physics;
+- ball/socket, unbounded hinge/round-revolute mechanisms, captured clips, locking/click/detent hinges and generic grouped connectors do not receive guessed physics;
+- any mechanism requiring an explicit physical override must provide stable targeting, finite limits where applicable and a non-empty evidence source;
 - V4 debug geometry is removed before collider measurement so diagnostics cannot change physics bounds.
 
 `F9` toggles the Connector V4 endpoint/axis debug overlay.
@@ -196,7 +200,9 @@ connectors-v4/runtime-v4.js
   └─ production LDraw structural snap ownership
   ↓
 connectors-v4/physics-guard-v4.js
-  └─ live V4 physics plan + fail-closed Rapier adapter
+  ├─ live V4 physics plan
+  ├─ fail-closed safety gate / explicit override registry
+  └─ Rapier adapter only after full certification
   ↓
 app.js
   ↓
@@ -244,7 +250,7 @@ Connector V4 acceptance:
 npm run test:connectors-v4
 ```
 
-The suite includes parser/resolver/upstream fixtures, placement and graph behavior, production bridge checks, Rapier axle/hole stability, dynamic disengagement, multi-stud aggregation, family policy checks and production import-map consistency.
+The suite includes parser/resolver/upstream fixtures, placement and graph behavior, production bridge checks, Rapier axle/hole stability, dynamic disengagement, multi-stud aggregation, physics safety/override checks, bounded revolute-limit application, immutable evidence records and production import-map consistency.
 
 ## Documentation
 
@@ -264,7 +270,7 @@ The suite includes parser/resolver/upstream fixtures, placement and graph behavi
 
 ## Current modelling limits
 
-Physics v2 is designed for interactive browser simulation, not engineering FEA. Tyre contact is ray-based, drivetrain coupling is semantic rather than tooth-contact physics, flexible deformation is not simulated, and current part masses/resistance values are prototype or normalized simulation parameters unless explicitly documented otherwise. LDraw supplies geometry while advanced drivetrain behavior still requires BrickLab mechanical semantics.
+Physics v2 is designed for interactive browser simulation, not engineering FEA. Tyre contact is ray-based, drivetrain coupling is semantic rather than tooth-contact physics, flexible deformation is not simulated, and current part masses/resistance values are prototype or normalized simulation parameters unless explicitly documented otherwise. LDraw supplies geometry while advanced drivetrain behavior still requires BrickLab mechanical semantics. Connector V4 deliberately keeps mechanisms with unproven angular envelopes or retention behavior BUILD-only instead of inventing plausible-looking SIMULATE physics.
 
 ## Trademark / LDraw note
 
