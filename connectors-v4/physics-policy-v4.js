@@ -1,7 +1,7 @@
 import { approveConstraintV4, proposeConstraintV4 } from './constraints-v4.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.2.5'
+export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.2.6'
 
 const MIN_DISTINCT_STUD_DISTANCE = 0.45
 const ROTATION_TRANSMITTING_FAMILIES = new Set([
@@ -44,14 +44,15 @@ function ruleFor(entry, studBundleSize = 1) {
   const group = groupName(entry.connectorA, entry.connectorB)
 
   if (family === 'stud-anti-stud') {
-    // One stud constrains translation/tilt but still permits twist. Keep collider
-    // contacts enabled so the actual part shapes provide the physical stop instead
-    // of letting a revolute joint rotate two bricks through each other. Two or more
-    // spatially distinct stud contacts form one rigid attachment; a single fixed
-    // constraint represents the bundle and its member contacts may be suppressed.
+    // Two or more spatially distinct contacts fully constrain the rigid relative pose
+    // and can be represented by one fixed joint. A single stud still permits twist,
+    // but LDraw parts currently use coarse collider envelopes: disabling contacts lets
+    // parts rotate through each other, while enabling them can start from overlapping
+    // stud/underside Box3 bounds and inject an impulse. Until a connector-aware collider
+    // envelope exists, single-stud SIMULATE must fail closed instead of guessing.
     return studBundleSize >= 2
       ? { supported:true, kind:'fixed', retention:'captured', release:null, contacts:'disabled', bundle:'multi-stud-rigid' }
-      : { supported:true, kind:'revolute', retention:'captured', release:null, contacts:'enabled', bundle:'single-stud-twist' }
+      : { supported:false, reason:'single-stud-collider-envelope-not-proven' }
   }
 
   if (family === 'technic-axle-keyed-hole' || family === 'keyed-shaft-interface') {
@@ -185,6 +186,9 @@ export function buildPhysicsPlanV4({ objects = [], connections = [], getConnecto
 
   for (const entry of entries) {
     if (consumed.has(entry.connection.id)) continue
+    // Stud entries are handled exclusively by the bundle pass above. If a single
+    // stud is unsupported, do not accidentally revisit it here and create a joint.
+    if (entry.family === 'stud-anti-stud') continue
     const rule = ruleFor(entry, 1)
     if (!rule.supported) {
       blockers.push({connectionId:entry.connection.id,family:entry.family,reason:rule.reason})
