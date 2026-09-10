@@ -1,9 +1,10 @@
 import { approveConstraintV4, proposeConstraintV4 } from './constraints-v4.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.2.6'
+export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.2.7'
 
 const MIN_DISTINCT_STUD_DISTANCE = 0.45
+const PARALLEL_STUD_AXIS_DOT = 0.9995
 const ROTATION_TRANSMITTING_FAMILIES = new Set([
   'technic-axle-keyed-hole',
   'keyed-shaft-interface',
@@ -44,8 +45,8 @@ function ruleFor(entry, studBundleSize = 1) {
   const group = groupName(entry.connectorA, entry.connectorB)
 
   if (family === 'stud-anti-stud') {
-    // Two or more spatially distinct contacts fully constrain the rigid relative pose
-    // and can be represented by one fixed joint. A single stud still permits twist,
+    // Two or more independent stud contacts can fully constrain the rigid relative
+    // pose and are represented by one fixed joint. A single stud still permits twist,
     // but LDraw parts currently use coarse collider envelopes: disabling contacts lets
     // parts rotate through each other, while enabling them can start from overlapping
     // stud/underside Box3 bounds and inject an impulse. Until a connector-aware collider
@@ -126,19 +127,40 @@ function connectorOnInstance(entry, instanceId) {
   return null
 }
 
-function distinctStudBundle(entries) {
+function localConnectorAxis(connector) {
+  const o=connector?.frame?.orientationBrickLab
+  if (!Array.isArray(o) || o.length!==9 || !o.every(Number.isFinite)) return null
+  // Canonical V4 connector axis is local -Y; orientationBrickLab is row-major.
+  const axis=[-o[1],-o[4],-o[7]]
+  const length=Math.hypot(...axis)
+  if (!(length>1e-9)) return null
+  return axis.map(value=>value/length)
+}
+
+function multiStudBundleIsRigid(entries) {
   if (entries.length < 2) return false
-  // Always compare endpoints on the SAME physical part, even if imported records
-  // have their a/b direction reversed. This makes bundle classification invariant
-  // under connection serialization order.
+  // Compare contacts on one consistent physical part even if serialization reverses
+  // a/b. Two contact axes that are not parallel independently constrain rotation.
+  // For parallel axes, only their separation perpendicular to that axis removes the
+  // remaining twist. Two contacts merely displaced along one common axis do NOT.
   const referenceInstance=[entries[0].connection.a.instanceId,entries[0].connection.b.instanceId].sort()[0]
   for (let i = 0; i < entries.length; i += 1) {
     for (let j = i + 1; j < entries.length; j += 1) {
-      const pa=connectorOnInstance(entries[i],referenceInstance)?.frame?.positionStud
-      const pb=connectorOnInstance(entries[j],referenceInstance)?.frame?.positionStud
-      if (!Array.isArray(pa) || !Array.isArray(pb) || pa.length !== 3 || pb.length !== 3) continue
-      const d = Math.hypot(pa[0]-pb[0], pa[1]-pb[1], pa[2]-pb[2])
-      if (d >= MIN_DISTINCT_STUD_DISTANCE) return true
+      const ca=connectorOnInstance(entries[i],referenceInstance)
+      const cb=connectorOnInstance(entries[j],referenceInstance)
+      const pa=ca?.frame?.positionStud
+      const pb=cb?.frame?.positionStud
+      const aa=localConnectorAxis(ca)
+      const ab=localConnectorAxis(cb)
+      if (!Array.isArray(pa) || !Array.isArray(pb) || pa.length!==3 || pb.length!==3 || !aa || !ab) continue
+
+      const axisDot=Math.abs(aa[0]*ab[0]+aa[1]*ab[1]+aa[2]*ab[2])
+      if (axisDot < PARALLEL_STUD_AXIS_DOT) return true
+
+      const dx=pb[0]-pa[0],dy=pb[1]-pa[1],dz=pb[2]-pa[2]
+      const along=dx*aa[0]+dy*aa[1]+dz*aa[2]
+      const lateralSq=Math.max(0,dx*dx+dy*dy+dz*dz-along*along)
+      if (Math.sqrt(lateralSq) >= MIN_DISTINCT_STUD_DISTANCE) return true
     }
   }
   return false
@@ -165,7 +187,7 @@ export function buildPhysicsPlanV4({ objects = [], connections = [], getConnecto
   const consumed = new Set()
   const joints = []
   for (const [key, bundle] of studGroups) {
-    const rigid = distinctStudBundle(bundle)
+    const rigid = multiStudBundleIsRigid(bundle)
     const representative = bundle[0]
     const rule = ruleFor(representative, rigid ? bundle.length : 1)
     if (!rule.supported) {
@@ -186,8 +208,8 @@ export function buildPhysicsPlanV4({ objects = [], connections = [], getConnecto
 
   for (const entry of entries) {
     if (consumed.has(entry.connection.id)) continue
-    // Stud entries are handled exclusively by the bundle pass above. If a single
-    // stud is unsupported, do not accidentally revisit it here and create a joint.
+    // Stud entries are handled exclusively by the bundle pass above. If a stud bundle
+    // is not proven rigid, do not revisit an entry here and accidentally create a joint.
     if (entry.family === 'stud-anti-stud') continue
     const rule = ruleFor(entry, 1)
     if (!rule.supported) {
