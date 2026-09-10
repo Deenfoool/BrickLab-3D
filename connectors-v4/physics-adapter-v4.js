@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_ADAPTER_VERSION_V4 = 'connector-rapier-adapter-v4.2.0'
+export const PHYSICS_ADAPTER_VERSION_V4 = 'connector-rapier-adapter-v4.2.1'
 
 // Rapier GenericJoint axesMask means LOCKED axes. Joint-frame X is the connector axis.
 const MASK_PRISMATIC_X = 2 | 4 | 8 | 16 | 32
@@ -27,9 +27,9 @@ function bodyLocalDirection(member,worldDirection) {
   return worldDirection.clone().applyQuaternion(member.component.bodyWorldRotation.clone().invert()).normalize()
 }
 
-function jointWorldQuaternion(frame) {
-  const x=frame.axis.clone().normalize()
-  let y=frame.reference.clone().projectOnPlane(x)
+function jointWorldQuaternion(axis,reference) {
+  const x=axis.clone().normalize()
+  let y=reference.clone().projectOnPlane(x)
   if (y.lengthSq()<1e-10) y=Math.abs(x.y)<0.9?new THREE.Vector3(0,1,0):new THREE.Vector3(0,0,1)
   y.projectOnPlane(x).normalize()
   const z=x.clone().cross(y).normalize()
@@ -38,13 +38,34 @@ function jointWorldQuaternion(frame) {
   return new THREE.Quaternion().setFromRotationMatrix(m).normalize()
 }
 
-function bodyLocalFrameQuaternion(member,worldFrame) {
-  return member.component.bodyWorldRotation.clone().invert().multiply(jointWorldQuaternion(worldFrame)).normalize()
+function bodyLocalFrameQuaternion(member,worldQuaternion) {
+  return member.component.bodyWorldRotation.clone().invert().multiply(worldQuaternion).normalize()
 }
 
 function ensureFiniteVector(v,label) {
   if (![v.x,v.y,v.z].every(Number.isFinite)) throw new Error(`${label} is non-finite`)
   return v
+}
+
+function commonAxis(frameA,frameB) {
+  const axis=frameA.axis.clone().add(frameB.axis)
+  return axis.lengthSq()>1e-10?axis.normalize():frameA.axis.clone().normalize()
+}
+
+function sharedPoint(frameA,frameB) {
+  return frameA.position.clone().add(frameB.position).multiplyScalar(0.5)
+}
+
+function jointAnchors(rule,frameA,frameB,axisWorld) {
+  const center=sharedPoint(frameA,frameB)
+  if (rule.kind!=='prismatic' && rule.kind!=='cylindrical') return {worldA:center,worldB:center.clone()}
+
+  // Preserve the existing legal axial insertion offset, but remove any tiny lateral
+  // connector residual from the virtual joint anchors. The constraint is therefore
+  // exactly satisfied before Rapier's first step and cannot create a correction kick.
+  const axial=frameA.position.clone().sub(frameB.position).dot(axisWorld)
+  const half=axisWorld.clone().multiplyScalar(axial/2)
+  return {worldA:center.clone().add(half),worldB:center.clone().sub(half)}
 }
 
 function makeJoint(session,item,runtime) {
@@ -56,12 +77,19 @@ function makeJoint(session,item,runtime) {
 
   const frameA=runtime.worldFrame(entry.objectA,entry.connectorA)
   const frameB=runtime.worldFrame(entry.objectB,entry.connectorB)
-  const anchorA=ensureFiniteVector(bodyLocalPoint(memberA,frameA.position),'anchorA')
-  const anchorB=ensureFiniteVector(bodyLocalPoint(memberB,frameB.position),'anchorB')
-  const axisA=ensureFiniteVector(bodyLocalDirection(memberA,frameA.axis),'axisA')
-  const axisB=ensureFiniteVector(bodyLocalDirection(memberB,frameB.axis),'axisB')
-  const localFrameA=bodyLocalFrameQuaternion(memberA,frameA)
-  const localFrameB=bodyLocalFrameQuaternion(memberB,frameB)
+  const axisWorld=ensureFiniteVector(commonAxis(frameA,frameB),'axisWorld')
+  const anchors=jointAnchors(rule,frameA,frameB,axisWorld)
+  const anchorA=ensureFiniteVector(bodyLocalPoint(memberA,anchors.worldA),'anchorA')
+  const anchorB=ensureFiniteVector(bodyLocalPoint(memberB,anchors.worldB),'anchorB')
+  const axisA=ensureFiniteVector(bodyLocalDirection(memberA,axisWorld),'axisA')
+  const axisB=ensureFiniteVector(bodyLocalDirection(memberB,axisWorld),'axisB')
+
+  // Both local frames are derived from one common world frame. This freezes only the
+  // already-certified relative orientation; it does not ask Rapier to repair a small
+  // connector-reference mismatch at t=0.
+  const worldJointRotation=jointWorldQuaternion(axisWorld,frameA.reference)
+  const localFrameA=bodyLocalFrameQuaternion(memberA,worldJointRotation)
+  const localFrameB=bodyLocalFrameQuaternion(memberB,worldJointRotation)
 
   let params=null
   if (rule.kind==='fixed') {
@@ -83,8 +111,7 @@ function makeJoint(session,item,runtime) {
 
   // GenericJoint's public constructor accepts one local axis for both bodies. Rapier
   // 0.20 exposes full independent local frames after creation; set them before the
-  // first world.step so the same world connector frame is represented exactly on
-  // both bodies even when their object-local axes differ.
+  // first world.step so the common world constraint frame is exact on both bodies.
   if (rule.kind==='prismatic' || rule.kind==='cylindrical') {
     if (typeof joint.setLocalFrame1!=='function' || typeof joint.setLocalFrame2!=='function') {
       session.world.removeImpulseJoint(joint,true)
