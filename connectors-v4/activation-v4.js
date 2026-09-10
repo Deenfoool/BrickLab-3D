@@ -1,6 +1,6 @@
 import { CONNECTOR_SCHEMA_VERSION_V4, CONNECTOR_SYSTEM_VERSION_V4, validateConnectorV4 } from './schema-v4.js'
 
-export const ACTIVATION_POLICY_VERSION_V4 = 'connector-activation-v4.1.1'
+export const ACTIVATION_POLICY_VERSION_V4 = 'connector-activation-v4.2.0'
 
 const CRITICAL_WARNING_CODES = new Set([
   'invalid-snap-meta',
@@ -116,6 +116,23 @@ export function certifyConnectivityV4(definition) {
   }
 }
 
+function activeResult(family, kind, sourceRole, targetRole, evidence = 'ldcad-shadow:shape-profile') {
+  return {
+    active:true,
+    family,
+    editor:true,
+    graph:true,
+    // Persisted graph records never self-certify physics. SIMULATE independently
+    // rebuilds a live physics plan through physics-policy-v4.js on every start.
+    physics:false,
+    physicsReason:'runtime-recertification-required',
+    constraintKind:kind,
+    evidence,
+    sourceRole,
+    targetRole,
+  }
+}
+
 export function activationForMatchV4(source, target, match) {
   const sourceRole = classifyConnectorV4(source)
   const targetRole = classifyConnectorV4(target)
@@ -125,34 +142,20 @@ export function activationForMatchV4(source, target, match) {
     roles.has('technic-axle') && roles.has('technic-axle-hole') &&
     match?.compatible === true && match?.family === 'cylinder' && match?.keyed === true &&
     match?.rotationalSymmetry === 4 && match?.kinematicHint === 'prismatic'
-  ) {
-    return {
-      active:true,
-      family:'technic-axle-keyed-hole',
-      editor:true,
-      graph:true,
-      // Physics intentionally remains fail-closed until V4 supports dynamic
-      // disengagement/breakaway. A permanently limited prismatic joint would
-      // falsely trap an axle that should be able to leave an open axle hole.
-      physics:false,
-      physicsReason:'dynamic-disengagement-not-certified',
-      constraintKind:'prismatic',
-      evidence:'ldcad-shadow:exact-A6-keyed-profile',
-      sourceRole,
-      targetRole,
-    }
-  }
+  ) return activeResult('technic-axle-keyed-hole','prismatic',sourceRole,targetRole,'ldcad-shadow:exact-A6-keyed-profile')
 
   if (match?.compatible) {
     let family = null
-    let kind = match.kinematicHint
+    const kind = match.kinematicHint
     if (roles.has('technic-axle') && roles.has('technic-round-hole')) family='technic-axle-round-hole'
     else if (roles.has('stud') && roles.has('anti-stud')) family='stud-anti-stud'
     else if (match.family === 'cylinder' && Math.abs(match.fit?.clearanceLdu ?? Infinity) <= PROFILE_EPS_LDU) {
       const m=match.male, f=match.female
       if (m.geometry.sections.some(s=>s.elastic) && roles.has('technic-round-hole')) family='technic-pin-hole'
-      else if (m.geometry.sections.every(s=>s.shape==='R' && approx(s.radiusLdu,4)) && f.geometry.sections.every(s=>s.shape==='R')) family='bar-round-hole'
-      else if (m.geometry.sections.every(s=>s.shape==='A') && f.geometry.sections.every(s=>s.shape==='A')) family='keyed-shaft-interface'
+      else if (m.geometry.sections.every(s=>rigidShape(s)==='R' && approx(s.radiusLdu,4)) && f.geometry.sections.every(s=>rigidShape(s)==='R')) family='bar-round-hole'
+      else if (m.geometry.sections.every(s=>rigidShape(s)==='A') && f.geometry.sections.every(s=>rigidShape(s)==='A')) family='keyed-shaft-interface'
+      else if (!match.keyed && kind==='cylindrical') family='round-cylindrical-interface'
+      else if (!match.keyed && kind==='revolute') family='round-revolute-interface'
     }
     else if (match.family === 'clip-cylinder') family='bar-clip'
     else if (match.kinematicHint === 'spherical') {
@@ -162,9 +165,7 @@ export function activationForMatchV4(source, target, match) {
     }
     else if (match.family === 'fingers') family='hinge-fingers'
     else if (match.family === 'generic' && source.group && source.group===target.group) family='generic-group'
-    if (family) return {active:true,family,editor:true,graph:true,physics:false,
-      physicsReason:'requires-physical-policy-and-collider-preflight',constraintKind:kind,
-      evidence:'ldcad-shadow:shape-profile',sourceRole,targetRole}
+    if (family) return activeResult(family,kind,sourceRole,targetRole)
   }
 
   return {
