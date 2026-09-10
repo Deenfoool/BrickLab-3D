@@ -62,18 +62,19 @@ if (menuResult.action === 'new' || menuResult.action === 'open') {
 // Register dynamic ldraw-* definitions before app.js restores a saved project.
 await import('./ldraw/bootstrap-v1.js?v=ldraw-catalog-20260910-v3')
 
-// Connector V4.2 owns structural snapping for LDraw parts. Runtime connectivity is
-// fail-closed; each simulation re-certifies live geometry before Rapier receives a joint.
+// Connector V4.2 owns structural snapping for LDraw parts. These unversioned
+// specifiers are intentionally canonicalized by index.html's import map so every V4
+// dependency is loaded from one cache generation.
 globalThis.__bricklabConnectorV4StartMode = menuResult.action
-await import('./connectors-v4/runtime-v4.js?v=connector-v4-20260910-v6')
+await import('./connectors-v4/runtime-v4.js')
 // The guard creates V4 Rapier constraints only from a fresh physics policy plan. Any
 // unsupported/ambiguous connection blocks SIMULATE rather than downgrading silently.
-await import('./connectors-v4/physics-guard-v4.js?v=connector-v4-20260910-v6')
+await import('./connectors-v4/physics-guard-v4.js')
 
 await import('./app.js')
 // F9 toggles the V4 endpoint/axis overlay. It is removed synchronously before physics
 // collider measurement so diagnostics can never affect collision bounds.
-await import('./connectors-v4/debug-overlay-v4.js?v=connector-v4-20260910-v6')
+await import('./connectors-v4/debug-overlay-v4.js')
 
 for (const [key, value] of hiddenProjectEntries) {
   try { localStorage.setItem(key, value) } catch { /* storage may be unavailable */ }
