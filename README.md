@@ -14,6 +14,8 @@ Core loop: **build → simulate → test → inspect telemetry → modify → te
 
 - Three.js scene with improved lighting, shadows and procedural part geometry.
 - **80 prototype parts** covering bricks/plates, studded Technic bricks, full and thin liftarms, bent beams, axles, pins/connectors, spur gears, multiple wheel sizes, Lab Motor, F/N/R Gearbox, Open Differential, Bearing Block, Suspension Arm and sensors.
+- **LDraw Parts Library integration:** a remote on-demand parts browser can search LDraw Design IDs, load real `.dat` geometry lazily, register selected pieces in the normal BrickLab catalog and preserve them through local saves and `.bricklab` import/export.
+- LDraw primitive analysis currently recognises common stud/tube, Technic pin-hole and axle-hole connection features and converts them to BrickLab connectors.
 - New Parts asset browser: default grid view, category chips with counts, Favorites, Recent parts, full-text/tag/ID search, `Ctrl/Cmd + K` search focus and persistent list/grid preference.
 - Catalog-wide realistic molded-part visual pass: refined ABS/metal/rubber materials, Technic hole liners, axle detail bands, gear-face detail, power-unit fasteners, wheel sidewall/tread detail and studio PBR lighting.
 - Decorative visual meshes are excluded from Physics v2 collider bounds, so visual detail does not change simulation geometry.
@@ -23,8 +25,23 @@ Core loop: **build → simulate → test → inspect telemetry → modify → te
 - Floating Parts / Properties windows with drag, resize, List/Grid, collapsible inspector sections, Focus Scene and mobile drawers.
 - RU / EN interface switch.
 - Higher-resolution real 3D part previews in the catalog with contact shadow presentation.
+- In-project `Esc` menu centralises Project, Settings, Physics, Audio and remappable Controls.
 
 Scale is intentionally unavailable: arbitrary scaling would break mechanical dimensions and connector pitch.
+
+## LDraw Parts Library
+
+BrickLab does not vendor the full LDraw library into this repository. The runtime uses a version-controlled mirror and loads only the files required by parts the user actually selects.
+
+The LDraw browser is available from the Parts panel. LDraw-backed pieces use IDs such as `ldraw-3001`, survive local saves and `.bricklab` import/export, and progressively gain BrickLab capabilities:
+
+```text
+visual → snap → mechanical
+```
+
+`visual` means real LDraw geometry can be built, coloured and saved. `snap` means standard LDraw primitives were recognised as BrickLab connectors. `mechanical` additionally requires explicit BrickLab drivetrain metadata such as gear teeth, shaft behaviour, wheel radius, steering or motor properties.
+
+See [`docs/LDRAW.md`](docs/LDRAW.md) for the runtime architecture and current connector-inference rules.
 
 ## Physics v2
 
@@ -60,7 +77,7 @@ Physics v2 includes:
 - suspension compression/rebound damping, bump stop and simple anti-roll coupling;
 - finite-state validation after every Rapier microstep without runtime speed clamps.
 
-The **Physics** menu exposes quality, self collision, debug, surface override and Mass/COM overlay. `F8` toggles Physics Debug.
+Physics settings are available from **Esc → Settings → Physics**. `F8` toggles Physics Debug by default and can be remapped from **Esc → Controls**.
 
 See [`docs/PHYSICS_V2.md`](docs/PHYSICS_V2.md) and [`docs/PHYSICS_STABILITY.md`](docs/PHYSICS_STABILITY.md).
 
@@ -138,7 +155,7 @@ CSV exports Physics v2 SI traces: fixed physics time, TEST phase/status, quality
 
 ## Physics Debug
 
-Press `F8` to show:
+The default `F8` binding shows:
 
 - approximate collider bounds;
 - COM marker;
@@ -147,6 +164,8 @@ Press `F8` to show:
 - tyre force arrows;
 - chassis velocity vector;
 - suspension axes.
+
+All non-system editor bindings can be changed from **Esc → Controls**. `Esc` itself remains reserved for the project menu.
 
 ## Production runtime
 
@@ -170,19 +189,33 @@ runtime-extensions.js
   ├─ SI telemetry / Dyno
   └─ physics debug + TEST visuals
   ↓
+ldraw/bootstrap-v1.js
+  ├─ restores dynamic ldraw-* definitions
+  └─ prepares .bricklab imports containing LDraw parts
+  ↓
 app.js + workspace UI + TEST controller + i18n
+  ↓
+ldraw/catalog-v1.js
+  ├─ remote LDraw index
+  ├─ lazy DAT metadata / geometry
+  └─ primitive → BrickLab connector inference
 ```
 
 Expected GitHub Pages URL:
 
 `https://deenfoool.github.io/BrickLab-3D/`
 
-## Keyboard controls
+## Controls
+
+Press `Esc` inside a project and open **Controls** to see or change the active bindings. BrickLab detects conflicts, can replace or clear individual bindings, and can restore the defaults.
+
+Default bindings include:
 
 | Action | Shortcut |
 | --- | --- |
+| Open / close project menu | `Esc` (fixed) |
 | Move / Rotate | `M` / `R` |
-| Delete | `X` / `Delete` / `Backspace` |
+| Delete | `Delete` |
 | Duplicate | `Ctrl/Cmd + D` |
 | Undo / Redo | `Ctrl/Cmd + Z` / `Ctrl/Cmd + Shift + Z` |
 | Focus selection / frame all | `F` / `Home` |
@@ -199,10 +232,10 @@ Expected GitHub Pages URL:
 | Catalog search | `Ctrl/Cmd + K` |
 | Physics Debug | `F8` |
 | Save / export / import | `Ctrl/Cmd + S` / `Ctrl/Cmd + Shift + S` / `Ctrl/Cmd + O` |
-| Shortcut palette | `?` |
 
 ## Documentation
 
+- [`docs/LDRAW.md`](docs/LDRAW.md)
 - [`docs/PHYSICS_V2.md`](docs/PHYSICS_V2.md)
 - [`docs/PHYSICS_STABILITY.md`](docs/PHYSICS_STABILITY.md)
 - [`docs/CONNECTORS.md`](docs/CONNECTORS.md)
@@ -217,8 +250,11 @@ Expected GitHub Pages URL:
 
 ## Current modelling limits
 
-Physics v2 is designed for interactive browser simulation, not engineering FEA. Tyre contact is ray-based, drivetrain coupling is semantic rather than tooth-contact physics, flexible deformation is not simulated, and current part masses are prototype estimates. The architecture keeps these values replaceable as BrickLab gains calibrated data.
+Physics v2 is designed for interactive browser simulation, not engineering FEA. Tyre contact is ray-based, drivetrain coupling is semantic rather than tooth-contact physics, flexible deformation is not simulated, and current part masses are prototype estimates. LDraw supplies visual geometry and some connection primitives, but advanced BrickLab mechanics still require explicit semantic metadata. The architecture keeps these values replaceable as BrickLab gains calibrated data.
 
 ## Trademark / LDraw note
 
-BrickLab 3D is independent and is not affiliated with or endorsed by the LEGO Group. LDraw assets must be redistributed only under their applicable licenses and attribution requirements.
+BrickLab 3D is independent and is not affiliated with or endorsed by the LEGO Group.
+
+Parts geometry provided by the LDraw Parts Library.
+LDraw is an independent community project and is not affiliated with the LEGO Group.
