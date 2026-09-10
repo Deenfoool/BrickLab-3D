@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { PHYSICS_UNITS } from '../physical-parts.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_ADAPTER_VERSION_V4 = 'connector-rapier-adapter-v4.2.5'
+export const PHYSICS_ADAPTER_VERSION_V4 = 'connector-rapier-adapter-v4.3.0'
 
 // Rapier GenericJoint axesMask means LOCKED axes. Joint-frame X is the connector axis.
 const MASK_PRISMATIC_X = 2 | 4 | 8 | 16 | 32
@@ -15,6 +15,7 @@ const STUD_METERS = PHYSICS_UNITS.studMeters
 function vec(v) { return {x:v.x,y:v.y,z:v.z} }
 function quat(q) { return {x:q.x,y:q.y,z:q.z,w:q.w} }
 function clamp(value,min,max) { return Math.max(min,Math.min(max,value)) }
+function itemEntries(item) { return Array.isArray(item?.entries) && item.entries.length ? item.entries : [item?.entry].filter(Boolean) }
 
 function bodyQuaternion(body) {
   const q=body.rotation()
@@ -99,7 +100,7 @@ function makeJoint(session,item,runtime) {
   const memberA=session.members.get(entry.objectA.userData.instanceId)
   const memberB=session.members.get(entry.objectB.userData.instanceId)
   if (!memberA || !memberB) throw new Error(`V4 physics member missing for ${item.id}`)
-  if (memberA.body===memberB.body) return {internal:true,item,memberA,memberB,joint:null}
+  if (memberA.body===memberB.body) return {internal:true,item,memberA,memberB,joint:null,activeEngagements:itemEntries(item).length}
 
   const frameA=runtime.worldFrame(entry.objectA,entry.connectorA)
   const frameB=runtime.worldFrame(entry.objectB,entry.connectorB)
@@ -152,6 +153,7 @@ function makeJoint(session,item,runtime) {
     internal:false,item,memberA,memberB,joint,
     localAxisA:axisA.clone(),
     invalidFrames:0,
+    activeEngagements:itemEntries(item).length,
     released:false,
     createdAt:session.simulationTime??0,
   }
@@ -188,6 +190,7 @@ function rebuildSemanticDrivetrainAfterRelease(session,monitor) {
 function releaseMonitor(session,monitor,reason) {
   if (monitor.released) return false
   monitor.released=true
+  monitor.activeEngagements=0
   try { if (monitor.joint?.isValid?.()!==false) session.world.removeImpulseJoint(monitor.joint,true) } catch (error) {
     console.warn('[BrickLab Connector V4] Could not remove released Rapier joint.',error)
   }
@@ -210,12 +213,19 @@ function releaseMonitor(session,monitor,reason) {
 
 function validateMonitor(session,monitor,runtime) {
   if (monitor.released || monitor.internal || monitor.item.rule.release!=='axial-profile') return
-  const {entry}=monitor.item
-  const validity=validateConnectedGeometryV4(entry.objectA,entry.connectorA,entry.objectB,entry.connectorB)
-  if (validity.valid) { monitor.invalidFrames=0; return }
+  const results=itemEntries(monitor.item).map(entry=>({
+    entry,
+    validity:validateConnectedGeometryV4(entry.objectA,entry.connectorA,entry.objectB,entry.connectorB),
+  }))
+  const valid=results.filter(result=>result.validity.valid)
+  monitor.activeEngagements=valid.length
+  if (valid.length) { monitor.invalidFrames=0; return }
+
   monitor.invalidFrames+=1
   if (monitor.invalidFrames<RELEASE_CONFIRM_FRAMES) return
-  releaseMonitor(session,monitor,validity.reason || 'profile-disengaged')
+  const reasons=[...new Set(results.map(result=>result.validity.reason || 'profile-disengaged'))]
+  const reason=results.length>1 ? `profile-bundle-disengaged:${reasons.join('|')}` : reasons[0]
+  releaseMonitor(session,monitor,reason)
 }
 
 function installHooks(session,monitors,runtime) {
@@ -239,10 +249,12 @@ function installHooks(session,monitors,runtime) {
 }
 
 function preflightEntry(item) {
-  const {validity}=item.entry
-  if (!validity?.valid) return `invalid-live-geometry:${validity?.reason||'unknown'}`
-  if (Number.isFinite(validity.lateralErrorStud) && validity.lateralErrorStud>MAX_INITIAL_LINEAR_ERROR) return 'initial-linear-error'
-  if (Number.isFinite(validity.twistErrorRad) && validity.twistErrorRad>MAX_INITIAL_ANGULAR_ERROR) return 'initial-angular-error'
+  for (const entry of itemEntries(item)) {
+    const {validity}=entry
+    if (!validity?.valid) return `invalid-live-geometry:${validity?.reason||'unknown'}`
+    if (Number.isFinite(validity.lateralErrorStud) && validity.lateralErrorStud>MAX_INITIAL_LINEAR_ERROR) return 'initial-linear-error'
+    if (Number.isFinite(validity.twistErrorRad) && validity.twistErrorRad>MAX_INITIAL_ANGULAR_ERROR) return 'initial-angular-error'
+  }
   return null
 }
 
