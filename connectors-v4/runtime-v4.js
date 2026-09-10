@@ -1,10 +1,11 @@
 import { PARTS, findPart } from '../parts.js'
-import { CONNECTOR_SCHEMA_VERSION_V4, CONNECTOR_SYSTEM_VERSION_V4, SHADOW_SOURCE_V4 } from './schema-v4.js?v=connector-v4-20260910-v1'
-import { matchConnectorV4 } from './matcher-v4.js?v=connector-v4-20260910-v1'
-import { connectorToBrickLabV4, createShadowResolverV4 } from './shadow-resolver-v4.js?v=connector-v4-20260910-v1'
+import { CONNECTOR_SCHEMA_VERSION_V4, CONNECTOR_SYSTEM_VERSION_V4, SHADOW_SOURCE_V4 } from './schema-v4.js?v=connector-v4-20260910-v3'
+import { matchConnectorV4 } from './matcher-v4.js?v=connector-v4-20260910-v3'
+import { connectorToBrickLabV4, createShadowResolverV4 } from './shadow-resolver-v4.js?v=connector-v4-20260910-v3'
 import { finalizeConnectorIdentitiesV4 } from './identity-v4.js?v=connector-v4-20260910-v2'
-import { applyPlacementV4, solvePlacementV4 } from './placement-solver-v4.js?v=connector-v4-20260910-v2'
-import { auditConnectorDefinitionV4 } from './audit-v4.js?v=connector-v4-20260910-v2'
+import { applyPlacementV4, solvePlacementV4 } from './placement-solver-v4.js?v=connector-v4-20260910-v3'
+import { findBestPlacementCandidateV4, findPlacementCandidatesV4 } from './candidate-v4.js?v=connector-v4-20260910-v3'
+import { auditConnectorDefinitionV4 } from './audit-v4.js?v=connector-v4-20260910-v3'
 import { proposeConstraintV4 } from './constraints-v4.js?v=connector-v4-20260910-v1'
 import { createAxialOccupancyV4 } from './occupancy-v4.js?v=connector-v4-20260910-v1'
 
@@ -60,9 +61,6 @@ async function fetchShadowText(path) {
     if (!actualPath) return null
     return fetchTextOrNull(`${SHADOW_RAW_ROOT}${encodedPath(actualPath)}`)
   } catch (error) {
-    // GitHub API may be rate-limited independently from raw.githubusercontent.com.
-    // Fall back to an exact raw lookup; a raw 404 is still treated as "not present",
-    // while every other HTTP/network error remains a hard hydration error.
     if (!manifestFallbackWarned) {
       manifestFallbackWarned = true
       console.warn('[BrickLab Connector V4] Shadow manifest unavailable; using direct shadow lookup.', error)
@@ -123,7 +121,7 @@ export async function hydrateConnectorV4(defOrId, rootOverride = null) {
   const def = typeof defOrId === 'string' ? findPart(defOrId) : defOrId
   if (!isLDrawDefinition(def)) return null
   if (!def.ldraw?.ready) return null
-  if (def.connectivityV4?.status === 'ready') return def.connectivityV4
+  if (def.connectivityV4?.status === 'ready' && def.connectivityV4.systemVersion === CONNECTOR_SYSTEM_VERSION_V4) return def.connectivityV4
   if (hydration.has(def.id)) return hydration.get(def.id)
 
   const promise = (async () => {
@@ -185,7 +183,7 @@ function scanReadyDefinitions() {
   for (const def of PARTS) {
     if (!isLDrawDefinition(def)) continue
     instrumentDefinition(def)
-    if (def.ldraw?.ready && lastRoots.has(def.id) && def.connectivityV4?.status !== 'ready' && !hydration.has(def.id)) void hydrateConnectorV4(def)
+    if (def.ldraw?.ready && lastRoots.has(def.id) && (def.connectivityV4?.status !== 'ready' || def.connectivityV4.systemVersion !== CONNECTOR_SYSTEM_VERSION_V4) && !hydration.has(def.id)) void hydrateConnectorV4(def)
   }
 }
 
@@ -196,6 +194,8 @@ window.addEventListener('bricklab:ldrawloaded', event => {
 window.addEventListener('bricklab:partcatalogchange', scanReadyDefinitions)
 scanReadyDefinitions()
 
+const candidateOptions = options => ({ ...options, getDefinition: findPart })
+
 export const BrickLabConnectorV4 = Object.freeze({
   schemaVersion: CONNECTOR_SCHEMA_VERSION_V4,
   systemVersion: CONNECTOR_SYSTEM_VERSION_V4,
@@ -205,24 +205,27 @@ export const BrickLabConnectorV4 = Object.freeze({
   async resolve(file, visualOffsetStud = [0,0,0]) {
     const resolved = await resolver.resolve(file)
     const finalized = finalizeResolved(resolved, visualOffsetStud)
-    return {
-      ...resolved,
-      connectors: finalized.connectors,
-      identity: finalized.identity.stats,
-    }
+    return { ...resolved, connectors: finalized.connectors, identity: finalized.identity.stats }
   },
   hydrate: hydrateConnectorV4,
   get(partId) { return findPart(partId)?.connectivityV4 ?? null },
   match: matchConnectorV4,
   solvePlacement: solvePlacementV4,
   applyPlacement: applyPlacementV4,
+  findCandidates(movingObject, targetObjects, options = {}) {
+    return findPlacementCandidatesV4(movingObject, targetObjects, candidateOptions(options))
+  },
+  findCandidate(movingObject, targetObjects, options = {}) {
+    return findBestPlacementCandidateV4(movingObject, targetObjects, candidateOptions(options))
+  },
   proposeConstraint: proposeConstraintV4,
   audit: auditConnectorDefinitionV4,
   clearCache() { resolver.clearCache(); shadowManifestPromise = null },
   stats() {
-    const ready = PARTS.filter(def => def.connectivityV4?.status === 'ready')
+    const ready = PARTS.filter(def => def.connectivityV4?.status === 'ready' && def.connectivityV4.systemVersion === CONNECTOR_SYSTEM_VERSION_V4)
     return {
       mode:'observe',
+      systemVersion:CONNECTOR_SYSTEM_VERSION_V4,
       readyParts: ready.length,
       connectors: ready.reduce((sum, def) => sum + (def.connectivityV4.connectors?.length || 0), 0),
       warnings: ready.reduce((sum, def) => sum + (def.connectivityV4.warnings?.length || 0), 0),
