@@ -1,7 +1,7 @@
 import { approveConstraintV4, proposeConstraintV4 } from './constraints-v4.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.2.7'
+export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.3.0'
 
 const MIN_DISTINCT_STUD_DISTANCE = 0.45
 const PARALLEL_STUD_AXIS_DOT = 0.9995
@@ -166,6 +166,32 @@ function multiStudBundleIsRigid(entries) {
   return false
 }
 
+function axialBundleKey(entry, rule) {
+  if (rule?.release !== 'axial-profile' || !['prismatic','cylindrical'].includes(rule?.kind)) return null
+  // Occupancy channelKey is the stable identity of the continuous male profile
+  // (for example one long axle). Reusing that channel against the same opposite
+  // object/family means several graph records describe one physical shaft DOF and
+  // must not become competing Rapier joints.
+  const channelKey=entry.connection?.occupancy?.channelKey
+  if (!channelKey) return null
+  const bodies=pairKey(entry.connection.a.instanceId,entry.connection.b.instanceId)
+  return `${entry.family}|${rule.kind}|${bodies}|${channelKey}`
+}
+
+function physicsItem(entry, rule, { id = null, entries = null, connectionIds = null } = {}) {
+  const bundledEntries=Array.isArray(entries) && entries.length ? entries : [entry]
+  const ids=Array.isArray(connectionIds) && connectionIds.length ? connectionIds : bundledEntries.map(value=>value.connection.id)
+  return {
+    id:id || `v4physics:${entry.connection.id}`,
+    family:entry.family,
+    connectionIds:[...ids],
+    entry,
+    entries:bundledEntries,
+    rule,
+    constraint:approvedConstraint(entry, rule),
+  }
+}
+
 export function buildPhysicsPlanV4({ objects = [], connections = [], getConnector } = {}) {
   const byId = new Map(objects.filter(Boolean).map(object => [object.userData?.instanceId, object]))
   const entries = []
@@ -196,16 +222,14 @@ export function buildPhysicsPlanV4({ objects = [], connections = [], getConnecto
     }
     const used = rigid ? bundle : [representative]
     used.forEach(entry => consumed.add(entry.connection.id))
-    joints.push({
+    joints.push(physicsItem(representative,{...rule,bundle:'multi-stud-rigid'}, {
       id:`v4physics:${key}:studs`,
-      family:'stud-anti-stud',
-      connectionIds:used.map(entry => entry.connection.id),
-      entry:representative,
-      rule,
-      constraint:approvedConstraint(representative, rule),
-    })
+      entries:used,
+      connectionIds:used.map(entry=>entry.connection.id),
+    }))
   }
 
+  const axialGroups=new Map()
   for (const entry of entries) {
     if (consumed.has(entry.connection.id)) continue
     // Stud entries are handled exclusively by the bundle pass above. If a stud bundle
@@ -216,14 +240,26 @@ export function buildPhysicsPlanV4({ objects = [], connections = [], getConnecto
       blockers.push({connectionId:entry.connection.id,family:entry.family,reason:rule.reason})
       continue
     }
-    joints.push({
-      id:`v4physics:${entry.connection.id}`,
-      family:entry.family,
-      connectionIds:[entry.connection.id],
-      entry,
-      rule,
-      constraint:approvedConstraint(entry, rule),
-    })
+    const key=axialBundleKey(entry,rule)
+    if (!key) {
+      joints.push(physicsItem(entry,rule))
+      continue
+    }
+    if (!axialGroups.has(key)) axialGroups.set(key,[])
+    axialGroups.get(key).push({entry,rule})
+  }
+
+  for (const [key,bundle] of axialGroups) {
+    const representative=bundle[0]
+    const bundledEntries=bundle.map(value=>value.entry)
+    const rule=bundle.length>1
+      ? {...representative.rule,bundle:'coaxial-axial-profile'}
+      : representative.rule
+    joints.push(physicsItem(representative.entry,rule,{
+      id:bundle.length>1?`v4physics:${key}:bundle`:null,
+      entries:bundledEntries,
+      connectionIds:bundledEntries.map(entry=>entry.connection.id),
+    }))
   }
 
   return {
@@ -231,25 +267,42 @@ export function buildPhysicsPlanV4({ objects = [], connections = [], getConnecto
     pass:blockers.length === 0,
     joints,
     blockers,
-    stats:{ connections:connections.length, joints:joints.length, blockers:blockers.length },
+    stats:{
+      connections:connections.length,
+      joints:joints.length,
+      blockers:blockers.length,
+      axialBundles:[...axialGroups.values()].filter(bundle=>bundle.length>1).length,
+      bundledAxialConnections:[...axialGroups.values()].filter(bundle=>bundle.length>1).reduce((sum,bundle)=>sum+bundle.length,0),
+    },
   }
 }
 
 export function drivetrainSemanticLinksV4(connections = [], releasedConnectionIds = new Set()) {
   const released = releasedConnectionIds instanceof Set ? releasedConnectionIds : new Set(releasedConnectionIds ?? [])
-  return connections
-    .filter(connection => connection?.id && !released.has(connection.id) && ROTATION_TRANSMITTING_FAMILIES.has(familyOf(connection)))
-    .map(connection => ({
-      id:`v4semantic:${connection.id}`,
+  const groups=new Map()
+  for (const connection of connections) {
+    if (!connection?.id || released.has(connection.id) || !ROTATION_TRANSMITTING_FAMILIES.has(familyOf(connection))) continue
+    const family=familyOf(connection)
+    const key=`${family}|${pairKey(connection.a.instanceId,connection.b.instanceId)}`
+    if (!groups.has(key)) groups.set(key,[])
+    groups.get(key).push(connection)
+  }
+  return [...groups.values()].map(group=>{
+    const connection=group[0]
+    const ids=group.map(value=>value.id)
+    return {
+      id:`v4semantic:${pairKey(connection.a.instanceId,connection.b.instanceId)}:${familyOf(connection)}`,
       kind:'axle',
       a:{ instanceId:connection.a.instanceId, connectorId:null },
       b:{ instanceId:connection.b.instanceId, connectorId:null },
       metadata:{
         v4SemanticOnly:true,
         v4ConnectionId:connection.id,
+        v4ConnectionIds:ids,
         v4Family:familyOf(connection),
       },
-    }))
+    }
+  })
 }
 
 export function physicsRulePreviewV4(family, { match = null, connectorA = null, connectorB = null, studBundleSize = 1 } = {}) {
