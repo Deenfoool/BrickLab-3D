@@ -1,4 +1,4 @@
-import { cloneConnectorV4 } from './schema-v4.js?v=connector-v4-20260910-v1'
+import { cloneConnectorV4 } from './schema-v4.js'
 
 export const CONNECTOR_IDENTITY_VERSION_V4 = 'connector-identity-v4.0.0'
 
