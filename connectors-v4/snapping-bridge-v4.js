@@ -4,10 +4,12 @@ import { suppressNextConnectionForEndpoint } from '../connections.js'
 
 export * from '../snapping-v3.js'
 
-export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.3.0'
+export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.4.0'
 
 let preferredCandidateKey = null
 let preferredInstanceId = null
+let connectivityWarmPromise = null
+let lastConnectivityWarmAt = 0
 
 function runtime() {
   const value = globalThis.BrickLabConnectorV4
@@ -53,21 +55,32 @@ function isLDrawPart(object) {
   return String(object?.userData?.partId || '').startsWith('ldraw-')
 }
 
+function warmNearbyConnectivity(v4,selected,objects) {
+  if (!v4?.hydrateObjects || !selected) return
+  const now=typeof performance !== 'undefined' ? performance.now() : Date.now()
+  if (connectivityWarmPromise || now-lastConnectivityWarmAt<180) return
+  lastConnectivityWarmAt=now
+  const origin=selected.getWorldPosition(new THREE.Vector3())
+  const nearby=(objects??[])
+    .filter(object=>object && object!==selected && isLDrawPart(object))
+    .map(object=>({object,distance:origin.distanceTo(object.getWorldPosition(new THREE.Vector3()))}))
+    .sort((a,b)=>a.distance-b.distance)
+    .slice(0,23)
+    .map(entry=>entry.object)
+  const batch=[selected,...nearby]
+  connectivityWarmPromise=Promise.resolve(v4.hydrateObjects(batch))
+    .catch(error=>console.debug?.('[BrickLab Connector V4] Nearby connectivity warmup failed.',error))
+    .finally(()=>{connectivityWarmPromise=null})
+}
+
 export function v4OwnsLegacyCandidate(selected, legacy) {
   if (!legacy || legacy.kind === 'gear-mesh') return false
   const target=legacy.targetObject
-  // The current V4 runtime hydrates Shadow connectivity for LDraw definitions only.
-  // Therefore strict fail-closed ownership is correct for LDraw↔LDraw structural
-  // pairs, where both sides can be certified by the same system. A mixed
-  // LDraw↔native pair must retain V3 compatibility until native definitions also
-  // receive V4 connectivity; otherwise V4 would suppress a candidate it can never
-  // replace.
   return isLDrawPart(selected) && isLDrawPart(target)
 }
 
 export function findSnapCandidate(selected, objects, options = {}) {
   const legacy = V3.findSnapCandidate(selected, objects, options)
-  // Gear meshing is a separate mechanical-contact solver and remains authoritative.
   if (legacy?.kind === 'gear-mesh') return legacy
 
   const v4 = runtime()
@@ -79,6 +92,7 @@ export function findSnapCandidate(selected, objects, options = {}) {
   }
 
   if (v4 && selectedIsLDraw) {
+    warmNearbyConnectivity(v4,selected,objects)
     try {
       const candidate = v4.findActiveCandidate(selected, objects, {
         maxResults:48,
@@ -97,9 +111,6 @@ export function findSnapCandidate(selected, objects, options = {}) {
     }
   }
 
-  // LDraw↔LDraw structural pairs are fully V4-owned: while Shadow metadata is
-  // loading/quarantined or no certified V4 candidate exists, do not create a coarse
-  // V3 substitute. Mixed LDraw↔native pairs remain on V3 for compatibility.
   if (v4OwnsLegacyCandidate(selected, legacy)) return null
   return legacy
 }
@@ -115,8 +126,6 @@ export function applySnap(selected, candidate) {
   const v4 = runtime()
   const instanceId = selected?.userData?.instanceId
   const endpointId = candidate?.source?.id
-  // Always suppress the legacy connection attempt for a V4 candidate. If V4 commit
-  // fails, fail closed: do not let app.js create a generic V3 link from V4 metadata.
   if (instanceId && endpointId) suppressNextConnectionForEndpoint(instanceId, endpointId)
 
   if (!v4) {
