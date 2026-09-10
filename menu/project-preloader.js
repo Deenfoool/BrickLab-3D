@@ -2,7 +2,7 @@ const LOADER_ID = 'bricklab-project-loader-v1'
 const STYLE_ID = 'bricklab-project-loader-style-v1'
 const AUDIO_CANDIDATES = ['./assets/audio/music/workbench.ogg']
 const VIDEO_CANDIDATES = ['./assets/menu/background.webm', './assets/menu/background.mp4']
-const MENU_ASSETS = ['./menu/main-menu-v3.js', './menu/main-menu-v3.css']
+const MENU_ASSETS = ['./menu/main-menu-v3.js?v=main-menu-20260910-v3', './menu/main-menu-v3.css']
 
 function ensureStyle() {
   if (document.getElementById(STYLE_ID)) return
@@ -36,10 +36,21 @@ function importMap() {
 function resolveMapped(specifier, baseUrl, imports) {
   if (!specifier) return null
   if (imports[specifier]) return new URL(imports[specifier], location.href).href
+
+  if (specifier.startsWith('.') || specifier.startsWith('/')) {
+    const absolute = new URL(specifier, baseUrl).href
+    for (const [key, target] of Object.entries(imports)) {
+      if (key.endsWith('/')) continue
+      try {
+        if (new URL(key, location.href).href === absolute) return new URL(target, location.href).href
+      } catch { /* invalid import-map entry */ }
+    }
+    return absolute
+  }
+
   const prefix = Object.keys(imports).filter(key => key.endsWith('/') && specifier.startsWith(key)).sort((a, b) => b.length - a.length)[0]
   if (prefix) return new URL(imports[prefix] + specifier.slice(prefix.length), location.href).href
   if (/^(https?:)?\/\//.test(specifier)) return new URL(specifier, location.href).href
-  if (specifier.startsWith('.') || specifier.startsWith('/')) return new URL(specifier, baseUrl).href
   return null
 }
 
