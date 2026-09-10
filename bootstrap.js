@@ -59,6 +59,8 @@ if (menuResult.action === 'new' || menuResult.action === 'open') {
   }
 }
 
+// Register dynamic ldraw-* definitions before app.js restores a saved project.
+await import('./ldraw/bootstrap-v1.js?v=ldraw-20260910-v1')
 await import('./app.js')
 
 for (const [key, value] of hiddenProjectEntries) {
