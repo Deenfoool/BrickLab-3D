@@ -119,7 +119,20 @@ function publishRuntime(type, detail = {}) {
   }))
 }
 
-function visualOffsetFor(def, root = lastRoots.get(def?.id)) {
+function rootForDefinition(def, override = null) {
+  if (override) return override
+  const stored = lastRoots.get(def?.id)
+  if (!stored) return null
+  if (typeof stored.deref === 'function') {
+    const root = stored.deref()
+    if (!root && def?.id) lastRoots.delete(def.id)
+    return root ?? null
+  }
+  return stored
+}
+
+function visualOffsetFor(def, rootOverride = null) {
+  const root = rootForDefinition(def, rootOverride)
   if (!root) return null
   const visual = root.children?.find?.(child => child?.userData?.ldrawVisual)
   if (!visual?.position) return null
@@ -132,7 +145,7 @@ function instrumentDefinition(def) {
   def.create = function connectorV4ObservedCreate(...args) {
     const root = originalCreate.apply(this, args)
     if (root) {
-      lastRoots.set(def.id, new WeakRef(root))
+      lastRoots.set(def.id, typeof WeakRef === 'function' ? new WeakRef(root) : root)
       queueMicrotask(() => { if (def.ldraw?.ready) void hydrateConnectorV4(def, root) })
     }
     return root
