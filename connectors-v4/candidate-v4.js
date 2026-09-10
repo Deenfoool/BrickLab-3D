@@ -1,15 +1,16 @@
 import * as THREE from 'three'
 import { totalProfileLengthV4 } from './schema-v4.js'
 import { matchConnectorV4 } from './matcher-v4.js'
-import { activationForMatchV4 } from './activation-v4.js'
+import { activationForMatchV4, classifyConnectorV4 } from './activation-v4.js'
 import { connectorWorldFrameV4, solvePlacementV4 } from './placement-solver-v4.js'
 
-export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.3.0'
+export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.3.1'
 export const DEFAULT_CAPTURE_DISTANCE_STUD_V4 = 0.72
 export const DEFAULT_MIN_AXIS_ALIGNMENT_V4 = 0.72
 export const CLOSE_RANGE_MIN_AXIS_ALIGNMENT_V4 = 0.55
 const SUPPORT_POSITION_EPS_STUD = 0.045
 const SUPPORT_AXIS_DOT = 0.997
+const SUPPORT_ANALYSIS_LIMIT = 24
 
 function definitionConnectors(definition) {
   return definition?.connectivityV4?.status === 'ready'
@@ -45,20 +46,26 @@ function connectorPoseAtWorldPose(connector,worldPosition,worldQuaternion) {
 
 function countStudSupport(candidate,movingConnectors,targetConnectors,isAvailable) {
   if (candidate.activationPreview?.family !== 'stud-anti-stud') return 1
+  const movingRole=candidate.activationPreview.sourceRole
+  const targetRole=candidate.activationPreview.targetRole
+  const sourceRole=movingRole==='stud'?'stud':movingRole==='anti-stud'?'anti-stud':null
+  const expectedTargetRole=sourceRole==='stud'?'anti-stud':sourceRole==='anti-stud'?'stud':null
+  if (!sourceRole || !expectedTargetRole || targetRole!==expectedTargetRole) return 1
+
+  const sources=movingConnectors.filter(connector=>classifyConnectorV4(connector)===sourceRole)
+  const targets=targetConnectors.filter(connector=>classifyConnectorV4(connector)===expectedTargetRole)
   const worldPosition=new THREE.Vector3(...candidate.solution.worldPosition)
   const worldQuaternion=new THREE.Quaternion(...candidate.solution.worldQuaternion).normalize()
   const targetFrames=new Map()
   const usedTargets=new Set()
   let support=0
 
-  for (const source of movingConnectors) {
+  for (const source of sources) {
     if (!source?.endpointId || !isAvailable(candidate.sourceObject,source)) continue
     const sourcePose=connectorPoseAtWorldPose(source,worldPosition,worldQuaternion)
     let best=null
-    for (const target of targetConnectors) {
+    for (const target of targets) {
       if (!target?.endpointId || usedTargets.has(target.endpointId) || !isAvailable(candidate.targetObject,target)) continue
-      const match=matchConnectorV4(source,target)
-      if (!match.compatible || activationForMatchV4(source,target,match).family !== 'stud-anti-stud') continue
       let targetFrame=targetFrames.get(target.endpointId)
       if (!targetFrame) {
         try { targetFrame=connectorWorldFrameV4(candidate.targetObject,target) } catch { continue }
@@ -98,15 +105,23 @@ function candidateScore(solution,captureDistance,minAxisAlignment,orientationFre
   score+=Math.min(2,originMotion/Math.max(captureDistance,1e-6))*0.025
   score+=Math.min(1,clearance/0.35)*0.035
   score-=Math.min(1,engagement/20)*0.025
-  // Active production families always outrank merely shape-compatible editor pairs,
-  // preventing unsupported matches from consuming the finite certification shortlist.
   if (!active) score+=4
-  // A brick placement supported by several simultaneous stud/anti-stud contacts is
-  // much less ambiguous than a nearby one-stud placement. Cap the bonus so geometry
-  // and capture distance remain authoritative.
   score-=Math.min(0.34,Math.max(0,supportCount-1)*0.048)
   if (preferred) score-=0.075
   return score
+}
+
+function rescore(candidate,captureDistance,minAxisAlignment,preferredKey) {
+  candidate.score=candidateScore(candidate.solution,captureDistance,minAxisAlignment,candidate.orientationFree,{
+    preferred:candidate.key===preferredKey,
+    active:candidate.activationPreview.active===true,
+    supportCount:candidate.supportCount,
+  })
+  return candidate
+}
+
+function compareCandidates(a,b) {
+  return a.score-b.score || b.supportCount-a.supportCount || a.distanceStud-b.distanceStud || b.alignment-a.alignment || a.key.localeCompare(b.key)
 }
 
 export function findPlacementCandidatesV4(movingObject,targets,{
@@ -181,19 +196,31 @@ export function findPlacementCandidatesV4(movingObject,targets,{
           lateralDistanceStud:solution.diagnostics?.initialLateralDistanceStud ?? distance,
           alignment,
           requiredAlignment,
+          orientationFree,
           supportCount:1,
         }
-        candidate.supportCount=countStudSupport(candidate,sources,targetConnectors,isAvailable)
-        candidate.score=candidateScore(solution,captureDistanceStud,minAxisAlignment,orientationFree,{
-          preferred:key===preferredKey,
-          active:activationPreview.active===true,
-          supportCount:candidate.supportCount,
-        })
+        rescore(candidate,captureDistanceStud,minAxisAlignment,preferredKey)
         results.push(candidate)
       }
     }
   }
-  results.sort((a,b)=>a.score-b.score || b.supportCount-a.supportCount || a.distanceStud-b.distanceStud || b.alignment-a.alignment || a.key.localeCompare(b.key))
+
+  // Multi-contact analysis is intentionally bounded. Corresponding stud pairs for a
+  // good rigid placement have the same or nearly the same base score, so examining
+  // the leading shortlist finds the rigid pattern without O(candidates × studs²)
+  // work on very large plates during every TransformControls event.
+  results.sort(compareCandidates)
+  let analyzed=0
+  for (const candidate of results) {
+    if (analyzed>=SUPPORT_ANALYSIS_LIMIT) break
+    if (candidate.activationPreview.family!=='stud-anti-stud') continue
+    const targetDef=getDefinition(candidate.targetPartId)
+    candidate.supportCount=countStudSupport(candidate,sources,definitionConnectors(targetDef),isAvailable)
+    rescore(candidate,captureDistanceStud,minAxisAlignment,preferredKey)
+    analyzed+=1
+  }
+
+  results.sort(compareCandidates)
   return results.slice(0,Math.max(1,Math.floor(maxResults)))
 }
 
