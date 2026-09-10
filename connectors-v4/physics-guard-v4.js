@@ -1,12 +1,13 @@
 import { PhysicsSession } from '../physics.js'
 import { analyzeDrivetrain } from '../drivetrain.js'
 import { buildPhysicsPlanV4, drivetrainSemanticLinksV4, PHYSICS_POLICY_VERSION_V4 } from './physics-policy-v4.js'
+import { hardenPhysicsPlanV4, PHYSICS_PLAN_SAFETY_VERSION_V4 } from './physics-plan-safety-v4.js'
 import { installConnectorPhysicsV4, PHYSICS_ADAPTER_VERSION_V4 } from './physics-adapter-v4.js'
 
-export const PHYSICS_GUARD_VERSION_V4 = 'connector-physics-guard-v4.3.0'
+export const PHYSICS_GUARD_VERSION_V4 = 'connector-physics-guard-v4.4.0'
 export const PHYSICS_GUARD_ERROR_CODE_V4 = 'BRICKLAB_CONNECTOR_V4_PHYSICS_NOT_CERTIFIED'
 
-const marker = Symbol.for('bricklab.connectorV4.physicsGuard.v4.3')
+const marker = Symbol.for('bricklab.connectorV4.physicsGuard.v4.4')
 let lastPlan = null
 let lastFailure = null
 
@@ -22,9 +23,6 @@ function rebuildDrivetrainSemanticsV4(session, records) {
   const previouslyBridged = Boolean(session.connectorV4Drivetrain?.enabled)
   if (!links.length && !previouslyBridged) return null
 
-  // Semantic-only V4 links are intentionally passed ONLY to drivetrain analysis.
-  // They never enter session.connections, buildRigidComponents, or V3 joint creation,
-  // so a keyed axle may slide axially in Rapier while still transmitting rotation.
   const semanticConnections = [...session.connections, ...links]
   session.drivetrain = analyzeDrivetrain(session.objects, semanticConnections)
   session.buildGearCouplers?.()
@@ -51,10 +49,11 @@ function fail(reason, blockers = [], cause = null) {
   const error = new Error(`Connector V4 physics blocked: ${reason}${details.length ? ` (${details.length} connection${details.length===1?'':'s'})` : ''}`)
   error.code = PHYSICS_GUARD_ERROR_CODE_V4
   if (cause) error.cause = cause
-  error.connectorV4 = { guardVersion:PHYSICS_GUARD_VERSION_V4, reason, blockers:details }
+  error.connectorV4 = { guardVersion:PHYSICS_GUARD_VERSION_V4, safetyVersion:PHYSICS_PLAN_SAFETY_VERSION_V4, reason, blockers:details }
   lastFailure = error.connectorV4
   window.dispatchEvent(new CustomEvent('bricklab:connectorv4physicsblocked', { detail:{
     guardVersion:PHYSICS_GUARD_VERSION_V4,
+    safetyVersion:PHYSICS_PLAN_SAFETY_VERSION_V4,
     policyVersion:PHYSICS_POLICY_VERSION_V4,
     adapterVersion:PHYSICS_ADAPTER_VERSION_V4,
     count:details.length || 1,
@@ -80,7 +79,8 @@ if (!PhysicsSession[marker]) {
         await v4.hydrateObjects?.(objects)
         v4.reconcileGraph?.(objects, { persist:false })
         liveV4Records = v4.projectConnections()
-        plan = buildPhysicsPlanV4({ objects, connections:liveV4Records, getConnector:(partId,endpointId)=>v4.getConnector(partId,endpointId) })
+        const proposed = buildPhysicsPlanV4({ objects, connections:liveV4Records, getConnector:(partId,endpointId)=>v4.getConnector(partId,endpointId) })
+        plan = hardenPhysicsPlanV4(proposed)
         lastPlan = plan
       } catch (error) {
         fail('preflight-error', [], error)
@@ -88,11 +88,9 @@ if (!PhysicsSession[marker]) {
       if (!plan.pass) fail('uncertified-connections', plan.blockers)
     }
 
-    // Synchronous preflight event: visual diagnostics remove all Three helpers before
-    // PhysicsSession measures Box3/collider bounds. This fires even for a project with
-    // zero V4 links because debug endpoints themselves must never affect collision data.
     window.dispatchEvent(new CustomEvent('bricklab:connectorv4physicsstarting', {detail:{
       guardVersion:PHYSICS_GUARD_VERSION_V4,
+      safetyVersion:PHYSICS_PLAN_SAFETY_VERSION_V4,
       connections:liveV4Records.length,
       plannedJoints:plan?.joints?.length ?? 0,
     }}))
@@ -101,8 +99,6 @@ if (!PhysicsSession[marker]) {
     try {
       session = await originalCreate(objects, connections, ...rest)
       if (plan?.joints?.length) {
-        // Install the callback before the Rapier adapter. Dynamic axial release calls it
-        // after removing a keyed joint so semantic RPM/gear propagation is split again.
         session.rebuildConnectorV4Drivetrain = () => rebuildDrivetrainSemanticsV4(session, liveV4Records)
         installConnectorPhysicsV4(session, plan, v4)
         rebuildDrivetrainSemanticsV4(session, liveV4Records)
@@ -127,6 +123,7 @@ if (!PhysicsSession[marker]) {
 
 globalThis.BrickLabConnectorV4PhysicsGuard = Object.freeze({
   version:PHYSICS_GUARD_VERSION_V4,
+  safetyVersion:PHYSICS_PLAN_SAFETY_VERSION_V4,
   policyVersion:PHYSICS_POLICY_VERSION_V4,
   adapterVersion:PHYSICS_ADAPTER_VERSION_V4,
   errorCode:PHYSICS_GUARD_ERROR_CODE_V4,
