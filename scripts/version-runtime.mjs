@@ -1,5 +1,6 @@
 // One canonical versioned URL per module, shared by static and dynamic imports.
 import { readdir, readFile, writeFile } from 'node:fs/promises'
+import { posix as path } from 'node:path'
 
 const root = new URL('../', import.meta.url)
 const tag = process.argv[2] ?? 'parts-6-20260910-audio-v1'
@@ -11,21 +12,23 @@ for (const dir of ['audio', 'assets/audio', 'connectors-v4']) {
 }
 const versioned = Object.fromEntries(files.map(name => [`./${name}`, `./${name}?v=${tag}`]))
 
-// V4 was introduced in several cache generations before the runtime became
-// authoritative. Some modules still contain those historical query strings. Map
-// every historical V4 URL to this build's one canonical module URL so the browser
-// cannot instantiate two schema/matcher/runtime generations in the same page.
-const legacyV4Tags = [
-  'connector-v4-20260910-v1',
-  'connector-v4-20260910-v3',
-  'connector-v4-20260910-v5',
-  'connector-v4-20260910-v6',
-]
+// Early V4 modules used a few explicit query strings in relative imports. Discover
+// those exact historical URLs and redirect only them to this build's canonical URL.
+// This prevents duplicate schema/matcher instances without growing the import map
+// with aliases that can never be requested.
+const legacyV4Aliases = {}
 const v4Files = files.filter(name => name.startsWith('connectors-v4/'))
-const legacyV4Aliases = Object.fromEntries(v4Files.flatMap(name => legacyV4Tags.map(oldTag => [
-  `./${name}?v=${oldTag}`,
-  `./${name}?v=${tag}`,
-])))
+for (const importer of v4Files) {
+  const source = await readFile(new URL(importer, root), 'utf8')
+  const importerDir = path.dirname(importer)
+  for (const match of source.matchAll(/["'](\.\.?\/[^"']+\.js\?v=[^"']+)["']/g)) {
+    const requested = match[1]
+    const [pathname, query] = requested.split('?')
+    const resolved = path.normalize(path.join(importerDir, pathname))
+    const canonical = versioned[`./${resolved}`]
+    if (canonical && query) legacyV4Aliases[`./${resolved}?${query}`] = canonical
+  }
+}
 
 // Legacy import specifiers remain stable, but LDraw structural snapping is routed
 // through the V4 compatibility bridges. Native/procedural connector validation and
@@ -56,7 +59,7 @@ badge = badge
   .replace(/const BUILD_ID = '[^']+'/, `const BUILD_ID = '${id}'`)
   .replace(/const BUILD_TAG = '[^']+'/, `const BUILD_TAG = '${tag}'`)
 await writeFile(new URL('physics-error-ui.js', root), badge)
-console.log(`${id}: ${files.length} canonical module URLs (${tag})`)
+console.log(`${id}: ${files.length} canonical module URLs + ${Object.keys(legacyV4Aliases).length} V4 legacy redirects (${tag})`)
 
 const acceptance = new URL('tests/time-scale-browser.html', root)
 let testHtml = await readFile(acceptance, 'utf8')
