@@ -1,3 +1,4 @@
+import { buildHeroReducer, HERO_PART_IDS } from './hero-reducer.js?v=hero-reducer-20260910-v1'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
@@ -234,60 +235,8 @@ function visualBounds(root) {
   return populated ? result : new THREE.Box3().setFromObject(root)
 }
 
-function centerPart(object) {
-  const box = visualBounds(object)
-  object.position.sub(box.getCenter(new THREE.Vector3()))
-  object.updateMatrixWorld(true)
-  return object
-}
-
 function buildCuratedTransmission(root) {
-  const moving = []
-  const add = (id, color, position, rotation = [0, 0, 0], scale = 1, motion = null) => {
-    const part = tryPart(id, color)
-    if (!part) return null
-    centerPart(part)
-    const pivot = new THREE.Group()
-    pivot.position.fromArray(position)
-    pivot.rotation.set(...rotation)
-    pivot.scale.setScalar(scale)
-    pivot.add(part)
-    root.add(pivot)
-    if (motion) moving.push({ object: part, axis: motion.axis, speed: motion.speed })
-    return pivot
-  }
-
-  // Compact, presentation-first drivetrain. Fewer parts, clear silhouette, no giant
-  // rear frame and no long bright axle. Every visible component is a production part.
-  add('beam-9', 0x2a3035, [0, 1.86, -1.08], [0, 0, 0], .92)
-  add('beam-9', 0x2a3035, [0, -1.86, -1.08], [0, 0, 0], .92)
-  add('beam-5', 0x2a3035, [-3.70, 0, -1.08], [0, 0, Math.PI / 2], .90)
-  add('beam-5', 0x2a3035, [3.70, 0, -1.08], [0, 0, Math.PI / 2], .90)
-
-  add('motor', 0x444d54, [-2.72, -.05, -1.55], [0, Math.PI / 2, 0], .64)
-  add('gearbox-fnr', 0x353d43, [-.72, -.05, -1.46], [0, 0, 0], .62)
-  add('open-differential', 0x475158, [2.25, -.02, -1.42], [0, 0, 0], .70)
-
-  // True pitch-distance focal pair: 20T radius 1.25 + 24T radius 1.50 = 2.75 studs.
-  // These two gears stay at production scale 1.0 so their involute teeth actually mesh.
-  add('gear-20', 0xc7aa73, [-1.375, .20, .38], [Math.PI / 2, 0, Math.PI / 40], 1, { axis: 'y', speed: -.48 })
-  add('gear-24', 0x353c42, [1.375, .20, .35], [Math.PI / 2, 0, -Math.PI / 48], 1, { axis: 'y', speed: .40 })
-
-  // Two short dark shafts read as proper supported gear shafts instead of floating gears.
-  add('axle-3', 0x343a3f, [-1.375, .20, .12], [0, Math.PI / 2, 0], .76, { axis: 'x', speed: -.48 })
-  add('axle-3', 0x343a3f, [1.375, .20, .10], [0, Math.PI / 2, 0], .76, { axis: 'x', speed: .40 })
-  add('bush', 0x89939a, [-1.375, .20, .92], [Math.PI / 2, 0, 0], .82)
-  add('bush', 0x89939a, [1.375, .20, .90], [Math.PI / 2, 0, 0], .82)
-
-  // Restrained output stage on the right. Dark hardware prevents the white-stick look.
-  add('bearing-block', 0x2f363b, [3.18, -.02, -.48], [0, Math.PI / 2, 0], .72)
-  add('axle-3', 0x343a3f, [4.12, -.02, -.48], [0, 0, 0], .64, { axis: 'x', speed: .32 })
-  add('half-bush', 0x8d969c, [4.88, -.02, -.48], [0, 0, Math.PI / 2], .78)
-
-  // Small bevel accent above the gearbox gives depth without competing with the focal pair.
-  add('bevel-gear-12', 0xbda26f, [-.62, 1.02, -.55], [0, 0, Math.PI / 2], .72, { axis: 'y', speed: .58 })
-
-  return moving
+  return buildHeroReducer(root, tryPart).moving
 }
 
 function disposeTree(root) {
@@ -620,5 +569,5 @@ export const BrickLabMainMenuV4 = Object.freeze({
   projectKeys: PROJECT_KEYS,
   settingsKey: MENU_SETTINGS_KEY,
   fixedHero: true,
-  heroPartIds: Object.freeze(['beam-9', 'beam-5', 'motor', 'gearbox-fnr', 'open-differential', 'gear-20', 'gear-24', 'axle-3', 'bush', 'bearing-block', 'half-bush', 'bevel-gear-12']),
+  heroPartIds: HERO_PART_IDS,
 })

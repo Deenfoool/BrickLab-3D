@@ -1,4 +1,4 @@
-import { showMainMenu as showMainMenuV4, BrickLabMainMenuV4 } from './main-menu-v4.js?v=main-menu-20260910-v5-base'
+import { showMainMenu as showMainMenuV4, BrickLabMainMenuV4 } from './main-menu-v4.js?v=hero-reducer-20260910-v1'
 
 const LOGO_URL = new URL('../assets/menu/bricklab-3d.png?v=main-menu-20260910-v5', import.meta.url).href
 const STYLE_ID = 'bricklab-main-menu-v5-overrides'

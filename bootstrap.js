@@ -4,7 +4,7 @@
 
 let projectPreloader = null
 try {
-  const { createProjectPreloader } = await import('./menu/project-preloader-v4.js?v=main-menu-20260910-v4')
+  const { createProjectPreloader } = await import('./menu/project-preloader-v4.js?v=hero-reducer-20260910-v1')
   projectPreloader = createProjectPreloader()
   await projectPreloader.preload()
 } catch (error) {
@@ -27,7 +27,7 @@ try {
 let menuResult = { action: 'continue', snapshot: null }
 let showMainMenu = null
 try {
-  ;({ showMainMenu } = await import('./menu/main-menu-v5.js?v=main-menu-20260910-v5'))
+  ;({ showMainMenu } = await import('./menu/main-menu-v5.js?v=hero-reducer-20260910-v1'))
   projectPreloader?.stageProgress(1, 'Готово')
 } catch (error) {
   console.warn('[BrickLab] Main menu module unavailable; opening editor directly.', error)

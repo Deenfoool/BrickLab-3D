@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
 const root = new URL('../', import.meta.url)
+const hero = await readFile(new URL('menu/hero-reducer.js', root), 'utf8')
 const menu = await readFile(new URL('menu/main-menu-v4.js', root), 'utf8')
 const css = await readFile(new URL('menu/main-menu-v4.css', root), 'utf8')
 const preloader = await readFile(new URL('menu/project-preloader-v4.js', root), 'utf8')
@@ -18,22 +19,17 @@ test('main menu v4 hero is a fixed curated production-part transmission', () => 
   assert.match(menu, /buildCuratedTransmission/)
   assert.match(menu, /fixedHero: true/)
   assert.doesNotMatch(menu, /savedAssembly|usingSavedProject|state\.position|state\.rotation/)
-  for (const id of ['beam-9', 'beam-5', 'motor', 'gearbox-fnr', 'open-differential', 'gear-20', 'gear-24', 'axle-3', 'bearing-block']) {
-    assert.match(menu, new RegExp(id))
+  for (const id of ['beam-9', 'beam-5', 'gear-12', 'gear-20', 'gear-36', 'axle-7']) {
+    assert.match(hero, new RegExp(id))
   }
 })
 
-test('hero removes the composition problems seen in v3 screenshot', () => {
-  assert.doesNotMatch(menu, /technic-frame-5x7/)
-  assert.doesNotMatch(menu, /gear-36/)
-  assert.doesNotMatch(menu, /axle-7/)
-  assert.match(menu, /True pitch-distance focal pair/)
-  assert.match(menu, /\[-1\.375, \.20, \.38\]/)
-  assert.match(menu, /\[1\.375, \.20, \.35\]/)
-  assert.match(menu, /These two gears stay at production scale 1\.0/)
-  assert.match(menu, /add\('gear-20',[\s\S]*?\], 1, \{ axis: 'y'/)
-  assert.match(menu, /add\('gear-24',[\s\S]*?\], 1, \{ axis: 'y'/)
-  assert.match(menu, /Dark hardware prevents the white-stick look/)
+test('hero is a connector-aligned reducer with rigid shaft groups', () => {
+  assert.match(menu, /buildHeroReducer\(root, tryPart\)/)
+  assert.doesNotMatch(hero, /setScalar|centerPart|gearbox-fnr|open-differential|bevel-gear/)
+  assert.match(hero, /setFromUnitVectors/)
+  assert.match(hero, /pivot.rotation.z=/)
+  assert.match(hero, /reduction: 5/)
 })
 
 test('hero camera uses geometry-aware fit and ignores hidden visual hierarchy', () => {
@@ -95,7 +91,7 @@ test('hero helper text and menu actions are separated from the 3D canvas', () =>
 })
 
 test('project loader preloads actual v4 menu assets and reports real transfer progress', () => {
-  assert.match(preloader, /main-menu-v4\.js\?v=main-menu-20260910-v4/)
+  assert.match(preloader, /main-menu-v4\.js\?v=hero-reducer-20260910-v1/)
   assert.match(preloader, /main-menu-v4\.css/)
   assert.match(preloader, /script\[type=\"importmap\"\]/)
   assert.match(preloader, /fetch\(url/)
@@ -104,13 +100,13 @@ test('project loader preloads actual v4 menu assets and reports real transfer pr
   assert.match(preloader, /received \/ totalBytes/)
   assert.match(preloader, /background\.webm/)
   assert.match(preloader, /workbench\.ogg/)
-  assert.match(bootstrap, /project-preloader-v4\.js\?v=main-menu-20260910-v4/)
+  assert.match(bootstrap, /project-preloader-v4\.js\?v=hero-reducer-20260910-v1/)
   assert.match(bootstrap, /await projectPreloader\.preload\(\)/)
-  assert.match(bootstrap, /main-menu-v4\.js\?v=main-menu-20260910-v4/)
+  assert.match(bootstrap, /main-menu-v5\.js\?v=hero-reducer-20260910-v1/)
 })
 
 test('v4 boot cache tag and responsive composition are current', () => {
-  assert.match(index, /bootstrap\.js\?v=parts-6-20260910-menu-v4/)
+  assert.match(index, /bootstrap\.js\?v=parts-6-20260910-hero-v1/)
   for (const marker of ['bl4-left', 'bl4-center', 'bl4-right', 'bl4-top', 'bl4-footer', 'bl4-actions', 'bl4-hero']) {
     assert.match(css, new RegExp(`\\.${marker}`))
   }

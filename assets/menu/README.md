@@ -33,3 +33,23 @@ The center hero is not an image asset. It is live Three.js geometry created thro
 - Double click resets the camera.
 - Idle auto-rotation and showcase gear/shaft motion can be disabled in menu settings.
 - The hero never starts Rapier or changes physics/mechanics metadata.
+
+## Hero: Workbench reducer (2026-09-10)
+
+`menu/hero-reducer.js` builds a dedicated 5:1 hand-cranked demonstration gearbox
+using the current production part factories at unit scale. The visible mechanism
+is 12T → 20T, followed by a 12T pinion on the same intermediate shaft → 36T.
+Shaft centres are -2, 0, 3 studs, derived from the production gear module.
+Each axle passes through front and rear beam holes; lower through-axles tie the
+frames together. Bushes retain the shafts. The only bespoke visual is a keyed,
+bored crank arm and its grip.
+
+Whole shaft groups animate at +0.6, -0.36 and +0.12 rad/s. Initial shaft phases
+align tooth spaces while keeping every gear's cross bore aligned with its axle.
+No floating motor, disconnected differential, orphan bevel gear or per-part scale.
+This is a kinematic menu exhibit, not a saved project or a Rapier simulation.
+The existing v5 logo, menu actions, orbit interaction and reduced-motion settings remain.
+
+Validation: `node --import ./tests/runtime-import-map.mjs --test tests/hero-reducer.test.mjs tests/main-menu.test.mjs`.
+Also verified with an offline projection of the actual meshes; this does not replace
+review of WebGL lighting in the user's browser.

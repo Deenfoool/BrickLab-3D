@@ -2,7 +2,7 @@ const LOADER_ID = 'bricklab-project-loader-v4'
 const STYLE_ID = 'bricklab-project-loader-style-v4'
 const AUDIO_CANDIDATES = ['./assets/audio/music/workbench.ogg']
 const VIDEO_CANDIDATES = ['./assets/menu/background.webm', './assets/menu/background.mp4']
-const MENU_ASSETS = ['./menu/main-menu-v4.js?v=main-menu-20260910-v4', './menu/main-menu-v4.css']
+const MENU_ASSETS = ['./menu/main-menu-v5.js?v=hero-reducer-20260910-v1', './menu/main-menu-v4.js?v=hero-reducer-20260910-v1', './menu/hero-reducer.js?v=hero-reducer-20260910-v1', './menu/main-menu-v4.css']
 
 function ensureStyle() {
   if (document.getElementById(STYLE_ID)) return
