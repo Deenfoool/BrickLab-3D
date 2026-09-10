@@ -1,32 +1,38 @@
 # Connector System V4
 
-Connector System V4 is BrickLab 3D's geometry-aware connectivity layer for LDraw-backed parts. It is now used in production for certified LDraw structural snapping, connection persistence/occupancy and a fail-closed Rapier physics path.
+Connector System V4 is BrickLab 3D's geometry-aware connectivity layer for LDraw-backed parts. It is used in production for certified LDraw BUILD snapping, stable endpoint identity, connection persistence, interval occupancy and a fail-closed Rapier physics path.
 
-Connector V3 still exists as a compatibility layer for native/procedural BrickLab parts and older mechanics code. Gear meshing and other drivetrain relations remain separate mechanical systems; V4 does not turn gear contact into a structural joint.
+Connector V3 remains a compatibility layer for native/procedural BrickLab parts and older mechanics code. Gear meshing remains a separate mechanical-contact system and is never converted into a structural V4 connection.
 
-The runtime's historical internal mode string is currently `hybrid-pilot` when its self-test passes. Despite that name, the certified V4 path is wired into the production `gh-pages` runtime.
+The runtime's historical mode string is `hybrid-pilot` when its deterministic self-test passes. Despite that old name, certified V4 paths are wired into the production `gh-pages` runtime.
 
-## Core rule
+## Core invariant
 
-V4 deliberately separates four questions:
+V4 deliberately separates these questions:
 
 ```text
-1. Geometry
-   Can the two physical connector profiles fit?
-
-2. Placement
-   Where can the moving part be positioned and oriented?
-
-3. Constraint / physics
-   Which relative degrees of freedom remain in SIMULATE?
-
-4. Mechanics
-   Does the interface transmit rotation, torque, steering motion, ratio, etc.?
+CONNECTOR GEOMETRY
+Can the profiles physically mate?
+        ↓
+PLACEMENT
+Where may the moving part be positioned/oriented?
+        ↓
+OCCUPANCY
+Which physical interval/seat is occupied?
+        ↓
+CONSTRAINT / 6 DOF
+Which relative motions remain possible?
+        ↓
+PHYSICS SAFETY
+Do we have enough evidence to simulate those motions safely?
+        ↓
+MECHANICS
+Does the interface transmit rotation, torque, ratio, steering, etc.?
 ```
 
-A positive answer at one layer is not automatically evidence for the next. In particular, persisted connection records are never trusted to self-certify physics.
+Evidence at one layer is never automatically promoted to the next. In particular, saved `physicsReady` fields are not trusted; SIMULATE rebuilds certification from live objects and current metadata.
 
-## Upstream connectivity source
+## Connectivity source
 
 Primary metadata source:
 
@@ -36,9 +42,9 @@ snapshot: f2fb70c55521e0dfdf2af4d26a87167d4d0d9eec
 license: CC BY-SA 4.0
 ```
 
-The snapshot is pinned so connector metadata cannot change underneath a BrickLab release. See `NOTICE_CONNECTORS.md` for attribution.
+The snapshot is pinned so connector semantics do not change underneath a BrickLab release. See `NOTICE_CONNECTORS.md`.
 
-LDCad Shadow metadata supplements LDraw geometry with connection information. V4 currently parses:
+V4 parses the LDCad snapping metadata used by the pinned snapshot, including:
 
 ```text
 SNAP_CYL
@@ -50,45 +56,22 @@ SNAP_INCL
 SNAP_CLEAR
 ```
 
-Malformed or unsupported metadata produces diagnostics instead of guessed connectivity.
+Malformed or unsupported critical metadata causes diagnostics/quarantine instead of guessed connectivity.
 
-## Runtime pipeline
-
-```text
-LDraw part
-  ↓
-pinned LDCad Shadow metadata
-  ↓
-strict parser + recursive resolver
-  ↓
-canonical V4 connector frames/profiles
-  ↓
-geometry matcher
-  ↓
-placement solver
-  ↓
-activation policy
-  ├─ BUILD snap candidate
-  ├─ V4 connection graph + occupancy
-  └─ SIMULATE physics preflight
-          ↓
-     fresh physics policy plan
-          ↓
-     Rapier V4 adapter
-```
-
-Relevant modules include:
+## Runtime modules
 
 ```text
 connectors-v4/
 ├─ schema-v4.js
 ├─ ldcad-parser-v4.js
 ├─ shadow-resolver-v4.js
+├─ identity-v4.js
 ├─ matcher-v4.js
 ├─ axial-fit-v4.js
 ├─ placement-solver-v4.js
 ├─ candidate-v4.js
 ├─ activation-v4.js
+├─ validity-v4.js
 ├─ occupancy-v4.js
 ├─ connections-v4.js
 ├─ persistence-v4.js
@@ -96,22 +79,24 @@ connectors-v4/
 ├─ snapping-bridge-v4.js
 ├─ connections-bridge-v4.js
 ├─ constraints-v4.js
-├─ validity-v4.js
 ├─ physics-policy-v4.js
+├─ physics-overrides-v4.js
+├─ physics-plan-safety-v4.js
 ├─ physics-guard-v4.js
 ├─ physics-adapter-v4.js
+├─ selftest-v4.js
 └─ debug-overlay-v4.js
 ```
 
-## Coordinates and connector frames
+## Coordinates and identity
 
-Shadow/LDraw data is resolved in LDraw units first:
+LDraw data is resolved in LDraw units first:
 
 ```text
 20 LDU = 1 BrickLab stud
 ```
 
-The current LDraw visual conversion is:
+The visual coordinate conversion is:
 
 ```text
 LDraw (x, y, z)
@@ -119,55 +104,52 @@ LDraw (x, y, z)
 BrickLab (x / 20, -y / 20, -z / 20)
 ```
 
-Each V4 endpoint stores a complete local frame, not only a point. The canonical connector axis is local negative Y. The resolved frame is validated to remain finite, orthonormal and right-handed.
+Each endpoint stores a complete local frame, not only a point. Frames must remain finite, unit-scale, orthonormal and right-handed. The same actual visual centering offset used by the rendered LDraw part is also applied to its connectors.
 
-The same real visual centering offset used by the LDraw object is applied to connectivity, so snapping does not rely on part-name or nominal-size guesses.
+Endpoint IDs are deterministic hashes of canonical connector geometry/frame/policy data. Repeated inherited studs therefore receive distinct stable IDs while exact duplicate inherited connectors are deduplicated. A hash collision fails loudly instead of merging endpoints.
 
-## Shape matching
+## Shape/profile matching
 
-Cylinder profiles preserve LDCad section geometry:
+V4 is shape-based rather than part-name based. Cylinder sections preserve their real LDCad profiles:
 
 ```text
 R   round
-A   axle / cross
+A   axle/cross
 S   square
 _L  elastic round transition/end
 L_  elastic round transition/end
 ```
 
-Matching is directional where physical fit is directional:
+Multi-section holes and pins are never collapsed into one point. Gender, groups, caps, section radius/length, elastic zones, clip dimensions, finger sequences, generic bounds and spherical geometry all participate in matching.
+
+Examples:
 
 ```text
-male R → female R   allowed when radius/profile fit
-male A → female A   keyed
-male S → female S   keyed
-male A → female R   geometrically possible
-male S → female R   geometrically possible
-male R → female A   not assumed
-male R → female S   not assumed
+A male → A female  keyed fit
+A male → R female  round bearing-style fit
+R male → R female  round fit
+bar R  → clip      radius/profile fit
+ball    → socket   center/radius fit
+fingers → fingers  complementary sequence fit
 ```
 
-Groups are hard semantic gates. Different non-empty groups do not connect merely because their dimensions are similar.
-
-V4 also supports clips, alternating finger/hinge profiles, generic grouped bounds and spherical connectors.
+A geometrically compatible pair may still be BUILD-only if its physical limits are not known.
 
 ## Axial fit and occupancy
 
-Long connectors are not represented by a single occupied boolean. Axles, pins and bars reserve intervals along their connector channel.
+Long connectors use interval occupancy rather than `occupied=true`.
 
 ```text
-axle
-0 --------------------------------------------- 12L
-     [beam]      [gear]      [beam]      [wheel]
+axle 12L
+0 ------------------------------------------------ 12
+     [beam]       [gear]       [beam]       [bush]
 ```
 
-Independent parts can legally occupy different non-overlapping intervals of the same shaft. Profile caps and section geometry define legal insertion windows.
+Several non-overlapping reservations can coexist on one axle/bar/pin endpoint. Profile caps, shoulders and section transitions determine legal insertion windows. True interval overlap is rejected; touching interval boundaries are legal.
 
-This interval model is used both when committing BUILD connections and when restoring/reconciling saved graphs.
+## BUILD activation
 
-## Production activation families
-
-The activation policy currently recognizes certified structural families including:
+The current activation policy recognizes geometry-certified structural families including:
 
 - `technic-axle-keyed-hole`;
 - `technic-axle-round-hole`;
@@ -180,95 +162,152 @@ The activation policy currently recognizes certified structural families includi
 - `round-revolute-interface`;
 - `ball-socket`;
 - `hinge-fingers`;
-- `generic-group` as an editor/graph family only unless an explicit physics rule exists.
+- `generic-group` as an editor/graph family.
 
-Shape-based round interfaces are classified from compatible profile geometry, not from hard-coded part names.
+For V4-owned LDraw↔LDraw structural pairs, an uncertified result means no snap; V3 is not allowed to silently substitute a coarser connection. Mixed LDraw↔native pairs retain V3 compatibility when the native side has no V4 metadata. Gear mesh always remains a separate solver.
 
-## BUILD ownership and V3 compatibility
+## Transactional snap
 
-For LDraw structural pairs owned by V4, the snapping bridge fails closed: if Shadow metadata is loading, malformed, quarantined or not certified, V3 is not allowed to create a coarse substitute connection for the same pair.
-
-Gear mesh is intentionally excluded from that rule and remains owned by the drivetrain/gear solver.
-
-Native/procedural BrickLab pieces may continue to use Connector V3 where no V4 definition exists.
-
-## Connection persistence
-
-V4 has its own graph with stable endpoint identity, occupancy reservations and project persistence. New/Open actions clear stale graph state appropriately; saved/imported records are reconciled against the current objects and current endpoint geometry.
-
-A saved field such as:
+A V4 BUILD snap is committed as a transaction:
 
 ```text
-physicsReady: true
+candidate
+  ↓
+solve placement
+  ↓
+apply transform
+  ↓
+revalidate world geometry
+  ↓
+check occupancy
+  ↓
+commit graph record
 ```
 
-is never treated as authority. SIMULATE always re-certifies live geometry from the current part definitions.
+If final validation fails, the transform is rolled back and no V4 record is created.
 
-## Physics preflight
+Connections are revalidated after editing. Missing endpoints, lateral drift, invalid axis alignment, insufficient engagement or keyed twist invalidate the graph record instead of leaving a phantom link.
 
-Before `PhysicsSession` is allowed to start, `physics-guard-v4.js`:
+## Persistence / history
 
-1. hydrates required V4 endpoint metadata;
-2. reconciles the graph against current objects;
-3. resolves each endpoint again;
-4. validates current world-space connection geometry;
-5. builds a new runtime-only physics plan;
-6. refuses SIMULATE if any V4 connection lacks an explicit supported physics rule;
-7. creates the normal Rapier session only after the plan passes;
-8. installs all V4 Rapier joints atomically.
+V4 graph records are part of project state and participate in:
 
-If any V4 joint cannot be constructed, the partially created physics session is disposed. BrickLab never intentionally continues with a half-installed V4 constraint graph.
+- browser Save/Load;
+- `.bricklab` Export/Import;
+- New/Open flows;
+- Undo/Redo;
+- part deletion and movement.
 
-## Rapier constraint mapping
+Restored records are reconciled against current instance IDs, part IDs, endpoint IDs and current geometry. Persisted physics certification is discarded and rebuilt at SIMULATE time.
 
-The physics adapter maps approved rules to explicit Rapier constraints:
+## Two-stage SIMULATE certification
+
+Physics is intentionally stricter than BUILD.
+
+`physics-policy-v4.js` first converts live geometry into a proposed 6-DOF relationship. `physics-plan-safety-v4.js` then decides whether BrickLab has enough physical evidence to instantiate that relationship in Rapier.
+
+```text
+live V4 graph
+   ↓
+geometry revalidation
+   ↓
+physics-policy-v4
+   ↓
+physics-plan-safety-v4
+   ├─ proven → Rapier adapter
+   └─ unproven → SIMULATE blocked with a precise reason
+```
+
+`physics-overrides-v4.js` is an explicit trust boundary for mechanisms whose snapping geometry does not contain their physical angular envelope. An override must have a stable ID and an evidence string. Matching can be restricted by family, group, part IDs and endpoint IDs.
+
+No generic "trust this connection" flag exists.
+
+## Physics currently certified without special overrides
+
+The following relationships can be derived from profile geometry and current policies:
+
+```text
+multi-stud structural bundle → fixed
+single ordinary stud contact → revolute around stud axis
+keyed axle ↔ keyed hole      → prismatic
+axle ↔ round hole            → cylindrical
+pin ↔ compatible hole        → cylindrical + normalized resistance
+bar ↔ sliding round hole     → cylindrical
+sliding bar ↔ clip           → cylindrical where Shadow permits slide
+```
+
+Keyed axle links additionally participate in drivetrain semantics so rotation can propagate while axial translation remains physically free. If the keyed profile completely disengages during SIMULATE, the Rapier joint is removed and the semantic shaft graph is rebuilt immediately.
+
+## Physics intentionally blocked without stronger evidence
+
+Some families can be placed correctly in BUILD but are deliberately not simulated from Shadow geometry alone:
+
+- `ball-socket`: spherical mating geometry does not prove the actual angular cone/stops; the current generic colliders are not a certified substitute;
+- `hinge-fingers`: the axis is known, but actual angular stops must come from a proven per-family/per-part profile;
+- `round-revolute-interface`: a generic captured round pair may have mechanical stops that are not represented by snapping metadata;
+- captured/non-sliding `bar-clip`: rotation envelope/retention is not assumed;
+- locking/click/detent hinges: detent angles and torque are not inferred;
+- `generic-group`: plugs, magnets, electrical connectors and special couplings require explicit physical semantics.
+
+Ball/socket is currently hard-blocked in SIMULATE until BrickLab has a bounded spherical model. Revolute mechanism families may be unlocked only by an explicit tested override with finite angular limits and evidence.
+
+This is intentional. A missing simulation is preferable to a plausible-looking joint that lets geometry rotate through itself.
+
+## Rapier mapping
+
+Approved relationships map to Rapier as follows:
 
 ```text
 fixed        → fixed joint
 revolute     → revoluteWithAxes
-prismatic    → GenericJoint, only connector-frame LinX free
-cylindrical  → GenericJoint, connector-frame LinX + AngX free
-spherical    → spherical joint
+prismatic    → GenericJoint with only connector-frame LinX free
+cylindrical  → GenericJoint with connector-frame LinX + AngX free
+spherical    → reserved for a future bounded ball/socket implementation
 ```
 
-Rapier's joint frame X is aligned to the V4 connector axis. Independent local frames are assigned for both rigid bodies. This matters for cases such as an axle and a rotated Technic brick: the same physical world axis does not have to be represented by the same model-local axis on both bodies.
+For generic prismatic/cylindrical joints, BrickLab installs independent local frames for both bodies before the first world step. A common world constraint frame is constructed so the joint is already satisfied at `t=0`; Rapier is not asked to repair a small connector-frame mismatch and therefore does not receive an artificial correction kick.
 
-For multi-stud attachment between the same two parts, geometrically distinct contacts are aggregated into one fixed physics constraint instead of creating multiple competing fixed joints. A single stud contact remains rotationally free around the stud axis.
+This is a key regression guard for the historical class of failures where a long axle could launch a construction at simulation start.
+
+Approved revolute overrides may specify finite limits. The adapter applies those limits through Rapier's revolute `setLimits` API. Limits on generic prismatic/cylindrical or spherical relationships are rejected until a separately tested implementation exists.
 
 ## Dynamic disengagement
 
-Open axial profiles such as axles/pins/bars are not permanently trapped by their initial joint. Sliding connections are monitored after physics synchronization.
+Open axial profiles are monitored during SIMULATE. If current geometry is outside the valid engagement interval for two consecutive post-sync validations:
 
-When current geometry shows the profiles have completely left their valid engagement window for two consecutive validation frames, the V4 Rapier joint is removed. Contacts between the two rigid bodies are then allowed again.
+1. the joint is removed exactly once;
+2. joint counters are updated;
+3. contacts become available again;
+4. keyed-shaft semantic drivetrain links are rebuilt without the released connection;
+5. a diagnostic release event is emitted.
 
-The two-frame confirmation avoids boundary chatter while still allowing an axle or bar to leave an open hole naturally.
+The two-frame confirmation provides hysteresis at the profile boundary. Simulation changes are session-local; returning to BUILD restores the normal non-destructive simulation snapshot.
 
-This release is session-local. BUILD's persistent project graph is not rewritten from simulation motion; returning from SIMULATE restores the editor's project state through the existing non-destructive simulation workflow.
+## Friction / resistance
 
-## Resistance / friction model
+Some sliding interfaces use normalized BrickLab damping/force parameters. They are interactive simulation parameters, not claimed LEGO measurements. Geometry/DOF evidence is kept separate so future calibrated fit data can replace these values without changing connector identity or graph schema.
 
-Some sliding interfaces have a small normalized axial resistance model in BrickLab. These values are simulation parameters chosen for stable interactive behavior. They are **not claimed measurements of LEGO parts**.
+## Physics guard behavior
 
-Geometry and free/locked DOF come from connector evidence. A future calibrated material/fit database can replace the normalized resistance values without changing the V4 graph schema.
+Before Rapier starts, `physics-guard-v4.js`:
 
-## Intentionally blocked physics
+1. hydrates required Shadow metadata;
+2. reconciles the live V4 graph;
+3. re-resolves endpoints;
+4. validates current geometry;
+5. builds a fresh proposed physics plan;
+6. hardens it through the safety gate/override registry;
+7. blocks SIMULATE if any V4 record is not physics-certified;
+8. creates the normal PhysicsSession;
+9. installs V4 joints atomically.
 
-V4 remains fail-closed where Shadow geometry alone is insufficient.
-
-Current examples:
-
-- `generic-group` — may represent plugs, magnets, electrical connectors or special couplings; group/shape compatibility is not enough to choose a Rapier joint;
-- locking/click/detent hinge groups — the metadata does not provide a sufficiently proven detent torque/angle model.
-
-These connections may exist in BUILD where their geometry is certified, but SIMULATE is blocked until an explicit physical rule is available. BrickLab prefers an explicit unsupported state over plausible-looking false physics.
+If adapter construction fails, the partially created session is disposed. The user receives a Connector V4-specific reason instead of a misleading "Rapier failed to load" message.
 
 ## Debugging
 
-`F9` toggles the Connector V4 endpoint/axis overlay.
+`F9` toggles the Connector V4 endpoint/axis overlay. Helpers are removed synchronously before physics collider bounds are measured, so debug geometry cannot change mass/colliders.
 
-The overlay is built as non-interactive child debug geometry. Before any physics session measures collider bounds, the physics guard dispatches a synchronous preflight event and the overlay removes all helpers. Debug visuals therefore cannot enlarge a part's physics `Box3` or alter mass/collider construction.
-
-Useful browser diagnostics:
+Useful console diagnostics:
 
 ```js
 BrickLabConnectorV4.stats()
@@ -278,11 +317,12 @@ BrickLabConnectorV4.projectConnections()
 BrickLabConnectorV4PhysicsGuard.lastPlan()
 BrickLabConnectorV4PhysicsGuard.lastFailure()
 BrickLabConnectorV4Debug.toggle()
+__bricklabPhysicsDiagnostics()
 ```
 
 ## Failure policy
 
-The central invariant remains:
+The central rule is:
 
 ```text
 unknown > guessed
@@ -290,30 +330,29 @@ unknown > guessed
 
 Examples:
 
-- raw Shadow 404 → metadata absent;
-- timeout / 429 / 5xx / network error → hydration error, not absence;
-- malformed metadata → warning/quarantine rather than guessed connector;
-- invalid inherited scale/mirror → rejected inheritance;
-- recursion cycle/budget overflow → branch terminated with diagnostic;
-- unsupported physics family → SIMULATE blocked for that connection;
-- failed Rapier adapter construction → whole physics session aborted.
+- Shadow 404 → metadata absent;
+- timeout / 429 / 5xx → hydration error, not "no connector";
+- malformed snap meta → quarantine;
+- invalid scale/mirror → rejected inheritance;
+- recursion cycle/budget overflow → diagnostic and terminated branch;
+- unsupported physics family → SIMULATE blocked;
+- mechanism without proven angular envelope → BUILD allowed, SIMULATE blocked;
+- failed Rapier joint install → entire physics session aborted.
 
 ## Cache/version consistency
 
-BrickLab is a no-build GitHub Pages runtime, so module URL identity matters. `scripts/version-runtime.mjs` now versions root JavaScript, audio modules and every `connectors-v4/*.js` module with one canonical runtime tag.
+BrickLab is a no-build GitHub Pages runtime. `scripts/version-runtime.mjs` versions root JavaScript, audio and every `connectors-v4/*.js` file with one runtime generation. Historical explicit query imports are redirected to that same canonical generation so browser cache cannot instantiate two schema/matcher generations in one page.
 
-A few early V4 source files still contain historical query strings in relative imports. The version generator discovers those exact URLs and maps them to the current canonical module URL. This prevents two schema/matcher generations from being instantiated in the same page.
-
-`tests/import-map-integrity.test.mjs` enforces this invariant.
+`tests/import-map-integrity.test.mjs` enforces the mapping.
 
 ## Tests
 
-Run the complete Connector V4 acceptance suite with:
+Run:
 
 ```bash
 npm run test:connectors-v4
 ```
 
-The suite covers parser/resolver behavior, upstream fixtures, matching, placement, identity, occupancy, graph persistence/runtime behavior, production bridges, live physics recertification, Rapier DOF masks, axle/hole zero-impulse stability, dynamic disengagement, multi-stud aggregation, shape-based round interfaces, fail-closed locking hinges/generic groups and import-map generation consistency.
+The suite covers parser/resolver behavior, pinned Shadow fixtures, shape matching, placement, identity, interval occupancy, graph persistence/history/runtime behavior, production ownership bridges, live physics recertification, Rapier DOF masks, zero-impulse axle stability, dynamic disengagement/drivetrain split, multi-stud aggregation, safety gating, explicit override matching and import-map consistency.
 
-Existing Physics/Parts tests remain relevant because V4 is intentionally integrated with, rather than a replacement for, the rest of BrickLab's drivetrain and simulation architecture.
+GitHub Actions are not required for this workflow; the acceptance suite is designed to run locally.
