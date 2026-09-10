@@ -1,5 +1,5 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: PARTS-6 · real preload stage + curated interactive main-menu hero v4.
+// BUILD: PARTS-6 · real preload stage + curated interactive main-menu hero v5.
 // Root production modules are versioned by the import map in index.html.
 
 let projectPreloader = null
@@ -27,7 +27,7 @@ try {
 let menuResult = { action: 'continue', snapshot: null }
 let showMainMenu = null
 try {
-  ;({ showMainMenu } = await import('./menu/main-menu-v4.js?v=main-menu-20260910-v4'))
+  ;({ showMainMenu } = await import('./menu/main-menu-v5.js?v=main-menu-20260910-v5'))
   projectPreloader?.stageProgress(1, 'Готово')
 } catch (error) {
   console.warn('[BrickLab] Main menu module unavailable; opening editor directly.', error)
