@@ -1,7 +1,7 @@
 import { findPart } from '../parts.js'
-import { validateConnectorV4 } from './schema-v4.js?v=connector-v4-20260910-v1'
+import { validateConnectorV4 } from './schema-v4.js?v=connector-v4-20260910-v3'
 
-export const CONNECTOR_AUDIT_VERSION_V4 = 'connector-audit-v4.0.0'
+export const CONNECTOR_AUDIT_VERSION_V4 = 'connector-audit-v4.1.0'
 const DEFAULT_POSITION_TOLERANCE_STUD = 0.18
 
 function distance3(a,b) {
@@ -37,12 +37,16 @@ function v4Axis(connector) { return connector?.frame?.axis ?? null }
 
 function endpointUniqueness(connectors) {
   const ids=new Map()
+  const missing=[]
   for (const connector of connectors) {
     const id=String(connector?.endpointId || '')
-    if (!id) continue
+    if (!id) { missing.push(connector?.source ?? null); continue }
     ids.set(id,(ids.get(id)||0)+1)
   }
-  return [...ids.entries()].filter(([,count])=>count>1).map(([endpointId,count])=>({endpointId,count}))
+  return {
+    duplicates:[...ids.entries()].filter(([,count])=>count>1).map(([endpointId,count])=>({endpointId,count})),
+    missing,
+  }
 }
 
 export function auditConnectorDefinitionV4(defOrId,{positionToleranceStud=DEFAULT_POSITION_TOLERANCE_STUD}={}) {
@@ -60,7 +64,7 @@ export function auditConnectorDefinitionV4(defOrId,{positionToleranceStud=DEFAUL
     const validation=validateConnectorV4(connector)
     if (!validation.valid) validationErrors.push({endpointId:connector.endpointId || null,errors:validation.errors})
   }
-  const duplicateEndpointIds=endpointUniqueness(v4)
+  const identities=endpointUniqueness(v4)
 
   const legacyMatches=legacy.map(item => {
     let best=null
@@ -91,23 +95,22 @@ export function auditConnectorDefinitionV4(defOrId,{positionToleranceStud=DEFAUL
     partId:def.id,
     file:def.ldraw?.file || null,
     source:connectivity.source || null,
+    systemVersion:connectivity.systemVersion || null,
     counts:{legacy:legacy.length,v4:v4.length,matchedLegacy,unmatchedLegacy:unmatchedLegacy.length},
     coverage:legacy.length ? matchedLegacy/legacy.length : null,
     positionToleranceStud,
     unmatchedLegacy,
-    duplicateEndpointIds,
+    duplicateEndpointIds:identities.duplicates,
+    missingEndpointIds:identities.missing,
     validationErrors,
     warnings:connectivity.warnings ?? [],
     v4Kinds,
-    pass:duplicateEndpointIds.length===0 && validationErrors.length===0 && unmatchedLegacy.length===0,
+    pass:identities.duplicates.length===0 && identities.missing.length===0 && validationErrors.length===0 && unmatchedLegacy.length===0,
   }
 }
 
 export function auditReadyPartsV4(options={}) {
   const results=[]
-  const all=globalThis.BrickLabConnectorV4?.stats ? null : null
-  // PARTS is intentionally not imported here to keep this module usable in tests;
-  // callers can pass explicit definitions through auditConnectorDefinitionV4.
   for (const partId of options.partIds ?? []) results.push(auditConnectorDefinitionV4(partId,options))
   return {
     auditVersion:CONNECTOR_AUDIT_VERSION_V4,
