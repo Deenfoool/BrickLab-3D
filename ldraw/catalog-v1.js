@@ -1,4 +1,4 @@
-import { getLDrawIndex, getLDrawMetadata, registerLDrawPart } from './runtime-v1.js'
+import { getLDrawIndex, getLDrawMetadata, registerLDrawPart } from './runtime-v3.js?v=ldraw-20260910-v3'
 
 const STYLE_ID = 'bricklab-ldraw-catalog-v1-css'
 const LAYER_ID = 'bricklabLDrawCatalog'
@@ -34,7 +34,7 @@ function copy(){return isRussian()?{
 
 function ensureStyles(){
   if(document.getElementById(STYLE_ID))return
-  const link=document.createElement('link');link.id=STYLE_ID;link.rel='stylesheet';link.href=new URL('./catalog-v1.css?v=ldraw-20260910-v1',import.meta.url).href;document.head.append(link)
+  const link=document.createElement('link');link.id=STYLE_ID;link.rel='stylesheet';link.href=new URL('./catalog-v1.css?v=ldraw-20260910-v3',import.meta.url).href;document.head.append(link)
 }
 function icons(){window.lucide?.createIcons?.({attrs:{'stroke-width':1.7,'aria-hidden':'true'}})}
 function escapeHtml(value){return String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]))}
@@ -95,9 +95,9 @@ function render(items){
   icons()
 }
 
-async function enrich(files,generation){
+async function enrich(items,generation){
   const output=[]
-  const queue=[...files]
+  const queue=[...items]
   const workers=Array.from({length:Math.min(6,queue.length)},async()=>{
     while(queue.length){
       const item=queue.shift();if(!item)break
@@ -109,20 +109,9 @@ async function enrich(files,generation){
   return output
 }
 
-function localNameMatches(query){
-  const q=query.toLowerCase()
-  const output=[]
-  for(const [file,promise] of metadataMemo){
-    const value=promise?.__resolved
-    if(value&&`${value.code} ${value.description} ${value.category} ${(value.keywords||[]).join(' ')}`.toLowerCase().includes(q))output.push(value)
-  }
-  return output
-}
-
 async function siteNameSearch(query){
   try{
-    const url=`https://library.ldraw.org/parts/list?tableSearch=${encodeURIComponent(query)}`
-    const response=await fetch(url,{mode:'cors',cache:'no-store'})
+    const response=await fetch(`https://library.ldraw.org/parts/list?tableSearch=${encodeURIComponent(query)}`,{mode:'cors',cache:'no-store'})
     if(!response.ok)return []
     const html=await response.text()
     const doc=new DOMParser().parseFromString(html,'text/html')
@@ -185,20 +174,18 @@ async function addPart(button){
   const file=button.dataset.ldrawFile
   if(!file)return
   button.classList.add('loading')
-  const old=button.querySelector('.ldraw-add')?.innerHTML
-  if(button.querySelector('.ldraw-add'))button.querySelector('.ldraw-add').textContent='…'
+  const add=button.querySelector('.ldraw-add')
+  const old=add?.innerHTML
+  if(add)add.textContent='…'
   try{
-    const data=await metadata(file)
-    data.__resolved=true
-    metadataMemo.set(file,Object.assign(Promise.resolve(data),{__resolved:data}))
-    const def=registerLDrawPart(data)
+    const def=registerLDrawPart(await metadata(file))
     refreshBrickLabCatalog(def)
     close()
   }catch(error){
     console.warn('[BrickLab LDraw] catalog add failed',error)
     status.textContent=copy().failed
     button.classList.remove('loading')
-    if(button.querySelector('.ldraw-add'))button.querySelector('.ldraw-add').innerHTML=old||'<i data-lucide="plus"></i>'
+    if(add)add.innerHTML=old||'<i data-lucide="plus"></i>'
     icons()
   }
 }
@@ -217,7 +204,7 @@ async function open(){
   try{await ensureIndex();await runSearch(input.value)}catch{/* status already shown */}
   finally{opening=false}
 }
-function close(){if(!layer)return;layer.classList.add('hidden')}
+function close(){if(layer)layer.classList.add('hidden')}
 
 function installButton(){
   const browser=document.getElementById('catalogBrowserV2')
