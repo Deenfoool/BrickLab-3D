@@ -1,15 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import * as THREE from 'three'
-import * as RAPIER_MODULE from '@dimforge/rapier3d-compat'
+import RAPIER from '@dimforge/rapier3d-compat'
 import { Window } from 'happy-dom'
 import { parseShadowTextV4 } from '../connectors-v4/ldcad-parser-v4.js'
 import { connectorToBrickLabV4 } from '../connectors-v4/shadow-resolver-v4.js'
 import { matchConnectorV4 } from '../connectors-v4/matcher-v4.js'
-import { buildPhysicsPlanV4 } from '../connectors-v4/physics-policy-v4.js'
+import { activationForMatchV4 } from '../connectors-v4/activation-v4.js'
+import { validateConnectedGeometryV4 } from '../connectors-v4/validity-v4.js'
+import { buildPhysicsPlanV4, physicsRulePreviewV4 } from '../connectors-v4/physics-policy-v4.js'
 import { installConnectorPhysicsV4, CONNECTOR_V4_RAPIER_MASKS } from '../connectors-v4/physics-adapter-v4.js'
 
-const RAPIER=RAPIER_MODULE.default??RAPIER_MODULE
 const dom=new Window()
 for(const key of ['window','document','CustomEvent','HTMLElement']) globalThis[key]=key==='window'?dom:dom[key]
 await RAPIER.init()
@@ -38,13 +39,16 @@ function sessionFor(a,b){
   }
   return {session,ca,cb}
 }
-function connection(family,a,b,ca,cb){
+function connection(family,a,b,ca,cb,id=`${a.userData.instanceId}-${b.userData.instanceId}`){
   const match=matchConnectorV4(ca,cb)
   assert.equal(match.compatible,true)
-  return {schemaVersion:4,graphVersion:'connection-graph-v4.0.1',id:`${a.userData.instanceId}-${b.userData.instanceId}`,
+  return {schemaVersion:4,graphVersion:'connection-graph-v4.0.1',id,
     a:{instanceId:a.userData.instanceId,partId:a.userData.partId,endpointId:ca.endpointId},
     b:{instanceId:b.userData.instanceId,partId:b.userData.partId,endpointId:cb.endpointId},
     activation:{family},metadata:{activation:{family}},match}
+}
+function getConnectorMap(entries){
+  return new Map(entries.map(([part,connector])=>[`${part}:${connector.endpointId}`,connector]))
 }
 
 test('Rapier masks leave exactly the intended connector-axis DOF free',()=>{
@@ -57,7 +61,7 @@ test('aligned axle/round-hole creates one stable cylindrical joint and disengage
   const hole=endpoint('SNAP_CYL [gender=F] [caps=none] [secs=R 8 2 R 6 16 R 8 2] [center=true] [slide=true]','hole')
   const a=object('axle'),b=object('beam')
   const record=connection('technic-axle-round-hole',a,b,axle,hole)
-  const connectors=new Map([[`${a.userData.partId}:${axle.endpointId}`,axle],[`${b.userData.partId}:${hole.endpointId}`,hole]])
+  const connectors=getConnectorMap([[a.userData.partId,axle],[b.userData.partId,hole]])
   const plan=buildPhysicsPlanV4({objects:[a,b],connections:[record],getConnector:(part,id)=>connectors.get(`${part}:${id}`)})
   assert.equal(plan.pass,true)
   assert.equal(plan.joints[0].rule.kind,'cylindrical')
@@ -91,7 +95,7 @@ test('physics policy distrusts connection flags and certifies from live geometry
   const hole=endpoint('SNAP_CYL [gender=F] [caps=none] [secs=A 6 20] [center=true] [slide=true]','hole')
   const a=object('a'),b=object('b')
   const record={...connection('technic-axle-keyed-hole',a,b,axle,hole),physicsReady:true,constraint:{physicsReady:true,status:'approved'}}
-  const connectors=new Map([[`${a.userData.partId}:${axle.endpointId}`,axle],[`${b.userData.partId}:${hole.endpointId}`,hole]])
+  const connectors=getConnectorMap([[a.userData.partId,axle],[b.userData.partId,hole]])
   let plan=buildPhysicsPlanV4({objects:[a,b],connections:[record],getConnector:(part,id)=>connectors.get(`${part}:${id}`)})
   assert.equal(plan.pass,true)
   assert.equal(plan.joints[0].constraint.physicsReady,true)
@@ -100,4 +104,57 @@ test('physics policy distrusts connection flags and certifies from live geometry
   plan=buildPhysicsPlanV4({objects:[a,b],connections:[record],getConnector:(part,id)=>connectors.get(`${part}:${id}`)})
   assert.equal(plan.pass,false)
   assert.match(plan.blockers[0].reason,/live-geometry/)
+})
+
+test('two distinct stud contacts between the same parts become one rigid physics joint',()=>{
+  const studA=endpoint('SNAP_CYL [gender=M] [caps=one] [secs=R 6 4] [pos=-10 0 0]','stud-a')
+  const studB=endpoint('SNAP_CYL [gender=M] [caps=one] [secs=R 6 4] [pos=10 0 0]','stud-b')
+  const antiA=endpoint('SNAP_CYL [gender=F] [caps=one] [secs=R 6 4] [pos=-10 0 0]','anti-a')
+  const antiB=endpoint('SNAP_CYL [gender=F] [caps=one] [secs=R 6 4] [pos=10 0 0]','anti-b')
+  const top=object('top'),bottom=object('bottom')
+  const records=[
+    connection('stud-anti-stud',top,bottom,studA,antiA,'stud-1'),
+    connection('stud-anti-stud',top,bottom,studB,antiB,'stud-2'),
+  ]
+  const connectors=getConnectorMap([
+    [top.userData.partId,studA],[top.userData.partId,studB],
+    [bottom.userData.partId,antiA],[bottom.userData.partId,antiB],
+  ])
+  const plan=buildPhysicsPlanV4({objects:[top,bottom],connections:records,getConnector:(part,id)=>connectors.get(`${part}:${id}`)})
+  assert.equal(plan.pass,true)
+  assert.equal(plan.joints.length,1)
+  assert.equal(plan.joints[0].rule.kind,'fixed')
+  assert.deepEqual(new Set(plan.joints[0].connectionIds),new Set(['stud-1','stud-2']))
+})
+
+test('shape-based round activation and physics policy agree',()=>{
+  const slidingMale=endpoint('SNAP_CYL [gender=M] [caps=none] [secs=R 5 40] [center=true] [slide=true]','slide-m')
+  const slidingFemale=endpoint('SNAP_CYL [gender=F] [caps=none] [secs=R 5 40] [center=true] [slide=true]','slide-f')
+  const slideMatch=matchConnectorV4(slidingMale,slidingFemale)
+  const slideActivation=activationForMatchV4(slidingMale,slidingFemale,slideMatch)
+  assert.equal(slideActivation.family,'round-cylindrical-interface')
+  assert.equal(physicsRulePreviewV4(slideActivation.family,{match:slideMatch}).kind,'cylindrical')
+
+  const hingeMale=endpoint('SNAP_CYL [gender=M] [caps=one] [secs=R 5 8]','hinge-m')
+  const hingeFemale=endpoint('SNAP_CYL [gender=F] [caps=one] [secs=R 5 8]','hinge-f')
+  const hingeMatch=matchConnectorV4(hingeMale,hingeFemale)
+  const hingeActivation=activationForMatchV4(hingeMale,hingeFemale,hingeMatch)
+  assert.equal(hingeActivation.family,'round-revolute-interface')
+  assert.equal(physicsRulePreviewV4(hingeActivation.family,{match:hingeMatch}).kind,'revolute')
+})
+
+test('captured mechanisms map to explicit DOF while ambiguous mechanisms fail closed',()=>{
+  assert.deepEqual(
+    {supported:physicsRulePreviewV4('ball-socket').supported,kind:physicsRulePreviewV4('ball-socket').kind},
+    {supported:true,kind:'spherical'},
+  )
+  const hinge=physicsRulePreviewV4('hinge-fingers',{connectorA:{group:'hinge'},connectorB:{group:'hinge'}})
+  assert.equal(hinge.supported,true)
+  assert.equal(hinge.kind,'revolute')
+  const locking=physicsRulePreviewV4('hinge-fingers',{connectorA:{group:'lckhng'},connectorB:{group:'lckhng'}})
+  assert.equal(locking.supported,false)
+  assert.match(locking.reason,/locking-hinge/)
+  const generic=physicsRulePreviewV4('generic-group')
+  assert.equal(generic.supported,false)
+  assert.match(generic.reason,/explicit-physics-override/)
 })
