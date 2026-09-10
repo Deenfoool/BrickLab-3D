@@ -37,6 +37,41 @@ function showPhysicsError(detail = {}) {
   }, 0)
 }
 
+function connectorV4Reason(reason, ru) {
+  const reasons = {
+    'ball-socket-angular-envelope-not-implemented': ru ? 'для ball/socket ещё нет доказанной модели угловых ограничений' : 'ball/socket angular envelope is not implemented yet',
+    'hinge-angular-envelope-not-proven': ru ? 'для этого шарнира не подтверждены угловые пределы' : 'angular limits are not proven for this hinge',
+    'generic-revolute-angular-envelope-not-proven': ru ? 'для этого вращательного соединения не подтверждены угловые пределы' : 'angular limits are not proven for this revolute interface',
+    'captured-clip-angular-envelope-not-proven': ru ? 'для этого clip/bar не подтверждён диапазон вращения' : 'the rotation envelope is not proven for this clip/bar interface',
+    'generic-group-requires-explicit-physics-override': ru ? 'этому специальному соединению нужен явный физический профиль' : 'this special connector requires an explicit physics profile',
+    'locking-hinge-detent-policy-not-proven': ru ? 'для click/locking hinge не подтверждены detent-углы и усилие' : 'click/locking hinge detents are not certified',
+  }
+  return reasons[reason] || shortMessage(reason || (ru ? 'физика соединения не сертифицирована' : 'connector physics is not certified'), 110)
+}
+
+function showConnectorV4Blocked(detail = {}) {
+  // The V4 guard dispatches synchronously and startSimulation then enters its generic
+  // catch path. Defer this message one task so the precise connector explanation wins.
+  setTimeout(() => {
+    const toast = document.getElementById('toast')
+    const simState = document.getElementById('simState')
+    const status = document.getElementById('statusText')
+    if (!toast) return
+    const ru = isRussian()
+    const blockers = Array.isArray(detail.blockers) ? detail.blockers : []
+    const first = blockers[0] ?? {}
+    const family = first.family ? ` · ${first.family}` : ''
+    const extra = blockers.length > 1 ? (ru ? ` · ещё ${blockers.length - 1}` : ` · +${blockers.length - 1} more`) : ''
+    const reason = connectorV4Reason(first.reason || detail.reason, ru)
+    toast.textContent = `${ru ? 'Connector V4: симуляция заблокирована' : 'Connector V4: simulation blocked'}${family} · ${reason}${extra}`
+    toast.classList.add('show')
+    if (simState) simState.textContent = ru ? 'Connector V4 · нужен физический профиль' : 'Connector V4 · physics profile required'
+    if (status) status.textContent = ru ? 'SIMULATE · Connector V4 fail-closed' : 'SIMULATE · Connector V4 fail-closed'
+    clearTimeout(window.__bricklabPhysicsErrorToastTimer)
+    window.__bricklabPhysicsErrorToastTimer = setTimeout(() => toast.classList.remove('show'), 14000)
+  }, 0)
+}
+
 function installBuildStamp() {
   const actions = document.querySelector('.top-actions')
   if (!actions) {
@@ -47,7 +82,7 @@ function installBuildStamp() {
   const badge = document.createElement('span')
   badge.id = 'bricklabBuildStamp'
   badge.textContent = BUILD_ID
-  badge.title = `BrickLab ${BUILD_TAG} · high-fidelity wheels/driveline · hollow structural shells + molded cross axles · forged steering/threaded shocks · split shaft hardware · PARTS-4 mechanics preserved`
+  badge.title = `BrickLab ${BUILD_TAG} · high-fidelity wheels/driveline · Connector V4 fail-closed physics · PARTS-4 mechanics preserved`
   Object.assign(badge.style, {
     display: 'inline-flex',
     alignItems: 'center',
@@ -66,6 +101,7 @@ function installBuildStamp() {
 }
 
 window.addEventListener('bricklab:physicserror', event => showPhysicsError(event.detail))
+window.addEventListener('bricklab:connectorv4physicsblocked', event => showConnectorV4Blocked(event.detail))
 window.addEventListener('DOMContentLoaded', installBuildStamp, { once: true })
 installBuildStamp()
 
@@ -141,6 +177,7 @@ window.__bricklabPhysicsDiagnostics = () => ({
     runtime: window.BrickLabConnectorV4?.stats?.() ?? null,
     physicsGuard: window.BrickLabConnectorV4PhysicsGuard ? {
       version: window.BrickLabConnectorV4PhysicsGuard.version,
+      safetyVersion: window.BrickLabConnectorV4PhysicsGuard.safetyVersion ?? null,
       policyVersion: window.BrickLabConnectorV4PhysicsGuard.policyVersion,
       adapterVersion: window.BrickLabConnectorV4PhysicsGuard.adapterVersion,
       lastPlan: window.BrickLabConnectorV4PhysicsGuard.lastPlan?.() ?? null,
