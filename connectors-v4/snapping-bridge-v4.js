@@ -4,7 +4,7 @@ import { suppressNextConnectionForEndpoint } from '../connections.js'
 
 export * from '../snapping-v3.js'
 
-export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.1.0'
+export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.1.1'
 
 function runtime() {
   const value = globalThis.BrickLabConnectorV4
@@ -14,8 +14,8 @@ function runtime() {
 function bridgeConnector(connector, role) {
   return {
     ...connector,
-    id: connector.endpointId,
-    type: `v4-${role || connector.family || 'connector'}`,
+    id:connector.endpointId,
+    type:`v4-${role || connector.family || 'connector'}`,
   }
 }
 
@@ -44,26 +44,43 @@ function bridgeCandidate(candidate) {
   }
 }
 
+function isLDrawPart(object) {
+  return String(object?.userData?.partId || '').startsWith('ldraw-')
+}
+
+function v4OwnsLegacyCandidate(selected, legacy) {
+  if (!legacy || legacy.kind === 'gear-mesh') return false
+  if (!isLDrawPart(selected) && !isLDrawPart(legacy.targetObject)) return false
+  const types = new Set([legacy.source?.type, legacy.target?.type])
+  return types.has('axle') && types.has('axle-hole')
+}
+
 export function findSnapCandidate(selected, objects, options = {}) {
   const legacy = V3.findSnapCandidate(selected, objects, options)
   // Gear meshing is a separate mechanical-contact solver and remains authoritative.
   if (legacy?.kind === 'gear-mesh') return legacy
 
   const v4 = runtime()
-  if (!v4 || !selected?.userData?.partId?.startsWith?.('ldraw-')) return legacy
+  const selectedIsLDraw = isLDrawPart(selected)
 
-  let candidate = null
-  try {
-    candidate = v4.findActiveCandidate(selected, objects, {
-      maxResults:32,
-      captureDistanceStud:typeof options === 'number' ? options : options?.maxDistance,
-      minAxisAlignment:typeof options === 'object' ? options?.minAlignment : undefined,
-    })
-  } catch (error) {
-    console.warn('[BrickLab Connector V4] Active candidate search failed; V3 fallback remains active.', error)
-    return legacy
+  if (v4 && selectedIsLDraw) {
+    try {
+      const candidate = v4.findActiveCandidate(selected, objects, {
+        maxResults:32,
+        captureDistanceStud:typeof options === 'number' ? options : options?.maxDistance,
+        minAxisAlignment:typeof options === 'object' ? options?.minAlignment : undefined,
+      })
+      if (candidate) return bridgeCandidate(candidate)
+    } catch (error) {
+      console.warn('[BrickLab Connector V4] Active candidate search failed closed for V4-owned families.', error)
+    }
   }
-  return bridgeCandidate(candidate) ?? legacy
+
+  // Once a LDraw axle/axle-hole pair is owned by V4, V3 is never allowed to create
+  // the same coarse connection while Shadow metadata is loading, quarantined or
+  // otherwise uncertified. The absence of a certified V4 candidate means no snap.
+  if (v4OwnsLegacyCandidate(selected, legacy)) return null
+  return legacy
 }
 
 export function orientForSnap(selected, candidate) {
@@ -95,9 +112,7 @@ export function applySnap(selected, candidate) {
     const result = v4.commitActiveCandidate(rawCandidate)
     candidate.v4Commit = result
     globalThis.__bricklabLastConnectorV4Commit = result
-    if (!result?.accepted) {
-      console.warn('[BrickLab Connector V4] Snap candidate failed final commit validation.', result)
-    }
+    if (!result?.accepted) console.warn('[BrickLab Connector V4] Snap candidate failed final commit validation.', result)
   } catch (error) {
     candidate.v4Commit = { accepted:false, reason:'bridge-exception', error:String(error?.message || error) }
     globalThis.__bricklabLastConnectorV4Commit = candidate.v4Commit
