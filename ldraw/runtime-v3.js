@@ -18,6 +18,7 @@ const MAX_SUBPART_DEPTH = 8
 const textCache = new Map()
 const metadataCache = new Map()
 const prototypeCache = new Map()
+const resolvedPrototypeCache = new Map()
 const inferenceCache = new Map()
 let indexPromise = null
 let loaderPromise = null
@@ -253,6 +254,14 @@ async function getLoader() {
   return loaderPromise
 }
 
+function markSharedGeometry(root) {
+  root.traverse(object => {
+    if (!object.geometry) return
+    object.geometry.userData ??= {}
+    object.geometry.userData.bricklabSharedVisual = true
+  })
+}
+
 function cloneMaterials(root, color) {
   const hex = Number(color)
   root.traverse(object => {
@@ -271,6 +280,8 @@ function cloneMaterials(root, color) {
 
 async function loadPrototype(file) {
   const normalized = normalizeFile(file)
+  const resolved = resolvedPrototypeCache.get(normalized)
+  if (resolved) return resolved
   if (prototypeCache.has(normalized)) return prototypeCache.get(normalized)
   const promise = (async () => {
     const [loader, text] = await Promise.all([getLoader(), fetchLDrawText(normalized)])
@@ -287,16 +298,19 @@ async function loadPrototype(file) {
     const offset = new THREE.Vector3(-center.x, -box.min.y, -center.z)
     model.position.add(offset)
     model.updateMatrixWorld(true)
+    markSharedGeometry(model)
     const finalBox = new THREE.Box3().setFromObject(model)
     const size = finalBox.getSize(new THREE.Vector3())
     const metadata = parseHeader(text, normalized)
     const connectors = connectorArray(rawFeatures, offset)
-    return {
+    const value = {
       model,
       metadata: { ...metadata, size: [size.x, size.y, size.z], connectorCount: connectors.length, recursiveSubparts: true },
       connectors,
       mechanics: inferMechanics(metadata, connectors),
     }
+    resolvedPrototypeCache.set(normalized, value)
+    return value
   })()
   prototypeCache.set(normalized, promise)
   try { return await promise } catch (error) { prototypeCache.delete(normalized); throw error }
@@ -354,6 +368,42 @@ function categoryFor(metadata) {
   return 'LDraw'
 }
 
+function attachPrototype(root, def, payload, color, fallback = null, announce = false) {
+  if (fallback) {
+    root.remove(fallback)
+    fallback.userData.disposePlaceholder?.()
+  }
+  const visual = payload.model.clone(true)
+  cloneMaterials(visual, color)
+  visual.traverse(child => {
+    child.userData = { ...child.userData, instanceRoot: root, ldrawVisual: true }
+    if (child.isMesh) { child.castShadow = true; child.receiveShadow = true }
+  })
+  root.add(visual)
+  def.connectors.splice(0, def.connectors.length, ...payload.connectors)
+  def.name = payload.metadata.description || def.name
+  def.description = `${payload.metadata.description || def.description}${payload.metadata.license ? ` · ${payload.metadata.license}` : ''}`
+  def.category = categoryFor(payload.metadata)
+  def.tags = [...new Set([...def.tags, ...(payload.metadata.keywords || []), payload.metadata.category].filter(Boolean))]
+  if (payload.mechanics) def.mechanics = payload.mechanics
+  def.ldraw = {
+    ...def.ldraw,
+    ...payload.metadata,
+    ready: true,
+    level: payload.mechanics ? 'mechanical' : payload.connectors.length ? 'snap' : 'visual',
+  }
+  root.userData.ldraw = {
+    ...root.userData.ldraw,
+    status: 'ready',
+    connectorCount: payload.connectors.length,
+    level: def.ldraw.level,
+  }
+  if (announce) {
+    window.dispatchEvent(new CustomEvent('bricklab:ldrawloaded', { detail: { id: def.id, file: def.ldraw.file, code: def.ldraw.code, connectors: payload.connectors.length, level: def.ldraw.level } }))
+    window.dispatchEvent(new CustomEvent('bricklab:partcatalogchange'))
+  }
+}
+
 export function registerLDrawPart(entry = {}) {
   const file = normalizeFile(entry.file || `${entry.code}.dat`)
   const code = partCode(file)
@@ -371,35 +421,20 @@ export function registerLDrawPart(entry = {}) {
     defaultColor: entry.defaultColor ?? 0xd7263d,
     tags: ['ldraw', code, file, ...(entry.keywords || [])],
     connectors,
-    ldraw: { file, code, source: LDRAW_SOURCE.repository, level: 'visual' },
+    ldraw: { file, code, source: LDRAW_SOURCE.repository, ready: false, level: 'visual' },
     create(color = def.defaultColor) {
       const root = new THREE.Group()
       root.userData.partId = id
       root.userData.color = color
       root.userData.ldraw = { file, code, status: 'loading' }
+      const ready = resolvedPrototypeCache.get(file)
+      if (ready) {
+        attachPrototype(root, def, ready, color)
+        return root
+      }
       const fallback = placeholder(fallbackSize(def.name), color)
       root.add(fallback)
-      void loadPrototype(file).then(({ model, metadata, connectors: inferred, mechanics }) => {
-        root.remove(fallback)
-        fallback.userData.disposePlaceholder?.()
-        const visual = model.clone(true)
-        cloneMaterials(visual, color)
-        visual.traverse(child => {
-          child.userData = { ...child.userData, instanceRoot: root, ldrawVisual: true }
-          if (child.isMesh) { child.castShadow = true; child.receiveShadow = true }
-        })
-        root.add(visual)
-        connectors.splice(0, connectors.length, ...inferred)
-        def.name = metadata.description || def.name
-        def.description = `${metadata.description || def.description}${metadata.license ? ` · ${metadata.license}` : ''}`
-        def.category = categoryFor(metadata)
-        def.tags = [...new Set([...def.tags, ...(metadata.keywords || []), metadata.category].filter(Boolean))]
-        if (mechanics) def.mechanics = mechanics
-        def.ldraw = { ...def.ldraw, ...metadata, level: mechanics ? 'mechanical' : inferred.length ? 'snap' : 'visual' }
-        root.userData.ldraw = { ...root.userData.ldraw, status: 'ready', connectorCount: inferred.length, level: def.ldraw.level }
-        window.dispatchEvent(new CustomEvent('bricklab:ldrawloaded', { detail: { id, file, code, connectors: inferred.length, level: def.ldraw.level } }))
-        window.dispatchEvent(new CustomEvent('bricklab:partcatalogchange'))
-      }).catch(error => {
+      void loadPrototype(file).then(payload => attachPrototype(root, def, payload, color, fallback, !def.ldraw.ready)).catch(error => {
         console.warn(`[BrickLab LDraw] Could not load ${file}`, error)
         root.userData.ldraw = { ...root.userData.ldraw, status: 'error', error: String(error?.message || error) }
       })
