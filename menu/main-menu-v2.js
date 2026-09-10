@@ -109,9 +109,9 @@ function markup(snapshot) {
   </div>
   <div class="bl2-ui">
     <header class="bl2-top">
-      <div class="bl2-nav"><span>Ideas</span><i>/</i><span>Parts</span><i>/</i><span>Motion</span><i>/</i><span>More</span></div>
+      <div></div>
       <div class="bl2-progress"><div class="bl2-track"><span></span></div><span>72%</span></div>
-      <div class="bl2-tag">Build a brighter tomorrow</div>
+      <div></div>
     </header>
 
     <aside class="bl2-left">
@@ -122,12 +122,9 @@ function markup(snapshot) {
 
     <main class="bl2-center">
       <h1 class="bl2-title">BrickLab <em>3D</em></h1>
-      <div class="bl2-sub">Design&nbsp;&nbsp;·&nbsp;&nbsp;Simulate&nbsp;&nbsp;·&nbsp;&nbsp;Bring to life</div>
       <div class="bl2-hero" id="bl2Hero">
         <div class="bl2-glow"></div><div class="bl2-rings"></div>
         <div class="bl2-fallback" id="bl2Fallback">3D preview unavailable</div>
-        <div class="bl2-hero-badge">REAL PARTS · LIVE 3D</div>
-        <div class="bl2-hero-hint">Drag — rotate · Wheel — zoom · Double click — reset</div>
       </div>
       <div class="bl2-actions" role="menu" aria-label="Главное меню">
         <button class="bl2-action primary active" type="button" role="menuitem" data-action="new"><span></span><span>Новый проект</span><span class="arrow">›</span></button>
@@ -136,14 +133,8 @@ function markup(snapshot) {
       </div>
     </main>
 
-    <aside class="bl2-right" aria-hidden="true">
-      <div class="bl2-note a"><strong>Mechanics</strong>Creativity<br>without limits</div>
-      <div class="bl2-note b"><strong>Test</strong>Ideas<br>in motion</div>
-      <div class="bl2-note c">Different<br>perspectives<br>a brighter build</div>
-    </aside>
-
     <footer class="bl2-footer">
-      <div class="bl2-footer-left">Small parts · great ideas</div>
+      <div></div>
       <div class="bl2-links"><a href="https://github.com/Deenfoool/BrickLab-3D" target="_blank" rel="noopener noreferrer">GitHub</a><span>|</span><a href="https://github.com/Deenfoool/portfolio" target="_blank" rel="noopener noreferrer">Portfolio</a><span>|</span><button type="button" data-action="settings">Settings</button></div>
       <div class="bl2-version">${VERSION_LABEL}</div>
     </footer>
