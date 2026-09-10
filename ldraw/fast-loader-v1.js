@@ -1,6 +1,6 @@
 import { PARTS } from '../parts.js'
 
-export const LDRAW_FAST_LOADER_VERSION = 'ldraw-fast-loader-v1.1.0'
+export const LDRAW_FAST_LOADER_VERSION = 'ldraw-fast-loader-v1.2.0'
 
 const HOME_WARM = ['3001.dat','3003.dat','3004.dat','3005.dat','3020.dat','3022.dat','3023.dat','3894.dat','3895.dat','2780.dat','3673.dat','6558.dat','3705.dat','3706.dat','3707.dat','3708.dat']
 const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null
@@ -26,7 +26,8 @@ let mutationObserver = null
 const diagnostics = {
   queued:0, active:0, prepared:0, failed:0, backgroundStarted:0,
   cacheHits:0, hoverRequests:0, visibleRequests:0, criticalRequests:0,
-  connectorWarm:0, connectorWarmFailed:0, totalPrepareMs:0, lastPrepareMs:0,
+  projectWarmRequests:0, connectorWarm:0, connectorWarmFailed:0,
+  totalPrepareMs:0, lastPrepareMs:0,
 }
 
 function normalizeFile(value) {
@@ -227,6 +228,11 @@ function warmSavedList(key, max) {
     return items.slice(0,max).map(item=>normalizeFile(item?.file)).filter(Boolean)
   } catch { return [] }
 }
+function startRegisteredWarmup() {
+  const files = [...new Set(PARTS.filter(def => String(def?.id || '').startsWith('ldraw-') && def?.ldraw?.file && !def.ldraw.ready).map(def => normalizeFile(def.ldraw.file)))].slice(0,24)
+  diagnostics.projectWarmRequests = files.length
+  files.forEach((file,index) => void preloadLDrawPart(file,{priority:index < 4 ? 'critical' : 'hover'}).catch(()=>{}))
+}
 function startIdleWarmup() {
   if (constrainedNetwork || backgroundLimit <= 0) return
   idle(() => {
@@ -238,6 +244,7 @@ function startIdleWarmup() {
 }
 
 installPrediction()
+startRegisteredWarmup()
 startIdleWarmup()
 
 export const BrickLabLDrawFastLoader = Object.freeze({
