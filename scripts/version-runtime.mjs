@@ -4,22 +4,21 @@ import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { posix as path } from 'node:path'
 
 const root = new URL('../', import.meta.url)
-const tag = process.argv[2] ?? 'parts-6-20260910-connector-v4-physics-v8'
+const tag = process.argv[2] ?? 'parts-6-20260911-ldraw-fast-v1'
 if (!/^(?:runtime|connect|connector|physics|parts)-\d+-[a-z0-9-]+$/.test(tag)) throw new Error('Invalid runtime tag')
 const id = tag.match(/^(?:runtime|connect|connector|physics|parts)-\d+/)[0].toUpperCase()
 const files = (await readdir(root)).filter(name => name.endsWith('.js')).sort()
-for (const dir of ['audio', 'assets/audio', 'connectors-v4']) {
+for (const dir of ['audio', 'assets/audio', 'connectors-v4', 'ldraw']) {
   for (const name of await readdir(new URL(dir + '/', root))) if (name.endsWith('.js')) files.push(`${dir}/${name}`)
 }
 const versioned = Object.fromEntries(files.map(name => [`./${name}`, `./${name}?v=${tag}`]))
 
-// Early V4 modules used a few explicit query strings in relative imports. Discover
-// those exact historical URLs and redirect only them to this build's canonical URL.
-// This prevents duplicate schema/matcher instances without growing the import map
-// with aliases that can never be requested.
-const legacyV4Aliases = {}
-const v4Files = files.filter(name => name.startsWith('connectors-v4/'))
-for (const importer of v4Files) {
+// Some historical modules used explicit query strings in relative imports. Discover
+// only URLs that resolve to a file owned by this canonical runtime graph and redirect
+// them to the current build. This is especially important for LDraw: bootstrap,
+// catalog and predictive preload must share one prototype/text cache instance.
+const legacyAliases = {}
+for (const importer of files) {
   const source = await readFile(new URL(importer, root), 'utf8')
   const importerDir = path.dirname(importer)
   for (const match of source.matchAll(/["'](\.\.?\/[^"']+\.js\?v=[^"']+)["']/g)) {
@@ -27,7 +26,7 @@ for (const importer of v4Files) {
     const [pathname, query] = requested.split('?')
     const resolved = path.normalize(path.join(importerDir, pathname))
     const canonical = versioned[`./${resolved}`]
-    if (canonical && query) legacyV4Aliases[`./${resolved}?${query}`] = canonical
+    if (canonical && query) legacyAliases[`./${resolved}?${query}`] = canonical
   }
 }
 
@@ -45,7 +44,7 @@ const imports = {
   three: 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js',
   'three/addons/': 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/',
   ...versioned,
-  ...legacyV4Aliases,
+  ...legacyAliases,
   './tests/axle-fixtures.js': `./tests/axle-fixtures.js?v=${tag}`,
   ...connectorAliases,
 }
@@ -63,4 +62,4 @@ for (const file of ['physics-error-ui.js','tests/production-importmap-loader.js'
   await readFile(new URL(file, root), 'utf8')
 }
 
-console.log(`${id}: ${files.length} canonical module URLs + ${Object.keys(legacyV4Aliases).length} V4 legacy redirects (${tag}); QA delegates to production map`)
+console.log(`${id}: ${files.length} canonical module URLs + ${Object.keys(legacyAliases).length} legacy redirects (${tag}); LDraw shares one runtime cache; QA delegates to production map`)
