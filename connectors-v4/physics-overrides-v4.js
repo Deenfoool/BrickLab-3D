@@ -1,4 +1,4 @@
-export const PHYSICS_OVERRIDES_VERSION_V4 = 'connector-physics-overrides-v4.0.1'
+export const PHYSICS_OVERRIDES_VERSION_V4 = 'connector-physics-overrides-v4.0.2'
 
 // Physics overrides are an explicit trust boundary. Shadow connectivity can prove
 // that two endpoints mate, but some mechanisms also need information that is not
@@ -11,6 +11,11 @@ const registry = []
 function clean(value) { return String(value ?? '').trim().toLowerCase() }
 function clone(value) { return typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value)) }
 function normalizedSet(values) { return [...new Set(values.map(clean).filter(Boolean))].sort() }
+function deepFreeze(value) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value
+  for (const child of Object.values(value)) deepFreeze(child)
+  return Object.freeze(value)
+}
 
 function normalizeMatcher(match = {}) {
   const result = {
@@ -43,7 +48,7 @@ export function registerPhysicsOverrideV4({ id, match, rule } = {}) {
   const normalizedId = String(id || '').trim()
   if (!normalizedId) throw new TypeError('Connector V4 physics override requires a stable id')
   if (registry.some(entry => entry.id === normalizedId)) throw new Error(`Duplicate Connector V4 physics override: ${normalizedId}`)
-  const entry = Object.freeze({ id: normalizedId, match: Object.freeze(normalizeMatcher(match)), rule: Object.freeze(normalizeRule(rule)) })
+  const entry = deepFreeze({ id: normalizedId, match: normalizeMatcher(match), rule: normalizeRule(rule) })
   registry.push(entry)
   return entry
 }
@@ -87,3 +92,8 @@ export function listPhysicsOverridesV4() {
 }
 
 export const CONNECTOR_V4_OVERRIDE_KINDS = Object.freeze([...VALID_KINDS])
+
+globalThis.BrickLabConnectorV4PhysicsOverrides = Object.freeze({
+  version:PHYSICS_OVERRIDES_VERSION_V4,
+  list:listPhysicsOverridesV4,
+})
