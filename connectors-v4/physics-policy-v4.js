@@ -1,7 +1,7 @@
 import { approveConstraintV4, proposeConstraintV4 } from './constraints-v4.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.2.2'
+export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.2.3'
 
 const MIN_DISTINCT_STUD_DISTANCE = 0.45
 
@@ -48,8 +48,11 @@ function ruleFor(entry, studBundleSize = 1) {
   if (family === 'technic-axle-keyed-hole' || family === 'keyed-shaft-interface') {
     return { supported:true, kind:'prismatic', retention:'open-profile', release:'axial-profile', resistance:resistanceFor(family, match) }
   }
-  if (family === 'technic-axle-round-hole' || family === 'bar-round-hole') {
+  if (family === 'technic-axle-round-hole' || family === 'bar-round-hole' || family === 'round-cylindrical-interface') {
     return { supported:true, kind:'cylindrical', retention:'open-profile', release:'axial-profile', resistance:resistanceFor(family, match) }
+  }
+  if (family === 'round-revolute-interface') {
+    return { supported:true, kind:'revolute', retention:'captured', release:null }
   }
   if (family === 'technic-pin-hole') {
     return { supported:true, kind:'cylindrical', retention:'friction-profile', release:'axial-profile', resistance:resistanceFor(family, match) }
