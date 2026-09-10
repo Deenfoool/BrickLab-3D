@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { matchConnectorV4 } from './matcher-v4.js'
 import { nearestAxialOffsetV4, evaluateAxialOffsetV4 } from './axial-fit-v4.js'
 
-export const PLACEMENT_SOLVER_VERSION_V4 = 'placement-solver-v4.2.0'
+export const PLACEMENT_SOLVER_VERSION_V4 = 'placement-solver-v4.2.1'
 const EPS = 1e-8
 
 function matrixFromConnector(connector) {
@@ -46,7 +46,7 @@ function signedAngleAround(from, to, axis) {
   return Math.atan2(axis.dot(cross), THREE.MathUtils.clamp(a.dot(b),-1,1))
 }
 
-function worldPose(object) {
+export function objectWorldPoseV4(object) {
   object.updateWorldMatrix?.(true,false)
   const position = new THREE.Vector3()
   const quaternion = new THREE.Quaternion()
@@ -112,18 +112,14 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
   const match = options.match ?? matchConnectorV4(movingConnector,targetConnector)
   if (!match?.compatible) return { valid:false, reason:match?.reason || 'incompatible', match }
 
-  const movingFrame = connectorWorldFrameV4(movingObject,movingConnector)
-  const targetFrame = connectorWorldFrameV4(targetObject,targetConnector)
-  const movingPose = worldPose(movingObject)
+  const movingFrame = options.movingFrame ?? connectorWorldFrameV4(movingObject,movingConnector)
+  const targetFrame = options.targetFrame ?? connectorWorldFrameV4(targetObject,targetConnector)
+  const movingPose = options.movingPose ?? objectWorldPoseV4(movingObject)
   const initialDelta = movingFrame.position.clone().sub(targetFrame.position)
   const initialAxialSeparationStud = initialDelta.dot(targetFrame.axis)
   const initialLateralDistanceStud = initialDelta.clone().addScaledVector(targetFrame.axis,-initialAxialSeparationStud).length()
   const initialConnectorDistanceStud = initialDelta.length()
 
-  // LDCad cylinder sections are described along each connector's local negative-Y
-  // direction. Male/female profiles therefore mate with the two local Y frames
-  // pointing in the SAME world direction; this differs from BrickLab V3's legacy
-  // point-connector convention for stud/tube pairs.
   let desiredQuaternion = movingPose.quaternion.clone()
   let rotationDelta = new THREE.Quaternion()
   const placementMode = movingPlacementMode(movingConnector,match)
@@ -151,12 +147,9 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
   const desiredConnectorPosition = targetFrame.position.clone().addScaledVector(targetFrame.axis,axial.offsetStud)
   const desiredWorldPosition = desiredConnectorPosition.clone().sub(sourceOffset)
   const localPose = toParentLocalPose(movingObject,desiredWorldPosition,desiredQuaternion)
-  // Capture is intentionally connector-centric. Measuring only object-origin motion
-  // makes a connector near the edge of a large brick look "far away" when rotation
-  // around that connector is required, even though the mating points are adjacent.
   const captureCorrectionStud = movingFrame.position.distanceTo(desiredConnectorPosition)
 
-  const result = {
+  return {
     valid:true,
     reason:'solved',
     solverVersion:PLACEMENT_SOLVER_VERSION_V4,
@@ -182,7 +175,6 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
       engagementLdu:axial.fit?.engagementLdu ?? 0,
     },
   }
-  return result
 }
 
 export function applyPlacementV4(object,solution) {
