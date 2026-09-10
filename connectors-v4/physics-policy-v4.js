@@ -1,7 +1,7 @@
 import { approveConstraintV4, proposeConstraintV4 } from './constraints-v4.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.2.1'
+export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.2.2'
 
 const MIN_DISTINCT_STUD_DISTANCE = 0.45
 
@@ -107,15 +107,22 @@ function entryFor(connection, byId, getConnector) {
   return { ok:true, connection, family, objectA, objectB, connectorA, connectorB, validity }
 }
 
+function connectorOnInstance(entry, instanceId) {
+  if (entry.connection.a.instanceId === instanceId) return entry.connectorA
+  if (entry.connection.b.instanceId === instanceId) return entry.connectorB
+  return null
+}
+
 function distinctStudBundle(entries) {
   if (entries.length < 2) return false
+  // Always compare endpoints on the SAME physical part, even if imported records
+  // have their a/b direction reversed. This makes bundle classification invariant
+  // under connection serialization order.
+  const referenceInstance=[entries[0].connection.a.instanceId,entries[0].connection.b.instanceId].sort()[0]
   for (let i = 0; i < entries.length; i += 1) {
     for (let j = i + 1; j < entries.length; j += 1) {
-      // Connector coordinates are expressed in the same source part's local stud
-      // frame for all contacts in this pair. Any normal distinct LEGO stud-grid
-      // pair is comfortably farther apart than this conservative threshold.
-      const pa = entries[i].connectorA.frame.positionStud
-      const pb = entries[j].connectorA.frame.positionStud
+      const pa=connectorOnInstance(entries[i],referenceInstance)?.frame?.positionStud
+      const pb=connectorOnInstance(entries[j],referenceInstance)?.frame?.positionStud
       if (!Array.isArray(pa) || !Array.isArray(pb) || pa.length !== 3 || pb.length !== 3) continue
       const d = Math.hypot(pa[0]-pb[0], pa[1]-pb[1], pa[2]-pb[2])
       if (d >= MIN_DISTINCT_STUD_DISTANCE) return true
