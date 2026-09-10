@@ -61,15 +61,24 @@ if (menuResult.action === 'new' || menuResult.action === 'open') {
 
 // Register dynamic ldraw-* definitions before app.js restores a saved project.
 await import('./ldraw/bootstrap-v1.js?v=ldraw-catalog-20260910-v3')
-// Connector V4.1 resolves pinned LDCad Shadow metadata, stable endpoint identities,
-// exact axial fit windows and placement solutions in observe mode. It still does NOT
-// replace V3 project connections or Rapier joints until family audits are approved.
-await import('./connectors-v4/runtime-v4.js?v=connector-v4-20260910-v2')
+
+// Connector V4.1 is a fail-closed hybrid pilot. The menu action is supplied before
+// runtime initialization so New/Open cannot accidentally inherit a stale V4 graph.
+globalThis.__bricklabConnectorV4StartMode = menuResult.action
+await import('./connectors-v4/runtime-v4.js?v=connector-v4-20260910-v5')
+// Install physics preflight after all legacy PhysicsSession patches have loaded but
+// before the editor can start SIMULATE. Uncertified V4 links block physics explicitly.
+await import('./connectors-v4/physics-guard-v4.js?v=connector-v4-20260910-v5')
+
 await import('./app.js')
+// app.js remains the authoritative project/editor owner. This bridge only preserves
+// the V4 extension graph on import/export/new-project without duplicating app logic.
+await import('./connectors-v4/project-bridge-v4.js?v=connector-v4-20260910-v5')
 
 for (const [key, value] of hiddenProjectEntries) {
   try { localStorage.setItem(key, value) } catch { /* storage may be unavailable */ }
 }
+delete globalThis.__bricklabConnectorV4StartMode
 
 // "Open another project" enters the real editor first, then invokes its existing file
 // importer. This keeps import validation/migration in one authoritative code path.
