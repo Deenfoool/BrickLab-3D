@@ -2,15 +2,16 @@ import * as THREE from 'three'
 import { totalProfileLengthV4 } from './schema-v4.js'
 import { matchConnectorV4 } from './matcher-v4.js'
 import { activationForMatchV4, classifyConnectorV4 } from './activation-v4.js'
-import { connectorWorldFrameV4, solvePlacementV4 } from './placement-solver-v4.js'
+import { connectorWorldFrameV4, objectWorldPoseV4, solvePlacementV4 } from './placement-solver-v4.js'
 
-export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.3.1'
+export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.4.0'
 export const DEFAULT_CAPTURE_DISTANCE_STUD_V4 = 0.72
 export const DEFAULT_MIN_AXIS_ALIGNMENT_V4 = 0.72
 export const CLOSE_RANGE_MIN_AXIS_ALIGNMENT_V4 = 0.55
 const SUPPORT_POSITION_EPS_STUD = 0.045
 const SUPPORT_AXIS_DOT = 0.997
 const SUPPORT_ANALYSIS_LIMIT = 24
+const pairCompatibilityCache = new WeakMap()
 
 function definitionConnectors(definition) {
   return definition?.connectivityV4?.status === 'ready'
@@ -37,6 +38,21 @@ function adaptiveAlignmentThreshold(distance,captureDistance,minAxisAlignment) {
   return THREE.MathUtils.clamp(relaxed,CLOSE_RANGE_MIN_AXIS_ALIGNMENT_V4,1)
 }
 
+function cachedPair(source,target) {
+  let targets=pairCompatibilityCache.get(source)
+  if (!targets) {
+    targets=new WeakMap()
+    pairCompatibilityCache.set(source,targets)
+  }
+  let pair=targets.get(target)
+  if (!pair) {
+    const match=matchConnectorV4(source,target)
+    pair=Object.freeze({match,activationPreview:match?.compatible?activationForMatchV4(source,target,match):null})
+    targets.set(target,pair)
+  }
+  return pair
+}
+
 function connectorPoseAtWorldPose(connector,worldPosition,worldQuaternion) {
   const position=new THREE.Vector3(...connector.frame.positionStud).applyQuaternion(worldQuaternion).add(worldPosition)
   const localAxis=Array.isArray(connector.frame.axis) ? connector.frame.axis : [0,-1,0]
@@ -44,7 +60,7 @@ function connectorPoseAtWorldPose(connector,worldPosition,worldQuaternion) {
   return {position,axis}
 }
 
-function countStudSupport(candidate,movingConnectors,targetConnectors,isAvailable) {
+function countStudSupport(candidate,movingConnectors,targetConnectors,isAvailable,targetFrameCache) {
   if (candidate.activationPreview?.family !== 'stud-anti-stud') return 1
   const movingRole=candidate.activationPreview.sourceRole
   const targetRole=candidate.activationPreview.targetRole
@@ -56,7 +72,6 @@ function countStudSupport(candidate,movingConnectors,targetConnectors,isAvailabl
   const targets=targetConnectors.filter(connector=>classifyConnectorV4(connector)===expectedTargetRole)
   const worldPosition=new THREE.Vector3(...candidate.solution.worldPosition)
   const worldQuaternion=new THREE.Quaternion(...candidate.solution.worldQuaternion).normalize()
-  const targetFrames=new Map()
   const usedTargets=new Set()
   let support=0
 
@@ -66,10 +81,10 @@ function countStudSupport(candidate,movingConnectors,targetConnectors,isAvailabl
     let best=null
     for (const target of targets) {
       if (!target?.endpointId || usedTargets.has(target.endpointId) || !isAvailable(candidate.targetObject,target)) continue
-      let targetFrame=targetFrames.get(target.endpointId)
+      let targetFrame=targetFrameCache.get(target.endpointId)
       if (!targetFrame) {
         try { targetFrame=connectorWorldFrameV4(candidate.targetObject,target) } catch { continue }
-        targetFrames.set(target.endpointId,targetFrame)
+        targetFrameCache.set(target.endpointId,targetFrame)
       }
       const distance=sourcePose.position.distanceTo(targetFrame.position)
       const alignment=sourcePose.axis.dot(targetFrame.axis)
@@ -148,21 +163,36 @@ export function findPlacementCandidatesV4(movingObject,targets,{
     const def=getDefinition(o.userData?.partId)
     return def && definitionConnectors(def).length && center.distanceTo(o.getWorldPosition(new THREE.Vector3())) <= extent(movingDef)+extent(def)+captureDistanceStud
   })
+  const movingPose=objectWorldPoseV4(movingObject)
+  const movingFrameCache=new Map()
+  const targetFrameCaches=new WeakMap()
   const results=[]
+
   for (const source of sources) {
     if (!source?.endpointId || !isAvailable(movingObject,source)) continue
+    let movingFrame=movingFrameCache.get(source.endpointId)
+    if (!movingFrame) {
+      try { movingFrame=connectorWorldFrameV4(movingObject,source) } catch { continue }
+      movingFrameCache.set(source.endpointId,movingFrame)
+    }
     for (const targetObject of nearby) {
       if (!targetObject || targetObject === movingObject) continue
       const targetDef=getDefinition(targetObject.userData?.partId)
       const targetConnectors=definitionConnectors(targetDef)
+      let targetFrameCache=targetFrameCaches.get(targetObject)
+      if (!targetFrameCache) { targetFrameCache=new Map(); targetFrameCaches.set(targetObject,targetFrameCache) }
       for (const target of targetConnectors) {
         if (!target?.endpointId || !isAvailable(targetObject,target)) continue
-        const match=matchConnectorV4(source,target)
+        const {match,activationPreview}=cachedPair(source,target)
         if (!match?.compatible) continue
-        const activationPreview=activationForMatchV4(source,target,match)
+        let targetFrame=targetFrameCache.get(target.endpointId)
+        if (!targetFrame) {
+          try { targetFrame=connectorWorldFrameV4(targetObject,target) } catch { continue }
+          targetFrameCache.set(target.endpointId,targetFrame)
+        }
         let solution
         try {
-          solution=solvePlacementV4(movingObject,source,targetObject,target,{match})
+          solution=solvePlacementV4(movingObject,source,targetObject,target,{match,movingFrame,targetFrame,movingPose})
         } catch {
           continue
         }
@@ -205,17 +235,14 @@ export function findPlacementCandidatesV4(movingObject,targets,{
     }
   }
 
-  // Multi-contact analysis is intentionally bounded. Corresponding stud pairs for a
-  // good rigid placement have the same or nearly the same base score, so examining
-  // the leading shortlist finds the rigid pattern without O(candidates × studs²)
-  // work on very large plates during every TransformControls event.
   results.sort(compareCandidates)
   let analyzed=0
   for (const candidate of results) {
     if (analyzed>=SUPPORT_ANALYSIS_LIMIT) break
     if (candidate.activationPreview.family!=='stud-anti-stud') continue
     const targetDef=getDefinition(candidate.targetPartId)
-    candidate.supportCount=countStudSupport(candidate,sources,definitionConnectors(targetDef),isAvailable)
+    const targetFrameCache=targetFrameCaches.get(candidate.targetObject) ?? new Map()
+    candidate.supportCount=countStudSupport(candidate,sources,definitionConnectors(targetDef),isAvailable,targetFrameCache)
     rescore(candidate,captureDistanceStud,minAxisAlignment,preferredKey)
     analyzed+=1
   }
