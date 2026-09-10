@@ -5,6 +5,7 @@ import { connectorToBrickLabV4, createShadowResolverV4 } from './shadow-resolver
 import { finalizeConnectorIdentitiesV4 } from './identity-v4.js?v=connector-v4-20260910-v2'
 import { applyPlacementV4, solvePlacementV4 } from './placement-solver-v4.js?v=connector-v4-20260910-v3'
 import { findBestPlacementCandidateV4, findPlacementCandidatesV4 } from './candidate-v4.js?v=connector-v4-20260910-v3'
+import { createConnectionGraphV4, createConnectionProposalV4 } from './connections-v4.js?v=connector-v4-20260910-v3'
 import { auditConnectorDefinitionV4 } from './audit-v4.js?v=connector-v4-20260910-v3'
 import { proposeConstraintV4 } from './constraints-v4.js?v=connector-v4-20260910-v1'
 import { createAxialOccupancyV4 } from './occupancy-v4.js?v=connector-v4-20260910-v1'
@@ -17,6 +18,7 @@ const status = new Map()
 const lastRoots = new Map()
 const wrappedDefinitions = new WeakSet()
 const occupancy = createAxialOccupancyV4()
+const connectionGraph = createConnectionGraphV4()
 let shadowManifestPromise = null
 let manifestFallbackWarned = false
 
@@ -202,6 +204,7 @@ export const BrickLabConnectorV4 = Object.freeze({
   source: SHADOW_SOURCE_V4,
   mode: 'observe',
   occupancy,
+  connectionGraph,
   async resolve(file, visualOffsetStud = [0,0,0]) {
     const resolved = await resolver.resolve(file)
     const finalized = finalizeResolved(resolved, visualOffsetStud)
@@ -218,6 +221,7 @@ export const BrickLabConnectorV4 = Object.freeze({
   findCandidate(movingObject, targetObjects, options = {}) {
     return findBestPlacementCandidateV4(movingObject, targetObjects, candidateOptions(options))
   },
+  proposeConnection(candidate, options = {}) { return createConnectionProposalV4(candidate, options) },
   proposeConstraint: proposeConstraintV4,
   audit: auditConnectorDefinitionV4,
   clearCache() { resolver.clearCache(); shadowManifestPromise = null },
@@ -230,6 +234,7 @@ export const BrickLabConnectorV4 = Object.freeze({
       connectors: ready.reduce((sum, def) => sum + (def.connectivityV4.connectors?.length || 0), 0),
       warnings: ready.reduce((sum, def) => sum + (def.connectivityV4.warnings?.length || 0), 0),
       deduplicated: ready.reduce((sum, def) => sum + (def.connectivityV4.stats?.deduplicated || 0), 0),
+      graph:connectionGraph.stats(),
       loadingParts: [...status.values()].filter(value => value === 'loading').length,
       errorParts: [...status.values()].filter(value => value === 'error').length,
     }
