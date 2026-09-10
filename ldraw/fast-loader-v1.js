@@ -1,6 +1,6 @@
 import { PARTS } from '../parts.js'
 
-export const LDRAW_FAST_LOADER_VERSION = 'ldraw-fast-loader-v1.2.0'
+export const LDRAW_FAST_LOADER_VERSION = 'ldraw-fast-loader-v1.3.0'
 
 const HOME_WARM = ['3001.dat','3003.dat','3004.dat','3005.dat','3020.dat','3022.dat','3023.dat','3894.dat','3895.dat','2780.dat','3673.dat','6558.dat','3705.dat','3706.dat','3707.dat','3708.dat']
 const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null
@@ -26,8 +26,8 @@ let mutationObserver = null
 const diagnostics = {
   queued:0, active:0, prepared:0, failed:0, backgroundStarted:0,
   cacheHits:0, hoverRequests:0, visibleRequests:0, criticalRequests:0,
-  projectWarmRequests:0, connectorWarm:0, connectorWarmFailed:0,
-  totalPrepareMs:0, lastPrepareMs:0,
+  projectWarmRequests:0, directPrototypePreloads:0,
+  connectorWarm:0, connectorWarmFailed:0, totalPrepareMs:0, lastPrepareMs:0,
 }
 
 function normalizeFile(value) {
@@ -96,6 +96,7 @@ function startConnectorWarm(file, def, root) {
 async function perform(file) {
   const normalized = normalizeFile(file)
   const def = ensureDefinition(normalized)
+  const runtime = globalThis.BrickLabLDraw
   if (def.ldraw?.ready) {
     diagnostics.cacheHits += 1
     prepared.add(normalized)
@@ -107,9 +108,17 @@ async function perform(file) {
     return def
   }
   const started = performance.now()
-  const root = def.create(def.defaultColor)
-  warmRoots.set(normalized, root)
+  let root = null
   try {
+    // runtime-v3.1 publishes the reusable visual prototype before its legacy recursive
+    // connector inference completes. This is the fastest path and avoids constructing
+    // a loading placeholder just to warm network/parser caches.
+    if (typeof runtime?.preload === 'function') {
+      diagnostics.directPrototypePreloads += 1
+      await runtime.preload(normalized)
+    }
+    root = def.create(def.defaultColor)
+    warmRoots.set(normalized, root)
     await waitForVisual(def, root)
     prepared.add(normalized)
     failed.delete(normalized)
@@ -122,8 +131,10 @@ async function perform(file) {
     void startConnectorWarm(normalized, def, root)
     return def
   } catch (error) {
-    warmRoots.delete(normalized)
-    disposeWarmRoot(root)
+    if (root) {
+      warmRoots.delete(normalized)
+      disposeWarmRoot(root)
+    }
     throw error
   }
 }
@@ -250,7 +261,7 @@ startIdleWarmup()
 export const BrickLabLDrawFastLoader = Object.freeze({
   version:LDRAW_FAST_LOADER_VERSION,
   preload:preloadLDrawPart,
-  stats:()=>Object.freeze({...diagnostics,prepared:prepared.size,failed:failed.size,queued:queue.length,active:workers,connectorWarmActive:connectorWarm.size,backgroundLimit,concurrency,criticalConcurrency,constrainedNetwork,averagePrepareMs:prepared.size?diagnostics.totalPrepareMs/prepared.size:0}),
+  stats:()=>Object.freeze({...diagnostics,prepared:prepared.size,failed:failed.size,queued:queue.length,active:workers,connectorWarmActive:connectorWarm.size,backgroundLimit,concurrency,criticalConcurrency,constrainedNetwork,averagePrepareMs:prepared.size?diagnostics.totalPrepareMs/prepared.size:0,runtime:globalThis.BrickLabLDraw?.stats?.() ?? null}),
   isPrepared:file=>prepared.has(normalizeFile(file)),
 })
 globalThis.BrickLabLDrawFastLoader = BrickLabLDrawFastLoader
