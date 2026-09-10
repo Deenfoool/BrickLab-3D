@@ -59,6 +59,11 @@ if (menuResult.action === 'new' || menuResult.action === 'open') {
   }
 }
 
+// Enable Three.js' shared in-memory FileLoader cache before any LDraw model starts
+// loading. LDraw parts reuse many primitives/subparts, so later models can reuse the
+// same resources without re-entering the network layer.
+await import('./ldraw/cache-boost-v1.js')
+
 // Register dynamic ldraw-* definitions before app.js restores a saved project. LDraw
 // modules use canonical import-map specifiers so bootstrap/catalog/prefetch share one
 // text/prototype cache instance.
