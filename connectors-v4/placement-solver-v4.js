@@ -1,8 +1,8 @@
 import * as THREE from 'three'
-import { matchConnectorV4 } from './matcher-v4.js?v=connector-v4-20260910-v1'
+import { matchConnectorV4 } from './matcher-v4.js?v=connector-v4-20260910-v3'
 import { nearestAxialOffsetV4 } from './axial-fit-v4.js?v=connector-v4-20260910-v1'
 
-export const PLACEMENT_SOLVER_VERSION_V4 = 'placement-solver-v4.0.0'
+export const PLACEMENT_SOLVER_VERSION_V4 = 'placement-solver-v4.1.0'
 const EPS = 1e-8
 
 function matrixFromConnector(connector) {
@@ -92,6 +92,13 @@ function solveAxialOffset(movingConnector,targetConnector,match,movingFrame,targ
   return { offsetStud:fit.offsetLdu/20, offsetLdu:fit.offsetLdu, clamped:fit.clamped, windows:fit, rejected:false }
 }
 
+function movingPlacementMode(connector, match) {
+  const explicit = String(connector?.snap?.placement || '').toLowerCase()
+  if (explicit === 'retain' || explicit === 'free') return explicit
+  if (connector?.family === 'sphere' || match?.kinematicHint === 'spherical') return 'free'
+  return 'aligned'
+}
+
 export function solvePlacementV4(movingObject,movingConnector,targetObject,targetConnector,options={}) {
   const match = options.match ?? matchConnectorV4(movingConnector,targetConnector)
   if (!match?.compatible) return { valid:false, reason:match?.reason || 'incompatible', match }
@@ -106,9 +113,13 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
   // point-connector convention for stud/tube pairs.
   let desiredQuaternion = movingPose.quaternion.clone()
   let rotationDelta = new THREE.Quaternion()
-  const freePlacement = match.kinematicHint === 'spherical' || (movingConnector.snap?.placement === 'free' || targetConnector.snap?.placement === 'free')
+  const placementMode = movingPlacementMode(movingConnector,match)
+  // `retain` explicitly means: keep the dragged part's current orientation. `free`
+  // has the same editor transform behavior here; the semantic distinction is kept
+  // in the match/constraint layer for later physics handling.
+  const preserveMovingOrientation = placementMode === 'retain' || placementMode === 'free'
 
-  if (!freePlacement) {
+  if (!preserveMovingOrientation) {
     const axisAlign = new THREE.Quaternion().setFromUnitVectors(movingFrame.axis,targetFrame.axis)
     desiredQuaternion = axisAlign.clone().multiply(desiredQuaternion)
     rotationDelta.copy(axisAlign)
@@ -137,7 +148,8 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
     solverVersion:PLACEMENT_SOLVER_VERSION_V4,
     match,
     axial,
-    freePlacement,
+    placementMode,
+    preserveMovingOrientation,
     targetAxisWorld:targetFrame.axis.toArray(),
     targetPositionWorld:targetFrame.position.toArray(),
     worldPosition:desiredWorldPosition.toArray(),
