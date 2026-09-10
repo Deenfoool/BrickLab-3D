@@ -2,7 +2,7 @@ import { PhysicsSession } from './physics.js'
 import { STEP_OWNER } from './simulation-time.js'
 import { PHYSICS_PIPELINE_VERSION } from './physics-pipeline-v1.js'
 
-export const PHYSICS_OWNERSHIP_VERSION = 'physics-ownership-v5'
+export const PHYSICS_OWNERSHIP_VERSION = 'physics-ownership-v6'
 const JOINT_OWNER = 'joint-stability-v5'
 const COUPLING_OWNER = 'articulated-driveline-physics-v1'
 const VEHICLE_OWNER = 'vehicle-system-v1'
@@ -43,12 +43,21 @@ export function getPhysicsOwnershipSnapshot() {
   return {
     version: PHYSICS_OWNERSHIP_VERSION,
     pipeline: globalThis.BrickLabPhysicsPipeline?.version ?? null,
+    create: {
+      installed: typeof PhysicsSession.create === 'function',
+      owner: PhysicsSession.create?.__bricklabOwner ?? PhysicsSession.create?.name ?? null,
+      expected: globalThis.BrickLabConnectorV4PhysicsGuard?.version ?? null,
+    },
     methods: METHODS.map(methodInfo),
   }
 }
 
 export function assertPhysicsRuntimeContract() {
   const failures = []
+  const expectedCreateOwner = globalThis.BrickLabConnectorV4PhysicsGuard?.version ?? null
+  if (expectedCreateOwner && PhysicsSession.create?.__bricklabOwner !== expectedCreateOwner) {
+    failures.push(`create owner: expected ${expectedCreateOwner}, got ${PhysicsSession.create?.__bricklabOwner ?? PhysicsSession.create?.name ?? 'unknown'}`)
+  }
   if (PhysicsSession.prototype.step?.__bricklabOwner !== STEP_OWNER) {
     failures.push(`step owner: expected ${STEP_OWNER}, got ${PhysicsSession.prototype.step?.__bricklabOwner ?? 'unknown'}`)
   }
