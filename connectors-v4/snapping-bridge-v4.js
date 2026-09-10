@@ -4,7 +4,10 @@ import { suppressNextConnectionForEndpoint } from '../connections.js'
 
 export * from '../snapping-v3.js'
 
-export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.2.0'
+export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.3.0'
+
+let preferredCandidateKey = null
+let preferredInstanceId = null
 
 function runtime() {
   const value = globalThis.BrickLabConnectorV4
@@ -20,6 +23,8 @@ function bridgeConnector(connector, role) {
 }
 
 function markerPosition(candidate) {
+  const desired = candidate.solution?.desiredConnectorPositionWorld
+  if (Array.isArray(desired) && desired.length === 3) return new THREE.Vector3(...desired)
   const target = new THREE.Vector3(...(candidate.solution?.targetPositionWorld ?? [0,0,0]))
   const axis = new THREE.Vector3(...(candidate.solution?.targetAxisWorld ?? [0,1,0])).normalize()
   const axial = Number(candidate.solution?.axial?.offsetStud) || 0
@@ -67,16 +72,27 @@ export function findSnapCandidate(selected, objects, options = {}) {
 
   const v4 = runtime()
   const selectedIsLDraw = isLDrawPart(selected)
+  const instanceId=selected?.userData?.instanceId || null
+  if (instanceId !== preferredInstanceId) {
+    preferredInstanceId=instanceId
+    preferredCandidateKey=null
+  }
 
   if (v4 && selectedIsLDraw) {
     try {
       const candidate = v4.findActiveCandidate(selected, objects, {
-        maxResults:32,
+        maxResults:48,
+        preferredKey:preferredCandidateKey,
         captureDistanceStud:typeof options === 'number' ? options : options?.maxDistance,
         minAxisAlignment:typeof options === 'object' ? options?.minAlignment : undefined,
       })
-      if (candidate) return bridgeCandidate(candidate)
+      if (candidate) {
+        preferredCandidateKey=candidate.key
+        return bridgeCandidate(candidate)
+      }
+      preferredCandidateKey=null
     } catch (error) {
+      preferredCandidateKey=null
       console.warn('[BrickLab Connector V4] Active candidate search failed closed for V4-owned families.', error)
     }
   }
@@ -117,6 +133,7 @@ export function applySnap(selected, candidate) {
     const result = v4.commitActiveCandidate(rawCandidate)
     candidate.v4Commit = result
     globalThis.__bricklabLastConnectorV4Commit = result
+    if (result?.accepted) preferredCandidateKey=null
     if (!result?.accepted) console.warn('[BrickLab Connector V4] Snap candidate failed final commit validation.', result)
   } catch (error) {
     candidate.v4Commit = { accepted:false, reason:'bridge-exception', error:String(error?.message || error) }
