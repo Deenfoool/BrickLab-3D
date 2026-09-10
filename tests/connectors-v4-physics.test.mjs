@@ -1,15 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import * as THREE from 'three'
-import RAPIER from '@dimforge/rapier3d-compat'
+import * as RAPIER_MODULE from '@dimforge/rapier3d-compat'
 import { Window } from 'happy-dom'
 import { parseShadowTextV4 } from '../connectors-v4/ldcad-parser-v4.js'
 import { connectorToBrickLabV4 } from '../connectors-v4/shadow-resolver-v4.js'
 import { matchConnectorV4 } from '../connectors-v4/matcher-v4.js'
-import { validateConnectedGeometryV4 } from '../connectors-v4/validity-v4.js'
 import { buildPhysicsPlanV4 } from '../connectors-v4/physics-policy-v4.js'
 import { installConnectorPhysicsV4, CONNECTOR_V4_RAPIER_MASKS } from '../connectors-v4/physics-adapter-v4.js'
 
+const RAPIER=RAPIER_MODULE.default??RAPIER_MODULE
 const dom=new Window()
 for(const key of ['window','document','CustomEvent','HTMLElement']) globalThis[key]=key==='window'?dom:dom[key]
 await RAPIER.init()
