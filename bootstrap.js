@@ -4,7 +4,7 @@
 
 let projectPreloader = null
 try {
-  const { createProjectPreloader } = await import('./menu/project-preloader.js?v=main-menu-20260910-v4')
+  const { createProjectPreloader } = await import('./menu/project-preloader-v4.js?v=main-menu-20260910-v4')
   projectPreloader = createProjectPreloader()
   await projectPreloader.preload()
 } catch (error) {
