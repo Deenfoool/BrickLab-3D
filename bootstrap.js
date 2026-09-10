@@ -69,6 +69,9 @@ await import('./connectors-v4/runtime-v4.js?v=connector-v4-20260910-v5')
 // Install physics preflight after all legacy PhysicsSession patches have loaded but
 // before the editor can start SIMULATE. Uncertified V4 links block physics explicitly.
 await import('./connectors-v4/physics-guard-v4.js?v=connector-v4-20260910-v5')
+// History synchronization must be installed before app.js performs its first loadLocal
+// / resetHistory write. It tracks graph-only actions as first-class Undo/Redo steps.
+await import('./connectors-v4/history-sync-v4.js?v=connector-v4-20260910-v5')
 
 await import('./app.js')
 // app.js remains the authoritative project/editor owner. This bridge only preserves
