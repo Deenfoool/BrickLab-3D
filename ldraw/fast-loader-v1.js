@@ -1,6 +1,6 @@
 import { PARTS } from '../parts.js'
 
-export const LDRAW_FAST_LOADER_VERSION = 'ldraw-fast-loader-v1.0.0'
+export const LDRAW_FAST_LOADER_VERSION = 'ldraw-fast-loader-v1.1.0'
 
 const HOME_WARM = ['3001.dat','3003.dat','3004.dat','3005.dat','3020.dat','3022.dat','3023.dat','3894.dat','3895.dat','2780.dat','3673.dat','6558.dat','3705.dat','3706.dat','3707.dat','3708.dat']
 const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null
@@ -8,6 +8,7 @@ const constrainedNetwork = Boolean(connection?.saveData || /(?:^|-)2g$/.test(con
 const deviceMemory = Number(navigator.deviceMemory || 4)
 const backgroundLimit = constrainedNetwork ? 0 : deviceMemory <= 2 ? 10 : deviceMemory <= 4 ? 24 : 48
 const concurrency = constrainedNetwork ? 1 : deviceMemory <= 2 ? 2 : 3
+const criticalConcurrency = concurrency + 1
 
 const queue = []
 const queued = new Map()
@@ -15,6 +16,7 @@ const active = new Map()
 const prepared = new Set()
 const failed = new Map()
 const warmRoots = new Map()
+const connectorWarm = new Map()
 let workers = 0
 let backgroundStarted = 0
 let observedCards = new WeakSet()
@@ -24,6 +26,7 @@ let mutationObserver = null
 const diagnostics = {
   queued:0, active:0, prepared:0, failed:0, backgroundStarted:0,
   cacheHits:0, hoverRequests:0, visibleRequests:0, criticalRequests:0,
+  connectorWarm:0, connectorWarmFailed:0, totalPrepareMs:0, lastPrepareMs:0,
 }
 
 function normalizeFile(value) {
@@ -74,37 +77,69 @@ async function hydrateV4(def, root) {
   if (current?.status === 'ready') return current
   return runtime.hydrate(def, root)
 }
+function startConnectorWarm(file, def, root) {
+  const normalized = normalizeFile(file)
+  const existing = connectorWarm.get(normalized)
+  if (existing) return existing
+  const promise = hydrateV4(def, root)
+    .then(value => { diagnostics.connectorWarm += 1; return value })
+    .catch(error => { diagnostics.connectorWarmFailed += 1; console.debug?.(`[BrickLab LDraw Fast] V4 warm failed for ${normalized}`, error); return null })
+    .finally(() => {
+      connectorWarm.delete(normalized)
+      warmRoots.delete(normalized)
+      disposeWarmRoot(root)
+    })
+  connectorWarm.set(normalized, promise)
+  return promise
+}
 async function perform(file) {
   const normalized = normalizeFile(file)
   const def = ensureDefinition(normalized)
-  if (def.ldraw?.ready && def.connectivityV4?.status === 'ready') {
+  if (def.ldraw?.ready) {
     diagnostics.cacheHits += 1
     prepared.add(normalized)
+    if (def.connectivityV4?.status !== 'ready') {
+      const root = def.create(def.defaultColor)
+      warmRoots.set(normalized, root)
+      void startConnectorWarm(normalized, def, root)
+    }
     return def
   }
+  const started = performance.now()
   const root = def.create(def.defaultColor)
   warmRoots.set(normalized, root)
   try {
     await waitForVisual(def, root)
-    await hydrateV4(def, root)
     prepared.add(normalized)
     failed.delete(normalized)
+    const elapsed = performance.now() - started
+    diagnostics.lastPrepareMs = elapsed
+    diagnostics.totalPrepareMs += elapsed
+    // Connector hydration is deliberately detached from the visual worker. Once the
+    // reusable LDraw prototype exists, the next geometry preload can start while V4
+    // Shadow metadata finishes on the retained temporary root.
+    void startConnectorWarm(normalized, def, root)
     return def
-  } finally {
+  } catch (error) {
     warmRoots.delete(normalized)
     disposeWarmRoot(root)
+    throw error
   }
 }
+function sortQueue() { queue.sort((a,b) => b.priority - a.priority || a.order - b.order) }
 function pump() {
-  while (workers < concurrency && queue.length) {
-    queue.sort((a,b) => b.priority - a.priority || a.order - b.order)
-    const task = queue.shift()
+  sortQueue()
+  while (queue.length) {
+    const task = queue[0]
+    const limit = task.priority >= 300 ? criticalConcurrency : concurrency
+    if (workers >= limit) break
+    queue.shift()
     if (!task || active.has(task.file)) continue
     queued.delete(task.file)
     workers += 1
     diagnostics.queued = queue.length
     diagnostics.active = workers
-    const promise = perform(task.file)
+    const work = perform(task.file)
       .then(value => { diagnostics.prepared = prepared.size; task.resolve(value); return value })
       .catch(error => { failed.set(task.file, String(error?.message || error)); diagnostics.failed = failed.size; task.reject(error); throw error })
       .finally(() => {
@@ -115,9 +150,9 @@ function pump() {
         diagnostics.failed = failed.size
         pump()
       })
-    // Avoid unhandled-rejection noise for speculative background work; callers still
-    // receive the task promise created below.
-    active.set(task.file, promise.catch(() => null))
+    active.set(task.file, work)
+    work.catch(() => {})
+    sortQueue()
   }
 }
 let order = 0
@@ -125,7 +160,7 @@ export function preloadLDrawPart(file, { priority='visible', background=false } 
   const normalized = normalizeFile(file)
   if (!normalized) return Promise.resolve(null)
   const def = findDefinition(normalized)
-  if (prepared.has(normalized) || (def?.ldraw?.ready && def.connectivityV4?.status === 'ready')) {
+  if (prepared.has(normalized) || def?.ldraw?.ready) {
     prepared.add(normalized); diagnostics.cacheHits += 1; diagnostics.prepared = prepared.size
     return Promise.resolve(def)
   }
@@ -133,13 +168,13 @@ export function preloadLDrawPart(file, { priority='visible', background=false } 
   const existing = queued.get(normalized)
   if (existing) {
     existing.priority = Math.max(existing.priority, priorityValue(priority))
+    pump()
     return existing.promise
   }
   if (background && (constrainedNetwork || backgroundStarted >= backgroundLimit)) return Promise.resolve(null)
   if (background) { backgroundStarted += 1; diagnostics.backgroundStarted = backgroundStarted }
   let resolveTask, rejectTask
   const promise = new Promise((resolve,reject) => { resolveTask=resolve; rejectTask=reject })
-  // Speculative callers don't have to attach a rejection handler.
   promise.catch(() => {})
   const task = { file:normalized, priority:priorityValue(priority), order:order++, background, resolve:resolveTask, reject:rejectTask, promise }
   queue.push(task); queued.set(normalized, task); diagnostics.queued = queue.length; pump()
@@ -208,7 +243,7 @@ startIdleWarmup()
 export const BrickLabLDrawFastLoader = Object.freeze({
   version:LDRAW_FAST_LOADER_VERSION,
   preload:preloadLDrawPart,
-  stats:()=>Object.freeze({...diagnostics,prepared:prepared.size,failed:failed.size,queued:queue.length,active:workers,backgroundLimit,concurrency,constrainedNetwork}),
+  stats:()=>Object.freeze({...diagnostics,prepared:prepared.size,failed:failed.size,queued:queue.length,active:workers,connectorWarmActive:connectorWarm.size,backgroundLimit,concurrency,criticalConcurrency,constrainedNetwork,averagePrepareMs:prepared.size?diagnostics.totalPrepareMs/prepared.size:0}),
   isPrepared:file=>prepared.has(normalizeFile(file)),
 })
 globalThis.BrickLabLDrawFastLoader = BrickLabLDrawFastLoader
