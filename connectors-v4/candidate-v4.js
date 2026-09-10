@@ -4,7 +4,7 @@ import { matchConnectorV4 } from './matcher-v4.js'
 import { activationForMatchV4, classifyConnectorV4 } from './activation-v4.js'
 import { connectorWorldFrameV4, objectWorldPoseV4, solvePlacementV4 } from './placement-solver-v4.js'
 
-export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.5.1'
+export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.6.0'
 export const DEFAULT_CAPTURE_DISTANCE_STUD_V4 = 0.72
 export const DEFAULT_MIN_AXIS_ALIGNMENT_V4 = 0.72
 export const CLOSE_RANGE_MIN_AXIS_ALIGNMENT_V4 = 0.55
@@ -12,6 +12,11 @@ const SUPPORT_POSITION_EPS_STUD = 0.045
 const SUPPORT_AXIS_DOT = 0.997
 const SUPPORT_ANALYSIS_LIMIT = 24
 const SUPPORT_CELL_STUD = SUPPORT_POSITION_EPS_STUD * 2
+const MULTI_TWIST_BASIS_LIMIT = 6
+const MULTI_TWIST_TRIAL_LIMIT = 10
+const MULTI_TWIST_MIN_BASE_STUD = 0.45
+const MULTI_TWIST_LENGTH_TOL_STUD = 0.12
+const MULTI_TWIST_MAX_RAD = Math.PI / 2 + 0.05
 const pairCompatibilityCache = new WeakMap()
 
 function definitionConnectors(definition) {
@@ -104,19 +109,22 @@ function supportPoseKey(candidate) {
   return `${candidate.targetObject?.userData?.instanceId||''}:${p.map(rounded).join(',')}:${q.map(rounded).join(',')}:${candidate.activationPreview?.sourceRole||''}`
 }
 
-function countStudSupport(candidate,movingConnectors,targetConnectors,isAvailable,targetFrameCache,supportIndexCache) {
-  if (candidate.activationPreview?.family !== 'stud-anti-stud') return 1
-  const movingRole=candidate.activationPreview.sourceRole
+function studRoles(candidate) {
+  if(candidate.activationPreview?.family!=='stud-anti-stud')return null
+  const sourceRole=candidate.activationPreview.sourceRole
   const targetRole=candidate.activationPreview.targetRole
-  const sourceRole=movingRole==='stud'?'stud':movingRole==='anti-stud'?'anti-stud':null
-  const expectedTargetRole=sourceRole==='stud'?'anti-stud':sourceRole==='anti-stud'?'stud':null
-  if (!sourceRole || !expectedTargetRole || targetRole!==expectedTargetRole) return 1
+  if(!['stud','anti-stud'].includes(sourceRole)||!['stud','anti-stud'].includes(targetRole)||sourceRole===targetRole)return null
+  return {sourceRole,targetRole}
+}
 
-  const sources=movingConnectors.filter(connector=>classifyConnectorV4(connector)===sourceRole)
-  const cacheKey=`${candidate.targetObject?.userData?.instanceId||''}:${expectedTargetRole}`
+function countStudSupport(candidate,movingConnectors,targetConnectors,isAvailable,targetFrameCache,supportIndexCache) {
+  const roles=studRoles(candidate)
+  if(!roles)return 1
+  const sources=movingConnectors.filter(connector=>classifyConnectorV4(connector)===roles.sourceRole)
+  const cacheKey=`${candidate.targetObject?.userData?.instanceId||''}:${roles.targetRole}`
   let index=supportIndexCache.get(cacheKey)
   if(!index){
-    index=buildSupportIndex(candidate.targetObject,targetConnectors,expectedTargetRole,isAvailable,targetFrameCache)
+    index=buildSupportIndex(candidate.targetObject,targetConnectors,roles.targetRole,isAvailable,targetFrameCache)
     supportIndexCache.set(cacheKey,index)
   }
   const worldPosition=new THREE.Vector3(...candidate.solution.worldPosition)
@@ -142,6 +150,65 @@ function countStudSupport(candidate,movingConnectors,targetConnectors,isAvailabl
     }
   }
   return Math.max(1,support)
+}
+
+function signedAngleAround(from,to,axis) {
+  const a=from.clone().projectOnPlane(axis)
+  const b=to.clone().projectOnPlane(axis)
+  if(a.lengthSq()<1e-10||b.lengthSq()<1e-10)return null
+  a.normalize();b.normalize()
+  return Math.atan2(axis.dot(a.clone().cross(b)),THREE.MathUtils.clamp(a.dot(b),-1,1))
+}
+
+function multiStudTwistSuggestions(candidate,movingConnectors,targetConnectors,isAvailable,movingFrameCache,targetFrameCache) {
+  const roles=studRoles(candidate)
+  if(!roles)return []
+  const sourceSeed=movingFrameCache.get(candidate.source.endpointId)
+  const targetSeed=targetFrameCache.get(candidate.target.endpointId)
+  if(!sourceSeed||!targetSeed)return []
+
+  const axisAlign=new THREE.Quaternion().setFromUnitVectors(sourceSeed.axis,targetSeed.axis)
+  const sourceBases=[]
+  for(const source of movingConnectors){
+    if(source===candidate.source||classifyConnectorV4(source)!==roles.sourceRole||!isAvailable(candidate.sourceObject,source))continue
+    let frame=movingFrameCache.get(source.endpointId)
+    if(!frame){
+      try{frame=connectorWorldFrameV4(candidate.sourceObject,source)}catch{continue}
+      movingFrameCache.set(source.endpointId,frame)
+    }
+    const vector=frame.position.clone().sub(sourceSeed.position).applyQuaternion(axisAlign).projectOnPlane(targetSeed.axis)
+    const length=vector.length()
+    if(length>=MULTI_TWIST_MIN_BASE_STUD)sourceBases.push({vector,length})
+  }
+  sourceBases.sort((a,b)=>a.length-b.length)
+  if(!sourceBases.length)return []
+
+  const targetBases=[]
+  for(const target of targetConnectors){
+    if(target===candidate.target||classifyConnectorV4(target)!==roles.targetRole||!isAvailable(candidate.targetObject,target))continue
+    let frame=targetFrameCache.get(target.endpointId)
+    if(!frame){
+      try{frame=connectorWorldFrameV4(candidate.targetObject,target)}catch{continue}
+      targetFrameCache.set(target.endpointId,frame)
+    }
+    const vector=frame.position.clone().sub(targetSeed.position).projectOnPlane(targetSeed.axis)
+    const length=vector.length()
+    if(length>=MULTI_TWIST_MIN_BASE_STUD)targetBases.push({vector,length})
+  }
+  if(!targetBases.length)return []
+
+  const unique=new Map()
+  for(const source of sourceBases.slice(0,MULTI_TWIST_BASIS_LIMIT)){
+    for(const target of targetBases){
+      const tolerance=Math.max(MULTI_TWIST_LENGTH_TOL_STUD,source.length*0.035)
+      if(Math.abs(source.length-target.length)>tolerance)continue
+      const angle=signedAngleAround(source.vector,target.vector,targetSeed.axis)
+      if(!Number.isFinite(angle)||Math.abs(angle)>MULTI_TWIST_MAX_RAD)continue
+      const key=Math.round(angle*10000)
+      if(!unique.has(key))unique.set(key,angle)
+    }
+  }
+  return [...unique.values()].sort((a,b)=>Math.abs(a)-Math.abs(b)).slice(0,MULTI_TWIST_TRIAL_LIMIT)
 }
 
 function genericBoundingMismatch(source,target) {
@@ -201,6 +268,49 @@ function rescore(candidate,captureDistance,minAxisAlignment,preferredKey) {
 
 function compareCandidates(a,b) {
   return a.score-b.score || b.supportCount-a.supportCount || a.distanceStud-b.distanceStud || b.alignment-a.alignment || a.key.localeCompare(b.key)
+}
+
+function updateCandidateFromSolution(candidate,solution) {
+  candidate.solution=solution
+  candidate.distanceStud=captureError(solution)
+  candidate.originTranslationStud=solution.diagnostics?.translationStud ?? candidate.distanceStud
+  candidate.lateralDistanceStud=solution.diagnostics?.initialLateralDistanceStud ?? candidate.distanceStud
+}
+
+function refineMultiStudTwist(candidate,movingConnectors,targetConnectors,isAvailable,movingFrameCache,targetFrameCache,movingPose,supportIndexCache) {
+  if(candidate.supportCount>1)return candidate
+  const suggestions=multiStudTwistSuggestions(candidate,movingConnectors,targetConnectors,isAvailable,movingFrameCache,targetFrameCache)
+  if(!suggestions.length)return candidate
+  const movingFrame=movingFrameCache.get(candidate.source.endpointId)
+  const targetFrame=targetFrameCache.get(candidate.target.endpointId)
+  let bestSolution=candidate.solution
+  let bestSupport=candidate.supportCount
+  let bestAbsTwist=Infinity
+
+  for(const twistCorrectionRad of suggestions){
+    let solution
+    try{
+      solution=solvePlacementV4(candidate.sourceObject,candidate.source,candidate.targetObject,candidate.target,{
+        match:candidate.match,movingFrame,targetFrame,movingPose,twistCorrectionRad,
+      })
+    }catch{continue}
+    if(!solution.valid)continue
+    const trial={...candidate,solution}
+    const support=countStudSupport(trial,movingConnectors,targetConnectors,isAvailable,targetFrameCache,supportIndexCache)
+    const absTwist=Math.abs(twistCorrectionRad)
+    if(support>bestSupport||(support===bestSupport&&support>1&&absTwist<bestAbsTwist)){
+      bestSupport=support
+      bestAbsTwist=absTwist
+      bestSolution=solution
+    }
+  }
+
+  if(bestSolution!==candidate.solution&&bestSupport>candidate.supportCount){
+    updateCandidateFromSolution(candidate,bestSolution)
+    candidate.supportCount=bestSupport
+    candidate.multiContactTwistRefined=true
+  }
+  return candidate
 }
 
 export function findPlacementCandidatesV4(movingObject,targets,{
@@ -307,21 +417,24 @@ export function findPlacementCandidatesV4(movingObject,targets,{
   for (const candidate of results) {
     if (analyzed>=SUPPORT_ANALYSIS_LIMIT) break
     if (candidate.activationPreview.family!=='stud-anti-stud') continue
+    const targetDef=getDefinition(candidate.targetPartId)
+    const targetConnectors=definitionConnectors(targetDef)
+    const targetFrameCache=targetFrameCaches.get(candidate.targetObject) ?? new Map()
     const poseKey=supportPoseKey(candidate)
     let support=supportPoseCache.get(poseKey)
     if(support==null){
-      const targetDef=getDefinition(candidate.targetPartId)
-      const targetFrameCache=targetFrameCaches.get(candidate.targetObject) ?? new Map()
-      support=countStudSupport(candidate,sources,definitionConnectors(targetDef),isAvailable,targetFrameCache,supportIndexCache)
+      support=countStudSupport(candidate,sources,targetConnectors,isAvailable,targetFrameCache,supportIndexCache)
       supportPoseCache.set(poseKey,support)
     }
     candidate.supportCount=support
+    refineMultiStudTwist(candidate,sources,targetConnectors,isAvailable,movingFrameCache,targetFrameCache,movingPose,supportIndexCache)
     rescore(candidate,captureDistanceStud,minAxisAlignment,preferredKey)
     analyzed+=1
   }
 
   results.sort(compareCandidates)
-  return results.slice(0,Math.max(1,Math.floor(maxResults)))
+  const limit=Number.isFinite(maxResults)?Math.max(1,Math.floor(maxResults)):results.length
+  return limit>=results.length?results:results.slice(0,limit)
 }
 
 export function findBestPlacementCandidateV4(movingObject,targets,options={}) {
