@@ -11,6 +11,22 @@ for (const dir of ['audio', 'assets/audio', 'connectors-v4']) {
 }
 const versioned = Object.fromEntries(files.map(name => [`./${name}`, `./${name}?v=${tag}`]))
 
+// V4 was introduced in several cache generations before the runtime became
+// authoritative. Some modules still contain those historical query strings. Map
+// every historical V4 URL to this build's one canonical module URL so the browser
+// cannot instantiate two schema/matcher/runtime generations in the same page.
+const legacyV4Tags = [
+  'connector-v4-20260910-v1',
+  'connector-v4-20260910-v3',
+  'connector-v4-20260910-v5',
+  'connector-v4-20260910-v6',
+]
+const v4Files = files.filter(name => name.startsWith('connectors-v4/'))
+const legacyV4Aliases = Object.fromEntries(v4Files.flatMap(name => legacyV4Tags.map(oldTag => [
+  `./${name}?v=${oldTag}`,
+  `./${name}?v=${tag}`,
+])))
+
 // Legacy import specifiers remain stable, but LDraw structural snapping is routed
 // through the V4 compatibility bridges. Native/procedural connector validation and
 // structural welding still use their established V3 implementations.
@@ -25,6 +41,7 @@ const imports = {
   three: 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js',
   'three/addons/': 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/',
   ...versioned,
+  ...legacyV4Aliases,
   './tests/axle-fixtures.js': `./tests/axle-fixtures.js?v=${tag}`,
   ...connectorAliases,
 }
