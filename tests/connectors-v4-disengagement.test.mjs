@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { Window } from 'happy-dom'
+import { PHYSICS_UNITS } from '../physical-parts.js'
 import { parseShadowTextV4 } from '../connectors-v4/ldcad-parser-v4.js'
 import { connectorToBrickLabV4 } from '../connectors-v4/shadow-resolver-v4.js'
 import { matchConnectorV4 } from '../connectors-v4/matcher-v4.js'
@@ -12,6 +13,7 @@ import { installConnectorPhysicsV4 } from '../connectors-v4/physics-adapter-v4.j
 const dom = new Window()
 for (const key of ['window','document','CustomEvent','HTMLElement']) globalThis[key] = key === 'window' ? dom : dom[key]
 await RAPIER.init()
+const STUD=PHYSICS_UNITS.studMeters
 
 function endpoint(meta,id) {
   const connector = parseShadowTextV4(`0 !LDCAD ${meta}`).operations[0].connector
@@ -34,7 +36,7 @@ function createMember(world,value) {
   value.matrixWorld.decompose(position,rotation,scale)
   const body = world.createRigidBody(
     RAPIER.RigidBodyDesc.dynamic()
-      .setTranslation(position.x,position.y,position.z)
+      .setTranslation(position.x*STUD,position.y*STUD,position.z*STUD)
       .setRotation({x:rotation.x,y:rotation.y,z:rotation.z,w:rotation.w}),
   )
   const matrix = value.matrixWorld.clone()
@@ -111,7 +113,7 @@ test('keyed semantic links disappear after the physical profile disengages', () 
     syncObjects(){
       for (const [value,member] of [[a,memberA],[b,memberB]]) {
         const p=member.body.translation(), q=member.body.rotation()
-        value.position.set(p.x,p.y,p.z)
+        value.position.set(p.x/STUD,p.y/STUD,p.z/STUD)
         value.quaternion.set(q.x,q.y,q.z,q.w)
         value.updateMatrixWorld(true)
       }
@@ -121,8 +123,9 @@ test('keyed semantic links disappear after the physical profile disengages', () 
   const state = installConnectorPhysicsV4(session,plan,{worldFrame})
   assert.equal(state.active,1)
   assert.equal(session.jointCount,1)
+  assert.deepEqual(state.units,{studMeters:STUD,anchorUnit:'m'})
 
-  memberB.body.setTranslation({x:0,y:20,z:0},true)
+  memberB.body.setTranslation({x:0,y:20*STUD,z:0},true)
   session.syncObjects()
   assert.equal(rebuilds,0,'release hysteresis must require confirmation')
   session.syncObjects()
