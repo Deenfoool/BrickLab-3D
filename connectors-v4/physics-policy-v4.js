@@ -1,7 +1,7 @@
 import { approveConstraintV4, proposeConstraintV4 } from './constraints-v4.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.2.4'
+export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.2.5'
 
 const MIN_DISTINCT_STUD_DISTANCE = 0.45
 const ROTATION_TRANSMITTING_FAMILIES = new Set([
@@ -44,9 +44,14 @@ function ruleFor(entry, studBundleSize = 1) {
   const group = groupName(entry.connectorA, entry.connectorB)
 
   if (family === 'stud-anti-stud') {
+    // One stud constrains translation/tilt but still permits twist. Keep collider
+    // contacts enabled so the actual part shapes provide the physical stop instead
+    // of letting a revolute joint rotate two bricks through each other. Two or more
+    // spatially distinct stud contacts form one rigid attachment; a single fixed
+    // constraint represents the bundle and its member contacts may be suppressed.
     return studBundleSize >= 2
-      ? { supported:true, kind:'fixed', retention:'captured', release:null, bundle:'multi-stud-rigid' }
-      : { supported:true, kind:'revolute', retention:'captured', release:null, bundle:'single-stud-twist' }
+      ? { supported:true, kind:'fixed', retention:'captured', release:null, contacts:'disabled', bundle:'multi-stud-rigid' }
+      : { supported:true, kind:'revolute', retention:'captured', release:null, contacts:'enabled', bundle:'single-stud-twist' }
   }
 
   if (family === 'technic-axle-keyed-hole' || family === 'keyed-shaft-interface') {
