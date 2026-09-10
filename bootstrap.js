@@ -59,8 +59,10 @@ if (menuResult.action === 'new' || menuResult.action === 'open') {
   }
 }
 
-// Register dynamic ldraw-* definitions before app.js restores a saved project.
-await import('./ldraw/bootstrap-v1.js?v=ldraw-fast-20260911-v1')
+// Register dynamic ldraw-* definitions before app.js restores a saved project. LDraw
+// modules use canonical import-map specifiers so bootstrap/catalog/prefetch share one
+// text/prototype cache instance.
+await import('./ldraw/bootstrap-v1.js')
 
 // Connector V4.2 owns structural snapping for LDraw parts. These unversioned
 // specifiers are intentionally canonicalized by index.html's import map so every V4
@@ -72,7 +74,7 @@ await import('./connectors-v4/runtime-v4.js')
 // works only in idle/hover/visibility time, deduplicates work and keeps V4 hydration
 // on the same definitions that BUILD will later instantiate.
 try {
-  await import('./ldraw/fast-loader-v1.js?v=ldraw-fast-20260911-v2')
+  await import('./ldraw/fast-loader-v1.js')
 } catch (error) {
   console.warn('[BrickLab LDraw] Predictive fast loader unavailable; using normal on-demand loading.', error)
 }
@@ -115,8 +117,8 @@ await import('./parts4/catalog-parts-4.js?v=parts-4-20260908-driveline-v1')
 await import('./i18n-runtime-patch.js')
 await import('./i18n-physics-v2.js')
 await import('./i18n-physics-v2-extra.js')
-await import('./ldraw/catalog-v3.js?v=ldraw-catalog-20260910-v3')
-await import('./ldraw/catalog-thumbnails-v1.js?v=ldraw-catalog-20260910-v3')
+await import('./ldraw/catalog-v3.js')
+await import('./ldraw/catalog-thumbnails-v1.js')
 await import('./menu/project-menu-v1.js?v=project-menu-20260910-v1')
 
 const { assertPhysicsRuntimeContract } = await import('./physics-ownership-v1.js')
