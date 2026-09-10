@@ -4,10 +4,10 @@ import { buildPhysicsPlanV4, drivetrainSemanticLinksV4, PHYSICS_POLICY_VERSION_V
 import { hardenPhysicsPlanV4, PHYSICS_PLAN_SAFETY_VERSION_V4 } from './physics-plan-safety-v4.js'
 import { installConnectorPhysicsV4, PHYSICS_ADAPTER_VERSION_V4 } from './physics-adapter-v4.js'
 
-export const PHYSICS_GUARD_VERSION_V4 = 'connector-physics-guard-v4.5.0'
+export const PHYSICS_GUARD_VERSION_V4 = 'connector-physics-guard-v4.5.1'
 export const PHYSICS_GUARD_ERROR_CODE_V4 = 'BRICKLAB_CONNECTOR_V4_PHYSICS_NOT_CERTIFIED'
 
-const marker = Symbol.for('bricklab.connectorV4.physicsGuard.v4.5')
+const marker = Symbol.for('bricklab.connectorV4.physicsGuard.v4.5.1')
 let lastPlan = null
 let lastFailure = null
 
@@ -16,6 +16,10 @@ function runtimeReady(v4) { return v4?.mode === 'hybrid-pilot' && v4?.selfTest?.
 
 function releasedConnectionIds(session) {
   return new Set((session?.connectorV4Physics?.releaseEvents ?? []).flatMap(event => event.connectionIds ?? []))
+}
+
+function semanticConnectionIds(links) {
+  return [...new Set(links.flatMap(link => link.metadata?.v4ConnectionIds ?? [link.metadata?.v4ConnectionId].filter(Boolean)))]
 }
 
 function rebuildDrivetrainSemanticsV4(session, records) {
@@ -34,7 +38,7 @@ function rebuildDrivetrainSemanticsV4(session, records) {
     enabled:true,
     policyVersion:PHYSICS_POLICY_VERSION_V4,
     activeLinks:links.length,
-    connectionIds:links.map(link => link.metadata.v4ConnectionId),
+    connectionIds:semanticConnectionIds(links),
     released:[...releasedConnectionIds(session)],
   }
   return session.connectorV4Drivetrain
