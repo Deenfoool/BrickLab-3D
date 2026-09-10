@@ -25,15 +25,16 @@ function object(instanceId,partId,position=[0,0,0]) {
   return value
 }
 
-const source=[]
-const goodTarget=[]
-for (let z=0; z<2; z+=1) {
-  for (let x=0; x<4; x+=1) {
-    const index=z*4+x
-    source.push(stud(`s${index}`,'male',[x,0,z]))
-    goodTarget.push(stud(`a${index}`,'female',[x,0,z]))
+function grid(prefix,gender,width=4,depth=2) {
+  const result=[]
+  for(let z=0;z<depth;z+=1)for(let x=0;x<width;x+=1){
+    result.push(stud(`${prefix}${z*width+x}`,gender,[x,0,z]))
   }
+  return result
 }
+
+const source=grid('s','male')
+const goodTarget=grid('a','female')
 const badTarget=[stud('single','female',[0,0,0])]
 const defs=new Map([
   ['moving-part',{id:'moving-part',connectivityV4:{status:'ready',connectors:source}}],
@@ -58,4 +59,48 @@ test('a full 2x4 stud pattern outranks a slightly closer isolated stud',()=>{
   assert.ok(isolated)
   assert.equal(isolated.supportCount,1)
   assert.ok(candidates[0].score<isolated.score)
+})
+
+test('a yawed 2x4 brick uses a second stud to rotate itself onto the full grid',()=>{
+  const moving=object('moving-yawed','moving-part')
+  const yaw=THREE.MathUtils.degToRad(12)
+  moving.rotation.y=yaw
+  moving.updateMatrixWorld(true)
+  const target=object('grid-target','good-part')
+
+  const candidates=findPlacementCandidatesV4(moving,[target],{
+    getDefinition:id=>defs.get(id),
+    captureDistanceStud:0.72,
+    maxResults:64,
+  })
+  assert.ok(candidates.length>0)
+  const best=candidates[0]
+  assert.equal(best.targetObject,target)
+  assert.equal(best.supportCount,8,'refined pose should align the complete 2x4 stud pattern')
+  assert.equal(best.multiContactTwistRefined,true)
+  assert.ok(Math.abs(Math.abs(best.solution.diagnostics.twistCorrectionRad)-yaw)<1e-3,'grid refinement corrects the initial yaw')
+
+  const solvedQuaternion=new THREE.Quaternion(...best.solution.worldQuaternion)
+  const solvedForward=new THREE.Vector3(1,0,0).applyQuaternion(solvedQuaternion)
+  assert.ok(Math.abs(solvedForward.z)<1e-4,'final brick grid is axis-aligned with the target')
+})
+
+test('a single stud remains rotationally free and is not given an artificial yaw lock',()=>{
+  const singleSource=[stud('single-source','male',[0,0,0])]
+  const singleTarget=[stud('single-target','female',[0,0,0])]
+  const localDefs=new Map([
+    ['single-moving',{id:'single-moving',connectivityV4:{status:'ready',connectors:singleSource}}],
+    ['single-target-part',{id:'single-target-part',connectivityV4:{status:'ready',connectors:singleTarget}}],
+  ])
+  const moving=object('single-moving-instance','single-moving')
+  moving.rotation.y=THREE.MathUtils.degToRad(27)
+  moving.updateMatrixWorld(true)
+  const target=object('single-target-instance','single-target-part')
+  const candidates=findPlacementCandidatesV4(moving,[target],{
+    getDefinition:id=>localDefs.get(id),captureDistanceStud:0.72,maxResults:8,
+  })
+  assert.equal(candidates.length,1)
+  assert.equal(candidates[0].supportCount,1)
+  assert.equal(Boolean(candidates[0].multiContactTwistRefined),false)
+  assert.ok(Math.abs(candidates[0].solution.diagnostics.twistCorrectionRad)<1e-9)
 })
