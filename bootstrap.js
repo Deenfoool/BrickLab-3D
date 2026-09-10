@@ -7,8 +7,23 @@
 await import('./physics-error-ui.js')
 await import('./runtime-extensions.js')
 
+async function preloadMainMenuStyles() {
+  if (document.getElementById('bricklab-main-menu-style')) return
+  const link = document.createElement('link')
+  link.id = 'bricklab-main-menu-style'
+  link.rel = 'stylesheet'
+  link.href = './main-menu.css?v=main-menu-20260910-v1'
+  const ready = new Promise(resolve => {
+    link.addEventListener('load', resolve, { once: true })
+    link.addEventListener('error', resolve, { once: true })
+  })
+  document.head.append(link)
+  await ready
+}
+
 let menuResult = { action: 'continue', snapshot: null }
 try {
+  await preloadMainMenuStyles()
   const { showMainMenu } = await import('./main-menu.js')
   menuResult = await showMainMenu()
 } catch (error) {
