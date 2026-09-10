@@ -1,4 +1,4 @@
-export const PHYSICS_OVERRIDES_VERSION_V4 = 'connector-physics-overrides-v4.0.0'
+export const PHYSICS_OVERRIDES_VERSION_V4 = 'connector-physics-overrides-v4.0.1'
 
 // Physics overrides are an explicit trust boundary. Shadow connectivity can prove
 // that two endpoints mate, but some mechanisms also need information that is not
@@ -10,14 +10,15 @@ const registry = []
 
 function clean(value) { return String(value ?? '').trim().toLowerCase() }
 function clone(value) { return typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value)) }
+function normalizedSet(values) { return [...new Set(values.map(clean).filter(Boolean))].sort() }
 
 function normalizeMatcher(match = {}) {
   const result = {
     family: match.family ? clean(match.family) : null,
     group: match.group ? clean(match.group) : null,
-    groups: Array.isArray(match.groups) ? [...new Set(match.groups.map(clean).filter(Boolean))].sort() : null,
-    partIds: Array.isArray(match.partIds) ? [...new Set(match.partIds.map(clean).filter(Boolean))].sort() : null,
-    endpointIds: Array.isArray(match.endpointIds) ? [...new Set(match.endpointIds.map(clean).filter(Boolean))].sort() : null,
+    groups: Array.isArray(match.groups) ? normalizedSet(match.groups) : null,
+    partIds: Array.isArray(match.partIds) ? normalizedSet(match.partIds) : null,
+    endpointIds: Array.isArray(match.endpointIds) ? normalizedSet(match.endpointIds) : null,
   }
   if (!result.family) throw new TypeError('Connector V4 physics override requires a family')
   return result
@@ -48,15 +49,15 @@ export function registerPhysicsOverrideV4({ id, match, rule } = {}) {
 }
 
 function endpointGroups(entry) {
-  return [entry?.connectorA?.group, entry?.connectorB?.group].map(clean).filter(Boolean).sort()
+  return normalizedSet([entry?.connectorA?.group, entry?.connectorB?.group])
 }
 
 function endpointPartIds(entry) {
-  return [entry?.objectA?.userData?.partId, entry?.objectB?.userData?.partId].map(clean).filter(Boolean).sort()
+  return normalizedSet([entry?.objectA?.userData?.partId, entry?.objectB?.userData?.partId])
 }
 
 function endpointIds(entry) {
-  return [entry?.connectorA?.endpointId, entry?.connectorB?.endpointId].map(clean).filter(Boolean).sort()
+  return normalizedSet([entry?.connectorA?.endpointId, entry?.connectorB?.endpointId])
 }
 
 function sameSet(actual, expected) {
