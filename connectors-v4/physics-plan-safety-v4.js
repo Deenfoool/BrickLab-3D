@@ -1,23 +1,24 @@
 import { resolvePhysicsOverrideV4, PHYSICS_OVERRIDES_VERSION_V4 } from './physics-overrides-v4.js'
 
-export const PHYSICS_PLAN_SAFETY_VERSION_V4 = 'connector-physics-plan-safety-v4.0.1'
+export const PHYSICS_PLAN_SAFETY_VERSION_V4 = 'connector-physics-plan-safety-v4.0.2'
 
+const HARD_BLOCKED = new Map([
+  ['ball-socket', 'ball-socket-angular-envelope-not-implemented'],
+])
 const OVERRIDE_REQUIRED = new Map([
-  ['ball-socket', 'ball-socket-angular-envelope-not-proven'],
   ['hinge-fingers', 'hinge-angular-envelope-not-proven'],
   ['round-revolute-interface', 'generic-revolute-angular-envelope-not-proven'],
 ])
 
 function reasonFor(item) {
-  if (OVERRIDE_REQUIRED.has(item?.family)) return OVERRIDE_REQUIRED.get(item.family)
-  if (item?.family === 'bar-clip' && item?.rule?.kind === 'revolute') return 'captured-clip-angular-envelope-not-proven'
+  if (HARD_BLOCKED.has(item?.family)) return { reason:HARD_BLOCKED.get(item.family), overridable:false }
+  if (OVERRIDE_REQUIRED.has(item?.family)) return { reason:OVERRIDE_REQUIRED.get(item.family), overridable:true }
+  if (item?.family === 'bar-clip' && item?.rule?.kind === 'revolute') return { reason:'captured-clip-angular-envelope-not-proven', overridable:true }
   return null
 }
 
 function finiteLimitPair(limits) {
-  return limits == null || (
-    Number.isFinite(limits?.min) && Number.isFinite(limits?.max) && limits.min <= limits.max
-  )
+  return limits != null && Number.isFinite(limits?.min) && Number.isFinite(limits?.max) && limits.min <= limits.max
 }
 
 function applyOverride(item, override) {
@@ -25,15 +26,10 @@ function applyOverride(item, override) {
   if (rule.kind !== item.rule.kind) {
     return { ok:false, reason:`physics-override-kind-mismatch:${override.id}` }
   }
-  if (!finiteLimitPair(rule.limits)) {
-    return { ok:false, reason:`physics-override-invalid-limits:${override.id}` }
-  }
-  // Rapier 0.20 UnitImpulseJoint exposes setLimits for revolute/prismatic unit
-  // joints, but BrickLab's cylindrical/prismatic V4 path intentionally uses a
-  // GenericJoint with independent frames. Do not pretend generic-axis limits are
-  // supported until they are implemented and tested explicitly.
-  if (rule.limits && rule.kind !== 'revolute') {
-    return { ok:false, reason:`physics-override-limits-unsupported:${override.id}` }
+  // Today only revolute overrides have a tested limit application path. Generic
+  // prismatic/cylindrical and spherical angular limits remain deliberately blocked.
+  if (rule.kind !== 'revolute' || !finiteLimitPair(rule.limits)) {
+    return { ok:false, reason:`physics-override-revolute-limits-required:${override.id}` }
   }
   return {
     ok:true,
@@ -45,7 +41,7 @@ function applyOverride(item, override) {
         release:rule.release ?? item.rule.release,
         resistance:rule.resistance ?? item.rule.resistance,
         contacts:rule.contacts || 'disabled',
-        limits:rule.limits ?? null,
+        limits:{ min:rule.limits.min, max:rule.limits.max },
         override:{
           id:override.id,
           version:override.version,
@@ -66,25 +62,26 @@ export function hardenPhysicsPlanV4(plan) {
   let overridden=0
 
   for (const item of plan.joints) {
-    const reason=reasonFor(item)
-    if (!reason) {
+    const policy=reasonFor(item)
+    if (!policy) {
       joints.push(item)
+      continue
+    }
+
+    if (!policy.overridable) {
+      for (const connectionId of item.connectionIds ?? [null]) blockers.push({connectionId,family:item.family,reason:policy.reason})
       continue
     }
 
     const override=resolvePhysicsOverrideV4(item.entry)
     if (!override) {
-      for (const connectionId of item.connectionIds ?? [null]) {
-        blockers.push({connectionId,family:item.family,reason})
-      }
+      for (const connectionId of item.connectionIds ?? [null]) blockers.push({connectionId,family:item.family,reason:policy.reason})
       continue
     }
 
     const applied=applyOverride(item,override)
     if (!applied.ok) {
-      for (const connectionId of item.connectionIds ?? [null]) {
-        blockers.push({connectionId,family:item.family,reason:applied.reason})
-      }
+      for (const connectionId of item.connectionIds ?? [null]) blockers.push({connectionId,family:item.family,reason:applied.reason})
       continue
     }
     joints.push(applied.item)
@@ -108,9 +105,11 @@ export function hardenPhysicsPlanV4(plan) {
 }
 
 export function physicsSafetyReasonV4(family, kind = null) {
+  if (HARD_BLOCKED.has(family)) return HARD_BLOCKED.get(family)
   if (OVERRIDE_REQUIRED.has(family)) return OVERRIDE_REQUIRED.get(family)
   if (family === 'bar-clip' && kind === 'revolute') return 'captured-clip-angular-envelope-not-proven'
   return null
 }
 
+export const CONNECTOR_V4_HARD_BLOCKED_PHYSICS_FAMILIES = Object.freeze([...HARD_BLOCKED.keys()])
 export const CONNECTOR_V4_OVERRIDE_REQUIRED_FAMILIES = Object.freeze([...OVERRIDE_REQUIRED.keys()])
