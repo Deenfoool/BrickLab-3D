@@ -1,8 +1,8 @@
 import * as THREE from 'three'
-import { matchConnectorV4 } from './matcher-v4.js?v=connector-v4-20260910-v3'
-import { nearestAxialOffsetV4, evaluateAxialOffsetV4 } from './axial-fit-v4.js?v=connector-v4-20260910-v1'
+import { matchConnectorV4 } from './matcher-v4.js'
+import { nearestAxialOffsetV4, evaluateAxialOffsetV4 } from './axial-fit-v4.js'
 
-export const PLACEMENT_SOLVER_VERSION_V4 = 'placement-solver-v4.1.0'
+export const PLACEMENT_SOLVER_VERSION_V4 = 'placement-solver-v4.2.0'
 const EPS = 1e-8
 
 function matrixFromConnector(connector) {
@@ -86,7 +86,7 @@ function toParentLocalPose(object, worldPosition, worldQuaternion) {
 }
 
 function solveAxialOffset(movingConnector,targetConnector,match,movingFrame,targetFrame,options) {
-  if (!['cylinder','clip-cylinder'].includes(match.family)) return { offsetStud:0, offsetLdu:0, clamped:false, windows:null }
+  if (!['cylinder','clip-cylinder'].includes(match.family)) return { offsetStud:0, offsetLdu:0, clamped:false, windows:null, fit:null }
   if (!match.editorMotion?.axialSlide) {
     const fit = evaluateAxialOffsetV4(movingConnector,targetConnector,0)
     return {offsetStud:0,offsetLdu:0,clamped:false,rejected:!fit.valid,fit}
@@ -94,9 +94,11 @@ function solveAxialOffset(movingConnector,targetConnector,match,movingFrame,targ
   const requestedStud = Number.isFinite(options.axialOffsetStud)
     ? options.axialOffsetStud
     : movingFrame.position.clone().sub(targetFrame.position).dot(targetFrame.axis)
-  const fit = nearestAxialOffsetV4(movingConnector,targetConnector,requestedStud*20)
-  if (!fit.valid || fit.offsetLdu == null) return { offsetStud:0, offsetLdu:0, clamped:true, windows:fit, rejected:true }
-  return { offsetStud:fit.offsetLdu/20, offsetLdu:fit.offsetLdu, clamped:fit.clamped, windows:fit, rejected:false }
+  const windows = nearestAxialOffsetV4(movingConnector,targetConnector,requestedStud*20)
+  if (!windows.valid || windows.offsetLdu == null) return { offsetStud:0, offsetLdu:0, clamped:true, windows, fit:null, rejected:true }
+  const fit = evaluateAxialOffsetV4(movingConnector,targetConnector,windows.offsetLdu)
+  if (!fit.valid) return { offsetStud:0, offsetLdu:0, clamped:true, windows, fit, rejected:true }
+  return { offsetStud:windows.offsetLdu/20, offsetLdu:windows.offsetLdu, clamped:windows.clamped, windows, fit, rejected:false }
 }
 
 function movingPlacementMode(connector, match) {
@@ -113,6 +115,10 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
   const movingFrame = connectorWorldFrameV4(movingObject,movingConnector)
   const targetFrame = connectorWorldFrameV4(targetObject,targetConnector)
   const movingPose = worldPose(movingObject)
+  const initialDelta = movingFrame.position.clone().sub(targetFrame.position)
+  const initialAxialSeparationStud = initialDelta.dot(targetFrame.axis)
+  const initialLateralDistanceStud = initialDelta.clone().addScaledVector(targetFrame.axis,-initialAxialSeparationStud).length()
+  const initialConnectorDistanceStud = initialDelta.length()
 
   // LDCad cylinder sections are described along each connector's local negative-Y
   // direction. Male/female profiles therefore mate with the two local Y frames
@@ -121,9 +127,6 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
   let desiredQuaternion = movingPose.quaternion.clone()
   let rotationDelta = new THREE.Quaternion()
   const placementMode = movingPlacementMode(movingConnector,match)
-  // `retain` explicitly means: keep the dragged part's current orientation. `free`
-  // has the same editor transform behavior here; the semantic distinction is kept
-  // in the match/constraint layer for later physics handling.
   const preserveMovingOrientation = placementMode === 'retain' || placementMode === 'free'
 
   if (!preserveMovingOrientation) {
@@ -148,6 +151,10 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
   const desiredConnectorPosition = targetFrame.position.clone().addScaledVector(targetFrame.axis,axial.offsetStud)
   const desiredWorldPosition = desiredConnectorPosition.clone().sub(sourceOffset)
   const localPose = toParentLocalPose(movingObject,desiredWorldPosition,desiredQuaternion)
+  // Capture is intentionally connector-centric. Measuring only object-origin motion
+  // makes a connector near the edge of a large brick look "far away" when rotation
+  // around that connector is required, even though the mating points are adjacent.
+  const captureCorrectionStud = movingFrame.position.distanceTo(desiredConnectorPosition)
 
   const result = {
     valid:true,
@@ -159,14 +166,20 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
     preserveMovingOrientation,
     targetAxisWorld:targetFrame.axis.toArray(),
     targetPositionWorld:targetFrame.position.toArray(),
+    desiredConnectorPositionWorld:desiredConnectorPosition.toArray(),
     worldPosition:desiredWorldPosition.toArray(),
     worldQuaternion:desiredQuaternion.toArray(),
     localPosition:localPose.position.toArray(),
     localQuaternion:localPose.quaternion.toArray(),
     diagnostics:{
       initialAxisDot:movingFrame.axis.dot(targetFrame.axis),
+      initialConnectorDistanceStud,
+      initialLateralDistanceStud,
+      initialAxialSeparationStud,
+      captureCorrectionStud,
       translationStud:movingPose.position.distanceTo(desiredWorldPosition),
       rotationRad:2*Math.acos(THREE.MathUtils.clamp(Math.abs(rotationDelta.w),-1,1)),
+      engagementLdu:axial.fit?.engagementLdu ?? 0,
     },
   }
   return result
