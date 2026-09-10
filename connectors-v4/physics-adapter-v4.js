@@ -1,7 +1,8 @@
 import * as THREE from 'three'
+import { PHYSICS_UNITS } from '../physical-parts.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_ADAPTER_VERSION_V4 = 'connector-rapier-adapter-v4.2.4'
+export const PHYSICS_ADAPTER_VERSION_V4 = 'connector-rapier-adapter-v4.2.5'
 
 // Rapier GenericJoint axesMask means LOCKED axes. Joint-frame X is the connector axis.
 const MASK_PRISMATIC_X = 2 | 4 | 8 | 16 | 32
@@ -9,6 +10,7 @@ const MASK_CYLINDRICAL_X = 2 | 4 | 16 | 32
 const RELEASE_CONFIRM_FRAMES = 2
 const MAX_INITIAL_LINEAR_ERROR = 0.04
 const MAX_INITIAL_ANGULAR_ERROR = THREE.MathUtils.degToRad(1)
+const STUD_METERS = PHYSICS_UNITS.studMeters
 
 function vec(v) { return {x:v.x,y:v.y,z:v.z} }
 function quat(q) { return {x:q.x,y:q.y,z:q.z,w:q.w} }
@@ -19,8 +21,12 @@ function bodyQuaternion(body) {
   return new THREE.Quaternion(q.x,q.y,q.z,q.w)
 }
 
-function bodyLocalPoint(member,worldPoint) {
-  return worldPoint.clone().applyMatrix4(member.component.bodyWorldInverse)
+function bodyLocalPoint(member,worldPointStud) {
+  // member.component.bodyWorldInverse lives in editor/stud coordinates while Rapier
+  // local anchors are SI metres. This boundary must match Physics v2 bodyLocalPoint.
+  return worldPointStud.clone()
+    .applyMatrix4(member.component.bodyWorldInverse)
+    .multiplyScalar(STUD_METERS)
 }
 
 function bodyLocalDirection(member,worldDirection) {
@@ -243,6 +249,7 @@ function preflightEntry(item) {
 export function installConnectorPhysicsV4(session,plan,runtime) {
   if (!session?.world || !session?.RAPIER || !runtime) throw new TypeError('A built PhysicsSession and Connector V4 runtime are required')
   if (!plan?.pass) throw new Error('Connector V4 physics plan contains blockers')
+  if (!(STUD_METERS > 0 && Number.isFinite(STUD_METERS))) throw new Error('Connector V4 physics unit scale is invalid')
 
   const preflightFailures=[]
   for (const item of plan.joints) {
@@ -273,6 +280,7 @@ export function installConnectorPhysicsV4(session,plan,runtime) {
     adapterVersion:PHYSICS_ADAPTER_VERSION_V4,
     policyVersion:plan.version,
     safetyVersion:plan.safetyVersion ?? null,
+    units:{studMeters:STUD_METERS,anchorUnit:'m'},
     planned:plan.joints.length,
     active:activeCount,
     internal:internalCount,
@@ -285,6 +293,7 @@ export function installConnectorPhysicsV4(session,plan,runtime) {
   window.dispatchEvent(new CustomEvent('bricklab:connectorv4physicsready',{detail:{
     adapterVersion:PHYSICS_ADAPTER_VERSION_V4,
     safetyVersion:plan.safetyVersion ?? null,
+    studMeters:STUD_METERS,
     joints:session.connectorV4Physics.active,
     internal:session.connectorV4Physics.internal,
     families:[...session.connectorV4Physics.families],
