@@ -16,12 +16,14 @@ function canonicalTag(index){
   return tag
 }
 
-test('browser physics QA pages delegate import-map ownership to production index',async()=>{
-  const [index,loader,timeScale,axle]=await Promise.all([
+test('browser QA pages delegate import-map ownership to production index',async()=>{
+  const [index,loader,timeScale,axle,audio,generator]=await Promise.all([
     text('index.html'),
     text('tests/production-importmap-loader.js'),
     text('tests/time-scale-browser.html'),
     text('tests/axle-browser.html'),
+    text('audio-qa.html'),
+    text('scripts/version-runtime.mjs'),
   ])
   const tag=canonicalTag(index)
   assert.match(tag,/connector-v4-physics-/)
@@ -29,6 +31,7 @@ test('browser physics QA pages delegate import-map ownership to production index
   for(const [name,html,moduleName] of [
     ['time-scale',timeScale,'./tests/time-scale-browser.js'],
     ['axle',axle,'./tests/axle-browser.js'],
+    ['audio',audio,'./audio/qa.js'],
   ]) {
     assert.doesNotMatch(html,/<script\s+type="importmap"/i,`${name} QA must not embed a stale import map`)
     assert.match(html,/production-importmap-loader\.js\?v=1/,`${name} QA loads the production-map bridge`)
@@ -41,4 +44,7 @@ test('browser physics QA pages delegate import-map ownership to production index
   assert.match(loader,/data\?\.imports\?\.\['\.\/app\.js'\]/,'QA loader derives the canonical tag from production app mapping')
   assert.match(loader,/map\.type = 'importmap'/,'QA loader installs import map before boot')
   assert.match(loader,/script\.type = 'module'/,'QA loader starts the requested module after map installation')
+
+  assert.match(generator,/production-importmap-loader\.js/,'runtime generator preserves the shared QA loader')
+  assert.doesNotMatch(generator,/testHtml\.replace\(\/\(<script type="importmap"/,'runtime generator no longer writes duplicate QA import maps')
 })
