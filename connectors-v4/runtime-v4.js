@@ -2,6 +2,11 @@ import { PARTS, findPart } from '../parts.js'
 import { CONNECTOR_SCHEMA_VERSION_V4, CONNECTOR_SYSTEM_VERSION_V4, SHADOW_SOURCE_V4 } from './schema-v4.js?v=connector-v4-20260910-v1'
 import { matchConnectorV4 } from './matcher-v4.js?v=connector-v4-20260910-v1'
 import { connectorToBrickLabV4, createShadowResolverV4 } from './shadow-resolver-v4.js?v=connector-v4-20260910-v1'
+import { finalizeConnectorIdentitiesV4 } from './identity-v4.js?v=connector-v4-20260910-v2'
+import { applyPlacementV4, solvePlacementV4 } from './placement-solver-v4.js?v=connector-v4-20260910-v2'
+import { auditConnectorDefinitionV4 } from './audit-v4.js?v=connector-v4-20260910-v2'
+import { proposeConstraintV4 } from './constraints-v4.js?v=connector-v4-20260910-v1'
+import { createAxialOccupancyV4 } from './occupancy-v4.js?v=connector-v4-20260910-v1'
 
 const LDRAW_RAW_ROOT = 'https://raw.githubusercontent.com/pybricks/ldraw/master/'
 const SHADOW_RAW_ROOT = `https://raw.githubusercontent.com/${SHADOW_SOURCE_V4.repository}/${SHADOW_SOURCE_V4.commit}/`
@@ -10,6 +15,7 @@ const hydration = new Map()
 const status = new Map()
 const lastRoots = new Map()
 const wrappedDefinitions = new WeakSet()
+const occupancy = createAxialOccupancyV4()
 let shadowManifestPromise = null
 let manifestFallbackWarned = false
 
@@ -107,6 +113,12 @@ function instrumentDefinition(def) {
   wrappedDefinitions.add(def)
 }
 
+function finalizeResolved(resolved, offset) {
+  const identity = finalizeConnectorIdentitiesV4(resolved.file, resolved.connectors)
+  const connectors = identity.connectors.map(connector => connectorToBrickLabV4(connector, offset))
+  return { connectors, identity }
+}
+
 export async function hydrateConnectorV4(defOrId, rootOverride = null) {
   const def = typeof defOrId === 'string' ? findPart(defOrId) : defOrId
   if (!isLDrawDefinition(def)) return null
@@ -127,15 +139,27 @@ export async function hydrateConnectorV4(defOrId, rootOverride = null) {
       const resolved = await resolver.resolve(def.ldraw.file)
       const offset = visualOffsetFor(def, rootOverride)
       if (!offset) throw new Error('LDraw visual offset is not available yet; V4 hydration waits for an instantiated visual')
-      const connectors = resolved.connectors.map(connector => connectorToBrickLabV4(connector, offset))
+      const finalized = finalizeResolved(resolved, offset)
       def.connectivityV4 = {
         schemaVersion: CONNECTOR_SCHEMA_VERSION_V4,
         systemVersion: CONNECTOR_SYSTEM_VERSION_V4,
-        status: 'ready', source: SHADOW_SOURCE_V4, mode: 'observe', connectors,
-        warnings: resolved.warnings, stats: resolved.stats, visualOffsetStud: [...offset],
+        status: 'ready', source: SHADOW_SOURCE_V4, mode: 'observe', connectors: finalized.connectors,
+        warnings: resolved.warnings,
+        stats: {
+          ...resolved.stats,
+          identityInput: finalized.identity.stats.input,
+          identityOutput: finalized.identity.stats.output,
+          deduplicated: finalized.identity.stats.deduplicated,
+        },
+        visualOffsetStud: [...offset],
       }
       status.set(def.id, 'ready')
-      publish(def, { status:'ready', connectors:connectors.length, warnings:resolved.warnings.length })
+      publish(def, {
+        status:'ready',
+        connectors:finalized.connectors.length,
+        warnings:resolved.warnings.length,
+        deduplicated:finalized.identity.stats.deduplicated,
+      })
       return def.connectivityV4
     } catch (error) {
       const message = String(error?.message || error)
@@ -177,13 +201,23 @@ export const BrickLabConnectorV4 = Object.freeze({
   systemVersion: CONNECTOR_SYSTEM_VERSION_V4,
   source: SHADOW_SOURCE_V4,
   mode: 'observe',
+  occupancy,
   async resolve(file, visualOffsetStud = [0,0,0]) {
     const resolved = await resolver.resolve(file)
-    return { ...resolved, connectors: resolved.connectors.map(connector => connectorToBrickLabV4(connector, visualOffsetStud)) }
+    const finalized = finalizeResolved(resolved, visualOffsetStud)
+    return {
+      ...resolved,
+      connectors: finalized.connectors,
+      identity: finalized.identity.stats,
+    }
   },
   hydrate: hydrateConnectorV4,
   get(partId) { return findPart(partId)?.connectivityV4 ?? null },
   match: matchConnectorV4,
+  solvePlacement: solvePlacementV4,
+  applyPlacement: applyPlacementV4,
+  proposeConstraint: proposeConstraintV4,
+  audit: auditConnectorDefinitionV4,
   clearCache() { resolver.clearCache(); shadowManifestPromise = null },
   stats() {
     const ready = PARTS.filter(def => def.connectivityV4?.status === 'ready')
@@ -192,6 +226,7 @@ export const BrickLabConnectorV4 = Object.freeze({
       readyParts: ready.length,
       connectors: ready.reduce((sum, def) => sum + (def.connectivityV4.connectors?.length || 0), 0),
       warnings: ready.reduce((sum, def) => sum + (def.connectivityV4.warnings?.length || 0), 0),
+      deduplicated: ready.reduce((sum, def) => sum + (def.connectivityV4.stats?.deduplicated || 0), 0),
       loadingParts: [...status.values()].filter(value => value === 'loading').length,
       errorParts: [...status.values()].filter(value => value === 'error').length,
     }
