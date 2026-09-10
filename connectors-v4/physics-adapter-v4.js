@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_ADAPTER_VERSION_V4 = 'connector-rapier-adapter-v4.2.3'
+export const PHYSICS_ADAPTER_VERSION_V4 = 'connector-rapier-adapter-v4.2.4'
 
 // Rapier GenericJoint axesMask means LOCKED axes. Joint-frame X is the connector axis.
 const MASK_PRISMATIC_X = 2 | 4 | 8 | 16 | 32
@@ -68,6 +68,26 @@ function jointAnchors(rule,frameA,frameB,axisWorld) {
   return {worldA:center.clone().add(half),worldB:center.clone().sub(half)}
 }
 
+function configureJointPolicy(session,joint,rule) {
+  if (typeof joint.setContactsEnabled!=='function') {
+    session.world.removeImpulseJoint(joint,true)
+    throw new Error('Rapier joint contact-control API unavailable')
+  }
+  joint.setContactsEnabled(rule.contacts==='enabled')
+
+  if (rule.limits) {
+    if (rule.kind!=='revolute' || typeof joint.setLimits!=='function') {
+      session.world.removeImpulseJoint(joint,true)
+      throw new Error(`Rapier limits unavailable for Connector V4 ${rule.kind}`)
+    }
+    if (!Number.isFinite(rule.limits.min) || !Number.isFinite(rule.limits.max) || rule.limits.min>rule.limits.max) {
+      session.world.removeImpulseJoint(joint,true)
+      throw new Error('Connector V4 joint limits are invalid')
+    }
+    joint.setLimits(rule.limits.min,rule.limits.max)
+  }
+}
+
 function makeJoint(session,item,runtime) {
   const {entry,rule}=item
   const memberA=session.members.get(entry.objectA.userData.instanceId)
@@ -109,9 +129,9 @@ function makeJoint(session,item,runtime) {
   const joint=session.world.createImpulseJoint(params,memberA.body,memberB.body,true)
   if (!joint) throw new Error(`Rapier failed to create V4 joint ${item.id}`)
 
-  // GenericJoint's public constructor accepts one local axis for both bodies. Rapier
-  // 0.20 exposes full independent local frames after creation; set them before the
-  // first world.step so the common world constraint frame is exact on both bodies.
+  // Rapier 0.20 exposes full independent local frames on ImpulseJoint. Set them
+  // before the first world.step so one common world connector frame is represented
+  // exactly on both bodies even when their model-local connector axes differ.
   if (rule.kind==='prismatic' || rule.kind==='cylindrical') {
     if (typeof joint.setLocalFrame1!=='function' || typeof joint.setLocalFrame2!=='function') {
       session.world.removeImpulseJoint(joint,true)
@@ -120,7 +140,7 @@ function makeJoint(session,item,runtime) {
     joint.setLocalFrame1(vec(anchorA),quat(localFrameA))
     joint.setLocalFrame2(vec(anchorB),quat(localFrameB))
   }
-  joint.setContactsEnabled?.(false)
+  configureJointPolicy(session,joint,rule)
 
   return {
     internal:false,item,memberA,memberB,joint,
@@ -252,6 +272,7 @@ export function installConnectorPhysicsV4(session,plan,runtime) {
   session.connectorV4Physics={
     adapterVersion:PHYSICS_ADAPTER_VERSION_V4,
     policyVersion:plan.version,
+    safetyVersion:plan.safetyVersion ?? null,
     planned:plan.joints.length,
     active:activeCount,
     internal:internalCount,
@@ -263,6 +284,7 @@ export function installConnectorPhysicsV4(session,plan,runtime) {
   installHooks(session,monitors,runtime)
   window.dispatchEvent(new CustomEvent('bricklab:connectorv4physicsready',{detail:{
     adapterVersion:PHYSICS_ADAPTER_VERSION_V4,
+    safetyVersion:plan.safetyVersion ?? null,
     joints:session.connectorV4Physics.active,
     internal:session.connectorV4Physics.internal,
     families:[...session.connectorV4Physics.families],
