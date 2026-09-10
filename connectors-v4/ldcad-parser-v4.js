@@ -54,9 +54,7 @@ export function parseOptionBlocksV4(tail = '') {
   return { options, duplicates, malformed, consumed }
 }
 
-export function parseGridV4(value) {
-  if (!String(value ?? '').trim()) return null
-  const input = tokens(value)
+function parseGridAttempt(input, dimensions) {
   let cursor = 0
   const axisCount = () => {
     let centered = false
@@ -65,21 +63,68 @@ export function parseGridV4(value) {
     if (!Number.isInteger(count) || count < 1) throw new Error('grid count must be a positive integer')
     return { count, centered }
   }
+
   const x = axisCount()
-  const z = axisCount()
+  let y = { count:1, centered:false }
+  let z
+  if (dimensions === 3) {
+    y = axisCount()
+    z = axisCount()
+  } else {
+    z = axisCount()
+  }
+
   const stepX = Number(input[cursor++])
-  const stepZ = Number(input[cursor++])
-  if (!Number.isFinite(stepX) || !Number.isFinite(stepZ) || cursor !== input.length) throw new Error('grid must be: [C] Xcount [C] Zcount Xstep Zstep')
-  return { xCount: x.count, zCount: z.count, centerX: x.centered, centerZ: z.centered, stepX, stepZ }
+  let stepY = 0
+  let stepZ
+  if (dimensions === 3) {
+    stepY = Number(input[cursor++])
+    stepZ = Number(input[cursor++])
+  } else {
+    stepZ = Number(input[cursor++])
+  }
+  if (![stepX, stepY, stepZ].every(Number.isFinite) || cursor !== input.length) throw new Error('grid token count does not match variant')
+
+  return {
+    dimensions,
+    xCount:x.count,
+    yCount:y.count,
+    zCount:z.count,
+    centerX:x.centered,
+    centerY:y.centered,
+    centerZ:z.centered,
+    stepX,
+    stepY,
+    stepZ,
+  }
+}
+
+export function parseGridV4(value) {
+  if (!String(value ?? '').trim()) return null
+  const input = tokens(value)
+  // LDCad supports both the documented X/Z form and a later X/Y/Z form. Try the
+  // longer grammar first because optional C tokens make length-only detection unsafe.
+  try { return parseGridAttempt(input, 3) }
+  catch (threeError) {
+    try { return parseGridAttempt(input, 2) }
+    catch (twoError) {
+      throw new Error(`grid must be [C] Xcount [C] Zcount Xstep Zstep or [C] Xcount [C] Ycount [C] Zcount Xstep Ystep Zstep`)
+    }
+  }
 }
 
 export function expandGridV4(grid) {
   if (!grid) return [[0, 0, 0]]
   const x0 = grid.centerX ? -((grid.xCount - 1) * grid.stepX) / 2 : 0
+  const y0 = grid.centerY ? -((grid.yCount - 1) * grid.stepY) / 2 : 0
   const z0 = grid.centerZ ? -((grid.zCount - 1) * grid.stepZ) / 2 : 0
   const result = []
   for (let ix = 0; ix < grid.xCount; ix += 1) {
-    for (let iz = 0; iz < grid.zCount; iz += 1) result.push([x0 + ix * grid.stepX, 0, z0 + iz * grid.stepZ])
+    for (let iy = 0; iy < grid.yCount; iy += 1) {
+      for (let iz = 0; iz < grid.zCount; iz += 1) {
+        result.push([x0 + ix * grid.stepX, y0 + iy * grid.stepY, z0 + iz * grid.stepZ])
+      }
+    }
   }
   return result
 }
@@ -189,7 +234,8 @@ function parseConnector(meta, options, context, lineNumber, raw) {
         firstGender: normalizeGenderV4(options.genderofs, 'male'),
         sequenceLdu,
         radiusLdu: number(options.radius, null),
-        centered: bool(options.center, false),
+        // LDCad fingers are centered by default; cylinders are not.
+        centered: bool(options.center, true),
       },
       snap: { slide: false },
       inheritance: commonPolicy(options, { mirror: 'none' }),
@@ -203,8 +249,9 @@ function parseConnector(meta, options, context, lineNumber, raw) {
       gender: normalizeGenderV4(options.gender, 'male'),
       geometry: { bounding: parseBoundingV4(options.bounding) },
       snap: {
-        placement: options.placement || 'aligned',
-        match: options.match || 'group',
+        placement: String(options.placement || 'aligned').toLowerCase(),
+        // Roland Melkert confirmed `shape` is the default: group + bounding kind.
+        match: String(options.match || 'shape').toLowerCase(),
         slide: false,
       },
       inheritance: commonPolicy(options, { mirror: 'none' }),
