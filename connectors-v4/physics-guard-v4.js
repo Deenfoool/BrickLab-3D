@@ -2,7 +2,7 @@ import { PhysicsSession } from '../physics.js'
 import { buildPhysicsPlanV4, PHYSICS_POLICY_VERSION_V4 } from './physics-policy-v4.js'
 import { installConnectorPhysicsV4, PHYSICS_ADAPTER_VERSION_V4 } from './physics-adapter-v4.js'
 
-export const PHYSICS_GUARD_VERSION_V4 = 'connector-physics-guard-v4.2.0'
+export const PHYSICS_GUARD_VERSION_V4 = 'connector-physics-guard-v4.2.1'
 export const PHYSICS_GUARD_ERROR_CODE_V4 = 'BRICKLAB_CONNECTOR_V4_PHYSICS_NOT_CERTIFIED'
 
 const marker = Symbol.for('bricklab.connectorV4.physicsGuard.v4.2')
@@ -56,6 +56,15 @@ if (!PhysicsSession[marker]) {
       }
       if (!plan.pass) fail('uncertified-connections', plan.blockers)
     }
+
+    // Synchronous preflight event: visual diagnostics remove all Three helpers before
+    // PhysicsSession measures Box3/collider bounds. This fires even for a project with
+    // zero V4 links because debug endpoints themselves must never affect collision data.
+    window.dispatchEvent(new CustomEvent('bricklab:connectorv4physicsstarting', {detail:{
+      guardVersion:PHYSICS_GUARD_VERSION_V4,
+      connections:v4Records.length,
+      plannedJoints:plan?.joints?.length ?? 0,
+    }}))
 
     let session
     try {
