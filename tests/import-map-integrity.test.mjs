@@ -73,3 +73,26 @@ test('all Connector V4 modules and their real historical imports collapse to one
     }
   }
 })
+
+test('all LDraw JavaScript modules share one canonical generation and runtime cache', async () => {
+  const { imports } = await productionImports()
+  const canonical = imports['./app.js']?.match(/\?v=(.+)$/)?.[1]
+  assert.ok(canonical)
+  const dir=new URL('../ldraw/',import.meta.url)
+  const names=(await readdir(dir)).filter(name=>name.endsWith('.js'))
+  for(const name of names){
+    const specifier=`./ldraw/${name}`
+    assert.equal(imports[specifier],`${specifier}?v=${canonical}`,`${name} uses canonical LDraw generation`)
+    const source=await readFile(new URL(name,dir),'utf8')
+    for(const match of source.matchAll(/["'](\.\.?\/[^"']+\.js\?v=[^"']+)["']/g)){
+      const requested=match[1]
+      const [pathname,query]=requested.split('?')
+      const resolved=path.normalize(path.join('ldraw',pathname))
+      const canonicalSpecifier=`./${resolved}`
+      if (!imports[canonicalSpecifier]) continue
+      const historical=`./${resolved}?${query}`
+      assert.equal(imports[historical],imports[canonicalSpecifier],`${historical} resolves to the same LDraw module instance`)
+    }
+  }
+  assert.equal(imports['./ldraw/runtime-v3.js?v=ldraw-catalog-20260910-v3'],imports['./ldraw/runtime-v3.js'],'catalog and bootstrap share runtime-v3 caches')
+})
