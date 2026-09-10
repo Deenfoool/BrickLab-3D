@@ -1,6 +1,6 @@
 import { resolvePhysicsOverrideV4, PHYSICS_OVERRIDES_VERSION_V4 } from './physics-overrides-v4.js'
 
-export const PHYSICS_PLAN_SAFETY_VERSION_V4 = 'connector-physics-plan-safety-v4.0.0'
+export const PHYSICS_PLAN_SAFETY_VERSION_V4 = 'connector-physics-plan-safety-v4.0.1'
 
 const OVERRIDE_REQUIRED = new Map([
   ['ball-socket', 'ball-socket-angular-envelope-not-proven'],
@@ -28,7 +28,11 @@ function applyOverride(item, override) {
   if (!finiteLimitPair(rule.limits)) {
     return { ok:false, reason:`physics-override-invalid-limits:${override.id}` }
   }
-  if (rule.limits && !['revolute','prismatic'].includes(rule.kind)) {
+  // Rapier 0.20 UnitImpulseJoint exposes setLimits for revolute/prismatic unit
+  // joints, but BrickLab's cylindrical/prismatic V4 path intentionally uses a
+  // GenericJoint with independent frames. Do not pretend generic-axis limits are
+  // supported until they are implemented and tested explicitly.
+  if (rule.limits && rule.kind !== 'revolute') {
     return { ok:false, reason:`physics-override-limits-unsupported:${override.id}` }
   }
   return {
