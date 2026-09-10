@@ -1,7 +1,7 @@
 import { cloneConnectorV4, SHADOW_SOURCE_V4 } from './schema-v4.js'
 import { expandGridV4, parseShadowTextV4 } from './ldcad-parser-v4.js'
 
-export const SHADOW_RESOLVER_VERSION_V4 = 'shadow-resolver-v4.0.0'
+export const SHADOW_RESOLVER_VERSION_V4 = 'shadow-resolver-v4.0.1'
 
 const SCALE_EPS = 1e-5
 const ORTHO_EPS = 2e-4
@@ -191,16 +191,15 @@ export function createShadowResolverV4({ fetchOfficialText, fetchShadowText, max
   const shadowCache = new Map()
   const directCache = new Map()
   const officialResolveCache = new Map()
-  let nodeCount = 0
 
   const getOfficial = path => {
     const key = lowerPath(path)
-    if (!officialCache.has(key)) officialCache.set(key, Promise.resolve(fetchOfficialText(key)).catch(() => null))
+    if (!officialCache.has(key)) officialCache.set(key, Promise.resolve().then(() => fetchOfficialText(key)))
     return officialCache.get(key)
   }
   const getShadow = path => {
     const key = lowerPath(path)
-    if (!shadowCache.has(key)) shadowCache.set(key, Promise.resolve(fetchShadowText(key)).catch(() => null))
+    if (!shadowCache.has(key)) shadowCache.set(key, Promise.resolve().then(() => fetchShadowText(key)))
     return shadowCache.get(key)
   }
 
@@ -230,7 +229,7 @@ export function createShadowResolverV4({ fetchOfficialText, fetchShadowText, max
       return { connectors, warnings, found:true }
     })()
     directCache.set(key, promise)
-    return promise
+    try { return await promise } catch (error) { directCache.delete(key); throw error }
   }
 
   async function applyCurrentShadow(base, path, text, warnings) {
@@ -270,16 +269,16 @@ export function createShadowResolverV4({ fetchOfficialText, fetchShadowText, max
     return connectors
   }
 
-  async function resolveOfficialLocal(path, depth = 0, stack = []) {
+  async function resolveOfficialLocal(path, depth = 0, stack = [], traversal = { nodes:0 }) {
     const key = lowerPath(path)
+    const warnings = []
+    if (depth > maxDepth) return { connectors:[], warnings:[{code:'max-depth',file:key,detail:String(maxDepth)}], found:false }
+    if (stack.includes(key)) return { connectors:[], warnings:[{code:'cycle',file:key,detail:[...stack,key].join(' -> ')}], found:false }
     if (officialResolveCache.has(key)) return officialResolveCache.get(key)
-    const promise = (async () => {
-      const warnings = []
-      if (depth > maxDepth) return { connectors:[], warnings:[{code:'max-depth',file:key,detail:String(maxDepth)}], found:false }
-      if (stack.includes(key)) return { connectors:[], warnings:[{code:'cycle',file:key,detail:stack.join(' -> ')}], found:false }
-      nodeCount += 1
-      if (nodeCount > maxNodes) return { connectors:[], warnings:[{code:'node-budget',file:key,detail:String(maxNodes)}], found:false }
+    traversal.nodes += 1
+    if (traversal.nodes > maxNodes) return { connectors:[], warnings:[{code:'node-budget',file:key,detail:String(maxNodes)}], found:false }
 
+    const promise = (async () => {
       const official = await getOfficial(key)
       let connectors = []
       if (official != null) {
@@ -288,7 +287,7 @@ export function createShadowResolverV4({ fetchOfficialText, fetchShadowText, max
           const candidates = referenceCandidates(reference.ref, key)
           if (shouldRecurseOfficial(reference.ref)) {
             const childPath = candidates[0]
-            const child = await resolveOfficialLocal(childPath, depth + 1, nextStack)
+            const child = await resolveOfficialLocal(childPath, depth + 1, nextStack, traversal)
             warnings.push(...child.warnings)
             for (const sourceConnector of child.connectors) {
               const transformed = transformConnector(sourceConnector, reference.transform, warnings, `${key} -> ${childPath}`)
@@ -312,14 +311,14 @@ export function createShadowResolverV4({ fetchOfficialText, fetchShadowText, max
       return { connectors, warnings, found: official != null || shadow != null }
     })()
     officialResolveCache.set(key, promise)
-    return promise
+    try { return await promise } catch (error) { officialResolveCache.delete(key); throw error }
   }
 
   return {
     async resolve(file) {
-      nodeCount = 0
+      const traversal = { nodes:0 }
       const path = rootPath(file)
-      const result = await resolveOfficialLocal(path)
+      const result = await resolveOfficialLocal(path, 0, [], traversal)
       return {
         schemaVersion: 4,
         resolverVersion: SHADOW_RESOLVER_VERSION_V4,
@@ -330,14 +329,14 @@ export function createShadowResolverV4({ fetchOfficialText, fetchShadowText, max
         stats: {
           connectors: result.connectors.length,
           warnings: result.warnings.length,
-          resolvedOfficialNodes: nodeCount,
+          resolvedOfficialNodes: traversal.nodes,
           maxDepth,
           maxNodes,
         },
       }
     },
     clearCache() {
-      officialCache.clear(); shadowCache.clear(); directCache.clear(); officialResolveCache.clear(); nodeCount = 0
+      officialCache.clear(); shadowCache.clear(); directCache.clear(); officialResolveCache.clear()
     },
   }
 }
