@@ -1,7 +1,7 @@
-import { cloneConnectorV4, SHADOW_SOURCE_V4 } from './schema-v4.js'
-import { expandGridV4, parseShadowTextV4 } from './ldcad-parser-v4.js'
+import { cloneConnectorV4, SHADOW_SOURCE_V4 } from './schema-v4.js?v=connector-v4-20260910-v3'
+import { expandGridV4, parseShadowTextV4 } from './ldcad-parser-v4.js?v=connector-v4-20260910-v3'
 
-export const SHADOW_RESOLVER_VERSION_V4 = 'shadow-resolver-v4.0.2'
+export const SHADOW_RESOLVER_VERSION_V4 = 'shadow-resolver-v4.1.0'
 
 const SCALE_EPS = 1e-5
 const ORTHO_EPS = 2e-4
