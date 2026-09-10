@@ -125,8 +125,6 @@ function fingersMatch(a, b) {
   if (Math.abs(lenA - lenB) > LENGTH_TOLERANCE_LDU) return { compatible: false, reason: 'finger-length' }
   const sa = fingerSegments(a)
   const sb = fingerSegments(b)
-  // Conservative validation at every interval boundary. A candidate only passes
-  // when overlapping material alternates male/female rather than male/male.
   const points = [...new Set([...sa.flatMap(x => [x.start, x.end]), ...sb.flatMap(x => [x.start, x.end])])].sort((x, y) => x - y)
   for (let i = 0; i < points.length - 1; i += 1) {
     const mid = (points[i] + points[i + 1]) / 2
@@ -146,32 +144,77 @@ function fingersMatch(a, b) {
   }
 }
 
+function boundingKind(bound) {
+  return bound?.kind || 'point'
+}
+
 function boundingSignature(bound) {
-  if (!bound) return ''
-  if (bound.kind === 'point') return 'pnt'
+  if (!bound || bound.kind === 'point') return 'point'
   if (bound.kind === 'box') return `box:${bound.halfExtentsLdu.join(',')}`
   if (bound.kind === 'cube') return `cube:${bound.halfSizeLdu}`
-  if (bound.kind === 'cylinder') return `cyl:${bound.radiusLdu},${bound.lengthLdu}`
-  if (bound.kind === 'sphere') return `sph:${bound.radiusLdu}`
-  return ''
+  if (bound.kind === 'cylinder') return `cylinder:${bound.radiusLdu},${bound.lengthLdu}`
+  if (bound.kind === 'sphere') return `sphere:${bound.radiusLdu}`
+  return `unknown:${String(bound.kind || '')}`
+}
+
+function close(a, b, tolerance) {
+  return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= tolerance
+}
+
+function boundingSizeCompatible(a, b) {
+  const kind = boundingKind(a)
+  if (kind !== boundingKind(b)) return false
+  if (kind === 'point') return true
+  if (kind === 'sphere') return close(a.radiusLdu, b.radiusLdu, RADIUS_TOLERANCE_LDU)
+  if (kind === 'cube') return close(a.halfSizeLdu, b.halfSizeLdu, LENGTH_TOLERANCE_LDU)
+  if (kind === 'cylinder') return close(a.radiusLdu, b.radiusLdu, RADIUS_TOLERANCE_LDU) && close(a.lengthLdu, b.lengthLdu, LENGTH_TOLERANCE_LDU)
+  if (kind === 'box') return Array.isArray(a.halfExtentsLdu) && Array.isArray(b.halfExtentsLdu) && a.halfExtentsLdu.length === 3 && a.halfExtentsLdu.every((value, index) => close(value, b.halfExtentsLdu[index], LENGTH_TOLERANCE_LDU))
+  return boundingSignature(a) === boundingSignature(b)
+}
+
+function requestedGenericMatch(a, b) {
+  const rank = { group: 0, shape: 1, size: 2 }
+  const modeA = String(a.snap?.match || 'shape').toLowerCase()
+  const modeB = String(b.snap?.match || 'shape').toLowerCase()
+  return (rank[modeA] ?? 1) >= (rank[modeB] ?? 1) ? modeA : modeB
 }
 
 function genericMatch(a, b) {
   if (a.family !== 'generic' || b.family !== 'generic') return { compatible: false, reason: 'generic-pair' }
-  if (!a.group || a.group !== b.group) return { compatible: false, reason: 'group' }
   if (!oppositeGender(a.gender, b.gender)) return { compatible: false, reason: 'generic-gender' }
-  const sizeMatchRequested = a.snap?.match === 'size' || b.snap?.match === 'size'
-  if (sizeMatchRequested && boundingSignature(a.geometry.bounding) !== boundingSignature(b.geometry.bounding)) return { compatible: false, reason: 'generic-size' }
-  const free = a.snap?.placement === 'free' || b.snap?.placement === 'free'
+
+  // LDCad's generic matcher always compares group values (empty counts as the same
+  // unnamed group). `shape` is the default and additionally checks bounding kind;
+  // `size` is stricter and also compares dimensions. If peers request different
+  // modes BrickLab uses the stricter requirement so it never creates a false match.
+  if (String(a.group || '') !== String(b.group || '')) return { compatible: false, reason: 'group' }
+  const mode = requestedGenericMatch(a, b)
+  const boundA = a.geometry?.bounding
+  const boundB = b.geometry?.bounding
+  if (mode === 'shape' && boundingKind(boundA) !== boundingKind(boundB)) return { compatible: false, reason: 'generic-shape' }
+  if (mode === 'size' && !boundingSizeCompatible(boundA, boundB)) return { compatible: false, reason: 'generic-size' }
+
+  const placementA = String(a.snap?.placement || 'aligned').toLowerCase()
+  const placementB = String(b.snap?.placement || 'aligned').toLowerCase()
+  const free = placementA === 'free' || placementB === 'free'
+  const retained = placementA === 'retain' || placementB === 'retain'
+  const spherical = free && boundingKind(boundA) === 'sphere' && boundingKind(boundB) === 'sphere'
   return {
     compatible: true,
     family: 'generic',
-    reason: a.group,
-    keyed: !free,
-    rotationalSymmetry: free ? Infinity : 1,
-    editorMotion: { axialSlide: false, freeTwist: free },
-    kinematicHint: free ? 'spherical' : 'fixed',
+    reason: `generic-${mode}`,
+    matchMode: mode,
+    keyed: !(free || retained),
+    rotationalSymmetry: free || retained ? Infinity : 1,
+    editorMotion: {
+      axialSlide: false,
+      freeTwist: free || retained,
+      freeOrientation: free,
+      retainOrientation: retained,
+    },
+    kinematicHint: spherical ? 'spherical' : (free ? null : 'fixed'),
     physicsReady: false,
+    bounding: { a: boundingSignature(boundA), b: boundingSignature(boundB) },
   }
 }
 
@@ -186,7 +229,7 @@ function sphereMatch(a, b) {
     reason: 'ball-socket',
     keyed: false,
     rotationalSymmetry: Infinity,
-    editorMotion: { axialSlide: false, freeTwist: true },
+    editorMotion: { axialSlide: false, freeTwist: true, freeOrientation: true },
     kinematicHint: 'spherical',
     physicsReady: false,
   }
