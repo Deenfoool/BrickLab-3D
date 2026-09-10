@@ -1,5 +1,5 @@
 const BUILD_ID = 'PARTS-6'
-const BUILD_TAG = 'parts-6-20260910-connector-v4-physics-v4'
+const BUILD_TAG = 'parts-6-20260910-connector-v4-physics-v6'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
