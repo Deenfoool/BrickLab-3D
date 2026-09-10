@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { Window } from 'happy-dom'
+import { PHYSICS_UNITS } from '../physical-parts.js'
 import { parseShadowTextV4 } from '../connectors-v4/ldcad-parser-v4.js'
 import { connectorToBrickLabV4 } from '../connectors-v4/shadow-resolver-v4.js'
 import { matchConnectorV4 } from '../connectors-v4/matcher-v4.js'
@@ -14,6 +15,7 @@ import { installConnectorPhysicsV4, CONNECTOR_V4_RAPIER_MASKS } from '../connect
 const dom=new Window()
 for(const key of ['window','document','CustomEvent','HTMLElement']) globalThis[key]=key==='window'?dom:dom[key]
 await RAPIER.init()
+const STUD=PHYSICS_UNITS.studMeters
 
 function endpoint(meta,id){
   const connector=parseShadowTextV4(`0 !LDCAD ${meta}`).operations[0].connector
@@ -25,7 +27,7 @@ function component(world,object){
   object.updateMatrixWorld(true)
   const p=new THREE.Vector3(),q=new THREE.Quaternion(),s=new THREE.Vector3()
   object.matrixWorld.decompose(p,q,s)
-  const body=world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(p.x,p.y,p.z).setRotation({x:q.x,y:q.y,z:q.z,w:q.w}))
+  const body=world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(p.x*STUD,p.y*STUD,p.z*STUD).setRotation({x:q.x,y:q.y,z:q.z,w:q.w}))
   const matrix=object.matrixWorld.clone()
   return {body,member:{body,component:{body,bodyWorldMatrix:matrix,bodyWorldInverse:matrix.clone().invert(),bodyWorldRotation:q.clone(),bodyWorldRotationInverse:q.clone().invert()}}}
 }
@@ -34,7 +36,7 @@ function sessionFor(a,b){
   const ca=component(world,a),cb=component(world,b)
   const session={RAPIER,world,members:new Map([[a.userData.instanceId,ca.member],[b.userData.instanceId,cb.member]]),simulationTime:0,
     applyMotorTorques(){},
-    syncObjects(){for(const [object,c] of [[a,ca],[b,cb]]){const p=c.body.translation(),q=c.body.rotation();object.position.set(p.x,p.y,p.z);object.quaternion.set(q.x,q.y,q.z,q.w);object.updateMatrixWorld(true)}},
+    syncObjects(){for(const [object,c] of [[a,ca],[b,cb]]){const p=c.body.translation(),q=c.body.rotation();object.position.set(p.x/STUD,p.y/STUD,p.z/STUD);object.quaternion.set(q.x,q.y,q.z,q.w);object.updateMatrixWorld(true)}},
     dispose(){world.free?.()},
   }
   return {session,ca,cb}
@@ -50,10 +52,38 @@ function connection(family,a,b,ca,cb,id=`${a.userData.instanceId}-${b.userData.i
 function getConnectorMap(entries){
   return new Map(entries.map(([part,connector])=>[`${part}:${connector.endpointId}`,connector]))
 }
+function runtimeFor(){
+  return {worldFrame:(o,c)=>{
+    const p=new THREE.Vector3(...c.frame.positionStud).applyMatrix4(o.matrixWorld)
+    const m=new THREE.Matrix3().fromArray(c.frame.orientationBrickLab)
+    const axis=new THREE.Vector3(0,-1,0).applyMatrix3(m).transformDirection(o.matrixWorld)
+    const reference=new THREE.Vector3(1,0,0).applyMatrix3(m).transformDirection(o.matrixWorld)
+    return {position:p,axis,reference}
+  }}
+}
 
 test('Rapier masks leave exactly the intended connector-axis DOF free',()=>{
   assert.equal(CONNECTOR_V4_RAPIER_MASKS.prismaticX,62)
   assert.equal(CONNECTOR_V4_RAPIER_MASKS.cylindricalX,54)
+})
+
+test('V4 local joint anchors cross the stud-to-metre boundary exactly once',()=>{
+  const axle=endpoint('SNAP_CYL [gender=M] [caps=none] [secs=A 6 80] [center=true] [slide=true] [pos=20 0 0]','axle-si')
+  const hole=endpoint('SNAP_CYL [gender=F] [caps=none] [secs=R 6 20] [center=true] [slide=true] [pos=20 0 0]','hole-si')
+  const a=object('si-a'),b=object('si-b')
+  const record=connection('technic-axle-round-hole',a,b,axle,hole,'si-anchor')
+  const connectors=getConnectorMap([[a.userData.partId,axle],[b.userData.partId,hole]])
+  const plan=buildPhysicsPlanV4({objects:[a,b],connections:[record],getConnector:(part,id)=>connectors.get(`${part}:${id}`)})
+  const {session}=sessionFor(a,b)
+  const state=installConnectorPhysicsV4(session,plan,runtimeFor())
+  const joint=state.monitors[0].joint
+  const anchor1=joint.anchor1()
+  const anchor2=joint.anchor2()
+  assert.ok(Math.abs(anchor1.x-STUD)<1e-8,`anchor1.x=${anchor1.x}, expected ${STUD}`)
+  assert.ok(Math.abs(anchor2.x-STUD)<1e-8,`anchor2.x=${anchor2.x}, expected ${STUD}`)
+  assert.ok(Math.abs(anchor1.y)<1e-8 && Math.abs(anchor1.z)<1e-8)
+  assert.deepEqual(state.units,{studMeters:STUD,anchorUnit:'m'})
+  session.dispose()
 })
 
 test('aligned axle/round-hole creates one stable cylindrical joint and disengages exactly once',()=>{
@@ -66,14 +96,7 @@ test('aligned axle/round-hole creates one stable cylindrical joint and disengage
   assert.equal(plan.pass,true)
   assert.equal(plan.joints[0].rule.kind,'cylindrical')
   const {session,ca,cb}=sessionFor(a,b)
-  const runtime={worldFrame:(o,c)=>{
-    const p=new THREE.Vector3(...c.frame.positionStud).applyMatrix4(o.matrixWorld)
-    const m=new THREE.Matrix3().fromArray(c.frame.orientationBrickLab)
-    const axis=new THREE.Vector3(0,-1,0).applyMatrix3(m).transformDirection(o.matrixWorld)
-    const reference=new THREE.Vector3(1,0,0).applyMatrix3(m).transformDirection(o.matrixWorld)
-    return {position:p,axis,reference}
-  }}
-  const state=installConnectorPhysicsV4(session,plan,runtime)
+  const state=installConnectorPhysicsV4(session,plan,runtimeFor())
   assert.equal(state.active,1)
   for(let i=0;i<8;i++){session.world.timestep=1/120;session.world.step()}
   const av=ca.body.linvel(),bv=cb.body.linvel()
@@ -81,7 +104,7 @@ test('aligned axle/round-hole creates one stable cylindrical joint and disengage
 
   // Connector axis for the identity shadow frame is -Y. Move the hole completely
   // beyond the 8L axle and run two post-sync validity passes (release hysteresis).
-  cb.body.setTranslation({x:0,y:20,z:0},true)
+  cb.body.setTranslation({x:0,y:20*STUD,z:0},true)
   session.syncObjects();session.syncObjects()
   assert.equal(state.released,1)
   assert.equal(state.active,0)
