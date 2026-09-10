@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { matchConnectorV4 } from './matcher-v4.js'
 import { nearestAxialOffsetV4, evaluateAxialOffsetV4 } from './axial-fit-v4.js'
 
-export const PLACEMENT_SOLVER_VERSION_V4 = 'placement-solver-v4.2.1'
+export const PLACEMENT_SOLVER_VERSION_V4 = 'placement-solver-v4.3.0'
 const EPS = 1e-8
 
 function matrixFromConnector(connector) {
@@ -124,6 +124,7 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
   let rotationDelta = new THREE.Quaternion()
   const placementMode = movingPlacementMode(movingConnector,match)
   const preserveMovingOrientation = placementMode === 'retain' || placementMode === 'free'
+  let appliedTwistCorrectionRad = 0
 
   if (!preserveMovingOrientation) {
     const axisAlign = new THREE.Quaternion().setFromUnitVectors(movingFrame.axis,targetFrame.axis)
@@ -131,11 +132,15 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
     rotationDelta.copy(axisAlign)
 
     const alignedReference = movingFrame.reference.clone().applyQuaternion(axisAlign)
-    const correctionAngle = fullOrientationCorrection(alignedReference,targetFrame.reference,targetFrame.axis,match)
+    const requestedTwist = Number(options.twistCorrectionRad)
+    const correctionAngle = Number.isFinite(requestedTwist)
+      ? requestedTwist
+      : fullOrientationCorrection(alignedReference,targetFrame.reference,targetFrame.axis,match)
     if (Math.abs(correctionAngle) > 1e-9) {
       const twist = new THREE.Quaternion().setFromAxisAngle(targetFrame.axis,correctionAngle)
       desiredQuaternion = twist.clone().multiply(desiredQuaternion)
       rotationDelta = twist.clone().multiply(rotationDelta)
+      appliedTwistCorrectionRad = correctionAngle
     }
   }
 
@@ -172,6 +177,7 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
       captureCorrectionStud,
       translationStud:movingPose.position.distanceTo(desiredWorldPosition),
       rotationRad:2*Math.acos(THREE.MathUtils.clamp(Math.abs(rotationDelta.w),-1,1)),
+      twistCorrectionRad:appliedTwistCorrectionRad,
       engagementLdu:axial.fit?.engagementLdu ?? 0,
     },
   }
