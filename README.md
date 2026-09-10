@@ -16,7 +16,7 @@ Core loop: **build → simulate → test → inspect telemetry → modify → te
 - **80 prototype parts** covering bricks/plates, studded Technic bricks, full and thin liftarms, bent beams, axles, pins/connectors, spur gears, multiple wheel sizes, Lab Motor, F/N/R Gearbox, Open Differential, Bearing Block, Suspension Arm and sensors.
 - **LDraw Parts Library integration:** a remote on-demand parts browser searches LDraw Design IDs, loads real `.dat` geometry lazily, registers selected pieces in the normal BrickLab catalog and preserves them through local saves and `.bricklab` import/export.
 - **Connector System V4 for LDraw parts:** pinned LDCad Shadow metadata is resolved into shape-aware endpoints, axial occupancy, certified snapping and fail-closed Rapier constraints.
-- Connector V4 BUILD recognizes families including stud/anti-stud, Technic axle/keyed or round holes, pin/hole, bar/hole, bar/clip, round rotational/sliding interfaces, ball/socket and finger hinges. SIMULATE is intentionally stricter: only families with a proven DOF/retention model are accepted automatically; ball/socket, unconstrained hinge/round-revolute mechanisms, captured clips, generic groups and locking/click hinges remain physics-blocked unless an explicit bounded override supplies evidence.
+- Connector V4 BUILD recognizes families including stud/anti-stud, Technic axle/keyed or round holes, pin/hole, bar/hole, bar/clip, round rotational/sliding interfaces, ball/socket and finger hinges. SIMULATE is intentionally stricter: only families with a proven DOF/retention model are accepted automatically; single-stud contacts, ball/socket, unconstrained hinge/round-revolute mechanisms, captured clips, generic groups and locking/click hinges remain physics-blocked unless a proven bounded model exists.
 - Connector V3 remains as a compatibility layer for native/procedural parts and established mechanics code; gear mesh remains a separate drivetrain contact solver.
 - New Parts asset browser: default grid view, category chips with counts, Favorites, Recent parts, full-text/tag/ID search, `Ctrl/Cmd + K` search focus and persistent list/grid preference.
 - Catalog-wide realistic molded-part visual pass: refined ABS/metal/rubber materials, Technic hole liners, axle detail bands, gear-face detail, power-unit fasteners, wheel sidewall/tread detail and studio PBR lighting.
@@ -70,8 +70,10 @@ Important safety properties:
 
 - a saved `physicsReady` flag is never trusted as authority; SIMULATE rebuilds a physics plan from live endpoints and transforms;
 - V4-owned LDraw structural pairs fail closed instead of silently falling back to a coarse V3 connection;
-- multiple distinct stud contacts between the same two parts become one rigid physics constraint instead of competing Rapier joints;
-- open axle/pin/bar profiles can dynamically disengage after leaving their valid axial engagement window;
+- multiple independent stud contacts between the same two parts become one rigid physics constraint; a single stud remains BUILD-only until connector-aware collider envelopes are available;
+- several graph records for one continuous axle/bar/pin through the same part are aggregated into one axial Rapier constraint instead of competing joints;
+- open axle/pin/bar profiles dynamically disengage only after every engagement represented by their physical bundle has left its valid axial window;
+- V4 joint anchors cross the editor→Rapier unit boundary exactly once: `1 stud = 0.008 m`;
 - ball/socket, unbounded hinge/round-revolute mechanisms, captured clips, locking/click/detent hinges and generic grouped connectors do not receive guessed physics;
 - any mechanism requiring an explicit physical override must provide stable targeting, finite limits where applicable and a non-empty evidence source;
 - V4 debug geometry is removed before collider measurement so diagnostics cannot change physics bounds.
@@ -250,7 +252,7 @@ Connector V4 acceptance:
 npm run test:connectors-v4
 ```
 
-The suite includes parser/resolver/upstream fixtures, placement and graph behavior, production bridge checks, Rapier axle/hole stability, dynamic disengagement, multi-stud aggregation, physics safety/override checks, bounded revolute-limit application, immutable evidence records and production import-map consistency.
+The suite includes parser/resolver/upstream fixtures, placement and graph behavior, production bridge checks, first-load hydration, Rapier axle/hole stability, SI anchor conversion, dynamic disengagement, coaxial axial-bundle aggregation/release, multi-stud constraint-rank checks, physics safety/override checks, bounded revolute-limit application, guard ownership, immutable evidence records and production import-map consistency.
 
 ## Documentation
 
@@ -270,7 +272,7 @@ The suite includes parser/resolver/upstream fixtures, placement and graph behavi
 
 ## Current modelling limits
 
-Physics v2 is designed for interactive browser simulation, not engineering FEA. Tyre contact is ray-based, drivetrain coupling is semantic rather than tooth-contact physics, flexible deformation is not simulated, and current part masses/resistance values are prototype or normalized simulation parameters unless explicitly documented otherwise. LDraw supplies geometry while advanced drivetrain behavior still requires BrickLab mechanical semantics. Connector V4 deliberately keeps mechanisms with unproven angular envelopes or retention behavior BUILD-only instead of inventing plausible-looking SIMULATE physics.
+Physics v2 is designed for interactive browser simulation, not engineering FEA. Tyre contact is ray-based, drivetrain coupling is semantic rather than tooth-contact physics, flexible deformation is not simulated, and current part masses/resistance values are prototype or normalized simulation parameters unless explicitly documented otherwise. LDraw supplies geometry while advanced drivetrain behavior still requires BrickLab mechanical semantics. Connector V4 deliberately keeps mechanisms with unproven angular envelopes, collider envelopes or retention behavior BUILD-only instead of inventing plausible-looking SIMULATE physics.
 
 ## Trademark / LDraw note
 
