@@ -1,9 +1,13 @@
 import { approveConstraintV4, proposeConstraintV4 } from './constraints-v4.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.2.3'
+export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.2.4'
 
 const MIN_DISTINCT_STUD_DISTANCE = 0.45
+const ROTATION_TRANSMITTING_FAMILIES = new Set([
+  'technic-axle-keyed-hole',
+  'keyed-shaft-interface',
+])
 
 function familyOf(connection) {
   return connection?.activation?.family || connection?.metadata?.activation?.family || null
@@ -200,7 +204,26 @@ export function buildPhysicsPlanV4({ objects = [], connections = [], getConnecto
   }
 }
 
+export function drivetrainSemanticLinksV4(connections = [], releasedConnectionIds = new Set()) {
+  const released = releasedConnectionIds instanceof Set ? releasedConnectionIds : new Set(releasedConnectionIds ?? [])
+  return connections
+    .filter(connection => connection?.id && !released.has(connection.id) && ROTATION_TRANSMITTING_FAMILIES.has(familyOf(connection)))
+    .map(connection => ({
+      id:`v4semantic:${connection.id}`,
+      kind:'axle',
+      a:{ instanceId:connection.a.instanceId, connectorId:null },
+      b:{ instanceId:connection.b.instanceId, connectorId:null },
+      metadata:{
+        v4SemanticOnly:true,
+        v4ConnectionId:connection.id,
+        v4Family:familyOf(connection),
+      },
+    }))
+}
+
 export function physicsRulePreviewV4(family, { match = null, connectorA = null, connectorB = null, studBundleSize = 1 } = {}) {
   const entry = { family, validity:{match:match || {}}, connectorA, connectorB }
   return clone(ruleFor(entry, studBundleSize))
 }
+
+export const CONNECTOR_V4_ROTATION_TRANSMITTING_FAMILIES = Object.freeze([...ROTATION_TRANSMITTING_FAMILIES])
