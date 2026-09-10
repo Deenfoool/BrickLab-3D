@@ -10,7 +10,7 @@ export const LDRAW_SOURCE = Object.freeze({
   apiRoot: 'https://api.github.com/repos/pybricks/ldraw',
   librarySite: 'https://library.ldraw.org',
 })
-export const LDRAW_RUNTIME_VERSION = 'ldraw-runtime-v3.1.0'
+export const LDRAW_RUNTIME_VERSION = 'ldraw-runtime-v3.2.0'
 
 export const LDU_TO_STUD = 1 / 20
 const PARTS_ROOT = `${LDRAW_SOURCE.rawRoot}parts/`
@@ -106,9 +106,6 @@ function convertedAxis(matrix, local = new THREE.Vector3(0, 1, 0)) {
 function primitiveKind(file) {
   const basename = normalizeFile(file).split('/').pop() || ''
   if (/^stud/i.test(basename)) {
-    // LDraw's stud3/stud4 families are LEGO underside tubes; stud8 and stud11
-    // are the corresponding Duplo/underside tube families. Other stud* primitives
-    // describe outward studs and are safe stud candidates.
     return /^(?:stud3|stud4|stud8|stud11)/i.test(basename) ? 'tube' : 'stud'
   }
   if (/^(?:peghole|pinhol|pin-hole)/i.test(basename)) return 'pin-hole'
@@ -119,9 +116,6 @@ function primitiveKind(file) {
 function featureFromPrimitive(kind, matrix) {
   if (kind === 'stud') return { kind, position: convertedPoint(matrix), axis: convertedAxis(matrix, new THREE.Vector3(0, -1, 0)) }
   if (kind === 'tube') {
-    // Standard stud tube primitives are open at local Y=-4. Using that opening,
-    // instead of the primitive origin, places BrickLab's tube connector on the
-    // actual underside mating plane of a brick.
     return { kind, position: convertedPoint(matrix, new THREE.Vector3(0, -4, 0)), axis: convertedAxis(matrix, new THREE.Vector3(0, -1, 0)) }
   }
   return { kind, position: convertedPoint(matrix), axis: convertedAxis(matrix) }
@@ -181,8 +175,6 @@ async function scanFeatures(text, parentMatrix, depth, stack, output) {
     if (depth < MAX_SUBPART_DEPTH && isSubpartReference(ref.file)) subparts.push({ file: normalizeFile(ref.file), matrix })
   }
 
-  // Fetch independent subparts concurrently. This is materially faster on complex
-  // parts than probing every primitive reference with an extra network request.
   await Promise.all(subparts.map(async child => {
     if (stack.has(child.file)) return
     try {
@@ -332,11 +324,14 @@ async function loadPrototype(file) {
   if (resolved) return resolved
   if (prototypeCache.has(normalized)) return prototypeCache.get(normalized)
   const promise = (async () => {
-    const [loader, text] = await Promise.all([getLoader(), fetchLDrawText(normalized)])
-    // Geometry is the user-visible critical path. Legacy primitive inference can need
-    // several extra subpart fetches, so it is deliberately started after the reusable
-    // visual prototype is published instead of blocking scene appearance.
-    const model = await loader.loadAsync(rawUrl(PARTS_ROOT, normalized))
+    // Start the independent top-level text request immediately. As soon as the shared
+    // LDrawLoader (including its one-time colour config) is ready, start geometry too;
+    // neither request waits for the other before doing useful network work.
+    const textTask = fetchLDrawText(normalized)
+    const loaderTask = getLoader()
+    const loader = await loaderTask
+    const modelTask = loader.loadAsync(rawUrl(PARTS_ROOT, normalized))
+    const [model, text] = await Promise.all([modelTask, textTask])
     model.rotation.x = Math.PI
     model.scale.setScalar(LDU_TO_STUD)
     model.updateMatrixWorld(true)
@@ -461,8 +456,6 @@ function attachPrototype(root, def, payload, color, fallback = null, announce = 
   }
   if (payload.legacyReady) void payload.legacyReady.then(() => applyLegacyPayload(def, payload, root, true))
   if (announce) {
-    // This announces visual readiness immediately. Connector V4 uses Shadow metadata
-    // and therefore does not need to wait for the legacy primitive inference promise.
     window.dispatchEvent(new CustomEvent('bricklab:ldrawloaded', { detail: { id: def.id, file: def.ldraw.file, code: def.ldraw.code, connectors: payload.connectors.length, level: def.ldraw.level, legacyReady:def.ldraw.legacyReady } }))
     window.dispatchEvent(new CustomEvent('bricklab:partcatalogchange'))
   }
