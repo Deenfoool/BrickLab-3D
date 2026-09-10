@@ -8,13 +8,7 @@ The selected scenario is stored in `localStorage` under `bricklab.test.scenario.
 
 Goal: reach the finish gate as fast as possible.
 
-The scenario adds:
-
-- an 18-unit ramp at 22°;
-- a matching static Rapier collider;
-- high-friction surface;
-- finish gate;
-- progress and altitude telemetry.
+The scenario adds an 18-unit ramp at 22°, a matching static Rapier collider, high-friction surface, finish gate, progress and altitude telemetry.
 
 Result states:
 
@@ -42,44 +36,49 @@ ramp rate:   1.35 F/s
 
 Score: highest force sustained before `STALLED`, or the maximum load when `PASSED`.
 
-The current pull force is also included in exported telemetry CSV files.
-
 ## OBST — Obstacle Course
 
 Goal: cross a compact suspension/clearance course as quickly as possible.
 
-Physical obstacles:
+Physical obstacles include a low threshold, staggered articulation blocks, high cross bump, short bridge ramps and a finish gate. The course exposes insufficient clearance, wheel contact, grip, chassis stability and suspension travel.
 
-1. low entry threshold;
-2. staggered left/right articulation blocks;
-3. high cross bump;
-4. short two-ramp bridge;
-5. finish gate.
-
-The course is intended to expose:
-
-- insufficient ground clearance;
-- weak wheel contact;
-- excessive wheel slip;
-- unstable chassis geometry;
-- insufficient suspension travel.
-
-Score: lowest completed time. Best result is stored locally.
+Score: lowest completed time.
 
 ## Transmission changes during TEST
 
-Changing F/N/R while a TEST is active restarts the currently selected scenario. This ensures the drivetrain graph and semantic gearbox couplings are rebuilt before the next run.
+Changing F/N/R while a TEST is active restarts the selected scenario. This ensures the drivetrain graph and semantic gearbox couplings are rebuilt before the next run.
 
 ## Retry and records
 
-Each scenario has a Retry action in the TEST telemetry card. Records are independent:
+Each scenario has a Retry action in the TEST telemetry card. Records are independent and live only in browser `localStorage`; they are not uploaded.
 
-- Hill Climb best time;
-- Pull Bench best sustained force;
-- Obstacle Course best time.
+## Automated Connector V4 acceptance
 
-Records live only in browser `localStorage` and are not uploaded.
+Connector System V4 has a dedicated Node/Rapier regression suite:
+
+```bash
+npm run test:connectors-v4
+```
+
+It covers:
+
+- strict LDCad Shadow parsing and resolver behavior;
+- pinned upstream fixtures and spec regressions;
+- connector shape matching and placement;
+- endpoint identity, interval occupancy and graph persistence;
+- production snapping/connection bridges;
+- live physics recertification rather than trusting persisted `physicsReady` flags;
+- Rapier prismatic/cylindrical DOF masks;
+- the axle/hole zero-impulse regression relevant to the historical 12L axle instability class;
+- dynamic disengagement of open axial profiles;
+- multi-stud aggregation into one rigid physics constraint;
+- round rotational/sliding family activation;
+- ball/socket and normal hinge policy;
+- fail-closed locking hinge and generic-group policy;
+- production import-map/cache-generation consistency.
+
+The Connector V4 acceptance command also runs `tests/import-map-integrity.test.mjs`, because loading two incompatible connector generations in one browser page is considered a runtime correctness failure rather than only a deployment/cache issue.
 
 ## Runtime extension order
 
-Scenario physics extensions are registered from `runtime-extensions.js` before `app.js` is evaluated. `bootstrap.js` then starts the editor and TEST controller in deterministic order.
+Scenario physics extensions are registered from `runtime-extensions.js` before `app.js` is evaluated. `bootstrap.js` initializes Connector V4 and its physics guard before the editor can start SIMULATE, then loads the debug/UI layers in deterministic order.
