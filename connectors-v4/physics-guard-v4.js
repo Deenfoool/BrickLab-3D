@@ -4,10 +4,10 @@ import { buildPhysicsPlanV4, drivetrainSemanticLinksV4, PHYSICS_POLICY_VERSION_V
 import { hardenPhysicsPlanV4, PHYSICS_PLAN_SAFETY_VERSION_V4 } from './physics-plan-safety-v4.js'
 import { installConnectorPhysicsV4, PHYSICS_ADAPTER_VERSION_V4 } from './physics-adapter-v4.js'
 
-export const PHYSICS_GUARD_VERSION_V4 = 'connector-physics-guard-v4.4.0'
+export const PHYSICS_GUARD_VERSION_V4 = 'connector-physics-guard-v4.5.0'
 export const PHYSICS_GUARD_ERROR_CODE_V4 = 'BRICKLAB_CONNECTOR_V4_PHYSICS_NOT_CERTIFIED'
 
-const marker = Symbol.for('bricklab.connectorV4.physicsGuard.v4.4')
+const marker = Symbol.for('bricklab.connectorV4.physicsGuard.v4.5')
 let lastPlan = null
 let lastFailure = null
 
@@ -68,6 +68,8 @@ if (!PhysicsSession[marker]) {
   const originalCreate = PhysicsSession.create.bind(PhysicsSession)
 
   PhysicsSession.create = async function createWithCertifiedConnectorV4Physics(objects, connections, ...rest) {
+    // Diagnostics must describe this invocation, not the previous project's plan.
+    lastPlan = null
     const v4 = rawRuntime()
     const initialV4Records = v4?.projectConnections?.() ?? []
     if (initialV4Records.length && !runtimeReady(v4)) fail('runtime-self-test-or-mode-not-safe')
@@ -112,6 +114,12 @@ if (!PhysicsSession[marker]) {
       throw error
     }
   }
+  Object.defineProperty(PhysicsSession.create, '__bricklabOwner', {
+    value:PHYSICS_GUARD_VERSION_V4,
+    enumerable:false,
+    configurable:false,
+    writable:false,
+  })
 
   Object.defineProperty(PhysicsSession, marker, {
     value:true,
@@ -128,6 +136,7 @@ globalThis.BrickLabConnectorV4PhysicsGuard = Object.freeze({
   adapterVersion:PHYSICS_ADAPTER_VERSION_V4,
   errorCode:PHYSICS_GUARD_ERROR_CODE_V4,
   active:true,
+  createOwner:PhysicsSession.create?.__bricklabOwner ?? null,
   lastPlan(){ return lastPlan },
   lastFailure(){ return lastFailure },
 })
