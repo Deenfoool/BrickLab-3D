@@ -1,7 +1,6 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
 // BUILD: PARTS-6 · molded realism + interactive main-menu hero.
-// Root production modules are versioned by the import map; feature modules may carry
-// an explicit query tag until the next global runtime-version bump.
+// All root production modules are versioned once by the import map in index.html.
 
 // Diagnostics and the complete part registry must exist before the menu creates its
 // real Three.js hero assembly from production part factories.
@@ -10,7 +9,7 @@ await import('./runtime-extensions.js')
 
 let menuResult = { action: 'continue', snapshot: null }
 try {
-  const { showMainMenu } = await import('./main-menu.js?v=main-menu-20260910-v1')
+  const { showMainMenu } = await import('./main-menu.js')
   menuResult = await showMainMenu()
 } catch (error) {
   // The menu is presentation-only. A menu/WebGL failure must never prevent the editor
