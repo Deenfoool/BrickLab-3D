@@ -4,7 +4,7 @@ import { matchConnectorV4 } from './matcher-v4.js'
 import { activationForMatchV4, classifyConnectorV4 } from './activation-v4.js'
 import { connectorWorldFrameV4, objectWorldPoseV4, solvePlacementV4 } from './placement-solver-v4.js'
 
-export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.5.0'
+export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.5.1'
 export const DEFAULT_CAPTURE_DISTANCE_STUD_V4 = 0.72
 export const DEFAULT_MIN_AXIS_ALIGNMENT_V4 = 0.72
 export const CLOSE_RANGE_MIN_AXIS_ALIGNMENT_V4 = 0.55
@@ -149,7 +149,11 @@ function genericBoundingMismatch(source,target) {
   const a=source.geometry?.bounding,b=target.geometry?.bounding
   if(!a&&!b)return 0
   if(!a||!b||a.kind!==b.kind)return 1
-  const ratio=(x,y)=>Math.abs(Number(x)||0-Number(y)||0)/Math.max(1,Math.abs(Number(x)||0),Math.abs(Number(y)||0))
+  const ratio=(x,y)=>{
+    const nx=Number(x),ny=Number(y)
+    if(!Number.isFinite(nx)||!Number.isFinite(ny))return 1
+    return Math.abs(nx-ny)/Math.max(1,Math.abs(nx),Math.abs(ny))
+  }
   if(a.kind==='sphere')return ratio(a.radiusLdu,b.radiusLdu)
   if(a.kind==='cube')return ratio(a.halfSizeLdu,b.halfSizeLdu)
   if(a.kind==='cylinder')return (ratio(a.radiusLdu,b.radiusLdu)+ratio(a.lengthLdu,b.lengthLdu))/2
