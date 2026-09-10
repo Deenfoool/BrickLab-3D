@@ -1,12 +1,12 @@
-import { cloneConnectorV4, SHADOW_SOURCE_V4 } from './schema-v4.js?v=connector-v4-20260910-v3'
-import { expandGridV4, parseShadowTextV4 } from './ldcad-parser-v4.js?v=connector-v4-20260910-v3'
+import { cloneConnectorV4, SHADOW_SOURCE_V4 } from './schema-v4.js'
+import { expandGridV4, parseShadowTextV4 } from './ldcad-parser-v4.js'
 
-export const SHADOW_RESOLVER_VERSION_V4 = 'shadow-resolver-v4.1.0'
+export const SHADOW_RESOLVER_VERSION_V4 = 'shadow-resolver-v4.2.0'
 
 const SCALE_EPS = 1e-5
 const ORTHO_EPS = 2e-4
-const DEFAULT_MAX_DEPTH = 10
-const DEFAULT_MAX_NODES = 256
+const DEFAULT_MAX_DEPTH = 12
+const DEFAULT_MAX_NODES = 512
 
 const normalizePath = value => String(value || '').replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+/g, '/').trim()
 const lowerPath = value => normalizePath(value).toLowerCase()
@@ -48,8 +48,6 @@ function inheritanceScaleAllowed(policy,m) {
   if(kind==='none')return yOnly&&approx(m.sy)
   if(kind==='yonly')return yOnly
   if(kind==='ronly')return rOnly
-  // LDCad documents YandR as inheritance when the YOnly or ROnly rule applies.
-  // Do not silently accept simultaneous independent radial+axial scaling here.
   if(kind==='yandr')return yOnly||rOnly
   return false
 }
@@ -100,13 +98,9 @@ function transformConnector(connector,transform,warnings,context,{enforceInherit
   }
 
   let x=m.nx,y=norm3(m.ny),z=m.nz
-  // Snap frames remain right-handed. For inherited mirrored references this is
-  // LDCad's mirror=cor correction; for explicit SNAP_INCL transforms the author
-  // has deliberately supplied the transform and we normalize only the frame.
   if(m.mirrored && String(connector.inheritance?.mirror||'cor').toLowerCase() !== 'corz')x=scale3v(x,-1)
   x=norm3(add3(x,scale3v(y,-dot3(x,y))))
   z=norm3(cross3(x,y))
-  // cross(x,y) is the corrected Z; corZ intentionally reverses raw Z.
 
   const result=cloneConnectorV4(connector)
   result.frame.positionLdu=transformPoint(transform,connector.frame.positionLdu)
@@ -181,9 +175,13 @@ export function createShadowResolverV4({fetchOfficialText,fetchShadowText,maxDep
   }
   async function findExisting(candidates,getter){for(const path of candidates){const text=await getter(path);if(text!=null)return{path,text}}return null}
 
-  async function resolveFlatShadow(path,text=null){
+  async function resolveFlatShadow(path,text=null,depth=0,stack=[],traversal={nodes:0}){
     const key=lowerPath(path)
+    if(depth>maxDepth)return{connectors:[],warnings:[{code:'max-depth',file:key,detail:String(maxDepth)}],found:false}
+    if(stack.includes(key))return{connectors:[],warnings:[{code:'cycle',file:key,detail:[...stack,key].join(' -> ')}],found:false}
     if(text==null&&flatShadowCache.has(key))return flatShadowCache.get(key)
+    traversal.nodes+=1
+    if(traversal.nodes>maxNodes)return{connectors:[],warnings:[{code:'node-budget',file:key,detail:String(maxNodes)}],found:false}
     const promise=(async()=>{
       const warnings=[]
       const source=text==null?await getShadow(key):text
@@ -191,10 +189,25 @@ export function createShadowResolverV4({fetchOfficialText,fetchShadowText,maxDep
       const parsed=parseShadowTextV4(source,{file:key})
       warnings.push(...parsed.warnings.map(w=>({...w,file:key})))
       let connectors=[]
+      const nextStack=[...stack,key]
       for(const op of parsed.operations){
-        if(op.type==='clear')connectors=clearConnectors(connectors,op.id)
-        else if(op.type==='connector')connectors.push(...connectorWithGrid(op.connector,op.grid,key))
-        else if(op.type==='include')warnings.push({code:'nested-include-not-followed',file:key,line:op.source?.line,detail:op.ref})
+        if(op.type==='clear'){connectors=clearConnectors(connectors,op.id);continue}
+        if(op.type==='connector'){connectors.push(...connectorWithGrid(op.connector,op.grid,key));continue}
+        if(op.type!=='include')continue
+        const found=await findExisting(referenceCandidates(op.ref,key),getShadow)
+        if(!found){warnings.push({code:'include-not-found',file:key,line:op.source?.line,detail:op.ref});continue}
+        const included=await resolveFlatShadow(found.path,found.text,depth+1,nextStack,traversal)
+        warnings.push(...included.warnings.map(w=>({...w,includedFrom:key})))
+        for(const offset of expandGridV4(op.grid)){
+          const transform=includeTransform(op,offset)
+          for(const sourceConnector of included.connectors){
+            const transformed=transformConnector(sourceConnector,transform,warnings,`${key} -> SNAP_INCL ${found.path}`,{enforceInheritance:false})
+            if(!transformed)continue
+            if(op.id)transformed.clearIds=[...new Set([...(transformed.clearIds||[]),op.id])]
+            transformed.provenance=[...(transformed.provenance||[]),{type:'include',from:key,ref:found.path}]
+            connectors.push(transformed)
+          }
+        }
       }
       return{connectors,warnings,found:true}
     })()
@@ -211,10 +224,10 @@ export function createShadowResolverV4({fetchOfficialText,fetchShadowText,maxDep
       if(op.type==='clear'){connectors=clearConnectors(connectors,op.id);continue}
       if(op.type==='connector'){connectors.push(...connectorWithGrid(op.connector,op.grid,path));continue}
       if(op.type!=='include')continue
-      if(!allowIncludes){warnings.push({code:'nested-include-not-followed',file:path,line:op.source?.line,detail:op.ref});continue}
+      if(!allowIncludes)continue
       const found=await findExisting(referenceCandidates(op.ref,path),getShadow)
       if(!found){warnings.push({code:'include-not-found',file:path,line:op.source?.line,detail:op.ref});continue}
-      const included=await resolveFlatShadow(found.path,found.text)
+      const included=await resolveFlatShadow(found.path,found.text,1,[lowerPath(path)],{nodes:0})
       warnings.push(...included.warnings.map(w=>({...w,includedFrom:path})))
       for(const offset of expandGridV4(op.grid)){
         const transform=includeTransform(op,offset)
