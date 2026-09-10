@@ -1,5 +1,5 @@
 export const CONNECTOR_SCHEMA_VERSION_V4 = 4
-export const CONNECTOR_SYSTEM_VERSION_V4 = 'connector-system-v4.0.0'
+export const CONNECTOR_SYSTEM_VERSION_V4 = 'connector-system-v4.1.0'
 export const LDRAW_LDU_PER_STUD = 20
 
 export const SHADOW_SOURCE_V4 = Object.freeze({
@@ -11,6 +11,8 @@ export const SHADOW_SOURCE_V4 = Object.freeze({
 export const CONNECTOR_FAMILIES_V4 = Object.freeze(['cylinder', 'clip', 'fingers', 'generic', 'sphere'])
 export const CYLINDER_SECTION_SHAPES_V4 = Object.freeze(['R', 'A', 'S', '_L', 'L_'])
 export const CONNECTOR_GENDERS_V4 = Object.freeze(['male', 'female'])
+export const GENERIC_MATCH_MODES_V4 = Object.freeze(['group', 'shape', 'size'])
+export const GENERIC_PLACEMENT_MODES_V4 = Object.freeze(['aligned', 'retain', 'free'])
 
 const finite = value => Number.isFinite(value)
 const finiteArray = (value, length) => Array.isArray(value) && value.length === length && value.every(finite)
@@ -56,7 +58,12 @@ export function validateConnectorV4(connector) {
     if (!(finite(connector.geometry?.radiusLdu) && connector.geometry.radiusLdu > 0)) errors.push('fingers radiusLdu must be positive')
   } else if (connector.family === 'generic') {
     if (!CONNECTOR_GENDERS_V4.includes(connector.gender)) errors.push('generic gender must be male or female')
-    if (!connector.group) errors.push('generic connectors require a group')
+    const match = String(connector.snap?.match || 'shape').toLowerCase()
+    const placement = String(connector.snap?.placement || 'aligned').toLowerCase()
+    if (!GENERIC_MATCH_MODES_V4.includes(match)) errors.push(`unsupported generic match mode: ${match}`)
+    if (!GENERIC_PLACEMENT_MODES_V4.includes(placement)) errors.push(`unsupported generic placement mode: ${placement}`)
+    // `group` is intentionally optional. The pinned Shadow Library contains many
+    // generic ball/socket pairs without a group and disambiguates them by shape/size.
   } else if (connector.family === 'sphere') {
     if (!CONNECTOR_GENDERS_V4.includes(connector.gender)) errors.push('sphere gender must be male or female')
     if (!(finite(connector.geometry?.radiusLdu) && connector.geometry.radiusLdu > 0)) errors.push('sphere radiusLdu must be positive')
