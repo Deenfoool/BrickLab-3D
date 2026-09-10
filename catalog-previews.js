@@ -83,6 +83,10 @@ function renderPreview(partId) {
 
   const definition = findPart(partId)
   if (!definition?.create) return null
+  // LDraw create() is synchronous to the editor, but the remote geometry is not.
+  // Never snapshot the temporary placeholder. runtime-v3 flips ready only after the
+  // real prototype and connector analysis have completed.
+  if (definition.ldraw && !definition.ldraw.ready) return null
 
   let object = null
   let wrapper = null
@@ -150,6 +154,15 @@ function renderPreview(partId) {
   }
 }
 
+function enqueue(partId) {
+  const definition = findPart(partId)
+  if (!definition || (definition.ldraw && !definition.ldraw.ready)) return
+  if (queued.has(partId) || cache.has(partId)) return
+  queued.add(partId)
+  queue.push(partId)
+  scheduleQueue()
+}
+
 function applyPreviewToCard(card) {
   const partId = card.dataset.part
   if (!partId) return
@@ -165,11 +178,7 @@ function applyPreviewToCard(card) {
     return
   }
 
-  if (!queued.has(partId)) {
-    queued.add(partId)
-    queue.push(partId)
-    scheduleQueue()
-  }
+  enqueue(partId)
 }
 
 function refreshVisibleCards() {
@@ -201,6 +210,21 @@ function scheduleQueue() {
   else setTimeout(() => runOne(null), 20)
 }
 
+function refreshLDrawPreview(partId) {
+  if (!partId) return
+  cache.delete(partId)
+  queued.delete(partId)
+  queue = queue.filter(id => id !== partId)
+  document.querySelectorAll(`.part-card[data-part="${CSS.escape(partId)}"]`).forEach(card => {
+    const icon = card.querySelector('.part-icon')
+    if (icon) {
+      delete icon.dataset.previewPart
+      icon.classList.remove('has-preview')
+    }
+    applyPreviewToCard(card)
+  })
+}
+
 function installCatalogPreviews() {
   if (!document.getElementById('bricklabPreviewStyles')) {
     const style = document.createElement('style')
@@ -225,12 +249,8 @@ function installCatalogPreviews() {
   refreshVisibleCards()
   new MutationObserver(refreshVisibleCards).observe(list, { childList: true, subtree: true })
 
-  for (const part of PARTS) {
-    if (queued.has(part.id) || cache.has(part.id)) continue
-    queued.add(part.id)
-    queue.push(part.id)
-  }
-  scheduleQueue()
+  for (const part of PARTS) enqueue(part.id)
 }
 
+window.addEventListener('bricklab:ldrawloaded', event => refreshLDrawPreview(event.detail?.id))
 installCatalogPreviews()
