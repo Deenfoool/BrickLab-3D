@@ -1,5 +1,5 @@
 const BUILD_ID = 'PARTS-6'
-const BUILD_TAG = 'parts-6-20260910-connector-v4-physics-v6'
+const BUILD_TAG = new URL(import.meta.url).searchParams.get('v') || 'unversioned-runtime'
 window.__bricklabBuildId = BUILD_ID
 window.__bricklabBuildTag = BUILD_TAG
 
@@ -39,6 +39,7 @@ function showPhysicsError(detail = {}) {
 
 function connectorV4Reason(reason, ru) {
   const reasons = {
+    'single-stud-collider-envelope-not-proven': ru ? 'одиночный stud пока доступен только в BUILD: физический профиль столкновений ещё не сертифицирован' : 'single-stud physics is BUILD-only until its collision envelope is certified',
     'ball-socket-angular-envelope-not-implemented': ru ? 'для ball/socket ещё нет доказанной модели угловых ограничений' : 'ball/socket angular envelope is not implemented yet',
     'hinge-angular-envelope-not-proven': ru ? 'для этого шарнира не подтверждены угловые пределы' : 'angular limits are not proven for this hinge',
     'generic-revolute-angular-envelope-not-proven': ru ? 'для этого вращательного соединения не подтверждены угловые пределы' : 'angular limits are not proven for this revolute interface',
