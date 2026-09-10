@@ -4,7 +4,7 @@ import { suppressNextConnectionForEndpoint } from '../connections.js'
 
 export * from '../snapping-v3.js'
 
-export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.1.1'
+export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.2.0'
 
 function runtime() {
   const value = globalThis.BrickLabConnectorV4
@@ -48,11 +48,16 @@ function isLDrawPart(object) {
   return String(object?.userData?.partId || '').startsWith('ldraw-')
 }
 
-function v4OwnsLegacyCandidate(selected, legacy) {
+export function v4OwnsLegacyCandidate(selected, legacy) {
   if (!legacy || legacy.kind === 'gear-mesh') return false
-  if (!isLDrawPart(selected) && !isLDrawPart(legacy.targetObject)) return false
-  // All LDraw structural pairs require Shadow certification. Gear contact remains separate.
-  return true
+  const target=legacy.targetObject
+  // The current V4 runtime hydrates Shadow connectivity for LDraw definitions only.
+  // Therefore strict fail-closed ownership is correct for LDraw↔LDraw structural
+  // pairs, where both sides can be certified by the same system. A mixed
+  // LDraw↔native pair must retain V3 compatibility until native definitions also
+  // receive V4 connectivity; otherwise V4 would suppress a candidate it can never
+  // replace.
+  return isLDrawPart(selected) && isLDrawPart(target)
 }
 
 export function findSnapCandidate(selected, objects, options = {}) {
@@ -76,9 +81,9 @@ export function findSnapCandidate(selected, objects, options = {}) {
     }
   }
 
-  // Once a LDraw axle/axle-hole pair is owned by V4, V3 is never allowed to create
-  // the same coarse connection while Shadow metadata is loading, quarantined or
-  // otherwise uncertified. The absence of a certified V4 candidate means no snap.
+  // LDraw↔LDraw structural pairs are fully V4-owned: while Shadow metadata is
+  // loading/quarantined or no certified V4 candidate exists, do not create a coarse
+  // V3 substitute. Mixed LDraw↔native pairs remain on V3 for compatibility.
   if (v4OwnsLegacyCandidate(selected, legacy)) return null
   return legacy
 }
