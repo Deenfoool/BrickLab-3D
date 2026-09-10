@@ -1,16 +1,46 @@
 import { PhysicsSession } from '../physics.js'
-import { buildPhysicsPlanV4, PHYSICS_POLICY_VERSION_V4 } from './physics-policy-v4.js'
+import { analyzeDrivetrain } from '../drivetrain.js'
+import { buildPhysicsPlanV4, drivetrainSemanticLinksV4, PHYSICS_POLICY_VERSION_V4 } from './physics-policy-v4.js'
 import { installConnectorPhysicsV4, PHYSICS_ADAPTER_VERSION_V4 } from './physics-adapter-v4.js'
 
-export const PHYSICS_GUARD_VERSION_V4 = 'connector-physics-guard-v4.2.1'
+export const PHYSICS_GUARD_VERSION_V4 = 'connector-physics-guard-v4.3.0'
 export const PHYSICS_GUARD_ERROR_CODE_V4 = 'BRICKLAB_CONNECTOR_V4_PHYSICS_NOT_CERTIFIED'
 
-const marker = Symbol.for('bricklab.connectorV4.physicsGuard.v4.2')
+const marker = Symbol.for('bricklab.connectorV4.physicsGuard.v4.3')
 let lastPlan = null
 let lastFailure = null
 
 function rawRuntime() { return globalThis.BrickLabConnectorV4 ?? null }
 function runtimeReady(v4) { return v4?.mode === 'hybrid-pilot' && v4?.selfTest?.pass === true }
+
+function releasedConnectionIds(session) {
+  return new Set((session?.connectorV4Physics?.releaseEvents ?? []).flatMap(event => event.connectionIds ?? []))
+}
+
+function rebuildDrivetrainSemanticsV4(session, records) {
+  const links = drivetrainSemanticLinksV4(records, releasedConnectionIds(session))
+  const previouslyBridged = Boolean(session.connectorV4Drivetrain?.enabled)
+  if (!links.length && !previouslyBridged) return null
+
+  // Semantic-only V4 links are intentionally passed ONLY to drivetrain analysis.
+  // They never enter session.connections, buildRigidComponents, or V3 joint creation,
+  // so a keyed axle may slide axially in Rapier while still transmitting rotation.
+  const semanticConnections = [...session.connections, ...links]
+  session.drivetrain = analyzeDrivetrain(session.objects, semanticConnections)
+  session.buildGearCouplers?.()
+  session.buildShaftMonitors?.()
+  session.buildWheelMonitors?.()
+  session.removeTelemetry?.()
+  session.mountTelemetry?.()
+  session.connectorV4Drivetrain = {
+    enabled:true,
+    policyVersion:PHYSICS_POLICY_VERSION_V4,
+    activeLinks:links.length,
+    connectionIds:links.map(link => link.metadata.v4ConnectionId),
+    released:[...releasedConnectionIds(session)],
+  }
+  return session.connectorV4Drivetrain
+}
 
 function fail(reason, blockers = [], cause = null) {
   const details = blockers.map(blocker => ({
@@ -40,16 +70,17 @@ if (!PhysicsSession[marker]) {
 
   PhysicsSession.create = async function createWithCertifiedConnectorV4Physics(objects, connections, ...rest) {
     const v4 = rawRuntime()
-    const v4Records = v4?.projectConnections?.() ?? []
-    if (v4Records.length && !runtimeReady(v4)) fail('runtime-self-test-or-mode-not-safe')
+    const initialV4Records = v4?.projectConnections?.() ?? []
+    if (initialV4Records.length && !runtimeReady(v4)) fail('runtime-self-test-or-mode-not-safe')
 
     let plan = null
-    if (runtimeReady(v4) && v4Records.length) {
+    let liveV4Records = initialV4Records
+    if (runtimeReady(v4) && initialV4Records.length) {
       try {
         await v4.hydrateObjects?.(objects)
         v4.reconcileGraph?.(objects, { persist:false })
-        const records = v4.projectConnections()
-        plan = buildPhysicsPlanV4({ objects, connections:records, getConnector:(partId,endpointId)=>v4.getConnector(partId,endpointId) })
+        liveV4Records = v4.projectConnections()
+        plan = buildPhysicsPlanV4({ objects, connections:liveV4Records, getConnector:(partId,endpointId)=>v4.getConnector(partId,endpointId) })
         lastPlan = plan
       } catch (error) {
         fail('preflight-error', [], error)
@@ -62,20 +93,26 @@ if (!PhysicsSession[marker]) {
     // zero V4 links because debug endpoints themselves must never affect collision data.
     window.dispatchEvent(new CustomEvent('bricklab:connectorv4physicsstarting', {detail:{
       guardVersion:PHYSICS_GUARD_VERSION_V4,
-      connections:v4Records.length,
+      connections:liveV4Records.length,
       plannedJoints:plan?.joints?.length ?? 0,
     }}))
 
     let session
     try {
       session = await originalCreate(objects, connections, ...rest)
-      if (plan?.joints?.length) installConnectorPhysicsV4(session, plan, v4)
+      if (plan?.joints?.length) {
+        // Install the callback before the Rapier adapter. Dynamic axial release calls it
+        // after removing a keyed joint so semantic RPM/gear propagation is split again.
+        session.rebuildConnectorV4Drivetrain = () => rebuildDrivetrainSemanticsV4(session, liveV4Records)
+        installConnectorPhysicsV4(session, plan, v4)
+        rebuildDrivetrainSemanticsV4(session, liveV4Records)
+      }
       lastFailure = null
       return session
     } catch (error) {
       try { session?.dispose?.() } catch {}
       if (error?.code === PHYSICS_GUARD_ERROR_CODE_V4) throw error
-      if (plan?.joints?.length) fail('rapier-adapter-error', [{connectionId:null,family:null,reason:String(error?.message || error)}], error)
+      if (plan?.joints?.length) fail('v4-session-integration-error', [{connectionId:null,family:null,reason:String(error?.message || error)}], error)
       throw error
     }
   }
