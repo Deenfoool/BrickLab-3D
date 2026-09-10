@@ -1,6 +1,6 @@
 import { CONNECTOR_SCHEMA_VERSION_V4, CONNECTOR_SYSTEM_VERSION_V4, validateConnectorV4 } from './schema-v4.js'
 
-export const ACTIVATION_POLICY_VERSION_V4 = 'connector-activation-v4.1.0'
+export const ACTIVATION_POLICY_VERSION_V4 = 'connector-activation-v4.1.1'
 
 const CRITICAL_WARNING_CODES = new Set([
   'invalid-snap-meta',
@@ -131,7 +131,11 @@ export function activationForMatchV4(source, target, match) {
       family:'technic-axle-keyed-hole',
       editor:true,
       graph:true,
-      physics:true,
+      // Physics intentionally remains fail-closed until V4 supports dynamic
+      // disengagement/breakaway. A permanently limited prismatic joint would
+      // falsely trap an axle that should be able to leave an open axle hole.
+      physics:false,
+      physicsReason:'dynamic-disengagement-not-certified',
       constraintKind:'prismatic',
       evidence:'ldcad-shadow:exact-A6-keyed-profile',
       sourceRole,
