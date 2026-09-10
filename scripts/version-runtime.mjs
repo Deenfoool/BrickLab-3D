@@ -1,4 +1,5 @@
-// One canonical versioned URL per module, shared by static and dynamic imports.
+// One canonical versioned URL per module. Production index.html is the only import-map
+// source of truth; browser QA pages load that exact map through their classic loader.
 import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { posix as path } from 'node:path'
 
@@ -50,33 +51,16 @@ const imports = {
 }
 
 let html = await readFile(new URL('index.html', root), 'utf8')
-html = html.replace(/(<script type="importmap">)[\s\S]*?(<\/script>)/, `$1\n${JSON.stringify({ imports }, null, 2)}\n    $2`)
-html = html.replace(/bootstrap\.js\?v=[^"]+/g, `bootstrap.js?v=${tag}`)
+const replaced = html.replace(/(<script type="importmap">)[\s\S]*?(<\/script>)/, `$1\n${JSON.stringify({ imports }, null, 2)}\n    $2`)
+if (replaced === html) throw new Error('index.html production import map was not found')
+html = replaced.replace(/bootstrap\.js\?v=[^"]+/g, `bootstrap.js?v=${tag}`)
 await writeFile(new URL('index.html', root), html)
 
-let badge = await readFile(new URL('physics-error-ui.js', root), 'utf8')
-badge = badge
-  .replace(/const BUILD_ID = '[^']+'/, `const BUILD_ID = '${id}'`)
-  .replace(/const BUILD_TAG = '[^']+'/, `const BUILD_TAG = '${tag}'`)
-await writeFile(new URL('physics-error-ui.js', root), badge)
-console.log(`${id}: ${files.length} canonical module URLs + ${Object.keys(legacyV4Aliases).length} V4 legacy redirects (${tag})`)
+// physics-error-ui.js derives its BUILD_TAG from import.meta.url, and browser QA
+// pages load the production map with tests/production-importmap-loader.js. Keeping
+// those consumers dynamic prevents a future cache generation from drifting.
+for (const file of ['physics-error-ui.js','tests/production-importmap-loader.js','tests/time-scale-browser.html','tests/axle-browser.html','audio-qa.html']) {
+  await readFile(new URL(file, root), 'utf8')
+}
 
-const acceptance = new URL('tests/time-scale-browser.html', root)
-let testHtml = await readFile(acceptance, 'utf8')
-testHtml = testHtml.replace(/(<script type="importmap">)[\s\S]*?(<\/script>)/, `$1\n${JSON.stringify({ imports }, null, 2)}\n$2`)
-testHtml = testHtml.replace(/time-scale-browser\.js(?:\?v=[^"]+)?/, `time-scale-browser.js?v=${tag}`)
-await writeFile(acceptance, testHtml)
-
-const axleAcceptance = new URL('tests/axle-browser.html', root)
-let axleHtml = await readFile(axleAcceptance, 'utf8')
-axleHtml = axleHtml.replace(/(<script type="importmap">)[\s\S]*?(<\/script>)/, `$1\n${JSON.stringify({ imports }, null, 2)}\n$2`)
-axleHtml = axleHtml.replace(/axle-browser\.js(?:\?v=[^"]+)?/, `axle-browser.js?v=${tag}`)
-await writeFile(axleAcceptance, axleHtml)
-
-const qa = new URL('audio-qa.html', root)
-let qaHtml = await readFile(qa, 'utf8')
-const map = `<script type="importmap">${JSON.stringify({ imports })}</script>`
-qaHtml = qaHtml.replace(/<script type="importmap">[\s\S]*?<\/script>/, '')
-qaHtml = qaHtml.replace('<script type="module"', map + '\n<script type="module"')
-qaHtml = qaHtml.replace(/src="\.\/audio\/qa\.js(?:\?v=[^"]+)?/, `src="./audio/qa.js?v=${tag}`)
-await writeFile(qa, qaHtml)
+console.log(`${id}: ${files.length} canonical module URLs + ${Object.keys(legacyV4Aliases).length} V4 legacy redirects (${tag}); QA delegates to production map`)
