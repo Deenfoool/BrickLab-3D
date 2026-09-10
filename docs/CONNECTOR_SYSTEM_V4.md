@@ -88,12 +88,13 @@ connectors-v4/
 └─ debug-overlay-v4.js
 ```
 
-## Coordinates and identity
+## Coordinates, units and identity
 
 LDraw data is resolved in LDraw units first:
 
 ```text
 20 LDU = 1 BrickLab stud
+1 BrickLab stud = 0.008 m in Rapier
 ```
 
 The visual coordinate conversion is:
@@ -105,6 +106,8 @@ BrickLab (x / 20, -y / 20, -z / 20)
 ```
 
 Each endpoint stores a complete local frame, not only a point. Frames must remain finite, unit-scale, orthonormal and right-handed. The same actual visual centering offset used by the rendered LDraw part is also applied to its connectors.
+
+Connector positions remain in studs throughout BUILD. `physics-adapter-v4.js` converts body-local joint anchors to SI metres exactly once at the Rapier boundary using `PHYSICS_UNITS.studMeters`. Axes and quaternions remain dimensionless. This unit boundary is regression-tested because a studs-as-metres anchor error would amplify an anchor by 125× and can produce catastrophic constraint correction impulses.
 
 Endpoint IDs are deterministic hashes of canonical connector geometry/frame/policy data. Repeated inherited studs therefore receive distinct stable IDs while exact duplicate inherited connectors are deduplicated. A hash collision fails loudly instead of merging endpoints.
 
@@ -133,7 +136,7 @@ ball    → socket   center/radius fit
 fingers → fingers  complementary sequence fit
 ```
 
-A geometrically compatible pair may still be BUILD-only if its physical limits are not known.
+A geometrically compatible pair may still be BUILD-only if its physical limits, retention or collider envelope are not known.
 
 ## Axial fit and occupancy
 
@@ -146,6 +149,8 @@ axle 12L
 ```
 
 Several non-overlapping reservations can coexist on one axle/bar/pin endpoint. Profile caps, shoulders and section transitions determine legal insertion windows. True interval overlap is rejected; touching interval boundaries are legal.
+
+Multiple graph records may describe one physical continuous shaft passing through several holes of the same opposite part. When those records share the same continuous male occupancy channel, body pair, family and DOF, `physics-policy-v4.js` aggregates them into one axial Rapier constraint. This prevents duplicate co-axial joints from over-constraining the same two rigid bodies while preserving every graph connection ID for validation, release and diagnostics.
 
 ## BUILD activation
 
@@ -188,6 +193,8 @@ If final validation fails, the transform is rolled back and no V4 record is crea
 
 Connections are revalidated after editing. Missing endpoints, lateral drift, invalid axis alignment, insufficient engagement or keyed twist invalidate the graph record instead of leaving a phantom link.
 
+First-load LDraw hydration also resolves the actual instantiated visual through its stored `WeakRef` before reading the visual centering offset. This covers the normal asynchronous placeholder → real LDraw visual path and is regression-tested so a first instance cannot silently receive `hydrate-error` while a later cached instance works.
+
 ## Persistence / history
 
 V4 graph records are part of project state and participate in:
@@ -227,21 +234,24 @@ No generic "trust this connection" flag exists.
 The following relationships can be derived from profile geometry and current policies:
 
 ```text
-multi-stud structural bundle → fixed
-single ordinary stud contact → revolute around stud axis
-keyed axle ↔ keyed hole      → prismatic
-axle ↔ round hole            → cylindrical
-pin ↔ compatible hole        → cylindrical + normalized resistance
-bar ↔ sliding round hole     → cylindrical
-sliding bar ↔ clip           → cylindrical where Shadow permits slide
+independent multi-stud structural bundle → one fixed joint
+keyed axle ↔ keyed hole                  → prismatic
+axle ↔ round hole                        → cylindrical
+pin ↔ compatible hole                    → cylindrical + normalized resistance
+bar ↔ sliding round hole                 → cylindrical
+sliding bar ↔ clip                       → cylindrical where Shadow permits slide
+coaxial records on one continuous shaft  → one axial joint per body pair/family/DOF
 ```
 
-Keyed axle links additionally participate in drivetrain semantics so rotation can propagate while axial translation remains physically free. If the keyed profile completely disengages during SIMULATE, the Rapier joint is removed and the semantic shaft graph is rebuilt immediately.
+A multi-stud bundle is not certified merely because it contains two different points. V4 checks whether the contacts independently constrain the remaining twist: two contacts displaced only along one common axis are not treated as rigid, while sufficiently separated parallel contacts or non-parallel contact axes can form a rigid bundle.
+
+Keyed axle links additionally participate in drivetrain semantics so rotation can propagate while axial translation remains physically free. Redundant graph records between the same keyed body pair are deduplicated into one semantic shaft link while retaining the complete underlying V4 connection-ID set.
 
 ## Physics intentionally blocked without stronger evidence
 
 Some families can be placed correctly in BUILD but are deliberately not simulated from Shadow geometry alone:
 
+- a **single `stud-anti-stud` contact**: it permits twist, but the current coarse LDraw collider envelope cannot safely prove collision-free rotational stops; it remains BUILD-only;
 - `ball-socket`: spherical mating geometry does not prove the actual angular cone/stops; the current generic colliders are not a certified substitute;
 - `hinge-fingers`: the axis is known, but actual angular stops must come from a proven per-family/per-part profile;
 - `round-revolute-interface`: a generic captured round pair may have mechanical stops that are not represented by snapping metadata;
@@ -251,7 +261,7 @@ Some families can be placed correctly in BUILD but are deliberately not simulate
 
 Ball/socket is currently hard-blocked in SIMULATE until BrickLab has a bounded spherical model. Revolute mechanism families may be unlocked only by an explicit tested override with finite angular limits and evidence.
 
-This is intentional. A missing simulation is preferable to a plausible-looking joint that lets geometry rotate through itself.
+This is intentional. A missing simulation is preferable to a plausible-looking joint that lets geometry rotate through itself or starts from an overlapping coarse collider envelope.
 
 ## Rapier mapping
 
@@ -259,7 +269,7 @@ Approved relationships map to Rapier as follows:
 
 ```text
 fixed        → fixed joint
-revolute     → revoluteWithAxes
+revolute     → revoluteWithAxes, only through a bounded/evidenced path
 prismatic    → GenericJoint with only connector-frame LinX free
 cylindrical  → GenericJoint with connector-frame LinX + AngX free
 spherical    → reserved for a future bounded ball/socket implementation
@@ -267,19 +277,24 @@ spherical    → reserved for a future bounded ball/socket implementation
 
 For generic prismatic/cylindrical joints, BrickLab installs independent local frames for both bodies before the first world step. A common world constraint frame is constructed so the joint is already satisfied at `t=0`; Rapier is not asked to repair a small connector-frame mismatch and therefore does not receive an artificial correction kick.
 
-This is a key regression guard for the historical class of failures where a long axle could launch a construction at simulation start.
+Rapier anchors are expressed in metres, not editor studs. The V4 adapter performs the explicit `stud × 0.008` conversion after transforming a connector point into the rigid body's local editor frame. Regression tests inspect the resulting Rapier anchors numerically.
+
+These are key regression guards for the historical class of failures where a long axle could launch a construction at simulation start.
 
 Approved revolute overrides may specify finite limits. The adapter applies those limits through Rapier's revolute `setLimits` API. Limits on generic prismatic/cylindrical or spherical relationships are rejected until a separately tested implementation exists.
 
 ## Dynamic disengagement
 
-Open axial profiles are monitored during SIMULATE. If current geometry is outside the valid engagement interval for two consecutive post-sync validations:
+Open axial profiles are monitored during SIMULATE. A single-record axial connection is released only after its live geometry is invalid for two consecutive post-sync validations.
 
-1. the joint is removed exactly once;
-2. joint counters are updated;
-3. contacts become available again;
-4. keyed-shaft semantic drivetrain links are rebuilt without the released connection;
-5. a diagnostic release event is emitted.
+A bundled continuous shaft is stricter: every underlying engagement is revalidated. If one of several coaxial holes is still engaged, the shared Rapier joint remains active and the invalid-frame counter resets. Only after **all** engagements are outside their valid profile windows for two consecutive validations does V4:
+
+1. remove the physical joint exactly once;
+2. mark all bundled connection IDs as released for the session;
+3. update joint counters;
+4. make contacts available again;
+5. rebuild keyed-shaft semantic drivetrain links without those released records;
+6. emit one diagnostic release event carrying the complete connection-ID set.
 
 The two-frame confirmation provides hysteresis at the profile boundary. Simulation changes are session-local; returning to BUILD restores the normal non-destructive simulation snapshot.
 
@@ -296,12 +311,15 @@ Before Rapier starts, `physics-guard-v4.js`:
 3. re-resolves endpoints;
 4. validates current geometry;
 5. builds a fresh proposed physics plan;
-6. hardens it through the safety gate/override registry;
-7. blocks SIMULATE if any V4 record is not physics-certified;
-8. creates the normal PhysicsSession;
-9. installs V4 joints atomically.
+6. aggregates redundant axial records where the physical DOF is identical;
+7. hardens the plan through the safety gate/override registry;
+8. blocks SIMULATE if any V4 record is not physics-certified;
+9. creates the normal PhysicsSession;
+10. installs V4 joints atomically.
 
 If adapter construction fails, the partially created session is disposed. The user receives a Connector V4-specific reason instead of a misleading "Rapier failed to load" message.
+
+`PhysicsSession.create` itself is ownership-marked by the V4 guard and the global physics runtime contract checks that no later patch silently replaces that entry point.
 
 ## Debugging
 
@@ -336,6 +354,7 @@ Examples:
 - invalid scale/mirror → rejected inheritance;
 - recursion cycle/budget overflow → diagnostic and terminated branch;
 - unsupported physics family → SIMULATE blocked;
+- single-stud contact without a proven collider envelope → BUILD allowed, SIMULATE blocked;
 - mechanism without proven angular envelope → BUILD allowed, SIMULATE blocked;
 - failed Rapier joint install → entire physics session aborted.
 
@@ -343,7 +362,7 @@ Examples:
 
 BrickLab is a no-build GitHub Pages runtime. `scripts/version-runtime.mjs` versions root JavaScript, audio and every `connectors-v4/*.js` file with one runtime generation. Historical explicit query imports are redirected to that same canonical generation so browser cache cannot instantiate two schema/matcher generations in one page.
 
-`tests/import-map-integrity.test.mjs` enforces the mapping.
+`tests/import-map-integrity.test.mjs` enforces the production mapping. Browser acceptance pages are also generated from the same import map so a QA page cannot accidentally exercise an older V3/V4 generation.
 
 ## Tests
 
@@ -353,6 +372,6 @@ Run:
 npm run test:connectors-v4
 ```
 
-The suite covers parser/resolver behavior, pinned Shadow fixtures, shape matching, placement, identity, interval occupancy, graph persistence/history/runtime behavior, production ownership bridges, live physics recertification, Rapier DOF masks, zero-impulse axle stability, dynamic disengagement/drivetrain split, multi-stud aggregation, safety gating, explicit override matching and import-map consistency.
+The acceptance suite covers parser/resolver behavior, pinned Shadow fixtures, shape matching, placement, identity, interval occupancy, graph persistence/history/runtime behavior, first-load hydration, production ownership bridges, live physics recertification, Rapier DOF masks, SI anchor conversion, zero-impulse axle stability, dynamic disengagement/drivetrain split, coaxial axial-bundle aggregation and full-release behavior, multi-stud constraint-rank classification, safety gating, explicit override matching/limits, static physics-entry ownership and production import-map consistency.
 
 GitHub Actions are not required for this workflow; the acceptance suite is designed to run locally.
