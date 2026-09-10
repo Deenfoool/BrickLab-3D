@@ -46,5 +46,6 @@ test('browser QA pages delegate import-map ownership to production index',async(
   assert.match(loader,/script\.type = 'module'/,'QA loader starts the requested module after map installation')
 
   assert.match(generator,/production-importmap-loader\.js/,'runtime generator preserves the shared QA loader')
-  assert.doesNotMatch(generator,/testHtml\.replace\(\/\(<script type="importmap"/,'runtime generator no longer writes duplicate QA import maps')
+  assert.equal(generator.includes('testHtml.replace(/(<script type="importmap">)'),false,'runtime generator no longer writes duplicate QA import maps')
+  assert.equal(generator.includes('axleHtml.replace(/(<script type="importmap">)'),false,'runtime generator no longer writes duplicate axle QA import maps')
 })
