@@ -14,6 +14,16 @@ test('predictive LDraw loader starts before app and never blocks normal fallback
   assert.match(bootstrap,/Predictive fast loader unavailable; using normal on-demand loading/)
 })
 
+test('shared Three.js cache is enabled before any LDraw runtime can start loading', async () => {
+  const [bootstrap,boost] = await Promise.all([text('bootstrap.js'),text('ldraw/cache-boost-v1.js')])
+  const boostImport = bootstrap.indexOf("await import('./ldraw/cache-boost-v1.js')")
+  const ldrawBootstrap = bootstrap.indexOf("await import('./ldraw/bootstrap-v1.js')")
+  const preload = bootstrap.indexOf("await import('./ldraw/fast-loader-v1.js')")
+  assert.ok(boostImport >= 0 && boostImport < ldrawBootstrap && ldrawBootstrap < preload,'cache boost loads before LDraw registration/preload')
+  assert.match(boost,/THREE\.Cache\.enabled = true/,'Three.js FileLoader cache is enabled')
+  assert.match(boost,/THREE\.Cache\.clear\(\)/,'cache remains explicitly clearable for diagnostics')
+})
+
 test('fast loader predicts visible, hovered, clicked, recent, favorite and saved-project parts', async () => {
   const source = await text('ldraw/fast-loader-v1.js')
   assert.match(source,/new IntersectionObserver/,'visible catalog cards are warmed')
