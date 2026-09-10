@@ -60,7 +60,7 @@ if (menuResult.action === 'new' || menuResult.action === 'open') {
 }
 
 // Register dynamic ldraw-* definitions before app.js restores a saved project.
-await import('./ldraw/bootstrap-v1.js?v=ldraw-catalog-20260910-v3')
+await import('./ldraw/bootstrap-v1.js?v=ldraw-fast-20260911-v1')
 
 // Connector V4.2 owns structural snapping for LDraw parts. These unversioned
 // specifiers are intentionally canonicalized by index.html's import map so every V4
@@ -72,7 +72,7 @@ await import('./connectors-v4/runtime-v4.js')
 // works only in idle/hover/visibility time, deduplicates work and keeps V4 hydration
 // on the same definitions that BUILD will later instantiate.
 try {
-  await import('./ldraw/fast-loader-v1.js?v=ldraw-fast-20260911-v1')
+  await import('./ldraw/fast-loader-v1.js?v=ldraw-fast-20260911-v2')
 } catch (error) {
   console.warn('[BrickLab LDraw] Predictive fast loader unavailable; using normal on-demand loading.', error)
 }
