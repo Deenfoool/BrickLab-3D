@@ -10,6 +10,7 @@ export const LDRAW_SOURCE = Object.freeze({
   apiRoot: 'https://api.github.com/repos/pybricks/ldraw',
   librarySite: 'https://library.ldraw.org',
 })
+export const LDRAW_RUNTIME_VERSION = 'ldraw-runtime-v3.1.0'
 
 export const LDU_TO_STUD = 1 / 20
 const PARTS_ROOT = `${LDRAW_SOURCE.rawRoot}parts/`
@@ -278,6 +279,53 @@ function cloneMaterials(root, color) {
   })
 }
 
+function legacyLevel(payload) {
+  return payload.mechanics ? 'mechanical' : payload.connectors.length ? 'snap' : 'visual'
+}
+
+function applyLegacyPayload(def, payload, root = null, announce = false) {
+  def.connectors.splice(0, def.connectors.length, ...payload.connectors)
+  if (payload.mechanics) def.mechanics = payload.mechanics
+  const level = legacyLevel(payload)
+  def.ldraw = {
+    ...def.ldraw,
+    connectorCount:payload.connectors.length,
+    recursiveSubparts:payload.metadata.recursiveSubparts,
+    legacyReady:payload.metadata.recursiveSubparts === true,
+    legacyError:payload.metadata.legacyError || null,
+    level,
+  }
+  if (root) root.userData.ldraw = {
+    ...root.userData.ldraw,
+    connectorCount:payload.connectors.length,
+    legacyReady:def.ldraw.legacyReady,
+    level,
+  }
+  if (announce && !payload.legacyAnnounced) {
+    payload.legacyAnnounced = true
+    window.dispatchEvent(new CustomEvent('bricklab:ldrawlegacyready', { detail:{ id:def.id, file:def.ldraw.file, connectors:payload.connectors.length, level } }))
+    window.dispatchEvent(new CustomEvent('bricklab:partcatalogchange'))
+  }
+}
+
+function startLegacyInference(normalized, text, offset, metadata, payload) {
+  payload.legacyReady = inferFeatures(normalized, text).then(rawFeatures => {
+    const connectors = connectorArray(rawFeatures, offset)
+    payload.connectors.splice(0, payload.connectors.length, ...connectors)
+    payload.mechanics = inferMechanics(metadata, payload.connectors)
+    payload.metadata.connectorCount = payload.connectors.length
+    payload.metadata.recursiveSubparts = true
+    payload.metadata.legacyError = null
+    return payload
+  }).catch(error => {
+    payload.metadata.recursiveSubparts = false
+    payload.metadata.legacyError = String(error?.message || error)
+    console.debug?.(`[BrickLab LDraw] Legacy connector inference unavailable for ${normalized}`, error)
+    return payload
+  })
+  return payload.legacyReady
+}
+
 async function loadPrototype(file) {
   const normalized = normalizeFile(file)
   const resolved = resolvedPrototypeCache.get(normalized)
@@ -285,10 +333,10 @@ async function loadPrototype(file) {
   if (prototypeCache.has(normalized)) return prototypeCache.get(normalized)
   const promise = (async () => {
     const [loader, text] = await Promise.all([getLoader(), fetchLDrawText(normalized)])
-    const [model, rawFeatures] = await Promise.all([
-      loader.loadAsync(rawUrl(PARTS_ROOT, normalized)),
-      inferFeatures(normalized, text),
-    ])
+    // Geometry is the user-visible critical path. Legacy primitive inference can need
+    // several extra subpart fetches, so it is deliberately started after the reusable
+    // visual prototype is published instead of blocking scene appearance.
+    const model = await loader.loadAsync(rawUrl(PARTS_ROOT, normalized))
     model.rotation.x = Math.PI
     model.scale.setScalar(LDU_TO_STUD)
     model.updateMatrixWorld(true)
@@ -302,18 +350,29 @@ async function loadPrototype(file) {
     const finalBox = new THREE.Box3().setFromObject(model)
     const size = finalBox.getSize(new THREE.Vector3())
     const metadata = parseHeader(text, normalized)
-    const connectors = connectorArray(rawFeatures, offset)
-    const value = {
+    const connectors = []
+    const payload = {
       model,
-      metadata: { ...metadata, size: [size.x, size.y, size.z], connectorCount: connectors.length, recursiveSubparts: true },
+      metadata: { ...metadata, size: [size.x, size.y, size.z], connectorCount: 0, recursiveSubparts: 'loading', legacyError:null },
       connectors,
       mechanics: inferMechanics(metadata, connectors),
+      legacyReady:null,
+      legacyAnnounced:false,
     }
-    resolvedPrototypeCache.set(normalized, value)
-    return value
+    resolvedPrototypeCache.set(normalized, payload)
+    void startLegacyInference(normalized, text, offset, metadata, payload)
+    return payload
   })()
   prototypeCache.set(normalized, promise)
   try { return await promise } catch (error) { prototypeCache.delete(normalized); throw error }
+}
+
+export async function preloadLDrawPrototype(file) {
+  return loadPrototype(normalizeFile(file))
+}
+
+export function isLDrawPrototypeReady(file) {
+  return resolvedPrototypeCache.has(normalizeFile(file))
 }
 
 export async function getLDrawMetadata(file) {
@@ -390,16 +449,21 @@ function attachPrototype(root, def, payload, color, fallback = null, announce = 
     ...def.ldraw,
     ...payload.metadata,
     ready: true,
-    level: payload.mechanics ? 'mechanical' : payload.connectors.length ? 'snap' : 'visual',
+    legacyReady:payload.metadata.recursiveSubparts === true,
+    level: legacyLevel(payload),
   }
   root.userData.ldraw = {
     ...root.userData.ldraw,
     status: 'ready',
     connectorCount: payload.connectors.length,
+    legacyReady:def.ldraw.legacyReady,
     level: def.ldraw.level,
   }
+  if (payload.legacyReady) void payload.legacyReady.then(() => applyLegacyPayload(def, payload, root, true))
   if (announce) {
-    window.dispatchEvent(new CustomEvent('bricklab:ldrawloaded', { detail: { id: def.id, file: def.ldraw.file, code: def.ldraw.code, connectors: payload.connectors.length, level: def.ldraw.level } }))
+    // This announces visual readiness immediately. Connector V4 uses Shadow metadata
+    // and therefore does not need to wait for the legacy primitive inference promise.
+    window.dispatchEvent(new CustomEvent('bricklab:ldrawloaded', { detail: { id: def.id, file: def.ldraw.file, code: def.ldraw.code, connectors: payload.connectors.length, level: def.ldraw.level, legacyReady:def.ldraw.legacyReady } }))
     window.dispatchEvent(new CustomEvent('bricklab:partcatalogchange'))
   }
 }
@@ -421,7 +485,7 @@ export function registerLDrawPart(entry = {}) {
     defaultColor: entry.defaultColor ?? 0xd7263d,
     tags: ['ldraw', code, file, ...(entry.keywords || [])],
     connectors,
-    ldraw: { file, code, source: LDRAW_SOURCE.repository, ready: false, level: 'visual' },
+    ldraw: { file, code, source: LDRAW_SOURCE.repository, ready: false, legacyReady:false, level: 'visual' },
     create(color = def.defaultColor) {
       const root = new THREE.Group()
       root.userData.partId = id
@@ -451,12 +515,22 @@ export async function registerLDrawPartByFile(file) {
 }
 
 export const BrickLabLDraw = Object.freeze({
+  version:LDRAW_RUNTIME_VERSION,
   source: LDRAW_SOURCE,
   lduToStud: LDU_TO_STUD,
   getIndex: getLDrawIndex,
   getMetadata: getLDrawMetadata,
   register: registerLDrawPart,
   registerByFile: registerLDrawPartByFile,
+  preload: preloadLDrawPrototype,
+  isPrepared: isLDrawPrototypeReady,
+  stats:()=>Object.freeze({
+    textCache:textCache.size,
+    metadataCache:metadataCache.size,
+    prototypeCache:prototypeCache.size,
+    resolvedPrototypeCache:resolvedPrototypeCache.size,
+    inferenceCache:inferenceCache.size,
+  }),
 })
 
 globalThis.BrickLabLDraw = BrickLabLDraw
