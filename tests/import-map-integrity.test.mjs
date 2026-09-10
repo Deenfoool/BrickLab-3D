@@ -25,8 +25,10 @@ test('production import map has no dangling local JavaScript targets', async () 
 test('every root JavaScript module has one canonical cache-busted mapping', async () => {
   const html = await readFile(new URL('index.html', root), 'utf8')
   const { imports } = JSON.parse(html.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1])
+  const canonical = imports['./app.js']?.match(/\?v=(.+)$/)?.[1]
   const entry = html.match(/src="\.\/bootstrap\.js\?v=([^"]+)/)?.[1]
-  assert.ok(entry, 'bootstrap cache-bust tag exists')
+  assert.ok(canonical, 'canonical import-map cache-bust tag exists')
+  assert.ok(entry, 'bootstrap entry cache-bust tag exists')
 
   const aliases = {
     'connections.js': 'connections-v3.js',
@@ -38,7 +40,7 @@ test('every root JavaScript module has one canonical cache-busted mapping', asyn
   for (const name of modules) {
     assert.equal(
       imports[`./${name}`],
-      `./${aliases[name] ?? name}?v=${entry}`,
+      `./${aliases[name] ?? name}?v=${canonical}`,
       `${name} has canonical import-map URL`,
     )
   }
