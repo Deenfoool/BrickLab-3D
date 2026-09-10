@@ -1,5 +1,5 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: PARTS-6 · molded realism + interactive main-menu hero.
+// BUILD: PARTS-6 · molded realism + interactive main-menu hero v2.
 // All root production modules are versioned once by the import map in index.html.
 
 // Diagnostics and the complete part registry must exist before the menu creates its
@@ -7,24 +7,9 @@
 await import('./physics-error-ui.js')
 await import('./runtime-extensions.js')
 
-async function preloadMainMenuStyles() {
-  if (document.getElementById('bricklab-main-menu-style')) return
-  const link = document.createElement('link')
-  link.id = 'bricklab-main-menu-style'
-  link.rel = 'stylesheet'
-  link.href = './main-menu.css?v=main-menu-20260910-v1'
-  const ready = new Promise(resolve => {
-    link.addEventListener('load', resolve, { once: true })
-    link.addEventListener('error', resolve, { once: true })
-  })
-  document.head.append(link)
-  await ready
-}
-
 let menuResult = { action: 'continue', snapshot: null }
 try {
-  await preloadMainMenuStyles()
-  const { showMainMenu } = await import('./main-menu.js')
+  const { showMainMenu } = await import('./menu/main-menu-v2.js?v=main-menu-20260910-v2')
   menuResult = await showMainMenu()
 } catch (error) {
   // The menu is presentation-only. A menu/WebGL failure must never prevent the editor
