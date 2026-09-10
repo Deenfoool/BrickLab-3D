@@ -113,3 +113,22 @@ test('groups matcher is set-like and does not fail when both endpoints share one
   assert.equal(resolvePhysicsOverrideV4(candidate.entry)?.id,'group-set-v1')
   assert.equal(hardenPhysicsPlanV4(plan(candidate)).pass,true)
 })
+
+test('registered evidence is deeply immutable and resolved copies cannot mutate the registry',()=>{
+  const registered=registerPhysicsOverrideV4({
+    id:'deep-freeze-v1',
+    match:{family:'hinge-fingers',groups:['immutable-group'],partIds:['ldraw-a','ldraw-b']},
+    rule:{kind:'revolute',limits:{min:-0.4,max:0.4},resistance:{angularDamping:0.2},evidence:'immutability test'},
+  })
+  assert.equal(Object.isFrozen(registered),true)
+  assert.equal(Object.isFrozen(registered.match.groups),true)
+  assert.equal(Object.isFrozen(registered.rule.limits),true)
+  assert.equal(Object.isFrozen(registered.rule.resistance),true)
+  assert.throws(()=>{registered.rule.limits.min=-99},TypeError)
+
+  const candidate=entry('hinge-fingers',{group:'immutable-group'})
+  const copy=resolvePhysicsOverrideV4(candidate)
+  assert.equal(copy.rule.limits.min,-0.4)
+  copy.rule.limits.min=-9
+  assert.equal(resolvePhysicsOverrideV4(candidate).rule.limits.min,-0.4)
+})
