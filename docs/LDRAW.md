@@ -1,121 +1,147 @@
 # LDraw integration
 
-BrickLab 3D uses the LDraw Parts Library as an on-demand source of part geometry. The LDraw library is **not vendored into this repository**; the browser loads only the index and files required by parts the user actually selects.
+BrickLab 3D uses the LDraw Parts Library as an on-demand source of part geometry. The full LDraw library is **not vendored into this repository**; the browser loads only the index and files required by parts the user actually selects.
+
+For connectivity, production LDraw parts use Connector System V4 with a pinned LDCad Shadow Library snapshot when certified metadata exists. The older LDraw primitive analyser remains useful as a conservative geometry/connectivity source and fallback, but it is no longer the whole connection architecture.
 
 ## Runtime architecture
 
 ```text
 LDraw remote library
     │
-    ├─ Git tree → lightweight Design ID index
-    ├─ parts/<id>.dat → header + connector analysis
-    ├─ parts/s/* → recursive connector analysis
-    ├─ p/* → geometry primitives resolved by LDrawLoader
-    └─ LDConfig.ldr → official colour definitions
+    ├─ Git tree → Design ID index
+    ├─ parts/<id>.dat → geometry/header data
+    ├─ parts/s/* → recursive subparts
+    ├─ p/* → primitives resolved by LDrawLoader
+    └─ LDConfig.ldr → colour definitions
              │
              ▼
 ldraw/runtime-v3.js
-    │
     ├─ 20 LDU = 1 BrickLab stud
-    ├─ LDraw Y-down → Three.js Y-up
-    ├─ geometry/model cache
-    ├─ DAT/subpart cache
-    ├─ primitive-based connector inference
-    ├─ basic mechanical metadata inference
+    ├─ coordinate conversion / centering
+    ├─ DAT/model caches
+    ├─ conservative primitive connector analysis
+    ├─ basic safe mechanical inference
     └─ dynamic PARTS registration
              │
              ▼
-BrickLab PARTS
-    │
-    ├─ normal selection / transform
-    ├─ undo / redo
-    ├─ autosave
-    ├─ .bricklab import / export
-    ├─ catalog Favorites / Recent
-    └─ Connector / Physics systems
+LDraw-backed BrickLab part
+             │
+             ├──────────── visual / catalog / project persistence
+             │
+             ▼
+Connector System V4
+    ├─ pinned LDCad Shadow metadata
+    ├─ profile/frame resolver
+    ├─ shape-aware matching + placement
+    ├─ interval occupancy + V4 graph
+    ├─ BUILD snap ownership
+    └─ SIMULATE live recertification + Rapier adapter
 ```
 
-`runtime-v1.js` and `runtime-v2.js` remain compatibility entry points and re-export the current runtime.
+`ldraw/runtime-v1.js` and `runtime-v2.js` remain compatibility entry points and re-export the current LDraw runtime.
 
-## Source
+## Geometry source
 
-The production runtime currently points to the version-controlled `pybricks/ldraw` mirror of the official LDraw library. Geometry is requested from `raw.githubusercontent.com` and the complete top-level `parts/` filename index is obtained lazily from the GitHub Trees API.
+The production LDraw runtime currently uses the version-controlled `pybricks/ldraw` mirror. Geometry is requested from `raw.githubusercontent.com`; the top-level `parts/` filename index is obtained lazily from GitHub's Trees API.
 
-This keeps the BrickLab repository small and avoids downloading tens of thousands of part files on startup.
+This keeps BrickLab small and avoids downloading the complete parts library on startup.
 
 ## Catalog
 
-The Parts panel contains an **LDraw** button. Opening it loads the remote part index only when needed.
+The Parts panel contains the LDraw browser. It supports Design ID lookup, starter parts and metadata/name discovery where the remote source permits it.
 
-Supported discovery paths:
+Selecting a result dynamically registers a `ldraw-<design-id>` definition and uses the normal BrickLab placement path. The complete remote index is not appended to the normal `PARTS` array as thousands of eager objects.
 
-- exact or partial LDraw / LEGO Design ID, e.g. `3001`, `3894`, `3647`;
-- popular starter parts shown without entering a query;
-- name search through the public LDraw Library search endpoint when cross-origin access is available;
-- already fetched DAT metadata is cached for the rest of the session.
-
-Selecting a result dynamically registers a `ldraw-<design-id>` BrickLab part and places it through BrickLab's existing part-placement path. The full remote index is never appended to `PARTS`, so the normal catalog remains fast.
-
-The index intentionally exposes top-level `.dat` files, not `parts/s/` subparts or `p/` primitives as standalone catalog pieces.
+Only top-level part `.dat` files are exposed as catalog parts; subparts and primitives stay implementation details.
 
 ## Geometry loading
 
-A selected part is created synchronously with a temporary lightweight placeholder so the existing BrickLab editor does not need an asynchronous `create()` API. The actual LDraw geometry then loads in the background and replaces the placeholder.
+A selected LDraw part initially has a lightweight synchronous placeholder because the editor's normal `create()` path is synchronous. Real LDraw geometry then loads and replaces it.
 
 Loaded geometry is:
 
-1. rotated 180° around X to convert LDraw coordinates to the Three.js / BrickLab orientation;
-2. scaled by `1 / 20`, because 20 LDraw units equal one horizontal stud pitch and 24 LDU become BrickLab's 1.2-stud brick height;
-3. centered in X/Z and moved so its visual lower bound sits on BrickLab Y=0;
+1. rotated to BrickLab/Three.js orientation;
+2. scaled at `1 / 20` because 20 LDU equal one horizontal stud pitch;
+3. centered in X/Z and grounded at BrickLab Y=0;
 4. recoloured through LDraw `Main_Colour` where applicable;
-5. marked with the BrickLab instance root so ray picking continues to work.
+5. marked with the BrickLab instance root for picking and project behavior.
 
-## Automatic connectors
+The exact centering/grounding offset is reused by Connector V4 so endpoint positions stay aligned with the visible model.
 
-`runtime-v3.js` reads type-1 LDraw references and recursively follows `parts/s/*` subparts up to a guarded depth. Every child reference matrix is composed with its parent matrix before the connector is converted into BrickLab coordinates.
+## Connectivity sources
 
-Current automatic connector classes:
+BrickLab has two complementary LDraw connectivity sources.
 
-- outward studs from standard `stud*.dat` primitive families;
-- underside tubes from the LDraw stud-tube primitive families;
-- Technic pin holes from `peghole.dat` / pin-hole primitive families;
-- Technic axle holes from `axlehole.dat` / `axlehol*.dat` primitive families.
+### LDCad Shadow metadata — production V4 source
 
-For example, a classic brick such as `3001.dat` delegates most of its geometry to `s/3001s01.dat`; the recursive pass therefore still reaches the actual stud/tube primitives instead of leaving the brick visual-only.
+Connector System V4 uses the pinned `RolandMelkert/LDCadShadowLibrary` snapshot documented in [`CONNECTOR_SYSTEM_V4.md`](CONNECTOR_SYSTEM_V4.md) and `NOTICE_CONNECTORS.md`.
 
-Opposite pin/axle-hole openings are paired into one through-connector. Their LDraw transform matrices determine position and axis, and the same grounding/centering offset used by the rendered model is applied to connector positions.
+Shadow metadata provides richer connection profiles than base LDraw geometry alone: cylinders/axles/holes, clips, finger hinges, generic grouped connectors, spheres, includes and clears. V4 resolves these into complete local frames and physical profiles.
 
-The analyser is intentionally conservative: a false connector is worse than a missing one. It currently follows official `parts/s/` subparts rather than recursively treating every referenced part as a connection source. The primitive registry is designed to grow with bars, clips, hinges, ball joints, tyre/rim seats and other connection standards.
+For V4-owned LDraw structural pairs, an uncertified/missing V4 candidate fails closed instead of silently creating a coarse V3 connection.
+
+### Primitive analyser — conservative source/fallback
+
+`ldraw/runtime-v3.js` also reads type-1 LDraw references and recursively follows guarded `parts/s/*` subparts. It can recognise common primitive families such as:
+
+- studs;
+- underside tubes;
+- Technic pin holes;
+- Technic axle holes.
+
+For example, `3001.dat` delegates much geometry to a subpart, so the recursive analyser can still reach stud/tube primitives rather than leaving the part visual-only.
+
+Opposite pin/axle-hole openings can be paired into a through-connector. The analyser remains deliberately conservative: false connectivity is considered worse than missing connectivity.
+
+## Connector V4 behavior
+
+V4 connectivity is geometry-aware and uses full profiles rather than only labels. Current production concepts include:
+
+- shape compatibility (`R`, `A`, `S`, elastic profile sections);
+- male/female and semantic group gates;
+- exact connector coordinate frames;
+- axial insertion windows;
+- interval occupancy for long axles/bars/pins;
+- stable endpoint identity and project graph persistence;
+- shape-based round interfaces where the profile itself supplies enough evidence;
+- explicit fail-closed handling for ambiguous families.
+
+On SIMULATE, BrickLab does not trust connection flags saved in a project. The current endpoints and transforms are revalidated and a fresh runtime physics plan is created.
+
+Certified rules map to Rapier fixed, revolute, prismatic, cylindrical or spherical constraints. Open axial profiles can disengage dynamically after leaving their valid engagement window.
+
+See [`CONNECTOR_SYSTEM_V4.md`](CONNECTOR_SYSTEM_V4.md) for the complete model and physics policy.
 
 ## Basic mechanical inference
 
-A small safe subset can move directly beyond `snap`:
+LDraw geometry/connectivity is separate from drivetrain mechanics. A small safe subset can receive mechanical metadata automatically:
 
-- ordinary `Technic Gear <N> Tooth` spur gears with a recognised axle hole receive BrickLab gear metadata (`teeth`, `pitchRadius = teeth / 16`, prototype efficiency);
-- ordinary Technic axle part descriptions receive shaft metadata.
+- ordinary `Technic Gear <N> Tooth` spur gears with a recognised axle hole can receive teeth/pitch metadata;
+- ordinary Technic axle descriptions can receive shaft metadata.
 
-Special gears (bevel, worm, rack, crown, clutch, differential, knob/turntable families), wheels, steering, suspension and motors are **not guessed**. They stay visual/snap until BrickLab has an explicit mechanical profile for the part.
+Special gears, wheel behavior, steering, suspension, motors and unusual couplings are not guessed from visual geometry alone.
 
-## BrickLab capability levels
+## Capability levels
 
-LDraw-backed parts use progressive capability levels:
+LDraw-backed parts progress through capabilities:
 
 ```text
 visual
   └─ geometry / colour / transform / save / import / export
 
 snap
-  └─ visual + automatically recognised BrickLab connectors
+  └─ visual + certified connection metadata
 
 mechanical
-  └─ snap + safe inferred or explicit BrickLab mechanics metadata
+  └─ snap + safe inferred or explicit BrickLab drivetrain semantics
 ```
 
-LDraw provides geometry, but it does not replace BrickLab's mechanical model. Advanced drivetrain behaviour remains BrickLab metadata.
+Connector V4 physics certification is evaluated at simulation time and is intentionally stricter than simply having a `snap` capability.
 
 ## Persistence
 
-`.bricklab` projects continue to store the normal `partId`. LDraw parts use IDs such as:
+LDraw part IDs are stored normally, for example:
 
 ```text
 ldraw-3001
@@ -123,15 +149,17 @@ ldraw-3894
 ldraw-3647
 ```
 
-`ldraw/bootstrap-v1.js` scans local saves before `app.js` boots and recreates any required dynamic definitions. The same module prepares imported `.bricklab` files before the normal importer runs, so LDraw-backed parts survive reloads and file transfer.
+`ldraw/bootstrap-v1.js` recreates required dynamic definitions before `app.js` restores a saved project. Imported `.bricklab` files are prepared through the same mechanism.
 
-## Caching and network behaviour
+Connector V4 keeps its richer connection graph/endpoint identity alongside the project lifecycle and reconciles restored records against current geometry.
 
-The complete filename index is loaded only when the LDraw browser opens. DAT files, subparts, parsed metadata, connector analysis and finished geometry prototypes are cached for the page session. Independent subparts are analysed concurrently; the connector analyser does not probe unrelated LDraw primitives with additional requests.
+## Caching and network behavior
 
-LDraw geometry is remote by design. If the remote library cannot be reached, the placed part keeps its placeholder rather than crashing the editor. Existing native BrickLab parts and the rest of the project continue to work.
+LDraw geometry, DAT metadata, subparts and finished model prototypes are cached during the page session. Shadow connectivity uses a pinned upstream snapshot and guarded resolver caches.
 
-A future offline-cache layer can store fetched DAT files and dependencies in IndexedDB without changing project format.
+Production JavaScript modules, including every `connectors-v4/*.js`, are mapped through one canonical cache generation in `index.html`. Historical V4 query URLs still present in early source imports are redirected to the same current module URL so multiple V4 schema generations cannot coexist in one page.
+
+If remote LDraw geometry cannot be reached, a placed part keeps its placeholder instead of crashing the editor. Existing native BrickLab systems remain available. Shadow network failures are distinguished from a genuine metadata 404; transient failures are not interpreted as proof that a connector does not exist.
 
 ## Attribution
 
