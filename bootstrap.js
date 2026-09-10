@@ -62,21 +62,18 @@ if (menuResult.action === 'new' || menuResult.action === 'open') {
 // Register dynamic ldraw-* definitions before app.js restores a saved project.
 await import('./ldraw/bootstrap-v1.js?v=ldraw-catalog-20260910-v3')
 
-// Connector V4.1 is a fail-closed hybrid pilot. The menu action is supplied before
-// runtime initialization so New/Open cannot accidentally inherit a stale V4 graph.
+// Connector V4.2 owns structural snapping for LDraw parts. Runtime connectivity is
+// fail-closed; each simulation re-certifies live geometry before Rapier receives a joint.
 globalThis.__bricklabConnectorV4StartMode = menuResult.action
-await import('./connectors-v4/runtime-v4.js?v=connector-v4-20260910-v5')
-// Install physics preflight after all legacy PhysicsSession patches have loaded but
-// before the editor can start SIMULATE. Uncertified V4 links block physics explicitly.
-await import('./connectors-v4/physics-guard-v4.js?v=connector-v4-20260910-v5')
-// History synchronization must be installed before app.js performs its first loadLocal
-// / resetHistory write. It tracks graph-only actions as first-class Undo/Redo steps.
-// Native projectState/applyProject now snapshot the V4 graph, including graph-only history.
+await import('./connectors-v4/runtime-v4.js?v=connector-v4-20260910-v6')
+// The guard creates V4 Rapier constraints only from a fresh physics policy plan. Any
+// unsupported/ambiguous connection blocks SIMULATE rather than downgrading silently.
+await import('./connectors-v4/physics-guard-v4.js?v=connector-v4-20260910-v6')
 
 await import('./app.js')
-// app.js remains the authoritative project/editor owner. This bridge only preserves
-// the V4 extension graph on import/export/new-project without duplicating app logic.
-// Native import/export/new use the same serialized V4 graph as Undo/Redo.
+// F9 toggles the V4 endpoint/axis overlay. It is removed synchronously before physics
+// collider measurement so diagnostics can never affect collision bounds.
+await import('./connectors-v4/debug-overlay-v4.js?v=connector-v4-20260910-v6')
 
 for (const [key, value] of hiddenProjectEntries) {
   try { localStorage.setItem(key, value) } catch { /* storage may be unavailable */ }
