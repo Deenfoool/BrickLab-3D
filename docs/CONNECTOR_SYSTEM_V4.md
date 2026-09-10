@@ -1,40 +1,34 @@
 # Connector System V4
 
-Connector System V4 is the replacement connectivity architecture for BrickLab 3D.
+Connector System V4 is BrickLab 3D's geometry-aware connectivity layer for LDraw-backed parts. It is now used in production for certified LDraw structural snapping, connection persistence/occupancy and a fail-closed Rapier physics path.
 
-The system is being introduced **alongside Connector System V3**. V4 is currently in **observe mode**: it resolves and validates rich LDraw/LDCad connectivity metadata, but it does not yet replace the active V3 snap graph or create Rapier joints. This is intentional. A wrong connector is worse than a missing connector because it can silently create impossible assemblies or unstable physics.
+Connector V3 still exists as a compatibility layer for native/procedural BrickLab parts and older mechanics code. Gear meshing and other drivetrain relations remain separate mechanical systems; V4 does not turn gear contact into a structural joint.
 
-## Design rule
+The runtime's historical internal mode string is currently `hybrid-pilot` when its self-test passes. Despite that name, the certified V4 path is wired into the production `gh-pages` runtime.
 
-V4 separates four questions that V3 previously compressed into a connector `type`:
+## Core rule
+
+V4 deliberately separates four questions:
 
 ```text
 1. Geometry
-   Can these physical connector shapes fit each other?
+   Can the two physical connector profiles fit?
 
 2. Placement
-   Where may the moving part be positioned/oriented while snapping?
+   Where can the moving part be positioned and oriented?
 
-3. Kinematics / physics
-   Which degrees of freedom remain after the physical connection is made?
+3. Constraint / physics
+   Which relative degrees of freedom remain in SIMULATE?
 
 4. Mechanics
-   Does the connection transmit rotation, torque, gear ratio, steering motion, etc.?
+   Does the interface transmit rotation, torque, steering motion, ratio, etc.?
 ```
 
-These layers must not be inferred from one another unless a rule is explicitly justified.
-
-In particular:
-
-- `slide=true` in LDCad is an editor snapping property. It is **not** by itself proof that the final Rapier joint must be prismatic/cylindrical.
-- geometric compatibility does not imply a structural connection;
-- gear mesh is mechanical contact, not a rigid connector;
-- a V4 `kinematicHint` is never sufficient to create physics by itself;
-- all current V4 matcher results therefore carry `physicsReady: false`.
+A positive answer at one layer is not automatically evidence for the next. In particular, persisted connection records are never trusted to self-certify physics.
 
 ## Upstream connectivity source
 
-Primary source:
+Primary metadata source:
 
 ```text
 RolandMelkert/LDCadShadowLibrary
@@ -42,30 +36,9 @@ snapshot: f2fb70c55521e0dfdf2af4d26a87167d4d0d9eec
 license: CC BY-SA 4.0
 ```
 
-The snapshot is pinned so that connector behaviour cannot change underneath a BrickLab release.
+The snapshot is pinned so connector metadata cannot change underneath a BrickLab release. See `NOTICE_CONNECTORS.md` for attribution.
 
-The Shadow Library exists specifically to supplement LDraw files with snapping metadata that the base LDraw format does not contain. See `NOTICE_CONNECTORS.md` for attribution.
-
-V4 keeps the existing LDraw primitive analyser only as a future fallback. Shadow metadata has priority when available.
-
-## Source files
-
-```text
-connectors-v4/
-├── schema-v4.js
-├── ldcad-parser-v4.js
-├── matcher-v4.js
-├── shadow-resolver-v4.js
-└── runtime-v4.js
-```
-
-### `schema-v4.js`
-
-Defines the canonical V4 connector data model and validation rules.
-
-### `ldcad-parser-v4.js`
-
-Strict parser for LDCad Shadow metas. It currently understands:
+LDCad Shadow metadata supplements LDraw geometry with connection information. V4 currently parses:
 
 ```text
 SNAP_CYL
@@ -77,411 +50,270 @@ SNAP_INCL
 SNAP_CLEAR
 ```
 
-Unknown or malformed data becomes a diagnostic warning. It is not silently converted into a guessed connector.
+Malformed or unsupported metadata produces diagnostics instead of guessed connectivity.
 
-### `matcher-v4.js`
+## Runtime pipeline
 
-Answers only the geometry/family compatibility question. It intentionally does not create editor transforms or physics joints yet.
-
-### `shadow-resolver-v4.js`
-
-Combines connector metadata through the same structural concepts used by LDraw/LDCad:
-
-- LDraw type-1 transforms;
-- recursive subpart inheritance;
-- primitive shadow information;
-- `SNAP_CLEAR` overrides;
-- `SNAP_INCL`;
-- connector/include grids;
-- scale policies;
-- mirror policies;
-- cycle and traversal guards.
-
-### `runtime-v4.js`
-
-Attaches resolved V4 connectivity to instantiated LDraw definitions as `definition.connectivityV4` while V3 continues to operate normally.
-
-## Canonical V4 connector
-
-A V4 connector is a shape in a local coordinate frame, not a point label.
-
-Simplified example:
-
-```js
-{
-  schemaVersion: 4,
-  id: 'connhole',
-  family: 'cylinder',
-  gender: 'female',
-  group: null,
-
-  frame: {
-    positionLdu: [0, 0, 0],
-    orientation: [
-      1, 0, 0,
-      0, 1, 0,
-      0, 0, 1,
-    ]
-  },
-
-  geometry: {
-    sections: [
-      { shape: 'R', radiusLdu: 8, lengthLdu: 2 },
-      { shape: 'R', radiusLdu: 6, lengthLdu: 16 },
-      { shape: 'R', radiusLdu: 8, lengthLdu: 2 }
-    ],
-    caps: 'none',
-    centered: true
-  },
-
-  snap: {
-    slide: true
-  },
-
-  inheritance: {
-    scale: 'none',
-    mirror: 'cor'
-  },
-
-  source: {
-    kind: 'ldcad-shadow',
-    file: 'p/connhole.dat',
-    line: 6,
-    meta: 'SNAP_CYL'
-  }
-}
+```text
+LDraw part
+  ↓
+pinned LDCad Shadow metadata
+  ↓
+strict parser + recursive resolver
+  ↓
+canonical V4 connector frames/profiles
+  ↓
+geometry matcher
+  ↓
+placement solver
+  ↓
+activation policy
+  ├─ BUILD snap candidate
+  ├─ V4 connection graph + occupancy
+  └─ SIMULATE physics preflight
+          ↓
+     fresh physics policy plan
+          ↓
+     Rapier V4 adapter
 ```
 
-## Coordinate systems
+Relevant modules include:
 
-Shadow/LDraw connector data is kept in LDraw units until resolution has finished.
+```text
+connectors-v4/
+├─ schema-v4.js
+├─ ldcad-parser-v4.js
+├─ shadow-resolver-v4.js
+├─ matcher-v4.js
+├─ axial-fit-v4.js
+├─ placement-solver-v4.js
+├─ candidate-v4.js
+├─ activation-v4.js
+├─ occupancy-v4.js
+├─ connections-v4.js
+├─ persistence-v4.js
+├─ runtime-v4.js
+├─ snapping-bridge-v4.js
+├─ connections-bridge-v4.js
+├─ constraints-v4.js
+├─ validity-v4.js
+├─ physics-policy-v4.js
+├─ physics-guard-v4.js
+├─ physics-adapter-v4.js
+└─ debug-overlay-v4.js
+```
+
+## Coordinates and connector frames
+
+Shadow/LDraw data is resolved in LDraw units first:
 
 ```text
 20 LDU = 1 BrickLab stud
 ```
 
-LDraw and the current BrickLab LDraw visual have different Y/Z orientation. V4 performs the same conversion used by the visual pipeline:
+The current LDraw visual conversion is:
 
 ```text
-LDraw point (x, y, z)
+LDraw (x, y, z)
     ↓
 BrickLab (x / 20, -y / 20, -z / 20)
 ```
 
-The final visual centering offset is added after this conversion. V4 does not guess this offset from the part name or nominal dimensions: `runtime-v4.js` observes the actual centered LDraw visual instance and uses its exact offset.
+Each V4 endpoint stores a complete local frame, not only a point. The canonical connector axis is local negative Y. The resolved frame is validated to remain finite, orthonormal and right-handed.
 
-The original LDraw-space frame is retained alongside the BrickLab-space frame for diagnostics and reproducibility.
+The same real visual centering offset used by the LDraw object is applied to connectivity, so snapping does not rely on part-name or nominal-size guesses.
 
-## Cylinder profiles
+## Shape matching
 
-`SNAP_CYL` is represented as a segmented axial profile.
-
-Supported LDCad section shapes:
+Cylinder profiles preserve LDCad section geometry:
 
 ```text
 R   round
-A   axle/cross
+A   axle / cross
 S   square
 _L  elastic round transition/end
 L_  elastic round transition/end
 ```
 
-Example Technic pin hole:
+Matching is directional where physical fit is directional:
 
 ```text
-R 8 2 | R 6 16 | R 8 2
+male R → female R   allowed when radius/profile fit
+male A → female A   keyed
+male S → female S   keyed
+male A → female R   geometrically possible
+male S → female R   geometrically possible
+male R → female A   not assumed
+male R → female S   not assumed
 ```
 
-Example Technic axle:
+Groups are hard semantic gates. Different non-empty groups do not connect merely because their dimensions are similar.
+
+V4 also supports clips, alternating finger/hinge profiles, generic grouped bounds and spherical connectors.
+
+## Axial fit and occupancy
+
+Long connectors are not represented by a single occupied boolean. Axles, pins and bars reserve intervals along their connector channel.
 
 ```text
-A 6 80
+axle
+0 --------------------------------------------- 12L
+     [beam]      [gear]      [beam]      [wheel]
 ```
 
-The matcher is deliberately asymmetric where necessary:
+Independent parts can legally occupy different non-overlapping intervals of the same shaft. Profile caps and section geometry define legal insertion windows.
+
+This interval model is used both when committing BUILD connections and when restoring/reconciling saved graphs.
+
+## Production activation families
+
+The activation policy currently recognizes certified structural families including:
+
+- `technic-axle-keyed-hole`;
+- `technic-axle-round-hole`;
+- `technic-pin-hole`;
+- `stud-anti-stud`;
+- `bar-round-hole`;
+- `bar-clip`;
+- `keyed-shaft-interface`;
+- `round-cylindrical-interface`;
+- `round-revolute-interface`;
+- `ball-socket`;
+- `hinge-fingers`;
+- `generic-group` as an editor/graph family only unless an explicit physics rule exists.
+
+Shape-based round interfaces are classified from compatible profile geometry, not from hard-coded part names.
+
+## BUILD ownership and V3 compatibility
+
+For LDraw structural pairs owned by V4, the snapping bridge fails closed: if Shadow metadata is loading, malformed, quarantined or not certified, V3 is not allowed to create a coarse substitute connection for the same pair.
+
+Gear mesh is intentionally excluded from that rule and remains owned by the drivetrain/gear solver.
+
+Native/procedural BrickLab pieces may continue to use Connector V3 where no V4 definition exists.
+
+## Connection persistence
+
+V4 has its own graph with stable endpoint identity, occupancy reservations and project persistence. New/Open actions clear stale graph state appropriately; saved/imported records are reconciled against the current objects and current endpoint geometry.
+
+A saved field such as:
 
 ```text
-male R -> female R      allowed when radius fits
-male A -> female A      keyed candidate
-male S -> female S      keyed candidate
-male A -> female R      geometrically possible candidate
-male S -> female R      geometrically possible candidate
-male R -> female A      NOT assumed
-male R -> female S      NOT assumed
+physicsReady: true
 ```
 
-The flexible `_L` / `L_` shapes are retained as `elastic: true` and currently produce only a friction hint. V4 does not invent a friction coefficient from them.
+is never treated as authority. SIMULATE always re-certifies live geometry from the current part definitions.
 
-## Gender and groups
+## Physics preflight
 
-Cylinder and generic connectors carry `male` / `female` gender. Clips are female by definition. Finger connectors carry an alternating male/female sequence.
+Before `PhysicsSession` is allowed to start, `physics-guard-v4.js`:
 
-A non-empty LDCad `group` is a hard compatibility gate in V4:
+1. hydrates required V4 endpoint metadata;
+2. reconciles the graph against current objects;
+3. resolves each endpoint again;
+4. validates current world-space connection geometry;
+5. builds a new runtime-only physics plan;
+6. refuses SIMULATE if any V4 connection lacks an explicit supported physics rule;
+7. creates the normal Rapier session only after the plan passes;
+8. installs all V4 Rapier joints atomically.
+
+If any V4 joint cannot be constructed, the partially created physics session is disposed. BrickLab never intentionally continues with a half-installed V4 constraint graph.
+
+## Rapier constraint mapping
+
+The physics adapter maps approved rules to explicit Rapier constraints:
 
 ```text
-no group + no group  -> may match by geometry
-same group           -> may match
-one group only       -> reject
-different groups     -> reject
+fixed        → fixed joint
+revolute     → revoluteWithAxes
+prismatic    → GenericJoint, only connector-frame LinX free
+cylindrical  → GenericJoint, connector-frame LinX + AngX free
+spherical    → spherical joint
 ```
 
-This prevents geometrically similar but semantically unrelated systems from snapping together, such as special click hinges or proprietary connector families.
+Rapier's joint frame X is aligned to the V4 connector axis. Independent local frames are assigned for both rigid bodies. This matters for cases such as an axle and a rotated Technic brick: the same physical world axis does not have to be represented by the same model-local axis on both bodies.
 
-## Clips
+For multi-stud attachment between the same two parts, geometrically distinct contacts are aggregated into one fixed physics constraint instead of creating multiple competing fixed joints. A single stud contact remains rotationally free around the stud axis.
 
-`SNAP_CLP` is modeled separately from a cylinder. A clip can match a male round cylindrical section when its radius is compatible.
+## Dynamic disengagement
 
-The matcher does not yet solve the final angular seating/contact arc. That belongs to the future placement solver, not the coarse compatibility pass.
+Open axial profiles such as axles/pins/bars are not permanently trapped by their initial joint. Sliding connections are monitored after physics synchronization.
 
-## Fingers and hinges
+When current geometry shows the profiles have completely left their valid engagement window for two consecutive validation frames, the V4 Rapier joint is removed. Contacts between the two rigid bodies are then allowed again.
 
-`SNAP_FGR` stores:
+The two-frame confirmation avoids boundary chatter while still allowing an axle or bar to leave an open hole naturally.
 
-- first finger gender;
-- complete alternating segment sequence;
-- radius;
-- optional group;
-- centering and frame.
+This release is session-local. BUILD's persistent project graph is not rewritten from simulation motion; returning from SIMULATE restores the editor's project state through the existing non-destructive simulation workflow.
 
-V4 tests the overlapping sequence rather than merely checking `hinge + hinge`. Two male finger intervals occupying the same axial region are rejected.
+## Resistance / friction model
 
-A successful fingers match produces a `revolute` **hint**, not an active Rapier revolute joint. Click detents, friction and rotation limits still require explicit mechanics/constraint metadata.
+Some sliding interfaces have a small normalized axial resistance model in BrickLab. These values are simulation parameters chosen for stable interactive behavior. They are **not claimed measurements of LEGO parts**.
 
-## Generic and spherical connections
+Geometry and free/locked DOF come from connector evidence. A future calibrated material/fit database can replace the normalized resistance values without changing the V4 graph schema.
 
-`SNAP_GEN` requires a matching group and opposite gender.
+## Intentionally blocked physics
 
-When Shadow metadata explicitly requests size matching, V4 also compares the bounding signature. `placement=free` produces a spherical kinematic hint.
+V4 remains fail-closed where Shadow geometry alone is insufficient.
 
-Legacy `SNAP_SPH` is preserved as a sphere family.
+Current examples:
 
-Angular limits are not present in enough Shadow data to safely infer ball-joint physics, so V4 does not activate them yet.
+- `generic-group` — may represent plugs, magnets, electrical connectors or special couplings; group/shape compatibility is not enough to choose a Rapier joint;
+- locking/click/detent hinge groups — the metadata does not provide a sufficiently proven detent torque/angle model.
 
-## `SNAP_INCL`
+These connections may exist in BUILD where their geometry is certified, but SIMULATE is blocked until an explicit physical rule is available. BrickLab prefers an explicit unsupported state over plausible-looking false physics.
 
-Includes are intentionally **non-recursive**, matching the LDCad specification.
+## Debugging
 
-V4 behaviour:
+`F9` toggles the Connector V4 endpoint/axis overlay.
 
-```text
-current shadow
-    └── SNAP_INCL A
-            ├── connectors in A        YES
-            └── SNAP_INCL B inside A   NO
-```
+The overlay is built as non-interactive child debug geometry. Before any physics session measures collider bounds, the physics guard dispatches a synchronous preflight event and the overlay removes all helpers. Debug visuals therefore cannot enlarge a part's physics `Box3` or alter mass/collider construction.
 
-Nested includes produce `nested-include-not-followed` diagnostics instead of being followed accidentally.
-
-The include's explicit `pos`, `ori`, `scale` and `grid` are applied to the included data. Explicit include scaling is separate from a connector's inheritance scaling policy.
-
-## `SNAP_CLEAR`
-
-Every inherited connector retains all relevant clear IDs. A later:
-
-```text
-SNAP_CLEAR [ID=axleHole]
-```
-
-removes only connectors carrying that ID.
-
-A clear without an ID removes all inherited/current connectors collected at that level so far.
-
-Order matters and V4 preserves source order.
-
-## Grid expansion
-
-LDCad grid syntax is preserved exactly:
-
-```text
-[C] Xcount [C] Zcount Xstep Zstep
-```
-
-Example:
-
-```text
-C 4 C 2 20 20
-```
-
-expands to an exactly centered 4×2 grid with 20 LDU pitch.
-
-Grid offsets are transformed by the connector/include orientation before being added to its position.
-
-## Scale inheritance
-
-V4 distinguishes two unrelated concepts:
-
-1. an explicit `SNAP_INCL [scale=x y z]` transform;
-2. `SNAP_CYL/CLP/FGR/GEN ... [scale=...]`, which controls whether metadata may survive scaling of an official LDraw reference.
-
-For inherited connector metadata V4 recognizes:
-
-```text
-none
-YOnly
-ROnly
-YandR
-```
-
-V4 rejects shear. Cylinder/clip/finger radial X/Z scale must remain symmetric because the current schema intentionally has no elliptical connector primitive.
-
-For `YandR`, V4 currently follows the conservative literal interpretation of the LDCad documentation: the reference must satisfy the YOnly rule or the ROnly rule. A transformation requiring independent simultaneous axial and radial scaling is not accepted until confirmed by an upstream test case.
-
-## Mirror inheritance
-
-Mirrored inherited information is accepted only where the Shadow connector policy permits correction (`mirror=cor`). Otherwise it is dropped with a diagnostic.
-
-The resolved connector frame is normalized back to a right-handed orthonormal frame. V4 never leaves a sheared or non-orthogonal orientation in a connector record.
-
-## Failure policy
-
-The most important V4 invariant is:
-
-```text
-unknown > guessed
-```
-
-Meaning: an explicit unknown/error state is preferable to a plausible-looking but unsupported connection.
-
-Examples:
-
-- HTTP 404 from the pinned Shadow source: metadata is absent;
-- timeout / 429 / 5xx / network error: hydration error, NOT metadata absence;
-- malformed `secs`: warning + no connector;
-- unsupported family/meta: warning + no invented equivalent;
-- invalid inheritance scale: warning + connector not inherited;
-- recursion cycle: warning + branch terminated;
-- traversal budget exceeded: warning + branch terminated;
-- unknown physics DOF: `physicsReady: false`.
-
-## Network behaviour
-
-The runtime first loads the Git tree manifest for the pinned Shadow commit. This gives an exact set of `.dat` files that exist in the Shadow Library and avoids probing every LDraw primitive with a raw HTTP request.
-
-If GitHub's API endpoint is rate-limited while raw GitHub remains reachable, V4 falls back to exact raw-file lookups. A raw 404 still means absent metadata; other failures remain errors.
-
-## Current rollout: observe mode
-
-Production loads V4 in:
-
-```text
-mode = observe
-```
-
-V4 may attach:
-
-```js
-definition.connectivityV4
-```
-
-but it does **not** mutate:
-
-```js
-definition.connectors
-project connections
-V3 endpoint occupancy
-V3 snap candidates
-Rapier joints
-```
-
-This lets us inspect V4 results on real parts without changing established BUILD/SIMULATE behaviour.
-
-Browser diagnostics are available through:
+Useful browser diagnostics:
 
 ```js
 BrickLabConnectorV4.stats()
 BrickLabConnectorV4.get('ldraw-3001')
 BrickLabConnectorV4.resolve('3894.dat')
-BrickLabConnectorV4.match(connectorA, connectorB)
+BrickLabConnectorV4.projectConnections()
+BrickLabConnectorV4PhysicsGuard.lastPlan()
+BrickLabConnectorV4PhysicsGuard.lastFailure()
+BrickLabConnectorV4Debug.toggle()
 ```
 
-## Required work before V4 can become authoritative
+## Failure policy
 
-The next stages are deliberately separated:
+The central invariant remains:
 
 ```text
-V4.1  real-part audit / V3-vs-V4 comparison
-V4.2  axial placement solver + caps/contact depth
-V4.3  interval occupancy for axle/bar/pin profiles
-V4.4  explicit constraint classifier and DOF model
-V4.5  editor snapping pilot for selected families
-V4.6  Rapier constraint pilot
-V4.7  migration of project connection schema
-V4.8  V3 compatibility bridge / removal plan
+unknown > guessed
 ```
 
-Before any family becomes authoritative, it needs fixtures covering at least:
+Examples:
 
-- normal match;
-- reversed source/target order;
-- rotation;
-- mirrored part/reference where allowed;
-- rejected mirror where prohibited;
-- legal inherited scale;
-- illegal inherited scale;
-- multiple connectors close together;
-- occupied intervals;
-- save/reload;
-- BUILD -> SIMULATE transition;
-- disconnect/reconnect;
-- malformed/missing upstream data.
+- raw Shadow 404 → metadata absent;
+- timeout / 429 / 5xx / network error → hydration error, not absence;
+- malformed metadata → warning/quarantine rather than guessed connector;
+- invalid inherited scale/mirror → rejected inheritance;
+- recursion cycle/budget overflow → branch terminated with diagnostic;
+- unsupported physics family → SIMULATE blocked for that connection;
+- failed Rapier adapter construction → whole physics session aborted.
 
-## Axial occupancy requirement
+## Cache/version consistency
 
-V3's endpoint occupancy is intentionally not reused as the final V4 model for long profiles.
+BrickLab is a no-build GitHub Pages runtime, so module URL identity matters. `scripts/version-runtime.mjs` now versions root JavaScript, audio modules and every `connectors-v4/*.js` module with one canonical runtime tag.
 
-An axle can pass through several holes/gears/bushes at different axial positions. Therefore V4 will represent occupancy as intervals on an axial connector channel rather than a single boolean:
+A few early V4 source files still contain historical query strings in relative imports. The version generator discovers those exact URLs and maps them to the current canonical module URL. This prevents two schema/matcher generations from being instantiated in the same page.
 
-```text
-axle profile
-0 ------------------------------------------------ 12L
-     [beam]     [gear]       [beam]     [wheel]
-```
-
-Two reservations conflict only when their occupied axial interiors overlap illegally. Touching boundaries may be legal. Stops/collars/end caps will constrain the legal insertion interval separately.
-
-## Physics requirement
-
-No matcher result is allowed to create a physics joint until a constraint classifier explicitly marks it `physicsReady: true`.
-
-The classifier will operate in connector-local coordinates and describe six relative degrees of freedom explicitly rather than relying only on names such as `hinge` or `bearing`.
-
-Target model:
-
-```text
-translation radial X  locked/free/limited
-translation axial Y   locked/free/limited
-translation radial Z  locked/free/limited
-rotation tilt X       locked/free/limited
-rotation axial Y      locked/free/limited
-rotation tilt Z       locked/free/limited
-```
-
-A semantic joint label may then be derived for Rapier, not the other way around.
-
-## Mechanics remains separate
-
-The following are not ordinary structural connector matching:
-
-- gear/gear mesh;
-- worm/gear mesh;
-- rack/pinion mesh;
-- differential relations;
-- universal joint phase/ratio;
-- driving rings;
-- linear actuators;
-- motors;
-- wheel/ground contact.
-
-They may use V4 connector frames as anchors, but their transmission equations belong to the mechanics layer.
+`tests/import-map-integrity.test.mjs` enforces this invariant.
 
 ## Tests
 
-Current pure V4 tests run without a browser or Rapier:
+Run the complete Connector V4 acceptance suite with:
 
 ```bash
-node --test tests/connectors-v4.test.mjs
+npm run test:connectors-v4
 ```
 
-The fixture suite covers parsing, centered grids, malformed metadata, cylinder shape compatibility, generic group/size matching, finger sequences, subpart inheritance, `SNAP_CLEAR`, `SNAP_INCL`, explicit include scaling, `YOnly` inheritance, coordinate conversion, network failure semantics and recursion-cycle termination.
+The suite covers parser/resolver behavior, upstream fixtures, matching, placement, identity, occupancy, graph persistence/runtime behavior, production bridges, live physics recertification, Rapier DOF masks, axle/hole zero-impulse stability, dynamic disengagement, multi-stud aggregation, shape-based round interfaces, fail-closed locking hinges/generic groups and import-map generation consistency.
 
-These tests are additive. Existing Connector V3/physics tests remain authoritative for current production behaviour while V4 stays in observe mode.
+Existing Physics/Parts tests remain relevant because V4 is intentionally integrated with, rather than a replacement for, the rest of BrickLab's drivetrain and simulation architecture.
