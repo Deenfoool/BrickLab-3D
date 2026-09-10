@@ -14,13 +14,13 @@ Core loop: **build → simulate → test → inspect telemetry → modify → te
 
 - Three.js scene with improved lighting, shadows and procedural part geometry.
 - **80 prototype parts** covering bricks/plates, studded Technic bricks, full and thin liftarms, bent beams, axles, pins/connectors, spur gears, multiple wheel sizes, Lab Motor, F/N/R Gearbox, Open Differential, Bearing Block, Suspension Arm and sensors.
-- **LDraw Parts Library integration:** a remote on-demand parts browser can search LDraw Design IDs, load real `.dat` geometry lazily, register selected pieces in the normal BrickLab catalog and preserve them through local saves and `.bricklab` import/export.
-- LDraw primitive analysis currently recognises common stud/tube, Technic pin-hole and axle-hole connection features and converts them to BrickLab connectors.
+- **LDraw Parts Library integration:** a remote on-demand parts browser searches LDraw Design IDs, loads real `.dat` geometry lazily, registers selected pieces in the normal BrickLab catalog and preserves them through local saves and `.bricklab` import/export.
+- **Connector System V4 for LDraw parts:** pinned LDCad Shadow metadata is resolved into shape-aware endpoints, axial occupancy, certified snapping and fail-closed Rapier constraints.
+- Connector V4 supports current production families such as stud/anti-stud, Technic axle/keyed or round holes, pin/hole, bar/hole, bar/clip, round rotational/sliding interfaces, ball/socket and ordinary finger hinges. Ambiguous generic groups and locking/click hinges remain physics-blocked until an explicit physical rule exists.
+- Connector V3 remains as a compatibility layer for native/procedural parts and established mechanics code; gear mesh remains a separate drivetrain contact solver.
 - New Parts asset browser: default grid view, category chips with counts, Favorites, Recent parts, full-text/tag/ID search, `Ctrl/Cmd + K` search focus and persistent list/grid preference.
 - Catalog-wide realistic molded-part visual pass: refined ABS/metal/rubber materials, Technic hole liners, axle detail bands, gear-face detail, power-unit fasteners, wheel sidewall/tread detail and studio PBR lighting.
 - Decorative visual meshes are excluded from Physics v2 collider bounds, so visual detail does not change simulation geometry.
-- Connector types: `stud`, `tube`, `pin`, `pin-hole`, `axle`, `axle-hole`.
-- Connector System v3: strict snapping, keyed axles, multi-contact stud/tube links, graph validation, legacy migration and physics-side mechanical recovery.
 - Undo/redo, autosave, `.bricklab` v2 import/export, multi-select and logical grouping.
 - Floating Parts / Properties windows with drag, resize, List/Grid, collapsible inspector sections, Focus Scene and mobile drawers.
 - RU / EN interface switch.
@@ -39,9 +39,40 @@ The LDraw browser is available from the Parts panel. LDraw-backed pieces use IDs
 visual → snap → mechanical
 ```
 
-`visual` means real LDraw geometry can be built, coloured and saved. `snap` means standard LDraw primitives were recognised as BrickLab connectors. `mechanical` additionally requires explicit BrickLab drivetrain metadata such as gear teeth, shaft behaviour, wheel radius, steering or motor properties.
+`visual` means real LDraw geometry can be built, coloured and saved. `snap` means the part has usable connection metadata. For production LDraw snapping, Connector V4 prefers pinned LDCad Shadow metadata and keeps the older primitive analyser as a conservative source/fallback for recognised basic features. `mechanical` additionally requires explicit or safely inferred BrickLab drivetrain metadata such as gear teeth, shaft behaviour, wheel radius, steering or motor properties.
 
-See [`docs/LDRAW.md`](docs/LDRAW.md) for the runtime architecture and current connector-inference rules.
+See [`docs/LDRAW.md`](docs/LDRAW.md) and [`docs/CONNECTOR_SYSTEM_V4.md`](docs/CONNECTOR_SYSTEM_V4.md).
+
+## Connector System V4
+
+V4 treats a connector as a **profile in a local coordinate frame**, not only a point with a type label. It separates geometry, placement, physical degrees of freedom and drivetrain mechanics.
+
+Current production flow:
+
+```text
+pinned LDCad Shadow data
+        ↓
+strict parser / resolver
+        ↓
+profile matcher + placement solver
+        ↓
+BUILD connection graph + axial occupancy
+        ↓
+SIMULATE live recertification
+        ↓
+Rapier fixed / revolute / prismatic / cylindrical / spherical constraints
+```
+
+Important safety properties:
+
+- a saved `physicsReady` flag is never trusted as authority; SIMULATE rebuilds a physics plan from live endpoints and transforms;
+- V4-owned LDraw structural pairs fail closed instead of silently falling back to a coarse V3 connection;
+- multiple distinct stud contacts between the same two parts become one rigid physics constraint instead of competing Rapier joints;
+- open axle/pin/bar profiles can dynamically disengage after leaving their valid axial engagement window;
+- locking/click/detent hinges and generic grouped connectors do not receive guessed physics;
+- V4 debug geometry is removed before collider measurement so diagnostics cannot change physics bounds.
+
+`F9` toggles the Connector V4 endpoint/axis debug overlay.
 
 ## Physics v2
 
@@ -67,7 +98,7 @@ Physics v2 includes:
 - CCD on Balanced/Accurate;
 - self-collision OFF / MECHANICAL / FULL;
 - corrected transformed colliders for rotated wheels/gears;
-- physical hinge/bearing joints;
+- physical hinge/bearing joints plus certified Connector V4 Rapier constraints;
 - finite motor torque and reaction torque;
 - inertia-aware gear/gearbox/differential torque transfer that cannot overshoot light shafts by one microstep;
 - wheel contact, normal load, slip ratio and slip angle without double-counting wheel rotation;
@@ -93,14 +124,7 @@ voltage:       9 V
 
 Telemetry includes actual RPM, load, torque, current, mechanical/electrical power, efficiency and stall state.
 
-`drivetrain.js` derives semantic shafts and relationships from the construction. It supports:
-
-- automatic spur gear mesh detection;
-- multi-stage RPM/torque propagation;
-- F/N/R gearbox;
-- open differential with independent left/right RPM;
-- drivetrain conflict detection;
-- requested/transmitted torque and loss accounting.
+`drivetrain.js` derives semantic shafts and relationships from the construction. It supports automatic spur gear mesh detection, multi-stage RPM/torque propagation, F/N/R gearbox, open differential with independent left/right RPM, drivetrain conflict detection and requested/transmitted torque/loss accounting.
 
 Gear pitch stays aligned to the editor grid:
 
@@ -124,7 +148,7 @@ Motor drive is disabled until RUN. Scoring uses fixed physics time rather than r
 
 ### PULL
 
-Increasing reverse load measured in Newtons. Best score: **highest sustained force**.
+Increasing reverse load. Best score: **highest sustained force**.
 
 ### OBST
 
@@ -136,69 +160,49 @@ A dynamometer brake loads the drivetrain and records RPM, N·m, W, current and e
 
 ## Telemetry and CSV
 
-Live telemetry reports:
+Live telemetry reports build mass/COM, body speed/acceleration, motor RPM/load/torque/current/power/efficiency, target/actual shaft RPM, wheel contact/load/slip/forces, suspension state, drivetrain energy flow and Dyno curves.
 
-- build mass and COM;
-- body speed/acceleration;
-- motor RPM/load/torque/current/power/efficiency;
-- target/actual shaft RPM and torque capacity;
-- gearbox/differential state;
-- wheel ground speed, contact, normal load, slip ratio and slip angle;
-- longitudinal/lateral tyre force;
-- suspension state;
-- input/output/loss energy view;
-- Dyno curves.
-
-Placeable `RPM Sensor` and `Torque Sensor` remain available.
-
-CSV exports Physics v2 SI traces: fixed physics time, TEST phase/status, quality/surface, mass, speed, acceleration, RPM, torque, power, current, efficiency, Pull force, Dyno power, sensor channels and per-wheel contact/load/slip/forces.
+Placeable `RPM Sensor` and `Torque Sensor` remain available. CSV exports Physics v2 SI traces with fixed simulation time and scenario/sensor channels.
 
 ## Physics Debug
 
-The default `F8` binding shows:
+The default `F8` binding shows approximate collider bounds, COM, tyre contacts/normals/forces, chassis velocity and suspension axes.
 
-- approximate collider bounds;
-- COM marker;
-- tyre contact points;
-- contact normals;
-- tyre force arrows;
-- chassis velocity vector;
-- suspension axes.
-
-All non-system editor bindings can be changed from **Esc → Controls**. `Esc` itself remains reserved for the project menu.
+Connector V4 has a separate `F9` endpoint/axis overlay for inspecting resolved LDraw connectivity in BUILD mode.
 
 ## Production runtime
 
-BrickLab is a no-build static site:
+BrickLab is a no-build static site. Production JavaScript now uses one canonical cache generation so old Connector V4 module URLs cannot mix schema/matcher/runtime versions in the same page.
 
 ```text
-index.html
+index.html + canonical import map
   ↓
 bootstrap.js
   ↓
 runtime-extensions.js
-  ├─ basic + expanded Technic part packs
-  ├─ physical part DB
-  ├─ realistic catalog-wide visuals
-  ├─ Physics v2 + explicit stud↔metre boundary
-  ├─ Connector System v3 + mechanical recovery
-  ├─ corrected colliders
-  ├─ inertia-aware drivetrain stability
-  ├─ impulse-limited surface / tyre solver
-  ├─ suspension v2
-  ├─ SI telemetry / Dyno
-  └─ physics debug + TEST visuals
+  ├─ native/basic/Technic part packs
+  ├─ Physics v2
+  ├─ Connector V3 compatibility/mechanical recovery
+  ├─ drivetrain / tyres / suspension / TEST systems
+  └─ audio + diagnostics
   ↓
 ldraw/bootstrap-v1.js
-  ├─ restores dynamic ldraw-* definitions
-  └─ prepares .bricklab imports containing LDraw parts
+  └─ restores dynamic ldraw-* definitions before project load
   ↓
-app.js + workspace UI + TEST controller + i18n
+connectors-v4/runtime-v4.js
+  ├─ pinned Shadow metadata
+  ├─ shape/profile matching
+  ├─ placement + occupancy + persistent V4 graph
+  └─ production LDraw structural snap ownership
   ↓
-ldraw/catalog-v1.js
-  ├─ remote LDraw index
-  ├─ lazy DAT metadata / geometry
-  └─ primitive → BrickLab connector inference
+connectors-v4/physics-guard-v4.js
+  └─ live V4 physics plan + fail-closed Rapier adapter
+  ↓
+app.js
+  ↓
+connectors-v4/debug-overlay-v4.js
+  ↓
+ldraw/catalog-v3.js + catalog thumbnails + workspace UI
 ```
 
 Expected GitHub Pages URL:
@@ -208,8 +212,6 @@ Expected GitHub Pages URL:
 ## Controls
 
 Press `Esc` inside a project and open **Controls** to see or change the active bindings. BrickLab detects conflicts, can replace or clear individual bindings, and can restore the defaults.
-
-Default bindings include:
 
 | Action | Shortcut |
 | --- | --- |
@@ -231,11 +233,23 @@ Default bindings include:
 | BUILD ↔ SIMULATE | `Tab` |
 | Catalog search | `Ctrl/Cmd + K` |
 | Physics Debug | `F8` |
+| Connector V4 endpoints / axes | `F9` |
 | Save / export / import | `Ctrl/Cmd + S` / `Ctrl/Cmd + Shift + S` / `Ctrl/Cmd + O` |
+
+## Automated tests
+
+Connector V4 acceptance:
+
+```bash
+npm run test:connectors-v4
+```
+
+The suite includes parser/resolver/upstream fixtures, placement and graph behavior, production bridge checks, Rapier axle/hole stability, dynamic disengagement, multi-stud aggregation, family policy checks and production import-map consistency.
 
 ## Documentation
 
 - [`docs/LDRAW.md`](docs/LDRAW.md)
+- [`docs/CONNECTOR_SYSTEM_V4.md`](docs/CONNECTOR_SYSTEM_V4.md)
 - [`docs/PHYSICS_V2.md`](docs/PHYSICS_V2.md)
 - [`docs/PHYSICS_STABILITY.md`](docs/PHYSICS_STABILITY.md)
 - [`docs/CONNECTORS.md`](docs/CONNECTORS.md)
@@ -250,7 +264,7 @@ Default bindings include:
 
 ## Current modelling limits
 
-Physics v2 is designed for interactive browser simulation, not engineering FEA. Tyre contact is ray-based, drivetrain coupling is semantic rather than tooth-contact physics, flexible deformation is not simulated, and current part masses are prototype estimates. LDraw supplies visual geometry and some connection primitives, but advanced BrickLab mechanics still require explicit semantic metadata. The architecture keeps these values replaceable as BrickLab gains calibrated data.
+Physics v2 is designed for interactive browser simulation, not engineering FEA. Tyre contact is ray-based, drivetrain coupling is semantic rather than tooth-contact physics, flexible deformation is not simulated, and current part masses/resistance values are prototype or normalized simulation parameters unless explicitly documented otherwise. LDraw supplies geometry while advanced drivetrain behavior still requires BrickLab mechanical semantics.
 
 ## Trademark / LDraw note
 
