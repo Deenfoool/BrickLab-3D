@@ -1,4 +1,4 @@
-import { registerLDrawPart } from './runtime-v3.js?v=ldraw-20260910-v3'
+import { registerLDrawPart } from './runtime-v3.js?v=ldraw-catalog-20260910-v3'
 
 const PROJECT_KEYS = ['bricklab.project.v2', 'bricklab.project.v1']
 const LDRAW_PREFIX = 'ldraw-'
