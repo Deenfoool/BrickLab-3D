@@ -1,14 +1,20 @@
 import { PARTS, findPart } from '../parts.js'
-import { CONNECTOR_SCHEMA_VERSION_V4, CONNECTOR_SYSTEM_VERSION_V4, SHADOW_SOURCE_V4 } from './schema-v4.js'
-import { matchConnectorV4 } from './matcher-v4.js'
-import { connectorToBrickLabV4, createShadowResolverV4 } from './shadow-resolver-v4.js'
+import { CONNECTOR_SCHEMA_VERSION_V4, CONNECTOR_SYSTEM_VERSION_V4, SHADOW_SOURCE_V4 } from './schema-v4.js?v=connector-v4-20260910-v1'
+import { matchConnectorV4 } from './matcher-v4.js?v=connector-v4-20260910-v1'
+import { connectorToBrickLabV4, createShadowResolverV4 } from './shadow-resolver-v4.js?v=connector-v4-20260910-v1'
 
 const LDRAW_RAW_ROOT = 'https://raw.githubusercontent.com/pybricks/ldraw/master/'
 const SHADOW_RAW_ROOT = `https://raw.githubusercontent.com/${SHADOW_SOURCE_V4.repository}/${SHADOW_SOURCE_V4.commit}/`
+const SHADOW_TREE_URL = `https://api.github.com/repos/${SHADOW_SOURCE_V4.repository}/git/trees/${SHADOW_SOURCE_V4.commit}?recursive=1`
 const hydration = new Map()
 const status = new Map()
 const lastRoots = new Map()
 const wrappedDefinitions = new WeakSet()
+let shadowManifestPromise = null
+let manifestFallbackWarned = false
+
+const normalizedPath = value => String(value || '').replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase()
+const encodedPath = value => String(value || '').split('/').map(encodeURIComponent).join('/')
 
 async function fetchTextOrNull(url) {
   const response = await fetch(url, { mode:'cors', cache:'force-cache' })
@@ -17,9 +23,51 @@ async function fetchTextOrNull(url) {
   return response.text()
 }
 
+async function shadowManifest() {
+  if (shadowManifestPromise) return shadowManifestPromise
+  shadowManifestPromise = (async () => {
+    const response = await fetch(SHADOW_TREE_URL, {
+      mode:'cors', cache:'force-cache', headers:{ Accept:'application/vnd.github+json' },
+    })
+    if (!response.ok) throw new Error(`Shadow manifest HTTP ${response.status}`)
+    const data = await response.json()
+    if (!Array.isArray(data.tree) || data.truncated) throw new Error('Shadow manifest is missing or truncated')
+    const map = new Map()
+    for (const item of data.tree) {
+      if (item.type !== 'blob' || !/\.dat$/i.test(item.path || '')) continue
+      map.set(normalizedPath(item.path), item.path)
+    }
+    return map
+  })()
+  try { return await shadowManifestPromise }
+  catch (error) {
+    shadowManifestPromise = null
+    throw error
+  }
+}
+
+async function fetchShadowText(path) {
+  const normalized = normalizedPath(path)
+  try {
+    const manifest = await shadowManifest()
+    const actualPath = manifest.get(normalized)
+    if (!actualPath) return null
+    return fetchTextOrNull(`${SHADOW_RAW_ROOT}${encodedPath(actualPath)}`)
+  } catch (error) {
+    // GitHub API may be rate-limited independently from raw.githubusercontent.com.
+    // Fall back to an exact raw lookup; a raw 404 is still treated as "not present",
+    // while every other HTTP/network error remains a hard hydration error.
+    if (!manifestFallbackWarned) {
+      manifestFallbackWarned = true
+      console.warn('[BrickLab Connector V4] Shadow manifest unavailable; using direct shadow lookup.', error)
+    }
+    return fetchTextOrNull(`${SHADOW_RAW_ROOT}${encodedPath(normalized)}`)
+  }
+}
+
 const resolver = createShadowResolverV4({
-  fetchOfficialText: path => fetchTextOrNull(`${LDRAW_RAW_ROOT}${path}`),
-  fetchShadowText: path => fetchTextOrNull(`${SHADOW_RAW_ROOT}${path}`),
+  fetchOfficialText: path => fetchTextOrNull(`${LDRAW_RAW_ROOT}${encodedPath(path)}`),
+  fetchShadowText,
 })
 
 function isLDrawDefinition(def) {
@@ -71,11 +119,7 @@ export async function hydrateConnectorV4(defOrId, rootOverride = null) {
     def.connectivityV4 = {
       schemaVersion: CONNECTOR_SCHEMA_VERSION_V4,
       systemVersion: CONNECTOR_SYSTEM_VERSION_V4,
-      status: 'loading',
-      source: SHADOW_SOURCE_V4,
-      mode: 'observe',
-      connectors: [],
-      warnings: [],
+      status: 'loading', source: SHADOW_SOURCE_V4, mode: 'observe', connectors: [], warnings: [],
     }
     publish(def, { status:'loading' })
 
@@ -87,13 +131,8 @@ export async function hydrateConnectorV4(defOrId, rootOverride = null) {
       def.connectivityV4 = {
         schemaVersion: CONNECTOR_SCHEMA_VERSION_V4,
         systemVersion: CONNECTOR_SYSTEM_VERSION_V4,
-        status: 'ready',
-        source: SHADOW_SOURCE_V4,
-        mode: 'observe',
-        connectors,
-        warnings: resolved.warnings,
-        stats: resolved.stats,
-        visualOffsetStud: [...offset],
+        status: 'ready', source: SHADOW_SOURCE_V4, mode: 'observe', connectors,
+        warnings: resolved.warnings, stats: resolved.stats, visualOffsetStud: [...offset],
       }
       status.set(def.id, 'ready')
       publish(def, { status:'ready', connectors:connectors.length, warnings:resolved.warnings.length })
@@ -103,10 +142,7 @@ export async function hydrateConnectorV4(defOrId, rootOverride = null) {
       def.connectivityV4 = {
         schemaVersion: CONNECTOR_SCHEMA_VERSION_V4,
         systemVersion: CONNECTOR_SYSTEM_VERSION_V4,
-        status: 'error',
-        source: SHADOW_SOURCE_V4,
-        mode: 'observe',
-        connectors: [],
+        status: 'error', source: SHADOW_SOURCE_V4, mode: 'observe', connectors: [],
         warnings: [{ code:'hydrate-error', detail:message }],
       }
       status.set(def.id, 'error')
@@ -143,15 +179,12 @@ export const BrickLabConnectorV4 = Object.freeze({
   mode: 'observe',
   async resolve(file, visualOffsetStud = [0,0,0]) {
     const resolved = await resolver.resolve(file)
-    return {
-      ...resolved,
-      connectors: resolved.connectors.map(connector => connectorToBrickLabV4(connector, visualOffsetStud)),
-    }
+    return { ...resolved, connectors: resolved.connectors.map(connector => connectorToBrickLabV4(connector, visualOffsetStud)) }
   },
   hydrate: hydrateConnectorV4,
   get(partId) { return findPart(partId)?.connectivityV4 ?? null },
   match: matchConnectorV4,
-  clearCache() { resolver.clearCache() },
+  clearCache() { resolver.clearCache(); shadowManifestPromise = null },
   stats() {
     const ready = PARTS.filter(def => def.connectivityV4?.status === 'ready')
     return {
