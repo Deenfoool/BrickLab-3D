@@ -27,14 +27,19 @@ test('hero removes the composition problems seen in v3 screenshot', () => {
   assert.doesNotMatch(menu, /technic-frame-5x7/)
   assert.doesNotMatch(menu, /gear-36/)
   assert.doesNotMatch(menu, /axle-7/)
-  assert.match(menu, /Exact pitch-distance focal pair/)
+  assert.match(menu, /True pitch-distance focal pair/)
   assert.match(menu, /\[-1\.375, \.20, \.38\]/)
   assert.match(menu, /\[1\.375, \.20, \.35\]/)
+  assert.match(menu, /These two gears stay at production scale 1\.0/)
+  assert.match(menu, /add\('gear-20',[\s\S]*?\], 1, \{ axis: 'y'/)
+  assert.match(menu, /add\('gear-24',[\s\S]*?\], 1, \{ axis: 'y'/)
   assert.match(menu, /Dark hardware prevents the white-stick look/)
 })
 
-test('hero camera uses geometry-aware fit rather than a magic close-up distance', () => {
+test('hero camera uses geometry-aware fit and ignores hidden visual hierarchy', () => {
+  assert.match(menu, /function hierarchyVisible/)
   assert.match(menu, /function visualBounds/)
+  assert.match(menu, /hierarchyVisible\(object, root\)/)
   assert.match(menu, /function fitDistance/)
   assert.match(menu, /horizontalFov/)
   assert.match(menu, /byHeight/)
