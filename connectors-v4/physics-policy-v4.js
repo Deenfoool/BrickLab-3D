@@ -1,7 +1,7 @@
 import { approveConstraintV4, proposeConstraintV4 } from './constraints-v4.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.2.0'
+export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.2.1'
 
 const MIN_DISTINCT_STUD_DISTANCE = 0.45
 
@@ -109,24 +109,16 @@ function entryFor(connection, byId, getConnector) {
 
 function distinctStudBundle(entries) {
   if (entries.length < 2) return false
-  const points = entries.map(entry => entry.objectA.localToWorld(
-    // connector frame positions are in the part root's local stud units.
-    { ...entry.connectorA.frame.positionStud },
-  ))
-  // The helper above cannot safely use a plain object with Three.js. Keep this
-  // branch unused by production and use the frame positions below instead.
-  void points
   for (let i = 0; i < entries.length; i += 1) {
-    const a = entries[i].validity
     for (let j = i + 1; j < entries.length; j += 1) {
-      const b = entries[j].validity
-      // For aligned studs the target connector origins are coincident with source
-      // origins. Compare stable part-local connector coordinates; any pair on a
-      // normal stud grid is comfortably above this threshold.
+      // Connector coordinates are expressed in the same source part's local stud
+      // frame for all contacts in this pair. Any normal distinct LEGO stud-grid
+      // pair is comfortably farther apart than this conservative threshold.
       const pa = entries[i].connectorA.frame.positionStud
       const pb = entries[j].connectorA.frame.positionStud
+      if (!Array.isArray(pa) || !Array.isArray(pb) || pa.length !== 3 || pb.length !== 3) continue
       const d = Math.hypot(pa[0]-pb[0], pa[1]-pb[1], pa[2]-pb[2])
-      if (d >= MIN_DISTINCT_STUD_DISTANCE && a.valid && b.valid) return true
+      if (d >= MIN_DISTINCT_STUD_DISTANCE) return true
     }
   }
   return false
@@ -170,9 +162,6 @@ export function buildPhysicsPlanV4({ objects = [], connections = [], getConnecto
       rule,
       constraint:approvedConstraint(representative, rule),
     })
-    // If multiple coincident/duplicate-like stud contacts survived graph validation,
-    // only a geometrically distinct bundle may become rigid; remaining contacts are
-    // independently revolute so no connection silently disappears.
   }
 
   for (const entry of entries) {
