@@ -85,8 +85,20 @@ function parseGridAttempt(input, dimensions) {
   }
   if (![stepX, stepY, stepZ].every(Number.isFinite) || cursor !== input.length) throw new Error('grid token count does not match variant')
 
+  if (dimensions === 2) {
+    // Preserve the V4.0 shape so existing fixtures and cached metadata remain
+    // byte-for-byte comparable. expandGridV4 supplies the implicit Y defaults.
+    return {
+      xCount:x.count,
+      zCount:z.count,
+      centerX:x.centered,
+      centerZ:z.centered,
+      stepX,
+      stepZ,
+    }
+  }
   return {
-    dimensions,
+    dimensions:3,
     xCount:x.count,
     yCount:y.count,
     zCount:z.count,
@@ -108,21 +120,27 @@ export function parseGridV4(value) {
   catch (threeError) {
     try { return parseGridAttempt(input, 2) }
     catch (twoError) {
-      throw new Error(`grid must be [C] Xcount [C] Zcount Xstep Zstep or [C] Xcount [C] Ycount [C] Zcount Xstep Ystep Zstep`)
+      throw new Error('grid must be [C] Xcount [C] Zcount Xstep Zstep or [C] Xcount [C] Ycount [C] Zcount Xstep Ystep Zstep')
     }
   }
 }
 
 export function expandGridV4(grid) {
   if (!grid) return [[0, 0, 0]]
-  const x0 = grid.centerX ? -((grid.xCount - 1) * grid.stepX) / 2 : 0
-  const y0 = grid.centerY ? -((grid.yCount - 1) * grid.stepY) / 2 : 0
-  const z0 = grid.centerZ ? -((grid.zCount - 1) * grid.stepZ) / 2 : 0
+  const xCount = grid.xCount ?? 1
+  const yCount = grid.yCount ?? 1
+  const zCount = grid.zCount ?? 1
+  const stepX = grid.stepX ?? 0
+  const stepY = grid.stepY ?? 0
+  const stepZ = grid.stepZ ?? 0
+  const x0 = grid.centerX ? -((xCount - 1) * stepX) / 2 : 0
+  const y0 = grid.centerY ? -((yCount - 1) * stepY) / 2 : 0
+  const z0 = grid.centerZ ? -((zCount - 1) * stepZ) / 2 : 0
   const result = []
-  for (let ix = 0; ix < grid.xCount; ix += 1) {
-    for (let iy = 0; iy < grid.yCount; iy += 1) {
-      for (let iz = 0; iz < grid.zCount; iz += 1) {
-        result.push([x0 + ix * grid.stepX, y0 + iy * grid.stepY, z0 + iz * grid.stepZ])
+  for (let ix = 0; ix < xCount; ix += 1) {
+    for (let iy = 0; iy < yCount; iy += 1) {
+      for (let iz = 0; iz < zCount; iz += 1) {
+        result.push([x0 + ix * stepX, y0 + iy * stepY, z0 + iz * stepZ])
       }
     }
   }
