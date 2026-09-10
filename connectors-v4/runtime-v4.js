@@ -1,0 +1,168 @@
+import { PARTS, findPart } from '../parts.js'
+import { CONNECTOR_SCHEMA_VERSION_V4, CONNECTOR_SYSTEM_VERSION_V4, SHADOW_SOURCE_V4 } from './schema-v4.js'
+import { matchConnectorV4 } from './matcher-v4.js'
+import { connectorToBrickLabV4, createShadowResolverV4 } from './shadow-resolver-v4.js'
+
+const LDRAW_RAW_ROOT = 'https://raw.githubusercontent.com/pybricks/ldraw/master/'
+const SHADOW_RAW_ROOT = `https://raw.githubusercontent.com/${SHADOW_SOURCE_V4.repository}/${SHADOW_SOURCE_V4.commit}/`
+const hydration = new Map()
+const status = new Map()
+const lastRoots = new Map()
+const wrappedDefinitions = new WeakSet()
+
+async function fetchTextOrNull(url) {
+  const response = await fetch(url, { mode:'cors', cache:'force-cache' })
+  if (response.status === 404) return null
+  if (!response.ok) throw new Error(`HTTP ${response.status}: ${url}`)
+  return response.text()
+}
+
+const resolver = createShadowResolverV4({
+  fetchOfficialText: path => fetchTextOrNull(`${LDRAW_RAW_ROOT}${path}`),
+  fetchShadowText: path => fetchTextOrNull(`${SHADOW_RAW_ROOT}${path}`),
+})
+
+function isLDrawDefinition(def) {
+  return Boolean(def?.ldraw?.file && String(def.id || '').startsWith('ldraw-'))
+}
+
+function publish(def, detail = {}) {
+  window.dispatchEvent(new CustomEvent('bricklab:connectorv4', {
+    detail: {
+      partId: def.id,
+      file: def.ldraw?.file,
+      schemaVersion: CONNECTOR_SCHEMA_VERSION_V4,
+      systemVersion: CONNECTOR_SYSTEM_VERSION_V4,
+      ...detail,
+    },
+  }))
+}
+
+function visualOffsetFor(def, root = lastRoots.get(def?.id)) {
+  if (!root) return null
+  const visual = root.children?.find?.(child => child?.userData?.ldrawVisual)
+  if (!visual?.position) return null
+  return [visual.position.x, visual.position.y, visual.position.z]
+}
+
+function instrumentDefinition(def) {
+  if (!isLDrawDefinition(def) || wrappedDefinitions.has(def) || typeof def.create !== 'function') return
+  const originalCreate = def.create
+  def.create = function connectorV4ObservedCreate(...args) {
+    const root = originalCreate.apply(this, args)
+    if (root) {
+      lastRoots.set(def.id, root)
+      queueMicrotask(() => { if (def.ldraw?.ready) void hydrateConnectorV4(def, root) })
+    }
+    return root
+  }
+  wrappedDefinitions.add(def)
+}
+
+export async function hydrateConnectorV4(defOrId, rootOverride = null) {
+  const def = typeof defOrId === 'string' ? findPart(defOrId) : defOrId
+  if (!isLDrawDefinition(def)) return null
+  if (!def.ldraw?.ready) return null
+  if (def.connectivityV4?.status === 'ready') return def.connectivityV4
+  if (hydration.has(def.id)) return hydration.get(def.id)
+
+  const promise = (async () => {
+    status.set(def.id, 'loading')
+    def.connectivityV4 = {
+      schemaVersion: CONNECTOR_SCHEMA_VERSION_V4,
+      systemVersion: CONNECTOR_SYSTEM_VERSION_V4,
+      status: 'loading',
+      source: SHADOW_SOURCE_V4,
+      mode: 'observe',
+      connectors: [],
+      warnings: [],
+    }
+    publish(def, { status:'loading' })
+
+    try {
+      const resolved = await resolver.resolve(def.ldraw.file)
+      const offset = visualOffsetFor(def, rootOverride)
+      if (!offset) throw new Error('LDraw visual offset is not available yet; V4 hydration waits for an instantiated visual')
+      const connectors = resolved.connectors.map(connector => connectorToBrickLabV4(connector, offset))
+      def.connectivityV4 = {
+        schemaVersion: CONNECTOR_SCHEMA_VERSION_V4,
+        systemVersion: CONNECTOR_SYSTEM_VERSION_V4,
+        status: 'ready',
+        source: SHADOW_SOURCE_V4,
+        mode: 'observe',
+        connectors,
+        warnings: resolved.warnings,
+        stats: resolved.stats,
+        visualOffsetStud: [...offset],
+      }
+      status.set(def.id, 'ready')
+      publish(def, { status:'ready', connectors:connectors.length, warnings:resolved.warnings.length })
+      return def.connectivityV4
+    } catch (error) {
+      const message = String(error?.message || error)
+      def.connectivityV4 = {
+        schemaVersion: CONNECTOR_SCHEMA_VERSION_V4,
+        systemVersion: CONNECTOR_SYSTEM_VERSION_V4,
+        status: 'error',
+        source: SHADOW_SOURCE_V4,
+        mode: 'observe',
+        connectors: [],
+        warnings: [{ code:'hydrate-error', detail:message }],
+      }
+      status.set(def.id, 'error')
+      console.warn(`[BrickLab Connector V4] Could not resolve ${def.ldraw.file}`, error)
+      publish(def, { status:'error', error:message })
+      return def.connectivityV4
+    } finally {
+      hydration.delete(def.id)
+    }
+  })()
+  hydration.set(def.id, promise)
+  return promise
+}
+
+function scanReadyDefinitions() {
+  for (const def of PARTS) {
+    if (!isLDrawDefinition(def)) continue
+    instrumentDefinition(def)
+    if (def.ldraw?.ready && lastRoots.has(def.id) && def.connectivityV4?.status !== 'ready' && !hydration.has(def.id)) void hydrateConnectorV4(def)
+  }
+}
+
+window.addEventListener('bricklab:ldrawloaded', event => {
+  const def = findPart(event.detail?.id)
+  if (def) { instrumentDefinition(def); void hydrateConnectorV4(def) }
+})
+window.addEventListener('bricklab:partcatalogchange', scanReadyDefinitions)
+scanReadyDefinitions()
+
+export const BrickLabConnectorV4 = Object.freeze({
+  schemaVersion: CONNECTOR_SCHEMA_VERSION_V4,
+  systemVersion: CONNECTOR_SYSTEM_VERSION_V4,
+  source: SHADOW_SOURCE_V4,
+  mode: 'observe',
+  async resolve(file, visualOffsetStud = [0,0,0]) {
+    const resolved = await resolver.resolve(file)
+    return {
+      ...resolved,
+      connectors: resolved.connectors.map(connector => connectorToBrickLabV4(connector, visualOffsetStud)),
+    }
+  },
+  hydrate: hydrateConnectorV4,
+  get(partId) { return findPart(partId)?.connectivityV4 ?? null },
+  match: matchConnectorV4,
+  clearCache() { resolver.clearCache() },
+  stats() {
+    const ready = PARTS.filter(def => def.connectivityV4?.status === 'ready')
+    return {
+      mode:'observe',
+      readyParts: ready.length,
+      connectors: ready.reduce((sum, def) => sum + (def.connectivityV4.connectors?.length || 0), 0),
+      warnings: ready.reduce((sum, def) => sum + (def.connectivityV4.warnings?.length || 0), 0),
+      loadingParts: [...status.values()].filter(value => value === 'loading').length,
+      errorParts: [...status.values()].filter(value => value === 'error').length,
+    }
+  },
+})
+
+globalThis.BrickLabConnectorV4 = BrickLabConnectorV4
