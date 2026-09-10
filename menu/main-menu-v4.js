@@ -209,12 +209,20 @@ function tryPart(id, color) {
   }
 }
 
+function hierarchyVisible(object, root) {
+  for (let node = object; node; node = node.parent) {
+    if (node.visible === false) return false
+    if (node === root) break
+  }
+  return true
+}
+
 function visualBounds(root) {
   root.updateMatrixWorld(true)
   const result = new THREE.Box3()
   let populated = false
   root.traverse(object => {
-    if (!object.isMesh || !object.geometry || object.visible === false) return
+    if (!object.isMesh || !object.geometry || !hierarchyVisible(object, root)) return
     const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : []
     if (materials.length && materials.every(material => material?.visible === false || material?.opacity === 0 || material?.colorWrite === false)) return
     if (!object.geometry.boundingBox) object.geometry.computeBoundingBox()
@@ -251,18 +259,19 @@ function buildCuratedTransmission(root) {
 
   // Compact, presentation-first drivetrain. Fewer parts, clear silhouette, no giant
   // rear frame and no long bright axle. Every visible component is a production part.
-  add('beam-9', 0x252b2f, [0, 1.86, -1.08], [0, 0, 0], .92)
-  add('beam-9', 0x252b2f, [0, -1.86, -1.08], [0, 0, 0], .92)
-  add('beam-5', 0x252b2f, [-3.70, 0, -1.08], [0, 0, Math.PI / 2], .90)
-  add('beam-5', 0x252b2f, [3.70, 0, -1.08], [0, 0, Math.PI / 2], .90)
+  add('beam-9', 0x2a3035, [0, 1.86, -1.08], [0, 0, 0], .92)
+  add('beam-9', 0x2a3035, [0, -1.86, -1.08], [0, 0, 0], .92)
+  add('beam-5', 0x2a3035, [-3.70, 0, -1.08], [0, 0, Math.PI / 2], .90)
+  add('beam-5', 0x2a3035, [3.70, 0, -1.08], [0, 0, Math.PI / 2], .90)
 
-  add('motor', 0x3b4248, [-2.72, -.05, -1.55], [0, Math.PI / 2, 0], .64)
-  add('gearbox-fnr', 0x343b40, [-.72, -.05, -1.46], [0, 0, 0], .62)
-  add('open-differential', 0x3f464c, [2.25, -.02, -1.42], [0, 0, 0], .70)
+  add('motor', 0x444d54, [-2.72, -.05, -1.55], [0, Math.PI / 2, 0], .64)
+  add('gearbox-fnr', 0x353d43, [-.72, -.05, -1.46], [0, 0, 0], .62)
+  add('open-differential', 0x475158, [2.25, -.02, -1.42], [0, 0, 0], .70)
 
-  // Exact pitch-distance focal pair: 20T radius 1.25 + 24T radius 1.50 = 2.75 studs.
-  add('gear-20', 0xc7aa73, [-1.375, .20, .38], [Math.PI / 2, 0, Math.PI / 40], .92, { axis: 'y', speed: -.48 })
-  add('gear-24', 0x2b3136, [1.375, .20, .35], [Math.PI / 2, 0, -Math.PI / 48], .92, { axis: 'y', speed: .40 })
+  // True pitch-distance focal pair: 20T radius 1.25 + 24T radius 1.50 = 2.75 studs.
+  // These two gears stay at production scale 1.0 so their involute teeth actually mesh.
+  add('gear-20', 0xc7aa73, [-1.375, .20, .38], [Math.PI / 2, 0, Math.PI / 40], 1, { axis: 'y', speed: -.48 })
+  add('gear-24', 0x353c42, [1.375, .20, .35], [Math.PI / 2, 0, -Math.PI / 48], 1, { axis: 'y', speed: .40 })
 
   // Two short dark shafts read as proper supported gear shafts instead of floating gears.
   add('axle-3', 0x343a3f, [-1.375, .20, .12], [0, Math.PI / 2, 0], .76, { axis: 'x', speed: -.48 })
@@ -293,7 +302,7 @@ function disposeTree(root) {
   materials.forEach(material => material.dispose?.())
 }
 
-function fitDistance(box, camera, aspect, padding = 1.22) {
+function fitDistance(box, camera, aspect, padding = 1.28) {
   const size = box.getSize(new THREE.Vector3())
   const verticalFov = THREE.MathUtils.degToRad(camera.fov)
   const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * Math.max(.2, aspect))
@@ -355,14 +364,14 @@ function mountHero(shell, settings) {
   }
 
   // Presentation pose is deliberately modest: readable 3/4 view, not a low dramatic crop.
-  presentation.rotation.set(-.055, -.30, -.018)
+  presentation.rotation.set(-.04, -.22, -.012)
   model.updateMatrixWorld(true)
   const centered = visualBounds(model)
   model.position.sub(centered.getCenter(new THREE.Vector3()))
   model.updateMatrixWorld(true)
 
   const target = new THREE.Vector3(0, .02, 0)
-  const homeDirection = new THREE.Vector3(.82, .36, 2.9).normalize()
+  const homeDirection = new THREE.Vector3(.78, .52, 3.1).normalize()
   let homeDistance = 12
   let homePosition = homeDirection.clone().multiplyScalar(homeDistance).add(target)
 
@@ -380,7 +389,7 @@ function mountHero(shell, settings) {
   controls.autoRotate = settings.autoRotate && !reducedMotion()
   controls.autoRotateSpeed = .45
 
-  const fitCamera = (preserveOrbit = false) => {
+  const fitCamera = () => {
     const rect = shell.getBoundingClientRect()
     const width = Math.max(1, Math.floor(rect.width))
     const height = Math.max(1, Math.floor(rect.height))
@@ -389,18 +398,16 @@ function mountHero(shell, settings) {
     renderer.setSize(width, height, false)
     presentation.updateMatrixWorld(true)
     const box = visualBounds(presentation)
-    homeDistance = fitDistance(box, camera, camera.aspect, width < 700 ? 1.36 : 1.22)
+    homeDistance = fitDistance(box, camera, camera.aspect, width < 700 ? 1.38 : 1.28)
     homePosition = homeDirection.clone().multiplyScalar(homeDistance).add(target)
-    controls.minDistance = homeDistance * .68
+    controls.minDistance = homeDistance * .70
     controls.maxDistance = homeDistance * 1.75
-    if (!preserveOrbit) {
-      camera.position.copy(homePosition)
-      controls.target.copy(target)
-      controls.update()
-    }
+    camera.position.copy(homePosition)
+    controls.target.copy(target)
+    controls.update()
   }
 
-  fitCamera(false)
+  fitCamera()
 
   let resumeTimer = 0
   const resumeAuto = () => {
@@ -413,8 +420,8 @@ function mountHero(shell, settings) {
   const onPointerDown = () => renderer.domElement.classList.add('grab')
   const onPointerUp = () => renderer?.domElement.classList.remove('grab')
   const resetCamera = () => {
-    presentation.rotation.set(-.055, -.30, -.018)
-    fitCamera(false)
+    presentation.rotation.set(-.04, -.22, -.012)
+    fitCamera()
     pauseAuto()
   }
   renderer.domElement.addEventListener('pointerdown', onPointerDown)
@@ -440,7 +447,7 @@ function mountHero(shell, settings) {
   let resizeTimer = 0
   const observer = new ResizeObserver(() => {
     clearTimeout(resizeTimer)
-    resizeTimer = setTimeout(() => fitCamera(true), 30)
+    resizeTimer = setTimeout(fitCamera, 30)
   })
   observer.observe(shell)
   requestAnimationFrame(frame)
