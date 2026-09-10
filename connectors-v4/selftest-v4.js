@@ -4,8 +4,9 @@ import { matchConnectorV4 } from './matcher-v4.js'
 import { connectorToBrickLabV4 } from './shadow-resolver-v4.js'
 import { solvePlacementV4 } from './placement-solver-v4.js'
 import { activationForMatchV4, classifyConnectorV4, connectorFrameHealthV4 } from './activation-v4.js'
+import { hardenPhysicsPlanV4 } from './physics-plan-safety-v4.js'
 
-export const SELF_TEST_VERSION_V4 = 'connector-selftest-v4.1.0'
+export const SELF_TEST_VERSION_V4 = 'connector-selftest-v4.2.0'
 
 function connector(line, file) {
   const parsed = parseShadowTextV4(`0 self-test\n${line}`, { file })
@@ -40,7 +41,7 @@ export function runConnectorV4SelfTest() {
     invariant(match.compatible && match.keyed && match.rotationalSymmetry === 4, 'keyed axle match mismatch')
     const activation = activationForMatchV4(axle, hole, match)
     invariant(activation.active && activation.editor && activation.graph, 'pilot activation rejected')
-    invariant(activation.physics === false, 'physics must remain fail-closed')
+    invariant(activation.physics === false, 'saved BUILD activation must not self-certify physics')
   })
 
   run('round shaft cannot enter keyed axle hole by inference', () => {
@@ -73,6 +74,21 @@ export function runConnectorV4SelfTest() {
     const parsed = parseShadowTextV4('0 !LDCAD SNAP_GEN [gender=M] [bounding=sph 8] [match=size] [placement=free]', { file:'parts/ball.dat' })
     invariant(parsed.warnings.length === 0, 'group-less SNAP_GEN emitted warning')
     invariant(parsed.operations[0]?.connector?.family === 'generic', 'group-less SNAP_GEN missing')
+  })
+
+  run('physics safety keeps proven axial joints and blocks unbounded ball joints', () => {
+    const axial = hardenPhysicsPlanV4({
+      version:'selftest',pass:true,blockers:[],stats:{connections:1,joints:1,blockers:0},
+      joints:[{id:'self:axial',family:'technic-axle-round-hole',connectionIds:['self:axial'],rule:{kind:'cylindrical'},entry:{family:'technic-axle-round-hole'}}],
+    })
+    invariant(axial.pass && axial.joints.length === 1, 'proven axial physics was rejected')
+
+    const ball = hardenPhysicsPlanV4({
+      version:'selftest',pass:true,blockers:[],stats:{connections:1,joints:1,blockers:0},
+      joints:[{id:'self:ball',family:'ball-socket',connectionIds:['self:ball'],rule:{kind:'spherical'},entry:{family:'ball-socket'}}],
+    })
+    invariant(!ball.pass && ball.joints.length === 0, 'unbounded ball/socket physics escaped safety gate')
+    invariant(ball.blockers.some(item => item.reason === 'ball-socket-angular-envelope-not-implemented'), 'ball/socket block reason mismatch')
   })
 
   const failed = checks.filter(check => !check.pass)
