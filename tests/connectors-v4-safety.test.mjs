@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { hardenPhysicsPlanV4, physicsSafetyReasonV4 } from '../connectors-v4/physics-plan-safety-v4.js'
 import { registerPhysicsOverrideV4, resolvePhysicsOverrideV4 } from '../connectors-v4/physics-overrides-v4.js'
+import { physicsRulePreviewV4 } from '../connectors-v4/physics-policy-v4.js'
 
 function endpoint(id, group = '') {
   return { endpointId:id, group }
@@ -42,6 +43,24 @@ test('axial and rigid certified families pass the additional safety gate unchang
   assert.equal(hardened.pass,true)
   assert.equal(hardened.joints.length,4)
   assert.equal(hardened.blockers.length,0)
+})
+
+test('single stud keeps collider contacts while a multi-stud bundle becomes one fixed attachment',()=>{
+  const single=physicsRulePreviewV4('stud-anti-stud',{studBundleSize:1})
+  assert.equal(single.supported,true)
+  assert.equal(single.kind,'revolute')
+  assert.equal(single.contacts,'enabled')
+  assert.equal(single.bundle,'single-stud-twist')
+
+  const bundle=physicsRulePreviewV4('stud-anti-stud',{studBundleSize:2})
+  assert.equal(bundle.supported,true)
+  assert.equal(bundle.kind,'fixed')
+  assert.equal(bundle.contacts,'disabled')
+  assert.equal(bundle.bundle,'multi-stud-rigid')
+
+  const hardened=hardenPhysicsPlanV4(plan({...item('stud-anti-stud','revolute'),rule:single}))
+  assert.equal(hardened.pass,true)
+  assert.equal(hardened.joints[0].rule.contacts,'enabled')
 })
 
 test('ball/socket stays hard-blocked until a bounded spherical model exists',()=>{
