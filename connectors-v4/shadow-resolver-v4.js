@@ -94,7 +94,7 @@ function transformConnector(connector,transform,warnings,context,{enforceInherit
     warnings.push({code:'inheritance-scale-rejected',file:context,connector:connector.source?.raw||'',detail:`scale=${connector.inheritance?.scale||'none'} sx=${m.sx.toFixed(5)} sy=${m.sy.toFixed(5)} sz=${m.sz.toFixed(5)}`})
     return null
   }
-  if(enforceInheritance&&m.mirrored&&String(connector.inheritance?.mirror||'none').toLowerCase()!=='cor'){
+  if(enforceInheritance&&m.mirrored&&!['cor','corz'].includes(String(connector.inheritance?.mirror||'none').toLowerCase())){
     warnings.push({code:'inheritance-mirror-rejected',file:context,connector:connector.source?.raw||''})
     return null
   }
@@ -103,10 +103,10 @@ function transformConnector(connector,transform,warnings,context,{enforceInherit
   // Snap frames remain right-handed. For inherited mirrored references this is
   // LDCad's mirror=cor correction; for explicit SNAP_INCL transforms the author
   // has deliberately supplied the transform and we normalize only the frame.
-  if(m.mirrored)x=scale3v(x,-1)
+  if(m.mirrored && String(connector.inheritance?.mirror||'cor').toLowerCase() !== 'corz')x=scale3v(x,-1)
   x=norm3(add3(x,scale3v(y,-dot3(x,y))))
   z=norm3(cross3(x,y))
-  if(dot3(z,m.nz)<0){x=scale3v(x,-1);z=scale3v(z,-1)}
+  // cross(x,y) is the corrected Z; corZ intentionally reverses raw Z.
 
   const result=cloneConnectorV4(connector)
   result.frame.positionLdu=transformPoint(transform,connector.frame.positionLdu)
@@ -171,12 +171,12 @@ export function createShadowResolverV4({fetchOfficialText,fetchShadowText,maxDep
 
   const getOfficial=path=>{
     const key=lowerPath(path)
-    if(!officialCache.has(key))officialCache.set(key,Promise.resolve().then(()=>fetchOfficialText(key)))
+    if(!officialCache.has(key))officialCache.set(key,Promise.resolve().then(()=>fetchOfficialText(key)).catch(error=>{officialCache.delete(key);throw error}))
     return officialCache.get(key)
   }
   const getShadow=path=>{
     const key=lowerPath(path)
-    if(!shadowCache.has(key))shadowCache.set(key,Promise.resolve().then(()=>fetchShadowText(key)))
+    if(!shadowCache.has(key))shadowCache.set(key,Promise.resolve().then(()=>fetchShadowText(key)).catch(error=>{shadowCache.delete(key);throw error}))
     return shadowCache.get(key)
   }
   async function findExisting(candidates,getter){for(const path of candidates){const text=await getter(path);if(text!=null)return{path,text}}return null}

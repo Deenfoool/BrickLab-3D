@@ -95,10 +95,10 @@ test('V4 resolver composes subparts, SNAP_CLEAR, SNAP_INCL grids and YOnly scali
   const official = new Map([
     ['parts/root.dat', [
       '0 root',
-      '1 16 20 0 0 1 0 0 0 1 0 0 0 s/base.dat',
+      '1 16 20 0 0 1 0 0 0 1 0 0 0 1 s/base.dat',
       '1 16 0 0 0 1 0 0 0 2 0 0 0 1 axlehole.dat',
     ].join('\n')],
-    ['parts/s/base.dat', '0 base\n1 16 0 0 0 1 0 0 0 1 0 0 0 stud.dat'],
+    ['parts/s/base.dat', '0 base\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 stud.dat'],
     ['p/stud.dat', '0 stud'],
     ['p/axlehole.dat', '0 axle hole'],
   ])
@@ -140,7 +140,7 @@ test('V4 resolver composes subparts, SNAP_CLEAR, SNAP_INCL grids and YOnly scali
 
 test('V4 follows one SNAP_INCL level in primitive shadows but never recursively follows nested includes', async () => {
   const official = new Map([
-    ['parts/root.dat', '0 root\n1 16 0 0 0 1 0 0 0 1 0 0 0 stud15.dat'],
+    ['parts/root.dat', '0 root\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 stud15.dat'],
   ])
   const shadow = new Map([
     ['p/stud15.dat', '0 !LDCAD SNAP_INCL [ref=stud.dat]'],
@@ -198,8 +198,8 @@ test('V4 resolver reports transient source errors instead of treating them as mi
 
 test('V4 resolver terminates cyclic subpart graphs deterministically', async () => {
   const official = new Map([
-    ['parts/a.dat', '0 a\n1 16 0 0 0 1 0 0 0 1 0 0 0 s/b.dat'],
-    ['parts/s/b.dat', '0 b\n1 16 0 0 0 1 0 0 0 1 0 0 0 s/b.dat'],
+    ['parts/a.dat', '0 a\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 s/b.dat'],
+    ['parts/s/b.dat', '0 b\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 s/b.dat'],
   ])
   const resolver = createShadowResolverV4({
     fetchOfficialText: async path => official.get(path) ?? null,

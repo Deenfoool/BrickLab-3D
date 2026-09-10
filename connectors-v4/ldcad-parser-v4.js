@@ -10,8 +10,10 @@ const ZERO_3 = Object.freeze([0, 0, 0])
 const SNAP_PREFIX = /^\s*0\s+!LDCAD\s+(SNAP_[A-Z0-9_]+)\b(.*)$/i
 
 function number(value, fallback = null) {
+  if (value == null) return fallback
   const result = Number(value)
-  return Number.isFinite(result) ? result : fallback
+  if (!String(value).trim() || !Number.isFinite(result)) throw new Error('invalid number')
+  return result
 }
 
 function bool(value, fallback = false) {
@@ -19,6 +21,7 @@ function bool(value, fallback = false) {
   const normalized = String(value ?? '').trim().toLowerCase()
   if (normalized === 'true' || normalized === '1' || normalized === 'yes') return true
   if (normalized === 'false' || normalized === '0' || normalized === 'no') return false
+  if (value != null) throw new Error('invalid boolean')
   return fallback
 }
 
@@ -27,12 +30,16 @@ function tokens(value) {
 }
 
 function numbers(value) {
-  return tokens(value).map(Number).filter(Number.isFinite)
+  const result = tokens(value).map(Number)
+  if (!result.every(Number.isFinite)) throw new Error('non-finite numeric token')
+  return result
 }
 
 function vector(value, length, fallback) {
+  if (value == null) return [...fallback]
   const parsed = numbers(value)
-  return parsed.length === length ? parsed : [...fallback]
+  if (parsed.length !== length) throw new Error(`expected ${length} numeric components`)
+  return parsed
 }
 
 export function parseOptionBlocksV4(tail = '') {
@@ -130,6 +137,7 @@ export function expandGridV4(grid) {
   const xCount = grid.xCount ?? 1
   const yCount = grid.yCount ?? 1
   const zCount = grid.zCount ?? 1
+  if (![xCount,yCount,zCount].every(n => Number.isSafeInteger(n) && n > 0) || xCount*yCount*zCount > 4096) throw new Error('grid expansion budget exceeded')
   const stepX = grid.stepX ?? 0
   const stepY = grid.stepY ?? 0
   const stepZ = grid.stepZ ?? 0
@@ -167,6 +175,7 @@ export function parseBoundingV4(value) {
   if (!input.length) return null
   const kind = input.shift().toLowerCase()
   const values = input.map(Number)
+  if (values.some(v => v < 0)) throw new Error('negative bounding size')
   if (!values.every(Number.isFinite)) throw new Error('bounding values must be finite')
   if (kind === 'pnt' && values.length === 0) return { kind: 'point' }
   if (kind === 'box' && values.length === 3) return { kind: 'box', halfExtentsLdu: values }
@@ -305,6 +314,35 @@ function parseInclude(options, context, lineNumber, raw) {
   }
 }
 
+
+// Unknown options cannot silently change a connector's meaning. SNAP_CLEAR in
+// the pinned library includes disabled old metas; only its documented ID acts.
+const commonOptions = 'id group pos ori scale mirror grid'.split(' ')
+const optionSets = {
+  SNAP_CYL: [...commonOptions, 'gender','caps','secs','center','slide'],
+  SNAP_CLP: [...commonOptions, 'radius','length','center','slide'],
+  SNAP_FGR: [...commonOptions, 'genderofs','seq','radius','center'],
+  SNAP_GEN: [...commonOptions, 'gender','bounding','placement','match'],
+  SNAP_SPH: [...commonOptions, 'gender','radius'],
+  SNAP_INCL: ['id','pos','ori','scale','ref','grid'],
+  SNAP_CLEAR: ['id'],
+}
+function validateOptions(meta, parsed) {
+  if (parsed.duplicates.length || parsed.malformed.length) throw new Error('ambiguous option syntax')
+  const allowed = optionSets[meta]
+  if (!allowed) throw new Error(`unsupported snap meta ${meta}`)
+  const o = parsed.options
+  // CLEAR has no geometry: old disabled option tails have no effect in LDCad.
+  if (meta === 'SNAP_CLEAR') return
+  for (const key of Object.keys(o)) if (!allowed.includes(key)) throw new Error(`unsupported ${meta} option ${key}`)
+  for (const key of ['gender','genderofs']) if (o[key] != null && !/^(m|f|male|female)$/i.test(o[key])) throw new Error(`invalid ${key}`)
+  if (o.caps != null && !/^(none|one|two|a|b)$/i.test(o.caps)) throw new Error('invalid caps')
+  if (meta !== 'SNAP_INCL' && o.scale != null && !/^(none|yonly|ronly|yandr)$/i.test(o.scale)) throw new Error('invalid scale policy')
+  if (o.mirror != null && !/^(none|cor|corz)$/i.test(o.mirror)) throw new Error('invalid mirror policy')
+  if (o.grid) expandGridV4(parseGridV4(o.grid))
+  if (o.ref && (/^(?:[a-z]+:|\/)/i.test(o.ref) || o.ref.replace(/\\/g,'/').split('/').includes('..'))) throw new Error('non-local include ref')
+}
+
 export function parseShadowTextV4(text, context = {}) {
   const operations = []
   const warnings = []
@@ -319,6 +357,7 @@ export function parseShadowTextV4(text, context = {}) {
     if (parsedOptions.malformed.length) warnings.push({ line: index + 1, code: 'malformed-tail', detail: parsedOptions.malformed.join(' '), raw })
 
     try {
+      validateOptions(meta, parsedOptions)
       if (meta === 'SNAP_CLEAR') {
         operations.push({ type: 'clear', id: parsedOptions.options.id || null, source: commonSource(context, index + 1, raw, meta) })
         continue

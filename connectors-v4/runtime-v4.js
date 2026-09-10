@@ -52,22 +52,14 @@ async function fetchTextOrNull(url) {
 async function shadowManifest() {
   if (shadowManifestPromise) return shadowManifestPromise
   shadowManifestPromise = (async () => {
-    const response = await fetch(SHADOW_TREE_URL, {
-      mode:'cors', cache:'force-cache', headers:{ Accept:'application/vnd.github+json' },
-    })
+    const response = await fetch(new URL('./shadow-manifest.json?v=connector-v4-20260910-v4', import.meta.url))
     if (!response.ok) throw new Error(`Shadow manifest HTTP ${response.status}`)
     const data = await response.json()
-    if (!Array.isArray(data.tree) || data.truncated) throw new Error('Shadow manifest is missing or truncated')
-    const map = new Map()
-    for (const item of data.tree) {
-      if (item.type !== 'blob' || !/\.dat$/i.test(item.path || '')) continue
-      map.set(normalizedPath(item.path), item.path)
-    }
-    return map
+    if (data.commit !== SHADOW_SOURCE_V4.commit || !Array.isArray(data.files)) throw new Error('Shadow manifest generation mismatch')
+    return new Map(data.files.map(path => [normalizedPath(path), path]))
   })()
   try { return await shadowManifestPromise }
   catch (error) {
-    shadowManifestPromise = null
     throw error
   }
 }
