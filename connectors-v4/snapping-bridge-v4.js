@@ -4,7 +4,7 @@ import { suppressNextConnectionForEndpoint } from '../connections.js'
 
 export * from '../snapping-v3.js'
 
-export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.4.0'
+export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.4.1'
 
 let preferredCandidateKey = null
 let preferredInstanceId = null
@@ -65,7 +65,7 @@ function warmNearbyConnectivity(v4,selected,objects) {
     .filter(object=>object && object!==selected && isLDrawPart(object))
     .map(object=>({object,distance:origin.distanceTo(object.getWorldPosition(new THREE.Vector3()))}))
     .sort((a,b)=>a.distance-b.distance)
-    .slice(0,23)
+    .slice(0,31)
     .map(entry=>entry.object)
   const batch=[selected,...nearby]
   connectivityWarmPromise=Promise.resolve(v4.hydrateObjects(batch))
@@ -94,8 +94,12 @@ export function findSnapCandidate(selected, objects, options = {}) {
   if (v4 && selectedIsLDraw) {
     warmNearbyConnectivity(v4,selected,objects)
     try {
+      // Search well past the visible shortlist so assemblies with many already-used
+      // holes/studs do not hide the next free mating point. Candidate generation
+      // already caches pair compatibility/world frames, so the deeper certification
+      // window adds little drag cost compared with missing a valid snap entirely.
       const candidate = v4.findActiveCandidate(selected, objects, {
-        maxResults:48,
+        maxResults:192,
         preferredKey:preferredCandidateKey,
         captureDistanceStud:typeof options === 'number' ? options : options?.maxDistance,
         minAxisAlignment:typeof options === 'object' ? options?.minAlignment : undefined,
