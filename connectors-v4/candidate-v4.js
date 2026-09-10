@@ -4,13 +4,14 @@ import { matchConnectorV4 } from './matcher-v4.js'
 import { activationForMatchV4, classifyConnectorV4 } from './activation-v4.js'
 import { connectorWorldFrameV4, objectWorldPoseV4, solvePlacementV4 } from './placement-solver-v4.js'
 
-export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.4.0'
+export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.5.0'
 export const DEFAULT_CAPTURE_DISTANCE_STUD_V4 = 0.72
 export const DEFAULT_MIN_AXIS_ALIGNMENT_V4 = 0.72
 export const CLOSE_RANGE_MIN_AXIS_ALIGNMENT_V4 = 0.55
 const SUPPORT_POSITION_EPS_STUD = 0.045
 const SUPPORT_AXIS_DOT = 0.997
 const SUPPORT_ANALYSIS_LIMIT = 24
+const SUPPORT_CELL_STUD = SUPPORT_POSITION_EPS_STUD * 2
 const pairCompatibilityCache = new WeakMap()
 
 function definitionConnectors(definition) {
@@ -60,7 +61,50 @@ function connectorPoseAtWorldPose(connector,worldPosition,worldQuaternion) {
   return {position,axis}
 }
 
-function countStudSupport(candidate,movingConnectors,targetConnectors,isAvailable,targetFrameCache) {
+function supportCell(position) {
+  return [
+    Math.floor(position.x/SUPPORT_CELL_STUD),
+    Math.floor(position.y/SUPPORT_CELL_STUD),
+    Math.floor(position.z/SUPPORT_CELL_STUD),
+  ]
+}
+function supportCellKey(x,y,z){return `${x}:${y}:${z}`}
+function nearbySupportEntries(index,position) {
+  const [cx,cy,cz]=supportCell(position)
+  const found=[]
+  for(let x=cx-1;x<=cx+1;x+=1)for(let y=cy-1;y<=cy+1;y+=1)for(let z=cz-1;z<=cz+1;z+=1){
+    const bucket=index.get(supportCellKey(x,y,z))
+    if(bucket)found.push(...bucket)
+  }
+  return found
+}
+
+function buildSupportIndex(targetObject,targetConnectors,role,isAvailable,targetFrameCache) {
+  const index=new Map()
+  for(const target of targetConnectors) {
+    if(classifyConnectorV4(target)!==role || !target?.endpointId || !isAvailable(targetObject,target))continue
+    let frame=targetFrameCache.get(target.endpointId)
+    if(!frame){
+      try{frame=connectorWorldFrameV4(targetObject,target)}catch{continue}
+      targetFrameCache.set(target.endpointId,frame)
+    }
+    const [x,y,z]=supportCell(frame.position)
+    const key=supportCellKey(x,y,z)
+    const bucket=index.get(key)??[]
+    bucket.push({target,frame})
+    index.set(key,bucket)
+  }
+  return index
+}
+
+function supportPoseKey(candidate) {
+  const p=candidate.solution.worldPosition
+  const q=candidate.solution.worldQuaternion
+  const rounded=value=>Math.round(value*10000)
+  return `${candidate.targetObject?.userData?.instanceId||''}:${p.map(rounded).join(',')}:${q.map(rounded).join(',')}:${candidate.activationPreview?.sourceRole||''}`
+}
+
+function countStudSupport(candidate,movingConnectors,targetConnectors,isAvailable,targetFrameCache,supportIndexCache) {
   if (candidate.activationPreview?.family !== 'stud-anti-stud') return 1
   const movingRole=candidate.activationPreview.sourceRole
   const targetRole=candidate.activationPreview.targetRole
@@ -69,7 +113,12 @@ function countStudSupport(candidate,movingConnectors,targetConnectors,isAvailabl
   if (!sourceRole || !expectedTargetRole || targetRole!==expectedTargetRole) return 1
 
   const sources=movingConnectors.filter(connector=>classifyConnectorV4(connector)===sourceRole)
-  const targets=targetConnectors.filter(connector=>classifyConnectorV4(connector)===expectedTargetRole)
+  const cacheKey=`${candidate.targetObject?.userData?.instanceId||''}:${expectedTargetRole}`
+  let index=supportIndexCache.get(cacheKey)
+  if(!index){
+    index=buildSupportIndex(candidate.targetObject,targetConnectors,expectedTargetRole,isAvailable,targetFrameCache)
+    supportIndexCache.set(cacheKey,index)
+  }
   const worldPosition=new THREE.Vector3(...candidate.solution.worldPosition)
   const worldQuaternion=new THREE.Quaternion(...candidate.solution.worldQuaternion).normalize()
   const usedTargets=new Set()
@@ -79,17 +128,13 @@ function countStudSupport(candidate,movingConnectors,targetConnectors,isAvailabl
     if (!source?.endpointId || !isAvailable(candidate.sourceObject,source)) continue
     const sourcePose=connectorPoseAtWorldPose(source,worldPosition,worldQuaternion)
     let best=null
-    for (const target of targets) {
-      if (!target?.endpointId || usedTargets.has(target.endpointId) || !isAvailable(candidate.targetObject,target)) continue
-      let targetFrame=targetFrameCache.get(target.endpointId)
-      if (!targetFrame) {
-        try { targetFrame=connectorWorldFrameV4(candidate.targetObject,target) } catch { continue }
-        targetFrameCache.set(target.endpointId,targetFrame)
-      }
-      const distance=sourcePose.position.distanceTo(targetFrame.position)
-      const alignment=sourcePose.axis.dot(targetFrame.axis)
-      if (distance>SUPPORT_POSITION_EPS_STUD || alignment<SUPPORT_AXIS_DOT) continue
-      if (!best || distance<best.distance) best={target,distance}
+    for (const entry of nearbySupportEntries(index,sourcePose.position)) {
+      const target=entry.target
+      if(usedTargets.has(target.endpointId))continue
+      const distance=sourcePose.position.distanceTo(entry.frame.position)
+      const alignment=sourcePose.axis.dot(entry.frame.axis)
+      if(distance>SUPPORT_POSITION_EPS_STUD||alignment<SUPPORT_AXIS_DOT)continue
+      if(!best||distance<best.distance)best={target,distance}
     }
     if (best) {
       usedTargets.add(best.target.endpointId)
@@ -99,7 +144,20 @@ function countStudSupport(candidate,movingConnectors,targetConnectors,isAvailabl
   return Math.max(1,support)
 }
 
-function candidateScore(solution,captureDistance,minAxisAlignment,orientationFree,{preferred=false,active=true,supportCount=1}={}) {
+function genericBoundingMismatch(source,target) {
+  if(source?.family!=='generic'||target?.family!=='generic')return 0
+  const a=source.geometry?.bounding,b=target.geometry?.bounding
+  if(!a&&!b)return 0
+  if(!a||!b||a.kind!==b.kind)return 1
+  const ratio=(x,y)=>Math.abs(Number(x)||0-Number(y)||0)/Math.max(1,Math.abs(Number(x)||0),Math.abs(Number(y)||0))
+  if(a.kind==='sphere')return ratio(a.radiusLdu,b.radiusLdu)
+  if(a.kind==='cube')return ratio(a.halfSizeLdu,b.halfSizeLdu)
+  if(a.kind==='cylinder')return (ratio(a.radiusLdu,b.radiusLdu)+ratio(a.lengthLdu,b.lengthLdu))/2
+  if(a.kind==='box'&&Array.isArray(a.halfExtentsLdu)&&Array.isArray(b.halfExtentsLdu))return a.halfExtentsLdu.reduce((sum,value,index)=>sum+ratio(value,b.halfExtentsLdu[index]),0)/3
+  return 0
+}
+
+function candidateScore(solution,captureDistance,minAxisAlignment,orientationFree,{preferred=false,active=true,supportCount=1,boundingMismatch=0}={}) {
   const distance=captureError(solution)
   const distanceScore=distance/Math.max(captureDistance,1e-6)
   const rotation=Math.min(Math.PI,Math.abs(solution.diagnostics?.rotationRad ?? 0))
@@ -119,6 +177,7 @@ function candidateScore(solution,captureDistance,minAxisAlignment,orientationFre
   score+=Math.min(1.5,lateral/Math.max(captureDistance,1e-6))*0.06
   score+=Math.min(2,originMotion/Math.max(captureDistance,1e-6))*0.025
   score+=Math.min(1,clearance/0.35)*0.035
+  score+=Math.min(1,Math.max(0,boundingMismatch))*0.08
   score-=Math.min(1,engagement/20)*0.025
   if (!active) score+=4
   score-=Math.min(0.34,Math.max(0,supportCount-1)*0.048)
@@ -131,6 +190,7 @@ function rescore(candidate,captureDistance,minAxisAlignment,preferredKey) {
     preferred:candidate.key===preferredKey,
     active:candidate.activationPreview.active===true,
     supportCount:candidate.supportCount,
+    boundingMismatch:candidate.boundingMismatch,
   })
   return candidate
 }
@@ -228,6 +288,7 @@ export function findPlacementCandidatesV4(movingObject,targets,{
           requiredAlignment,
           orientationFree,
           supportCount:1,
+          boundingMismatch:genericBoundingMismatch(source,target),
         }
         rescore(candidate,captureDistanceStud,minAxisAlignment,preferredKey)
         results.push(candidate)
@@ -237,12 +298,20 @@ export function findPlacementCandidatesV4(movingObject,targets,{
 
   results.sort(compareCandidates)
   let analyzed=0
+  const supportIndexCache=new Map()
+  const supportPoseCache=new Map()
   for (const candidate of results) {
     if (analyzed>=SUPPORT_ANALYSIS_LIMIT) break
     if (candidate.activationPreview.family!=='stud-anti-stud') continue
-    const targetDef=getDefinition(candidate.targetPartId)
-    const targetFrameCache=targetFrameCaches.get(candidate.targetObject) ?? new Map()
-    candidate.supportCount=countStudSupport(candidate,sources,definitionConnectors(targetDef),isAvailable,targetFrameCache)
+    const poseKey=supportPoseKey(candidate)
+    let support=supportPoseCache.get(poseKey)
+    if(support==null){
+      const targetDef=getDefinition(candidate.targetPartId)
+      const targetFrameCache=targetFrameCaches.get(candidate.targetObject) ?? new Map()
+      support=countStudSupport(candidate,sources,definitionConnectors(targetDef),isAvailable,targetFrameCache,supportIndexCache)
+      supportPoseCache.set(poseKey,support)
+    }
+    candidate.supportCount=support
     rescore(candidate,captureDistanceStud,minAxisAlignment,preferredKey)
     analyzed+=1
   }
