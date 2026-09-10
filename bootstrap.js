@@ -1,11 +1,49 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: PARTS-6 · molded realism + nominal mating-interface fidelity.
-// All root module URLs are versioned once by the import map in index.html.
+// BUILD: PARTS-6 · molded realism + interactive main-menu hero.
+// Root production modules are versioned by the import map; feature modules may carry
+// an explicit query tag until the next global runtime-version bump.
 
-// Diagnostics must exist before any runtime/app module can fail.
+// Diagnostics and the complete part registry must exist before the menu creates its
+// real Three.js hero assembly from production part factories.
 await import('./physics-error-ui.js')
 await import('./runtime-extensions.js')
+
+let menuResult = { action: 'continue', snapshot: null }
+try {
+  const { showMainMenu } = await import('./main-menu.js?v=main-menu-20260910-v1')
+  menuResult = await showMainMenu()
+} catch (error) {
+  // The menu is presentation-only. A menu/WebGL failure must never prevent the editor
+  // from starting, especially on old/mobile GPUs.
+  console.warn('[BrickLab] Main menu unavailable; opening editor directly.', error)
+}
+
+// app.js currently restores the last local project during module evaluation. For a
+// deliberate New/Open action, temporarily hide that snapshot while the editor boots,
+// then put it back so "New project" never destroys the user's previous saved build.
+const hiddenProjectEntries = []
+if (menuResult.action === 'new' || menuResult.action === 'open') {
+  for (const key of ['bricklab.project.v2', 'bricklab.project.v1']) {
+    try {
+      const value = localStorage.getItem(key)
+      if (value != null) hiddenProjectEntries.push([key, value])
+      localStorage.removeItem(key)
+    } catch { /* storage may be unavailable */ }
+  }
+}
+
 await import('./app.js')
+
+for (const [key, value] of hiddenProjectEntries) {
+  try { localStorage.setItem(key, value) } catch { /* storage may be unavailable */ }
+}
+
+// "Open another project" enters the real editor first, then invokes its existing file
+// importer. This keeps import validation/migration in one authoritative code path.
+if (menuResult.action === 'open') {
+  requestAnimationFrame(() => document.querySelector('#importBtn')?.click())
+}
+
 await import('./parts5/gear-mesh-ui-v1.js?v=parts-5-20260909-visual-v2')
 await import('./overlay-ui.js')
 await import('./catalog-ui.js')
