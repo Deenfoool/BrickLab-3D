@@ -3,17 +3,20 @@ import { readdir, readFile, writeFile } from 'node:fs/promises'
 
 const root = new URL('../', import.meta.url)
 const tag = process.argv[2] ?? 'parts-6-20260910-audio-v1'
-if (!/^(?:runtime|connect|physics|parts)-\d+-[a-z0-9-]+$/.test(tag)) throw new Error('Invalid runtime tag')
-const id = tag.match(/^(?:runtime|connect|physics|parts)-\d+/)[0].toUpperCase()
+if (!/^(?:runtime|connect|connector|physics|parts)-\d+-[a-z0-9-]+$/.test(tag)) throw new Error('Invalid runtime tag')
+const id = tag.match(/^(?:runtime|connect|connector|physics|parts)-\d+/)[0].toUpperCase()
 const files = (await readdir(root)).filter(name => name.endsWith('.js')).sort()
-for (const dir of ['audio', 'assets/audio']) for (const name of await readdir(new URL(dir + '/', root))) if (name.endsWith('.js')) files.push(`${dir}/${name}`)
+for (const dir of ['audio', 'assets/audio', 'connectors-v4']) {
+  for (const name of await readdir(new URL(dir + '/', root))) if (name.endsWith('.js')) files.push(`${dir}/${name}`)
+}
 const versioned = Object.fromEntries(files.map(name => [`./${name}`, `./${name}?v=${tag}`]))
 
-// Keep old call sites stable while Connector System v3 is authoritative.
-// app.js and several mechanics modules can continue importing the legacy specifiers.
+// Legacy import specifiers remain stable, but LDraw structural snapping is routed
+// through the V4 compatibility bridges. Native/procedural connector validation and
+// structural welding still use their established V3 implementations.
 const connectorAliases = {
-  './connections.js': `./connections-v3.js?v=${tag}`,
-  './snapping.js': `./snapping-v3.js?v=${tag}`,
+  './connections.js': `./connectors-v4/connections-bridge-v4.js?v=${tag}`,
+  './snapping.js': `./connectors-v4/snapping-bridge-v4.js?v=${tag}`,
   './connector-validation.js': `./connector-validation-v3.js?v=${tag}`,
   './structural-auto-weld-v2.js': `./connector-physics-v3.js?v=${tag}`,
 }
