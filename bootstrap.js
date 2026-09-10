@@ -60,7 +60,7 @@ if (menuResult.action === 'new' || menuResult.action === 'open') {
 }
 
 // Register dynamic ldraw-* definitions before app.js restores a saved project.
-await import('./ldraw/bootstrap-v1.js?v=ldraw-20260910-v3')
+await import('./ldraw/bootstrap-v1.js?v=ldraw-catalog-20260910-v2')
 await import('./app.js')
 
 for (const [key, value] of hiddenProjectEntries) {
@@ -75,8 +75,6 @@ if (menuResult.action === 'open') {
 
 await import('./parts5/gear-mesh-ui-v1.js?v=parts-5-20260909-visual-v2')
 await import('./overlay-ui.js')
-await import('./catalog-ui.js')
-await import('./catalog-previews.js?v=ldraw-20260910-v3')
 await import('./inspector-ui.js')
 await import('./physical-inspector-v2.js')
 await import('./mechanism-controls-ui.js')
@@ -93,7 +91,7 @@ await import('./parts4/catalog-parts-4.js?v=parts-4-20260908-driveline-v1')
 await import('./i18n-runtime-patch.js')
 await import('./i18n-physics-v2.js')
 await import('./i18n-physics-v2-extra.js')
-await import('./ldraw/catalog-v1.js?v=ldraw-20260910-v3')
+await import('./ldraw/catalog-v2.js?v=ldraw-catalog-20260910-v2')
 await import('./menu/project-menu-v1.js?v=project-menu-20260910-v1')
 
 const { assertPhysicsRuntimeContract } = await import('./physics-ownership-v1.js')
