@@ -1,10 +1,12 @@
 import * as THREE from 'three'
 import { totalProfileLengthV4 } from './schema-v4.js'
-import { solvePlacementV4 } from './placement-solver-v4.js?v=connector-v4-20260910-v3'
+import { matchConnectorV4 } from './matcher-v4.js'
+import { solvePlacementV4 } from './placement-solver-v4.js'
 
-export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.0.0'
-export const DEFAULT_CAPTURE_DISTANCE_STUD_V4 = 0.55
-export const DEFAULT_MIN_AXIS_ALIGNMENT_V4 = 0.90
+export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.2.0'
+export const DEFAULT_CAPTURE_DISTANCE_STUD_V4 = 0.72
+export const DEFAULT_MIN_AXIS_ALIGNMENT_V4 = 0.72
+export const CLOSE_RANGE_MIN_AXIS_ALIGNMENT_V4 = 0.55
 
 function definitionConnectors(definition) {
   return definition?.connectivityV4?.status === 'ready'
@@ -21,16 +23,45 @@ function isOrientationFree(source,match) {
   return placement === 'free' || placement === 'retain' || match?.kinematicHint === 'spherical'
 }
 
-function candidateScore(solution,captureDistance,minAxisAlignment,orientationFree) {
-  const translation=solution.diagnostics?.translationStud ?? Infinity
-  const distanceScore=translation/Math.max(captureDistance,1e-6)
-  if (orientationFree) return distanceScore
-  const alignment=Math.abs(solution.diagnostics?.initialAxisDot ?? 0)
-  const alignmentRange=Math.max(1e-5,1-minAxisAlignment)
-  const alignmentPenalty=Math.max(0,(1-alignment)/alignmentRange)*0.10
+function captureError(solution) {
+  return solution.diagnostics?.captureCorrectionStud ?? solution.diagnostics?.translationStud ?? Infinity
+}
+
+function adaptiveAlignmentThreshold(distance,captureDistance,minAxisAlignment) {
+  const proximity=THREE.MathUtils.clamp(1-distance/Math.max(captureDistance,1e-6),0,1)
+  const relaxed=minAxisAlignment-(minAxisAlignment-CLOSE_RANGE_MIN_AXIS_ALIGNMENT_V4)*proximity
+  return THREE.MathUtils.clamp(relaxed,CLOSE_RANGE_MIN_AXIS_ALIGNMENT_V4,1)
+}
+
+function candidateScore(solution,captureDistance,minAxisAlignment,orientationFree,{preferred=false}={}) {
+  const distance=captureError(solution)
+  const distanceScore=distance/Math.max(captureDistance,1e-6)
   const rotation=Math.min(Math.PI,Math.abs(solution.diagnostics?.rotationRad ?? 0))
-  const rotationPenalty=(rotation/Math.PI)*0.06
-  return distanceScore+alignmentPenalty+rotationPenalty
+  const originMotion=Math.max(0,solution.diagnostics?.translationStud ?? distance)
+  const lateral=Math.max(0,solution.diagnostics?.initialLateralDistanceStud ?? distance)
+  const clearance=Math.abs(solution.match?.fit?.clearanceLdu ?? 0)
+  const engagement=Math.max(0,solution.diagnostics?.engagementLdu ?? 0)
+
+  let score=distanceScore
+  if (!orientationFree) {
+    const alignment=THREE.MathUtils.clamp(solution.diagnostics?.initialAxisDot ?? -1,-1,1)
+    const required=adaptiveAlignmentThreshold(distance,captureDistance,minAxisAlignment)
+    const range=Math.max(1e-5,1-required)
+    score+=Math.max(0,(1-alignment)/range)*0.13
+    score+=(rotation/Math.PI)*0.11
+  }
+  // Prefer a connector that needs little lateral correction and a profile with
+  // tighter radial fit. Origin motion is deliberately weak: large bricks can need
+  // substantial centre movement when rotating around an already-near connector.
+  score+=Math.min(1.5,lateral/Math.max(captureDistance,1e-6))*0.06
+  score+=Math.min(2,originMotion/Math.max(captureDistance,1e-6))*0.025
+  score+=Math.min(1,clearance/0.35)*0.035
+  // For axial profiles, deeper legal engagement is a small but useful tiebreaker.
+  score-=Math.min(1,engagement/20)*0.025
+  // Hysteresis prevents two adjacent valid studs from flickering while the pointer
+  // moves through the score boundary. It never keeps a candidate that fails geometry.
+  if (preferred) score-=0.075
+  return score
 }
 
 export function findPlacementCandidatesV4(movingObject,targets,{
@@ -38,6 +69,7 @@ export function findPlacementCandidatesV4(movingObject,targets,{
   captureDistanceStud=DEFAULT_CAPTURE_DISTANCE_STUD_V4,
   minAxisAlignment=DEFAULT_MIN_AXIS_ALIGNMENT_V4,
   isAvailable=()=>true,
+  preferredKey=null,
   maxResults=12,
 }={}) {
   if (!movingObject || typeof getDefinition !== 'function') return []
@@ -64,18 +96,27 @@ export function findPlacementCandidatesV4(movingObject,targets,{
       const targetDef=getDefinition(targetObject.userData?.partId)
       for (const target of definitionConnectors(targetDef)) {
         if (!target?.endpointId || !isAvailable(targetObject,target)) continue
+        // Match before solving. Most endpoint pairs are incompatible and should never
+        // pay the cost of world-frame decomposition and placement solving.
+        const match=matchConnectorV4(source,target)
+        if (!match?.compatible) continue
         let solution
         try {
-          solution=solvePlacementV4(movingObject,source,targetObject,target)
-        } catch (error) {
+          solution=solvePlacementV4(movingObject,source,targetObject,target,{match})
+        } catch {
           continue
         }
         if (!solution.valid) continue
-        const translation=solution.diagnostics?.translationStud ?? Infinity
-        if (!(translation <= captureDistanceStud)) continue
+        const distance=captureError(solution)
+        if (!(distance <= captureDistanceStud)) continue
         const orientationFree=isOrientationFree(source,solution.match)
-        const alignment=Math.abs(solution.diagnostics?.initialAxisDot ?? 0)
-        if (!orientationFree && alignment < minAxisAlignment) continue
+        const alignment=THREE.MathUtils.clamp(solution.diagnostics?.initialAxisDot ?? -1,-1,1)
+        const requiredAlignment=adaptiveAlignmentThreshold(distance,captureDistanceStud,minAxisAlignment)
+        // Do not use abs(axisDot). LDCad male/female cylinder frames mate with their
+        // local negative-Y axes pointing in the same world direction. Opposite axes
+        // are not an "equally good" candidate and used to cause 180-degree flips.
+        if (!orientationFree && alignment < requiredAlignment) continue
+        const key=candidateKey(movingObject,source,targetObject,target)
         results.push({
           schemaVersion:4,
           searchVersion:CANDIDATE_SEARCH_VERSION_V4,
@@ -89,17 +130,20 @@ export function findPlacementCandidatesV4(movingObject,targets,{
           targetObject,
           sourcePartId:movingDef?.id || movingObject.userData?.partId || null,
           targetPartId:targetDef?.id || targetObject.userData?.partId || null,
-          key:candidateKey(movingObject,source,targetObject,target),
+          key,
           match:solution.match,
           solution,
-          distanceStud:translation,
+          distanceStud:distance,
+          originTranslationStud:solution.diagnostics?.translationStud ?? distance,
+          lateralDistanceStud:solution.diagnostics?.initialLateralDistanceStud ?? distance,
           alignment,
-          score:candidateScore(solution,captureDistanceStud,minAxisAlignment,orientationFree),
+          requiredAlignment,
+          score:candidateScore(solution,captureDistanceStud,minAxisAlignment,orientationFree,{preferred:key===preferredKey}),
         })
       }
     }
   }
-  results.sort((a,b)=>a.score-b.score || a.distanceStud-b.distanceStud || a.key.localeCompare(b.key))
+  results.sort((a,b)=>a.score-b.score || a.distanceStud-b.distanceStud || b.alignment-a.alignment || a.key.localeCompare(b.key))
   return results.slice(0,Math.max(1,Math.floor(maxResults)))
 }
 
