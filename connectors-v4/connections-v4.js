@@ -1,9 +1,9 @@
 import { axialSpanV4 } from './schema-v4.js?v=connector-v4-20260910-v3'
 import { proposeConstraintV4 } from './constraints-v4.js?v=connector-v4-20260910-v1'
-import { createAxialOccupancyV4 } from './occupancy-v4.js?v=connector-v4-20260910-v1'
+import { axialOverlapV4, createAxialOccupancyV4 } from './occupancy-v4.js?v=connector-v4-20260910-v1'
 
 export const CONNECTION_SCHEMA_VERSION_V4 = 4
-export const CONNECTION_GRAPH_VERSION_V4 = 'connection-graph-v4.0.0'
+export const CONNECTION_GRAPH_VERSION_V4 = 'connection-graph-v4.0.1'
 const EPS = 1e-6
 
 export function endpointKeyV4(instanceId, endpointId) {
@@ -116,6 +116,17 @@ export function createConnectionGraphV4() {
   const exclusiveOwners=new Map()
   const axial=createAxialOccupancyV4()
 
+  function occupancyReservation(proposal) {
+    const reservation=proposal?.occupancy
+    if (!reservation) return null
+    return {
+      connectionId:proposal.id,
+      occupantId:proposal.b?.instanceId || null,
+      interval:reservation.interval,
+      metadata:{a:proposal.a,b:proposal.b},
+    }
+  }
+
   function conflictsFor(proposal) {
     const conflicts=[]
     for (const key of proposal?.exclusiveEndpointKeys ?? []) {
@@ -123,9 +134,17 @@ export function createConnectionGraphV4() {
       if (owner && owner!==proposal.id) conflicts.push({type:'exclusive-endpoint',key,connectionId:owner})
     }
     const reservation=proposal?.occupancy
-    if (reservation) {
-      const found=axial.conflicts(reservation.channelKey,reservation.interval,{ignoreConnectionId:proposal.id})
-      for (const conflict of found) conflicts.push({type:'axial-overlap',channelKey:reservation.channelKey,connectionId:conflict.item.connectionId,overlap:conflict.overlap})
+    const candidateReservation=occupancyReservation(proposal)
+    if (reservation && candidateReservation) {
+      const found=axial.conflicts(reservation.channelKey,candidateReservation,{ignoreConnectionId:proposal.id})
+      for (const existing of found) {
+        conflicts.push({
+          type:'axial-overlap',
+          channelKey:reservation.channelKey,
+          connectionId:existing.connectionId,
+          overlap:axialOverlapV4(existing.interval,reservation.interval),
+        })
+      }
     }
     return conflicts
   }
@@ -137,12 +156,7 @@ export function createConnectionGraphV4() {
     if (conflicts.length) return {accepted:false,reason:'occupied',conflicts}
 
     if (proposal.occupancy) {
-      const reserved=axial.reserve(proposal.occupancy.channelKey,{
-        connectionId:proposal.id,
-        occupantId:proposal.b.instanceId,
-        interval:proposal.occupancy.interval,
-        meta:{a:proposal.a,b:proposal.b},
-      })
+      const reserved=axial.reserve(proposal.occupancy.channelKey,occupancyReservation(proposal))
       if (!reserved.accepted) return {accepted:false,reason:'axial-overlap',conflicts:reserved.conflicts}
     }
     for (const key of proposal.exclusiveEndpointKeys ?? []) exclusiveOwners.set(key,proposal.id)
