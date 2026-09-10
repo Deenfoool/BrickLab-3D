@@ -91,6 +91,7 @@ await import('./parts4/catalog-parts-4.js?v=parts-4-20260908-driveline-v1')
 await import('./i18n-runtime-patch.js')
 await import('./i18n-physics-v2.js')
 await import('./i18n-physics-v2-extra.js')
+await import('./ldraw/catalog-v1.js?v=ldraw-20260910-v1')
 await import('./menu/project-menu-v1.js?v=project-menu-20260910-v1')
 
 const { assertPhysicsRuntimeContract } = await import('./physics-ownership-v1.js')
