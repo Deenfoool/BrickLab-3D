@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_ADAPTER_VERSION_V4 = 'connector-rapier-adapter-v4.2.1'
+export const PHYSICS_ADAPTER_VERSION_V4 = 'connector-rapier-adapter-v4.2.2'
 
 // Rapier GenericJoint axesMask means LOCKED axes. Joint-frame X is the connector axis.
 const MASK_PRISMATIC_X = 2 | 4 | 8 | 16 | 32
@@ -157,6 +157,7 @@ function releaseMonitor(session,monitor,reason) {
   const state=session.connectorV4Physics
   state.released+=1
   state.active=Math.max(0,state.active-1)
+  session.jointCount=Math.max(0,(session.jointCount??0)-1)
   state.releaseEvents.push({id:monitor.item.id,connectionIds:[...monitor.item.connectionIds],reason,time:session.simulationTime??0})
   if (state.releaseEvents.length>64) state.releaseEvents.shift()
   window.dispatchEvent(new CustomEvent('bricklab:connectorv4physicsrelease',{detail:{
@@ -232,12 +233,16 @@ export function installConnectorPhysicsV4(session,plan,runtime) {
     throw error
   }
 
+  const activeCount=monitors.filter(m=>!m.internal).length
+  const internalCount=monitors.filter(m=>m.internal).length
+  session.jointCount=(session.jointCount??0)+activeCount
+  session.internalJointCount=(session.internalJointCount??0)+internalCount
   session.connectorV4Physics={
     adapterVersion:PHYSICS_ADAPTER_VERSION_V4,
     policyVersion:plan.version,
     planned:plan.joints.length,
-    active:monitors.filter(m=>!m.internal).length,
-    internal:monitors.filter(m=>m.internal).length,
+    active:activeCount,
+    internal:internalCount,
     released:0,
     releaseEvents:[],
     families:[...new Set(plan.joints.map(item=>item.family))],
