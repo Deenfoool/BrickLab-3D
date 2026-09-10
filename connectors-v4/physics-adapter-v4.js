@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_ADAPTER_VERSION_V4 = 'connector-rapier-adapter-v4.2.2'
+export const PHYSICS_ADAPTER_VERSION_V4 = 'connector-rapier-adapter-v4.2.3'
 
 // Rapier GenericJoint axesMask means LOCKED axes. Joint-frame X is the connector axis.
 const MASK_PRISMATIC_X = 2 | 4 | 8 | 16 | 32
@@ -148,6 +148,17 @@ function applyResistance(monitor) {
   monitor.memberA.body.addForce(vec(force.clone().multiplyScalar(-1)),true)
 }
 
+function rebuildSemanticDrivetrainAfterRelease(session,monitor) {
+  if (!['technic-axle-keyed-hole','keyed-shaft-interface'].includes(monitor.item.family)) return
+  try {
+    session.rebuildConnectorV4Drivetrain?.()
+  } catch (error) {
+    // A semantic telemetry rebuild must never resurrect or block an already released
+    // physical joint. Keep the mechanical split and make the diagnostic visible.
+    console.warn('[BrickLab Connector V4] Could not rebuild drivetrain after keyed disengagement.',error)
+  }
+}
+
 function releaseMonitor(session,monitor,reason) {
   if (monitor.released) return false
   monitor.released=true
@@ -160,6 +171,7 @@ function releaseMonitor(session,monitor,reason) {
   session.jointCount=Math.max(0,(session.jointCount??0)-1)
   state.releaseEvents.push({id:monitor.item.id,connectionIds:[...monitor.item.connectionIds],reason,time:session.simulationTime??0})
   if (state.releaseEvents.length>64) state.releaseEvents.shift()
+  rebuildSemanticDrivetrainAfterRelease(session,monitor)
   window.dispatchEvent(new CustomEvent('bricklab:connectorv4physicsrelease',{detail:{
     adapterVersion:PHYSICS_ADAPTER_VERSION_V4,
     id:monitor.item.id,
