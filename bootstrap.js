@@ -76,7 +76,7 @@ if (menuResult.action === 'open') {
 await import('./parts5/gear-mesh-ui-v1.js?v=parts-5-20260909-visual-v2')
 await import('./overlay-ui.js')
 await import('./catalog-ui.js')
-await import('./catalog-previews.js')
+await import('./catalog-previews.js?v=ldraw-20260910-v3')
 await import('./inspector-ui.js')
 await import('./physical-inspector-v2.js')
 await import('./mechanism-controls-ui.js')
