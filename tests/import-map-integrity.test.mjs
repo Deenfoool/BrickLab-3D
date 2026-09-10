@@ -1,14 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile, readdir, access } from 'node:fs/promises'
+import { posix as path } from 'node:path'
 
 const root = new URL('../', import.meta.url)
-const legacyV4Tags = [
-  'connector-v4-20260910-v1',
-  'connector-v4-20260910-v3',
-  'connector-v4-20260910-v5',
-  'connector-v4-20260910-v6',
-]
 
 function localTarget(target) {
   if (typeof target !== 'string' || !target.startsWith('./')) return null
@@ -54,17 +49,27 @@ test('every root JavaScript module has one canonical cache-busted mapping', asyn
   }
 })
 
-test('all Connector V4 modules and historical URLs collapse to the same generation', async () => {
+test('all Connector V4 modules and their real historical imports collapse to one generation', async () => {
   const { imports } = await productionImports()
   const canonical = imports['./app.js']?.match(/\?v=(.+)$/)?.[1]
   assert.ok(canonical)
-  const names=(await readdir(new URL('../connectors-v4/',import.meta.url))).filter(name=>name.endsWith('.js'))
+  const dir=new URL('../connectors-v4/',import.meta.url)
+  const names=(await readdir(dir)).filter(name=>name.endsWith('.js'))
   for(const name of names){
     const specifier=`./connectors-v4/${name}`
     const target=`${specifier}?v=${canonical}`
     assert.equal(imports[specifier],target,`${name} uses canonical V4 generation`)
-    for(const oldTag of legacyV4Tags){
-      assert.equal(imports[`${specifier}?v=${oldTag}`],target,`${name} ${oldTag} aliases to canonical generation`)
+
+    const source=await readFile(new URL(name,dir),'utf8')
+    for(const match of source.matchAll(/["'](\.\.?\/[^"']+\.js\?v=[^"']+)["']/g)){
+      const requested=match[1]
+      const [pathname,query]=requested.split('?')
+      const resolved=path.normalize(path.join('connectors-v4',pathname))
+      const historical=`./${resolved}?${query}`
+      const historicalTarget=imports[historical]
+      assert.ok(historicalTarget,`${name} historical import ${historical} is explicitly redirected`)
+      const canonicalSpecifier=`./${resolved}`
+      assert.equal(historicalTarget,imports[canonicalSpecifier],`${historical} resolves to canonical generation`)
     }
   }
 })
