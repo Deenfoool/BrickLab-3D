@@ -61,10 +61,10 @@ if (menuResult.action === 'new' || menuResult.action === 'open') {
 
 // Register dynamic ldraw-* definitions before app.js restores a saved project.
 await import('./ldraw/bootstrap-v1.js?v=ldraw-catalog-20260910-v3')
-// Connector V4 currently observes rich LDCad Shadow metadata only. It must wrap
-// dynamic LDraw factories before app.js instantiates persisted parts, but it does
-// not replace V3 snapping/connections/physics until the audit rollout is complete.
-await import('./connectors-v4/runtime-v4.js?v=connector-v4-20260910-v1')
+// Connector V4.1 resolves pinned LDCad Shadow metadata, stable endpoint identities,
+// exact axial fit windows and placement solutions in observe mode. It still does NOT
+// replace V3 project connections or Rapier joints until family audits are approved.
+await import('./connectors-v4/runtime-v4.js?v=connector-v4-20260910-v2')
 await import('./app.js')
 
 for (const [key, value] of hiddenProjectEntries) {
