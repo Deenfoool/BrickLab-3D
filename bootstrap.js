@@ -1,20 +1,48 @@
 // Ordered production bootstrap for the no-build GitHub Pages runtime.
-// BUILD: PARTS-6 · molded realism + interactive main-menu hero v2.
-// All root production modules are versioned once by the import map in index.html.
+// BUILD: PARTS-6 · real preload stage + fixed interactive main-menu hero v3.
+// Root production modules are versioned by the import map in index.html.
 
-// Diagnostics and the complete part registry must exist before the menu creates its
-// real Three.js hero assembly from production part factories.
-await import('./physics-error-ui.js')
-await import('./runtime-extensions.js')
+let projectPreloader = null
+try {
+  const { createProjectPreloader } = await import('./menu/project-preloader.js?v=main-menu-20260910-v3')
+  projectPreloader = createProjectPreloader()
+  await projectPreloader.preload()
+} catch (error) {
+  console.warn('[BrickLab] Project preloader unavailable; continuing with normal browser loading.', error)
+}
+
+// Diagnostics and the complete PARTS registry must execute before the menu creates
+// its real Three.js drivetrain from the same factories used by BUILD mode.
+try {
+  projectPreloader?.stageProgress(.18, 'Подготовка диагностики')
+  await import('./physics-error-ui.js')
+  projectPreloader?.stageProgress(.42, 'Подготовка моделей деталей')
+  await import('./runtime-extensions.js')
+  projectPreloader?.stageProgress(.82, 'Сборка главного меню')
+} catch (error) {
+  await projectPreloader?.finish('Ошибка инициализации')
+  throw error
+}
 
 let menuResult = { action: 'continue', snapshot: null }
+let showMainMenu = null
 try {
-  const { showMainMenu } = await import('./menu/main-menu-v2.js?v=main-menu-20260910-v2')
-  menuResult = await showMainMenu()
+  ;({ showMainMenu } = await import('./menu/main-menu-v3.js?v=main-menu-20260910-v3'))
+  projectPreloader?.stageProgress(1, 'Готово')
 } catch (error) {
-  // The menu is presentation-only. A menu/WebGL failure must never prevent the editor
-  // from starting, especially on old/mobile GPUs.
-  console.warn('[BrickLab] Main menu unavailable; opening editor directly.', error)
+  console.warn('[BrickLab] Main menu module unavailable; opening editor directly.', error)
+}
+
+if (projectPreloader) await projectPreloader.finish('Готово')
+
+if (showMainMenu) {
+  try {
+    menuResult = await showMainMenu()
+  } catch (error) {
+    // The menu is presentation-only. Menu/WebGL failure must never prevent the editor
+    // from starting, especially on old/mobile GPUs.
+    console.warn('[BrickLab] Main menu unavailable; opening editor directly.', error)
+  }
 }
 
 // app.js currently restores the last local project during module evaluation. For a
