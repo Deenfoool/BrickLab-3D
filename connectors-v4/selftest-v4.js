@@ -5,8 +5,9 @@ import { connectorToBrickLabV4 } from './shadow-resolver-v4.js'
 import { solvePlacementV4 } from './placement-solver-v4.js'
 import { activationForMatchV4, classifyConnectorV4, connectorFrameHealthV4 } from './activation-v4.js'
 import { hardenPhysicsPlanV4 } from './physics-plan-safety-v4.js'
+import { physicsRulePreviewV4 } from './physics-policy-v4.js'
 
-export const SELF_TEST_VERSION_V4 = 'connector-selftest-v4.2.0'
+export const SELF_TEST_VERSION_V4 = 'connector-selftest-v4.3.0'
 
 function connector(line, file) {
   const parsed = parseShadowTextV4(`0 self-test\n${line}`, { file })
@@ -89,6 +90,14 @@ export function runConnectorV4SelfTest() {
     })
     invariant(!ball.pass && ball.joints.length === 0, 'unbounded ball/socket physics escaped safety gate')
     invariant(ball.blockers.some(item => item.reason === 'ball-socket-angular-envelope-not-implemented'), 'ball/socket block reason mismatch')
+  })
+
+  run('single stud remains BUILD-only until collider envelope is proven', () => {
+    const single = physicsRulePreviewV4('stud-anti-stud', { studBundleSize:1 })
+    invariant(single.supported === false, 'single stud unexpectedly self-certified physics')
+    invariant(single.reason === 'single-stud-collider-envelope-not-proven', 'single-stud block reason mismatch')
+    const bundle = physicsRulePreviewV4('stud-anti-stud', { studBundleSize:2 })
+    invariant(bundle.supported === true && bundle.kind === 'fixed', 'multi-stud rigid policy was lost')
   })
 
   const failed = checks.filter(check => !check.pass)
