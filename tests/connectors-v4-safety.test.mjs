@@ -45,22 +45,16 @@ test('axial and rigid certified families pass the additional safety gate unchang
   assert.equal(hardened.blockers.length,0)
 })
 
-test('single stud keeps collider contacts while a multi-stud bundle becomes one fixed attachment',()=>{
+test('single-stud physics fails closed while a multi-stud bundle is one fixed attachment',()=>{
   const single=physicsRulePreviewV4('stud-anti-stud',{studBundleSize:1})
-  assert.equal(single.supported,true)
-  assert.equal(single.kind,'revolute')
-  assert.equal(single.contacts,'enabled')
-  assert.equal(single.bundle,'single-stud-twist')
+  assert.equal(single.supported,false)
+  assert.match(single.reason,/single-stud-collider-envelope-not-proven/)
 
   const bundle=physicsRulePreviewV4('stud-anti-stud',{studBundleSize:2})
   assert.equal(bundle.supported,true)
   assert.equal(bundle.kind,'fixed')
   assert.equal(bundle.contacts,'disabled')
   assert.equal(bundle.bundle,'multi-stud-rigid')
-
-  const hardened=hardenPhysicsPlanV4(plan({...item('stud-anti-stud','revolute'),rule:single}))
-  assert.equal(hardened.pass,true)
-  assert.equal(hardened.joints[0].rule.contacts,'enabled')
 })
 
 test('ball/socket stays hard-blocked until a bounded spherical model exists',()=>{
