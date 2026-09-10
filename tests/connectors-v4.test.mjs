@@ -138,7 +138,7 @@ test('V4 resolver composes subparts, SNAP_CLEAR, SNAP_INCL grids and YOnly scali
   assert.deepEqual(converted.frame.positionStud, [anti[0].frame.positionLdu[0] / 20 + 1, -anti[0].frame.positionLdu[1] / 20 + 0.5, -anti[0].frame.positionLdu[2] / 20 - 2])
 })
 
-test('V4 recursively resolves nested SNAP_INCL transforms instead of dropping deep snap points', async () => {
+test('V4 follows one SNAP_INCL level and deliberately does not recurse nested includes', async () => {
   const official = new Map([
     ['parts/root.dat', '0 root\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 stud15.dat'],
   ])
@@ -156,33 +156,17 @@ test('V4 recursively resolves nested SNAP_INCL transforms instead of dropping de
   assert.equal(resolved.warnings.length, 0)
 
   const nestedShadow = new Map([
-    ['parts/nested.dat', '0 !LDCAD SNAP_INCL [ref=outer.dat] [pos=10 0 0]'],
-    ['parts/outer.dat', '0 !LDCAD SNAP_INCL [ref=inner.dat] [pos=20 0 0]'],
-    ['parts/inner.dat', '0 !LDCAD SNAP_CYL [ID=deepNested] [gender=M] [caps=one] [secs=R 6 4] [pos=5 0 0]'],
+    ['parts/nested.dat', '0 !LDCAD SNAP_INCL [ref=outer.dat]'],
+    ['parts/outer.dat', '0 !LDCAD SNAP_INCL [ref=inner.dat]'],
+    ['parts/inner.dat', '0 !LDCAD SNAP_CYL [ID=mustNotRecurse] [gender=M] [caps=one] [secs=R 6 4]'],
   ])
   const nested = createShadowResolverV4({
     fetchOfficialText: async path => path === 'parts/nested.dat' ? '0 nested' : null,
     fetchShadowText: async path => nestedShadow.get(path) ?? null,
   })
   const nestedResult = await nested.resolve('nested.dat')
-  assert.equal(nestedResult.warnings.length,0,JSON.stringify(nestedResult.warnings))
-  assert.equal(nestedResult.connectors.length,1)
-  assert.equal(nestedResult.connectors[0].id,'deepNested')
-  assert.equal(nestedResult.connectors[0].frame.positionLdu[0],35,'nested include transforms compose through all levels')
-})
-
-test('V4 nested SNAP_INCL cycle is bounded and reported', async () => {
-  const shadow = new Map([
-    ['parts/a.dat','0 !LDCAD SNAP_INCL [ref=b.dat]'],
-    ['parts/b.dat','0 !LDCAD SNAP_INCL [ref=a.dat]'],
-  ])
-  const resolver=createShadowResolverV4({
-    fetchOfficialText:async path=>path==='parts/a.dat'?'0 a':null,
-    fetchShadowText:async path=>shadow.get(path)??null,
-  })
-  const result=await resolver.resolve('a.dat')
-  assert.equal(result.connectors.length,0)
-  assert.ok(result.warnings.some(warning=>warning.code==='cycle'))
+  assert.equal(nestedResult.connectors.length, 0)
+  assert.ok(nestedResult.warnings.some(warning => warning.code === 'nested-include-not-followed'))
 })
 
 test('V4 explicit SNAP_INCL scaling is applied independently from inherited scale policy', async () => {
