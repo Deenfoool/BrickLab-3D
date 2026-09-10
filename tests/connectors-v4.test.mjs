@@ -33,13 +33,11 @@ test('V4 parser preserves a segmented cylinder profile and centered grid exactly
   assert.equal(connector.snap.slide, true)
   assert.deepEqual(grid, { xCount: 5, zCount: 1, centerX: true, centerZ: false, stepX: 20, stepZ: 0 })
   assert.deepEqual(expandGridV4(grid).map(point => point[0]), [-40, -20, 0, 20, 40])
+  assert.deepEqual(parseGridV4('2 C 3 20 10'), { xCount: 2, zCount: 3, centerX: false, centerZ: true, stepX: 20, stepZ: 10 })
 })
 
 test('V4 parser rejects malformed connector metadata instead of inventing geometry', () => {
-  const parsed = parseShadowTextV4(
-    '0 !LDCAD SNAP_CYL [gender=M] [secs=R nope 20 R 6]',
-    { file: 'parts/broken.dat' },
-  )
+  const parsed = parseShadowTextV4('0 !LDCAD SNAP_CYL [gender=M] [secs=R nope 20 R 6]', { file: 'parts/broken.dat' })
   assert.equal(parsed.operations.length, 0)
   assert.equal(parsed.warnings.length, 1)
   assert.equal(parsed.warnings[0].code, 'invalid-snap-meta')
@@ -66,8 +64,7 @@ test('V4 matcher distinguishes free round bores from keyed axle holes conservati
   assert.equal(keyed.rotationalSymmetry, 4)
   assert.equal(keyed.physicsReady, false)
 
-  const forbiddenReverseInference = matchConnectorV4(roundShaft, axleHole)
-  assert.equal(forbiddenReverseInference.compatible, false)
+  assert.equal(matchConnectorV4(roundShaft, axleHole).compatible, false)
 })
 
 test('V4 matcher gates generic ball joints by group, gender and requested size', () => {
@@ -101,10 +98,7 @@ test('V4 resolver composes subparts, SNAP_CLEAR, SNAP_INCL grids and YOnly scali
       '1 16 20 0 0 1 0 0 0 1 0 0 0 s/base.dat',
       '1 16 0 0 0 1 0 0 0 2 0 0 0 1 axlehole.dat',
     ].join('\n')],
-    ['parts/s/base.dat', [
-      '0 base',
-      '1 16 0 0 0 1 0 0 0 1 0 0 0 stud.dat',
-    ].join('\n')],
+    ['parts/s/base.dat', '0 base\n1 16 0 0 0 1 0 0 0 1 0 0 0 stud.dat'],
     ['p/stud.dat', '0 stud'],
     ['p/axlehole.dat', '0 axle hole'],
   ])
@@ -112,10 +106,7 @@ test('V4 resolver composes subparts, SNAP_CLEAR, SNAP_INCL grids and YOnly scali
     ['p/stud.dat', '0 !LDCAD SNAP_CYL [ID=studC] [gender=M] [caps=one] [secs=R 6 4]'],
     ['p/axlehole.dat', '0 !LDCAD SNAP_CYL [ID=axleHole] [gender=F] [caps=none] [secs=A 6 1] [slide=true] [scale=YOnly] [pos=0 1 0]'],
     ['p/connhole.dat', '0 !LDCAD SNAP_CYL [ID=connhole] [gender=F] [caps=none] [secs=R 6 20] [center=true] [slide=true]'],
-    ['parts/s/base.dat', [
-      '0 !LDCAD SNAP_CLEAR [ID=studC]',
-      '0 !LDCAD SNAP_CYL [ID=aStud] [gender=F] [caps=one] [secs=R 6 20] [pos=0 24 0] [grid=C 2 1 20 0]',
-    ].join('\n')],
+    ['parts/s/base.dat', '0 !LDCAD SNAP_CLEAR [ID=studC]\n0 !LDCAD SNAP_CYL [ID=aStud] [gender=F] [caps=one] [secs=R 6 20] [pos=0 24 0] [grid=C 2 1 20 0]'],
     ['parts/root.dat', '0 !LDCAD SNAP_INCL [ref=connhole.dat] [pos=0 10 0] [grid=C 2 1 20 0]'],
   ])
 
@@ -127,7 +118,7 @@ test('V4 resolver composes subparts, SNAP_CLEAR, SNAP_INCL grids and YOnly scali
 
   assert.equal(resolved.warnings.length, 0, JSON.stringify(resolved.warnings))
   assert.equal(resolved.connectors.length, 5)
-  assert.equal(resolved.connectors.some(connector => connector.id === 'studC'), false, 'SNAP_CLEAR must remove inherited primitive connector')
+  assert.equal(resolved.connectors.some(connector => connector.id === 'studC'), false)
 
   const anti = resolved.connectors.filter(connector => connector.id === 'aStud')
   assert.equal(anti.length, 2)
@@ -135,8 +126,8 @@ test('V4 resolver composes subparts, SNAP_CLEAR, SNAP_INCL grids and YOnly scali
 
   const axleHole = resolved.connectors.find(connector => connector.id === 'axleHole')
   assert.ok(axleHole)
-  assert.equal(axleHole.geometry.sections[0].lengthLdu, 2, 'YOnly must scale axial length')
-  assert.equal(axleHole.geometry.sections[0].radiusLdu, 6, 'YOnly must not scale radius')
+  assert.equal(axleHole.geometry.sections[0].lengthLdu, 2)
+  assert.equal(axleHole.geometry.sections[0].radiusLdu, 6)
 
   const included = resolved.connectors.filter(connector => connector.id === 'connhole')
   assert.equal(included.length, 2)
@@ -145,6 +136,53 @@ test('V4 resolver composes subparts, SNAP_CLEAR, SNAP_INCL grids and YOnly scali
   const converted = connectorToBrickLabV4(anti[0], [1, 0.5, -2])
   assert.equal(converted.unit, 'stud')
   assert.deepEqual(converted.frame.positionStud, [anti[0].frame.positionLdu[0] / 20 + 1, -anti[0].frame.positionLdu[1] / 20 + 0.5, -anti[0].frame.positionLdu[2] / 20 - 2])
+})
+
+test('V4 follows one SNAP_INCL level in primitive shadows but never recursively follows nested includes', async () => {
+  const official = new Map([
+    ['parts/root.dat', '0 root\n1 16 0 0 0 1 0 0 0 1 0 0 0 stud15.dat'],
+  ])
+  const shadow = new Map([
+    ['p/stud15.dat', '0 !LDCAD SNAP_INCL [ref=stud.dat]'],
+    ['p/stud.dat', '0 !LDCAD SNAP_CYL [ID=studC] [gender=M] [caps=one] [secs=R 6 4]'],
+  ])
+  const resolver = createShadowResolverV4({
+    fetchOfficialText: async path => official.get(path) ?? null,
+    fetchShadowText: async path => shadow.get(path) ?? null,
+  })
+  const resolved = await resolver.resolve('root.dat')
+  assert.equal(resolved.connectors.length, 1)
+  assert.equal(resolved.connectors[0].id, 'studC')
+  assert.equal(resolved.warnings.length, 0)
+
+  const nestedShadow = new Map([
+    ['parts/nested.dat', '0 !LDCAD SNAP_INCL [ref=outer.dat]'],
+    ['parts/outer.dat', '0 !LDCAD SNAP_INCL [ref=inner.dat]'],
+    ['parts/inner.dat', '0 !LDCAD SNAP_CYL [ID=forbiddenNested] [gender=M] [caps=one] [secs=R 6 4]'],
+  ])
+  const nested = createShadowResolverV4({
+    fetchOfficialText: async path => path === 'parts/nested.dat' ? '0 nested' : null,
+    fetchShadowText: async path => nestedShadow.get(path) ?? null,
+  })
+  const nestedResult = await nested.resolve('nested.dat')
+  assert.equal(nestedResult.connectors.length, 0)
+  assert.ok(nestedResult.warnings.some(warning => warning.code === 'nested-include-not-followed'))
+})
+
+test('V4 explicit SNAP_INCL scaling is applied independently from inherited scale policy', async () => {
+  const resolver = createShadowResolverV4({
+    fetchOfficialText: async path => path === 'parts/scaled.dat' ? '0 scaled' : null,
+    fetchShadowText: async path => {
+      if (path === 'parts/scaled.dat') return '0 !LDCAD SNAP_INCL [ref=probe.dat] [scale=1 2 1]'
+      if (path === 'parts/probe.dat') return '0 !LDCAD SNAP_CYL [ID=probe] [gender=F] [caps=none] [secs=R 6 10] [center=true]'
+      return null
+    },
+  })
+  const result = await resolver.resolve('scaled.dat')
+  assert.equal(result.warnings.length, 0, JSON.stringify(result.warnings))
+  assert.equal(result.connectors.length, 1)
+  assert.equal(result.connectors[0].geometry.sections[0].radiusLdu, 6)
+  assert.equal(result.connectors[0].geometry.sections[0].lengthLdu, 20)
 })
 
 test('V4 resolver reports transient source errors instead of treating them as missing metadata', async () => {
