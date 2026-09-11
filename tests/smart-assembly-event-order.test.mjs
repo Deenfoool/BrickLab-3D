@@ -11,7 +11,7 @@ test('Smart Assembly evaluates after catalog click has selected the inserted par
   const activationImport = bootstrap.indexOf("./guidance/smart-assembly-activation-v1.js?v=smart-assembly-20260911-v1")
   assert.ok(runtimeReady >= 0)
   assert.ok(activationImport > runtimeReady, 'guidance activation must remain after the established editor runtime is ready')
-  assert.match(bootstrap, /setTimeout\?\.\(\(\) => void startSmartAssembly\(\), 0\)/)
+  assert.match(bootstrap, /setTimeout\(\(\) => void startSmartAssembly\(\), 0\)/)
   assert.doesNotMatch(bootstrap, /requestIdleCallback/, 'Smart Assembly startup must not wait indefinitely for browser idle time')
 
   assert.match(app, /button\.onclick = \(\) => addPart\(button\.dataset\.part\)/, 'catalog insertion is performed by the button click handler')
