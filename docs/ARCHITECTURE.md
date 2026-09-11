@@ -1,5 +1,7 @@
 # BrickLab 3D architecture
 
+Architecture Consolidation V1 status: **COMPLETE**. See [`ARCHITECTURE_CONSOLIDATION_V1.md`](ARCHITECTURE_CONSOLIDATION_V1.md) for the closure record and roadmap-item-1 acceptance mapping.
+
 BrickLab is a browser-native ES-module application served directly by GitHub Pages. The production runtime intentionally stays **no-build**: `index.html` owns the canonical import map and `bootstrap.js` starts subsystems in a controlled order.
 
 This document describes the architecture after the first Architecture Consolidation milestone from [`ROADMAP_NEXT.md`](ROADMAP_NEXT.md).
@@ -143,20 +145,24 @@ app.js
   ↓
 architecture/editor-adapter-v1.js
   ↓
+architecture/contract-assert-v1.js
+  ↓
 viewport/UI extensions
 ```
 
 Loading the architecture facade **after** the Connector V4 physics guard is intentional: `physics.createSession()` must observe the already guarded `PhysicsSession.create` path.
 
+`architecture/contract-assert-v1.js` turns the consolidated boundaries into a production invariant. Runtime readiness is blocked if editor/projects are not bound, BUILD/SIMULATE ownership changes, the physics guard is inactive, or documented core APIs disappear.
+
 ## Migration policy
 
-Architecture Consolidation is incremental:
+Architecture Consolidation V1 is closed, but migration remains incremental behind the stable boundary:
 
-1. Add a stable boundary and regression tests.
-2. Bind/migrate existing editor state to that boundary.
-3. Migrate new features first; do not add new direct patch/global dependencies.
-4. Move existing consumers subsystem-by-subsystem.
-5. Delete duplicated legacy/runtime paths only after equivalent regression coverage exists.
+1. Stable boundary and regression tests are in production.
+2. Existing editor/project state is bound through the adapter.
+3. New roadmap features must use the stable subsystem APIs and must not add new direct patch/global dependencies.
+4. Existing internal consumers may move subsystem-by-subsystem when a focused change benefits from it.
+5. Duplicated legacy/runtime paths are deleted only after equivalent regression coverage exists.
 
 Do not rename layers merely to make version numbers disappear. A legacy module should only be removed when its ownership has actually moved and tests prove behavior stayed intact.
 
@@ -175,7 +181,7 @@ Architecture work must preserve all of these:
 
 ## Tests
 
-Architecture boundary regression:
+Architecture boundary and completion-contract regression:
 
 ```bash
 npm run test:architecture
@@ -187,4 +193,4 @@ Connector V4 acceptance remains the safety gate for connectivity/physics behavio
 npm run test:connectors-v4
 ```
 
-The architecture test also checks that bootstrap ordering keeps the physics guard before the facade and the facade before `app.js`.
+The architecture tests verify bootstrap ordering, editor/project binding, centralized part metadata/identity, explicit BUILD/SIMULATE ownership and the production fail-closed architecture assertion.

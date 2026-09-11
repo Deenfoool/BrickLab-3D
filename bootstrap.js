@@ -105,6 +105,13 @@ try {
 // Bind the current lexical editor state to the stable Architecture API only after
 // app.js has created the scene, selection collection, history controls and V4 object source.
 await import('./architecture/editor-adapter-v1.js?v=architecture-20260911-v1')
+
+// Architecture Consolidation V1 is a production invariant now, not only documentation.
+// The runtime is allowed to continue only if editor/projects are bound and BUILD/SIMULATE
+// still resolve through Connector V4 and its fail-closed physics guard.
+const { assertArchitectureContract } = await import('./architecture/contract-assert-v1.js?v=architecture-20260911-v1')
+assertArchitectureContract()
+
 // F9 toggles the V4 endpoint/axis overlay. It is removed synchronously before physics
 // collider measurement so diagnostics can never affect collision bounds.
 await import('./connectors-v4/debug-overlay-v4.js')
