@@ -1,4 +1,4 @@
-export const SMART_ASSEMBLY_ACTIVATION_VERSION = 'smart-assembly-activation-v1.0.0'
+export const SMART_ASSEMBLY_ACTIVATION_VERSION = 'smart-assembly-activation-v1.0.1'
 
 function enqueue(callback) {
   if (typeof globalThis.queueMicrotask === 'function') globalThis.queueMicrotask(callback)
@@ -6,7 +6,7 @@ function enqueue(callback) {
 }
 
 export async function activateSmartAssembly() {
-  await import('./smart-assembly-runtime-v1.js?v=smart-assembly-20260911-v3')
+  await import('./smart-assembly-runtime-v1.js?v=smart-assembly-20260911-v4')
 
   // app.js catalog cards select the newly inserted part from their `click` handler.
   // Observe the same click only in the bubble phase and defer evaluation to a
