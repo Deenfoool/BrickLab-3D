@@ -22,6 +22,10 @@ const retiredFiles = [
   'ldraw/runtime-v1.js',
   'ldraw/runtime-v2.js',
   'testlab.js',
+  'drivetrain.css',
+  'obstacle-test-patch.js',
+  'test-scenarios-v2.js',
+  'torque-test-patch.js',
 ]
 
 function localTarget(target) {
@@ -62,13 +66,26 @@ test('retired public specifiers resolve to current authoritative implementations
   }
 })
 
-test('the live menu, TEST Lab and LDraw generations remain present', async () => {
+test('unreachable TEST patch specifiers stay out of the production import map', async () => {
+  const imports = await productionImports()
+  for (const specifier of [
+    './obstacle-test-patch.js',
+    './test-scenarios-v2.js',
+    './torque-test-patch.js',
+  ]) {
+    assert.equal(imports[specifier], undefined, `${specifier} has no production import-map entry`)
+  }
+})
+
+test('the live menu, TEST Lab, physics and LDraw generations remain present', async () => {
   for (const file of [
     'menu/main-menu-v5.js',
     'menu/main-menu-v4.js',
     'menu/main-menu-v4.css',
     'menu/project-preloader-v4.js',
     'testlab-v2.js',
+    'physics-v2.js',
+    'test-world-visuals-v2.js',
     'ldraw/catalog-v3.js',
     'ldraw/runtime-v3.js',
   ]) {
