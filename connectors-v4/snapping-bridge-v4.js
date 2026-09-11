@@ -1,13 +1,14 @@
 import * as THREE from 'three'
 import * as V3 from '../snapping-v3.js'
 import { suppressNextConnectionForEndpoint } from '../connections.js'
+import { interactionGroupMembers } from '../editor-groups-v1.js'
 
 export * from '../snapping-v3.js'
 
-export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.4.2'
+export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.5.0'
 
 let preferredCandidateKey = null
-let preferredInstanceId = null
+let preferredInteractionId = null
 let connectivityWarmPromise = null
 let lastConnectivityWarmAt = 0
 
@@ -55,19 +56,37 @@ function isLDrawPart(object) {
   return String(object?.userData?.partId || '').startsWith('ldraw-')
 }
 
+function interactionId(object) {
+  return object?.userData?.groupId
+    ? `group:${object.userData.groupId}`
+    : `part:${object?.userData?.instanceId || ''}`
+}
+
+function groupMembers(object) {
+  const members = interactionGroupMembers(object)
+  return members.length ? members : (object ? [object] : [])
+}
+
+function externalTargets(selected, objects) {
+  const internal = new Set(groupMembers(selected))
+  return (objects ?? []).filter(object => object && !internal.has(object))
+}
+
 function warmNearbyConnectivity(v4,selected,objects) {
   if (!v4?.hydrateObjects || !selected) return
   const now=typeof performance !== 'undefined' ? performance.now() : Date.now()
   if (connectivityWarmPromise || now-lastConnectivityWarmAt<180) return
   lastConnectivityWarmAt=now
-  const origin=selected.getWorldPosition(new THREE.Vector3())
+  const members=groupMembers(selected)
+  const origin=members.reduce((sum,object)=>sum.add(object.getWorldPosition(new THREE.Vector3())),new THREE.Vector3())
+    .multiplyScalar(1/Math.max(1,members.length))
   const nearby=(objects??[])
-    .filter(object=>object && object!==selected && isLDrawPart(object))
+    .filter(object=>object && isLDrawPart(object))
     .map(object=>({object,distance:origin.distanceTo(object.getWorldPosition(new THREE.Vector3()))}))
     .sort((a,b)=>a.distance-b.distance)
     .slice(0,31)
     .map(entry=>entry.object)
-  const batch=[selected,...nearby]
+  const batch=[...members.filter(isLDrawPart),...nearby]
   connectivityWarmPromise=Promise.resolve(v4.hydrateObjects(batch))
     .catch(error=>console.debug?.('[BrickLab Connector V4] Nearby connectivity warmup failed.',error))
     .finally(()=>{connectivityWarmPromise=null})
@@ -79,25 +98,73 @@ export function v4OwnsLegacyCandidate(selected, legacy) {
   return isLDrawPart(selected) && isLDrawPart(target)
 }
 
+function candidateOrderValue(candidate) {
+  if (!candidate) return Number.POSITIVE_INFINITY
+  if (Number.isFinite(candidate.score)) return candidate.score
+  if (Number.isFinite(candidate.distanceStud)) return candidate.distanceStud
+  if (Number.isFinite(candidate.distance)) return candidate.distance
+  return Number.POSITIVE_INFINITY
+}
+
+function bestGroupV4Candidate(v4,selected,targets,options) {
+  const members=groupMembers(selected).filter(isLDrawPart)
+  let best=null
+  for(const member of members){
+    const candidate=v4.findActiveCandidate(member,targets,options)
+    if(!candidate)continue
+    candidate.groupSourceObject=member
+    candidate.groupInteractionId=interactionId(selected)
+    if(!best || candidateOrderValue(candidate)<candidateOrderValue(best)) best=candidate
+  }
+  return best
+}
+
+function captureGroupWorldState(selected) {
+  const members=groupMembers(selected)
+  const matrices=new Map()
+  for(const object of members){
+    object.updateWorldMatrix(true,false)
+    matrices.set(object,object.matrixWorld.clone())
+  }
+  return {members,matrices}
+}
+
+function applyWorldMatrix(object,worldMatrix) {
+  if(!object?.parent)return
+  object.parent.updateWorldMatrix(true,false)
+  const local=object.parent.matrixWorld.clone().invert().multiply(worldMatrix)
+  local.decompose(object.position,object.quaternion,object.scale)
+  object.updateMatrixWorld(true)
+}
+
+function propagateAnchorDelta(anchor,state) {
+  if(!anchor || !state?.matrices?.has(anchor) || state.members.length<2)return
+  anchor.updateWorldMatrix(true,false)
+  const before=state.matrices.get(anchor)
+  const delta=anchor.matrixWorld.clone().multiply(before.clone().invert())
+  for(const object of state.members){
+    if(object===anchor)continue
+    const start=state.matrices.get(object)
+    if(start)applyWorldMatrix(object,delta.clone().multiply(start))
+  }
+}
+
 export function findSnapCandidate(selected, objects, options = {}) {
-  const legacy = V3.findSnapCandidate(selected, objects, options)
+  const targets=externalTargets(selected,objects)
+  const legacy = V3.findSnapCandidate(selected, targets, options)
   if (legacy?.kind === 'gear-mesh') return legacy
 
   const v4 = runtime()
-  const selectedIsLDraw = isLDrawPart(selected)
-  const instanceId=selected?.userData?.instanceId || null
-  if (instanceId !== preferredInstanceId) {
-    preferredInstanceId=instanceId
+  const id=interactionId(selected)
+  if (id !== preferredInteractionId) {
+    preferredInteractionId=id
     preferredCandidateKey=null
   }
 
-  if (v4 && selectedIsLDraw) {
-    warmNearbyConnectivity(v4,selected,objects)
+  if (v4 && groupMembers(selected).some(isLDrawPart)) {
+    warmNearbyConnectivity(v4,selected,targets)
     try {
-      // Candidate generation already computes and sorts the full geometric set before
-      // slicing. Let runtime certification walk that complete ordered set so occupied
-      // studs/holes can never hide a farther free endpoint behind an arbitrary cap.
-      const candidate = v4.findActiveCandidate(selected, objects, {
+      const candidate = bestGroupV4Candidate(v4,selected,targets,{
         maxResults:Number.POSITIVE_INFINITY,
         preferredKey:preferredCandidateKey,
         captureDistanceStud:typeof options === 'number' ? options : options?.maxDistance,
@@ -120,24 +187,32 @@ export function findSnapCandidate(selected, objects, options = {}) {
 
 export function orientForSnap(selected, candidate) {
   if (candidate?.kind === 'connector-v4-active') return
-  return V3.orientForSnap(selected, candidate)
+  const state=captureGroupWorldState(selected)
+  V3.orientForSnap(selected,candidate)
+  propagateAnchorDelta(selected,state)
 }
 
 export function applySnap(selected, candidate) {
-  if (candidate?.kind !== 'connector-v4-active') return V3.applySnap(selected, candidate)
+  const state=captureGroupWorldState(selected)
+  if (candidate?.kind !== 'connector-v4-active') {
+    const result=V3.applySnap(selected,candidate)
+    propagateAnchorDelta(selected,state)
+    return result
+  }
 
   const v4 = runtime()
-  const instanceId = selected?.userData?.instanceId
-  const endpointId = candidate?.source?.id
-  if (instanceId && endpointId) suppressNextConnectionForEndpoint(instanceId, endpointId)
+  const sourceObject=candidate.groupSourceObject ?? candidate.sourceObject ?? selected
+  const suppressInstanceId=selected?.userData?.instanceId
+  const endpointId=candidate?.source?.id
+  if (suppressInstanceId && endpointId) suppressNextConnectionForEndpoint(suppressInstanceId, endpointId)
 
   if (!v4) {
     candidate.v4Commit = { accepted:false, reason:'runtime-unavailable' }
     return
   }
-
   const rawCandidate = {
     ...candidate,
+    sourceObject,
     source:candidate.v4RawSource ?? candidate.source,
     target:candidate.v4RawTarget ?? candidate.target,
   }
@@ -145,7 +220,10 @@ export function applySnap(selected, candidate) {
     const result = v4.commitActiveCandidate(rawCandidate)
     candidate.v4Commit = result
     globalThis.__bricklabLastConnectorV4Commit = result
-    if (result?.accepted) preferredCandidateKey=null
+    if (result?.accepted) {
+      propagateAnchorDelta(sourceObject,state)
+      preferredCandidateKey=null
+    }
     if (!result?.accepted) console.warn('[BrickLab Connector V4] Snap candidate failed final commit validation.', result)
   } catch (error) {
     candidate.v4Commit = { accepted:false, reason:'bridge-exception', error:String(error?.message || error) }
