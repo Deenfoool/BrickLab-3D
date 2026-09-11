@@ -51,7 +51,7 @@ Manual QA pages, tests, examples, documentation, `src/` and build configuration 
 
 `tests/repository-hygiene.test.mjs` now verifies that retired files remain absent, old public specifiers resolve to current owners, and the live menu / TEST Lab / LDraw generations remain present.
 
-The hygiene test is part of both:
+The hygiene test is imported by `tests/architecture-contract.test.mjs`, so it runs through both existing architecture and Connector V4 acceptance commands:
 
 ```bash
 npm run test:architecture
