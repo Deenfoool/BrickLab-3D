@@ -18,7 +18,6 @@ const retiredFiles = [
   'ldraw/catalog-v1.js',
   'ldraw/catalog-v1.css',
   'ldraw/catalog-v2.js',
-  'ldraw/catalog-v2.css',
   'ldraw/runtime-v1.js',
   'ldraw/runtime-v2.js',
   'testlab.js',
@@ -92,6 +91,12 @@ test('dynamically loaded drivetrain stylesheet remains available', async () => {
   assert.match(physics, /stylesheet\.href\s*=\s*['"]\.\/drivetrain\.css['"]/, 'physics telemetry dynamically loads drivetrain.css')
 })
 
+test('live LDraw catalog stylesheet remains available', async () => {
+  await access(new URL('ldraw/catalog-v2.css', root))
+  const catalog = await readFile(new URL('ldraw/catalog-v3.js', root), 'utf8')
+  assert.match(catalog, /new URL\(['"]\.\/catalog-v2\.css\?v=ldraw-catalog-20260910-v3['"],import\.meta\.url\)/, 'catalog-v3 keeps its live stylesheet dependency')
+})
+
 test('the live menu, TEST Lab, physics and LDraw generations remain present', async () => {
   for (const file of [
     'menu/main-menu-v5.js',
@@ -103,6 +108,7 @@ test('the live menu, TEST Lab, physics and LDraw generations remain present', as
     'physics-stability-v3.js',
     'test-world-visuals-v2.js',
     'ldraw/catalog-v3.js',
+    'ldraw/catalog-v2.css',
     'ldraw/runtime-v3.js',
   ]) {
     await access(new URL(file, root))
