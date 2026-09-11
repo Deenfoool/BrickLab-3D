@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import './repository-hygiene.test.mjs'
+import './performance-engine.test.mjs'
 
 import {
   ARCHITECTURE_CONSOLIDATION_STATUS,
@@ -89,12 +90,14 @@ test('completion contract requires editor, projects and centralized metadata acc
 test('production bootstrap asserts the architecture contract after binding the editor adapter', async () => {
   const source = await readFile(new URL('../bootstrap.js', import.meta.url), 'utf8')
   const adapter = source.indexOf("await import('./architecture/editor-adapter-v1.js?v=architecture-20260911-v1')")
+  const performanceEngine = source.indexOf("await import('./performance/runtime-v1.js?v=performance-20260911-v1')")
   const assertionImport = source.indexOf("await import('./architecture/contract-assert-v1.js?v=architecture-20260911-v1')")
   const assertionCall = source.indexOf('assertArchitectureContract()')
   const runtimeReady = source.indexOf('window.__bricklabRuntimeReady = true')
 
   assert.ok(adapter >= 0)
-  assert.ok(assertionImport > adapter, 'contract assertion loads after live editor/projects binding')
+  assert.ok(performanceEngine > adapter, 'Performance Engine consumes the bound editor contract')
+  assert.ok(assertionImport > performanceEngine, 'contract assertion loads after optional performance initialization')
   assert.ok(assertionCall > assertionImport, 'architecture contract is executed')
   assert.ok(runtimeReady > assertionCall, 'runtime is marked ready only after the architecture contract passes')
 })

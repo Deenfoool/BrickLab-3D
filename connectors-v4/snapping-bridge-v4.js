@@ -5,7 +5,7 @@ import { interactionGroupMembers } from '../editor-groups-v1.js'
 
 export * from '../snapping-v3.js'
 
-export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.5.0'
+export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.6.0'
 
 let preferredCandidateKey = null
 let preferredInteractionId = null
@@ -70,6 +70,18 @@ function groupMembers(object) {
 function externalTargets(selected, objects) {
   const internal = new Set(groupMembers(selected))
   return (objects ?? []).filter(object => object && !internal.has(object))
+}
+
+function performanceTargets(selected, objects, options) {
+  const engine=globalThis.BrickLabPerformance
+  if(!engine?.querySnapTargets)return null
+  const captureDistanceStud=typeof options === 'number' ? options : options?.maxDistance
+  try {
+    return engine.querySnapTargets(groupMembers(selected),objects,{captureDistanceStud})
+  } catch (error) {
+    console.debug?.('[BrickLab Performance] Spatial SNAP query fell back to the legacy target list.',error)
+    return null
+  }
 }
 
 function warmNearbyConnectivity(v4,selected,objects) {
@@ -150,7 +162,9 @@ function propagateAnchorDelta(anchor,state) {
 }
 
 export function findSnapCandidate(selected, objects, options = {}) {
-  const targets=externalTargets(selected,objects)
+  const spatial=performanceTargets(selected,objects,options)
+  const targets=spatial?.objects ?? externalTargets(selected,objects)
+  const connectorTargets=spatial?.connectorObjects ?? targets
   const legacy = V3.findSnapCandidate(selected, targets, options)
   if (legacy?.kind === 'gear-mesh') return legacy
 
@@ -164,7 +178,7 @@ export function findSnapCandidate(selected, objects, options = {}) {
   if (v4 && groupMembers(selected).some(isLDrawPart)) {
     warmNearbyConnectivity(v4,selected,targets)
     try {
-      const candidate = bestGroupV4Candidate(v4,selected,targets,{
+      const candidate = bestGroupV4Candidate(v4,selected,connectorTargets,{
         maxResults:Number.POSITIVE_INFINITY,
         preferredKey:preferredCandidateKey,
         captureDistanceStud:typeof options === 'number' ? options : options?.maxDistance,
