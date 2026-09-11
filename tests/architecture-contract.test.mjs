@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import './repository-hygiene.test.mjs'
 import './performance-engine.test.mjs'
+import './ldraw-mechanical-intelligence.test.mjs'
 
 import {
   ARCHITECTURE_CONSOLIDATION_STATUS,
