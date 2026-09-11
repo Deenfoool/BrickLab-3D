@@ -122,14 +122,6 @@ try {
 const { assertArchitectureContract } = await import('./architecture/contract-assert-v1.js?v=architecture-20260911-v1')
 assertArchitectureContract()
 
-// Smart Assembly Assistant consumes Mechanical Intelligence + the stable editor facade.
-// It is advisory only: no part is loaded or inserted until the user accepts a card.
-try {
-  await import('./guidance/smart-assembly-runtime-v1.js?v=smart-assembly-20260911-v1')
-} catch (error) {
-  console.warn('[BrickLab Smart Assembly] Assistant unavailable; editor continues without assembly suggestions.', error)
-}
-
 // F9 toggles the V4 endpoint/axis overlay. It is removed synchronously before physics
 // collider measurement so diagnostics can never affect collision bounds.
 await import('./connectors-v4/debug-overlay-v4.js')
@@ -170,3 +162,21 @@ await import('./menu/project-menu-v1.js?v=project-menu-20260910-v1')
 const { assertPhysicsRuntimeContract } = await import('./physics-ownership-v1.js')
 assertPhysicsRuntimeContract()
 window.__bricklabRuntimeReady = true
+
+// Smart Assembly is advisory and must never sit on the critical editor-start path.
+// Start it only after the established editor/UI runtime is fully ready. A slow LDraw
+// dependency or a guidance regression therefore cannot leave the user stuck on the
+// base app.js shell while the later overlay/i18n/catalog modules are still waiting.
+const startSmartAssembly = async () => {
+  try {
+    await import('./guidance/smart-assembly-runtime-v1.js?v=smart-assembly-20260911-v2')
+  } catch (error) {
+    console.warn('[BrickLab Smart Assembly] Assistant unavailable; editor continues without assembly suggestions.', error)
+  }
+}
+
+if (typeof globalThis.requestIdleCallback === 'function') {
+  globalThis.requestIdleCallback(() => void startSmartAssembly(), { timeout: 1200 })
+} else {
+  globalThis.setTimeout?.(() => void startSmartAssembly(), 0)
+}

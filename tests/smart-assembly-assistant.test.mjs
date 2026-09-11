@@ -91,7 +91,6 @@ test('already centered compatible tire/rim suppresses duplicate suggestions', ()
   assert.equal(isCompatibleAssemblyPresent(tire, tireDef, [tire, rim], lookup), false)
 })
 
-
 test('LDraw bottom-normalized tire/rim placement aligns visual centres, including rotated assemblies', () => {
   const tireDef = ldrawDef('6578', 'tire')
   const source = sceneObject(tireDef.id, [5,2,-1], [0,0,Math.PI / 2])
@@ -117,7 +116,6 @@ test('accepted placement reuses source transform and a normal editor group id', 
   assert.match(smartAssemblyDismissalKey(source, choice), /instance-.*::tire-rim-30\.4x14::rim/)
 })
 
-
 test('stable editor facade exposes mode, viewport projection and normal part insertion for guidance features', () => {
   const part = {
     id:'fixture-rim',
@@ -138,7 +136,6 @@ test('stable editor facade exposes mode, viewport projection and normal part ins
   assert.deepEqual(api.editor.viewportPoint({}), { x:10, y:20, visible:true })
   assert.equal(api.editor.insertPart(part.id, { groupId:'g' }), inserted)
 })
-
 
 test('legacy editor bridge inserts a normal PARTS object into the live build root and persists only when called', () => {
   const children = []
@@ -188,16 +185,19 @@ test('legacy editor bridge inserts a normal PARTS object into the live build roo
   assert.deepEqual(saved, ['save'])
 })
 
-test('production bootstrap loads Smart Assembly only after the stable editor contract is bound', async () => {
+test('production bootstrap never blocks the established editor UI on Smart Assembly', async () => {
   const source = await readFile(new URL('../bootstrap.js', import.meta.url), 'utf8')
   const runtime = await readFile(new URL('../guidance/smart-assembly-runtime-v1.js', import.meta.url), 'utf8')
   const adapter = source.indexOf("./architecture/editor-adapter-v1.js?v=architecture-20260911-v1")
-  const assistant = source.indexOf("./guidance/smart-assembly-runtime-v1.js?v=smart-assembly-20260911-v1")
-  const physicsOwner = source.indexOf('assertPhysicsRuntimeContract()')
+  const runtimeReady = source.indexOf('window.__bricklabRuntimeReady = true')
+  const assistant = source.indexOf("./guidance/smart-assembly-runtime-v1.js?v=smart-assembly-20260911-v2")
   assert.ok(adapter >= 0)
-  assert.ok(assistant > adapter)
-  assert.ok(physicsOwner > assistant, 'assistant installs before the final runtime-ready physics assertion')
+  assert.ok(runtimeReady > adapter, 'established editor runtime finishes after the stable editor adapter is bound')
+  assert.ok(assistant > runtimeReady, 'optional Smart Assembly starts only after the editor is runtime-ready')
+  assert.match(source, /requestIdleCallback/)
+  assert.doesNotMatch(source.slice(0, runtimeReady), /smart-assembly-runtime-v1/, 'guidance must not be in the critical startup chain')
   assert.match(runtime, /subsystems\.editor\.insertPart/)
   assert.match(runtime, /const sourceDef = current\.sourceDef/, 'install flow must retain the evaluated source definition')
+  assert.doesNotMatch(runtime, /setInterval/, 'Smart Assembly should be event-driven instead of polling the editor forever')
   assert.doesNotMatch(runtime, /commitCandidate|createConnection\(/, 'tire/rim install must not fabricate a Connector V4 relationship')
 })

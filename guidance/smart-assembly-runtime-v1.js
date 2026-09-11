@@ -13,7 +13,7 @@ import {
   smartAssemblyPlacement,
 } from './assembly-compatibility-v1.js'
 
-export const SMART_ASSEMBLY_ASSISTANT_VERSION = 'smart-assembly-assistant-v1.0.0'
+export const SMART_ASSEMBLY_ASSISTANT_VERSION = 'smart-assembly-assistant-v1.0.1'
 
 const subsystems = globalThis.BrickLabSubsystems
 if (!subsystems?.editor?.ready?.()) throw new Error('Smart Assembly Assistant requires the bound editor subsystem')
@@ -22,7 +22,7 @@ function ensureStylesheet() {
   if (!globalThis.document?.head || document.querySelector('link[data-bricklab-smart-assembly]')) return
   const link = document.createElement('link')
   link.rel = 'stylesheet'
-  link.href = './guidance/smart-assembly-v1.css?v=smart-assembly-20260911-v1'
+  link.href = './guidance/smart-assembly-v1.css?v=smart-assembly-20260911-v2'
   link.dataset.bricklabSmartAssembly = 'v1'
   document.head.append(link)
 }
@@ -293,11 +293,11 @@ for (const eventName of [
   'bricklab:partcatalogchange',
   'bricklab:ldrawloaded',
   'bricklab:editorexternalmutation',
+  'bricklab:editorgroupselection',
 ]) globalThis.addEventListener?.(eventName, scheduleEvaluation)
 
 document.addEventListener('pointerup', scheduleEvaluation, true)
 document.addEventListener('keyup', scheduleEvaluation, true)
-const contextTimer = globalThis.setInterval?.(scheduleEvaluation, 650)
 
 const api = Object.freeze({
   version:SMART_ASSEMBLY_ASSISTANT_VERSION,
@@ -318,7 +318,6 @@ const api = Object.freeze({
   installBest:() => current ? installChoice(current.choice) : Promise.resolve(null),
   resetDismissals() { dismissed.clear(); scheduleEvaluation() },
   destroy() {
-    if (contextTimer) clearInterval(contextTimer)
     if (animationFrame) cancelAnimationFrame(animationFrame)
     ui.layer.remove()
   },
