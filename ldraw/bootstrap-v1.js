@@ -1,4 +1,6 @@
+import { PARTS } from '../parts.js'
 import { registerLDrawPart } from './runtime-v3.js'
+import { installLDrawMechanicalIntelligence } from './mechanical-intelligence-v1.js?v=ldraw-mechanics-20260911-v1'
 
 const PROJECT_KEYS = ['bricklab.project.v2', 'bricklab.project.v1']
 const LDRAW_PREFIX = 'ldraw-'
@@ -67,12 +69,17 @@ function installImportPreparation() {
   }, true)
 }
 
+// Install semantic classification before persisted/imported ldraw-* definitions are
+// registered. The classifier then follows catalog/legacy/V4 hydration events without
+// becoming a geometry, connector or physics owner.
+const mechanicalIntelligence = installLDrawMechanicalIntelligence(PARTS)
 registerPersistedLDrawParts()
 installImportPreparation()
 
 export const BrickLabLDrawBootstrap = Object.freeze({
   registerProjectParts: registerLDrawProjectParts,
   registerPersistedParts: registerPersistedLDrawParts,
+  mechanicalIntelligence,
 })
 
 globalThis.BrickLabLDrawBootstrap = BrickLabLDrawBootstrap
