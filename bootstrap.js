@@ -88,7 +88,15 @@ try {
 // unsupported/ambiguous connection blocks SIMULATE rather than downgrading silently.
 await import('./connectors-v4/physics-guard-v4.js')
 
-await import('./app.js')
+// app.js keeps selection state lexical. The editor-group layer installs a one-shot Set
+// constructor immediately before app evaluation so selectedObjects becomes group-aware,
+// then restores the native Set as soon as that one collection has been created.
+globalThis.BrickLabEditorGroups?.armSelectionCapture?.()
+try {
+  await import('./app.js')
+} finally {
+  globalThis.BrickLabEditorGroups?.cancelSelectionCapture?.()
+}
 // F9 toggles the V4 endpoint/axis overlay. It is removed synchronously before physics
 // collider measurement so diagnostics can never affect collision bounds.
 await import('./connectors-v4/debug-overlay-v4.js')
