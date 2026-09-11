@@ -165,11 +165,11 @@ window.__bricklabRuntimeReady = true
 
 // Smart Assembly stays out of the critical editor-start path, but once the established
 // editor/UI runtime is ready its activation should start promptly instead of waiting for
-// browser idle time. The activation layer also re-evaluates after catalog click handlers
-// have inserted and selected a new part.
+// browser idle time. The activation layer also installs a temporary visible diagnostic
+// panel so the current browser-specific failure can be isolated without DevTools.
 const startSmartAssembly = async () => {
   try {
-    await import('./guidance/smart-assembly-activation-v1.js?v=smart-assembly-20260911-v2')
+    await import('./guidance/smart-assembly-activation-v1.js?v=smart-assembly-20260911-v3')
   } catch (error) {
     console.warn('[BrickLab Smart Assembly] Assistant unavailable; editor continues without assembly suggestions.', error)
   }
