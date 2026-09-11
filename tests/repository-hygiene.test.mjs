@@ -22,7 +22,6 @@ const retiredFiles = [
   'ldraw/runtime-v1.js',
   'ldraw/runtime-v2.js',
   'testlab.js',
-  'drivetrain.css',
   'obstacle-test-patch.js',
   'test-scenarios-v2.js',
   'torque-test-patch.js',
@@ -75,6 +74,12 @@ test('unreachable TEST patch specifiers stay out of the production import map', 
   ]) {
     assert.equal(imports[specifier], undefined, `${specifier} has no production import-map entry`)
   }
+})
+
+test('dynamically loaded drivetrain stylesheet remains available', async () => {
+  await access(new URL('drivetrain.css', root))
+  const physics = await readFile(new URL('physics.js', root), 'utf8')
+  assert.match(physics, /stylesheet\.href\s*=\s*['"]\.\/drivetrain\.css['"]/, 'physics telemetry dynamically loads drivetrain.css')
 })
 
 test('the live menu, TEST Lab, physics and LDraw generations remain present', async () => {
