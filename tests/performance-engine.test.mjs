@@ -1,8 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import * as THREE from 'three'
+import { readFile } from 'node:fs/promises'
 import { SpatialHash3D } from '../performance/spatial-index-v1.js'
 import { FrameBudgetScheduler } from '../performance/work-queue-v1.js'
+import { createPersistentJsonCache } from '../performance/persistent-cache-v1.js'
 import { createPerformanceEngine } from '../performance/runtime-v1.js'
 import { findBestPlacementCandidateV4 } from '../connectors-v4/candidate-v4.js'
 
@@ -72,4 +74,54 @@ test('performance SNAP target query preserves the same best V4 candidate without
   assert.ok(full&&indexed)
   assert.equal(indexed.key,full.key)
   assert.equal(indexed.targetObject,near)
+})
+
+test('persistent JSON cache survives a new cache instance and expires stale records',async()=>{
+  const backing=new Map()
+  const storage={
+    getItem:key=>backing.get(key)??null,
+    setItem:(key,value)=>backing.set(key,value),
+    removeItem:key=>backing.delete(key),
+  }
+  let time=1000
+  const options={namespace:'fixture',version:'schema-v1',ttlMs:100,indexedDBRef:null,storage,now:()=>time}
+  const first=createPersistentJsonCache(options)
+  await first.set('3001.dat',{description:'Brick 2 x 4'})
+  assert.deepEqual(await first.get('3001.dat'),{description:'Brick 2 x 4'})
+
+  const second=createPersistentJsonCache(options)
+  assert.deepEqual(await second.get('3001.dat'),{description:'Brick 2 x 4'},'new runtime instance reads persisted metadata')
+  time=1201
+  assert.equal(await second.get('3001.dat'),null,'TTL prevents stale parsed metadata from surviving indefinitely')
+})
+
+test('production SNAP bridge asks Performance Engine for local targets before legacy candidate work',async()=>{
+  const source=await readFile(new URL('../connectors-v4/snapping-bridge-v4.js',import.meta.url),'utf8')
+  const spatial=source.indexOf('performanceTargets(selected,objects,options)')
+  const legacy=source.indexOf('V3.findSnapCandidate(selected, targets, options)')
+  assert.ok(spatial>=0 && legacy>spatial)
+  assert.match(source,/connectorTargets=spatial\?\.connectorObjects \?\? targets/)
+})
+
+test('production import map canonicalizes Performance Engine and routes catalog metadata through persistent cache',async()=>{
+  const html=await readFile(new URL('../index.html',import.meta.url),'utf8')
+  const match=html.match(/<script type="importmap">([\s\S]*?)<\/script>/)
+  assert.ok(match)
+  const imports=JSON.parse(match[1]).imports
+  const canonical=imports['./app.js']?.match(/\?v=(.+)$/)?.[1]
+  for(const module of ['runtime-v1.js','spatial-index-v1.js','work-queue-v1.js','persistent-cache-v1.js']){
+    assert.equal(imports[`./performance/${module}`],`./performance/${module}?v=${canonical}`)
+  }
+  assert.equal(imports['./performance/runtime-v1.js?v=performance-20260911-v1'],imports['./performance/runtime-v1.js'])
+  assert.equal(imports['./ldraw/runtime-v3.js?v=ldraw-catalog-20260910-v3'],imports['./ldraw/runtime-metadata-cache-v1.js'])
+})
+
+test('Performance Engine V1 closure record maps roadmap item 2 acceptance criteria',async()=>{
+  const source=await readFile(new URL('../docs/PERFORMANCE_ENGINE_V1.md',import.meta.url),'utf8')
+  assert.match(source,/Status: \*\*COMPLETE\*\*/)
+  assert.match(source,/1,500\+/)
+  assert.match(source,/full target scan/i)
+  assert.match(source,/yield/i)
+  assert.match(source,/persistent/i)
+  assert.match(source,/fail-safe/i)
 })

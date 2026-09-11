@@ -74,12 +74,13 @@ test('all Connector V4 modules and their real historical imports collapse to one
   }
 })
 
-test('all LDraw JavaScript modules share one canonical generation and runtime cache', async () => {
+test('all LDraw JavaScript modules share canonical runtime caches while catalog metadata uses the persistent wrapper', async () => {
   const { imports } = await productionImports()
   const canonical = imports['./app.js']?.match(/\?v=(.+)$/)?.[1]
   assert.ok(canonical)
   const dir=new URL('../ldraw/',import.meta.url)
   const names=(await readdir(dir)).filter(name=>name.endsWith('.js'))
+  const wrapperSpecifier='./ldraw/runtime-metadata-cache-v1.js'
   for(const name of names){
     const specifier=`./ldraw/${name}`
     assert.equal(imports[specifier],`${specifier}?v=${canonical}`,`${name} uses canonical LDraw generation`)
@@ -91,8 +92,17 @@ test('all LDraw JavaScript modules share one canonical generation and runtime ca
       const canonicalSpecifier=`./${resolved}`
       if (!imports[canonicalSpecifier]) continue
       const historical=`./${resolved}?${query}`
-      assert.equal(imports[historical],imports[canonicalSpecifier],`${historical} resolves to the same LDraw module instance`)
+      const historicalTarget=imports[historical]
+      if(historical==='./ldraw/runtime-v3.js?v=ldraw-catalog-20260910-v3'){
+        assert.equal(historicalTarget,imports[wrapperSpecifier],`${historical} uses persistent parsed-metadata wrapper`)
+      }else{
+        assert.equal(historicalTarget,imports[canonicalSpecifier],`${historical} resolves to the same LDraw module instance`)
+      }
     }
   }
-  assert.equal(imports['./ldraw/runtime-v3.js?v=ldraw-catalog-20260910-v3'],imports['./ldraw/runtime-v3.js'],'catalog and bootstrap share runtime-v3 caches')
+  const wrapperSource=await readFile(new URL('runtime-metadata-cache-v1.js',dir),'utf8')
+  assert.match(wrapperSource,/from ['"]\.\/runtime-v3\.js['"]/,'persistent metadata wrapper consumes canonical runtime-v3')
+  assert.match(wrapperSource,/export \* from ['"]\.\/runtime-v3\.js['"]/,'persistent metadata wrapper re-exports canonical runtime-v3')
+  assert.equal(imports['./ldraw/runtime-v3.js?v=ldraw-catalog-20260910-v3'],imports[wrapperSpecifier],'catalog metadata path uses persistent wrapper')
+  assert.equal(imports['./ldraw/runtime-v3.js?v=ldraw-20260910-v3'],imports['./ldraw/runtime-v3.js'],'bootstrap/runtime historical path still shares runtime-v3 caches')
 })

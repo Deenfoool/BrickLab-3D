@@ -11,6 +11,8 @@ try {
   console.warn('[BrickLab] Project preloader unavailable; continuing with normal browser loading.', error)
 }
 
+// Diagnostics and the complete PARTS registry must execute before the menu creates
+// its real Three.js drivetrain from the same factories used by BUILD mode.
 try {
   projectPreloader?.stageProgress(.18, 'Подготовка диагностики')
   await import('./physics-error-ui.js')
@@ -37,10 +39,15 @@ if (showMainMenu) {
   try {
     menuResult = await showMainMenu()
   } catch (error) {
+    // The menu is presentation-only. Menu/WebGL failure must never prevent the editor
+    // from starting, especially on old/mobile GPUs.
     console.warn('[BrickLab] Main menu unavailable; opening editor directly.', error)
   }
 }
 
+// app.js currently restores the last local project during module evaluation. For a
+// deliberate New/Open action, temporarily hide that snapshot while the editor boots,
+// then put it back so "New project" never destroys the user's previous saved build.
 const hiddenProjectEntries = []
 if (menuResult.action === 'new' || menuResult.action === 'open') {
   for (const key of ['bricklab.project.v2', 'bricklab.project.v1']) {
@@ -52,27 +59,51 @@ if (menuResult.action === 'new' || menuResult.action === 'open') {
   }
 }
 
+// Enable Three.js' shared in-memory FileLoader cache before any LDraw model starts
+// loading. LDraw parts reuse many primitives/subparts, so later models can reuse the
+// same resources without re-entering the network layer.
 await import('./ldraw/cache-boost-v1.js')
+
+// Register dynamic ldraw-* definitions before app.js restores a saved project. LDraw
+// modules use canonical import-map specifiers so bootstrap/catalog/prefetch share one
+// text/prototype cache instance.
 await import('./ldraw/bootstrap-v1.js')
 
+// Connector V4.2 owns structural snapping for LDraw parts. These unversioned
+// specifiers are intentionally canonicalized by index.html's import map so every V4
+// dependency is loaded from one cache generation.
 globalThis.__bricklabConnectorV4StartMode = menuResult.action
 await import('./connectors-v4/runtime-v4.js')
 
+// Start predictive LDraw warming before the editor itself is evaluated. The loader
+// works only in idle/hover/visibility time, deduplicates work and keeps V4 hydration
+// on the same definitions that BUILD will later instantiate.
 try {
   await import('./ldraw/fast-loader-v1.js')
 } catch (error) {
   console.warn('[BrickLab LDraw] Predictive fast loader unavailable; using normal on-demand loading.', error)
 }
 
+// The guard creates V4 Rapier constraints only from a fresh physics policy plan. Any
+// unsupported/ambiguous connection blocks SIMULATE rather than downgrading silently.
 await import('./connectors-v4/physics-guard-v4.js')
+
+// Architecture API v1 is a compatibility facade, not a new owner. It exposes stable
+// subsystem contracts while BUILD remains owned by Connector V4/bridges and SIMULATE
+// remains owned by the fail-closed Connector V4 physics guard.
 await import('./architecture/runtime-v1.js?v=architecture-20260911-v1')
 
+// app.js keeps selection state lexical. The editor-group layer installs a one-shot Set
+// constructor immediately before app evaluation so selectedObjects becomes group-aware,
+// then restores the native Set as soon as that one collection has been created.
 globalThis.BrickLabEditorGroups?.armSelectionCapture?.()
 try {
   await import('./app.js')
 } finally {
   globalThis.BrickLabEditorGroups?.cancelSelectionCapture?.()
 }
+// Bind the current lexical editor state to the stable Architecture API only after
+// app.js has created the scene, selection collection, history controls and V4 object source.
 await import('./architecture/editor-adapter-v1.js?v=architecture-20260911-v1')
 
 // Performance Engine V1 consumes the stable editor contract, builds scene/endpoint
@@ -80,13 +111,19 @@ await import('./architecture/editor-adapter-v1.js?v=architecture-20260911-v1')
 // full target scan until the indexes are ready or whenever membership becomes stale.
 try {
   await import('./performance/runtime-v1.js?v=performance-20260911-v1')
+  await import('./performance/ldraw-sync-v1.js?v=performance-20260911-v1')
 } catch (error) {
   console.warn('[BrickLab Performance] Spatial performance engine unavailable; using compatibility scans.', error)
 }
 
+// Architecture Consolidation V1 is a production invariant now, not only documentation.
+// The runtime is allowed to continue only if editor/projects are bound and BUILD/SIMULATE
+// still resolve through Connector V4 and its fail-closed physics guard.
 const { assertArchitectureContract } = await import('./architecture/contract-assert-v1.js?v=architecture-20260911-v1')
 assertArchitectureContract()
 
+// F9 toggles the V4 endpoint/axis overlay. It is removed synchronously before physics
+// collider measurement so diagnostics can never affect collision bounds.
 await import('./connectors-v4/debug-overlay-v4.js')
 
 for (const [key, value] of hiddenProjectEntries) {
@@ -94,6 +131,8 @@ for (const [key, value] of hiddenProjectEntries) {
 }
 delete globalThis.__bricklabConnectorV4StartMode
 
+// "Open another project" enters the real editor first, then invokes its existing file
+// importer. This keeps import validation/migration in one authoritative code path.
 if (menuResult.action === 'open') {
   requestAnimationFrame(() => document.querySelector('#importBtn')?.click())
 }
