@@ -106,6 +106,18 @@ try {
 // app.js has created the scene, selection collection, history controls and V4 object source.
 await import('./architecture/editor-adapter-v1.js?v=architecture-20260911-v1')
 
+// Smart Assembly depends only on the established editor contract. Start it here,
+// non-blocking, before performance/optional UI modules so an unrelated later failure
+// can never leave BUILD + LDraw usable while silently preventing assembly guidance.
+const startSmartAssembly = async () => {
+  try {
+    await import('./guidance/smart-assembly-activation-v1.js?v=smart-assembly-20260912-v1')
+  } catch (error) {
+    console.warn('[BrickLab Smart Assembly] Assistant unavailable; editor continues without assembly suggestions.', error)
+  }
+}
+void startSmartAssembly()
+
 // Performance Engine V1 consumes the stable editor contract, builds scene/endpoint
 // indexes progressively, and remains optional: SNAP falls back to the established
 // full target scan until the indexes are ready or whenever membership becomes stale.
@@ -162,19 +174,3 @@ await import('./menu/project-menu-v1.js?v=project-menu-20260910-v1')
 const { assertPhysicsRuntimeContract } = await import('./physics-ownership-v1.js')
 assertPhysicsRuntimeContract()
 window.__bricklabRuntimeReady = true
-
-// Smart Assembly remains optional and starts only after the established editor/UI
-// reaches runtimeReady. Any failure here must never block the editor itself.
-const startSmartAssembly = async () => {
-  try {
-    await import('./guidance/smart-assembly-activation-v1.js?v=smart-assembly-20260911-v4')
-  } catch (error) {
-    console.warn('[BrickLab Smart Assembly] Assistant unavailable; editor continues without assembly suggestions.', error)
-  }
-}
-
-if (typeof globalThis.setTimeout === 'function') {
-  globalThis.setTimeout(() => void startSmartAssembly(), 0)
-} else {
-  void startSmartAssembly()
-}
