@@ -1,4 +1,4 @@
-export const SMART_ASSEMBLY_COMPATIBILITY_VERSION = 'smart-assembly-compatibility-v1.0.0'
+export const SMART_ASSEMBLY_COMPATIBILITY_VERSION = 'smart-assembly-compatibility-v1.1.0'
 
 export const SMART_ASSEMBLY_FAMILIES = Object.freeze([
   Object.freeze({
@@ -42,7 +42,22 @@ function classificationFor(definition) {
     ?? null
 }
 
+function curatedRoleForCode(code) {
+  if (!code) return null
+  for (const family of SMART_ASSEMBLY_FAMILIES) {
+    if (family.tireCodes.includes(code)) return 'tire'
+    if (family.rimCodes.includes(code)) return 'rim'
+  }
+  return null
+}
+
 export function smartAssemblyRole(definition) {
+  // A curated family is already verified mechanical compatibility evidence. Do not
+  // require the asynchronous Mechanical Intelligence sync to finish before an
+  // explicitly registered tire/rim ID can produce a suggestion.
+  const curatedRole = curatedRoleForCode(codeFor(definition))
+  if (curatedRole) return curatedRole
+
   const classification = classificationFor(definition)
   if (!classification || classification.confidence === UNKNOWN) return null
   return classification.class === 'tire' || classification.class === 'rim'
