@@ -1,7 +1,7 @@
 const NativeSet = globalThis.Set
 const NativeMap = globalThis.Map
 
-export const EDITOR_GROUPS_VERSION = 'editor-groups-v1.0.1'
+export const EDITOR_GROUPS_VERSION = 'editor-groups-v1.0.2'
 
 let captureArmed = false
 let captureCount = 0
@@ -74,8 +74,15 @@ function deleteInteractionUnit(set, value) {
   return changed
 }
 
+function directCallerIsApp() {
+  const lines = String(new Error().stack || '').split('\n').slice(1)
+  const caller = lines.find(line => !line.includes('editor-groups-v1.js')) ?? ''
+  return /(?:^|[\/])app\.js(?:\?|:|\b)/.test(caller)
+}
+
 function qualifiesAsSelectionConstruction(values) {
   if (!globalThis.document?.querySelector?.('.shell')) return false
+  if (!directCallerIsApp()) return false
   if (values == null) return true
   return values.length > 0 && values.every(isEditorPart)
 }
