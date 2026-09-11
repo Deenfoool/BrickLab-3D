@@ -169,7 +169,7 @@ window.__bricklabRuntimeReady = true
 // have inserted and selected a new part.
 const startSmartAssembly = async () => {
   try {
-    await import('./guidance/smart-assembly-activation-v1.js?v=smart-assembly-20260911-v1')
+    await import('./guidance/smart-assembly-activation-v1.js?v=smart-assembly-20260911-v2')
   } catch (error) {
     console.warn('[BrickLab Smart Assembly] Assistant unavailable; editor continues without assembly suggestions.', error)
   }
