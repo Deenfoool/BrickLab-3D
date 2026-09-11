@@ -1,7 +1,7 @@
 const NativeSet = globalThis.Set
 const NativeMap = globalThis.Map
 
-export const EDITOR_GROUPS_VERSION = 'editor-groups-v1.0.0'
+export const EDITOR_GROUPS_VERSION = 'editor-groups-v1.0.1'
 
 let captureArmed = false
 let captureCount = 0
@@ -133,19 +133,25 @@ export function cancelSelectionCapture() {
   restoreSet?.()
 }
 
+function armForSynchronousEditorAction() {
+  armSelectionCapture()
+  queueMicrotask(() => cancelSelectionCapture())
+}
+
 function shortcutNeedsSelectionRebuild(event) {
   if (!(event.ctrlKey || event.metaKey) || event.altKey) return false
   return event.code === 'KeyA' || event.code === 'KeyD'
 }
 
 // selectedObjects is reassigned only by Select All and Duplicate after the initial
-// editor bootstrap. Arm the one-shot constructor before those existing handlers run.
+// editor bootstrap. Arm the one-shot constructor before those existing handlers run
+// and cancel it in a microtask if the action returned early without creating a Set.
 globalThis.addEventListener?.('keydown', event => {
-  if (shortcutNeedsSelectionRebuild(event)) armSelectionCapture()
+  if (shortcutNeedsSelectionRebuild(event)) armForSynchronousEditorAction()
 }, true)
 
 globalThis.document?.addEventListener?.('click', event => {
-  if (event.target?.closest?.('#duplicateBtn')) armSelectionCapture()
+  if (event.target?.closest?.('#duplicateBtn')) armForSynchronousEditorAction()
 }, true)
 
 export const BrickLabEditorGroups = Object.freeze({
