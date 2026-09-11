@@ -1,4 +1,4 @@
-export const BRICKLAB_SUBSYSTEM_API_VERSION = 'architecture-v1.0.0'
+export const BRICKLAB_SUBSYSTEM_API_VERSION = 'architecture-v1.1.0'
 
 function cloneValue(value) {
   if (value == null) return value
@@ -202,8 +202,20 @@ export function createBrickLabSubsystemApi({
     lastFailure: connectivity.simulate.lastFailure,
   })
 
+  const projects = Object.freeze({
+    bind:projectsSlot.bind,
+    ready:projectsSlot.ready,
+    current() {
+      const value = projectsSlot.get()?.current?.() ?? editor.projectState()
+      return value == null ? null : snapshot(value)
+    },
+    save(...args) { return projectsSlot.require().save?.(...args) },
+    createNew(...args) { return projectsSlot.require().createNew?.(...args) },
+    requestImport(...args) { return projectsSlot.require().requestImport?.(...args) },
+    exportProject(...args) { return projectsSlot.require().exportProject?.(...args) },
+  })
+
   const adapters = Object.freeze({
-    projects:Object.freeze({ bind:projectsSlot.bind, ready:projectsSlot.ready, get:projectsSlot.get }),
     testLab:Object.freeze({ bind:testLabSlot.bind, ready:testLabSlot.ready, get:testLabSlot.get }),
     guidance:Object.freeze({ bind:guidanceSlot.bind, ready:guidanceSlot.ready, get:guidanceSlot.get }),
     telemetry:Object.freeze({ bind:telemetrySlot.bind, ready:telemetrySlot.ready, get:telemetrySlot.get }),
@@ -216,7 +228,7 @@ export function createBrickLabSubsystemApi({
     connectivity,
     mechanics,
     physics,
-    projects:adapters.projects,
+    projects,
     testLab:adapters.testLab,
     guidance:adapters.guidance,
     telemetry:adapters.telemetry,
@@ -226,7 +238,7 @@ export function createBrickLabSubsystemApi({
         editor:editor.ready(),
         connectorBuild:connectivity.build.ready(),
         connectorSimulate:connectivity.simulate.ready(),
-        projects:adapters.projects.ready(),
+        projects:projects.ready(),
         testLab:adapters.testLab.ready(),
         guidance:adapters.guidance.ready(),
         telemetry:adapters.telemetry.ready(),

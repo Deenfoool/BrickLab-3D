@@ -6,6 +6,7 @@ import {
   BRICKLAB_SUBSYSTEM_API_VERSION,
   createBrickLabSubsystemApi,
 } from '../architecture/subsystem-api-v1.js'
+import { createLegacyEditorAdapter } from '../architecture/editor-adapter-v1.js'
 
 function fixturePart() {
   return {
@@ -116,13 +117,74 @@ test('Editor-facing contract is bindable incrementally and supplies identity/gro
   assert.equal(api.editor.groups.isGroup(objects[0]), true)
 })
 
+
+
+test('legacy editor adapter binds live editor state without making app internals a public dependency', () => {
+  const clicks = []
+  const elements = {
+    projectName:{ textContent:'Adapter Build' },
+    undoBtn:{ disabled:false, click:() => clicks.push('undo') },
+    redoBtn:{ disabled:true, click:() => clicks.push('redo') },
+    saveBtn:{ click:() => clicks.push('save') },
+    newBtn:{ click:() => clicks.push('new') },
+    importBtn:{ click:() => clicks.push('import') },
+    exportBtn:{ click:() => clicks.push('export') },
+  }
+  const object = {
+    userData:{ instanceId:'live-a', partId:'fixture-gear', color:0x123456, groupId:'group-a' },
+    position:{ toArray:() => [4,5,6] },
+    rotation:{ x:0.1, y:0.2, z:0.3 },
+  }
+  const reconciles = []
+  const subsystems = {
+    editor:{},
+    connectivity:{
+      build:{
+        reconcile:(objects, options) => { reconciles.push([objects, options]); return { kept:1 } },
+        records:() => [{ id:'live-v4' }],
+      },
+    },
+  }
+  const adapter = createLegacyEditorAdapter({
+    subsystems,
+    connectorRuntime:{ objects:() => [object] },
+    groups:{ selection:() => [object], primary:() => object },
+    documentRef:{ querySelector:selector => elements[selector.slice(1)] ?? null },
+    storage:{ getItem:key => key === 'bricklab.project.v2' ? JSON.stringify({
+      version:2,
+      name:'Stored Build',
+      parts:[{ instanceId:'stale' }],
+      connections:[{ id:'legacy-link' }],
+      connectionsV4:[{ id:'stale-v4' }],
+    }) : null },
+  })
+
+  assert.deepEqual(adapter.selection(), [object])
+  assert.equal(adapter.primarySelection(), object)
+  assert.equal(adapter.objectById('live-a'), object)
+  assert.deepEqual(adapter.history(), { canUndo:true, canRedo:false })
+
+  const state = adapter.projectState()
+  assert.equal(state.name, 'Adapter Build')
+  assert.deepEqual(state.parts[0].position, [4,5,6])
+  assert.deepEqual(state.connections, [{ id:'legacy-link' }])
+  assert.deepEqual(state.connectionsV4, [{ id:'live-v4' }])
+  assert.equal(reconciles.length, 1)
+  assert.deepEqual(reconciles[0][1], { persist:false })
+
+  adapter.undo(); adapter.redo(); adapter.save(); adapter.createNew(); adapter.requestImport(); adapter.exportProject()
+  assert.deepEqual(clicks, ['undo','redo','save','new','import','export'])
+})
+
 test('production bootstrap installs Architecture API after the V4 physics guard and before app.js', async () => {
   const source = await readFile(new URL('../bootstrap.js', import.meta.url), 'utf8')
   const guard = source.indexOf("await import('./connectors-v4/physics-guard-v4.js')")
   const architecture = source.indexOf("await import('./architecture/runtime-v1.js?v=architecture-20260911-v1')")
   const app = source.indexOf("await import('./app.js')")
+  const editorAdapter = source.indexOf("await import('./architecture/editor-adapter-v1.js?v=architecture-20260911-v1')")
 
   assert.ok(guard >= 0, 'Connector V4 physics guard is installed')
   assert.ok(architecture > guard, 'Architecture API is loaded after the guard')
   assert.ok(app > architecture, 'editor starts only after stable subsystem facade exists')
+  assert.ok(editorAdapter > app, 'legacy editor state is bound only after app.js creates it')
 })

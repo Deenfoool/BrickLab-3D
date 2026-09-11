@@ -4,6 +4,8 @@ import * as THREE from 'three'
 
 import {
   EDITOR_GROUPS_VERSION,
+  editorPrimarySelection,
+  editorSelection,
   interactionGroupMembers,
   isEditorGroup,
   normalizeDuplicatedGroupIds,
@@ -58,4 +60,11 @@ test('select-all style normalization does not rewrite an existing complete group
   normalizeDuplicatedGroupIds([a,b])
   assert.equal(a.userData.groupId, 'stable-group')
   assert.equal(b.userData.groupId, 'stable-group')
+})
+
+test('selection bridge is exposed without inventing selection before app capture', () => {
+  assert.deepEqual(editorSelection(), [])
+  assert.equal(editorPrimarySelection(), null)
+  assert.equal(globalThis.BrickLabEditorGroups.selection, editorSelection)
+  assert.equal(globalThis.BrickLabEditorGroups.primary, editorPrimarySelection)
 })

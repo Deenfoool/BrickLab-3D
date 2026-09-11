@@ -102,6 +102,9 @@ try {
 } finally {
   globalThis.BrickLabEditorGroups?.cancelSelectionCapture?.()
 }
+// Bind the current lexical editor state to the stable Architecture API only after
+// app.js has created the scene, selection collection, history controls and V4 object source.
+await import('./architecture/editor-adapter-v1.js?v=architecture-20260911-v1')
 // F9 toggles the V4 endpoint/axis overlay. It is removed synchronously before physics
 // collider measurement so diagnostics can never affect collision bounds.
 await import('./connectors-v4/debug-overlay-v4.js')

@@ -90,7 +90,7 @@ The facade deliberately does **not** provide a bypass around the guard. If Conne
 
 `BrickLabSubsystems.editor` is the integration point for scene objects, selection, groups, object identity, project state and history.
 
-The contract is adapter-based so the existing monolithic `app.js` can be migrated incrementally without destabilising the editor. Until an adapter is bound, read-only object lookup can fall back to the object provider already attached to Connector V4.
+The contract is adapter-based so the existing monolithic `app.js` can be migrated incrementally without destabilising the editor. `architecture/editor-adapter-v1.js` is bound immediately after `app.js` starts and exposes the live object list, selection/primary selection, group semantics, project snapshot and undo/redo capability through this contract. Read-only object lookup can still fall back to the object provider attached to Connector V4 if the adapter is unavailable.
 
 Roadmap features such as Design Doctor, Kinematics and the instruction generator should consume this editor contract instead of reaching into `app.js`, DOM helpers, selection hacks or patch internals.
 
@@ -108,6 +108,8 @@ BrickLabSubsystems.parts.connectors(partId)
 BrickLabSubsystems.parts.connectivity(partId)
 BrickLabSubsystems.parts.capabilities(partId)
 ```
+
+Project consumers should likewise use `BrickLabSubsystems.projects.current()`, `save()`, `createNew()`, `requestImport()` and `exportProject()` instead of clicking editor controls themselves. The transitional editor adapter is the only layer allowed to translate those calls to the current UI implementation.
 
 Returned metadata snapshots are cloned/frozen so analysis features do not accidentally mutate the production registry.
 
@@ -138,6 +140,8 @@ Connector V4 physics guard
 architecture/runtime-v1.js
   ↓
 app.js
+  ↓
+architecture/editor-adapter-v1.js
   ↓
 viewport/UI extensions
 ```

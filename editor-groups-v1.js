@@ -1,11 +1,13 @@
 const NativeSet = globalThis.Set
 const NativeMap = globalThis.Map
 
-export const EDITOR_GROUPS_VERSION = 'editor-groups-v1.0.2'
+export const EDITOR_GROUPS_VERSION = 'editor-groups-v1.1.0'
 
 let captureArmed = false
 let captureCount = 0
 let restoreSet = null
+let capturedSelection = null
+let primarySelection = null
 
 function isEditorPart(value) {
   return Boolean(value?.isObject3D && value?.userData?.instanceId)
@@ -24,6 +26,14 @@ export function interactionGroupMembers(object) {
 
 export function isEditorGroup(object) {
   return Boolean(object?.userData?.groupId && interactionGroupMembers(object).length > 1)
+}
+
+export function editorSelection() {
+  return capturedSelection ? [...capturedSelection] : []
+}
+
+export function editorPrimarySelection() {
+  return primarySelection && capturedSelection?.has(primarySelection) ? primarySelection : null
 }
 
 function randomGroupId() {
@@ -102,6 +112,8 @@ export function armSelectionCapture() {
 
       super()
       this.__bricklabGroupAwareSelection = true
+      capturedSelection = this
+      primarySelection = null
       if (values) normalizeDuplicatedGroupIds(values)
       for (const value of values ?? []) this.add(value)
 
@@ -119,12 +131,21 @@ export function armSelectionCapture() {
     add(value) {
       if (!this.__bricklabGroupAwareSelection) return super.add(value)
       addInteractionUnit(this, value)
+      if (isEditorPart(value)) primarySelection = value
       return this
     }
 
     delete(value) {
       if (!this.__bricklabGroupAwareSelection) return super.delete(value)
-      return deleteInteractionUnit(this, value)
+      const changed = deleteInteractionUnit(this, value)
+      if (changed && primarySelection && !this.has(primarySelection)) primarySelection = [...this].at(-1) ?? null
+      return changed
+    }
+
+    clear() {
+      if (!this.__bricklabGroupAwareSelection) return super.clear()
+      NativeSet.prototype.clear.call(this)
+      primarySelection = null
     }
   }
 
@@ -167,6 +188,8 @@ export const BrickLabEditorGroups = Object.freeze({
   cancelSelectionCapture,
   members:interactionGroupMembers,
   isGroup:isEditorGroup,
+  selection:editorSelection,
+  primary:editorPrimarySelection,
   normalizeDuplicatedGroupIds,
   get captureCount(){ return captureCount },
 })
