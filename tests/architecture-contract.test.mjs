@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import './repository-hygiene.test.mjs'
 import './performance-engine.test.mjs'
 import './ldraw-mechanical-intelligence.test.mjs'
+import './smart-assembly-assistant.test.mjs'
 
 import {
   ARCHITECTURE_CONSOLIDATION_STATUS,
@@ -14,9 +15,9 @@ import {
 
 function completeSubsystemFixture() {
   return {
-    version:'architecture-v1.1.0',
+    version:'architecture-v1.2.0',
     status:() => ({
-      version:'architecture-v1.1.0',
+      version:'architecture-v1.2.0',
       editor:true,
       connectorBuild:true,
       connectorSimulate:true,

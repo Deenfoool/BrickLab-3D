@@ -1,4 +1,4 @@
-export const BRICKLAB_SUBSYSTEM_API_VERSION = 'architecture-v1.1.0'
+export const BRICKLAB_SUBSYSTEM_API_VERSION = 'architecture-v1.2.0'
 
 function cloneValue(value) {
   if (value == null) return value
@@ -129,6 +129,16 @@ export function createBrickLabSubsystemApi({
     history() {
       const value = editorSlot.get()?.history?.()
       return value == null ? null : snapshot(value)
+    },
+    mode() { return editorSlot.get()?.mode?.() ?? null },
+    viewportPoint(object, options = {}) {
+      const value = editorSlot.get()?.viewportPoint?.(object, options) ?? null
+      return value == null ? null : snapshot(value)
+    },
+    insertPart(value, options = {}) {
+      const bound = editorSlot.require()
+      if (typeof bound.insertPart !== 'function') throw new Error('Editor insertPart capability is unavailable')
+      return bound.insertPart(normalizePartId(value), options)
     },
     commitHistory(...args) { return editorSlot.require().commitHistory?.(...args) },
     undo(...args) { return editorSlot.require().undo?.(...args) },

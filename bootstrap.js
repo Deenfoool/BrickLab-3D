@@ -122,6 +122,14 @@ try {
 const { assertArchitectureContract } = await import('./architecture/contract-assert-v1.js?v=architecture-20260911-v1')
 assertArchitectureContract()
 
+// Smart Assembly Assistant consumes Mechanical Intelligence + the stable editor facade.
+// It is advisory only: no part is loaded or inserted until the user accepts a card.
+try {
+  await import('./guidance/smart-assembly-runtime-v1.js?v=smart-assembly-20260911-v1')
+} catch (error) {
+  console.warn('[BrickLab Smart Assembly] Assistant unavailable; editor continues without assembly suggestions.', error)
+}
+
 // F9 toggles the V4 endpoint/axis overlay. It is removed synchronously before physics
 // collider measurement so diagnostics can never affect collision bounds.
 await import('./connectors-v4/debug-overlay-v4.js')

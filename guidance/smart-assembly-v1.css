@@ -1,0 +1,100 @@
+#viewport.smart-assembly-host { position: relative; }
+.smart-assembly-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 24;
+  pointer-events: none;
+  overflow: hidden;
+}
+.smart-assembly-anchor {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border: 2px solid rgba(116,230,166,.95);
+  border-radius: 999px;
+  background: rgba(18,26,24,.86);
+  box-shadow: 0 0 0 5px rgba(116,230,166,.12), 0 0 18px rgba(116,230,166,.45);
+  transform: translate3d(-9999px,-9999px,0);
+}
+.smart-assembly-anchor::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: inherit;
+  background: #74e6a6;
+}
+.smart-assembly-line {
+  position: absolute;
+  height: 1px;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, rgba(116,230,166,.95), rgba(116,230,166,.28));
+  box-shadow: 0 0 8px rgba(116,230,166,.22);
+  transform: translate3d(-9999px,-9999px,0);
+}
+.smart-assembly-line::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-top: 1px solid rgba(116,230,166,.7);
+  border-right: 1px solid rgba(116,230,166,.7);
+  transform: rotate(45deg);
+}
+.smart-assembly-card {
+  position: absolute;
+  width: min(310px, calc(100% - 28px));
+  pointer-events: auto;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(23,27,31,.96);
+  color: #eef3f7;
+  box-shadow: 0 16px 44px rgba(0,0,0,.42);
+  backdrop-filter: blur(14px);
+  opacity: 0;
+  transform: translate3d(-9999px,-9999px,0);
+  transition: opacity .14s ease;
+}
+.smart-assembly-layer.is-visible .smart-assembly-card { opacity: 1; }
+.smart-assembly-card small {
+  display: block;
+  margin-bottom: 5px;
+  color: #74e6a6;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.smart-assembly-card h3 { margin: 0; font-size: 15px; line-height: 1.25; }
+.smart-assembly-card p { margin: 7px 0 12px; color: #aeb7c0; font-size: 12px; line-height: 1.45; }
+.smart-assembly-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.smart-assembly-actions button,
+.smart-assembly-choice {
+  appearance: none;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: #252b31;
+  color: #eef3f7;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.smart-assembly-actions button:hover,
+.smart-assembly-choice:hover { border-color: rgba(116,230,166,.55); background: #2b3339; }
+.smart-assembly-actions .primary { border-color: rgba(116,230,166,.5); background: #24513f; color: #dffff1; }
+.smart-assembly-actions .quiet { color: #9ba6b0; }
+.smart-assembly-actions button:disabled { opacity: .5; cursor: wait; }
+.smart-assembly-choices { display: grid; gap: 6px; margin: 10px 0 2px; }
+.smart-assembly-choice { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; }
+.smart-assembly-choice span { display: grid; gap: 2px; }
+.smart-assembly-choice small { margin: 0; color: #89949e; letter-spacing: 0; text-transform: none; font-weight: 500; }
+.smart-assembly-choice b { color: #74e6a6; font-size: 10px; }
+.smart-assembly-status { min-height: 14px; margin-top: 8px; color: #8dddb8; font-size: 11px; }
+@media (max-width: 700px) {
+  .smart-assembly-card { width: min(280px, calc(100% - 18px)); padding: 12px; }
+}
