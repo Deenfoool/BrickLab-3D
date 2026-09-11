@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-export const CONNECTOR_DEBUG_VERSION_V4='connector-debug-overlay-v4.2.0'
+export const CONNECTOR_DEBUG_VERSION_V4='connector-debug-overlay-v4.2.1'
 const ROOT_NAME='__bricklabConnectorV4Debug'
 const MAX_ENDPOINTS_PER_PART=384
 let enabled=false
@@ -98,7 +98,7 @@ window.addEventListener('keydown',event=>{
   setEnabled(!enabled)
 })
 window.addEventListener('bricklab:connectorv4',()=>{if(enabled)queueMicrotask(refresh)})
-window.addEventListener('bricklab:connectorv4physicsstarting',clear)
+window.addEventListener('bricklab:connectorv4physicsstarting',()=>setEnabled(false))
 
 export const BrickLabConnectorV4Debug=Object.freeze({
   version:CONNECTOR_DEBUG_VERSION_V4,
