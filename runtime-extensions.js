@@ -103,8 +103,10 @@ await import('./connector-mechanical-recovery-v4.js')
 // joint-stability-v4.js is retained as the stable import path; it now exports
 // joint-stability-v5 and owns stabilized revolute, spherical and prismatic joints.
 await import('./joint-stability-v4.js')
-await import('./powertrain-physics-v2.js')
 
+// Physics Stability is the authoritative drivetrain coupling owner. Do not install a
+// provisional coupling solver before it: transient prototype ownership makes startup
+// order harder to reason about and provides no runtime behavior after this import.
 await import('./physics-stability-v3.js')
 await import('./drivetrain-stress-v2.js')
 // This is intentionally outside the stress layer: it supplies the final ratio

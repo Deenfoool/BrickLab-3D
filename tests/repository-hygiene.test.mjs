@@ -25,6 +25,7 @@ const retiredFiles = [
   'obstacle-test-patch.js',
   'test-scenarios-v2.js',
   'torque-test-patch.js',
+  'powertrain-physics-v2.js',
 ]
 
 function localTarget(target) {
@@ -58,6 +59,7 @@ test('retired public specifiers resolve to current authoritative implementations
     './ldraw/runtime-v1.js':'./ldraw/runtime-v3.js',
     './ldraw/runtime-v2.js':'./ldraw/runtime-v3.js',
     './ldraw/runtime-v2.js?v=ldraw-20260910-v2':'./ldraw/runtime-v3.js',
+    './powertrain-physics-v2.js':'./physics-stability-v3.js',
   }
 
   for (const [specifier, target] of Object.entries(aliases)) {
@@ -76,6 +78,14 @@ test('unreachable TEST patch specifiers stay out of the production import map', 
   }
 })
 
+test('transient drivetrain coupling layer stays retired', async () => {
+  const runtime = await readFile(new URL('runtime-extensions.js', root), 'utf8')
+  const stability = await readFile(new URL('physics-stability-v3.js', root), 'utf8')
+  assert.doesNotMatch(runtime, /powertrain-physics-v2\.js/, 'runtime does not install a provisional coupling owner')
+  assert.match(stability, /inertia-aware-coupling-v3/, 'Physics Stability exposes the authoritative coupling owner')
+  assert.match(stability, /PhysicsSession\.prototype\.applyGearCouplingTorques\s*=/, 'Physics Stability installs the final coupling solver')
+})
+
 test('dynamically loaded drivetrain stylesheet remains available', async () => {
   await access(new URL('drivetrain.css', root))
   const physics = await readFile(new URL('physics.js', root), 'utf8')
@@ -90,6 +100,7 @@ test('the live menu, TEST Lab, physics and LDraw generations remain present', as
     'menu/project-preloader-v4.js',
     'testlab-v2.js',
     'physics-v2.js',
+    'physics-stability-v3.js',
     'test-world-visuals-v2.js',
     'ldraw/catalog-v3.js',
     'ldraw/runtime-v3.js',

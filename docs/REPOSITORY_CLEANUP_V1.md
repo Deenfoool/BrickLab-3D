@@ -8,7 +8,7 @@ This cleanup removes historical files only when the production runtime, regressi
 
 ## Removed physical files
 
-Across two conservative passes the cleanup retires 21 duplicate, superseded or unreachable files.
+Across three conservative passes the cleanup retires 22 duplicate, superseded, unreachable or transiently overwritten files.
 
 ### Pass 1 — superseded generations and shadowed compatibility files
 
@@ -21,13 +21,19 @@ The first pass removed 18 files:
 
 ### Pass 2 — proven unreachable TEST leftovers
 
-The second pass removes three more files:
+The second pass removed three more files:
 
 - `test-scenarios-v2.js` — no consumer; `physics-v2.js` owns the authoritative runtime scenario definitions while `testlab-v2.js` owns TEST selection/presentation metadata.
 - `torque-test-patch.js` — obsolete side-effect patch; torque-pull world setup, forces, scoring and telemetry are implemented directly by the active `physics-v2.js` path.
 - `obstacle-test-patch.js` — obsolete side-effect patch; obstacle-course colliders/scoring are implemented directly by `physics-v2.js` and presentation decoration remains in the actively loaded `test-world-visuals-v2.js`.
 
 The three removed TEST JavaScript files also lose their unused self-mappings from the production import map. They are not compatibility entry points and had no current consumers, so keeping aliases would only preserve misleading dead surface area.
+
+### Pass 3 — transient prototype owner
+
+The third pass removes `powertrain-physics-v2.js` from the production load chain and deletes the physical module. It did only one thing: assign `PhysicsSession.prototype.applyGearCouplingTorques`. A few imports later `physics-stability-v3.js` unconditionally replaces that exact method with the inertia-aware coupling solver (`inertia-aware-coupling-v3`). The retired module exported no API and installed no UI, globals, observers or cleanup hooks, so its implementation could only exist during startup and never owned final runtime behavior.
+
+`runtime-extensions.js` now installs Physics Stability directly after the joint-stability layer. The historical `./powertrain-physics-v2.js` import-map specifier is retained as a compatibility redirect to `physics-stability-v3.js`, so stale callers resolve to the authoritative owner instead of resurrecting a provisional solver.
 
 `drivetrain.css` is intentionally retained. It is not linked from `index.html`; `PhysicsSession.mountTelemetry()` dynamically creates a stylesheet link to `./drivetrain.css` when simulation telemetry is mounted. The repository-hygiene test locks this runtime dependency so a future cleanup cannot mistake it for an orphan again.
 
@@ -46,20 +52,25 @@ Removing a historical physical file does not require breaking its old module spe
 ./ldraw/catalog-v2.js         → ldraw/catalog-v3.js
 ./ldraw/runtime-v1.js         → ldraw/runtime-v3.js
 ./ldraw/runtime-v2.js         → ldraw/runtime-v3.js
+./powertrain-physics-v2.js    → physics-stability-v3.js
 ```
 
 This keeps old internal specifiers fail-safe while ensuring there is only one physical implementation to maintain for each retired compatibility path.
 
 ## Kept intentionally
 
-Files are not deleted merely because their name contains `v1/v2/v3/v4` or because they are not loaded on every page. In particular, current production still intentionally uses:
+Files are not deleted merely because their name contains `v1/v2/v3/v4`, because they are not loaded on every page, or because one of several prototype assignments inside them is later refined. In particular, current production still intentionally uses:
 
 - `menu/main-menu-v5.js` as the presentation layer over `menu/main-menu-v4.js`;
 - `menu/main-menu-v4.css` and `menu/hero-reducer.js`;
 - `menu/project-preloader-v4.js`;
 - `ldraw/catalog-v3.js`, `ldraw/runtime-v3.js`, `ldraw/fast-loader-v1.js` and `ldraw/bootstrap-v1.js`;
-- `testlab-v2.js`, `physics-v2.js` and `test-world-visuals-v2.js`;
+- `testlab-v2.js`, `physics-v2.js`, `physics-stability-v3.js` and `test-world-visuals-v2.js`;
 - `drivetrain.css`, because it is loaded dynamically by the physics telemetry runtime;
+- `colliders-v2.js`, because later collider refinement replaces `createCompoundBody` but `colliders-v2.js` still owns the SI-safe `bodyLocalPoint` and `syncObjects` methods;
+- `differential-patch.js`, because its early coupling implementation is superseded but its differential telemetry wrappers remain in the final runtime chain;
+- `surface-v2.js`, because the later Vehicle System wraps and calls its surface-aware tire behavior rather than discarding it;
+- `rapier-loader-v2.js`, because Connector V4 physics guard wraps its `PhysicsSession.create` owner rather than replacing the Rapier loading/session construction behavior;
 - Connector V4 modules and the existing V3 compatibility/physics modules still imported by `runtime-extensions.js`.
 
 Manual QA pages, tests, examples, documentation, `src/` and build configuration are retained because they remain connected to diagnostics, acceptance coverage or the local build/type-check workflow.
@@ -68,7 +79,7 @@ Recent but currently unconnected Parts 6 work is also retained unless it is inde
 
 ## Regression guard
 
-`tests/repository-hygiene.test.mjs` verifies that retired files remain absent, compatibility specifiers resolve to current owners, removed TEST patch specifiers stay out of the production import map, the dynamically loaded drivetrain stylesheet remains present, and the live menu / TEST Lab / Physics / LDraw generations remain present.
+`tests/repository-hygiene.test.mjs` verifies that retired files remain absent, compatibility specifiers resolve to current owners, removed TEST patch specifiers stay out of the production import map, the transient powertrain solver cannot return to the startup chain, Physics Stability remains the final coupling owner, the dynamically loaded drivetrain stylesheet remains present, and the live menu / TEST Lab / Physics / LDraw generations remain present.
 
 The hygiene test is imported by `tests/architecture-contract.test.mjs`, so it runs through both existing architecture and Connector V4 acceptance commands:
 
@@ -77,4 +88,4 @@ npm run test:architecture
 npm run test:connectors-v4
 ```
 
-Future cleanup should follow the same rule: prove the file is unreachable or superseded, account for dynamic runtime loads and side effects, preserve a compatibility alias only when useful, add regression coverage, then delete the physical duplicate.
+Future cleanup should follow the same rule: prove the file is unreachable or superseded, inspect prototype/global ownership across the full load order, account for dynamic runtime loads and wrapper side effects, preserve a compatibility alias only when useful, add regression coverage, then delete the physical duplicate.
