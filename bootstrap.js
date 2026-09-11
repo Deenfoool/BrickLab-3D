@@ -163,20 +163,20 @@ const { assertPhysicsRuntimeContract } = await import('./physics-ownership-v1.js
 assertPhysicsRuntimeContract()
 window.__bricklabRuntimeReady = true
 
-// Smart Assembly is advisory and must never sit on the critical editor-start path.
-// Start it only after the established editor/UI runtime is fully ready. A slow LDraw
-// dependency or a guidance regression therefore cannot leave the user stuck on the
-// base app.js shell while the later overlay/i18n/catalog modules are still waiting.
+// Smart Assembly stays out of the critical editor-start path, but once the established
+// editor/UI runtime is ready its activation should start promptly instead of waiting for
+// browser idle time. The activation layer also re-evaluates after catalog click handlers
+// have inserted and selected a new part.
 const startSmartAssembly = async () => {
   try {
-    await import('./guidance/smart-assembly-runtime-v1.js?v=smart-assembly-20260911-v2')
+    await import('./guidance/smart-assembly-activation-v1.js?v=smart-assembly-20260911-v1')
   } catch (error) {
     console.warn('[BrickLab Smart Assembly] Assistant unavailable; editor continues without assembly suggestions.', error)
   }
 }
 
-if (typeof globalThis.requestIdleCallback === 'function') {
-  globalThis.requestIdleCallback(() => void startSmartAssembly(), { timeout: 1200 })
+if (typeof globalThis.setTimeout === 'function') {
+  globalThis.setTimeout(() => void startSmartAssembly(), 0)
 } else {
-  globalThis.setTimeout?.(() => void startSmartAssembly(), 0)
+  void startSmartAssembly()
 }

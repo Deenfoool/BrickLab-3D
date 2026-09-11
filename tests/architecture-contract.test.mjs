@@ -6,6 +6,7 @@ import './performance-engine.test.mjs'
 import './ldraw-mechanical-intelligence.test.mjs'
 import './smart-assembly-assistant.test.mjs'
 import './smart-assembly-curated-registry.test.mjs'
+import './smart-assembly-event-order.test.mjs'
 
 import {
   ARCHITECTURE_CONSOLIDATION_STATUS,
