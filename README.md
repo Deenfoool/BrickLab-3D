@@ -256,6 +256,7 @@ The suite includes parser/resolver/upstream fixtures, placement and graph behavi
 
 ## Documentation
 
+- [`docs/ROADMAP_NEXT.md`](docs/ROADMAP_NEXT.md) — active development roadmap
 - [`docs/LDRAW.md`](docs/LDRAW.md)
 - [`docs/CONNECTOR_SYSTEM_V4.md`](docs/CONNECTOR_SYSTEM_V4.md)
 - [`docs/PHYSICS_V2.md`](docs/PHYSICS_V2.md)
