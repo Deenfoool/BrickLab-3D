@@ -137,22 +137,33 @@ function groupIsWholeSelection(primary, targets) {
   return targets.every(object => object.userData.groupId === groupId && group.includes(object))
 }
 
+function setTextIfChanged(element, value) {
+  if (element && element.textContent !== value) element.textContent = value
+}
+
+function setValueIfChanged(element, value) {
+  if (element && element.value !== value) element.value = value
+}
+
 function decorateGroupInspector(state) {
   if (!state.groupActive || !state.proxy) return
-  const name = document.querySelector('#selectedName')
-  const id = document.querySelector('#selectedId')
-  const icon = document.querySelector('#selectedIcon')
-  if (name) name.textContent = `Group · ${state.targets.length} parts`
-  if (id) id.textContent = `${String(state.primary?.userData?.groupId || '').slice(0, 8)} · grouped object`
-  if (icon) icon.textContent = '▦'
+  setTextIfChanged(document.querySelector('#selectedName'), `Group · ${state.targets.length} parts`)
+  setTextIfChanged(document.querySelector('#selectedId'), `${String(state.primary?.userData?.groupId || '').slice(0, 8)} · grouped object`)
+  setTextIfChanged(document.querySelector('#selectedIcon'), '▦')
 
   for (const input of document.querySelectorAll('[data-pos]')) {
     const axis = input.dataset.pos
-    if (axis in state.proxy.position) input.value = state.proxy.position[axis].toFixed(2)
+    if (axis in state.proxy.position) setValueIfChanged(input, state.proxy.position[axis].toFixed(2))
   }
   for (const input of document.querySelectorAll('[data-rot]')) {
     const axis = input.dataset.rot
-    if (axis in state.proxy.rotation) input.value = `${Math.round(THREE.MathUtils.radToDeg(state.proxy.rotation[axis]))}°`
+    if (axis in state.proxy.rotation) setValueIfChanged(input, `${Math.round(THREE.MathUtils.radToDeg(state.proxy.rotation[axis]))}°`)
+  }
+
+  const stats = document.querySelector('#projectStats')
+  if (stats) {
+    const next = stats.textContent.replace(/ · \d+ selected$/, ' · 1 group selected')
+    setTextIfChanged(stats, next)
   }
 }
 
@@ -262,6 +273,19 @@ function gridSnapEnabled() {
   return document.querySelector('#gridSnapBtn')?.classList.contains('active') !== false
 }
 
+function syncProxyFromMembers(state) {
+  const primary = state.primary
+  const scene = primary?.parent?.parent
+  if (!state.proxy || !primary || !scene) return
+  const centerWorld = commonCenter(state.targets)
+  state.proxy.position.copy(scene.worldToLocal(centerWorld.clone()))
+  const primaryWorldQuaternion = primary.getWorldQuaternion(new THREE.Quaternion())
+  const sceneWorldQuaternion = scene.getWorldQuaternion(new THREE.Quaternion())
+  state.proxy.quaternion.copy(sceneWorldQuaternion.invert().multiply(primaryWorldQuaternion))
+  state.proxy.scale.set(1,1,1)
+  state.proxy.updateMatrixWorld(true)
+}
+
 function snapGroupPose(state) {
   const primary = state.primary
   if (!primary || !state.targets.length || !primary.parent || !state.groupActive || !gridSnapEnabled()) return
@@ -289,22 +313,13 @@ function snapGroupPose(state) {
   primary.parent.updateWorldMatrix(true, false)
   const desiredWorld = primary.parent.matrixWorld.clone().multiply(desiredLocal)
   const delta = desiredWorld.clone().multiply(oldPrimaryWorld.clone().invert())
-  if (delta.equals(new THREE.Matrix4())) return
 
   for (const object of state.targets) {
     object.updateWorldMatrix(true, false)
     applyWorldMatrix(object, delta.clone().multiply(object.matrixWorld))
   }
 
-  const scene = primary.parent.parent
-  if (state.proxy && scene) {
-    const centerWorld = commonCenter(state.targets)
-    state.proxy.position.copy(scene.worldToLocal(centerWorld.clone()))
-    const primaryWorldQuaternion = primary.getWorldQuaternion(new THREE.Quaternion())
-    const sceneWorldQuaternion = scene.getWorldQuaternion(new THREE.Quaternion())
-    state.proxy.quaternion.copy(sceneWorldQuaternion.invert().multiply(primaryWorldQuaternion))
-    state.proxy.updateMatrixWorld(true)
-  }
+  syncProxyFromMembers(state)
   for (const helper of state.hiddenHelpers) helper.update?.()
   updateGroupOutline(state)
 }
@@ -347,7 +362,6 @@ function activeGroupState() {
 
 TransformControls.prototype.attach = function bricklabMultiAttach(object) {
   const state = stateFor(this)
-
   if (object?.userData?.bricklabMultiPivot) return originalAttach.call(this, object)
 
   state.primary = object ?? null
@@ -420,21 +434,36 @@ window.addEventListener('keydown', event => {
   }
 }, true)
 
-// Keyboard ±90° must rotate the grouped object around its shared pivot, not only the
-// clicked member. The existing app shortcut is stopped only while a real group is active.
-window.addEventListener('keydown', event => {
-  if (!['BracketLeft','BracketRight'].includes(event.code) || event.ctrlKey || event.metaKey || event.altKey) return
-  const active = activeGroupState()
-  if (!active) return
+function keyboardTargetIsEditable(event) {
   const target = event.target
-  if (target instanceof HTMLElement && (/INPUT|TEXTAREA|SELECT/.test(target.tagName) || target.isContentEditable)) return
-  event.preventDefault()
-  event.stopImmediatePropagation()
-  const direction = event.code === 'BracketRight' ? 1 : -1
-  const axis = ['X','Y','Z'].includes(active.control.axis) ? active.control.axis.toLowerCase() : 'y'
-  editGroupProxy(active.control, active.state, proxy => {
-    proxy.rotation[axis] += direction * Math.PI / 2
-  })
+  return target instanceof HTMLElement && (/INPUT|TEXTAREA|SELECT/.test(target.tagName) || target.isContentEditable)
+}
+
+// Keyboard ±90° and reset shortcuts operate on the shared group pivot. The old app
+// handlers are stopped only for an actual group, so normal multi-select behavior stays intact.
+window.addEventListener('keydown', event => {
+  const active = activeGroupState()
+  if (!active || keyboardTargetIsEditable(event)) return
+
+  if (['BracketLeft','BracketRight'].includes(event.code) && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    const direction = event.code === 'BracketRight' ? 1 : -1
+    const axis = ['X','Y','Z'].includes(active.control.axis) ? active.control.axis.toLowerCase() : 'y'
+    editGroupProxy(active.control, active.state, proxy => {
+      proxy.rotation[axis] += direction * Math.PI / 2
+    })
+    return
+  }
+
+  if (event.altKey && !event.ctrlKey && !event.metaKey && (event.code === 'KeyR' || event.code === 'KeyG')) {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    editGroupProxy(active.control, active.state, proxy => {
+      if (event.code === 'KeyR') proxy.rotation.set(0,0,0)
+      else proxy.position.set(0,0,0)
+    })
+  }
 }, true)
 
 const inspectorObserver = new MutationObserver(() => {
