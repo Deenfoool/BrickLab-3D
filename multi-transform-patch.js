@@ -1,7 +1,9 @@
 import * as THREE from 'three'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
+import { interactionGroupMembers, isEditorGroup } from './editor-groups-v1.js'
 
 const states = new WeakMap()
+const knownControls = []
 const originalAttach = TransformControls.prototype.attach
 const originalDetach = TransformControls.prototype.detach
 const originalDispatchEvent = TransformControls.prototype.dispatchEvent
@@ -10,32 +12,32 @@ function stateFor(control) {
   let state = states.get(control)
   if (!state) {
     state = {
+      control,
       primary: null,
       targets: [],
       proxy: null,
       multiActive: false,
+      groupActive: false,
       dragging: false,
       proxyStart: new THREE.Matrix4(),
       starts: new Map(),
       scheduled: 0,
       syncing: false,
+      groupBounds: new THREE.Box3(),
+      groupOutline: null,
+      hiddenHelpers: new Set(),
     }
     states.set(control, state)
+    knownControls.push(control)
   }
   return state
-}
-
-function sceneFor(object) {
-  let root = object
-  while (root?.parent) root = root.parent
-  return root?.isScene ? root : object?.parent?.parent ?? null
 }
 
 function buildRootFor(object) {
   return object?.parent ?? null
 }
 
-function selectedFromHelpers(primary) {
+function helperSelection(primary) {
   const buildRoot = buildRootFor(primary)
   const scene = buildRoot?.parent
   if (!buildRoot || !scene) return primary ? [primary] : []
@@ -47,54 +49,111 @@ function selectedFromHelpers(primary) {
     if (child.type !== 'BoxHelper' && !child.isBoxHelper) continue
     if (!selected.includes(target)) selected.push(target)
   }
-
   if (primary && primary.parent === buildRoot && !selected.includes(primary)) selected.push(primary)
   return selected
 }
 
-function updateSelectionHelpers(primary) {
-  const scene = primary?.parent?.parent
-  if (!scene) return
-  for (const child of scene.children) {
-    if ((child.type === 'BoxHelper' || child.isBoxHelper) && child.object?.parent === primary.parent) {
-      child.update?.()
-    }
-  }
+function selectedFromHelpers(primary) {
+  const selected = helperSelection(primary)
+  if (selected.length >= 2) return selected
+  const grouped = interactionGroupMembers(primary)
+  return grouped.length >= 2 ? grouped : selected
 }
 
-function commonCenter(targets) {
-  const box = new THREE.Box3()
+function commonBounds(targets, box = new THREE.Box3()) {
+  box.makeEmpty()
   const partBox = new THREE.Box3()
-  let hasBounds = false
-
   for (const object of targets) {
     object.updateWorldMatrix(true, false)
     partBox.setFromObject(object)
-    if (partBox.isEmpty()) continue
-    if (!hasBounds) {
-      box.copy(partBox)
-      hasBounds = true
-    } else {
-      box.union(partBox)
-    }
+    if (!partBox.isEmpty()) box.union(partBox)
   }
+  return box
+}
 
-  if (hasBounds) return box.getCenter(new THREE.Vector3())
-
+function commonCenter(targets) {
+  const box = commonBounds(targets)
+  if (!box.isEmpty()) return box.getCenter(new THREE.Vector3())
   const center = new THREE.Vector3()
   if (!targets.length) return center
   for (const object of targets) center.add(object.getWorldPosition(new THREE.Vector3()))
   return center.multiplyScalar(1 / targets.length)
 }
 
+function restoreMemberHelpers(state) {
+  for (const helper of state.hiddenHelpers) helper.visible = true
+  state.hiddenHelpers.clear()
+}
+
+function removeGroupOutline(state) {
+  restoreMemberHelpers(state)
+  if (state.groupOutline?.parent) state.groupOutline.parent.remove(state.groupOutline)
+  state.groupOutline?.geometry?.dispose?.()
+  state.groupOutline?.material?.dispose?.()
+  state.groupOutline = null
+}
+
+function updateGroupOutline(state) {
+  if (!state.groupActive || !state.targets.length) return
+  const scene = state.primary?.parent?.parent
+  if (!scene) return
+
+  commonBounds(state.targets, state.groupBounds)
+  if (!state.groupOutline) {
+    state.groupOutline = new THREE.Box3Helper(state.groupBounds, 0x74e6a6)
+    state.groupOutline.name = '__bricklabEditorGroupOutline'
+    state.groupOutline.userData.bricklabEditorGroupOutline = true
+    state.groupOutline.raycast = () => {}
+    scene.add(state.groupOutline)
+  }
+  state.groupOutline.box = state.groupBounds
+  state.groupOutline.updateMatrixWorld(true)
+
+  restoreMemberHelpers(state)
+  for (const child of scene.children) {
+    if ((child.type !== 'BoxHelper' && !child.isBoxHelper) || !state.targets.includes(child.object)) continue
+    child.visible = false
+    state.hiddenHelpers.add(child)
+  }
+}
+
 function removeProxy(state) {
+  removeGroupOutline(state)
   if (state.proxy?.parent) state.proxy.parent.remove(state.proxy)
   state.proxy = null
   state.multiActive = false
+  state.groupActive = false
   state.targets = []
   state.starts.clear()
   state.dragging = false
   globalThis.__bricklabMultiTransformActive = false
+}
+
+function groupIsWholeSelection(primary, targets) {
+  if (!isEditorGroup(primary) || targets.length < 2) return false
+  const groupId = primary.userData.groupId
+  const group = interactionGroupMembers(primary)
+  if (group.length !== targets.length) return false
+  return targets.every(object => object.userData.groupId === groupId && group.includes(object))
+}
+
+function decorateGroupInspector(state) {
+  if (!state.groupActive || !state.proxy) return
+  const name = document.querySelector('#selectedName')
+  const id = document.querySelector('#selectedId')
+  const icon = document.querySelector('#selectedIcon')
+  if (name) name.textContent = `Group · ${state.targets.length} parts`
+  if (id) id.textContent = `${String(state.primary?.userData?.groupId || '').slice(0, 8)} · grouped object`
+  if (icon) icon.textContent = '▦'
+
+  for (const input of document.querySelectorAll('[data-pos]')) {
+    const axis = input.dataset.pos
+    if (axis in state.proxy.position) input.value = state.proxy.position[axis].toFixed(2)
+  }
+  for (const input of document.querySelectorAll('[data-rot]')) {
+    const axis = input.dataset.rot
+    if (axis in state.proxy.rotation) input.value = `${Math.round(THREE.MathUtils.radToDeg(state.proxy.rotation[axis]))}°`
+  }
 }
 
 function configureForSelection(control, expectedPrimary) {
@@ -130,8 +189,15 @@ function configureForSelection(control, expectedPrimary) {
 
   state.targets = targets
   state.multiActive = true
+  state.groupActive = groupIsWholeSelection(expectedPrimary, targets)
   globalThis.__bricklabMultiTransformActive = true
   originalAttach.call(control, state.proxy)
+  if (state.groupActive) {
+    updateGroupOutline(state)
+    queueMicrotask(() => decorateGroupInspector(state))
+  } else {
+    removeGroupOutline(state)
+  }
 }
 
 function scheduleSelectionSync(control, primary) {
@@ -185,44 +251,104 @@ function applyMultiDelta(control, state) {
       if (!start || !object.parent) continue
       applyWorldMatrix(object, delta.clone().multiply(start))
     }
-    updateSelectionHelpers(state.primary)
   } finally {
     state.syncing = false
   }
+  for (const helper of state.hiddenHelpers) helper.update?.()
+  updateGroupOutline(state)
 }
 
-function snapGroupTranslation(state) {
-  const primary = state.primary
-  if (!primary || !state.targets.length || !primary.parent) return
+function gridSnapEnabled() {
+  return document.querySelector('#gridSnapBtn')?.classList.contains('active') !== false
+}
 
-  const snapped = primary.position.clone()
-  snapped.set(
-    Math.round(snapped.x * 2) / 2,
-    Math.max(0, Math.round(snapped.y * 2) / 2),
-    Math.round(snapped.z * 2) / 2,
+function snapGroupPose(state) {
+  const primary = state.primary
+  if (!primary || !state.targets.length || !primary.parent || !state.groupActive || !gridSnapEnabled()) return
+
+  primary.updateWorldMatrix(true, false)
+  const oldPrimaryWorld = primary.matrixWorld.clone()
+  const position = primary.position.clone()
+  position.set(
+    Math.round(position.x * 2) / 2,
+    Math.max(0, Math.round(position.y * 2) / 2),
+    Math.round(position.z * 2) / 2,
   )
-  const delta = snapped.sub(primary.position)
-  if (delta.lengthSq() < 1e-10) return
+  const q = Math.PI / 2
+  const rotation = new THREE.Euler(
+    Math.round(primary.rotation.x / q) * q,
+    Math.round(primary.rotation.y / q) * q,
+    Math.round(primary.rotation.z / q) * q,
+    primary.rotation.order,
+  )
+  const desiredLocal = new THREE.Matrix4().compose(
+    position,
+    new THREE.Quaternion().setFromEuler(rotation),
+    primary.scale.clone(),
+  )
+  primary.parent.updateWorldMatrix(true, false)
+  const desiredWorld = primary.parent.matrixWorld.clone().multiply(desiredLocal)
+  const delta = desiredWorld.clone().multiply(oldPrimaryWorld.clone().invert())
+  if (delta.equals(new THREE.Matrix4())) return
 
   for (const object of state.targets) {
-    if (object.parent !== primary.parent) continue
-    object.position.add(delta)
-    object.updateMatrixWorld(true)
+    object.updateWorldMatrix(true, false)
+    applyWorldMatrix(object, delta.clone().multiply(object.matrixWorld))
   }
-  if (state.proxy?.parent === primary.parent?.parent) {
-    const worldDelta = delta.clone().applyQuaternion(primary.parent.getWorldQuaternion(new THREE.Quaternion()))
-    state.proxy.position.add(worldDelta)
+
+  const scene = primary.parent.parent
+  if (state.proxy && scene) {
+    const centerWorld = commonCenter(state.targets)
+    state.proxy.position.copy(scene.worldToLocal(centerWorld.clone()))
+    const primaryWorldQuaternion = primary.getWorldQuaternion(new THREE.Quaternion())
+    const sceneWorldQuaternion = scene.getWorldQuaternion(new THREE.Quaternion())
+    state.proxy.quaternion.copy(sceneWorldQuaternion.invert().multiply(primaryWorldQuaternion))
     state.proxy.updateMatrixWorld(true)
   }
-  updateSelectionHelpers(primary)
+  for (const helper of state.hiddenHelpers) helper.update?.()
+  updateGroupOutline(state)
+}
+
+function commitThroughExistingEditor() {
+  const color = document.querySelector('#colorInput')
+  if (!color) return
+  color.dispatchEvent(new Event('change', { bubbles:true }))
+}
+
+function notifyEditorTransform(control, state) {
+  originalDispatchEvent.call(control, { type:'objectChange' })
+  queueMicrotask(() => {
+    updateGroupOutline(state)
+    decorateGroupInspector(state)
+    commitThroughExistingEditor()
+  })
+}
+
+function editGroupProxy(control, state, mutate) {
+  if (!state.groupActive || !state.proxy || state.targets.length < 2) return false
+  beginMultiDrag(control, state)
+  mutate(state.proxy)
+  state.proxy.updateMatrixWorld(true)
+  applyMultiDelta(control, state)
+  state.dragging = false
+  state.starts.clear()
+  snapGroupPose(state)
+  notifyEditorTransform(control, state)
+  return true
+}
+
+function activeGroupState() {
+  for (const control of knownControls) {
+    const state = states.get(control)
+    if (state?.groupActive && state.primary && control.object === state.proxy) return { control, state }
+  }
+  return null
 }
 
 TransformControls.prototype.attach = function bricklabMultiAttach(object) {
   const state = stateFor(this)
 
-  if (object?.userData?.bricklabMultiPivot) {
-    return originalAttach.call(this, object)
-  }
+  if (object?.userData?.bricklabMultiPivot) return originalAttach.call(this, object)
 
   state.primary = object ?? null
   removeProxy(state)
@@ -248,19 +374,79 @@ TransformControls.prototype.dispatchEvent = function bricklabMultiDispatch(event
       else state.dragging = false
     } else if (event?.type === 'objectChange') {
       applyMultiDelta(this, state)
-      // The editor's single-object objectChange handler disconnects only the active
-      // part. Suppress that handler while the shared pivot owns the transform.
       return
     } else if (event?.type === 'mouseUp') {
       applyMultiDelta(this, state)
-      snapGroupTranslation(state)
+      snapGroupPose(state)
       state.dragging = false
       state.starts.clear()
+      updateGroupOutline(state)
+      queueMicrotask(() => decorateGroupInspector(state))
     }
   }
 
   return originalDispatchEvent.call(this, event)
 }
+
+// Numeric inspector edits are group transforms too. Intercept them before app.js' old
+// single-part handler and edit the same proxy used by TransformControls.
+document.addEventListener('change', event => {
+  const input = event.target
+  if (!(input instanceof HTMLInputElement) || (!input.dataset.pos && !input.dataset.rot)) return
+  const active = activeGroupState()
+  if (!active) return
+  const { control, state } = active
+  const raw = Number(String(input.value).replace('°', ''))
+  if (!Number.isFinite(raw)) return
+
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  editGroupProxy(control, state, proxy => {
+    if (input.dataset.pos) proxy.position[input.dataset.pos] = raw
+    else proxy.rotation[input.dataset.rot] = THREE.MathUtils.degToRad(raw)
+  })
+}, true)
+
+// Group/Ungroup changes groupId inside app.js. Re-evaluate the current selection in a
+// microtask after its shortcut handler has completed so the pivot/outline switches mode.
+window.addEventListener('keydown', event => {
+  if ((event.ctrlKey || event.metaKey) && event.code === 'KeyG') {
+    queueMicrotask(() => {
+      for (const control of knownControls) {
+        const state = states.get(control)
+        if (state?.primary) configureForSelection(control, state.primary)
+      }
+    })
+  }
+}, true)
+
+// Keyboard ±90° must rotate the grouped object around its shared pivot, not only the
+// clicked member. The existing app shortcut is stopped only while a real group is active.
+window.addEventListener('keydown', event => {
+  if (!['BracketLeft','BracketRight'].includes(event.code) || event.ctrlKey || event.metaKey || event.altKey) return
+  const active = activeGroupState()
+  if (!active) return
+  const target = event.target
+  if (target instanceof HTMLElement && (/INPUT|TEXTAREA|SELECT/.test(target.tagName) || target.isContentEditable)) return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  const direction = event.code === 'BracketRight' ? 1 : -1
+  const axis = ['X','Y','Z'].includes(active.control.axis) ? active.control.axis.toLowerCase() : 'y'
+  editGroupProxy(active.control, active.state, proxy => {
+    proxy.rotation[axis] += direction * Math.PI / 2
+  })
+}, true)
+
+const inspectorObserver = new MutationObserver(() => {
+  const active = activeGroupState()
+  if (active) queueMicrotask(() => decorateGroupInspector(active.state))
+})
+const inspector = document.querySelector('#inspector')
+if (inspector) inspectorObserver.observe(inspector, { childList:true, subtree:true })
+else window.addEventListener('bricklab:editorgroupselection', () => {
+  const value = document.querySelector('#inspector')
+  if (value) inspectorObserver.observe(value, { childList:true, subtree:true })
+}, { once:true })
 
 window.addEventListener('beforeunload', () => {
   globalThis.__bricklabMultiTransformActive = false
