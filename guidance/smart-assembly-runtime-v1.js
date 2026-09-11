@@ -13,7 +13,7 @@ import {
   smartAssemblyPlacement,
 } from './assembly-compatibility-v1.js'
 
-export const SMART_ASSEMBLY_ASSISTANT_VERSION = 'smart-assembly-assistant-v1.0.1'
+export const SMART_ASSEMBLY_ASSISTANT_VERSION = 'smart-assembly-assistant-v1.0.2'
 
 const subsystems = globalThis.BrickLabSubsystems
 if (!subsystems?.editor?.ready?.()) throw new Error('Smart Assembly Assistant requires the bound editor subsystem')
@@ -43,6 +43,32 @@ function sourceDefinitionFor(object) {
 
 function currentBuildMode() {
   return (subsystems.editor.mode?.() ?? document.querySelector('.mode.active')?.dataset?.mode) === 'build'
+}
+
+function inspectorSelectedObject() {
+  const inspector = document.querySelector('#inspector')
+  if (!inspector || inspector.classList.contains('hidden')) return null
+  const text = document.querySelector('#selectedId')?.textContent?.trim() || ''
+  // updateInspector appends "· +N selected" for a multi-selection. Guidance V1 only
+  // acts on one part, so never collapse a real multi-selection to its primary object.
+  if (!text || text.includes('· +')) return null
+  const prefix = text.split('·')[0]?.trim() || ''
+  if (prefix.length < 4) return null
+  const matches = subsystems.editor.objects().filter(object =>
+    String(object?.userData?.instanceId || '').startsWith(prefix),
+  )
+  return matches.length === 1 ? matches[0] : null
+}
+
+function guidanceSelection() {
+  const apiSelection = subsystems.editor.selection()
+  const inspectorSelection = inspectorSelectedObject()
+  if (!inspectorSelection) return apiSelection
+  if (apiSelection.length === 1 && apiSelection[0] === inspectorSelection) return apiSelection
+  // Firefox/browser stack formatting can prevent the legacy one-shot Set capture from
+  // observing app.js selectedObjects. The visible inspector is driven directly by the
+  // lexical editor selection, so use its unambiguous instance-id prefix as a fail-safe.
+  return [inspectorSelection]
 }
 
 function makeLayer() {
@@ -257,7 +283,7 @@ async function installChoice(choice) {
 function evaluate() {
   evaluationQueued = false
   if (!currentBuildMode()) return hide()
-  const selection = subsystems.editor.selection()
+  const selection = guidanceSelection()
   if (selection.length !== 1) return hide()
 
   const source = selection[0]
@@ -299,6 +325,12 @@ for (const eventName of [
 document.addEventListener('pointerup', scheduleEvaluation, true)
 document.addEventListener('keyup', scheduleEvaluation, true)
 
+const selectedIdNode = document.querySelector('#selectedId')
+const selectionObserver = selectedIdNode && typeof globalThis.MutationObserver === 'function'
+  ? new globalThis.MutationObserver(scheduleEvaluation)
+  : null
+selectionObserver?.observe(selectedIdNode, { childList:true, characterData:true, subtree:true })
+
 const api = Object.freeze({
   version:SMART_ASSEMBLY_ASSISTANT_VERSION,
   compatibilityVersion:SMART_ASSEMBLY_COMPATIBILITY_VERSION,
@@ -319,6 +351,7 @@ const api = Object.freeze({
   resetDismissals() { dismissed.clear(); scheduleEvaluation() },
   destroy() {
     if (animationFrame) cancelAnimationFrame(animationFrame)
+    selectionObserver?.disconnect()
     ui.layer.remove()
   },
 })
