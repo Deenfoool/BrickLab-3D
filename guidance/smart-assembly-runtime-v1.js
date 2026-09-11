@@ -11,9 +11,9 @@ import {
   isCompatibleAssemblyPresent,
   smartAssemblyDismissalKey,
   smartAssemblyPlacement,
-} from './assembly-compatibility-v1.js'
+} from './assembly-compatibility-v1.js?v=smart-assembly-20260911-v6'
 
-export const SMART_ASSEMBLY_ASSISTANT_VERSION = 'smart-assembly-assistant-v1.0.2'
+export const SMART_ASSEMBLY_ASSISTANT_VERSION = 'smart-assembly-assistant-v1.0.3'
 
 const subsystems = globalThis.BrickLabSubsystems
 if (!subsystems?.editor?.ready?.()) throw new Error('Smart Assembly Assistant requires the bound editor subsystem')
@@ -22,7 +22,7 @@ function ensureStylesheet() {
   if (!globalThis.document?.head || document.querySelector('link[data-bricklab-smart-assembly]')) return
   const link = document.createElement('link')
   link.rel = 'stylesheet'
-  link.href = './guidance/smart-assembly-v1.css?v=smart-assembly-20260911-v2'
+  link.href = './guidance/smart-assembly-v1.css?v=smart-assembly-20260911-v3'
   link.dataset.bricklabSmartAssembly = 'v1'
   document.head.append(link)
 }
@@ -65,9 +65,8 @@ function guidanceSelection() {
   const inspectorSelection = inspectorSelectedObject()
   if (!inspectorSelection) return apiSelection
   if (apiSelection.length === 1 && apiSelection[0] === inspectorSelection) return apiSelection
-  // Firefox/browser stack formatting can prevent the legacy one-shot Set capture from
-  // observing app.js selectedObjects. The visible inspector is driven directly by the
-  // lexical editor selection, so use its unambiguous instance-id prefix as a fail-safe.
+  // The inspector is driven by app.js' lexical selection and remains a fail-safe for
+  // old saved sessions while the editor selection bridge is being upgraded in place.
   return [inspectorSelection]
 }
 
@@ -319,6 +318,7 @@ for (const eventName of [
   'bricklab:partcatalogchange',
   'bricklab:ldrawloaded',
   'bricklab:editorexternalmutation',
+  'bricklab:editorselectionchange',
   'bricklab:editorgroupselection',
 ]) globalThis.addEventListener?.(eventName, scheduleEvaluation)
 

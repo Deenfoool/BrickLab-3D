@@ -1,13 +1,14 @@
 const NativeSet = globalThis.Set
 const NativeMap = globalThis.Map
 
-export const EDITOR_GROUPS_VERSION = 'editor-groups-v1.1.0'
+export const EDITOR_GROUPS_VERSION = 'editor-groups-v1.2.0'
 
 let captureArmed = false
 let captureCount = 0
 let restoreSet = null
 let capturedSelection = null
 let primarySelection = null
+let selectionEventQueued = false
 
 function isEditorPart(value) {
   return Boolean(value?.isObject3D && value?.userData?.instanceId)
@@ -84,17 +85,39 @@ function deleteInteractionUnit(set, value) {
   return changed
 }
 
-function directCallerIsApp() {
-  const lines = String(new Error().stack || '').split('\n').slice(1)
-  const caller = lines.find(line => !line.includes('editor-groups-v1.js')) ?? ''
-  return /(?:^|[\/])app\.js(?:\?|:|\b)/.test(caller)
+function queueSelectionEvent() {
+  if (selectionEventQueued) return
+  selectionEventQueued = true
+  const enqueue = typeof globalThis.queueMicrotask === 'function'
+    ? globalThis.queueMicrotask.bind(globalThis)
+    : callback => Promise.resolve().then(callback)
+  enqueue(() => {
+    selectionEventQueued = false
+    if (typeof globalThis.dispatchEvent !== 'function' || typeof globalThis.CustomEvent !== 'function') return
+    const detail = {
+      version:EDITOR_GROUPS_VERSION,
+      captureCount,
+      count:capturedSelection?.size ?? 0,
+      primaryInstanceId:editorPrimarySelection()?.userData?.instanceId ?? null,
+    }
+    globalThis.dispatchEvent(new globalThis.CustomEvent('bricklab:editorselectionchange', { detail }))
+    globalThis.dispatchEvent(new globalThis.CustomEvent('bricklab:editorgroupselection', { detail }))
+  })
 }
 
-function qualifiesAsSelectionConstruction(values) {
-  if (!globalThis.document?.querySelector?.('.shell')) return false
-  if (!directCallerIsApp()) return false
-  if (values == null) return true
-  return values.length > 0 && values.every(isEditorPart)
+function promoteSelection(set, primary = null) {
+  if (!set?.__bricklabGroupAwareSelection) {
+    set.__bricklabGroupAwareSelection = true
+    captureCount += 1
+  }
+  capturedSelection = set
+  if (isEditorPart(primary)) primarySelection = primary
+  else if (!set.size) primarySelection = null
+  queueSelectionEvent()
+}
+
+function shellReady() {
+  return Boolean(globalThis.document?.querySelector?.('.shell'))
 }
 
 export function armSelectionCapture() {
@@ -104,48 +127,54 @@ export function armSelectionCapture() {
 
   class BrickLabSelectionCaptureSet extends PreviousSet {
     constructor(iterable) {
-      const values = iterable == null ? null : [...iterable]
-      if (!qualifiesAsSelectionConstruction(values)) {
-        super(iterable)
+      const values = iterable == null ? [] : [...iterable]
+      super()
+      this.__bricklabSelectionCandidate = shellReady() && (
+        values.length === 0 || values.every(isEditorPart)
+      )
+      this.__bricklabGroupAwareSelection = false
+
+      if (this.__bricklabSelectionCandidate && values.length && values.every(isEditorPart)) {
+        normalizeDuplicatedGroupIds(values)
+        promoteSelection(this, values.at(-1) ?? null)
+        for (const value of values) addInteractionUnit(this, value)
+        queueSelectionEvent()
         return
       }
 
-      super()
-      this.__bricklabGroupAwareSelection = true
-      capturedSelection = this
-      primarySelection = null
-      if (values) normalizeDuplicatedGroupIds(values)
-      for (const value of values ?? []) this.add(value)
-
-      captureArmed = false
-      captureCount += 1
-      globalThis.Set = PreviousSet
-      restoreSet = null
-      queueMicrotask(() => {
-        globalThis.dispatchEvent?.(new CustomEvent('bricklab:editorgroupselection', {
-          detail:{ version:EDITOR_GROUPS_VERSION, captureCount },
-        }))
-      })
+      for (const value of values) NativeSet.prototype.add.call(this, value)
     }
 
     add(value) {
-      if (!this.__bricklabGroupAwareSelection) return super.add(value)
+      if (!this.__bricklabGroupAwareSelection) {
+        if (this.__bricklabSelectionCandidate && isEditorPart(value)) {
+          promoteSelection(this, value)
+        } else {
+          if (this.__bricklabSelectionCandidate && !isEditorPart(value)) this.__bricklabSelectionCandidate = false
+          NativeSet.prototype.add.call(this, value)
+          return this
+        }
+      }
       addInteractionUnit(this, value)
       if (isEditorPart(value)) primarySelection = value
+      queueSelectionEvent()
       return this
     }
 
     delete(value) {
-      if (!this.__bricklabGroupAwareSelection) return super.delete(value)
+      if (!this.__bricklabGroupAwareSelection) return NativeSet.prototype.delete.call(this, value)
       const changed = deleteInteractionUnit(this, value)
       if (changed && primarySelection && !this.has(primarySelection)) primarySelection = [...this].at(-1) ?? null
+      if (changed) queueSelectionEvent()
       return changed
     }
 
     clear() {
-      if (!this.__bricklabGroupAwareSelection) return super.clear()
+      if (!this.__bricklabGroupAwareSelection) return NativeSet.prototype.clear.call(this)
+      if (!this.size) return
       NativeSet.prototype.clear.call(this)
       primarySelection = null
+      queueSelectionEvent()
     }
   }
 
@@ -163,7 +192,10 @@ export function cancelSelectionCapture() {
 
 function armForSynchronousEditorAction() {
   armSelectionCapture()
-  queueMicrotask(() => cancelSelectionCapture())
+  const enqueue = typeof globalThis.queueMicrotask === 'function'
+    ? globalThis.queueMicrotask.bind(globalThis)
+    : callback => Promise.resolve().then(callback)
+  enqueue(() => cancelSelectionCapture())
 }
 
 function shortcutNeedsSelectionRebuild(event) {
@@ -171,9 +203,9 @@ function shortcutNeedsSelectionRebuild(event) {
   return event.code === 'KeyA' || event.code === 'KeyD'
 }
 
-// selectedObjects is reassigned only by Select All and Duplicate after the initial
-// editor bootstrap. Arm the one-shot constructor before those existing handlers run
-// and cancel it in a microtask if the action returned early without creating a Set.
+// selectedObjects is reassigned by Select All and Duplicate. Keep the constructor
+// wrapper armed only for the synchronous editor action; the created Set promotes
+// itself to the authoritative selection as soon as it receives real editor parts.
 globalThis.addEventListener?.('keydown', event => {
   if (shortcutNeedsSelectionRebuild(event)) armForSynchronousEditorAction()
 }, true)

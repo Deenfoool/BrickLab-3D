@@ -1,9 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import * as THREE from 'three'
 
 import {
   EDITOR_GROUPS_VERSION,
+  armSelectionCapture,
+  cancelSelectionCapture,
   editorPrimarySelection,
   editorSelection,
   interactionGroupMembers,
@@ -67,4 +70,34 @@ test('selection bridge is exposed without inventing selection before app capture
   assert.equal(editorPrimarySelection(), null)
   assert.equal(globalThis.BrickLabEditorGroups.selection, editorSelection)
   assert.equal(globalThis.BrickLabEditorGroups.primary, editorPrimarySelection)
+})
+
+test('empty app selection promotes on first editor part without stack-trace parsing', () => {
+  const originalDocument = globalThis.document
+  globalThis.document = {
+    querySelector(selector) { return selector === '.shell' ? {} : null },
+    addEventListener() {},
+  }
+  const a = part('direct-selection-a')
+  try {
+    armSelectionCapture()
+    const selectedObjects = new globalThis.Set()
+    cancelSelectionCapture()
+    selectedObjects.add(a)
+    assert.deepEqual(editorSelection(), [a])
+    assert.equal(editorPrimarySelection(), a)
+    selectedObjects.clear()
+    assert.deepEqual(editorSelection(), [])
+    assert.equal(editorPrimarySelection(), null)
+  } finally {
+    cancelSelectionCapture()
+    if (originalDocument === undefined) delete globalThis.document
+    else globalThis.document = originalDocument
+  }
+})
+
+test('selection bridge publishes an explicit editor-selection event and has no stack heuristic', async () => {
+  const source = await readFile(new URL('../editor-groups-v1.js', import.meta.url), 'utf8')
+  assert.match(source, /bricklab:editorselectionchange/)
+  assert.doesNotMatch(source, /new Error\(\)\.stack|directCallerIsApp/)
 })

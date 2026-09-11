@@ -93,9 +93,9 @@ await import('./connectors-v4/physics-guard-v4.js')
 // remains owned by the fail-closed Connector V4 physics guard.
 await import('./architecture/runtime-v1.js?v=architecture-20260911-v1')
 
-// app.js keeps selection state lexical. The editor-group layer installs a one-shot Set
-// constructor immediately before app evaluation so selectedObjects becomes group-aware,
-// then restores the native Set as soon as that one collection has been created.
+// app.js keeps selection state lexical. The editor-group layer installs a short-lived
+// Set wrapper before app evaluation. The selectedObjects Set promotes itself when it
+// first receives a real editor part and then publishes authoritative selection events.
 globalThis.BrickLabEditorGroups?.armSelectionCapture?.()
 try {
   await import('./app.js')
@@ -163,13 +163,11 @@ const { assertPhysicsRuntimeContract } = await import('./physics-ownership-v1.js
 assertPhysicsRuntimeContract()
 window.__bricklabRuntimeReady = true
 
-// Smart Assembly stays out of the critical editor-start path, but once the established
-// editor/UI runtime is ready its activation should start promptly instead of waiting for
-// browser idle time. The activation layer also installs a temporary visible diagnostic
-// panel so the current browser-specific failure can be isolated without DevTools.
+// Smart Assembly remains optional and starts only after the established editor/UI
+// reaches runtimeReady. Any failure here must never block the editor itself.
 const startSmartAssembly = async () => {
   try {
-    await import('./guidance/smart-assembly-activation-v1.js?v=smart-assembly-20260911-v3')
+    await import('./guidance/smart-assembly-activation-v1.js?v=smart-assembly-20260911-v4')
   } catch (error) {
     console.warn('[BrickLab Smart Assembly] Assistant unavailable; editor continues without assembly suggestions.', error)
   }

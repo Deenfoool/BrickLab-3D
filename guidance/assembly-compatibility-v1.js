@@ -1,4 +1,4 @@
-export const SMART_ASSEMBLY_COMPATIBILITY_VERSION = 'smart-assembly-compatibility-v1.1.0'
+export const SMART_ASSEMBLY_COMPATIBILITY_VERSION = 'smart-assembly-compatibility-v1.2.0'
 
 export const SMART_ASSEMBLY_FAMILIES = Object.freeze([
   Object.freeze({
@@ -52,9 +52,8 @@ function curatedRoleForCode(code) {
 }
 
 export function smartAssemblyRole(definition) {
-  // A curated family is already verified mechanical compatibility evidence. Do not
-  // require the asynchronous Mechanical Intelligence sync to finish before an
-  // explicitly registered tire/rim ID can produce a suggestion.
+  // Curated IDs are already verified compatibility evidence and must not wait for
+  // asynchronous Mechanical Intelligence hydration before guidance can appear.
   const curatedRole = curatedRoleForCode(codeFor(definition))
   if (curatedRole) return curatedRole
 
@@ -195,12 +194,14 @@ function rotateLocalOffset(offset, rotation) {
   const ry = Number(rotation?.y ?? rotation?.[1] ?? 0)
   const rz = Number(rotation?.z ?? rotation?.[2] ?? 0)
 
-  const cx = Math.cos(rx), sx = Math.sin(rx)
-  ;[y, z] = [y * cx - z * sx, y * sx + z * cx]
-  const cy = Math.cos(ry), sy = Math.sin(ry)
-  ;[x, z] = [x * cy + z * sy, -x * sy + z * cy]
+  // THREE.Euler defaults to XYZ. For column vectors its composed rotation matrix
+  // applies the local offset in reverse operation order: Z, then Y, then X.
   const cz = Math.cos(rz), sz = Math.sin(rz)
   ;[x, y] = [x * cz - y * sz, x * sz + y * cz]
+  const cy = Math.cos(ry), sy = Math.sin(ry)
+  ;[x, z] = [x * cy + z * sy, -x * sy + z * cy]
+  const cx = Math.cos(rx), sx = Math.sin(rx)
+  ;[y, z] = [y * cx - z * sx, y * sx + z * cx]
   return [x, y, z]
 }
 
