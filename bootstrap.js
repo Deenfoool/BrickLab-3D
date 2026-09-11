@@ -88,6 +88,11 @@ try {
 // unsupported/ambiguous connection blocks SIMULATE rather than downgrading silently.
 await import('./connectors-v4/physics-guard-v4.js')
 
+// Architecture API v1 is a compatibility facade, not a new owner. It exposes stable
+// subsystem contracts while BUILD remains owned by Connector V4/bridges and SIMULATE
+// remains owned by the fail-closed Connector V4 physics guard.
+await import('./architecture/runtime-v1.js?v=architecture-20260911-v1')
+
 // app.js keeps selection state lexical. The editor-group layer installs a one-shot Set
 // constructor immediately before app evaluation so selectedObjects becomes group-aware,
 // then restores the native Set as soon as that one collection has been created.

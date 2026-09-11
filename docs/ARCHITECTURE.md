@@ -1,124 +1,186 @@
 # BrickLab 3D architecture
 
-## Core principle
+BrickLab is a browser-native ES-module application served directly by GitHub Pages. The production runtime intentionally stays **no-build**: `index.html` owns the canonical import map and `bootstrap.js` starts subsystems in a controlled order.
 
-A rendered part and a mechanical part are not the same thing. Geometry answers “what does it look like?”, while metadata answers “how can it connect and behave?”.
+This document describes the architecture after the first Architecture Consolidation milestone from [`ROADMAP_NEXT.md`](ROADMAP_NEXT.md).
 
-The production runtime is currently browser-native ES modules in the repository root so GitHub Pages can serve it without a build step.
+## Stable subsystem boundary
 
-## Part schema
-
-Current connector types:
+New roadmap features should prefer the stable facade exposed as:
 
 ```js
-stud
-tube
-pin
-pin-hole
-axle
-axle-hole
+globalThis.BrickLabSubsystems
 ```
 
-Each connector has:
+The facade is installed by `architecture/runtime-v1.js` and reports its contract version through `BrickLabSubsystems.version`.
 
-```js
-{
-  id: 'hole-3',
-  type: 'pin-hole',
-  position: [x, y, z],
-  axis: [x, y, z]
-}
-```
-
-A part definition contains visual geometry plus connector metadata. Later it will also include collision geometry, mass properties and drivetrain metadata.
-
-## Connection graph
-
-Snapping no longer ends at a transform operation. A successful snap creates an explicit graph edge.
-
-```js
-{
-  id: '<uuid>',
-  kind: 'fixed' | 'hinge' | 'axle',
-  a: {
-    instanceId: '<part uuid>',
-    connectorId: '<connector id>',
-    connectorType: '...'
-  },
-  b: {
-    instanceId: '<part uuid>',
-    connectorId: '<connector id>',
-    connectorType: '...'
-  }
-}
-```
-
-Current connection mapping:
-
-- `stud ↔ tube` → `fixed`
-- `pin ↔ pin-hole` → `hinge`
-- `axle ↔ axle-hole` → `axle`
-
-Connector endpoints are exclusive. Once an endpoint participates in a graph edge it is considered occupied and the snap engine will not reuse it.
-
-## Connection pipeline
-
-1. User drags a part.
-2. Existing links belonging to that moved part are detached once the transform actually changes.
-3. Nearby compatible **free** connectors are queried.
-4. Candidates are scored by connector distance and axis alignment.
-5. Best candidate is previewed in the viewport.
-6. On release, the selected part is automatically oriented to the target connector axis.
-7. Connector positions are snapped together.
-8. A persistent connection edge is created.
-9. The new state is committed to undo/redo history and browser autosave.
-10. Future simulation will translate graph edges into Rapier rigid groups and joints.
-
-## Visual connector states
-
-- Blue: free connector on selected part.
-- Orange: occupied connector on selected part.
-- Green: saved connection point / current snap candidate.
-
-## History model
-
-The editor keeps bounded project snapshots for undo/redo. A snapshot includes:
-
-- all part instances;
-- transforms;
-- colors;
-- project name;
-- complete connection graph.
-
-This is intentionally project-state history rather than mesh history, which keeps it independent from the eventual geometry source.
-
-## Geometry strategy
-
-The current MVP uses procedural geometry to validate the editor. LDraw will be introduced through a geometry adapter so editor logic does not depend on the source of the mesh.
+The current public boundaries are:
 
 ```text
-PartDefinition
-     |
-     +-- ProceduralGeometryAdapter (current)
-     |
-     +-- LDrawGeometryAdapter (next)
+BrickLabSubsystems
+├─ editor
+│  ├─ objects / selection / primarySelection
+│  ├─ object identity
+│  ├─ groups
+│  ├─ projectState
+│  └─ history commands
+├─ parts
+│  ├─ list / get / require
+│  ├─ instantiate
+│  ├─ connectors
+│  ├─ mechanical metadata
+│  ├─ physical metadata
+│  └─ capability summary
+├─ connectivity
+│  ├─ build
+│  └─ simulate
+├─ mechanics
+├─ physics
+├─ telemetry
+├─ projects
+├─ testLab
+└─ guidance
 ```
 
-Selection, snapping, connection graph, project files and physics metadata should remain stable while visual meshes are replaced.
+This facade is a **compatibility boundary**, not a rewrite and not a new source of truth. During migration it delegates to the existing production owners.
 
-## Physics adapter target
+## Authority rules
 
-The connection graph is deliberately shaped to become physics input:
+### BUILD connectivity
+
+There is one authoritative BUILD path:
 
 ```text
-fixed graph components
-       ↓
-rigid body groups
-       ↓
-hinge edges ──→ revolute joints
-axle edges  ──→ drivetrain / revolute constraints
-       ↓
-Rapier world
+editor / future feature
+        ↓
+BrickLabSubsystems.connectivity.build
+        ↓
+Connector V4 runtime
+        ↓
+V4 graph / occupancy / placement
+        ↓
+legacy V3 bridge only where the current production bridge explicitly allows it
 ```
 
-The next physics milestone should not infer mechanical relationships from mesh overlap. It should consume explicit graph edges.
+New features must not mutate the Connector V4 graph directly. They should use the facade or the documented Connector V4 API when implementing Connector V4 itself.
+
+### SIMULATE physics planning
+
+There is one authoritative SIMULATE path:
+
+```text
+editor / TEST
+     ↓
+BrickLabSubsystems.physics.createSession(...)
+     ↓
+PhysicsSession.create(...)
+     ↓
+Connector V4 physics guard
+     ↓
+fresh live V4 recertification
+     ↓
+physics policy + safety hardening
+     ↓
+Rapier session / certified constraints
+```
+
+The facade deliberately does **not** provide a bypass around the guard. If Connector V4 says a connection is not certified for physics, SIMULATE remains fail-closed.
+
+## Editor contract
+
+`BrickLabSubsystems.editor` is the integration point for scene objects, selection, groups, object identity, project state and history.
+
+The contract is adapter-based so the existing monolithic `app.js` can be migrated incrementally without destabilising the editor. Until an adapter is bound, read-only object lookup can fall back to the object provider already attached to Connector V4.
+
+Roadmap features such as Design Doctor, Kinematics and the instruction generator should consume this editor contract instead of reaching into `app.js`, DOM helpers, selection hacks or patch internals.
+
+## Part metadata
+
+Part capability data has historically been spread across `parts.js`, part packs, `physical-parts.js`, LDraw runtime metadata and later refinement modules.
+
+New consumers should use:
+
+```js
+BrickLabSubsystems.parts.get(partId)
+BrickLabSubsystems.parts.mechanical(partId)
+BrickLabSubsystems.parts.physical(partId)
+BrickLabSubsystems.parts.connectors(partId)
+BrickLabSubsystems.parts.connectivity(partId)
+BrickLabSubsystems.parts.capabilities(partId)
+```
+
+Returned metadata snapshots are cloned/frozen so analysis features do not accidentally mutate the production registry.
+
+`parts.instantiate()` centralises editor instance identity (`instanceId`, `partId`, color and `instanceRoot`) while still calling the existing part factory.
+
+## Current production startup
+
+The important ownership order is:
+
+```text
+index.html import map
+  ↓
+bootstrap.js
+  ↓
+runtime-extensions.js
+  ├─ native/basic/Technic part packs
+  ├─ Parts 3–6 compatibility/refinement layers
+  ├─ Physics v2
+  ├─ drivetrain / vehicle / suspension / TEST support
+  └─ audio / diagnostics
+  ↓
+LDraw bootstrap + fast loader
+  ↓
+Connector V4 runtime
+  ↓
+Connector V4 physics guard
+  ↓
+architecture/runtime-v1.js
+  ↓
+app.js
+  ↓
+viewport/UI extensions
+```
+
+Loading the architecture facade **after** the Connector V4 physics guard is intentional: `physics.createSession()` must observe the already guarded `PhysicsSession.create` path.
+
+## Migration policy
+
+Architecture Consolidation is incremental:
+
+1. Add a stable boundary and regression tests.
+2. Bind/migrate existing editor state to that boundary.
+3. Migrate new features first; do not add new direct patch/global dependencies.
+4. Move existing consumers subsystem-by-subsystem.
+5. Delete duplicated legacy/runtime paths only after equivalent regression coverage exists.
+
+Do not rename layers merely to make version numbers disappear. A legacy module should only be removed when its ownership has actually moved and tests prove behavior stayed intact.
+
+## Compatibility invariants
+
+Architecture work must preserve all of these:
+
+- existing `.bricklab` files continue to load;
+- current local autosaves remain readable;
+- LDraw lazy loading and dynamic `ldraw-*` definitions keep working;
+- Connector V4 remains the structural owner for supported LDraw connectivity;
+- unsupported Connector V4 mechanisms remain BUILD-only rather than receiving guessed physics;
+- the Connector V4 physics guard remains fail-closed;
+- the no-build GitHub Pages runtime remains valid;
+- existing Parts 3–6, audio, menu/project and group behavior is not rewritten as part of consolidation.
+
+## Tests
+
+Architecture boundary regression:
+
+```bash
+npm run test:architecture
+```
+
+Connector V4 acceptance remains the safety gate for connectivity/physics behavior:
+
+```bash
+npm run test:connectors-v4
+```
+
+The architecture test also checks that bootstrap ordering keeps the physics guard before the facade and the facade before `app.js`.
