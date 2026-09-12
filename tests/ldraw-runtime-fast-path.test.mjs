@@ -7,7 +7,7 @@ const text = path => readFile(new URL(path, root), 'utf8')
 
 test('LDraw visual prototype no longer waits for recursive legacy connector inference', async () => {
   const source = await text('ldraw/runtime-v3.js')
-  const modelLoad = source.indexOf('const modelTask = loader.loadAsync')
+  const modelLoad = source.indexOf('const modelTask = textTask.then')
   const cachePublish = source.indexOf('resolvedPrototypeCache.set(normalized, payload)')
   const legacyStart = source.indexOf('void startLegacyInference(normalized, text, offset, metadata, payload)')
   assert.ok(modelLoad >= 0, 'runtime starts visual model loading directly')
@@ -20,7 +20,7 @@ test('cold LDraw geometry and top-level metadata requests overlap instead of ser
   const source = await text('ldraw/runtime-v3.js')
   const textTask = source.indexOf('const textTask = fetchLDrawText(normalized)')
   const loaderTask = source.indexOf('const loaderTask = getLoader()')
-  const modelTask = source.indexOf('const modelTask = loader.loadAsync')
+  const modelTask = source.indexOf('const modelTask = textTask.then')
   const join = source.indexOf('const [model, text] = await Promise.all([modelTask, textTask])')
   assert.ok(textTask >= 0 && loaderTask > textTask,'metadata and loader work start immediately')
   assert.ok(modelTask > loaderTask,'geometry begins as soon as shared loader becomes ready')

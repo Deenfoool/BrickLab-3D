@@ -2,6 +2,8 @@ import * as THREE from 'three'
 import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.js'
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js'
 import { PARTS } from '../parts.js'
+import { installLDrawCacheRecovery, retryLoad, parseCompleteLDraw } from './load-recovery-v1.js?v=ldraw-loading-20260912-v1'
+import { createLDrawTextTransport } from './text-transport-v1.js?v=ldraw-loading-20260912-v1'
 
 export const LDRAW_SOURCE = Object.freeze({
   repository: 'pybricks/ldraw',
@@ -10,7 +12,7 @@ export const LDRAW_SOURCE = Object.freeze({
   apiRoot: 'https://api.github.com/repos/pybricks/ldraw',
   librarySite: 'https://library.ldraw.org',
 })
-export const LDRAW_RUNTIME_VERSION = 'ldraw-runtime-v3.2.0'
+export const LDRAW_RUNTIME_VERSION = 'ldraw-runtime-v3.3.0'
 
 export const LDU_TO_STUD = 1 / 20
 const PARTS_ROOT = `${LDRAW_SOURCE.rawRoot}parts/`
@@ -23,6 +25,7 @@ const resolvedPrototypeCache = new Map()
 const inferenceCache = new Map()
 let indexPromise = null
 let loaderPromise = null
+const textTransport=createLDrawTextTransport()
 
 const normalizeFile = value => String(value || '').replace(/^parts\//i, '').replace(/\\/g, '/').trim()
 const partCode = file => normalizeFile(file).replace(/\.dat$/i, '')
@@ -30,14 +33,14 @@ const rawUrl = (root, file) => `${root}${normalizeFile(file).split('/').map(enco
 
 async function fetchOk(url, options = {}) {
   const response = await fetch(url, { mode: 'cors', cache: 'force-cache', ...options })
-  if (!response.ok) throw new Error(`LDraw HTTP ${response.status}: ${url}`)
+  if (!response.ok) { const error=new Error(`LDraw HTTP ${response.status}: ${url}`);error.status=response.status;throw error }
   return response
 }
 
 export async function fetchLDrawText(file) {
   const normalized = normalizeFile(file)
   if (textCache.has(normalized)) return textCache.get(normalized)
-  const promise = fetchOk(rawUrl(PARTS_ROOT, normalized)).then(response => response.text())
+  const promise = textTransport.read(`parts/${normalized}`)
   textCache.set(normalized, promise)
   try { return await promise } catch (error) { textCache.delete(normalized); throw error }
 }
@@ -235,10 +238,14 @@ function inferMechanics(metadata, connectors) {
 }
 
 async function createLoader() {
-  const loader = new LDrawLoader()
+  const loader = installLDrawCacheRecovery(new LDrawLoader())
   loader.setConditionalLineMaterial(LDrawConditionalLineMaterial)
   loader.setPartsLibraryPath(LDRAW_SOURCE.rawRoot)
-  try { await loader.preloadMaterials(CONFIG_URL) } catch (error) { console.warn('[BrickLab LDraw] colour config unavailable', error) }
+  loader.partsCache.parseCache.fetchData=file=>textTransport.subpart(file)
+  try {
+    const text=await textTransport.read('LDConfig.ldr')
+    await loader.preloadMaterials(`data:text/plain;charset=utf-8,${encodeURIComponent(text)}`)
+  } catch (error) { console.warn('[BrickLab LDraw] colour config unavailable', error) }
   return loader
 }
 
@@ -328,9 +335,12 @@ async function loadPrototype(file) {
     // LDrawLoader (including its one-time colour config) is ready, start geometry too;
     // neither request waits for the other before doing useful network work.
     const textTask = fetchLDrawText(normalized)
+    textTask.catch(()=>{}) // config may still be loading when the text request fails
     const loaderTask = getLoader()
     const loader = await loaderTask
-    const modelTask = loader.loadAsync(rawUrl(PARTS_ROOT, normalized))
+    // Reuse the same top-level text as metadata: no duplicate geometry download.
+    loader.addDefaultMaterials()
+    const modelTask = textTask.then(text=>parseCompleteLDraw(loader,text))
     const [model, text] = await Promise.all([modelTask, textTask])
     model.rotation.x = Math.PI
     model.scale.setScalar(LDU_TO_STUD)
@@ -491,7 +501,7 @@ export function registerLDrawPart(entry = {}) {
       }
       const fallback = placeholder(fallbackSize(def.name), color)
       root.add(fallback)
-      void loadPrototype(file).then(payload => attachPrototype(root, def, payload, color, fallback, !def.ldraw.ready)).catch(error => {
+      void retryLoad(()=>loadPrototype(file)).then(payload => attachPrototype(root, def, payload, color, fallback, !def.ldraw.ready)).catch(error => {
         console.warn(`[BrickLab LDraw] Could not load ${file}`, error)
         root.userData.ldraw = { ...root.userData.ldraw, status: 'error', error: String(error?.message || error) }
       })
@@ -507,6 +517,19 @@ export async function registerLDrawPartByFile(file) {
   return registerLDrawPart(await getLDrawMetadata(file))
 }
 
+export async function retryLDrawInstance(root,{canAttach=()=>true}={}) {
+  const def=PARTS.find(part=>part.id===root?.userData?.partId)
+  if(!def?.ldraw || root.userData.ldraw?.status!=='error')return false
+  root.userData.ldraw.status='loading'
+  try {
+    const payload=await retryLoad(()=>loadPrototype(def.ldraw.file))
+    if(!canAttach())throw Error('LDraw repair cancelled: scene or mode changed')
+    const fallback=root.children.find(child=>typeof child.userData.disposePlaceholder==='function')
+    attachPrototype(root,def,payload,root.userData.color??def.defaultColor,fallback,true)
+    return true
+  } catch(error){root.userData.ldraw.status='error';root.userData.ldraw.error=String(error?.message||error);throw error}
+}
+
 export const BrickLabLDraw = Object.freeze({
   version:LDRAW_RUNTIME_VERSION,
   source: LDRAW_SOURCE,
@@ -516,6 +539,7 @@ export const BrickLabLDraw = Object.freeze({
   register: registerLDrawPart,
   registerByFile: registerLDrawPartByFile,
   preload: preloadLDrawPrototype,
+  retry: retryLDrawInstance,
   isPrepared: isLDrawPrototypeReady,
   stats:()=>Object.freeze({
     textCache:textCache.size,
