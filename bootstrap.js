@@ -106,6 +106,16 @@ try {
 // app.js has created the scene, selection collection, history controls and V4 object source.
 await import('./architecture/editor-adapter-v1.js?v=architecture-20260911-v1')
 
+// app.js still renders its Mechanics inspector from the legacy V3 `connections`
+// array. Connector V4 snaps intentionally avoid duplicating those records, so keep the
+// visible inspector synchronized from the authoritative V4 graph without changing
+// editor/physics ownership.
+try {
+  await import('./connectors-v4/inspector-sync-v4.js?v=connector-inspector-20260912-v1')
+} catch (error) {
+  console.warn('[BrickLab Connector V4] Inspector graph sync unavailable; editor continues normally.', error)
+}
+
 // Guidance features depend only on the established editor contract. Start Smart
 // Assembly non-blocking, but mount Design Doctor's lightweight activation shell
 // synchronously so its toolbar control can never disappear behind a heavy dependency
