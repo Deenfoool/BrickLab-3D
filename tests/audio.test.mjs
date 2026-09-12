@@ -10,6 +10,15 @@ function context(){
  const node=()=>({connect(){},disconnect(){},gain:param(),threshold:param(),ratio:param(),playbackRate:param(),positionX:param(),positionY:param(),positionZ:param(),start(){},stop(){this.onended?.()}})
  return {state:'running',currentTime:0,destination:{},createGain:node,createDynamicsCompressor:node,createBufferSource:node,createPanner:node,createBuffer:(channels,length,rate)=>({length,sampleRate:rate,copyToChannel(){}}),resume:async()=>{}}
 }
+function mediaFactory(log=[]){
+ return src=>{
+  const listeners={}
+  return {src,preload:'',loop:false,paused:true,currentTime:0,volume:1,muted:false,error:null,
+   addEventListener(type,fn){listeners[type]=fn},load(){log.push(['load',this.src])},
+   play(){this.paused=false;log.push(['play',this.src]);return Promise.resolve()},
+   pause(){this.paused=true;log.push(['pause',this.src])},emit(type){listeners[type]?.()}}
+ }
+}
 const store=()=>({v:null,getItem(){return this.v},setItem(k,v){this.v=v}})
 test('autoplay: context is never created before explicit unlock; settings persist safely',async()=>{
  let calls=0;const storage=store(),a=new AudioManager({storage,contextFactory:()=>{calls++;return context()}})
@@ -42,10 +51,23 @@ test('buffer reuse, cooldown, polyphony, loop lifecycle, mute and missing recipe
  assert.equal(a.play('missing'),null);assert.ok(a.failed.has('missing/2'))
  a.setHidden(true);assert.equal(a.play('click'),null);assert.equal(a.master.gain.value,0)
 })
-test('missing music file is noncritical and not fetched repeatedly',async()=>{
- const previous=globalThis.fetch;let calls=0
- globalThis.fetch=async()=>{calls++;return {ok:false,status:404}}
- try{const a=new AudioManager({storage:store(),contextFactory:context});await a.unlock();await a.loadMusic();await a.loadMusic();assert.equal(calls,1);assert.ok(a.failed.has('music/workbench.ogg'));assert.ok(a.play('snap'))}finally{globalThis.fetch=previous}
+test('custom delete and tool samples use the supplied MP3 files and SFX volume',async()=>{
+ let now=0;const log=[]
+ const a=new AudioManager({storage:store(),contextFactory:context,mediaFactory:mediaFactory(log),now:()=>now});await a.unlock()
+ a.setSettings({master:.5,sfx:.4,mute:false})
+ const deletion=a.play('delete',{cooldown:0});assert.ok(deletion?.external);assert.match(deletion.element.src,/delete\.mp3$/);assert.equal(deletion.element.volume,.2)
+ now+=1
+ const tool=a.play('tool',{cooldown:0});assert.ok(tool?.external);assert.match(tool.element.src,/toggle-switch\.mp3$/);assert.equal(tool.element.volume,.2)
+ assert.ok(log.some(([type,src])=>type==='play' && /delete\.mp3$/.test(src)))
+ assert.ok(log.some(([type,src])=>type==='play' && /toggle-switch\.mp3$/.test(src)))
+})
+test('background music streams sound1 and sound2 as a repeating playlist',async()=>{
+ const log=[],a=new AudioManager({storage:store(),contextFactory:context,mediaFactory:mediaFactory(log)});await a.unlock()
+ const voice=a.startLoop('music');assert.ok(voice?.external);assert.match(a.musicElement.src,/sound1\.mp3$/);assert.equal(a.loops.has('music'),true)
+ a.musicElement.emit('ended');assert.match(a.musicElement.src,/sound2\.mp3$/)
+ a.musicElement.emit('ended');assert.match(a.musicElement.src,/sound1\.mp3$/)
+ a.stopLoop('music');assert.equal(a.musicElement.paused,true);assert.equal(a.loops.has('music'),false)
+ assert.ok(log.filter(([type])=>type==='play').length>=3)
 })
 test('connector semantics and three impact thresholds',()=>{
  assert.equal(connectorSound({source:'pin',target:'pin-hole'}),'pin-insert')
