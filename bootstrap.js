@@ -116,6 +116,14 @@ try {
   console.warn('[BrickLab Connector V4] Inspector graph sync unavailable; editor continues normally.', error)
 }
 
+// KINEMATICS is a lightweight mode activation shell. Its deterministic solver/runtime
+// loads only when the user enters the mode; Rapier is never started by this path.
+try {
+  await import('./kinematics/activation-v1.js?v=kinematics-20260912-v1')
+} catch (error) {
+  console.warn('[BrickLab Kinematics] Activation unavailable; editor continues normally.', error)
+}
+
 // Guidance features depend only on the established editor contract. Start Smart
 // Assembly non-blocking, but mount Design Doctor's lightweight activation shell
 // synchronously so its toolbar control can never disappear behind a heavy dependency

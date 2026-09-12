@@ -1,0 +1,207 @@
+.kinematics-mode {
+  position: relative;
+}
+
+.kinematics-mode.active {
+  color: var(--accent, #74e6a6);
+}
+
+.kinematics-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 36;
+  pointer-events: none;
+}
+
+.kinematics-layer[hidden] { display: none; }
+
+.kinematics-panel {
+  position: absolute;
+  top: 68px;
+  left: 18px;
+  width: min(360px, calc(100% - 36px));
+  max-height: calc(100% - 92px);
+  overflow: auto;
+  pointer-events: auto;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(16,19,22,.94);
+  box-shadow: 0 18px 48px rgba(0,0,0,.34);
+  backdrop-filter: blur(12px);
+  color: #e7edf4;
+}
+
+.kinematics-panel h3 {
+  margin: 2px 0 0;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.kinematics-panel small {
+  color: #8d9aa7;
+  font-size: 9px;
+  letter-spacing: .12em;
+}
+
+.kinematics-panel p,
+.kinematics-panel footer {
+  color: #93a0ad;
+  line-height: 1.45;
+}
+
+.kinematics-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kinematics-close {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255,255,255,.055);
+  color: #aab5c0;
+  cursor: pointer;
+}
+
+.kinematics-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  margin: 12px 0;
+}
+
+.kinematics-metrics > div {
+  padding: 9px;
+  border-radius: 10px;
+  background: rgba(255,255,255,.045);
+}
+
+.kinematics-metrics span {
+  display: block;
+  color: #8794a1;
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.kinematics-metrics b {
+  display: block;
+  margin-top: 4px;
+  font-size: 16px;
+}
+
+.kinematics-field,
+.kinematics-control {
+  display: block;
+  margin-top: 11px;
+}
+
+.kinematics-field > span,
+.kinematics-control > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  color: #a4b0bc;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.kinematics-field select {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 9px;
+  padding: 0 9px;
+  background: #171b1f;
+  color: #e8eef4;
+}
+
+.kinematics-control input[type="range"] {
+  width: 100%;
+  accent-color: #74e6a6;
+}
+
+.kinematics-readout-line {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 8px 9px;
+  border-radius: 9px;
+  background: rgba(116,230,166,.06);
+  color: #aeb9c3;
+  font-size: 11px;
+}
+
+.kinematics-alert {
+  margin-top: 10px;
+  border-radius: 9px;
+  padding: 9px 10px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.kinematics-alert.warning { background: rgba(244,190,78,.09); color: #e9c76d; }
+.kinematics-alert.error { background: rgba(245,94,94,.09); color: #ef9191; }
+.kinematics-alert.info { background: rgba(105,169,255,.08); color: #8ebcff; }
+
+.kinematics-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.kinematics-actions button {
+  flex: 1;
+  min-height: 32px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 9px;
+  background: rgba(255,255,255,.045);
+  color: #dce4eb;
+  cursor: pointer;
+}
+
+.kinematics-actions button.primary {
+  background: rgba(116,230,166,.12);
+  border-color: rgba(116,230,166,.24);
+  color: #9cf0be;
+}
+
+.kinematics-panel footer {
+  margin-top: 10px;
+  font-size: 9px;
+}
+
+.kinematics-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255,255,255,.12);
+  border-top-color: #74e6a6;
+  border-radius: 50%;
+  animation: bricklab-kinematics-spin .8s linear infinite;
+}
+
+@keyframes bricklab-kinematics-spin { to { transform: rotate(360deg); } }
+
+.bricklab-kinematics-active .parts-panel,
+.bricklab-kinematics-active .viewport-toolbar,
+.bricklab-kinematics-active #snapToolbar {
+  pointer-events: none !important;
+}
+
+.bricklab-kinematics-active .parts-panel,
+.bricklab-kinematics-active .viewport-toolbar {
+  opacity: .42;
+}
+
+@media (max-width: 780px) {
+  .kinematics-panel {
+    top: 62px;
+    left: 10px;
+    width: calc(100% - 20px);
+  }
+}
