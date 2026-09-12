@@ -1,13 +1,13 @@
 import { getLDrawIndex, getLDrawMetadata, registerLDrawPart, preloadLDrawPrototype } from './runtime-v3.js?v=ldraw-catalog-20260910-v3'
 import { retryLoad, withLoadDeadline } from './load-recovery-v1.js?v=ldraw-loading-20260912-v1'
+import { loadLDrawCatalogIndex } from './index-loader-v1.js?v=ldraw-index-20260912-v1'
 import { PARTS, findPart } from '../parts.js'
 import { compatibleAssemblyChoices } from '../guidance/assembly-compatibility-v1.js?v=smart-assembly-20260911-v6'
 import { libraryItems, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v5'
 import { mountPartsLibrary, LIBRARY_KEYS } from './library-view-v1.js?v=parts-library-20260912-v5'
 import { createPartsLibraryPreviewService } from './library-preview-v1.js?v=parts-library-20260912-v5'
 
-const INDEX_URL='https://raw.githubusercontent.com/partcad/partcad-ldraw/main/parts-index.json.gz'
-let index=[],view=null,root=null,panel=null,pending=null,refreshTimer
+let index=[],view=null,root=null,panel=null,pending=null,refreshTimer,indexSource='unloaded'
 const t=(en,ru)=>document.documentElement.lang==='ru'?ru:en
 
 // Exact geometry previews share one bounded offscreen renderer. LDraw catalog records
@@ -83,14 +83,13 @@ async function loadIndex() {
   if(pending)return pending
   pending=(async()=>{
     try {
-      const response=await fetch(INDEX_URL,{mode:'cors',cache:'force-cache'})
-      if(!response.ok||!response.body||typeof DecompressionStream!=='function')throw Error(`Index HTTP ${response.status}`)
-      const data=await new Response(response.body.pipeThrough(new DecompressionStream('gzip'))).json()
-      if(data.format!==2||!data.categories)throw Error('Unsupported index format')
-      index=Object.entries(data.categories).flatMap(([category,parts])=>Object.entries(parts).flatMap(([code,entry])=>Array.isArray(entry)&&String(entry[0]||'').trim()?[{file:`${code}.dat`,code,description:String(entry[0]).trim(),category}]:[]))
+      const loaded=await loadLDrawCatalogIndex()
+      index=loaded.items
+      indexSource=loaded.source
       refresh()
     } catch(error) {
-      console.warn('[BrickLab Library] Metadata index unavailable; registered parts remain usable.',error)
+      indexSource='unavailable'
+      console.warn('[BrickLab Library] Metadata indexes unavailable; registered parts remain usable.',error)
       refresh({message:t('Index unavailable · registered parts available','Индекс недоступен · доступны зарегистрированные детали')})
     }
   })()
@@ -140,4 +139,5 @@ globalThis.BrickLabLDrawCatalog=Object.freeze({
   focus:()=>view?.focus(),showCategory:name=>view?.showFamily(/technic|wheel|tyre/i.test(name)?'technic':'system'),
   showAll:()=>view?.showSection('all'),showFavorites:()=>view?.showSection('favorites'),
   state:()=>view?.state(),previewStatus:()=>previewService.status(),
+  indexStatus:()=>({source:indexSource,items:index.length}),
 })
