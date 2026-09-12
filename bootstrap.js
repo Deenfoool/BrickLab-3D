@@ -106,9 +106,10 @@ try {
 // app.js has created the scene, selection collection, history controls and V4 object source.
 await import('./architecture/editor-adapter-v1.js?v=architecture-20260911-v1')
 
-// Guidance features depend only on the established editor contract. Start them here,
-// non-blocking, before performance/optional UI modules so an unrelated later failure
-// can never leave BUILD + LDraw usable while silently preventing scene guidance.
+// Guidance features depend only on the established editor contract. Start Smart
+// Assembly non-blocking, but mount Design Doctor's lightweight activation shell
+// synchronously so its toolbar control can never disappear behind a heavy dependency
+// failure. The Doctor engine/runtime itself still loads lazily on first use.
 const startSmartAssembly = async () => {
   try {
     await import('./guidance/smart-assembly-activation-v1.js?v=smart-assembly-20260912-v1')
@@ -118,14 +119,11 @@ const startSmartAssembly = async () => {
 }
 void startSmartAssembly()
 
-const startDesignDoctor = async () => {
-  try {
-    await import('./guidance/design-doctor-runtime-v1.js?v=design-doctor-20260912-v1')
-  } catch (error) {
-    console.warn('[BrickLab Design Doctor] Diagnostics unavailable; editor continues normally.', error)
-  }
+try {
+  await import('./guidance/design-doctor-activation-v1.js?v=design-doctor-20260912-v2')
+} catch (error) {
+  console.warn('[BrickLab Design Doctor] Activation unavailable; editor continues normally.', error)
 }
-void startDesignDoctor()
 
 // Performance Engine V1 consumes the stable editor contract, builds scene/endpoint
 // indexes progressively, and remains optional: SNAP falls back to the established

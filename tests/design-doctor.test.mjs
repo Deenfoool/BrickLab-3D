@@ -138,23 +138,27 @@ test('Design Doctor issue ordering prioritizes errors, then warnings, then infor
   assert.deepEqual(sorted.map(issue => issue.id), ['e','w','i'])
 })
 
-test('production Design Doctor is scene-native, non-blocking and never adds collider-affecting helper geometry', async () => {
+test('production Design Doctor mounts a lightweight toolbar activation before lazy runtime loading', async () => {
   const bootstrap = await readFile(new URL('../bootstrap.js', import.meta.url), 'utf8')
+  const activation = await readFile(new URL('../guidance/design-doctor-activation-v1.js', import.meta.url), 'utf8')
   const runtime = await readFile(new URL('../guidance/design-doctor-runtime-v1.js', import.meta.url), 'utf8')
   const engine = await readFile(new URL('../guidance/design-doctor-engine-v1.js', import.meta.url), 'utf8')
   const css = await readFile(new URL('../guidance/design-doctor-v1.css', import.meta.url), 'utf8')
   const index = await readFile(new URL('../index.html', import.meta.url), 'utf8')
 
   const adapter = bootstrap.indexOf("./architecture/editor-adapter-v1.js?v=architecture-20260911-v1")
-  const doctor = bootstrap.indexOf("./guidance/design-doctor-runtime-v1.js?v=design-doctor-20260912-v1")
+  const doctorActivation = bootstrap.indexOf("./guidance/design-doctor-activation-v1.js?v=design-doctor-20260912-v2")
   const optionalUi = bootstrap.indexOf("./parts5/gear-mesh-ui-v1.js?v=parts-5-20260909-visual-v2")
-  assert.ok(adapter >= 0 && doctor > adapter)
-  assert.ok(doctor < optionalUi, 'later optional UI must never gate Design Doctor startup')
-  assert.match(bootstrap, /void startDesignDoctor\(\)/)
-  assert.doesNotMatch(bootstrap, /await startDesignDoctor\(\)/)
+  assert.ok(adapter >= 0 && doctorActivation > adapter)
+  assert.ok(doctorActivation < optionalUi, 'later optional UI must never gate Doctor toolbar activation')
+  assert.doesNotMatch(bootstrap, /design-doctor-runtime-v1\.js/, 'heavy Doctor runtime must not be a bootstrap dependency')
 
-  const bootstrapUrls = index.match(/bootstrap\.js\?v=design-doctor-20260912-v1/g) ?? []
+  const bootstrapUrls = index.match(/bootstrap\.js\?v=design-doctor-20260912-v2/g) ?? []
   assert.equal(bootstrapUrls.length, 2)
+  assert.match(activation, /data-design-doctor/)
+  assert.match(activation, /design-doctor-runtime-v1\.js\?v=design-doctor-20260912-v2/)
+  assert.match(activation, /insertBefore\(button, deleteButton\)/, 'Doctor control must remain visible in the primary toolbar')
+  assert.match(activation, /Design Doctor could not start/)
   assert.match(runtime, /design-doctor-marker/)
   assert.match(runtime, /data-doctor-next/)
   assert.match(runtime, /data-doctor-focus/)
