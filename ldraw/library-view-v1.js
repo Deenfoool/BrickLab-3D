@@ -1,8 +1,14 @@
-import { FAMILIES, filterLibrary, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v2'
+import { FAMILIES, filterLibrary, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v3'
 
 export const LIBRARY_KEYS = Object.freeze({ family:'bricklab.library.family.v1', favorites:'bricklab.library.favorites.v1', recents:'bricklab.library.recents.v1' })
 const PAGE_SIZE=48
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+
+// Global icon replacement also mutates the hidden native catalog. Those mutations
+// must never trigger refresh → createIcons → mutation → refresh feedback loops.
+export function hasNewPreview(records) {
+  return records.some(record=>[...record.addedNodes].some(node=>node.nodeType===1 && (node.tagName==='IMG'||node.querySelector?.('img'))))
+}
 
 // Dependency-injected UI: no Three.js, physics, project writes or part registration.
 export function mountPartsLibrary(root, { storage=globalThis.localStorage, language=()=>document.documentElement.lang, insert, context=()=>({}), preview=()=>null, info=()=>({}), onClose=()=>{} }) {

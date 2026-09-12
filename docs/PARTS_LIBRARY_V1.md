@@ -33,7 +33,7 @@ Open `parts-library-qa.html` for the exact production component and stylesheet w
 
 Browser QA on published GitHub Pages, 2026-09-12: first-visit picker, Technic, collapse/expand Gears, Bevel category, Russian search `ось 5`, insertion callback 32073, Recent, Favorites, close/reopen, family persistence after page reload, Compatible 6578 → 2994, change to System and `plate 2x4` all passed. Details for gear 3648 were inspected. No application exceptions on the component QA page; the browser extension emitted unrelated errors.
 
-Final verification: 26/26 library tests and 7/7 repository-hygiene tests pass. The selected 90-test regression suite remains 81 passing / 9 baseline failures, with no additional failing tests. The published v2 UI was rechecked, including the Russian language switch and labelled preview fallback.
+Final verification: 27/27 library tests and 7/7 repository-hygiene tests pass. The selected 90-test regression suite remains 81 passing / 9 baseline failures, with no additional failing tests. The published v2 UI was rechecked, including the Russian language switch and labelled preview fallback. The v3 integration additionally filters native-catalog mutations to images only; a regression test prevents SVG icon replacement from causing a refresh feedback loop. The visible layout is unchanged.
 
 ![Family picker (component QA)](qa/parts-library/family-picker.jpg)
 ![Technic library in Russian, with explicit unavailable-preview labels (component QA)](qa/parts-library/technic-library.jpg)
@@ -46,6 +46,6 @@ Baseline comparison at `1e4596a32d3462378bfebe6cf1e5c2498539b156`: the selected 
 
 ## Cache and attribution
 
-`parts-library-20260912-v2` versions bootstrap, catalog aliases, floating-panel integration, view, model and CSS. Unrelated import-map targets retain their original generations. Tests check the runtime metadata-cache alias is retained.
+`parts-library-20260912-v3` versions bootstrap, catalog aliases, floating-panel integration, view, model and CSS. Unrelated import-map targets retain their original generations. Tests check the runtime metadata-cache alias is retained.
 
 LDraw thumbnails use the existing official image endpoint. Geometry/library attribution remains unchanged. Family illustrations are original local inline SVG; no external illustration assets or new package dependencies were added.

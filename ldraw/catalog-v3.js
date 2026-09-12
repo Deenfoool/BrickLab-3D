@@ -1,8 +1,8 @@
 import { getLDrawIndex, getLDrawMetadata, registerLDrawPart } from './runtime-v3.js?v=ldraw-catalog-20260910-v3'
 import { PARTS, findPart } from '../parts.js'
 import { compatibleAssemblyChoices } from '../guidance/assembly-compatibility-v1.js?v=smart-assembly-20260911-v6'
-import { libraryItems, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v2'
-import { mountPartsLibrary, LIBRARY_KEYS } from './library-view-v1.js?v=parts-library-20260912-v2'
+import { libraryItems, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v3'
+import { mountPartsLibrary, LIBRARY_KEYS, hasNewPreview } from './library-view-v1.js?v=parts-library-20260912-v3'
 
 const INDEX_URL='https://raw.githubusercontent.com/partcad/partcad-ldraw/main/parts-index.json.gz'
 let index=[],view=null,root=null,panel=null,pending=null,refreshTimer
@@ -94,7 +94,7 @@ function install() {
   panel=document.querySelector('.parts-panel')
   if(!panel||!document.getElementById('partsList'))return
   if(document.getElementById('ldrawCatalogV3'))return
-  const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./library-v1.css?v=parts-library-20260912-v2',import.meta.url).href;document.head.append(css)
+  const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./library-v1.css?v=parts-library-20260912-v3',import.meta.url).href;document.head.append(css)
   migratePreferences()
   panel.classList.add('parts-library-v1')
   root=document.createElement('div');root.id='ldrawCatalogV3';panel.append(root)
@@ -105,7 +105,7 @@ function install() {
   void loadIndex()
   root.addEventListener('change',event=>{if(event.target.id==='plSearch')void lookupCode(event.target.value)})
   const schedule=()=>{clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>view?.refresh(),120)}
-  new MutationObserver(schedule).observe(document.getElementById('partsList'),{childList:true,subtree:true})
+  new MutationObserver(records=>{if(hasNewPreview(records))schedule()}).observe(document.getElementById('partsList'),{childList:true,subtree:true})
   globalThis.addEventListener('bricklab:partcatalogchange',()=>refresh())
   globalThis.addEventListener('bricklab:languagechange',()=>{view.languageChanged();if(title)title.textContent=t('PARTS LIBRARY','БИБЛИОТЕКА ДЕТАЛЕЙ')})
   for(const name of ['bricklab:editorexternalmutation','bricklab:selectionchange','bricklab:editorselectionchange','bricklab:smartassemblyinstalled','bricklab:ldrawloaded'])globalThis.addEventListener(name,schedule)

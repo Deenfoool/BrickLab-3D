@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { Window } from 'happy-dom'
-import { mountPartsLibrary, LIBRARY_KEYS } from '../ldraw/library-view-v1.js'
+import { mountPartsLibrary, LIBRARY_KEYS, hasNewPreview } from '../ldraw/library-view-v1.js'
 import { libraryItems } from '../ldraw/library-model-v1.js'
 
 const fixtures=libraryItems([
@@ -11,6 +11,14 @@ const fixtures=libraryItems([
   {file:'32270.dat',code:'32270',description:'Technic Gear 12 Tooth Bevel',category:'Technic'},
   {file:'3020.dat',code:'3020',description:'Plate 2 x 4',category:'Plate'},
 ],[])
+test('Native preview observer ignores icon churn and only refreshes for images',async()=>{
+  const window=new Window(),doc=window.document
+  assert.equal(hasNewPreview([{addedNodes:[doc.createElement('svg'),doc.createTextNode('icon')]}]),false)
+  assert.equal(hasNewPreview([{addedNodes:[doc.createElement('img')]}]),true)
+  const card=doc.createElement('div');card.innerHTML='<span><img></span>'
+  assert.equal(hasNewPreview([{addedNodes:[card]}]),true)
+  await window.happyDOM.close()
+})
 function setup(options={}) {
   const window=new Window({url:'https://bricklab.test'}),root=window.document.createElement('div')
   window.document.body.append(root)
@@ -87,12 +95,12 @@ test('Production retains native insertion and does not write mechanics',async()=
 test('UI cache generation is coherent without changing unrelated import targets',async()=>{
   const index=await readFile(new URL('../index.html',import.meta.url),'utf8')
   const map=JSON.parse(index.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]).imports
-  assert.equal(map['./bootstrap.js'],'./bootstrap.js?v=parts-library-20260912-v2')
-  assert.equal(map['./ldraw/catalog-v3.js'],'./ldraw/catalog-v3.js?v=parts-library-20260912-v2')
+  assert.equal(map['./bootstrap.js'],'./bootstrap.js?v=parts-library-20260912-v3')
+  assert.equal(map['./ldraw/catalog-v3.js'],'./ldraw/catalog-v3.js?v=parts-library-20260912-v3')
   assert.equal(map['./app.js'],'./app.js?v=parts-6-20260911-editor-groups-v2')
   assert.match(map['./ldraw/runtime-v3.js?v=ldraw-catalog-20260910-v3'],/runtime-metadata-cache-v1/)
   for(const file of ['library-view-v1.js','catalog-v3.js']){
     const code=await readFile(new URL(`../ldraw/${file}`,import.meta.url),'utf8')
-    for(const match of code.matchAll(/\.\/library-[^'" ]+/g))assert.match(match[0],/\?v=parts-library-20260912-v2$/)
+    for(const match of code.matchAll(/\.\/library-[^'" ]+/g))assert.match(match[0],/\?v=parts-library-20260912-v3$/)
   }
 })
