@@ -6,7 +6,13 @@ export function installAudio() {
   const audio=new AudioManager(), mechanics=new MechanicalAudio(audio)
   let unlocked=false, semanticAt=-Infinity, mode='build'
   async function unlock() {
-    if(await audio.unlock()) { if(!unlocked) {unlocked=true;void audio.preload()} }
+    if(await audio.unlock()) {
+      if(!unlocked) {
+        unlocked=true
+        void audio.preload()
+        if(mode==='build') audio.startLoop('music')
+      }
+    }
   }
   document.addEventListener('pointerdown',async event=>{
     await unlock()
