@@ -1,6 +1,6 @@
 import { createDesignDoctorScanner, DESIGN_DOCTOR_ENGINE_VERSION } from './design-doctor-engine-v1.js?v=design-doctor-20260912-v1'
 
-export const DESIGN_DOCTOR_RUNTIME_VERSION = 'design-doctor-runtime-v1.0.0'
+export const DESIGN_DOCTOR_RUNTIME_VERSION = 'design-doctor-runtime-v1.0.1'
 
 const subsystems = globalThis.BrickLabSubsystems
 if (!subsystems?.editor?.ready?.()) throw new Error('Design Doctor requires the bound editor subsystem')
@@ -9,7 +9,7 @@ function ensureStylesheet() {
   if (!globalThis.document?.head || document.querySelector('link[data-bricklab-design-doctor]')) return
   const link = document.createElement('link')
   link.rel = 'stylesheet'
-  link.href = './guidance/design-doctor-v1.css?v=design-doctor-20260912-v1'
+  link.href = './guidance/design-doctor-v1.css?v=design-doctor-20260912-v2'
   link.dataset.bricklabDesignDoctor = 'v1'
   document.head.append(link)
 }
@@ -35,7 +35,13 @@ function makeToolbarButton() {
   button.dataset.designDoctor = 'true'
   button.title = 'Design Doctor — scan build diagnostics'
   button.innerHTML = '<i data-lucide="scan-search"></i><span>Doctor</span>'
-  toolbar.append(divider, button)
+  const deleteButton = toolbar.querySelector('#deleteBtn')
+  if (deleteButton) {
+    toolbar.insertBefore(divider, deleteButton)
+    toolbar.insertBefore(button, deleteButton)
+  } else {
+    toolbar.append(divider, button)
+  }
   globalThis.lucide?.createIcons?.({ attrs:{ 'stroke-width':1.8, 'aria-hidden':'true' } })
   return button
 }
@@ -87,23 +93,46 @@ let raf = 0
 let rescanTimer = 0
 let scanToken = 0
 const markerButtons = new Map()
-const problemObjects = new Set()
-const materialBackups = new Map()
-const flashTimers = new Map()
+let highlightedObject = null
+let highlightBackup = null
 
 const severityColor = Object.freeze({
   error:0xff5f6d,
   warning:0xf2b84b,
   info:0x5aa9ff,
-  scanning:0x65d99b,
+})
+
+const severityIntensity = Object.freeze({
+  error:.34,
+  warning:.24,
+  info:.14,
 })
 
 function currentIssue() {
   return currentIndex >= 0 ? issues[currentIndex] ?? null : null
 }
 
-function cloneObjectMaterials(object) {
-  if (!object || materialBackups.has(object)) return
+function restoreHighlight() {
+  if (!highlightedObject || !highlightBackup) {
+    highlightedObject = null
+    highlightBackup = null
+    return
+  }
+  for (const entry of highlightBackup) {
+    entry.node.material = entry.array ? entry.originals : entry.originals[0]
+    for (const material of entry.clones) {
+      if (material && !entry.originals.includes(material)) material.dispose?.()
+    }
+  }
+  highlightedObject = null
+  highlightBackup = null
+}
+
+function highlightIssue(issue) {
+  restoreHighlight()
+  const object = issue?.object
+  if (!object) return
+
   const entries = []
   object.traverse?.(node => {
     if (!node?.material) return
@@ -112,63 +141,22 @@ function cloneObjectMaterials(object) {
     entries.push({ node, originals, array:Array.isArray(node.material), clones })
     node.material = Array.isArray(node.material) ? clones : clones[0]
   })
-  materialBackups.set(object, entries)
-}
+  if (!entries.length) return
 
-function tintObject(object, severity) {
-  if (!object) return
-  cloneObjectMaterials(object)
-  const color = severityColor[severity] ?? severityColor.info
-  for (const entry of materialBackups.get(object) ?? []) {
+  const color = severityColor[issue.severity] ?? severityColor.info
+  const intensity = severityIntensity[issue.severity] ?? severityIntensity.info
+  for (const entry of entries) {
     for (const material of entry.clones) {
       if (!material) continue
       if (material.emissive?.setHex) {
         material.emissive.setHex(color)
-        if ('emissiveIntensity' in material) material.emissiveIntensity = severity === 'scanning' ? .75 : .95
+        if ('emissiveIntensity' in material) material.emissiveIntensity = intensity
       }
       material.needsUpdate = true
     }
   }
-}
-
-function restoreObject(object) {
-  const entries = materialBackups.get(object)
-  if (!entries) return
-  for (const entry of entries) {
-    entry.node.material = entry.array ? entry.originals : entry.originals[0]
-    for (const material of entry.clones) {
-      if (material && !entry.originals.includes(material)) material.dispose?.()
-    }
-  }
-  materialBackups.delete(object)
-}
-
-function restoreAllObjects() {
-  for (const timer of flashTimers.values()) clearTimeout(timer)
-  flashTimers.clear()
-  for (const object of [...materialBackups.keys()]) restoreObject(object)
-  problemObjects.clear()
-}
-
-function flashInspect(object) {
-  if (!object) return
-  tintObject(object, 'scanning')
-  const previous = flashTimers.get(object)
-  if (previous) clearTimeout(previous)
-  const timer = setTimeout(() => {
-    flashTimers.delete(object)
-    if (!problemObjects.has(object)) restoreObject(object)
-  }, 180)
-  flashTimers.set(object, timer)
-}
-
-function markProblem(issue) {
-  if (!issue?.object) return
-  problemObjects.add(issue.object)
-  const timer = flashTimers.get(issue.object)
-  if (timer) clearTimeout(timer)
-  flashTimers.delete(issue.object)
-  tintObject(issue.object, issue.severity)
+  highlightedObject = object
+  highlightBackup = entries
 }
 
 function statusText(text) {
@@ -206,12 +194,12 @@ function renderCard() {
   const issue = currentIssue()
   if (!open) return
 
-  if (scanning && !issue) {
+  if (scanning) {
     ui.card.className = 'design-doctor-card is-scan'
     ui.card.innerHTML = `
       <small>Progressive scene scan</small>
-      <h3>Inspecting construction…</h3>
-      <p>Parts are checked within a frame budget. Diagnostic coloring is visual only and never enters the physics/collider tree.</p>
+      <h3>Checking construction…</h3>
+      <p>Design Doctor scans quietly in the background. It will not move the camera or flash every part while checking.</p>
     `
     return
   }
@@ -221,7 +209,7 @@ function renderCard() {
     ui.card.innerHTML = `
       <small>Design Doctor · complete</small>
       <h3>No supported problems found</h3>
-      <p>The current authoritative checks did not find an error or warning. Informational checks can remain absent when BrickLab lacks reliable evidence.</p>
+      <p>The current authoritative checks did not find an error or warning.</p>
       <div class="design-doctor-actions"><button type="button" data-doctor-rescan>Scan again</button></div>
     `
     ui.card.querySelector('[data-doctor-rescan]')?.addEventListener('click', () => void startScan())
@@ -263,7 +251,7 @@ function rebuildMarkers() {
     marker.innerHTML = '<span></span>'
     marker.addEventListener('click', event => {
       event.stopPropagation()
-      showIssue(index, { focus:false })
+      showIssue(index)
     })
     ui.markers.append(marker)
     markerButtons.set(issue.id, marker)
@@ -302,11 +290,11 @@ function positionUi() {
   const point = issue?.object ? subsystems.editor.viewportPoint?.(issue.object, { offsetY:.62 }) : null
   const cardWidth = ui.card.offsetWidth || Math.min(340, width - 24)
   const cardHeight = ui.card.offsetHeight || 180
-  const anchor = point?.visible ? point : { x:Math.max(28,width*.5), y:Math.max(68,height*.45) }
+  const anchor = point?.visible ? point : { x:Math.max(28,width*.5), y:Math.max(104,height*.45) }
   const toRight = anchor.x < width * .58
   const proposedX = toRight ? anchor.x + 58 : anchor.x - cardWidth - 58
   const cardX = Math.max(10, Math.min(width-cardWidth-10, proposedX))
-  const cardY = Math.max(56, Math.min(height-cardHeight-12, anchor.y-64))
+  const cardY = Math.max(96, Math.min(height-cardHeight-12, anchor.y-64))
   ui.card.style.transform = `translate3d(${cardX}px,${cardY}px,0)`
 
   if (issue && point?.visible) {
@@ -320,7 +308,6 @@ function positionUi() {
 
 function focusIssue(issue) {
   if (!issue?.object) return false
-  // Prefer a future stable editor focus API if one is available.
   if (typeof subsystems.editor.focusObjects === 'function') {
     try {
       const result = subsystems.editor.focusObjects([issue.object])
@@ -328,17 +315,12 @@ function focusIssue(issue) {
     } catch {}
   }
 
-  // Compatibility path: if the issue part is already selected, reuse BrickLab's
-  // established F shortcut so camera framing stays owned by app.js.
   const selected = subsystems.editor.selection?.() ?? []
   if (selected.includes(issue.object)) {
     globalThis.dispatchEvent?.(new KeyboardEvent('keydown', { key:'f', code:'KeyF', bubbles:true }))
     return true
   }
 
-  // Last-resort browser-native path: project the actual part, ask the editor canvas to
-  // select that hit, then invoke the established focus shortcut. This never mutates
-  // saved state or camera internals directly.
   const point = subsystems.editor.viewportPoint?.(issue.object, { offsetY:0 })
   const canvas = ui.viewport.querySelector('canvas')
   const rect = canvas?.getBoundingClientRect?.()
@@ -354,27 +336,29 @@ function focusIssue(issue) {
   return false
 }
 
-function showIssue(index, { focus=true } = {}) {
+function showIssue(index, { focus=false } = {}) {
   if (!issues.length) {
     currentIndex = -1
+    restoreHighlight()
     renderCard()
     return
   }
   currentIndex = ((Number(index) || 0) % issues.length + issues.length) % issues.length
   explainOpen = false
+  highlightIssue(currentIssue())
   renderCard()
   if (focus) focusIssue(currentIssue())
 }
 
 function nextIssue() {
   if (!issues.length) return
-  showIssue(currentIndex + 1, { focus:true })
+  showIssue(currentIndex + 1)
 }
 
 function clearScanVisuals() {
   markerButtons.clear()
   ui.markers.innerHTML = ''
-  restoreAllObjects()
+  restoreHighlight()
   issues = []
   currentIndex = -1
   explainOpen = false
@@ -395,19 +379,13 @@ async function startScan() {
   toolbarButton.classList.add('active')
   ui.layer.hidden = false
   ui.layer.classList.add('is-visible')
-  statusText('Starting progressive scan…')
+  statusText('Starting quiet scan…')
   setProgress(0)
   renderCard()
   if (!raf) raf = requestAnimationFrame(positionUi)
 
   try {
     const result = await scanner.scan({
-      onInspect:object => flashInspect(object),
-      onIssue:value => {
-        if (token !== scanToken) return
-        issues.push(value)
-        markProblem(value)
-      },
       onProgress:progress => {
         if (token !== scanToken) return
         setProgress(progress.fraction)
@@ -420,7 +398,7 @@ async function startScan() {
     statusText(summaryText(result))
     setProgress(1)
     rebuildMarkers()
-    if (issues.length) showIssue(0, { focus:true })
+    if (issues.length) showIssue(0)
     else renderCard()
     globalThis.dispatchEvent?.(new CustomEvent('bricklab:designdoctorcomplete', {
       detail:{ version:DESIGN_DOCTOR_RUNTIME_VERSION, engineVersion:DESIGN_DOCTOR_ENGINE_VERSION, stats:result.stats },
@@ -444,7 +422,7 @@ function closeDoctor() {
   rescanTimer = 0
   if (raf) cancelAnimationFrame(raf)
   raf = 0
-  restoreAllObjects()
+  clearScanVisuals()
   ui.layer.classList.remove('is-visible')
   ui.layer.hidden = true
   toolbarButton.classList.remove('active')
@@ -453,7 +431,7 @@ function closeDoctor() {
 function scheduleRescan() {
   if (!open) return
   clearTimeout(rescanTimer)
-  rescanTimer = setTimeout(() => void startScan(), 180)
+  rescanTimer = setTimeout(() => void startScan(), 850)
 }
 
 function toggleDoctor() {
@@ -464,17 +442,15 @@ function toggleDoctor() {
 toolbarButton.addEventListener('click', toggleDoctor)
 ui.close.addEventListener('click', closeDoctor)
 
+// Quiet mode: only authoritative model/graph mutations trigger an automatic refresh.
+// Pointer-up is intentionally not observed; orbiting, selecting and ordinary clicks
+// must never restart diagnostics or steal attention from the editor.
 for (const name of [
   'bricklab:editorexternalmutation',
   'bricklab:smartassemblyinstalled',
   'bricklab:connectorv4graphchange',
   'bricklab:mechanicalintelligencechange',
 ]) globalThis.addEventListener?.(name, scheduleRescan)
-
-document.addEventListener('pointerup', event => {
-  if (!open || event.target?.closest?.('.design-doctor-layer')) return
-  scheduleRescan()
-}, true)
 
 const api = Object.freeze({
   version:DESIGN_DOCTOR_RUNTIME_VERSION,
@@ -485,7 +461,7 @@ const api = Object.freeze({
   focus:() => focusIssue(currentIssue()),
   issues:() => [...issues],
   current:() => currentIssue(),
-  status:() => Object.freeze({ open, scanning, issueCount:issues.length, currentIndex }),
+  status:() => Object.freeze({ open, scanning, issueCount:issues.length, currentIndex, quiet:true }),
   destroy() {
     closeDoctor()
     toolbarButton.remove()
@@ -496,5 +472,5 @@ const api = Object.freeze({
 
 globalThis.BrickLabDesignDoctor = api
 globalThis.dispatchEvent?.(new CustomEvent('bricklab:designdoctorready', {
-  detail:{ version:DESIGN_DOCTOR_RUNTIME_VERSION, engineVersion:DESIGN_DOCTOR_ENGINE_VERSION },
+  detail:{ version:DESIGN_DOCTOR_RUNTIME_VERSION, engineVersion:DESIGN_DOCTOR_ENGINE_VERSION, quiet:true },
 }))

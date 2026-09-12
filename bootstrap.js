@@ -120,7 +120,7 @@ const startSmartAssembly = async () => {
 void startSmartAssembly()
 
 try {
-  await import('./guidance/design-doctor-activation-v1.js?v=design-doctor-20260912-v2')
+  await import('./guidance/design-doctor-activation-v1.js?v=design-doctor-20260912-v3')
 } catch (error) {
   console.warn('[BrickLab Design Doctor] Activation unavailable; editor continues normally.', error)
 }

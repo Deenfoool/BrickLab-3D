@@ -1,4 +1,4 @@
-export const DESIGN_DOCTOR_ACTIVATION_VERSION = 'design-doctor-activation-v1.0.0'
+export const DESIGN_DOCTOR_ACTIVATION_VERSION = 'design-doctor-activation-v1.0.1'
 
 function toast(message, timeout = 3600) {
   const node = document.querySelector('#toast')
@@ -12,7 +12,7 @@ function ensureStylesheet() {
   if (!globalThis.document?.head || document.querySelector('link[data-bricklab-design-doctor]')) return
   const link = document.createElement('link')
   link.rel = 'stylesheet'
-  link.href = './guidance/design-doctor-v1.css?v=design-doctor-20260912-v1'
+  link.href = './guidance/design-doctor-v1.css?v=design-doctor-20260912-v2'
   link.dataset.bricklabDesignDoctor = 'v1'
   document.head.append(link)
 }
@@ -35,8 +35,6 @@ function ensureButton() {
   button.title = 'Design Doctor — scan build diagnostics'
   button.innerHTML = '<i data-lucide="scan-search"></i><span>Doctor</span>'
 
-  // Keep Doctor visible next to normal editor tools instead of appending it beyond a
-  // horizontally clipped toolbar on narrower editor layouts.
   const deleteButton = toolbar.querySelector('#deleteBtn')
   if (deleteButton) {
     toolbar.insertBefore(divider, deleteButton)
@@ -63,7 +61,7 @@ async function activate(event) {
   button.title = 'Loading Design Doctor…'
 
   try {
-    await import('./design-doctor-runtime-v1.js?v=design-doctor-20260912-v2')
+    await import('./design-doctor-runtime-v1.js?v=design-doctor-20260912-v3')
     const api = globalThis.BrickLabDesignDoctor
     if (!api?.scan) throw new Error('Design Doctor runtime loaded without a scan API')
 
@@ -72,8 +70,6 @@ async function activate(event) {
     button.title = 'Design Doctor — scan build diagnostics'
     button.removeEventListener('click', activate)
 
-    // The click that caused this import happened before runtime attached its own
-    // toggle handler, so explicitly execute the first scan once loading finishes.
     await api.scan()
   } catch (error) {
     button.dataset.designDoctorState = 'error'
