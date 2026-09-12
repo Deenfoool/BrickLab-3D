@@ -1,4 +1,5 @@
 /* Scoped to the parts window; the scene, inspector and other subsystems are untouched. */
+.pl-preview-fallback{display:flex;flex-direction:column;align-items:center;gap:2px;color:#79918f}.pl-preview-fallback .pl-family-art{width:42px;height:42px}.pl-preview-fallback small{font-size:9px}.pl-thumb.has-image .pl-preview-fallback{visibility:hidden}.parts-library-v1 #partCount{display:none}
 .parts-panel.parts-library-v1{width:min(540px,calc(100vw - 24px))!important;min-width:0!important;height:min(860px,calc(100dvh - 110px))!important;max-height:calc(100dvh - 110px)!important;display:flex!important;flex-direction:column!important;border:1px solid #354047!important;border-radius:16px!important;background:#11191f!important;box-shadow:0 24px 70px #0008!important;overflow:hidden}
 .parts-panel.parts-library-v1.panel-hidden{display:none!important}
 .parts-library-v1>.search,.parts-library-v1>#categoryTabs,.parts-library-v1>#partsList,.parts-library-v1>#catalogBrowserV2,.parts-library-v1>.panel-resize-handle,.parts-library-v1 .panel-view-toggle{display:none!important}

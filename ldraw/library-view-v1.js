@@ -1,4 +1,4 @@
-import { FAMILIES, filterLibrary, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v1'
+import { FAMILIES, filterLibrary, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v2'
 
 export const LIBRARY_KEYS = Object.freeze({ family:'bricklab.library.family.v1', favorites:'bricklab.library.favorites.v1', recents:'bricklab.library.recents.v1' })
 const PAGE_SIZE=48
@@ -57,7 +57,14 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
   }
   function imageMarkup(item,large=false) {
     const url=preview(item)
-    return `<span class="pl-thumb ${large?'pl-large':''}">${url?`<img src="${escape(url)}" alt="${escape(item.name||item.description)}" loading="lazy" decoding="async">`:icon(familyDef()?.icon||'box')}<code>${escape(item.code)}</code></span>`
+    return `<span class="pl-thumb ${large?'pl-large':''}"><span class="pl-preview-fallback">${illustration(familyDef()||FAMILIES[0])}<small>${t('Preview unavailable','Нет превью')}</small></span>${url?`<img src="${escape(url)}" alt="${escape(item.name||item.description)}" loading="lazy" decoding="async" referrerpolicy="no-referrer">`:''}<code>${escape(item.code)}</code></span>`
+  }
+  function bindImages(host) {
+    host.querySelectorAll('img').forEach(img=>{
+      img.onload=()=>img.parentElement?.classList.add('has-image')
+      img.onerror=()=>{img.hidden=true;img.parentElement?.classList.remove('has-image')}
+      if(img.complete&&img.naturalWidth)img.onload()
+    })
   }
   function filtered() { return filterLibrary(items,{family,category,query,tab,favorites,recents,...context()}) }
   function renderResults() {
@@ -67,7 +74,7 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
     root.querySelector('.pl-summary').textContent=loading?t('Loading catalog…','Загрузка каталога…'):warning||`${all.length.toLocaleString()} ${t('parts','деталей')}${tab==='compatible'?t(' · verified matches only',' · только подтверждённые пары'):''}`
     root.querySelector('[data-results]').innerHTML=shown.length?shown.map(item=>`<article class="pl-card ${selected===item.key?'selected':''}" data-key="${escape(item.key)}"><button type="button" class="pl-select" data-select="${escape(item.key)}" aria-pressed="${selected===item.key}" title="${escape(item.name||item.description)}">${imageMarkup(item)}<strong>${escape(item.name||item.description)}</strong><small>${item.source} · ${escape(item.code)}</small></button><div class="pl-card-actions"><button type="button" data-favorite="${escape(item.key)}" aria-pressed="${favorites.includes(item.key)}" aria-label="${t('Favorite','В избранное')}">${favorites.includes(item.key)?'★':'☆'}</button><button type="button" data-add="${escape(item.key)}" ${busy?'disabled':''} aria-label="${t('Add','Добавить')} ${escape(item.code)}">+ ${t('Add','Добавить')}</button></div></article>`).join(''):`<div class="pl-empty">${icon('search')}<strong>${t('No matching parts','Нет подходящих деталей')}</strong><p>${tab==='compatible'?t('Select a part with a verified Smart Assembly pairing. Unverified fits are never guessed.','Выберите деталь с проверенной парой Smart Assembly. Неподтверждённые сопряжения не угадываются.'):t('Try a shorter search or another category. Sections stay within this family.','Попробуйте другой запрос или категорию. Разделы ограничены выбранным семейством.')}</p></div>`
     root.querySelector('.pl-paging').innerHTML=`<button type="button" data-page="-1" ${page===0?'disabled':''}>${t('Previous','Назад')}</button><span>${all.length?page+1:0} / ${Math.ceil(all.length/PAGE_SIZE)}</span><button type="button" data-page="1" ${(page+1)*PAGE_SIZE>=all.length?'disabled':''}>${t('Next','Далее')}</button>`
-    root.querySelectorAll('img').forEach(img=>img.onerror=()=>{img.hidden=true})
+    bindImages(root)
     icons()
   }
   function renderDetail() {
@@ -76,7 +83,7 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
     if(!item){host.innerHTML=`<span>${t('Select a card to inspect. Use + Add or double-click to place.','Выберите карточку для просмотра. + Добавить или двойной клик — вставка.')}</span>`;return}
     const meta=info(item)||{}
     host.innerHTML=`${imageMarkup(item,true)}<div><strong>${escape(item.name||item.description)}</strong><p>${escape(item.description)}</p><small>${item.source} · ${escape(item.code)}${meta.size?` · ${escape(meta.size)}`:''}</small><small>${t('Mechanical class','Механический класс')}: ${escape(meta.mechanical||t('not available','нет данных'))}</small><small>${t('Connectors','Коннекторы')}: ${escape(meta.connectors||t('not resolved','не загружены'))}</small></div>`
-    host.querySelectorAll('img').forEach(img=>img.onerror=()=>{img.hidden=true})
+    bindImages(host)
     icons()
   }
   async function add(key) {

@@ -19,7 +19,7 @@ The visible parts catalog is owned by `ldraw/catalog-v3.js`, using the WebGL-ind
 
 Insertion retains `registerLDrawPart` → hidden native card → `app.js addPart`. Native selection, sound, history, project persistence and Smart Assembly therefore retain their existing owner. Both BUILD and Kinematics state are checked immediately before insertion. A successful placement is verified against live editor instance IDs before recording Recent.
 
-LDraw geometry loads only via the existing runtime. Missing index data leaves registered parts usable; an exact Design ID lookup uses the existing fallback index and fetches metadata for that one known code. Failed thumbnails hide without breaking the card. Only already generated native previews are reused.
+LDraw geometry loads only via the existing runtime. Missing index data leaves registered parts usable; an exact Design ID lookup uses the existing fallback index and fetches metadata for that one known code. Already generated native previews take priority. Failed/unavailable thumbnails show an explicitly labelled family illustration, not a blank field or a fabricated part rendering.
 
 Storage keys: `bricklab.library.family.v1`, `bricklab.library.favorites.v1`, `bricklab.library.recents.v1`. Previous `bricklab.ldraw.favorites.v3` and `bricklab.ldraw.recents.v3` migrate once without deleting their original records. Storage failure is non-fatal.
 
@@ -31,12 +31,16 @@ Run `npm run test:library`. Tests cover classification, bilingual search, dimens
 
 Open `parts-library-qa.html` for the exact production component and stylesheet with deterministic real LDraw IDs, isolated QA preferences and explicit insertion-callback logging. This page does **not** substitute for a full-editor placement test.
 
-Full-editor smoke checklist: open library, choose Technic, expand Gears, search and insert, close/reopen, change family, inspect Smart Assembly/Doctor/Kinematics, save/reload. Browser results are recorded after publication below.
+Browser QA on published GitHub Pages, 2026-09-12: first-visit picker, Technic, collapse/expand Gears, Bevel category, Russian search `ось 5`, insertion callback 32073, Recent, Favorites, close/reopen, family persistence after page reload, Compatible 6578 → 2994, change to System and `plate 2x4` all passed. Details for gear 3648 were inspected. No application exceptions on the component QA page; the browser extension emitted unrelated errors.
+
+The existing official thumbnail URLs failed to load in this browser. This exposed the blank-image fallback and led to the labelled illustration fix. The component does not claim these illustrations are exact part geometry.
+
+Full-editor browser QA is **blocked by this browser's disabled WebGL**: `app.js:217` cannot create its renderer, before catalog initialization. This also occurs on the unchanged baseline. Actual 3D placement, scene/save/reload and interactive Smart Assembly/Doctor/Kinematics behavior are therefore **not browser-verified**. The QA insertion callback is not reported as a real scene insertion. No renderer/physics workaround was added.
 
 Baseline comparison at `1e4596a32d3462378bfebe6cf1e5c2498539b156`: the selected 90-test architecture/guidance/LDraw regression suite already had nine failures (stale structural/cache assertions, reference equality in architecture contract and loader text assertion). These are not reported as passing.
 
 ## Cache and attribution
 
-`parts-library-20260912-v1` versions bootstrap, catalog aliases, floating-panel integration, view, model and CSS. Unrelated import-map targets retain their original generations. Tests check the runtime metadata-cache alias is retained.
+`parts-library-20260912-v2` versions bootstrap, catalog aliases, floating-panel integration, view, model and CSS. Unrelated import-map targets retain their original generations. Tests check the runtime metadata-cache alias is retained.
 
 LDraw thumbnails use the existing official image endpoint. Geometry/library attribution remains unchanged. Family illustrations are original local inline SVG; no external illustration assets or new package dependencies were added.

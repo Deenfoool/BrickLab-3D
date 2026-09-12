@@ -1,5 +1,5 @@
-import { mountPartsLibrary, LIBRARY_KEYS } from '../ldraw/library-view-v1.js?v=parts-library-20260912-v1'
-import { libraryItems } from '../ldraw/library-model-v1.js?v=parts-library-20260912-v1'
+import { mountPartsLibrary, LIBRARY_KEYS } from '../ldraw/library-view-v1.js?v=parts-library-20260912-v2'
+import { libraryItems } from '../ldraw/library-model-v1.js?v=parts-library-20260912-v2'
 const fixtures=[
   ['3001','Brick 2 x 4','Brick'],['3020','Plate 2 x 4','Plate'],['3068b','Tile 2 x 2','Tile'],
   ['32073','Technic Axle 5','Technic'],['3708','Technic Axle 12','Technic'],['3894','Technic Brick 1 x 6 with Holes','Technic'],

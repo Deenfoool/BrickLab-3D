@@ -1,15 +1,14 @@
 import { getLDrawIndex, getLDrawMetadata, registerLDrawPart } from './runtime-v3.js?v=ldraw-catalog-20260910-v3'
 import { PARTS, findPart } from '../parts.js'
 import { compatibleAssemblyChoices } from '../guidance/assembly-compatibility-v1.js?v=smart-assembly-20260911-v6'
-import { libraryItems, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v1'
-import { mountPartsLibrary, LIBRARY_KEYS } from './library-view-v1.js?v=parts-library-20260912-v1'
+import { libraryItems, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v2'
+import { mountPartsLibrary, LIBRARY_KEYS } from './library-view-v1.js?v=parts-library-20260912-v2'
 
 const INDEX_URL='https://raw.githubusercontent.com/partcad/partcad-ldraw/main/parts-index.json.gz'
 let index=[],view=null,root=null,panel=null,pending=null,refreshTimer
 const t=(en,ru)=>document.documentElement.lang==='ru'?ru:en
-const preview=item=>item.file
-  ? `https://www.ldraw.org/library/official/images/parts/${encodeURIComponent(item.code)}.png`
-  : document.querySelector(`#partsList [data-part="${CSS.escape(item.key)}"] .part-icon img`)?.src || null
+const preview=item=>document.querySelector(`#partsList [data-part="${CSS.escape(item.key)}"] .part-icon img`)?.src
+  || (item.file?`https://www.ldraw.org/library/official/images/parts/${encodeURIComponent(item.code)}.png`:null)
 
 function migratePreferences() {
   for(const [oldKey,newKey] of [['bricklab.ldraw.favorites.v3',LIBRARY_KEYS.favorites],['bricklab.ldraw.recents.v3',LIBRARY_KEYS.recents]]) {
@@ -95,7 +94,7 @@ function install() {
   panel=document.querySelector('.parts-panel')
   if(!panel||!document.getElementById('partsList'))return
   if(document.getElementById('ldrawCatalogV3'))return
-  const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./library-v1.css?v=parts-library-20260912-v1',import.meta.url).href;document.head.append(css)
+  const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./library-v1.css?v=parts-library-20260912-v2',import.meta.url).href;document.head.append(css)
   migratePreferences()
   panel.classList.add('parts-library-v1')
   root=document.createElement('div');root.id='ldrawCatalogV3';panel.append(root)

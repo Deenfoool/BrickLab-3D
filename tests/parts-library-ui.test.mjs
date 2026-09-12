@@ -65,6 +65,14 @@ test('Failed insertion never records a recent part',async()=>{
   assert.equal(window.localStorage.getItem(LIBRARY_KEYS.recents),null)
   view.destroy();await window.happyDOM.close()
 })
+test('Failed thumbnails keep an explicit illustrated fallback',async()=>{
+  const {root,window,view,click}=setup({preview:()=>'/missing-image.png'})
+  click('[data-family="technic"]')
+  const image=root.querySelector('.pl-thumb img');image.dispatchEvent(new window.Event('error'))
+  assert.equal(image.hidden,true);assert.match(image.parentElement.textContent,/Preview unavailable/)
+  assert.ok(image.parentElement.querySelector('svg'))
+  view.destroy();await window.happyDOM.close()
+})
 test('Untrusted metadata is escaped and does not become markup',async()=>{
   const {root,window,view,click}=setup();view.setItems(libraryItems([{file:'1.dat',code:'1',description:'Technic <img src=x onerror=alert(1)>'}],[]))
   click('[data-family="technic"]');assert.equal(root.querySelector('[onerror]'),null)
@@ -79,12 +87,12 @@ test('Production retains native insertion and does not write mechanics',async()=
 test('UI cache generation is coherent without changing unrelated import targets',async()=>{
   const index=await readFile(new URL('../index.html',import.meta.url),'utf8')
   const map=JSON.parse(index.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]).imports
-  assert.equal(map['./bootstrap.js'],'./bootstrap.js?v=parts-library-20260912-v1')
-  assert.equal(map['./ldraw/catalog-v3.js'],'./ldraw/catalog-v3.js?v=parts-library-20260912-v1')
+  assert.equal(map['./bootstrap.js'],'./bootstrap.js?v=parts-library-20260912-v2')
+  assert.equal(map['./ldraw/catalog-v3.js'],'./ldraw/catalog-v3.js?v=parts-library-20260912-v2')
   assert.equal(map['./app.js'],'./app.js?v=parts-6-20260911-editor-groups-v2')
   assert.match(map['./ldraw/runtime-v3.js?v=ldraw-catalog-20260910-v3'],/runtime-metadata-cache-v1/)
   for(const file of ['library-view-v1.js','catalog-v3.js']){
     const code=await readFile(new URL(`../ldraw/${file}`,import.meta.url),'utf8')
-    for(const match of code.matchAll(/\.\/library-[^'" ]+/g))assert.match(match[0],/\?v=parts-library-20260912-v1$/)
+    for(const match of code.matchAll(/\.\/library-[^'" ]+/g))assert.match(match[0],/\?v=parts-library-20260912-v2$/)
   }
 })
