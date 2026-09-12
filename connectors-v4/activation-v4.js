@@ -1,6 +1,7 @@
 import { CONNECTOR_SCHEMA_VERSION_V4, CONNECTOR_SYSTEM_VERSION_V4, validateConnectorV4 } from './schema-v4.js'
+import { classifyTechnicPinInterfaceV4, technicPinPairV4 } from './pin-semantics-v4.js?v=connector-pin-gender-20260912-v1'
 
-export const ACTIVATION_POLICY_VERSION_V4 = 'connector-activation-v4.2.0'
+export const ACTIVATION_POLICY_VERSION_V4 = 'connector-activation-v4.3.0'
 
 const CRITICAL_WARNING_CODES = new Set([
   'invalid-snap-meta',
@@ -58,6 +59,9 @@ export function classifyConnectorV4(connector) {
     connector.gender === 'female' && connector.snap?.slide === true &&
     String(connector.geometry?.caps || '').toLowerCase() === 'none' && allA6
   ) return 'technic-axle-hole'
+
+  const pinSemantic=classifyTechnicPinInterfaceV4(connector)
+  if (pinSemantic) return pinSemantic.role
 
   if (
     connector.gender === 'female' && connector.snap?.slide === true && connector.geometry?.centered === true && allR &&
@@ -137,6 +141,8 @@ export function activationForMatchV4(source, target, match) {
   const sourceRole = classifyConnectorV4(source)
   const targetRole = classifyConnectorV4(target)
   const roles = new Set([sourceRole, targetRole])
+  const roundReceiver = roles.has('technic-round-hole') || roles.has('technic-pin-hole')
+  const pinPair = technicPinPairV4(source,target)
 
   if (
     roles.has('technic-axle') && roles.has('technic-axle-hole') &&
@@ -144,14 +150,20 @@ export function activationForMatchV4(source, target, match) {
     match?.rotationalSymmetry === 4 && match?.kinematicHint === 'prismatic'
   ) return activeResult('technic-axle-keyed-hole','prismatic',sourceRole,targetRole,'ldcad-shadow:exact-A6-keyed-profile')
 
+  if (
+    pinPair && match?.compatible === true && match?.family === 'cylinder' && !match?.keyed &&
+    Math.abs(match.fit?.clearanceLdu ?? Infinity) <= PROFILE_EPS_LDU
+  ) return activeResult('technic-pin-hole',match.kinematicHint,sourceRole,targetRole,pinPair.evidence)
+
   if (match?.compatible) {
     let family = null
     const kind = match.kinematicHint
-    if (roles.has('technic-axle') && roles.has('technic-round-hole')) family='technic-axle-round-hole'
+    if (roles.has('technic-axle') && roundReceiver) family='technic-axle-round-hole'
+    else if (roles.has('technic-pin') && roundReceiver && match.family === 'cylinder' && Math.abs(match.fit?.clearanceLdu ?? Infinity) <= PROFILE_EPS_LDU) family='technic-pin-hole'
     else if (roles.has('stud') && roles.has('anti-stud')) family='stud-anti-stud'
     else if (match.family === 'cylinder' && Math.abs(match.fit?.clearanceLdu ?? Infinity) <= PROFILE_EPS_LDU) {
       const m=match.male, f=match.female
-      if (m.geometry.sections.some(s=>s.elastic) && roles.has('technic-round-hole')) family='technic-pin-hole'
+      if (m.geometry.sections.some(s=>s.elastic) && roundReceiver) family='technic-pin-hole'
       else if (m.geometry.sections.every(s=>rigidShape(s)==='R' && approx(s.radiusLdu,4)) && f.geometry.sections.every(s=>rigidShape(s)==='R')) family='bar-round-hole'
       else if (m.geometry.sections.every(s=>rigidShape(s)==='A') && f.geometry.sections.every(s=>rigidShape(s)==='A')) family='keyed-shaft-interface'
       else if (!match.keyed && kind==='cylindrical') family='round-cylindrical-interface'
