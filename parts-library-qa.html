@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BrickLab · Parts library QA</title>
-<link rel="stylesheet" href="./ldraw/library-v1.css?v=parts-library-20260912-v3">
+<link rel="stylesheet" href="./ldraw/library-v1.css?v=parts-library-20260912-v4">
 <style>body{margin:0;background:#0b1117;color:#dfe8ea;font:14px system-ui;min-height:100dvh}#qa-toolbar{padding:18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}#qa-toolbar button{background:#1c2b33;color:#dfe8ea;border:1px solid #42565c;border-radius:6px;padding:8px;cursor:pointer}.parts-panel{position:relative;margin:0 24px 20px}.qa-note{position:absolute;left:610px;top:150px;max-width:360px;color:#91a6b0;line-height:1.6}.qa-note h1{color:#dfe8ea;font-size:27px}.qa-note code{color:#9bddc2}#qa-log{white-space:pre-wrap;font-size:12px}@media(max-width:900px){.qa-note{position:static;margin:20px}.parts-panel{margin:0 8px!important;top:auto!important}}</style>
 </head><body>
 <nav id="qa-toolbar"><strong>Parts library · component QA</strong><button id="qa-toggle">Close library</button><button id="qa-reset">First visit</button><button id="qa-language">Русский / English</button></nav>
 <aside class="parts-panel parts-library-v1"><div id="ldrawCatalogV3"></div></aside>
 <section class="qa-note"><h1>Find. Inspect. Build.</h1><p>This page runs the <strong>production library component and stylesheet</strong> without WebGL. It uses a small deterministic set of real LDraw IDs.</p><p>Add logs the insertion callback here; it does <strong>not</strong> test the 3D editor, physics or registration. QA preferences are isolated from your projects and normal library settings.</p><p>Check families, nested categories, search <code>ось 5</code> / <code>gear 24</code>, favorites, recent parts and reopen. Compatible uses the fixed QA selection 6578 → 2994.</p><output id="qa-log" aria-live="polite">No insertion yet.</output></section>
-<script type="module" src="./tests/parts-library-qa.mjs?v=parts-library-20260912-v3"></script>
+<script type="module" src="./tests/parts-library-qa.mjs?v=parts-library-20260912-v4"></script>
 </body></html>

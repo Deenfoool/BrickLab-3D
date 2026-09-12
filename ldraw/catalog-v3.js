@@ -1,8 +1,9 @@
-import { getLDrawIndex, getLDrawMetadata, registerLDrawPart } from './runtime-v3.js?v=ldraw-catalog-20260910-v3'
+import { getLDrawIndex, getLDrawMetadata, registerLDrawPart, preloadLDrawPrototype } from './runtime-v3.js?v=ldraw-catalog-20260910-v3'
+import { retryLoad, withLoadDeadline } from './load-recovery-v1.js?v=ldraw-loading-20260912-v1'
 import { PARTS, findPart } from '../parts.js'
 import { compatibleAssemblyChoices } from '../guidance/assembly-compatibility-v1.js?v=smart-assembly-20260911-v6'
-import { libraryItems, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v3'
-import { mountPartsLibrary, LIBRARY_KEYS, hasNewPreview } from './library-view-v1.js?v=parts-library-20260912-v3'
+import { libraryItems, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v4'
+import { mountPartsLibrary, LIBRARY_KEYS, hasNewPreview } from './library-view-v1.js?v=parts-library-20260912-v4'
 
 const INDEX_URL='https://raw.githubusercontent.com/partcad/partcad-ldraw/main/parts-index.json.gz'
 let index=[],view=null,root=null,panel=null,pending=null,refreshTimer
@@ -24,6 +25,7 @@ function context() {
   return {
     project:(editor?.objects?.()||[]).map(object=>object.userData?.partId),
     compatible:def?compatibleAssemblyChoices(def,PARTS).map(choice=>choice.targetPartId):[],
+    failedCount:(editor?.objects?.()||[]).filter(object=>object.userData.ldraw?.status==='error').length,
   }
 }
 function info(item) {
@@ -38,9 +40,21 @@ function canInsert() {
   if(globalThis.BrickLabKinematics?.active?.())return false
   return globalThis.BrickLabSubsystems?.editor?.mode?.()==='build'
 }
+async function repair() {
+  if(!canInsert())throw Error(t('Return to BUILD first','Сначала вернитесь в СБОРКУ'))
+  const editor=globalThis.BrickLabSubsystems.editor
+  const failed=editor.objects().filter(object=>object.userData.ldraw?.status==='error')
+  const outcomes=await Promise.allSettled(failed.map(root=>withLoadDeadline(globalThis.BrickLabLDraw.retry(root,{canAttach:()=>canInsert()&&editor.objects().includes(root)}))))
+  const remaining=outcomes.filter(result=>result.status==='rejected').length
+  if(remaining)throw Error(t(`Still unavailable: ${remaining}. Check network and retry.`,`Ещё недоступно: ${remaining}. Проверьте сеть и повторите.`))
+}
 // Native card click retains app.js addPart, history, selection, sound and guidance.
 // No editor objects, connector semantics or project data are written by this UI.
 async function insert(item) {
+  if(!canInsert())throw Error(t('Return to BUILD first','Сначала вернитесь в СБОРКУ'))
+  if(item.file)await withLoadDeadline(retryLoad(()=>globalThis.BrickLabLDrawFastLoader?.preload
+    ?globalThis.BrickLabLDrawFastLoader.preload(item.file,{priority:'critical'})
+    :preloadLDrawPrototype(item.file)))
   if(!canInsert())throw Error(t('Return to BUILD first','Сначала вернитесь в СБОРКУ'))
   const def=item.file?registerLDrawPart({...item,category:item.sourceCategory}):findPart(item.key)
   if(!def)throw Error(t('Part unavailable','Деталь недоступна'))
@@ -94,12 +108,12 @@ function install() {
   panel=document.querySelector('.parts-panel')
   if(!panel||!document.getElementById('partsList'))return
   if(document.getElementById('ldrawCatalogV3'))return
-  const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./library-v1.css?v=parts-library-20260912-v3',import.meta.url).href;document.head.append(css)
+  const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./library-v1.css?v=parts-library-20260912-v4',import.meta.url).href;document.head.append(css)
   migratePreferences()
   panel.classList.add('parts-library-v1')
   root=document.createElement('div');root.id='ldrawCatalogV3';panel.append(root)
   const title=panel.querySelector('.panel-title>span:first-child');if(title)title.textContent=t('PARTS LIBRARY','БИБЛИОТЕКА ДЕТАЛЕЙ')
-  view=mountPartsLibrary(root,{language:()=>document.documentElement.lang,insert,preview,info,context,onClose:()=>panel.querySelector('.panel-float-close')?.click()})
+  view=mountPartsLibrary(root,{language:()=>document.documentElement.lang,insert,repair,preview,info,context,onClose:()=>panel.querySelector('.panel-float-close')?.click()})
   refresh({pending:true})
   // Compact metadata only; LDraw geometry registration/loading remains on insertion.
   void loadIndex()

@@ -31,6 +31,7 @@ test('First visit → Technic → nested categories → details → native inser
   const {window,root,view,click,inserted}=setup()
   assert.equal(root.querySelectorAll('[data-family]').length,7)
   click('[data-family="technic"]');assert.equal(root.querySelectorAll('.pl-card').length,3)
+  assert.equal(root.querySelectorAll('.ld2-card[data-file]').length,3,'predictive loader sees every LDraw card')
   click('[data-expand="gears"]');assert.equal(root.querySelector('[data-category="gears/bevel"]'),null)
   click('[data-expand="gears"]');click('[data-category="gears/bevel"]')
   assert.equal(root.querySelectorAll('.pl-card').length,1)
@@ -95,12 +96,12 @@ test('Production retains native insertion and does not write mechanics',async()=
 test('UI cache generation is coherent without changing unrelated import targets',async()=>{
   const index=await readFile(new URL('../index.html',import.meta.url),'utf8')
   const map=JSON.parse(index.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]).imports
-  assert.equal(map['./bootstrap.js'],'./bootstrap.js?v=parts-library-20260912-v3')
-  assert.equal(map['./ldraw/catalog-v3.js'],'./ldraw/catalog-v3.js?v=parts-library-20260912-v3')
+  assert.equal(map['./bootstrap.js'],'./bootstrap.js?v=parts-library-20260912-v4')
+  assert.equal(map['./ldraw/catalog-v3.js'],'./ldraw/catalog-v3.js?v=parts-library-20260912-v4')
   assert.equal(map['./app.js'],'./app.js?v=parts-6-20260911-editor-groups-v2')
   assert.match(map['./ldraw/runtime-v3.js?v=ldraw-catalog-20260910-v3'],/runtime-metadata-cache-v1/)
   for(const file of ['library-view-v1.js','catalog-v3.js']){
     const code=await readFile(new URL(`../ldraw/${file}`,import.meta.url),'utf8')
-    for(const match of code.matchAll(/\.\/library-[^'" ]+/g))assert.match(match[0],/\?v=parts-library-20260912-v3$/)
+    for(const match of code.matchAll(/\.\/library-[^'" ]+/g))assert.match(match[0],/\?v=parts-library-20260912-v4$/)
   }
 })

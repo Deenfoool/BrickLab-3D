@@ -46,6 +46,6 @@ Baseline comparison at `1e4596a32d3462378bfebe6cf1e5c2498539b156`: the selected 
 
 ## Cache and attribution
 
-`parts-library-20260912-v3` versions bootstrap, catalog aliases, floating-panel integration, view, model and CSS. Unrelated import-map targets retain their original generations. Tests check the runtime metadata-cache alias is retained.
+`parts-library-20260912-v4` versions bootstrap, catalog aliases, floating-panel integration, view, model and CSS. Unrelated import-map targets retain their original generations. Tests check the runtime metadata-cache alias is retained.
 
 LDraw thumbnails use the existing official image endpoint. Geometry/library attribution remains unchanged. Family illustrations are original local inline SVG; no external illustration assets or new package dependencies were added.

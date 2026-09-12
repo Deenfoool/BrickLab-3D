@@ -205,7 +205,7 @@ function installPrediction() {
     for (const entry of entries) {
       if (!entry.isIntersecting) continue
       const file = entry.target.dataset.file
-      if (file) { diagnostics.visibleRequests += 1; void preloadLDrawPart(file,{priority:'visible',background:true}) }
+      if (file) { diagnostics.visibleRequests += 1; void preloadLDrawPart(file,{priority:'visible',background:true}).catch(()=>{}) }
       cardObserver.unobserve(entry.target)
     }
   }, { rootMargin:'320px 180px', threshold:0.01 })
@@ -236,7 +236,7 @@ function warmSavedList(key, max) {
   try {
     const items=JSON.parse(localStorage.getItem(key)||'[]')
     if (!Array.isArray(items)) return []
-    return items.slice(0,max).map(item=>normalizeFile(item?.file)).filter(Boolean)
+    return items.slice(0,max).map(item=>normalizeFile(typeof item==='string'&&item.startsWith('ldraw-')?`${item.slice(6)}.dat`:item?.file)).filter(Boolean)
   } catch { return [] }
 }
 function startRegisteredWarmup() {
@@ -247,10 +247,10 @@ function startRegisteredWarmup() {
 function startIdleWarmup() {
   if (constrainedNetwork || backgroundLimit <= 0) return
   idle(() => {
-    const recent=warmSavedList('bricklab.ldraw.recents.v3',8)
-    const favorites=warmSavedList('bricklab.ldraw.favorites.v3',8)
+    const recent=[...warmSavedList('bricklab.library.recents.v1',8),...warmSavedList('bricklab.ldraw.recents.v3',8)]
+    const favorites=[...warmSavedList('bricklab.library.favorites.v1',8),...warmSavedList('bricklab.ldraw.favorites.v3',8)]
     const files=[...new Set([...recent,...favorites,...HOME_WARM])].slice(0,backgroundLimit)
-    files.forEach((file,index) => idle(() => void preloadLDrawPart(file,{priority:'idle',background:true}),700+index*120))
+    files.forEach((file,index) => idle(() => void preloadLDrawPart(file,{priority:'idle',background:true}).catch(()=>{}),700+index*120))
   },900)
 }
 
