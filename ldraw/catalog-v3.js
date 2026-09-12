@@ -2,14 +2,20 @@ import { getLDrawIndex, getLDrawMetadata, registerLDrawPart, preloadLDrawPrototy
 import { retryLoad, withLoadDeadline } from './load-recovery-v1.js?v=ldraw-loading-20260912-v1'
 import { PARTS, findPart } from '../parts.js'
 import { compatibleAssemblyChoices } from '../guidance/assembly-compatibility-v1.js?v=smart-assembly-20260911-v6'
-import { libraryItems, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v4'
-import { mountPartsLibrary, LIBRARY_KEYS, hasNewPreview } from './library-view-v1.js?v=parts-library-20260912-v4'
+import { libraryItems, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v5'
+import { mountPartsLibrary, LIBRARY_KEYS } from './library-view-v1.js?v=parts-library-20260912-v5'
+import { createPartsLibraryPreviewService } from './library-preview-v1.js?v=parts-library-20260912-v5'
 
 const INDEX_URL='https://raw.githubusercontent.com/partcad/partcad-ldraw/main/parts-index.json.gz'
 let index=[],view=null,root=null,panel=null,pending=null,refreshTimer
 const t=(en,ru)=>document.documentElement.lang==='ru'?ru:en
-const preview=item=>document.querySelector(`#partsList [data-part="${CSS.escape(item.key)}"] .part-icon img`)?.src
-  || (item.file?`https://www.ldraw.org/library/official/images/parts/${encodeURIComponent(item.code)}.png`:null)
+
+// Exact geometry previews share one bounded offscreen renderer. LDraw catalog records
+// are previewed directly from preloadLDrawPrototype(), so browsing never registers
+// thousands of definitions or mutates the project/Connector graph.
+const previewService=createPartsLibraryPreviewService()
+const preview=item=>previewService.peek(item)
+preview.request=(item,options)=>previewService.request(item,options)
 
 function migratePreferences() {
   for(const [oldKey,newKey] of [['bricklab.ldraw.favorites.v3',LIBRARY_KEYS.favorites],['bricklab.ldraw.recents.v3',LIBRARY_KEYS.recents]]) {
@@ -108,22 +114,21 @@ function install() {
   panel=document.querySelector('.parts-panel')
   if(!panel||!document.getElementById('partsList'))return
   if(document.getElementById('ldrawCatalogV3'))return
-  const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./library-v1.css?v=parts-library-20260912-v4',import.meta.url).href;document.head.append(css)
+  const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./library-v1.css?v=parts-library-20260912-v5',import.meta.url).href;document.head.append(css)
   migratePreferences()
   panel.classList.add('parts-library-v1')
   root=document.createElement('div');root.id='ldrawCatalogV3';panel.append(root)
   const title=panel.querySelector('.panel-title>span:first-child');if(title)title.textContent=t('PARTS LIBRARY','БИБЛИОТЕКА ДЕТАЛЕЙ')
   view=mountPartsLibrary(root,{language:()=>document.documentElement.lang,insert,repair,preview,info,context,onClose:()=>panel.querySelector('.panel-float-close')?.click()})
   refresh({pending:true})
-  // Compact metadata only; LDraw geometry registration/loading remains on insertion.
+  // Compact metadata only; geometry is requested lazily by the preview service for
+  // the rendered page and by insertion at critical priority.
   void loadIndex()
   root.addEventListener('change',event=>{if(event.target.id==='plSearch')void lookupCode(event.target.value)})
   const schedule=()=>{clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>view?.refresh(),120)}
-  new MutationObserver(records=>{if(hasNewPreview(records))schedule()}).observe(document.getElementById('partsList'),{childList:true,subtree:true})
   globalThis.addEventListener('bricklab:partcatalogchange',()=>refresh())
   globalThis.addEventListener('bricklab:languagechange',()=>{view.languageChanged();if(title)title.textContent=t('PARTS LIBRARY','БИБЛИОТЕКА ДЕТАЛЕЙ')})
   for(const name of ['bricklab:editorexternalmutation','bricklab:selectionchange','bricklab:editorselectionchange','bricklab:smartassemblyinstalled','bricklab:ldrawloaded'])globalThis.addEventListener(name,schedule)
-  // Selection/project can change through legacy paths; refresh on opening, not each frame.
   new MutationObserver(()=>{if(!panel.classList.contains('panel-hidden'))schedule()}).observe(panel,{attributes:true,attributeFilter:['class']})
   document.addEventListener('keydown',event=>{
     if(!(event.ctrlKey||event.metaKey)||event.code!=='KeyK'||panel.classList.contains('panel-hidden'))return
@@ -134,5 +139,5 @@ install()
 globalThis.BrickLabLDrawCatalog=Object.freeze({
   focus:()=>view?.focus(),showCategory:name=>view?.showFamily(/technic|wheel|tyre/i.test(name)?'technic':'system'),
   showAll:()=>view?.showSection('all'),showFavorites:()=>view?.showSection('favorites'),
-  state:()=>view?.state(),
+  state:()=>view?.state(),previewStatus:()=>previewService.status(),
 })

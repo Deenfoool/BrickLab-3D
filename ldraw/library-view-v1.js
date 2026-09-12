@@ -1,16 +1,19 @@
-import { FAMILIES, filterLibrary, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v4'
+import { FAMILIES, filterLibrary, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v5'
 
 export const LIBRARY_KEYS = Object.freeze({ family:'bricklab.library.family.v1', favorites:'bricklab.library.favorites.v1', recents:'bricklab.library.recents.v1' })
 const PAGE_SIZE=48
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
 
-// Global icon replacement also mutates the hidden native catalog. Those mutations
-// must never trigger refresh → createIcons → mutation → refresh feedback loops.
+// Kept for compatibility with the V4 library tests/older integrations. The V5
+// library renders its own real geometry previews and no longer depends on native-card
+// image mutations.
 export function hasNewPreview(records) {
   return records.some(record=>[...record.addedNodes].some(node=>node.nodeType===1 && (node.tagName==='IMG'||node.querySelector?.('img'))))
 }
 
 // Dependency-injected UI: no Three.js, physics, project writes or part registration.
+// `preview(item)` is a synchronous cache read. If preview.request exists, thumbnails
+// ask the bounded shared preview service for exact geometry only after they are rendered.
 export function mountPartsLibrary(root, { storage=globalThis.localStorage, language=()=>document.documentElement.lang, insert, repair, context=()=>({}), preview=()=>null, info=()=>({}), onClose=()=>{} }) {
   const saved=readPreference(storage,LIBRARY_KEYS.family,null)
   const array=key=>{const value=readPreference(storage,key,[]);return Array.isArray(value)?value.filter(x=>typeof x==='string'):[]}
@@ -29,7 +32,6 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
   const count=(id,path='')=>counts.get(`${id}:${path}`)||0
 
   function illustration(f) {
-    // Small local vector illustrations, not remote imagery or extra WebGL contexts.
     const drawings={
       system:'<path d="M12 30 42 14 78 30 48 48Z M12 30v24l36 18 30-18V30 M48 48v24"/><ellipse cx="35" cy="26" rx="7" ry="4"/><ellipse cx="53" cy="34" rx="7" ry="4"/>',
       technic:'<path d="M16 54 57 18a12 12 0 0 1 16 18L32 72a12 12 0 0 1-16-18Z"/><circle cx="27" cy="61" r="5"/><circle cx="46" cy="45" r="5"/><circle cx="64" cy="28" r="5"/>',
@@ -41,6 +43,7 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
     }
     return `<svg class="pl-family-art" viewBox="0 0 92 92" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" aria-hidden="true">${drawings[f.id]}</svg>`
   }
+
   function render() {
     if(destroyed)return
     root.className='pl-root'
@@ -53,6 +56,7 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
     if(family){renderTree();renderResults();renderDetail()}
     icons()
   }
+
   function renderTree() {
     const tree=root.querySelector('.pl-tree');if(!tree)return
     const row=(n,parent='')=>{
@@ -61,17 +65,55 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
     }
     tree.innerHTML=`<button type="button" class="pl-tree-all" data-category="" aria-current="${!category}">${t('All categories','Все категории')} <small>${count(family)}</small></button>${familyDef().tree.map(n=>row(n)).join('')}`
   }
+
   function imageMarkup(item,large=false) {
     const url=preview(item)
-    return `<span class="pl-thumb ${large?'pl-large':''}"><span class="pl-preview-fallback">${illustration(familyDef()||FAMILIES[0])}<small>${t('Preview unavailable','Нет превью')}</small></span>${url?`<img src="${escape(url)}" alt="${escape(item.name||item.description)}" loading="lazy" decoding="async" referrerpolicy="no-referrer">`:''}<code>${escape(item.code)}</code></span>`
+    const canRender=typeof preview.request==='function'
+    const fallbackText=url?'':canRender?t('Rendering preview…','Создаём превью…'):t('Preview unavailable','Нет превью')
+    return `<span class="pl-thumb ${large?'pl-large':''}${url?' has-image':''}" data-preview-key="${escape(item.key)}"><span class="pl-preview-fallback">${illustration(familyDef()||FAMILIES[0])}<small data-preview-label>${fallbackText}</small></span>${url?`<img src="${escape(url)}" alt="${escape(item.name||item.description)}" loading="lazy" decoding="async">`:''}<code>${escape(item.code)}</code></span>`
   }
+
+  function bindImage(img) {
+    if(img.dataset.previewBound==='true')return
+    img.dataset.previewBound='true'
+    img.onload=()=>{
+      const thumb=img.parentElement
+      thumb?.classList.add('has-image')
+      thumb?.classList.remove('preview-loading','preview-failed')
+    }
+    img.onerror=()=>{
+      const thumb=img.parentElement
+      img.remove()
+      thumb?.classList.remove('has-image','preview-loading')
+      thumb?.classList.add('preview-failed')
+      const label=thumb?.querySelector('[data-preview-label]');if(label)label.textContent=t('Preview unavailable','Нет превью')
+    }
+    if(img.complete&&img.naturalWidth)img.onload()
+  }
+
   function bindImages(host) {
-    host.querySelectorAll('img').forEach(img=>{
-      img.onload=()=>img.parentElement?.classList.add('has-image')
-      img.onerror=()=>{img.hidden=true;img.parentElement?.classList.remove('has-image')}
-      if(img.complete&&img.naturalWidth)img.onload()
+    host.querySelectorAll('.pl-thumb img').forEach(bindImage)
+    if(typeof preview.request!=='function')return
+    host.querySelectorAll('.pl-thumb[data-preview-key]').forEach(thumb=>{
+      if(thumb.querySelector('img')||thumb.dataset.previewPending==='true')return
+      const item=byKey(thumb.dataset.previewKey);if(!item)return
+      thumb.dataset.previewPending='true';thumb.classList.add('preview-loading');thumb.classList.remove('preview-failed')
+      const label=thumb.querySelector('[data-preview-label]');if(label)label.textContent=t('Rendering preview…','Создаём превью…')
+      const priority=thumb.classList.contains('pl-large')?'high':'normal'
+      Promise.resolve(preview.request(item,{priority})).then(url=>{
+        if(destroyed||!thumb.isConnected)return
+        delete thumb.dataset.previewPending;thumb.classList.remove('preview-loading')
+        if(!url){thumb.classList.add('preview-failed');if(label)label.textContent=t('Preview unavailable','Нет превью');return}
+        const img=root.ownerDocument.createElement('img')
+        img.alt=item.name||item.description||'';img.loading='lazy';img.decoding='async';bindImage(img);thumb.append(img);img.src=url
+      }).catch(()=>{
+        if(destroyed||!thumb.isConnected)return
+        delete thumb.dataset.previewPending;thumb.classList.remove('preview-loading');thumb.classList.add('preview-failed')
+        if(label)label.textContent=t('Preview unavailable','Нет превью')
+      })
     })
   }
+
   function filtered() { return filterLibrary(items,{family,category,query,tab,favorites,recents,...context()}) }
   function renderResults() {
     if(!family)return
@@ -80,12 +122,12 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
     const shown=all.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE)
     root.querySelector('.pl-summary').textContent=busy?t('Preparing model before placement…','Подготовка модели перед размещением…'):loading?t('Loading catalog…','Загрузка каталога…'):warning||`${all.length.toLocaleString()} ${t('parts','деталей')}${tab==='compatible'?t(' · verified matches only',' · только подтверждённые пары'):''}`
     root.querySelector('[data-results]').innerHTML=shown.length?shown.map(item=>`<article class="pl-card ${selected===item.key?'selected':''}" data-key="${escape(item.key)}"><button type="button" class="pl-select" data-select="${escape(item.key)}" aria-pressed="${selected===item.key}" title="${escape(item.name||item.description)}">${imageMarkup(item)}<strong>${escape(item.name||item.description)}</strong><small>${item.source} · ${escape(item.code)}</small></button><div class="pl-card-actions"><button type="button" data-favorite="${escape(item.key)}" aria-pressed="${favorites.includes(item.key)}" aria-label="${t('Favorite','В избранное')}">${favorites.includes(item.key)?'★':'☆'}</button><button type="button" data-add="${escape(item.key)}" ${busy?'disabled':''} aria-label="${t('Add','Добавить')} ${escape(item.code)}">+ ${t('Add','Добавить')}</button></div></article>`).join(''):`<div class="pl-empty">${icon('search')}<strong>${t('No matching parts','Нет подходящих деталей')}</strong><p>${tab==='compatible'?t('Select a part with a verified Smart Assembly pairing. Unverified fits are never guessed.','Выберите деталь с проверенной парой Smart Assembly. Неподтверждённые сопряжения не угадываются.'):t('Try a shorter search or another category. Sections stay within this family.','Попробуйте другой запрос или категорию. Разделы ограничены выбранным семейством.')}</p></div>`
-    // Existing bounded visible/hover/focus prediction consumes this contract.
     for(const card of root.querySelectorAll('.pl-card')){const item=byKey(card.dataset.key);if(item?.file){card.classList.add('ld2-card');card.dataset.file=item.file}}
     root.querySelector('.pl-paging').innerHTML=`<button type="button" data-page="-1" ${page===0?'disabled':''}>${t('Previous','Назад')}</button><span>${all.length?page+1:0} / ${Math.ceil(all.length/PAGE_SIZE)}</span><button type="button" data-page="1" ${(page+1)*PAGE_SIZE>=all.length?'disabled':''}>${t('Next','Далее')}</button>`
-    bindImages(root)
+    bindImages(root.querySelector('[data-results]'))
     icons()
   }
+
   function renderDetail() {
     const host=root.querySelector('.pl-detail');if(!host)return
     const item=byKey(selected)
@@ -95,6 +137,7 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
     bindImages(host)
     icons()
   }
+
   async function add(key) {
     if(busy)return
     const item=byKey(key);if(!item)return
@@ -107,6 +150,7 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
     } catch(error) { warning=t('Could not add part: ','Не удалось добавить деталь: ')+(error?.message||'unknown error') }
     finally { busy=false;if(!destroyed)renderResults() }
   }
+
   function click(event) {
     const b=event.target.closest('button');if(!b||!root.contains(b))return
     if(b.hasAttribute('data-family')){family=b.dataset.family;category='';query='';tab='all';page=0;selected=null;writePreference(storage,LIBRARY_KEYS.family,family);render();root.querySelector('input')?.focus()}
@@ -120,14 +164,15 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
     else if(b.hasAttribute('data-repair')&&!busy){busy=true;warning='';renderResults();Promise.resolve().then(()=>repair()).catch(error=>{warning=error.message}).finally(()=>{busy=false;renderResults()})}
     else if(b.hasAttribute('data-page')){page+=Number(b.dataset.page);renderResults();root.querySelector('.pl-scroll').scrollTop=0}
   }
+
   function input(event){if(event.target.id!=='plSearch')return;query=event.target.value;page=0;clearTimeout(timer);timer=setTimeout(()=>renderResults(),100)}
   function dblclick(event){const b=event.target.closest('[data-select]');if(b)void add(b.dataset.select)}
   function keydown(event){event.stopPropagation();if(event.key==='Escape'){event.preventDefault();onClose()}}
-  // Bubble isolation allows native controls, but prevents BUILD shortcuts while typing.
   root.addEventListener('click',click);root.addEventListener('input',input);root.addEventListener('dblclick',dblclick);root.addEventListener('keydown',keydown)
   const isolatePointer=event=>event.stopPropagation()
   root.addEventListener('pointerdown',isolatePointer)
   render()
+
   return Object.freeze({
     setItems(next,{pending=false,message=''}={}){
       items=next;loading=pending;warning=message;counts.clear()
