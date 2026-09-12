@@ -33,6 +33,11 @@ Open `parts-library-qa.html` for the exact production component and stylesheet w
 
 Browser QA on published GitHub Pages, 2026-09-12: first-visit picker, Technic, collapse/expand Gears, Bevel category, Russian search `ось 5`, insertion callback 32073, Recent, Favorites, close/reopen, family persistence after page reload, Compatible 6578 → 2994, change to System and `plate 2x4` all passed. Details for gear 3648 were inspected. No application exceptions on the component QA page; the browser extension emitted unrelated errors.
 
+Final verification: 26/26 library tests and 7/7 repository-hygiene tests pass. The selected 90-test regression suite remains 81 passing / 9 baseline failures, with no additional failing tests. The published v2 UI was rechecked, including the Russian language switch and labelled preview fallback.
+
+![Family picker (component QA)](qa/parts-library/family-picker.jpg)
+![Technic library in Russian, with explicit unavailable-preview labels (component QA)](qa/parts-library/technic-library.jpg)
+
 The existing official thumbnail URLs failed to load in this browser. This exposed the blank-image fallback and led to the labelled illustration fix. The component does not claim these illustrations are exact part geometry.
 
 Full-editor browser QA is **blocked by this browser's disabled WebGL**: `app.js:217` cannot create its renderer, before catalog initialization. This also occurs on the unchanged baseline. Actual 3D placement, scene/save/reload and interactive Smart Assembly/Doctor/Kinematics behavior are therefore **not browser-verified**. The QA insertion callback is not reported as a real scene insertion. No renderer/physics workaround was added.
