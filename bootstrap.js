@@ -75,6 +75,15 @@ await import('./ldraw/bootstrap-v1.js')
 globalThis.__bricklabConnectorV4StartMode = menuResult.action
 await import('./connectors-v4/runtime-v4.js')
 
+// Connector Discovery is an additive second pass over official LDraw semantic
+// primitives. Shadow remains authoritative; this runtime can only append connection
+// sites that are physically absent from the hydrated V4 endpoint set.
+try {
+  await import('./connectors-v4/discovery-runtime-v4.js?v=connector-discovery-20260912-v2')
+} catch (error) {
+  console.warn('[BrickLab Connector Discovery] Additional primitive scan unavailable; using Shadow endpoints only.', error)
+}
+
 // Start predictive LDraw warming before the editor itself is evaluated. The loader
 // works only in idle/hover/visibility time, deduplicates work and keeps V4 hydration
 // on the same definitions that BUILD will later instantiate.

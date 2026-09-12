@@ -1,7 +1,7 @@
 import { axialSpanV4, CONNECTOR_SCHEMA_VERSION_V4 } from './schema-v4.js'
 import { classifyTechnicPinInterfaceV4 } from './pin-semantics-v4.js?v=connector-pin-gender-20260912-v1'
 
-export const CONNECTOR_DISCOVERY_VERSION_V4 = 'connector-discovery-v4.1.0'
+export const CONNECTOR_DISCOVERY_VERSION_V4 = 'connector-discovery-v4.2.0'
 
 const IDENTITY_3 = Object.freeze([1,0,0,0,1,0,0,0,1])
 const ORTHO_EPS = 2e-4
@@ -11,6 +11,12 @@ const CENTERLINE_EPS_LDU = 0.65
 const OVERLAP_RATIO_MIN = 0.65
 const DEFAULT_MAX_DEPTH = 8
 const DEFAULT_MAX_NODES = 192
+const PEGHOLE_AXIS_DOT_MAX = -0.997
+const PEGHOLE_CENTERLINE_EPS_LDU = 0.65
+const PEGHOLE_LIP_DEPTH_LDU = 2
+const PEGHOLE_MIN_SPAN_LDU = 6
+const PEGHOLE_MAX_SPAN_LDU = 64
+const PEGHOLE_PRIMITIVES = new Set(['peghole.dat','peghole2.dat','peghole3.dat','peghole4.dat','peghole5.dat','peghole6.dat'])
 
 const normalizePath = value => String(value || '').replace(/\\/g,'/').replace(/^\.\//,'').replace(/^parts\//i,'').replace(/\/+/g,'/').trim()
 const basename = value => normalizePath(value).split('/').pop()?.toLowerCase() || ''
@@ -62,10 +68,11 @@ function transformHealth(linear){
 
 function primitiveDescriptor(ref){
   const name=basename(ref)
-  if(name==='connect.dat'||name==='confric.dat')return{role:'technic-pin',policy:'unit',connector:cylinder('male',[['R',8,2],['R',6,16],['_L',6.25,2]],{caps:'one',centered:false,slide:false})}
-  if(name==='connhole.dat')return{role:'technic-pin-hole',policy:'unit',connector:cylinder('female',[['R',8,2],['R',6,16],['R',8,2]],{caps:'none',centered:true,slide:true})}
-  if(name==='axlehol0.dat')return{role:'technic-axle-hole',policy:'axial-scale',connector:cylinder('female',[['A',6,20]],{caps:'none',centered:true,slide:true})}
-  if(name==='stud.dat')return{role:'stud',policy:'unit',connector:cylinder('male',[['R',6,4]],{caps:'one',centered:false,slide:false})}
+  if(name==='connect.dat'||name==='confric.dat')return{kind:'connector',role:'technic-pin',policy:'unit',connector:cylinder('male',[['R',8,2],['R',6,16],['_L',6.25,2]],{caps:'one',centered:false,slide:false})}
+  if(name==='connhole.dat')return{kind:'connector',role:'technic-pin-hole',policy:'unit',connector:cylinder('female',[['R',8,2],['R',6,16],['R',8,2]],{caps:'none',centered:true,slide:true})}
+  if(name==='axlehol0.dat')return{kind:'connector',role:'technic-axle-hole',policy:'axial-scale',connector:cylinder('female',[['A',6,20]],{caps:'none',centered:true,slide:true})}
+  if(name==='stud.dat')return{kind:'connector',role:'stud',policy:'unit',connector:cylinder('male',[['R',6,4]],{caps:'one',centered:false,slide:false})}
+  if(PEGHOLE_PRIMITIVES.has(name))return{kind:'peghole-end',role:'technic-pin-hole-edge',policy:'unit',variant:name}
   return null
 }
 
@@ -87,18 +94,24 @@ function allowedTransform(policy,health){
   return false
 }
 
-function transformConnector(descriptor,transform,{file,primitive,raw,depth}){
-  const health=transformHealth(transform.linear)
-  if(!allowedTransform(descriptor.policy,health))return null
+function orientedBasis(health){
   let x=health.nx,y=health.ny
   if(health.mirrored)x=scale3(x,-1)
   x=norm3(sub3(x,scale3(y,dot3(x,y))))
-  let z=norm3(cross3(x,y))
+  const z=norm3(cross3(x,y))
   if(len3(x)<0.99||len3(y)<0.99||len3(z)<0.99)return null
+  return{x,y,z}
+}
+
+function transformConnector(descriptor,transform,{file,primitive,raw,depth}){
+  const health=transformHealth(transform.linear)
+  if(!allowedTransform(descriptor.policy,health))return null
+  const basis=orientedBasis(health)
+  if(!basis)return null
   const copy=structuredClone(descriptor.connector)
   const radial=(health.sx+health.sz)/2
   copy.frame.positionLdu=[...transform.translation]
-  copy.frame.orientation=fromCols(x,y,z)
+  copy.frame.orientation=fromCols(basis.x,basis.y,basis.z)
   copy.geometry.sections=copy.geometry.sections.map(section=>({...section,radiusLdu:section.radiusLdu*radial,lengthLdu:section.lengthLdu*health.sy}))
   copy.source={kind:'ldraw-primitive-discovery',file,primitive,meta:'TYPE1_PRIMITIVE',raw}
   copy.provenance=[{type:'primitive-discovery',primitive,depth}]
@@ -106,13 +119,106 @@ function transformConnector(descriptor,transform,{file,primitive,raw,depth}){
   return copy
 }
 
+function transformPegholeEnd(descriptor,transform,{file,primitive,raw,depth}){
+  const health=transformHealth(transform.linear)
+  if(!allowedTransform(descriptor.policy,health))return null
+  const basis=orientedBasis(health)
+  if(!basis)return null
+  return{
+    positionLdu:[...transform.translation],
+    inwardAxis:[...basis.y],
+    xAxis:[...basis.x],
+    zAxis:[...basis.z],
+    variant:descriptor.variant,
+    source:{kind:'ldraw-peghole-edge',file,primitive,meta:'TYPE1_PRIMITIVE',raw},
+    provenance:[{type:'peghole-edge-discovery',primitive,depth}],
+  }
+}
+
 function isSubpart(ref){return /^s\//i.test(normalizePath(ref))}
+
+function pegholePairCandidate(a,b,i,j){
+  const axisDot=dot3(a.inwardAxis,b.inwardAxis)
+  if(axisDot>PEGHOLE_AXIS_DOT_MAX)return null
+  const delta=sub3(b.positionLdu,a.positionLdu)
+  const separation=len3(delta)
+  if(separation<PEGHOLE_MIN_SPAN_LDU||separation>PEGHOLE_MAX_SPAN_LDU)return null
+  const axis=norm3(delta)
+  const facingA=dot3(axis,a.inwardAxis)
+  const facingB=dot3(scale3(axis,-1),b.inwardAxis)
+  if(facingA<AXIS_DOT_MIN||facingB<AXIS_DOT_MIN)return null
+  const lateralA=len3(sub3(delta,scale3(a.inwardAxis,dot3(delta,a.inwardAxis))))
+  const reverse=scale3(delta,-1)
+  const lateralB=len3(sub3(reverse,scale3(b.inwardAxis,dot3(reverse,b.inwardAxis))))
+  const lateral=Math.max(lateralA,lateralB)
+  if(lateral>PEGHOLE_CENTERLINE_EPS_LDU)return null
+  return{i,j,a,b,separation,lateral,axisDot,score:lateral*20+separation}
+}
+
+function connectorFromPegholePair(pair){
+  const {a,b,separation}=pair
+  const axis=norm3(sub3(b.positionLdu,a.positionLdu))
+  let x=norm3(sub3(a.xAxis,scale3(axis,dot3(a.xAxis,axis))))
+  if(len3(x)<0.99){
+    const helper=Math.abs(axis[0])<0.8?[1,0,0]:[0,0,1]
+    x=norm3(sub3(helper,scale3(axis,dot3(helper,axis))))
+  }
+  const z=norm3(cross3(x,axis))
+  if(len3(x)<0.99||len3(z)<0.99)return null
+  const throat=Math.max(2,separation-PEGHOLE_LIP_DEPTH_LDU*2)
+  const connector=cylinder('female',[
+    ['R',8,PEGHOLE_LIP_DEPTH_LDU],
+    ['R',6,throat],
+    ['R',8,PEGHOLE_LIP_DEPTH_LDU],
+  ],{caps:'none',centered:true,slide:true})
+  connector.frame.positionLdu=scale3(add3(a.positionLdu,b.positionLdu),0.5)
+  connector.frame.orientation=fromCols(x,axis,z)
+  connector.source={
+    kind:'ldraw-peghole-pair-discovery',
+    file:a.source.file,
+    primitive:`${a.variant}+${b.variant}`,
+    meta:'TYPE1_PRIMITIVE_PAIR',
+    raw:[a.source.raw,b.source.raw].join('\n'),
+  }
+  connector.provenance=[...a.provenance,...b.provenance,{type:'peghole-pair',separationLdu:separation}]
+  connector.discovery={
+    version:CONNECTOR_DISCOVERY_VERSION_V4,
+    role:'technic-pin-hole',
+    confidence:'primitive-pair-verified',
+    evidence:'ldraw:opposed-peghole-ends',
+    separationLdu:separation,
+    variants:[a.variant,b.variant],
+  }
+  return connector
+}
+
+export function pairPegholeEndsV4(ends){
+  const candidates=[]
+  for(let i=0;i<(ends??[]).length;i+=1){
+    for(let j=i+1;j<(ends??[]).length;j+=1){
+      const candidate=pegholePairCandidate(ends[i],ends[j],i,j)
+      if(candidate)candidates.push(candidate)
+    }
+  }
+  candidates.sort((a,b)=>a.score-b.score||a.i-b.i||a.j-b.j)
+  const used=new Set(),connectors=[],pairs=[]
+  for(const candidate of candidates){
+    if(used.has(candidate.i)||used.has(candidate.j))continue
+    const connector=connectorFromPegholePair(candidate)
+    if(!connector)continue
+    used.add(candidate.i);used.add(candidate.j)
+    connectors.push(connector)
+    pairs.push({a:candidate.i,b:candidate.j,separationLdu:candidate.separation,lateralErrorLdu:candidate.lateral,axisDot:candidate.axisDot})
+  }
+  return{connectors,pairs,pairedEnds:used.size,unpairedEnds:Math.max(0,(ends??[]).length-used.size),candidatePairs:candidates.length}
+}
 
 export async function discoverPrimitiveConnectorsV4(file,text,fetchText,{maxDepth=DEFAULT_MAX_DEPTH,maxNodes=DEFAULT_MAX_NODES}={}){
   if(typeof fetchText!=='function')throw new Error('discoverPrimitiveConnectorsV4 requires fetchText')
   const root=normalizePath(file)
   const connectors=[]
-  const stats={nodes:0,primitiveRefs:0,rejectedTransforms:0,cycles:0,maxDepthHits:0,loadErrors:0}
+  const pegholeEnds=[]
+  const stats={nodes:0,primitiveRefs:0,rejectedTransforms:0,cycles:0,maxDepthHits:0,loadErrors:0,pegholeEnds:0,pegholePairs:0,unpairedPegholeEnds:0}
 
   async function scan(currentFile,currentText,parentTransform,depth,stack){
     if(depth>maxDepth){stats.maxDepthHits+=1;return}
@@ -123,9 +229,15 @@ export async function discoverPrimitiveConnectorsV4(file,text,fetchText,{maxDept
       const descriptor=primitiveDescriptor(reference.ref)
       if(descriptor){
         stats.primitiveRefs+=1
-        const connector=transformConnector(descriptor,absolute,{file:currentFile,primitive:normalizePath(reference.ref),raw:reference.raw,depth})
-        if(connector)connectors.push(connector)
-        else stats.rejectedTransforms+=1
+        if(descriptor.kind==='peghole-end'){
+          const end=transformPegholeEnd(descriptor,absolute,{file:currentFile,primitive:normalizePath(reference.ref),raw:reference.raw,depth})
+          if(end)pegholeEnds.push(end)
+          else stats.rejectedTransforms+=1
+        }else{
+          const connector=transformConnector(descriptor,absolute,{file:currentFile,primitive:normalizePath(reference.ref),raw:reference.raw,depth})
+          if(connector)connectors.push(connector)
+          else stats.rejectedTransforms+=1
+        }
         continue
       }
       if(!isSubpart(reference.ref)||depth>=maxDepth)continue
@@ -142,6 +254,12 @@ export async function discoverPrimitiveConnectorsV4(file,text,fetchText,{maxDept
   }
 
   await scan(root,text,{linear:[...IDENTITY_3],translation:[0,0,0]},0,new Set([root]))
+  const pegholes=pairPegholeEndsV4(pegholeEnds)
+  connectors.push(...pegholes.connectors)
+  stats.pegholeEnds=pegholeEnds.length
+  stats.pegholePairs=pegholes.connectors.length
+  stats.unpairedPegholeEnds=pegholes.unpairedEnds
+  stats.pegholePairCandidates=pegholes.candidatePairs
   return{version:CONNECTOR_DISCOVERY_VERSION_V4,file:root,connectors,stats:{...stats,connectors:connectors.length}}
 }
 

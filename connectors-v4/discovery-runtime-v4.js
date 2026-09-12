@@ -8,9 +8,9 @@ import {
   discoverPrimitiveConnectorsV4,
   discoveryConnectorRoleV4,
   mergeDiscoveredConnectorsV4,
-} from './discovery-v4.js?v=connector-discovery-20260912-v1'
+} from './discovery-v4.js?v=connector-discovery-20260912-v2'
 
-export const CONNECTOR_DISCOVERY_RUNTIME_VERSION_V4 = 'connector-discovery-runtime-v4.1.0'
+export const CONNECTOR_DISCOVERY_RUNTIME_VERSION_V4 = 'connector-discovery-runtime-v4.2.0'
 
 const MAX_CONNECTORS_PER_PART=4096
 const inFlight=new Map()
