@@ -1,4 +1,10 @@
-export const PIN_RANKING_VERSION_V4 = 'pin-ranking-v4.1.0'
+if (typeof window !== 'undefined') {
+  void import('./discovery-runtime-v4.js?v=connector-discovery-20260912-v1').catch(error => {
+    console.warn('[BrickLab Connector Discovery] Optional discovery pass unavailable.', error)
+  })
+}
+
+export const PIN_RANKING_VERSION_V4 = 'pin-ranking-v4.1.1'
 export const PIN_EXACT_MATE_SCORE_BONUS_V4 = 0.13
 export const PIN_FALLBACK_MATE_SCORE_BONUS_V4 = 0.02
 
