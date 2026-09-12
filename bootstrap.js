@@ -193,7 +193,7 @@ await import('./i18n-runtime-patch.js')
 await import('./i18n-physics-v2.js')
 await import('./i18n-physics-v2-extra.js')
 await import('./ldraw/catalog-v3.js')
-await import('./ldraw/catalog-thumbnails-v1.js')
+// The family library owns lazy thumbnails; do not mount the superseded decorator.
 await import('./menu/project-menu-v1.js?v=project-menu-20260910-v1')
 
 const { assertPhysicsRuntimeContract } = await import('./physics-ownership-v1.js')

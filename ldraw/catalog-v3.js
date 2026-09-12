@@ -1,353 +1,125 @@
 import { getLDrawIndex, getLDrawMetadata, registerLDrawPart } from './runtime-v3.js?v=ldraw-catalog-20260910-v3'
+import { PARTS, findPart } from '../parts.js'
+import { compatibleAssemblyChoices } from '../guidance/assembly-compatibility-v1.js?v=smart-assembly-20260911-v6'
+import { libraryItems, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v1'
+import { mountPartsLibrary, LIBRARY_KEYS } from './library-view-v1.js?v=parts-library-20260912-v1'
 
-const INDEX_URL = 'https://raw.githubusercontent.com/partcad/partcad-ldraw/main/parts-index.json.gz'
-const INDEX_SOURCE = 'PartCAD / LDraw index'
-const ROOT_ID = 'ldrawCatalogV3'
-const STYLE_ID = 'bricklab-ldraw-catalog-v3-css'
-const FAVORITES_KEY = 'bricklab.ldraw.favorites.v3'
-const RECENTS_KEY = 'bricklab.ldraw.recents.v3'
-const VIEW_KEY = 'bricklab.ldraw.view.v3'
-const SORT_KEY = 'bricklab.ldraw.sort.v3'
-const CLEAN_KEY = 'bricklab.ldraw.clean.v3'
-const PAGE_SIZE = 80
+const INDEX_URL='https://raw.githubusercontent.com/partcad/partcad-ldraw/main/parts-index.json.gz'
+let index=[],view=null,root=null,panel=null,pending=null,refreshTimer
+const t=(en,ru)=>document.documentElement.lang==='ru'?ru:en
+const preview=item=>item.file
+  ? `https://www.ldraw.org/library/official/images/parts/${encodeURIComponent(item.code)}.png`
+  : document.querySelector(`#partsList [data-part="${CSS.escape(item.key)}"] .part-icon img`)?.src || null
 
-const HOME_FILES = [
-  '3001.dat','3003.dat','3004.dat','3005.dat','3010.dat','3020.dat','3022.dat','3023.dat','3068b.dat','3666.dat',
-  '3701.dat','3894.dat','3895.dat','32523.dat','32316.dat','2780.dat','3673.dat','6558.dat','32062.dat','32013.dat',
-  '3705.dat','3706.dat','3707.dat','3708.dat','4519.dat','32073.dat','32209.dat','3647.dat','4019.dat','3648.dat','32270.dat',
-]
-
-const PINNED_CATEGORIES = [
-  ['Brick','box'],['Plate','layers-2'],['Tile','square'],['Slope','triangle'],['Technic','settings-2'],
-  ['Wheel','circle-dot'],['Tyre','circle'],['Hinge','panel-top'],['Panel','panel-top-open'],['Electric','zap'],
-]
-
-const TECHNIC_PRESETS = [
-  ['', 'Все Technic', 'All Technic'],
-  ['liftarm', 'Балки / Liftarm', 'Beams / Liftarms'],
-  ['axle', 'Оси', 'Axles'],
-  ['gear', 'Шестерни', 'Gears'],
-  ['pin', 'Пины', 'Pins'],
-  ['connector', 'Коннекторы', 'Connectors'],
-  ['steering', 'Рулевое', 'Steering'],
-  ['shock absorber', 'Подвеска', 'Suspension'],
-]
-
-const CATEGORY_RU = {
-  Animal:'Животные',Antenna:'Антенны',Arch:'Арки',Arm:'Рычаги',Bar:'Штанги',Baseplate:'Базовые пластины',Belville:'Belville',Boat:'Лодки',Bracket:'Кронштейны',Brick:'Кирпичи',Car:'Авто',Clikits:'Clikits',Cockpit:'Кабины',Cone:'Конусы',Constraction:'Constraction','Constraction Accessory':'Аксессуары Constraction',Container:'Контейнеры',Conveyor:'Конвейеры',Crane:'Краны',Cylinder:'Цилиндры',Dish:'Тарелки',Door:'Двери',Duplo:'Duplo',Electric:'Электрика',Exhaust:'Выхлоп',Fence:'Ограждения',Figure:'Фигурки','Figure Accessory':'Аксессуары фигурок',Flag:'Флаги',Flexible:'Гибкие детали',Freestyle:'Freestyle',Garage:'Гараж',Glass:'Стёкла',Helper:'Служебные',Hinge:'Шарниры',Homemaker:'Homemaker',Hose:'Шланги',Ladder:'Лестницы',Magnet:'Магниты','Minifig Head':'Головы минифиг','Minifig Upper':'Верх минифиг','Minifig Lower':'Низ минифиг','Minifig Leg':'Ноги минифиг','Minifig Hips':'Бёдра минифиг','Minifig Arm':'Руки минифиг','Minifig Hand':'Кисти минифиг','Minifig Torso':'Торсы минифиг','Minifig Body':'Тела минифиг','Minifig Assembly':'Сборки минифиг','Minifig Accessory':'Аксессуары минифиг','Minifig Footwear':'Обувь минифиг','Minifig Headwear':'Головные уборы','Minifig Hipwear':'Аксессуары бёдер','Minifig Neckwear':'Аксессуары шеи',Monorail:'Монорельс',Modulex:'Modulex',Moved:'Перемещённые',Obsolete:'Устаревшие',Panel:'Панели',Plane:'Авиация',Plant:'Растения',Plate:'Пластины',Platform:'Платформы',Propeller:'Пропеллеры',Quatro:'Quatro',Rack:'Рейки',Roadsign:'Дорожные знаки',Rock:'Скалы',Scala:'Scala',Screw:'Винты','Sheet Cardboard':'Картон','Sheet Fabric':'Ткань','Sheet Plastic':'Пластиковые листы',Slope:'Скосы',Sphere:'Сферы',Staircase:'Лестницы',Sticker:'Стикеры','Sticker Shortcut':'Стикеры (сборки)',String:'Нити',Support:'Опоры',Tail:'Хвосты',Tap:'Краны',Technic:'Technic',Tile:'Тайлы',Tipper:'Самосвалы',Tractor:'Тракторы',Trailer:'Прицепы',Train:'Поезда',Turntable:'Поворотные столы',Tyre:'Шины',Vehicle:'Транспорт',Wedge:'Клинья',Wheel:'Колёса',Winch:'Лебёдки',Window:'Окна',Windscreen:'Лобовые стёкла',Wing:'Крылья',Znap:'Znap',
-}
-
-let panel = null
-let root = null
-let input = null
-let results = null
-let categorySelect = null
-let sentinelObserver = null
-let indexPromise = null
-let allParts = []
-let categoryCounts = new Map()
-let generation = 0
-let searchTimer = 0
-let favorites = readArray(FAVORITES_KEY)
-let recents = readArray(RECENTS_KEY)
-
-const state = {
-  mode:'home', category:'', preset:'', query:'', page:1, total:0, visibleTotal:0,
-  view:localStorage.getItem(VIEW_KEY)==='list'?'list':'grid',
-  sort:['name','id'].includes(localStorage.getItem(SORT_KEY))?localStorage.getItem(SORT_KEY):'name',
-  direction:'asc', clean:localStorage.getItem(CLEAN_KEY)!=='false', loading:false, fallback:false,
-}
-
-function readArray(key){try{const value=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(value)?value:[]}catch{return[]}}
-function writeArray(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch{/* storage unavailable */}}
-function isRussian(){return document.documentElement.lang==='ru'||localStorage.getItem('bricklab.ui.language.v1')==='ru'}
-function copy(){return isRussian()?{
-  search:'Поиск по названию, категории или Design ID…',featured:'Подборка',favorites:'Избранное',recent:'Недавние',all:'Все',allCategories:'Все категории',
-  byName:'По названию',byId:'По номеру',core:'Только основные',decorated:'Основные + принты',loading:'Загрузка индекса LDraw…',parts:'деталей',
-  add:'Добавить в сцену',fav:'В избранное',unfav:'Убрать из избранного',empty:'Ничего не найдено',emptyFav:'В избранном пока ничего нет',emptyRecent:'Недавно использованных деталей пока нет',
-  loadMore:'Показать ещё',source:'LDraw Parts Library',fallback:'Индекс метаданных недоступен · доступен поиск по Design ID',clear:'Очистить поиск',grid:'Сетка',list:'Список',
-}:{
-  search:'Search by name, category or Design ID…',featured:'Featured',favorites:'Favorites',recent:'Recent',all:'All',allCategories:'All categories',
-  byName:'By name',byId:'By ID',core:'Core parts only',decorated:'Core + decorated',loading:'Loading LDraw index…',parts:'parts',
-  add:'Add to scene',fav:'Add to favorites',unfav:'Remove from favorites',empty:'Nothing found',emptyFav:'No favorite parts yet',emptyRecent:'No recently used parts yet',
-  loadMore:'Load more',source:'LDraw Parts Library',fallback:'Metadata index unavailable · Design ID search remains available',clear:'Clear search',grid:'Grid',list:'List',
-}}
-function categoryLabel(name){return isRussian()?(CATEGORY_RU[name]||name):name}
-function normalizeFile(value){return String(value||'').replace(/^parts\//i,'').replace(/\\/g,'/').trim()}
-function codeOf(file){return normalizeFile(file).replace(/\.dat$/i,'')}
-function normalizeQuery(value){return String(value||'').trim().toLocaleLowerCase().replace(/^ldraw-/,'').replace(/\.dat$/,'')}
-function escapeHtml(value){return String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-function itemKey(item){return normalizeFile(item?.file).toLowerCase()}
-function savedItem(item){return{file:normalizeFile(item.file),code:item.code||codeOf(item.file),description:item.description||`LDraw ${item.code||codeOf(item.file)}`,category:item.category||''}}
-function favoriteKeys(){return new Set(favorites.map(itemKey))}
-function isFavorite(item){return favoriteKeys().has(itemKey(item))}
-
-function ensureStyles(){
-  if(document.getElementById(STYLE_ID))return
-  const link=document.createElement('link');link.id=STYLE_ID;link.rel='stylesheet';link.href=new URL('./catalog-v2.css?v=ldraw-catalog-20260910-v3',import.meta.url).href;document.head.append(link)
-}
-function icons(){window.lucide?.createIcons?.({attrs:{'stroke-width':1.7,'aria-hidden':'true'}})}
-
-async function ungzipJson(response){
-  if(!response.ok)throw new Error(`LDraw index HTTP ${response.status}`)
-  if(typeof DecompressionStream!=='function')throw new Error('gzip decompression is unavailable')
-  if(!response.body)throw new Error('LDraw index response has no body')
-  const stream=response.body.pipeThrough(new DecompressionStream('gzip'))
-  return JSON.parse(await new Response(stream).text())
-}
-
-function unpackIndex(data){
-  if(!data||data.format!==2||!data.categories)throw new Error('Unsupported LDraw catalog index')
-  const list=[];const counts=new Map()
-  for(const [category,parts] of Object.entries(data.categories)){
-    let count=0
-    for(const [code,entry] of Object.entries(parts||{})){
-      const description=Array.isArray(entry)?String(entry[0]||'').trim():''
-      if(!description)continue // site-only / unofficial entry, not in complete.zip
-      list.push({file:`${code}.dat`,code,description,category})
-      count+=1
-    }
-    if(count)counts.set(category,count)
+function migratePreferences() {
+  for(const [oldKey,newKey] of [['bricklab.ldraw.favorites.v3',LIBRARY_KEYS.favorites],['bricklab.ldraw.recents.v3',LIBRARY_KEYS.recents]]) {
+    if(readPreference(localStorage,newKey,null)!==null)continue
+    const old=readPreference(localStorage,oldKey,[])
+    if(Array.isArray(old))writePreference(localStorage,newKey,old.filter(x=>x?.file).map(x=>`ldraw-${x.file.replace(/^parts\//i,'').replace(/\.dat$/i,'').toLowerCase()}`))
   }
-  allParts=list
-  categoryCounts=counts
-  return list
 }
-
-async function ensureIndex(){
-  if(allParts.length)return allParts
-  if(indexPromise)return indexPromise
-  indexPromise=(async()=>{
-    try{
-      const response=await fetch(INDEX_URL,{mode:'cors',cache:'force-cache'})
-      return unpackIndex(await ungzipJson(response))
-    }catch(error){
-      console.warn('[BrickLab LDraw] compact metadata index unavailable; using mirror fallback',error)
-      state.fallback=true
-      return []
-    }
-  })()
-  return indexPromise
-}
-
-async function fallbackSearch(query){
-  const q=normalizeQuery(query)
-  const index=await getLDrawIndex()
-  const matches=(q?index.filter(item=>item.code.toLowerCase().includes(q)):index).slice(0,Math.max(PAGE_SIZE,state.page*PAGE_SIZE))
-  const token=++generation
-  const queue=[...matches];const output=[]
-  const workers=Array.from({length:Math.min(5,queue.length)},async()=>{
-    while(queue.length){
-      const item=queue.shift();if(!item)break
-      try{const meta=await getLDrawMetadata(item.file);output.push({...item,...meta,description:meta.description||`LDraw ${item.code}`,category:meta.category||guessCategory(meta.description)})}
-      catch{output.push({...item,description:`LDraw ${item.code}`,category:'Other'})}
-      if(token!==generation)return
-    }
-  })
-  await Promise.all(workers)
-  return output
-}
-
-function guessCategory(description=''){
-  const value=description.toLowerCase()
-  for(const name of ['Technic','Brick','Plate','Tile','Slope','Wheel','Tyre','Hinge','Panel','Electric','Door','Window','Plant','Animal','Sticker']){
-    if(value.includes(name.toLowerCase()))return name
+function context() {
+  const editor=globalThis.BrickLabSubsystems?.editor
+  const selected=editor?.primarySelection?.()
+  const def=findPart(selected?.userData?.partId)
+  return {
+    project:(editor?.objects?.()||[]).map(object=>object.userData?.partId),
+    compatible:def?compatibleAssemblyChoices(def,PARTS).map(choice=>choice.targetPartId):[],
   }
-  return 'Other'
 }
-
-function shell(){
-  const c=copy()
-  return `<div class="ld2-root ${state.view==='list'?'is-list':'is-grid'}" id="${ROOT_ID}">
-    <div class="ld2-search"><i data-lucide="search"></i><input id="ld3Search" autocomplete="off" spellcheck="false" placeholder="${c.search}"><button type="button" data-clear title="${c.clear}"><i data-lucide="x"></i></button><kbd>Ctrl K</kbd></div>
-    <div class="ld2-primary-nav">
-      <button type="button" data-mode="home"><i data-lucide="sparkles"></i><span>${c.featured}</span></button>
-      <button type="button" data-mode="favorites"><i data-lucide="star"></i><span>${c.favorites}</span><b data-fav-count>${favorites.length}</b></button>
-      <button type="button" data-mode="recent"><i data-lucide="history"></i><span>${c.recent}</span></button>
-      <button type="button" data-mode="all"><i data-lucide="blocks"></i><span>${c.all}</span></button>
-    </div>
-    <div class="ld2-pinned" data-pinned></div>
-    <div class="ld2-technic hidden" data-technic></div>
-    <div class="ld2-category-row"><i data-lucide="folders"></i><select id="ld3Category"><option value="">${c.allCategories}</option></select></div>
-    <div class="ld2-toolbar">
-      <select id="ld3Sort"><option value="name">${c.byName}</option><option value="id">${c.byId}</option></select>
-      <button type="button" data-direction title="A → Z"><i data-lucide="arrow-down-a-z"></i></button>
-      <button type="button" data-view title="${state.view==='grid'?c.list:c.grid}"><i data-lucide="${state.view==='grid'?'list':'layout-grid'}"></i></button>
-      <button type="button" class="ld2-clean ${state.clean?'active':''}" data-clean><i data-lucide="${state.clean?'package-check':'palette'}"></i><span>${state.clean?c.core:c.decorated}</span></button>
-    </div>
-    <div class="ld2-summary"><span data-summary>${c.loading}</span><span class="ld2-source"><span class="dot"></span>${c.source}</span></div>
-    <div class="ld2-scroll" data-scroll><div class="ld2-results" data-results></div><button class="ld2-more hidden" type="button" data-more>${c.loadMore}</button><div class="ld2-sentinel" data-sentinel></div></div>
-    <div class="ld2-foot">Parts geometry provided by the LDraw Parts Library.<br><span data-index-source>${INDEX_SOURCE}</span></div>
-  </div>`
+function info(item) {
+  const def=findPart(item.key),size=def?.ldraw?.size || def?.size
+  return {
+    size:Array.isArray(size)?`${size.map(n=>Number(n).toFixed(2)).join(' × ')} stud`:null,
+    mechanical:def?.mechanicalIntelligence?.class || def?.mechanics?.type || def?.mechanics?.kind,
+    connectors:def?.connectors?.length?[...new Set(def.connectors.map(c=>c.type||c.family).filter(Boolean))].join(', '):null,
+  }
 }
-
-function renderPinned(){
-  const host=root?.querySelector('[data-pinned]');if(!host)return
-  host.innerHTML=PINNED_CATEGORIES.map(([name,icon])=>`<button type="button" class="${state.category===name?'active':''}" data-category="${name}" title="${escapeHtml(categoryLabel(name))}"><i data-lucide="${icon}"></i><span>${escapeHtml(categoryLabel(name))}</span></button>`).join('')
-  host.querySelectorAll('[data-category]').forEach(button=>button.onclick=()=>selectCategory(button.dataset.category||''));icons()
+function canInsert() {
+  if(globalThis.BrickLabKinematics?.active?.())return false
+  return globalThis.BrickLabSubsystems?.editor?.mode?.()==='build'
 }
-function renderTechnic(){
-  const host=root?.querySelector('[data-technic]');if(!host)return
-  host.classList.toggle('hidden',state.category!=='Technic')
-  if(state.category!=='Technic'){host.innerHTML='';return}
-  host.innerHTML=TECHNIC_PRESETS.map(([value,ru,en])=>`<button type="button" class="${state.preset===value?'active':''}" data-preset="${value}">${escapeHtml(isRussian()?ru:en)}</button>`).join('')
-  host.querySelectorAll('[data-preset]').forEach(button=>button.onclick=()=>{state.preset=button.dataset.preset||'';state.page=1;renderTechnic();renderResults()})
-}
-function renderCategories(){
-  if(!categorySelect)return
-  const current=state.category;const c=copy()
-  const entries=[...categoryCounts.entries()].sort((a,b)=>categoryLabel(a[0]).localeCompare(categoryLabel(b[0]),isRussian()?'ru':'en'))
-  categorySelect.innerHTML=`<option value="">${c.allCategories}</option>`+entries.map(([name,count])=>`<option value="${escapeHtml(name)}">${escapeHtml(categoryLabel(name))} · ${count.toLocaleString(isRussian()?'ru-RU':'en-US')}</option>`).join('')
-  categorySelect.value=current
-}
-function syncControls(){
-  if(!root)return
-  root.classList.toggle('is-grid',state.view==='grid');root.classList.toggle('is-list',state.view==='list')
-  root.querySelectorAll('[data-mode]').forEach(button=>button.classList.toggle('active',button.dataset.mode===state.mode))
-  const sort=root.querySelector('#ld3Sort');if(sort)sort.value=state.sort
-  const clean=root.querySelector('[data-clean]');if(clean){clean.classList.toggle('active',state.clean);clean.innerHTML=`<i data-lucide="${state.clean?'package-check':'palette'}"></i><span>${state.clean?copy().core:copy().decorated}</span>`}
-  const view=root.querySelector('[data-view]');if(view){view.title=state.view==='grid'?copy().list:copy().grid;view.innerHTML=`<i data-lucide="${state.view==='grid'?'list':'layout-grid'}"></i>`}
-  renderPinned();renderTechnic();renderCategories();icons()
-}
-
-function isCore(item){
-  if(!state.clean)return true
-  const exact=normalizeQuery(state.query)
-  if(exact&&String(item.code).toLowerCase()===exact)return true
-  if(['Sticker','Sticker Shortcut','Moved','Obsolete'].includes(state.category))return true
-  const description=String(item.description||'')
-  if(/^[~=_]/.test(description))return false
-  if(/\b(?:sticker|pattern|physical colour|physical color|moved to|obsolete)\b/i.test(description))return false
+// Native card click retains app.js addPart, history, selection, sound and guidance.
+// No editor objects, connector semantics or project data are written by this UI.
+async function insert(item) {
+  if(!canInsert())throw Error(t('Return to BUILD first','Сначала вернитесь в СБОРКУ'))
+  const def=item.file?registerLDrawPart({...item,category:item.sourceCategory}):findPart(item.key)
+  if(!def)throw Error(t('Part unavailable','Деталь недоступна'))
+  const search=document.getElementById('partSearch')
+  if(!search)throw Error('Native catalog unavailable')
+  document.querySelector('#categoryTabs [data-cat="All"]')?.click()
+  search.value='';search.dispatchEvent(new Event('input',{bubbles:true}))
+  let card=document.querySelector(`#partsList .part-card[data-part="${CSS.escape(def.id)}"]`)
+  if(!card){await new Promise(resolve=>requestAnimationFrame(resolve));card=document.querySelector(`#partsList .part-card[data-part="${CSS.escape(def.id)}"]`)}
+  if(!card||!canInsert())throw Error(t('Editor insertion unavailable','Вставка в редактор недоступна'))
+  const before=new Set((globalThis.BrickLabSubsystems?.editor?.objects?.()||[]).map(o=>o.userData.instanceId))
+  card.click()
+  const added=(globalThis.BrickLabSubsystems?.editor?.objects?.()||[]).some(o=>o.userData.partId===def.id&&!before.has(o.userData.instanceId))
+  if(!added)throw Error(t('Editor did not place the part','Редактор не разместил деталь'))
   return true
 }
-function matchesQuery(item){
-  const q=normalizeQuery(state.query||state.preset);if(!q)return true
-  const haystack=`${item.code} ${item.description} ${item.category}`.toLocaleLowerCase()
-  return q.split(/\s+/).every(word=>haystack.includes(word))
-}
-function sourceItems(){
-  if(state.mode==='favorites')return favorites
-  if(state.mode==='recent')return recents
-  if(state.mode==='home'&&!state.query)return HOME_FILES.map(file=>allParts.find(item=>item.file.toLowerCase()===file.toLowerCase())).filter(Boolean)
-  return allParts
-}
-function filteredItems(){
-  let list=sourceItems().filter(item=>!state.category||item.category===state.category).filter(matchesQuery).filter(isCore)
-  const factor=state.direction==='asc'?1:-1
-  list=[...list].sort((a,b)=>state.sort==='id'
-    ?factor*String(a.code).localeCompare(String(b.code),'en',{numeric:true,sensitivity:'base'})
-    :factor*String(a.description).localeCompare(String(b.description),isRussian()?'ru':'en',{numeric:true,sensitivity:'base'}))
-  return list
-}
-function iconFor(item){return({Technic:'settings-2',Brick:'box',Plate:'layers-2',Tile:'square',Slope:'triangle',Wheel:'circle-dot',Tyre:'circle',Hinge:'panel-top',Panel:'panel-top-open',Electric:'zap',Door:'door-open',Window:'panels-top-left',Animal:'rabbit',Plant:'sprout',Sticker:'badge'}[item.category]||'box')}
-function cardMarkup(item){
-  const fav=isFavorite(item);const c=copy()
-  return `<article class="ld2-card" data-file="${escapeHtml(item.file)}"><button class="ld2-main" type="button" data-add="${escapeHtml(item.file)}" title="${c.add}"><span class="ld2-thumb"><i data-lucide="${iconFor(item)}"></i><b>${escapeHtml(item.code)}</b></span><span class="ld2-copy"><strong>${escapeHtml(item.description)}</strong><small><span>${escapeHtml(categoryLabel(item.category))}</span><code>${escapeHtml(item.code)}</code></small></span><span class="ld2-plus"><i data-lucide="plus"></i></span></button><button class="ld2-star ${fav?'active':''}" type="button" data-favorite="${escapeHtml(item.file)}" title="${fav?c.unfav:c.fav}"><i data-lucide="star"></i></button></article>`
+function refresh({pending=false,message=''}={}) { view?.setItems(libraryItems(index,PARTS),{pending,message}) }
+
+async function loadIndex() {
+  if(pending)return pending
+  pending=(async()=>{
+    try {
+      const response=await fetch(INDEX_URL,{mode:'cors',cache:'force-cache'})
+      if(!response.ok||!response.body||typeof DecompressionStream!=='function')throw Error(`Index HTTP ${response.status}`)
+      const data=await new Response(response.body.pipeThrough(new DecompressionStream('gzip'))).json()
+      if(data.format!==2||!data.categories)throw Error('Unsupported index format')
+      index=Object.entries(data.categories).flatMap(([category,parts])=>Object.entries(parts).flatMap(([code,entry])=>Array.isArray(entry)&&String(entry[0]||'').trim()?[{file:`${code}.dat`,code,description:String(entry[0]).trim(),category}]:[]))
+      refresh()
+    } catch(error) {
+      console.warn('[BrickLab Library] Metadata index unavailable; registered parts remain usable.',error)
+      refresh({message:t('Index unavailable · registered parts available','Индекс недоступен · доступны зарегистрированные детали')})
+    }
+  })()
+  return pending
 }
 
-async function ensureHomeMetadata(){
-  if(allParts.length)return
-  const token=++generation;const output=[]
-  await Promise.all(HOME_FILES.map(async file=>{try{const meta=await getLDrawMetadata(file);output.push({file,code:codeOf(file),description:meta.description||`LDraw ${codeOf(file)}`,category:meta.category||guessCategory(meta.description)})}catch{/* skip */}}))
-  if(token!==generation)return
-  allParts=output
+// Retain explicit Design-ID recovery without issuing thousands of metadata requests.
+async function lookupCode(query) {
+  const code=String(query).trim().replace(/^ldraw-/i,'').replace(/\.dat$/i,'')
+  if(!/^[0-9][a-z0-9_-]*$/i.test(code)||index.some(x=>x.code===code))return
+  try {
+    const known=await getLDrawIndex();const item=known.find(x=>x.code.toLowerCase()===code.toLowerCase())
+    if(!item)return
+    const meta=await getLDrawMetadata(item.file)
+    index.push({...item,...meta,code,description:meta.description||`LDraw ${code}`})
+    refresh()
+  } catch(error){console.warn('[BrickLab Library] Design ID lookup unavailable.',error)}
 }
 
-async function prepareIndex(){
-  state.loading=true;updateSummary()
-  await ensureIndex()
-  if(!allParts.length){await ensureHomeMetadata()}
-  state.loading=false;renderCategories();renderResults()
+function install() {
+  panel=document.querySelector('.parts-panel')
+  if(!panel||!document.getElementById('partsList'))return
+  if(document.getElementById('ldrawCatalogV3'))return
+  const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./library-v1.css?v=parts-library-20260912-v1',import.meta.url).href;document.head.append(css)
+  migratePreferences()
+  panel.classList.add('parts-library-v1')
+  root=document.createElement('div');root.id='ldrawCatalogV3';panel.append(root)
+  const title=panel.querySelector('.panel-title>span:first-child');if(title)title.textContent=t('PARTS LIBRARY','БИБЛИОТЕКА ДЕТАЛЕЙ')
+  view=mountPartsLibrary(root,{language:()=>document.documentElement.lang,insert,preview,info,context,onClose:()=>panel.querySelector('.panel-float-close')?.click()})
+  refresh({pending:true})
+  // Compact metadata only; LDraw geometry registration/loading remains on insertion.
+  void loadIndex()
+  root.addEventListener('change',event=>{if(event.target.id==='plSearch')void lookupCode(event.target.value)})
+  const schedule=()=>{clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>view?.refresh(),120)}
+  new MutationObserver(schedule).observe(document.getElementById('partsList'),{childList:true,subtree:true})
+  globalThis.addEventListener('bricklab:partcatalogchange',()=>refresh())
+  globalThis.addEventListener('bricklab:languagechange',()=>{view.languageChanged();if(title)title.textContent=t('PARTS LIBRARY','БИБЛИОТЕКА ДЕТАЛЕЙ')})
+  for(const name of ['bricklab:editorexternalmutation','bricklab:selectionchange','bricklab:editorselectionchange','bricklab:smartassemblyinstalled','bricklab:ldrawloaded'])globalThis.addEventListener(name,schedule)
+  // Selection/project can change through legacy paths; refresh on opening, not each frame.
+  new MutationObserver(()=>{if(!panel.classList.contains('panel-hidden'))schedule()}).observe(panel,{attributes:true,attributeFilter:['class']})
+  document.addEventListener('keydown',event=>{
+    if(!(event.ctrlKey||event.metaKey)||event.code!=='KeyK'||panel.classList.contains('panel-hidden'))return
+    event.preventDefault();event.stopImmediatePropagation();view.focus()
+  },true)
 }
-
-async function ensureFallbackForQuery(){
-  if(!state.fallback)return
-  if(!state.query&&state.mode==='home')return
-  state.loading=true;updateSummary()
-  const items=await fallbackSearch(state.query||state.preset)
-  allParts=items;state.loading=false;renderResults()
-}
-
-function renderResults(){
-  if(!results)return
-  const c=copy();const all=filteredItems();state.visibleTotal=all.length
-  const shown=all.slice(0,state.page*PAGE_SIZE);state.total=all.length
-  const empty=state.mode==='favorites'?c.emptyFav:state.mode==='recent'?c.emptyRecent:c.empty
-  results.innerHTML=shown.length?shown.map(cardMarkup).join(''):`<div class="ld2-empty"><i data-lucide="package-search"></i><strong>${escapeHtml(empty)}</strong></div>`
-  const more=root.querySelector('[data-more]');more.classList.toggle('hidden',shown.length>=all.length);more.disabled=state.loading
-  root.querySelector('[data-fav-count]').textContent=favorites.length
-  updateSummary();icons()
-}
-function updateSummary(){
-  const host=root?.querySelector('[data-summary]');if(!host)return
-  const c=copy();if(state.loading){host.textContent=c.loading;return}
-  if(state.fallback&&allParts.length<200){host.textContent=c.fallback;return}
-  host.textContent=`${state.visibleTotal.toLocaleString(isRussian()?'ru-RU':'en-US')} ${c.parts}`
-  const count=panel?.querySelector('#partCount');if(count)count.textContent=String(state.visibleTotal||allParts.length)
-}
-
-function selectCategory(name){state.mode=name?'category':'all';state.category=name;state.preset='';state.query='';state.page=1;if(input)input.value='';syncControls();renderResults();if(state.fallback)void ensureFallbackForQuery()}
-function setMode(mode){state.mode=mode;state.category='';state.preset='';state.query='';state.page=1;if(input)input.value='';if(categorySelect)categorySelect.value='';syncControls();renderResults();if(state.fallback&&mode==='all')void ensureFallbackForQuery()}
-function toggleFavorite(file){
-  const item=findItem(file);if(!item)return
-  const key=itemKey(item);const index=favorites.findIndex(value=>itemKey(value)===key)
-  if(index>=0)favorites.splice(index,1);else favorites.unshift(savedItem(item))
-  favorites=favorites.slice(0,600);writeArray(FAVORITES_KEY,favorites);renderResults()
-}
-function rememberRecent(item){const saved=savedItem(item);const key=itemKey(saved);recents=[saved,...recents.filter(value=>itemKey(value)!==key)].slice(0,60);writeArray(RECENTS_KEY,recents)}
-function findItem(file){const key=normalizeFile(file).toLowerCase();return allParts.find(item=>itemKey(item)===key)||favorites.find(item=>itemKey(item)===key)||recents.find(item=>itemKey(item)===key)||null}
-
-function clickNativePart(def){
-  const legacy=document.getElementById('partSearch');if(!legacy)return false
-  legacy.value='';legacy.dispatchEvent(new Event('input',{bubbles:true}))
-  const click=()=>{const card=document.querySelector(`#partsList .part-card[data-part="${CSS.escape(def.id)}"]`);if(!card)return false;card.click();return true}
-  if(click())return true;requestAnimationFrame(click);return true
-}
-async function addPart(file,card){
-  card?.classList.add('loading')
-  try{
-    let item=findItem(file)||{file:normalizeFile(file),code:codeOf(file),description:`LDraw ${codeOf(file)}`,category:''}
-    if(!item.description||/^LDraw\s/i.test(item.description)){const meta=await getLDrawMetadata(file);item={...item,...meta,description:meta.description||item.description,category:meta.category||item.category||guessCategory(meta.description)}}
-    const def=registerLDrawPart(item);rememberRecent(item);clickNativePart(def)
-    card?.classList.remove('loading');card?.classList.add('added');setTimeout(()=>card?.classList.remove('added'),700)
-  }catch(error){console.warn('[BrickLab LDraw] add failed',error);card?.classList.remove('loading')}
-}
-
-function bind(){
-  input=root.querySelector('#ld3Search');results=root.querySelector('[data-results]');categorySelect=root.querySelector('#ld3Category')
-  root.querySelectorAll('[data-mode]').forEach(button=>button.onclick=()=>setMode(button.dataset.mode||'home'))
-  root.querySelector('[data-clear]').onclick=()=>{input.value='';state.query='';state.page=1;input.focus();renderResults()}
-  input.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{state.query=input.value.trim();state.page=1;if(state.mode==='home'&&state.query)state.mode=state.category?'category':'all';syncControls();renderResults();if(state.fallback)void ensureFallbackForQuery()},120)})
-  categorySelect.onchange=()=>categorySelect.value?selectCategory(categorySelect.value):setMode('all')
-  root.querySelector('#ld3Sort').onchange=event=>{state.sort=event.target.value;localStorage.setItem(SORT_KEY,state.sort);state.page=1;renderResults()}
-  root.querySelector('[data-direction]').onclick=event=>{state.direction=state.direction==='asc'?'desc':'asc';event.currentTarget.innerHTML=`<i data-lucide="${state.direction==='asc'?'arrow-down-a-z':'arrow-up-z-a'}"></i>`;state.page=1;renderResults()}
-  root.querySelector('[data-view]').onclick=()=>{state.view=state.view==='grid'?'list':'grid';localStorage.setItem(VIEW_KEY,state.view);syncControls();renderResults()}
-  root.querySelector('[data-clean]').onclick=()=>{state.clean=!state.clean;localStorage.setItem(CLEAN_KEY,String(state.clean));state.page=1;syncControls();renderResults()}
-  root.querySelector('[data-more]').onclick=()=>{state.page+=1;renderResults()}
-  results.addEventListener('click',event=>{const fav=event.target.closest('[data-favorite]');if(fav){event.preventDefault();event.stopPropagation();toggleFavorite(fav.dataset.favorite);return}const add=event.target.closest('[data-add]');if(add)void addPart(add.dataset.add,add.closest('.ld2-card'))})
-  sentinelObserver=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting)){const all=filteredItems();if(state.page*PAGE_SIZE<all.length){state.page+=1;renderResults()}}},{root:root.querySelector('[data-scroll]'),rootMargin:'160px'})
-  sentinelObserver.observe(root.querySelector('[data-sentinel]'))
-}
-
-function updateLanguage(){
-  if(!root)return
-  const c=copy();input.placeholder=c.search
-  root.querySelector('[data-mode="home"] span').textContent=c.featured;root.querySelector('[data-mode="favorites"] span').textContent=c.favorites;root.querySelector('[data-mode="recent"] span').textContent=c.recent;root.querySelector('[data-mode="all"] span').textContent=c.all
-  root.querySelector('#ld3Sort').options[0].textContent=c.byName;root.querySelector('#ld3Sort').options[1].textContent=c.byId;root.querySelector('[data-more]').textContent=c.loadMore
-  syncControls();renderResults()
-}
-
-async function install(){
-  panel=document.querySelector('.parts-panel');if(!panel||!document.getElementById('partsList')||!document.getElementById('partSearch'))return requestAnimationFrame(install)
-  if(document.getElementById(ROOT_ID))return
-  ensureStyles();panel.classList.add('ldraw-catalog-v2-active')
-  const label=panel.querySelector('.panel-title span:first-child');if(label)label.textContent='LDRAW PARTS'
-  const holder=document.createElement('div');holder.innerHTML=shell();root=holder.firstElementChild;panel.append(root)
-  bind();syncControls();icons();renderResults();void prepareIndex()
-}
-
-document.addEventListener('keydown',event=>{if(!(event.ctrlKey||event.metaKey)||event.code!=='KeyK')return;if(!root||document.querySelector('.parts-panel')?.classList.contains('panel-hidden'))return;event.preventDefault();input.focus();input.select()},true)
-window.addEventListener('bricklab:languagechange',updateLanguage)
-
 install()
-window.BrickLabLDrawCatalog=Object.freeze({focus:()=>{input?.focus();input?.select()},showCategory:selectCategory,showAll:()=>setMode('all'),showFavorites:()=>setMode('favorites')})
+globalThis.BrickLabLDrawCatalog=Object.freeze({
+  focus:()=>view?.focus(),showCategory:name=>view?.showFamily(/technic|wheel|tyre/i.test(name)?'technic':'system'),
+  showAll:()=>view?.showSection('all'),showFavorites:()=>view?.showSection('favorites'),
+  state:()=>view?.state(),
+})

@@ -92,9 +92,9 @@ test('dynamically loaded drivetrain stylesheet remains available', async () => {
 })
 
 test('live LDraw catalog stylesheet remains available', async () => {
-  await access(new URL('ldraw/catalog-v2.css', root))
+  await access(new URL('ldraw/library-v1.css', root))
   const catalog = await readFile(new URL('ldraw/catalog-v3.js', root), 'utf8')
-  assert.match(catalog, /new URL\(['"]\.\/catalog-v2\.css\?v=ldraw-catalog-20260910-v3['"],import\.meta\.url\)/, 'catalog-v3 keeps its live stylesheet dependency')
+  assert.match(catalog, /new URL\(['"]\.\/library-v1\.css\?v=parts-library-20260912-v1['"],import\.meta\.url\)/, 'catalog-v3 keeps its live family-library stylesheet dependency')
 })
 
 test('the live menu, TEST Lab, physics and LDraw generations remain present', async () => {

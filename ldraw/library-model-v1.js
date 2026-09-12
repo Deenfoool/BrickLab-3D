@@ -55,7 +55,7 @@ export function libraryItems(index, definitions) {
     if (def.ldraw && items.has(key)) continue
     items.set(key, { id:def.id, file:def.ldraw?.file, code:def.ldraw?.code || def.id, name:def.name, description:def.description || def.name, category:def.category, source:def.ldraw?'LDraw':'BrickLab' })
   }
-  return [...items.values()].map(item => ({ ...item, key:partKey(item), ...classifyPart(item), source:item.file?'LDraw':'BrickLab', search:normalizeSearch(`${item.code} ${item.id || ''} ${item.name || ''} ${item.description} ${item.category}`) }))
+  return [...items.values()].map(item => ({ ...item, key:partKey(item), sourceCategory:item.category, ...classifyPart(item), source:item.file?'LDraw':'BrickLab', search:normalizeSearch(`${item.code} ${item.id || ''} ${item.name || ''} ${item.description} ${item.category}`) }))
 }
 
 export function filterLibrary(items, { family, category='', query='', tab='all', favorites=[], recents=[], project=[], compatible=[] }) {

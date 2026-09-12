@@ -104,7 +104,9 @@ function installOverlayUi() {
   function clampPlacement(panel, placement) {
     const shellRect = shell.getBoundingClientRect()
     const topbarHeight = document.querySelector('.topbar')?.getBoundingClientRect().height || 64
-    const width = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, Number(placement.width) || panel.getBoundingClientRect().width || 286))
+    const width = panel.classList.contains('parts-library-v1')
+      ? Math.min(540, shellRect.width - 24)
+      : Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, Number(placement.width) || panel.getBoundingClientRect().width || 286))
     const height = panel.getBoundingClientRect().height || Math.min(720, shellRect.height - topbarHeight - 22)
     const maxX = Math.max(EDGE_GAP, shellRect.width - width - EDGE_GAP)
     const minY = topbarHeight + EDGE_GAP

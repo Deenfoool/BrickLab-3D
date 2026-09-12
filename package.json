@@ -4,6 +4,7 @@
   "version": "0.2.0",
   "type": "module",
   "scripts": {
+    "test:library": "node --test tests/parts-library.test.mjs tests/parts-library-ui.test.mjs",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
