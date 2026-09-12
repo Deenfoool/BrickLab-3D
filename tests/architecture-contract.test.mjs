@@ -11,6 +11,7 @@ import './design-doctor.test.mjs'
 import './connectors-v4-pin-semantics.test.mjs'
 import './connectors-v4-pin-ranking.test.mjs'
 import './connectors-v4-discovery.test.mjs'
+import './project-library.test.mjs'
 
 import {
   ARCHITECTURE_CONSOLIDATION_STATUS,

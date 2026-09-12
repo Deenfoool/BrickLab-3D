@@ -115,6 +115,15 @@ try {
 // app.js has created the scene, selection collection, history controls and V4 object source.
 await import('./architecture/editor-adapter-v1.js?v=architecture-20260911-v1')
 
+// Project Library V1 stores multiple local projects in IndexedDB while applying every
+// opened snapshot through the editor's existing .bricklab importer. Mount it while the
+// startup action is still known so New/Open never overwrites the previous active card.
+try {
+  await import('./projects/library-ui-v1.js?v=project-library-20260912-v1')
+} catch (error) {
+  console.warn('[BrickLab Projects] Project Library unavailable; legacy save/import/export remains available.', error)
+}
+
 // app.js still renders its Mechanics inspector from the legacy V3 `connections`
 // array. Connector V4 snaps intentionally avoid duplicating those records, so keep the
 // visible inspector synchronized from the authoritative V4 graph without changing
