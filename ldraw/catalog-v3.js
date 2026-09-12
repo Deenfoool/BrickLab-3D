@@ -1,14 +1,87 @@
 import { getLDrawIndex, getLDrawMetadata, registerLDrawPart, preloadLDrawPrototype } from './runtime-v3.js?v=ldraw-catalog-20260910-v3'
 import { retryLoad, withLoadDeadline } from './load-recovery-v1.js?v=ldraw-loading-20260912-v1'
-import { loadLDrawCatalogIndex } from './index-loader-v1.js?v=ldraw-index-20260912-v1'
 import { PARTS, findPart } from '../parts.js'
 import { compatibleAssemblyChoices } from '../guidance/assembly-compatibility-v1.js?v=smart-assembly-20260911-v6'
 import { libraryItems, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v5'
 import { mountPartsLibrary, LIBRARY_KEYS } from './library-view-v1.js?v=parts-library-20260912-v5'
 import { createPartsLibraryPreviewService } from './library-preview-v1.js?v=parts-library-20260912-v5'
 
+const INDEX_URLS=Object.freeze({
+  current:'https://raw.githubusercontent.com/partcad/partcad-ldraw/main/parts-index.zip',
+  legacy:'https://raw.githubusercontent.com/partcad/partcad-ldraw/b91d69a98f72c9d550a838dcb74534a2991575ea/parts-index.json.gz',
+})
+const ZIP_LOCAL=0x04034b50,ZIP_CENTRAL=0x02014b50,ZIP_EOCD=0x06054b50
+const utf8=new TextDecoder()
 let index=[],view=null,root=null,panel=null,pending=null,refreshTimer,indexSource='unloaded'
 const t=(en,ru)=>document.documentElement.lang==='ru'?ru:en
+
+async function inflateBytes(bytes,format){
+  if(typeof DecompressionStream!=='function')throw Error('DecompressionStream is unavailable')
+  const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream(format))
+  return new Uint8Array(await new Response(stream).arrayBuffer())
+}
+function findZipEocd(view){
+  const min=Math.max(0,view.byteLength-0xffff-22)
+  for(let offset=view.byteLength-22;offset>=min;offset-=1)if(view.getUint32(offset,true)===ZIP_EOCD)return offset
+  throw Error('Invalid ZIP: end-of-central-directory not found')
+}
+function zipReader(buffer){
+  const data=new DataView(buffer),eocd=findZipEocd(data),count=data.getUint16(eocd+10,true),files=new Map()
+  let offset=data.getUint32(eocd+16,true)
+  for(let i=0;i<count;i+=1){
+    if(data.getUint32(offset,true)!==ZIP_CENTRAL)throw Error('Invalid ZIP central directory')
+    const method=data.getUint16(offset+10,true),compressedSize=data.getUint32(offset+20,true)
+    const fileNameLength=data.getUint16(offset+28,true),extraLength=data.getUint16(offset+30,true),commentLength=data.getUint16(offset+32,true)
+    const localOffset=data.getUint32(offset+42,true),name=utf8.decode(new Uint8Array(buffer,offset+46,fileNameLength))
+    if(data.getUint32(localOffset,true)!==ZIP_LOCAL)throw Error(`Invalid ZIP local header: ${name}`)
+    const localNameLength=data.getUint16(localOffset+26,true),localExtraLength=data.getUint16(localOffset+28,true)
+    const start=localOffset+30+localNameLength+localExtraLength,compressed=new Uint8Array(buffer,start,compressedSize)
+    files.set(name,{async text(){
+      if(method===0)return utf8.decode(compressed)
+      if(method!==8)throw Error(`Unsupported ZIP compression method ${method}: ${name}`)
+      return utf8.decode(await inflateBytes(compressed,'deflate-raw'))
+    }})
+    offset+=46+fileNameLength+extraLength+commentLength
+  }
+  return files
+}
+const categoryMember=category=>`c/${String(category).trim().replace(/\s+/g,'-')}.json`
+const catalogItem=(code,description,category)=>({file:`${code}.dat`,code,description:String(description||'').trim()||`LDraw ${code}`,category})
+async function decodeCurrentIndex(buffer){
+  const files=zipReader(buffer),metaFile=files.get('index.json')
+  if(!metaFile)throw Error('LDraw ZIP index is missing index.json')
+  const meta=JSON.parse(await metaFile.text())
+  if(meta.format!==3||!meta.categories)throw Error(`Unsupported LDraw ZIP index format: ${meta.format}`)
+  const items=[]
+  for(const [category,ids] of Object.entries(meta.categories)){
+    const member=files.get(categoryMember(category))
+    if(!member)throw Error(`LDraw ZIP index is missing category: ${category}`)
+    const parts=JSON.parse(await member.text())
+    for(const code of ids){const entry=parts[code];items.push(catalogItem(code,Array.isArray(entry)?entry[0]:'',category))}
+  }
+  if(!items.length)throw Error('LDraw ZIP index is empty')
+  return items
+}
+async function decodeLegacyIndex(buffer){
+  const data=JSON.parse(utf8.decode(await inflateBytes(new Uint8Array(buffer),'gzip')))
+  if(data.format!==2||!data.categories)throw Error(`Unsupported legacy LDraw index format: ${data.format}`)
+  const items=[]
+  for(const [category,parts] of Object.entries(data.categories))for(const [code,entry] of Object.entries(parts))if(Array.isArray(entry))items.push(catalogItem(code,entry[0],category))
+  if(!items.length)throw Error('Legacy LDraw index is empty')
+  return items
+}
+async function fetchIndexBuffer(url){
+  const response=await fetch(url,{mode:'cors',cache:'force-cache'})
+  if(!response.ok)throw Error(`Index HTTP ${response.status}: ${url}`)
+  return response.arrayBuffer()
+}
+async function loadCatalogIndex(){
+  let currentError
+  try{return{items:await decodeCurrentIndex(await fetchIndexBuffer(INDEX_URLS.current)),source:'current-zip'}}
+  catch(error){currentError=error;console.warn('[BrickLab Library] Current ZIP index unavailable; trying pinned legacy index.',error)}
+  try{return{items:await decodeLegacyIndex(await fetchIndexBuffer(INDEX_URLS.legacy)),source:'pinned-legacy-gzip'}}
+  catch(error){throw Error(`LDraw catalog indexes unavailable: ${currentError?.message||currentError}; ${error?.message||error}`)}
+}
 
 // Exact geometry previews share one bounded offscreen renderer. LDraw catalog records
 // are previewed directly from preloadLDrawPrototype(), so browsing never registers
@@ -83,7 +156,7 @@ async function loadIndex() {
   if(pending)return pending
   pending=(async()=>{
     try {
-      const loaded=await loadLDrawCatalogIndex()
+      const loaded=await loadCatalogIndex()
       index=loaded.items
       indexSource=loaded.source
       refresh()
