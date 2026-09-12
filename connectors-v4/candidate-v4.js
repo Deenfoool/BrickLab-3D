@@ -2,9 +2,10 @@ import * as THREE from 'three'
 import { totalProfileLengthV4 } from './schema-v4.js'
 import { matchConnectorV4 } from './matcher-v4.js'
 import { activationForMatchV4, classifyConnectorV4 } from './activation-v4.js'
+import { applyPinMateScoreBonusV4, pinMatePreferenceV4 } from './pin-ranking-v4.js?v=connector-pin-ranking-20260912-v1'
 import { connectorWorldFrameV4, objectWorldPoseV4, solvePlacementV4 } from './placement-solver-v4.js'
 
-export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.6.0'
+export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.7.0'
 export const DEFAULT_CAPTURE_DISTANCE_STUD_V4 = 0.72
 export const DEFAULT_MIN_AXIS_ALIGNMENT_V4 = 0.72
 export const CLOSE_RANGE_MIN_AXIS_ALIGNMENT_V4 = 0.55
@@ -228,7 +229,7 @@ function genericBoundingMismatch(source,target) {
   return 0
 }
 
-function candidateScore(solution,captureDistance,minAxisAlignment,orientationFree,{preferred=false,active=true,supportCount=1,boundingMismatch=0}={}) {
+function candidateScore(solution,captureDistance,minAxisAlignment,orientationFree,{preferred=false,active=true,supportCount=1,boundingMismatch=0,pinMateBonus=0}={}) {
   const distance=captureError(solution)
   const distanceScore=distance/Math.max(captureDistance,1e-6)
   const rotation=Math.min(Math.PI,Math.abs(solution.diagnostics?.rotationRad ?? 0))
@@ -250,6 +251,7 @@ function candidateScore(solution,captureDistance,minAxisAlignment,orientationFre
   score+=Math.min(1,clearance/0.35)*0.035
   score+=Math.min(1,Math.max(0,boundingMismatch))*0.08
   score-=Math.min(1,engagement/20)*0.025
+  score=applyPinMateScoreBonusV4(score,{ scoreBonus:pinMateBonus })
   if (!active) score+=4
   score-=Math.min(0.34,Math.max(0,supportCount-1)*0.048)
   if (preferred) score-=0.075
@@ -262,6 +264,7 @@ function rescore(candidate,captureDistance,minAxisAlignment,preferredKey) {
     active:candidate.activationPreview.active===true,
     supportCount:candidate.supportCount,
     boundingMismatch:candidate.boundingMismatch,
+    pinMateBonus:candidate.pinMatePreference?.scoreBonus,
   })
   return candidate
 }
@@ -394,6 +397,7 @@ export function findPlacementCandidatesV4(movingObject,targets,{
           key,
           match:solution.match,
           activationPreview,
+          pinMatePreference:pinMatePreferenceV4(activationPreview),
           solution,
           distanceStud:distance,
           originTranslationStud:solution.diagnostics?.translationStud ?? distance,

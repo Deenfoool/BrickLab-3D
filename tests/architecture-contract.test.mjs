@@ -8,6 +8,8 @@ import './smart-assembly-assistant.test.mjs'
 import './smart-assembly-curated-registry.test.mjs'
 import './smart-assembly-event-order.test.mjs'
 import './design-doctor.test.mjs'
+import './connectors-v4-pin-semantics.test.mjs'
+import './connectors-v4-pin-ranking.test.mjs'
 
 import {
   ARCHITECTURE_CONSOLIDATION_STATUS,
