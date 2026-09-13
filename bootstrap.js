@@ -210,6 +210,15 @@ await import('./parts4/catalog-parts-4.js?v=parts-4-20260908-driveline-v1')
 await import('./i18n-runtime-patch.js')
 await import('./i18n-physics-v2.js')
 await import('./i18n-physics-v2-extra.js')
+
+// Roadmap item 9 consumes only the stable project/parts/connectivity contracts. The
+// heavy renderer/PDF exporter remains lazy until the user opens a preview or exports.
+try {
+  await import('./instructions/activation-v1.js?v=instructions-20260913-v1')
+} catch (error) {
+  console.warn('[BrickLab Instructions] BOM/instruction UI unavailable; editor continues normally.', error)
+}
+
 await import('./ldraw/catalog-v3.js')
 // The family library owns lazy thumbnails; do not mount the superseded decorator.
 await import('./menu/project-menu-v1.js?v=project-menu-20260910-v1')
