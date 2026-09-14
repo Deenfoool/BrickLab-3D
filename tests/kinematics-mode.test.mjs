@@ -58,11 +58,17 @@ test('Joint control shape follows certified revolute/prismatic/cylindrical seman
 test('Production Kinematics is a lazy no-Rapier mode that protects project and V4 graph state', async () => {
   const activation = await readFile(new URL('../kinematics/activation-v1.js', import.meta.url), 'utf8')
   const runtime = await readFile(new URL('../kinematics/runtime-v1.js', import.meta.url), 'utf8')
+  const lifecycle = await readFile(new URL('../kinematics/lifecycle-guard-v1.js', import.meta.url), 'utf8')
   const bootstrap = await readFile(new URL('../bootstrap.js', import.meta.url), 'utf8')
   const index = await readFile(new URL('../index.html', import.meta.url), 'utf8')
 
   assert.match(activation, /data\.mode = 'kinematics'/)
-  assert.match(activation, /runtime-v1\.js\?v=kinematics-20260912-v1/)
+  assert.match(activation, /runtime-v1\.js\?v=kinematics-recovery-20260914-v1/)
+  assert.match(activation, /lifecycle-guard-v1\.js\?v=kinematics-recovery-20260914-v1/)
+  assert.match(activation, /BrickLabKinematics\?\.exit\?\.\(\{ restore:true \}\)/, 'failed activation must defensively restore BUILD')
+  assert.match(lifecycle, /rollback\('enter-failed', error\)/)
+  assert.match(lifecycle, /core\.exit\(\{ restore:true \}\)/)
+  assert.match(lifecycle, /stale-enter-completed-after-exit/)
   assert.match(bootstrap, /kinematics\/activation-v1\.js\?v=kinematics-20260912-v1/)
   assert.equal((index.match(/bootstrap\.js\?v=kinematics-20260912-v1/g) ?? []).length, 2)
 
