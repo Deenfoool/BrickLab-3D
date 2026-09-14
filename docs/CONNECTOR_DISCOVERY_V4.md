@@ -1,6 +1,6 @@
 # Connector V4 — Primitive Discovery Pass
 
-Status: **V4.4 implemented; local full-library audit completed**
+Status: **V4.4 implemented; local full-library audit and browser resolver smoke completed**
 
 ## V4.4: Shadow inheritance beyond subparts
 
@@ -41,6 +41,16 @@ Local validation: discovery suite **35/35**; full `test:connectors-v4`
 **210/219**, with the same nine failing legacy structural/cache assertions as
 unmodified `e5155e2` (**191/200**). The new work adds no failing tests to that
 baseline. These existing failures are not described as successful checks.
+
+Published browser QA on 2026-09-14: **9/9 PASS** at `connector-sites-qa.html`,
+using the production import map and `shadow-resolver-v4.3.0`. Parts: `32123a`,
+`32089`, `3713`, `60470`, `4488`, `3001`, `3708`, `3894`, `3648`. Counts,
+schema validation and deterministic endpoint identities passed. No application
+console errors were observed; browser-extension metadata errors are unrelated.
+This is resolver QA, not a claim of end-to-end editor/physics verification.
+The main menu loaded, but this cloud browser reports `GL_RENDERER = Disabled`
+and cannot create a WebGL context. Visual placement and simulation could not be
+verified in this environment; the no-WebGL resolver page is unaffected.
 
 Representative raw Shadow counts:
 
