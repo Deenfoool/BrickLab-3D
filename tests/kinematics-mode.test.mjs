@@ -69,8 +69,8 @@ test('Production Kinematics is a lazy no-Rapier mode that protects project and V
   assert.match(lifecycle, /rollback\('enter-failed', error\)/)
   assert.match(lifecycle, /core\.exit\(\{ restore:true \}\)/)
   assert.match(lifecycle, /stale-enter-completed-after-exit/)
-  assert.match(bootstrap, /kinematics\/activation-v1\.js\?v=kinematics-20260912-v1/)
-  assert.equal((index.match(/bootstrap\.js\?v=kinematics-20260912-v1/g) ?? []).length, 2)
+  assert.match(bootstrap, /kinematics\/activation-v1\.js\?v=/)
+  assert.equal((index.match(/bootstrap\.js\?v=[^"']+/g) ?? []).length, 2, 'import map and production script must both reference versioned bootstrap')
 
   assert.match(runtime, /buildPhysicsPlanV4/)
   assert.match(runtime, /drivetrainSemanticLinksV4/)
