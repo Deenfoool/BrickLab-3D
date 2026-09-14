@@ -2,7 +2,7 @@ import { PhysicsSession } from '../physics.js'
 import { analyzeDrivetrain } from '../drivetrain.js'
 import { buildPhysicsPlanV4, drivetrainSemanticLinksV4, PHYSICS_POLICY_VERSION_V4 } from './physics-policy-v4.js'
 import { hardenPhysicsPlanV4, PHYSICS_PLAN_SAFETY_VERSION_V4 } from './physics-plan-safety-v4.js'
-import { installConnectorPhysicsV4, PHYSICS_ADAPTER_VERSION_V4 } from './physics-adapter-v4.js'
+import { installConnectorPhysicsV4, PHYSICS_ADAPTER_VERSION_V4 } from './physics-adapter-v4.js?v=connector-resistance-20260914-v1'
 
 export const PHYSICS_GUARD_VERSION_V4 = 'connector-physics-guard-v4.5.1'
 export const PHYSICS_GUARD_ERROR_CODE_V4 = 'BRICKLAB_CONNECTOR_V4_PHYSICS_NOT_CERTIFIED'
