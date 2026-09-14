@@ -3,7 +3,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { findPart } from '../parts.js'
 import { loadPreviewLDrawModel, resetPreviewGeometryLoader } from './preview-geometry-v1.js?v=parts-library-family-preload-20260914-v1'
 
-export const PARTS_LIBRARY_PREVIEW_VERSION = 'parts-library-preview-v1.1.0'
+export const PARTS_LIBRARY_PREVIEW_VERSION = 'parts-library-preview-v1.1.1'
 
 const PREVIEW_SIZE = Object.freeze({ width:320, height:220 })
 const MAX_CONCURRENT = 2
@@ -82,6 +82,16 @@ function hashFamily(items) {
   return `${PERSISTENT_SCHEMA}:${items.length}:${(hash >>> 0).toString(36)}`
 }
 
+function dataUrlBlob(value) {
+  const match=typeof value==='string'&&value.match(/^data:([^;,]+);base64,(.+)$/)
+  if(!match||typeof globalThis.atob!=='function'||typeof Blob!=='function')return null
+  try {
+    const binary=globalThis.atob(match[2]),bytes=new Uint8Array(binary.length)
+    for(let i=0;i<binary.length;i+=1)bytes[i]=binary.charCodeAt(i)
+    return new Blob([bytes],{type:match[1]})
+  } catch{return null}
+}
+
 export function createPartsLibraryPreviewService({ findDefinition=findPart, loadLDraw=loadPreviewLDrawModel, now=()=>Date.now() } = {}) {
   const cache=new Map(),failures=new Map(),pending=new Map(),pendingPriority=new Map(),queued=new Map(),queue=[]
   const persistedKeys=new Set()
@@ -89,10 +99,13 @@ export function createPartsLibraryPreviewService({ findDefinition=findPart, load
   let persistentCachePromise=null,persistentUnavailable=false,persistentHits=0,persistentWrites=0,persistentWriteFailures=0
   let generatedSinceLoaderReset=0
 
+  function releaseUrl(value){if(typeof value==='string'&&value.startsWith('blob:'))globalThis.URL?.revokeObjectURL?.(value)}
   function remember(key,value) {
+    const previous=cache.get(key);if(previous&&previous!==value)releaseUrl(previous)
     cache.delete(key);cache.set(key,value)
-    while(cache.size>MAX_CACHE)cache.delete(cache.keys().next().value)
+    while(cache.size>MAX_CACHE){const oldest=cache.keys().next().value;releaseUrl(cache.get(oldest));cache.delete(oldest)}
   }
+  function clearMemory(){for(const value of cache.values())releaseUrl(value);cache.clear();failures.clear()}
 
   function cacheRequest(kind,key) {
     const origin=globalThis.location?.origin || 'https://bricklab.invalid'
@@ -116,8 +129,14 @@ export function createPartsLibraryPreviewService({ findDefinition=findPart, load
     try {
       const store=await persistentStore();if(!store)return null
       const response=await store.match(cacheRequest('item',key));if(!response)return null
-      const value=await response.text()
-      if(!/^data:image\//.test(value))return null
+      const type=String(response.headers.get('content-type')||'')
+      let value=null
+      if(type.startsWith('image/')){
+        const blob=await response.blob();value=globalThis.URL?.createObjectURL?.(blob)||null
+      }else{
+        const text=await response.text();if(/^data:image\//.test(text))value=text
+      }
+      if(!value)return null
       persistedKeys.add(key);persistentHits+=1
       return value
     } catch(error){console.debug?.('[BrickLab Library] Persistent preview read failed.',error);return null}
@@ -128,7 +147,8 @@ export function createPartsLibraryPreviewService({ findDefinition=findPart, load
     if(persistedKeys.has(key))return true
     try {
       const store=await persistentStore();if(!store)return false
-      await store.put(cacheRequest('item',key),new Response(value,{headers:{'content-type':'text/plain;charset=utf-8','cache-control':'max-age=31536000, immutable'}}))
+      const blob=dataUrlBlob(value),body=blob||value,type=blob?.type||'text/plain;charset=utf-8'
+      await store.put(cacheRequest('item',key),new Response(body,{headers:{'content-type':type,'cache-control':'max-age=31536000, immutable'}}))
       persistedKeys.add(key);persistentWrites+=1
       return true
     } catch(error){
@@ -268,7 +288,7 @@ export function createPartsLibraryPreviewService({ findDefinition=findPart, load
         const item=familyItems[index],key=keyFor(item)
         const alreadyPersisted=persistedKeys.has(key)
         const url=await request(item,{priority:'background'})
-        let durable=Boolean(url)&&(persistedKeys.has(key)||await writePersistent(key,url))
+        const durable=Boolean(url)&&(persistedKeys.has(key)||await writePersistent(key,url))
         if(durable){if(alreadyPersisted)cached+=1}else failed+=1
         done+=1
         notify({phase:'loading',familyId,total,done,failed,cached,cancelled:false})
@@ -288,7 +308,7 @@ export function createPartsLibraryPreviewService({ findDefinition=findPart, load
     request,
     preloadFamily,
     status(){return Object.freeze({cached:cache.size,persistedKnown:persistedKeys.size,pending:pending.size,queued:queue.length,active,rendererReady:Boolean(renderer),rendererUnavailable,persistentAvailable:!persistentUnavailable&&typeof globalThis.caches?.open==='function',persistentHits,persistentWrites,persistentWriteFailures})},
-    clear(){cache.clear();failures.clear()},
-    async clearPersistent(){persistedKeys.clear();persistentCachePromise=null;return typeof globalThis.caches?.delete==='function'?globalThis.caches.delete(PERSISTENT_CACHE):false},
+    clear(){clearMemory()},
+    async clearPersistent(){clearMemory();persistedKeys.clear();persistentCachePromise=null;return typeof globalThis.caches?.delete==='function'?globalThis.caches.delete(PERSISTENT_CACHE):false},
   })
 }
