@@ -63,12 +63,15 @@ test('Production Kinematics is a lazy no-Rapier mode that protects project and V
   const index = await readFile(new URL('../index.html', import.meta.url), 'utf8')
 
   assert.match(activation, /data\.mode = 'kinematics'/)
-  assert.match(activation, /runtime-v1\.js\?v=kinematics-recovery-20260914-v1/)
-  assert.match(activation, /lifecycle-guard-v1\.js\?v=kinematics-recovery-20260914-v1/)
+  assert.match(activation, /runtime-v1\.js\?v=kinematics-recovery-20260914-v2/)
+  assert.match(activation, /lifecycle-guard-v1\.js\?v=kinematics-recovery-20260914-v2/)
   assert.match(activation, /BrickLabKinematics\?\.exit\?\.\(\{ restore:true \}\)/, 'failed activation must defensively restore BUILD')
   assert.match(lifecycle, /rollback\('enter-failed', error\)/)
   assert.match(lifecycle, /core\.exit\(\{ restore:true \}\)/)
   assert.match(lifecycle, /stale-enter-completed-after-exit/)
+  assert.match(lifecycle, /Object\.isFrozen\(current\)/, 'frozen Connector V4 must receive a compatibility facade before legacy proxying')
+  assert.match(lifecycle, /mutableFacade\(current\)/)
+  assert.doesNotMatch(lifecycle, /new Proxy\(/, 'lifecycle guard itself must never proxy a frozen runtime API')
   assert.match(bootstrap, /kinematics\/activation-v1\.js\?v=/)
   assert.equal((index.match(/bootstrap\.js\?v=[^"']+/g) ?? []).length, 2, 'import map and production script must both reference versioned bootstrap')
 
