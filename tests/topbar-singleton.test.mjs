@@ -23,6 +23,15 @@ test('legacy header actions remain only as invisible action bridges', () => {
   assert.match(singleton, /aria-hidden/)
 })
 
+test('demo and FNR powertrain controls are retired from the production topbar', () => {
+  for (const id of ['demoProjectBtn', 'transmissionControl']) {
+    assert.match(singleton, new RegExp(id))
+  }
+  assert.match(singleton, /removeRetiredTopbarControls/)
+  assert.match(singleton, /element\.remove\(\)/)
+  assert.match(singleton, /removedTopbarIds: REMOVED_TOPBAR_IDS/)
+})
+
 test('singleton takes ownership immediately after app mounts and before UI contributors', () => {
   const app = bootstrap.indexOf("await import('./app.js')")
   const singletonImport = bootstrap.indexOf("await import('./editor/topbar-singleton-v1.js?v=topbar-singleton-20260914-v1')")
