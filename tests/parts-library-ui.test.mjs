@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { Window } from 'happy-dom'
 import { mountPartsLibrary, LIBRARY_KEYS, hasNewPreview } from '../ldraw/library-view-v1.js'
 import { libraryItems } from '../ldraw/library-model-v1.js'
+import { createPartsLibraryFamilyPreloader } from '../ldraw/library-family-preload-v1.js'
 
 const fixtures=libraryItems([
   {file:'32073.dat',code:'32073',description:'Technic Axle 5',category:'Technic'},
@@ -90,6 +91,41 @@ test('Rendered cards request bounded real previews and selected detail requests 
   view.destroy();await window.happyDOM.close()
 })
 
+test('Choosing a family warms every preview in that family and reports progress',async()=>{
+  const {root,window,view,click}=setup()
+  const calls=[]
+  const service={
+    async preloadFamily(familyId,items,{onProgress,signal}={}){
+      calls.push({familyId,keys:items.map(item=>item.key),signal})
+      onProgress?.({phase:'loading',familyId,total:items.length,done:1,failed:0,cached:0,percent:33,cancelled:false})
+      await Promise.resolve()
+      const result={phase:'complete',familyId,total:items.length,done:items.length,failed:0,cached:items.length,percent:100,cancelled:false}
+      onProgress?.(result)
+      return result
+    },
+  }
+  const warmer=createPartsLibraryFamilyPreloader(root,{previewService:service,getItems:()=>fixtures,getFamily:()=>view.state().family,language:()=> 'en'})
+  click('[data-family="technic"]')
+  await new Promise(resolve=>setTimeout(resolve,10))
+  assert.equal(calls.length,1)
+  assert.equal(calls[0].familyId,'technic')
+  assert.deepEqual(calls[0].keys.sort(),['ldraw-32073','ldraw-32270','ldraw-3648'].sort(),'family warm-up ignores System parts')
+  assert.match(root.querySelector('[data-family-preload-label]').textContent,/All Technic previews are ready/)
+  assert.equal(root.querySelector('[data-family-preload-track]').getAttribute('aria-valuenow'),'100')
+  assert.match(root.querySelector('[data-family-preload-count]').textContent,/3 \/ 3/)
+  warmer.destroy();view.destroy();await window.happyDOM.close()
+})
+
+test('Leaving a family aborts its unfinished background preview warm-up',async()=>{
+  const {root,window,view,click}=setup()
+  let signal=null,finish=null
+  const service={preloadFamily(familyId,items,options={}){signal=options.signal;return new Promise(resolve=>{finish=()=>resolve({phase:'cancelled',familyId,total:items.length,done:0,failed:0,cached:0,percent:0,cancelled:true})})}}
+  const warmer=createPartsLibraryFamilyPreloader(root,{previewService:service,getItems:()=>fixtures,getFamily:()=>view.state().family,language:()=> 'en'})
+  click('[data-family="technic"]');await new Promise(resolve=>setTimeout(resolve,0));assert.ok(signal)
+  click('[data-change]');await new Promise(resolve=>setTimeout(resolve,0));assert.equal(signal.aborted,true)
+  finish?.();warmer.destroy();view.destroy();await window.happyDOM.close()
+})
+
 test('Failed insertion never records a recent part',async()=>{
   const {root,window,view,click}=setup({insert:async()=>{throw Error('BUILD required')}})
   click('[data-family="technic"]');click('[data-add="ldraw-32073"]');await new Promise(r=>setTimeout(r,0))
@@ -115,30 +151,44 @@ test('Untrusted metadata is escaped and does not become markup',async()=>{
   view.destroy();await window.happyDOM.close()
 })
 
-test('Production retains native insertion and exact preview loading without catalog registration side effects',async()=>{
+test('Production retains native insertion plus bounded persistent preview warming without catalog registration side effects',async()=>{
   const catalog=await readFile(new URL('../ldraw/catalog-v3.js',import.meta.url),'utf8')
   const previews=await readFile(new URL('../ldraw/library-preview-v1.js',import.meta.url),'utf8')
+  const geometry=await readFile(new URL('../ldraw/preview-geometry-v1.js',import.meta.url),'utf8')
+  const familyWarmup=await readFile(new URL('../ldraw/library-family-preload-v1.js',import.meta.url),'utf8')
   assert.match(catalog,/registerLDrawPart\(\{\.\.\.item,category:item.sourceCategory\}\)/)
   assert.match(catalog,/card\.click\(\)/);assert.match(catalog,/BrickLabKinematics\?\.active/)
   assert.match(catalog,/createPartsLibraryPreviewService/)
+  assert.match(catalog,/createPartsLibraryFamilyPreloader/)
   assert.doesNotMatch(catalog,/www\.ldraw\.org\/library\/official\/images/,'library must not depend on the failed remote thumbnail endpoint')
-  assert.match(previews,/preloadLDrawPrototype/)
-  assert.match(previews,/payload\.model/,'unregistered LDraw catalog records must preview the real loaded geometry')
+  assert.match(previews,/loadPreviewLDrawModel/)
+  assert.match(previews,/globalThis\.caches\.open/,'completed family previews persist in browser Cache Storage')
+  assert.match(previews,/priority === 'background'/,'family warming stays below visible-card work')
+  assert.match(previews,/const MAX_CACHE = 240/,'RAM thumbnail cache remains bounded')
+  assert.match(previews,/const MAX_CONCURRENT = 2/,'geometry preview loading remains bounded')
+  assert.match(geometry,/parseCompleteLDraw/)
+  assert.match(geometry,/resetPreviewGeometryLoader/,'preview-only parser cache can be rotated during huge families')
+  assert.match(familyWarmup,/data-family-preload-track/)
   assert.doesNotMatch(previews,/registerLDrawPart/,'previewing must not mutate the authoritative PARTS registry')
+  assert.doesNotMatch(geometry,/registerLDrawPart/,'transient preview geometry must not register parts')
   assert.equal((previews.match(/new THREE\.WebGLRenderer/g)||[]).length,1,'one shared offscreen renderer owns all library previews')
-  assert.match(previews,/MAX_CONCURRENT = 2/,'geometry preview loading remains bounded')
   assert.doesNotMatch(catalog,/new PhysicsSession|createRigidBody|insertPart\(/)
 })
 
-test('UI cache generation is coherent without changing unrelated import targets',async()=>{
+test('Production catalog uses an isolated cache generation for family preview warming',async()=>{
   const index=await readFile(new URL('../index.html',import.meta.url),'utf8')
+  const bootstrap=await readFile(new URL('../bootstrap.js',import.meta.url),'utf8')
+  const catalog=await readFile(new URL('../ldraw/catalog-v3.js',import.meta.url),'utf8')
+  const view=await readFile(new URL('../ldraw/library-view-v1.js',import.meta.url),'utf8')
   const map=JSON.parse(index.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]).imports
-  assert.equal(map['./bootstrap.js'],'./bootstrap.js?v=parts-library-20260912-v5')
-  assert.equal(map['./ldraw/catalog-v3.js'],'./ldraw/catalog-v3.js?v=parts-library-20260912-v5')
+  assert.match(map['./bootstrap.js'],/^\.\/bootstrap\.js\?v=/)
+  assert.match(map['./ldraw/catalog-v3.js'],/^\.\/ldraw\/catalog-v3\.js\?v=/)
   assert.equal(map['./app.js'],'./app.js?v=parts-6-20260911-editor-groups-v2')
   assert.match(map['./ldraw/runtime-v3.js?v=ldraw-catalog-20260910-v3'],/runtime-metadata-cache-v1/)
-  for(const file of ['library-view-v1.js','catalog-v3.js']){
-    const code=await readFile(new URL(`../ldraw/${file}`,import.meta.url),'utf8')
-    for(const match of code.matchAll(/\.\/library-[^'" ]+/g))assert.match(match[0],/\?v=parts-library-20260912-v5$/)
-  }
+  assert.match(bootstrap,/\.\/ldraw\/catalog-v3\.js\?v=parts-library-family-preload-20260914-v1/)
+  assert.match(catalog,/\.\/library-model-v1\.js\?v=parts-library-20260912-v5/)
+  assert.match(catalog,/\.\/library-view-v1\.js\?v=parts-library-20260912-v5/)
+  assert.match(catalog,/\.\/library-preview-v1\.js\?v=parts-library-family-preload-20260914-v1/)
+  assert.match(catalog,/\.\/library-family-preload-v1\.js\?v=parts-library-family-preload-20260914-v1/)
+  for(const match of view.matchAll(/\.\/library-[^'" ]+/g))assert.match(match[0],/\?v=parts-library-20260912-v5$/)
 })
