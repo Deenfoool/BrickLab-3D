@@ -160,6 +160,12 @@ try {
 } finally {
   globalThis.BrickLabEditorGroups?.cancelSelectionCapture?.()
 }
+
+// The current production header is the only visible editor bar. Legacy New/Save/
+// Export/Help buttons remain only as invisible action bridges so existing shortcuts
+// and project-menu forwarding keep working without ever rendering the old header.
+await import('./editor/topbar-singleton-v1.js?v=topbar-singleton-20260914-v1')
+
 // Bind the current lexical editor state to the stable Architecture API only after
 // app.js has created the scene, selection collection, history controls and V4 object source.
 await import('./architecture/editor-adapter-v1.js?v=architecture-20260911-v1')
