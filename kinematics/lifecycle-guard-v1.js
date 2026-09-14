@@ -1,6 +1,29 @@
-export const KINEMATICS_LIFECYCLE_GUARD_VERSION = 'kinematics-lifecycle-guard-v1.0.0'
+export const KINEMATICS_LIFECYCLE_GUARD_VERSION = 'kinematics-lifecycle-guard-v1.0.1'
 
 const guardedMarker = Symbol.for('bricklab.kinematics.lifecycle-guard.v1')
+
+function frozenFacade(core, overrides) {
+  const facade = {}
+  for (const key of Reflect.ownKeys(core)) {
+    if (Object.prototype.hasOwnProperty.call(overrides, key)) continue
+    const descriptor = Object.getOwnPropertyDescriptor(core, key)
+    Object.defineProperty(facade, key, {
+      value:core[key],
+      enumerable:descriptor?.enumerable ?? true,
+      writable:false,
+      configurable:false,
+    })
+  }
+  for (const key of Reflect.ownKeys(overrides)) {
+    Object.defineProperty(facade, key, {
+      value:overrides[key],
+      enumerable:typeof key === 'string',
+      writable:false,
+      configurable:false,
+    })
+  }
+  return Object.freeze(facade)
+}
 
 export function guardKinematicsRuntime(core) {
   if (!core || typeof core.enter !== 'function' || typeof core.exit !== 'function' || typeof core.active !== 'function') {
@@ -39,8 +62,6 @@ export function guardKinematicsRuntime(core) {
     entering = true
     try {
       await core.enter(...args)
-      // A guarded exit can happen while the core is awaiting connector hydration.
-      // If stale startup later resumes and reactivates itself, force one final cleanup.
       if (token !== epoch && core.active()) rollback('stale-enter-completed-after-exit')
       return guarded
     } catch (error) {
@@ -58,15 +79,12 @@ export function guardKinematicsRuntime(core) {
     return guarded
   }
 
-  guarded = new Proxy(core, {
-    get(target, property, receiver) {
-      if (property === guardedMarker) return true
-      if (property === 'enter') return enter
-      if (property === 'exit') return exit
-      if (property === 'lifecycleGuardVersion') return KINEMATICS_LIFECYCLE_GUARD_VERSION
-      if (property === 'lastRollback') return () => lastRollback
-      return Reflect.get(target, property, receiver)
-    },
+  guarded = frozenFacade(core, {
+    [guardedMarker]:true,
+    enter,
+    exit,
+    lifecycleGuardVersion:KINEMATICS_LIFECYCLE_GUARD_VERSION,
+    lastRollback:() => lastRollback,
   })
   return guarded
 }
