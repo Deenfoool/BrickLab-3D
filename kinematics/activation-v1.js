@@ -1,4 +1,4 @@
-export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.0.0'
+export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.1.0'
 
 const LANGUAGE_KEY = 'bricklab.ui.language.v1'
 
@@ -85,13 +85,24 @@ async function activate(event) {
   button.dataset.kinematicsState = 'loading'
   button.title = copy().loading
   try {
-    await import('./runtime-v1.js?v=kinematics-20260912-v1')
-    const api = globalThis.BrickLabKinematics
-    if (!api?.enter) throw new Error('Kinematics runtime loaded without an enter API')
+    await import('./runtime-v1.js?v=kinematics-recovery-20260914-v1')
+    const { guardKinematicsRuntime } = await import('./lifecycle-guard-v1.js?v=kinematics-recovery-20260914-v1')
+    const core = globalThis.BrickLabKinematics
+    if (!core?.enter) throw new Error('Kinematics runtime loaded without an enter API')
+    const api = guardKinematicsRuntime(core)
+    globalThis.BrickLabKinematics = api
     button.dataset.kinematicsState = 'ready'
     localizeButton(button)
     await api.enter()
   } catch (error) {
+    // Runtime startup mutates editor input/V4 ownership before analysis finishes.
+    // Always attempt a full restore here as a second boundary even though the lifecycle
+    // guard already rolls back a failed enter. exit() is deliberately idempotent.
+    try {
+      globalThis.BrickLabKinematics?.exit?.({ restore:true })
+    } catch (rollbackError) {
+      console.error('[BrickLab Kinematics] Could not restore BUILD after failed startup', rollbackError)
+    }
     button.dataset.kinematicsState = 'error'
     button.title = `${copy().error}: ${error?.message || error}`
     console.error('[BrickLab Kinematics] Runtime failed to load', error)
