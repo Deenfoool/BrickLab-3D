@@ -1,7 +1,8 @@
 import { cloneConnectorV4, SHADOW_SOURCE_V4 } from './schema-v4.js'
 import { expandGridV4, parseShadowTextV4 } from './ldcad-parser-v4.js'
+import { CONNECTOR_INHERITANCE_PATHS_V4 } from './inheritance-index-v4.js?v=connector-sites-20260914-v2'
 
-export const SHADOW_RESOLVER_VERSION_V4 = 'shadow-resolver-v4.2.1'
+export const SHADOW_RESOLVER_VERSION_V4 = 'shadow-resolver-v4.3.0'
 
 const SCALE_EPS = 1e-5
 const ORTHO_EPS = 2e-4
@@ -159,7 +160,7 @@ function referenceCandidates(ref,parentPath){
 }
 function shouldRecurseOfficial(ref){const v=lowerPath(ref);return v.startsWith('s/')||v.startsWith('parts/s/')}
 
-export function createShadowResolverV4({fetchOfficialText,fetchShadowText,maxDepth=DEFAULT_MAX_DEPTH,maxNodes=DEFAULT_MAX_NODES}={}) {
+export function createShadowResolverV4({fetchOfficialText,fetchShadowText,maxDepth=DEFAULT_MAX_DEPTH,maxNodes=DEFAULT_MAX_NODES,inheritancePaths=CONNECTOR_INHERITANCE_PATHS_V4}={}) {
   if(typeof fetchOfficialText!=='function'||typeof fetchShadowText!=='function')throw new Error('createShadowResolverV4 requires fetchOfficialText and fetchShadowText')
   const officialCache=new Map(),shadowCache=new Map(),flatShadowCache=new Map(),directShadowCache=new Map(),resolvedCache=new Map()
 
@@ -254,6 +255,20 @@ export function createShadowResolverV4({fetchOfficialText,fetchShadowText,maxDep
         const nextStack=[...stack,key]
         for(const reference of parseType1ReferencesV4(official)){
           const candidates=referenceCandidates(reference.ref,key)
+          const indexedChild=candidates.find(path=>inheritancePaths.has(path))
+          if(indexedChild&&!shouldRecurseOfficial(reference.ref)){
+            const child=await resolveOfficialLocal(indexedChild,depth+1,nextStack,traversal)
+            const branchWarnings=[...child.warnings],staged=[]
+            for(const sourceConnector of child.connectors){
+              const transformed=transformConnector(sourceConnector,reference.transform,branchWarnings,`${key} -> ${indexedChild}`,{enforceInheritance:true})
+              if(transformed)staged.push(transformed)
+            }
+            if(!branchWarnings.length){connectors.push(...staged);continue}
+            // Expansion is additive: quarantine an uncertain *new* subtree as a
+            // transaction. Existing direct Shadow metadata below remains subject
+            // to its original validation; never substitute approximate geometry.
+            warnings.push({code:'discovery-branch-quarantined',file:key,detail:indexedChild,warnings:branchWarnings})
+          }
           if(shouldRecurseOfficial(reference.ref)){
             const childPath=candidates[0]
             const child=await resolveOfficialLocal(childPath,depth+1,nextStack,traversal)

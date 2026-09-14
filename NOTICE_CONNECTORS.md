@@ -23,3 +23,18 @@ The BrickLab source code implementing the parser, resolver, matcher, diagnostics
 ## LDraw
 
 The geometry source remains the LDraw Parts Library. See the LDraw attribution and licensing section in the repository README and `docs/LDRAW.md`.
+
+## Inheritance discovery audit and fixtures
+
+`connectors-v4/inheritance-index-v4.js` is a generated routing index derived from
+LDraw file references and the pinned Shadow snapshot. Treat this derived index
+as CC BY-SA 4.0. It contains paths, not geometry or invented connector profiles.
+
+`tests/fixtures/connector-inheritance-v4.json` keeps verbatim source files with
+their author/license headers. Its `official` section comes from
+https://github.com/pybricks/ldraw/tree/c43ed06a128a10ed65675166bf42eb6fd608b9b0
+and is used under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
+Its `shadow` section comes from the pinned LDCad Shadow repository above and is
+CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Individual authors
+remain identified in the original file headers. Source text is unmodified;
+JSON encoding and selection for regression testing are BrickLab packaging.
