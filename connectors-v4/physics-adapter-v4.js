@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { PHYSICS_UNITS } from '../physical-parts.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_ADAPTER_VERSION_V4 = 'connector-rapier-adapter-v4.3.0'
+export const PHYSICS_ADAPTER_VERSION_V4 = 'connector-rapier-adapter-v4.4.0'
 
 // Rapier GenericJoint axesMask means LOCKED axes. Joint-frame X is the connector axis.
 const MASK_PRISMATIC_X = 2 | 4 | 8 | 16 | 32
@@ -10,11 +10,12 @@ const MASK_CYLINDRICAL_X = 2 | 4 | 16 | 32
 const RELEASE_CONFIRM_FRAMES = 2
 const MAX_INITIAL_LINEAR_ERROR = 0.04
 const MAX_INITIAL_ANGULAR_ERROR = THREE.MathUtils.degToRad(1)
+const MAX_RESISTANCE_CANCEL_FRACTION = 0.92
+const MIN_DYNAMIC_MASS_KG = 1e-8
 const STUD_METERS = PHYSICS_UNITS.studMeters
 
 function vec(v) { return {x:v.x,y:v.y,z:v.z} }
 function quat(q) { return {x:q.x,y:q.y,z:q.z,w:q.w} }
-function clamp(value,min,max) { return Math.max(min,Math.min(max,value)) }
 function itemEntries(item) { return Array.isArray(item?.entries) && item.entries.length ? item.entries : [item?.entry].filter(Boolean) }
 
 function bodyQuaternion(body) {
@@ -165,15 +166,55 @@ function relativeLinearSpeed(monitor) {
   return {axis,speed:(bv.x-av.x)*axis.x+(bv.y-av.y)*axis.y+(bv.z-av.z)*axis.z}
 }
 
-function applyResistance(monitor) {
+function memberInverseMass(member) {
+  const body=member?.body
+  if (!body) return 0
+  if (typeof body.isDynamic==='function' && !body.isDynamic()) return 0
+
+  const bodyMass=Number(body.mass?.())
+  if (Number.isFinite(bodyMass) && bodyMass>MIN_DYNAMIC_MASS_KG) return 1/bodyMass
+
+  // Test fixtures and a few compatibility bodies can expose their intended mass on
+  // the BrickLab component before Rapier reports aggregate collider mass. Keep that
+  // fallback explicit instead of guessing a synthetic mass in the resistance solver.
+  const componentMass=Number(member?.component?.massKg)
+  return Number.isFinite(componentMass) && componentMass>MIN_DYNAMIC_MASS_KG ? 1/componentMass : 0
+}
+
+function applyResistance(monitor,dt) {
   const resistance=monitor.item.rule.resistance
-  if (!resistance || monitor.released || monitor.internal) return
+  if (!resistance || monitor.released || monitor.internal || !(dt>0) || !Number.isFinite(dt)) return
+
   const {axis,speed}=relativeLinearSpeed(monitor)
-  if (Math.abs(speed)<1e-5) return
-  const magnitude=clamp(-speed*resistance.axialDamping,-resistance.maxAxialForce,resistance.maxAxialForce)
-  const force=axis.multiplyScalar(magnitude)
-  monitor.memberB.body.addForce(vec(force),true)
-  monitor.memberA.body.addForce(vec(force.clone().multiplyScalar(-1)),true)
+  const speedAbs=Math.abs(speed)
+  if (speedAbs<1e-5) return
+
+  const damping=Math.max(0,Number(resistance.axialDamping)||0)
+  const maxForce=Math.max(0,Number(resistance.maxAxialForce)||0)
+  if (!(damping>0) || !(maxForce>0)) return
+
+  const inverseMassA=memberInverseMass(monitor.memberA)
+  const inverseMassB=memberInverseMass(monitor.memberB)
+  const inverseMassSum=inverseMassA+inverseMassB
+  if (!(inverseMassSum>0) || !Number.isFinite(inverseMassSum)) return
+
+  const effectiveMass=1/inverseMassSum
+  const desiredImpulse=speedAbs*damping*dt
+  const forceLimitedImpulse=maxForce*dt
+  const cancellationImpulse=speedAbs*effectiveMass*MAX_RESISTANCE_CANCEL_FRACTION
+  const magnitude=Math.min(desiredImpulse,forceLimitedImpulse,cancellationImpulse)
+  if (!(magnitude>0) || !Number.isFinite(magnitude)) return
+
+  // Use an impulse rather than an explicit force integration. The cancellation cap
+  // guarantees this pairwise friction step cannot reverse the relative axial velocity,
+  // so it cannot add kinetic energy even for gram-scale LDraw bodies. Monitors are
+  // processed sequentially, which is important when one axle/pin engages two receivers.
+  const impulse=axis.multiplyScalar(-Math.sign(speed)*magnitude)
+  if (inverseMassB>0) monitor.memberB.body.applyImpulse(vec(impulse),true)
+  if (inverseMassA>0) monitor.memberA.body.applyImpulse(vec(impulse.clone().multiplyScalar(-1)),true)
+
+  monitor.lastResistanceImpulseNs=magnitude
+  monitor.lastResistanceSpeedMps=speed
 }
 
 function rebuildSemanticDrivetrainAfterRelease(session,monitor) {
@@ -232,7 +273,7 @@ function installHooks(session,monitors,runtime) {
   const originalMotor=session.applyMotorTorques?.bind(session)
   session.applyMotorTorques=function connectorV4Forces(dt) {
     originalMotor?.(dt)
-    for (const monitor of monitors) applyResistance(monitor)
+    for (const monitor of monitors) applyResistance(monitor,dt)
   }
 
   const originalSync=session.syncObjects.bind(session)
@@ -261,7 +302,7 @@ function preflightEntry(item) {
 export function installConnectorPhysicsV4(session,plan,runtime) {
   if (!session?.world || !session?.RAPIER || !runtime) throw new TypeError('A built PhysicsSession and Connector V4 runtime are required')
   if (!plan?.pass) throw new Error('Connector V4 physics plan contains blockers')
-  if (!(STUD_METERS > 0 && Number.isFinite(STUD_METERS))) throw new Error('Connector V4 physics unit scale is invalid')
+  if (!(STUD_METERS>0 && Number.isFinite(STUD_METERS))) throw new Error('Connector V4 physics unit scale is invalid')
 
   const preflightFailures=[]
   for (const item of plan.joints) {
@@ -291,8 +332,9 @@ export function installConnectorPhysicsV4(session,plan,runtime) {
   session.connectorV4Physics={
     adapterVersion:PHYSICS_ADAPTER_VERSION_V4,
     policyVersion:plan.version,
-    safetyVersion:plan.safetyVersion ?? null,
+    safetyVersion:plan.safetyVersion??null,
     units:{studMeters:STUD_METERS,anchorUnit:'m'},
+    resistance:{mode:'effective-mass-bounded-impulse',maxCancellationFraction:MAX_RESISTANCE_CANCEL_FRACTION},
     planned:plan.joints.length,
     active:activeCount,
     internal:internalCount,
@@ -304,7 +346,7 @@ export function installConnectorPhysicsV4(session,plan,runtime) {
   installHooks(session,monitors,runtime)
   window.dispatchEvent(new CustomEvent('bricklab:connectorv4physicsready',{detail:{
     adapterVersion:PHYSICS_ADAPTER_VERSION_V4,
-    safetyVersion:plan.safetyVersion ?? null,
+    safetyVersion:plan.safetyVersion??null,
     studMeters:STUD_METERS,
     joints:session.connectorV4Physics.active,
     internal:session.connectorV4Physics.internal,
