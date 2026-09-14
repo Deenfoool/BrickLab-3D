@@ -45,6 +45,48 @@ if (showMainMenu) {
   }
 }
 
+// app.js mounts the historical base topbar before later editor layers add Kinematics,
+// overlay controls, localized labels and build-instruction actions. Keep that mutable
+// chrome hidden until the full production bootstrap has finished, so New/Open/Continue
+// reveal one final header instead of flashing through legacy/intermediate variants.
+const EDITOR_CHROME_STYLE_ID = 'bricklab-editor-chrome-boot-guard'
+const EDITOR_CHROME_READY_CLASS = 'bricklab-editor-chrome-ready'
+function beginEditorChromeBoot() {
+  if (!document.getElementById(EDITOR_CHROME_STYLE_ID)) {
+    const style = document.createElement('style')
+    style.id = EDITOR_CHROME_STYLE_ID
+    style.textContent = `
+html:not(.${EDITOR_CHROME_READY_CLASS}) #app .topbar {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+html.${EDITOR_CHROME_READY_CLASS} #app .topbar {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 120ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.${EDITOR_CHROME_READY_CLASS} #app .topbar { transition: none; }
+}`
+    document.head.append(style)
+  }
+  document.documentElement.classList.remove(EDITOR_CHROME_READY_CLASS)
+  document.getElementById('app')?.setAttribute('aria-busy', 'true')
+}
+function revealEditorChrome() {
+  const reveal = () => {
+    document.documentElement.classList.add(EDITOR_CHROME_READY_CLASS)
+    document.getElementById('app')?.removeAttribute('aria-busy')
+  }
+  if (document.visibilityState === 'hidden') {
+    reveal()
+    return
+  }
+  requestAnimationFrame(() => requestAnimationFrame(reveal))
+}
+beginEditorChromeBoot()
+
 // app.js currently restores the last local project during module evaluation. For a
 // deliberate New/Open action, temporarily hide that snapshot while the editor boots,
 // then put it back so "New project" never destroys the user's previous saved build.
@@ -226,3 +268,4 @@ await import('./menu/project-menu-v1.js?v=project-menu-20260910-v1')
 const { assertPhysicsRuntimeContract } = await import('./physics-ownership-v1.js')
 assertPhysicsRuntimeContract()
 window.__bricklabRuntimeReady = true
+revealEditorChrome()

@@ -105,8 +105,25 @@ test('project loader preloads actual v4 menu assets and reports real transfer pr
   assert.match(bootstrap, /main-menu-v5\.js\?v=hero-reducer-20260910-v1/)
 })
 
+test('editor topbar stays hidden until production UI bootstrap is complete', () => {
+  const guard = bootstrap.indexOf('beginEditorChromeBoot()')
+  const appBoot = bootstrap.indexOf("await import('./app.js')")
+  const overlay = bootstrap.indexOf("await import('./overlay-ui.js')")
+  const instructions = bootstrap.indexOf("await import('./instructions/activation-v1.js")
+  const ready = bootstrap.indexOf('window.__bricklabRuntimeReady = true')
+  const reveal = bootstrap.lastIndexOf('revealEditorChrome()')
+
+  assert.ok(guard >= 0 && guard < appBoot)
+  assert.ok(appBoot < overlay)
+  assert.ok(overlay < instructions)
+  assert.ok(instructions < ready)
+  assert.ok(ready < reveal)
+  assert.match(bootstrap, /html:not\(\.\$\{EDITOR_CHROME_READY_CLASS\}\) #app \.topbar/)
+  assert.match(bootstrap, /aria-busy/)
+})
+
 test('v4 boot cache tag and responsive composition are current', () => {
-  assert.match(index, /bootstrap\.js\?v=parts-6-20260910-hero-v1/)
+  assert.match(index, /bootstrap\.js\?v=editor-topbar-20260914-v1/)
   for (const marker of ['bl4-left', 'bl4-center', 'bl4-right', 'bl4-top', 'bl4-footer', 'bl4-actions', 'bl4-hero']) {
     assert.match(css, new RegExp(`\\.${marker}`))
   }
