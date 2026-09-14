@@ -1,4 +1,4 @@
-export const CONNECTOR_SEMANTIC_SITES_VERSION_V4='connector-semantic-sites-v4.1.0'
+export const CONNECTOR_SEMANTIC_SITES_VERSION_V4='connector-semantic-sites-v4.2.0'
 
 const IDENTITY_3=Object.freeze([1,0,0,0,1,0,0,0,1])
 const ORTHO_EPS=2e-4
@@ -10,7 +10,6 @@ const DEFAULT_MAX_DEPTH=8
 const DEFAULT_MAX_NODES=192
 const MAX_AXIAL_SCALE=1024
 const STANDARD_STUD_PRIMITIVES=new Set(['stud2.dat','stud2a.dat','studa.dat'])
-const ANTI_STUD_PRIMITIVES=new Set(['stud4.dat','stud4a.dat'])
 const AXLE_HOLE_PRIMITIVES=new Set(['axlehole.dat','axlehol0.dat'])
 
 const normalizePath=value=>String(value||'').replace(/\\/g,'/').replace(/^\.\//,'').replace(/^parts\//i,'').replace(/\/+/g,'/').trim()
@@ -83,10 +82,9 @@ function descriptorFor(ref){
     role:'stud',policy:'unit',anchor:[0,0,0],localOrientation:IDENTITY_3,
     connector:cylinder('male','R',6,4,{caps:'one',centered:false,slide:false}),
   }
-  if(ANTI_STUD_PRIMITIVES.has(name))return{
-    role:'anti-stud',policy:'axial-scale',anchor:[0,-4,0],localOrientation:[1,0,0,0,-1,0,0,0,-1],
-    connector:cylinder('female','R',6,4,{caps:'one',centered:false,slide:false}),
-  }
+  // Shadow p/stud4.dat deliberately disables this generic receiver: tube
+  // geometry alone does not prove clearance for the surrounding brick/plate.
+  // Keep part-specific Shadow anti-studs; never resurrect the disabled hint.
   if(name==='axle.dat')return{
     role:'technic-axle',policy:'axial-scale',anchor:[0,.5,0],localOrientation:IDENTITY_3,
     connector:cylinder('male','A',6,1,{caps:'none',centered:true,slide:true}),
@@ -169,7 +167,7 @@ export function semanticConnectorRoleV4(connector){
   const sections=sectionsOf(connector)
   const shapes=sections.map(rigidShape)
   const allA6=sections.length>0&&sections.every((section,index)=>shapes[index]==='A'&&Math.abs(Number(section.radiusLdu)-6)<=.2)
-  if(connector.gender==='male'&&connector.snap?.slide===true&&connector.geometry?.centered===true&&allA6)return'technic-axle'
+  if(connector.gender==='male'&&connector.snap?.slide===true&&allA6)return'technic-axle'
   if(connector.gender==='female'&&connector.snap?.slide===true&&allA6)return'technic-axle-hole'
   if(connector.gender==='male'&&connector.snap?.slide===false&&sections.length===1&&shapes[0]==='R'&&Math.abs(Number(sections[0].radiusLdu)-6)<=.2&&Math.abs(Number(sections[0].lengthLdu)-4)<=.3)return'stud'
   if(connector.gender==='female'&&connector.snap?.slide===false&&sections.length===1&&['R','S'].includes(shapes[0])&&Math.abs(Number(sections[0].radiusLdu)-6)<=.2&&String(connector.geometry?.caps||'one').toLowerCase()==='one')return'anti-stud'
@@ -186,7 +184,8 @@ function intervalOn(connector,origin,axis){
 }
 
 function coveredBy(existing,discovered,roleOf){
-  const existingRole=roleOf(existing),discoveredRole=roleOf(discovered)
+  const coverageRole=c=>['technic-pin-hole','technic-round-hole'].includes(roleOf(c))?'pin-receiver':roleOf(c)
+  const existingRole=coverageRole(existing),discoveredRole=coverageRole(discovered)
   if(!existingRole||!discoveredRole||existingRole!==discoveredRole)return false
   const axis=axisOf(existing),otherAxis=axisOf(discovered),ep=existing?.frame?.positionLdu,dp=discovered?.frame?.positionLdu
   if(!axis||!otherAxis||!Array.isArray(ep)||!Array.isArray(dp))return false

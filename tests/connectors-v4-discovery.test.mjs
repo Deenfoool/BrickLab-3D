@@ -150,17 +150,14 @@ test('two opposite pin halves remain two valid connection regions instead of bei
   assert.equal(merged.added.length,2)
 })
 
-test('V4.3 recovers alternate standard studs and scaled anti-stud tubes',async()=>{
+test('alternate studs are recovered but context-dependent underside tubes are not invented',async()=>{
   const result=await semanticScan([
     identity('stud2.dat',0,0,0),
     identity('stud2a.dat',20,0,0),
     identity('studa.dat',40,0,0),
     '1 16 60 4 0 1 0 0 0 -5 0 0 0 1 stud4.dat',
   ].join('\n'))
-  assert.deepEqual(result.connectors.map(semanticConnectorRoleV4),['stud','stud','stud','anti-stud'])
-  const anti=result.connectors.at(-1)
-  assert.deepEqual(anti.frame.positionLdu,[60,24,0])
-  assert.equal(anti.geometry.sections[0].lengthLdu,20)
+  assert.deepEqual(result.connectors.map(semanticConnectorRoleV4),['stud','stud','stud'])
 })
 
 test('V4.3 centers real axle and axle-hole primitives over their transformed spans',async()=>{
@@ -175,17 +172,17 @@ test('V4.3 centers real axle and axle-hole primitives over their transformed spa
   assert.equal(result.connectors[1].geometry.sections[0].lengthLdu,40)
 })
 
-test('V4.3 anti-stud merge is suppressed by the authoritative Shadow region',async()=>{
-  const discovered=(await semanticScan('1 16 0 4 0 1 0 0 0 -5 0 0 0 1 stud4.dat')).connectors[0]
+test('Shadow-only anti-stud remains unchanged when tube fallback is disabled',async()=>{
   const existing={
     schemaVersion:4,family:'cylinder',gender:'female',group:null,
     frame:{positionLdu:[0,24,0],orientation:[1,0,0,0,1,0,0,0,1]},
     geometry:{sections:[{shape:'R',radiusLdu:6,lengthLdu:20}],caps:'one',centered:false},
     snap:{slide:false},inheritance:{scale:'none',mirror:'cor'},
   }
-  const merged=mergeSemanticSitesV4([existing],[discovered])
+  const discovered=(await semanticScan('1 16 0 4 0 1 0 0 0 -5 0 0 0 1 stud4.dat')).connectors
+  const merged=mergeSemanticSitesV4([existing],discovered)
   assert.equal(merged.added.length,0)
-  assert.equal(merged.suppressed,1)
+  assert.equal(merged.suppressed,0)
 })
 
 test('V4.3 replaces the legacy axlehol0 origin candidate before endpoint identity assignment',async()=>{
@@ -194,7 +191,7 @@ test('V4.3 replaces the legacy axlehol0 origin candidate before endpoint identit
     '1 16 0 0 -20 1 0 0 0 0 1 0 40 0 axlehol0.dat',
     async()=>null,
   )
-  assert.equal(CONNECTOR_DISCOVERY_VERSION_V43,'connector-discovery-v4.3.0')
+  assert.equal(CONNECTOR_DISCOVERY_VERSION_V43,'connector-discovery-v4.4.0')
   assert.equal(result.stats.correctedAxleHints,1)
   const hint=result.connectors.find(connector=>connector.discovery?.role==='technic-axle-hole')
   assert.ok(hint)
@@ -205,7 +202,7 @@ test('V4.3 replaces the legacy axlehol0 origin candidate before endpoint identit
 test('production bootstrap mounts Connector Discovery V4.3 after Connector V4 and before editor evaluation',async()=>{
   const bootstrap=await readFile(new URL('../bootstrap.js',import.meta.url),'utf8')
   const connectorV4=bootstrap.indexOf("await import('./connectors-v4/runtime-v4.js')")
-  const discovery=bootstrap.indexOf("./connectors-v4/discovery-runtime-v4.js?v=connector-discovery-20260914-v1")
+  const discovery=bootstrap.indexOf("./connectors-v4/discovery-runtime-v4.js?v=connector-sites-20260914-v2")
   const app=bootstrap.indexOf("await import('./app.js')")
   assert.ok(connectorV4>=0)
   assert.ok(discovery>connectorV4)

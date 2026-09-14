@@ -52,7 +52,9 @@ test('production mounts Project Library after the editor project contract and ca
   const adapter=bootstrap.indexOf("./architecture/editor-adapter-v1.js?v=architecture-20260911-v1")
   const library=bootstrap.indexOf("./projects/library-ui-v1.js?v=project-library-20260912-v1")
   assert.ok(adapter>=0&&library>adapter)
-  assert.equal((index.match(/bootstrap\.js\?v=project-library-20260912-v1/g)||[]).length,2)
+  const bootstrapTarget=JSON.parse(index.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]).imports['./bootstrap.js']
+  assert.match(bootstrapTarget,/^\.\/bootstrap\.js\?v=.+/)
+  assert.ok(index.includes(`src="${bootstrapTarget}"`))
   assert.match(core,/indexedDB\.open\(PROJECT_DB_NAME,PROJECT_DB_VERSION\)/)
   assert.match(core,/META_STORE='projects'/)
   assert.match(core,/SNAPSHOT_STORE='snapshots'/)

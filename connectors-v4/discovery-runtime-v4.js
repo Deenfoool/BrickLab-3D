@@ -8,7 +8,7 @@ import {
   discoverPrimitiveConnectorsV4,
   discoveryConnectorRoleV4,
   mergeDiscoveredConnectorsV4,
-} from '../connector-discovery/discovery-v4.3.js'
+} from '../connector-discovery/discovery-v4.3.js?v=connector-sites-20260914-v2'
 
 export const CONNECTOR_DISCOVERY_RUNTIME_VERSION_V4 = 'connector-discovery-runtime-v4.3.0'
 

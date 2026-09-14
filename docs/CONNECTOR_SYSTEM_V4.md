@@ -34,6 +34,11 @@ Evidence at one layer is never automatically promoted to the next. In particular
 
 ## Connectivity source
 
+The resolver includes indexed inheritance through ordinary LDraw parts and
+primitive wrappers, not only `s/` subparts. See [Connector discovery audit](CONNECTOR_DISCOVERY_V4.md)
+for the pinned corpus, recovered interfaces, conservative exclusions and local
+reproduction commands. Geometry discovery does not grant physics certification.
+
 Primary metadata source:
 
 ```text

@@ -9,9 +9,9 @@ import {
   discoverSemanticSitesV4,
   mergeSemanticSitesV4,
   semanticConnectorRoleV4,
-} from './semantic-sites-v4.js'
+} from './semantic-sites-v4.js?v=connector-sites-20260914-v2'
 
-export const CONNECTOR_DISCOVERY_VERSION_V4='connector-discovery-v4.3.0'
+export const CONNECTOR_DISCOVERY_VERSION_V4='connector-discovery-v4.4.0'
 export { pairPegholeEndsV4 }
 
 const normalize=value=>String(value||'').replace(/\\/g,'/').split('/').pop()?.toLowerCase()||''

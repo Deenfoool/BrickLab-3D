@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BrickLab — Connector Sites QA</title>
+<style>body{background:#111722;color:#e4edf8;font:16px system-ui;max-width:1000px;margin:40px auto;padding:20px}button{padding:12px 20px;border-radius:8px;background:#286aa6;color:white;border:0;cursor:pointer}table{border-collapse:collapse;width:100%;margin-top:20px}td,th{text-align:left;border-bottom:1px solid #334;padding:10px}pre{white-space:pre-wrap;color:#a9c5df}a{color:#90c8ff}</style>
+<script src="./tests/production-importmap-loader.js" data-module="./tests/connector-sites-qa.mjs"></script>
+</head><body><h1>Connector Sites QA</h1>
+<p>Реальные LDraw/Shadow fixtures, production resolver и стабильные endpoint ID. Проверка не изменяет проект и не запускает физику.</p>
+<button id="run">Проверить места соединения</button><p id="status" role="status">Готово к проверке</p>
+<table><thead><tr><th>Деталь</th><th>До обхода</th><th>После</th><th>Семейства</th><th>Результат</th></tr></thead><tbody id="results"></tbody></table>
+<pre id="detail"></pre></body></html>
