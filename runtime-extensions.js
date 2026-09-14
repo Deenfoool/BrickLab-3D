@@ -81,7 +81,7 @@ await import('./parts6/hero-micro-detail-v5.js?v=parts-6-20260909-realism-v1')
 // Connector fidelity wraps the final factories and adds visible semantic ports.
 await import('./parts6/connector-fidelity-v1.js?v=parts-6-20260909-realism-v1')
 await import('./parts6/interface-fit-refinement-v2.js?v=parts-6-20260909-realism-v1')
-await import('./parts6/interface-physics-safety-v1.js?v=parts-6-20260909-realism-v1')
+await import('./parts6/interface-physics-safety-v1.js?v=collider-hole-safety-20260914-v1')
 // Shaft hardware v10 is a final visual owner for pins, bushes, axle coupler and compact
 // connector blocks. It keeps the complete pre-v10 render tree hidden as the collider/bounds
 // proxy, so true slots/open bores cannot silently change the physics envelope.
