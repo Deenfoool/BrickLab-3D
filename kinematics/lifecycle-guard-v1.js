@@ -1,4 +1,4 @@
-export const KINEMATICS_LIFECYCLE_GUARD_VERSION = 'kinematics-lifecycle-guard-v1.0.1'
+export const KINEMATICS_LIFECYCLE_GUARD_VERSION = 'kinematics-lifecycle-guard-v1.0.2'
 
 const guardedMarker = Symbol.for('bricklab.kinematics.lifecycle-guard.v1')
 
@@ -25,6 +25,20 @@ function frozenFacade(core, overrides) {
   return Object.freeze(facade)
 }
 
+function mutableFacade(source) {
+  const facade = {}
+  for (const key of Reflect.ownKeys(source ?? {})) {
+    const descriptor = Object.getOwnPropertyDescriptor(source, key)
+    Object.defineProperty(facade, key, {
+      value:source[key],
+      enumerable:descriptor?.enumerable ?? true,
+      writable:true,
+      configurable:true,
+    })
+  }
+  return facade
+}
+
 export function guardKinematicsRuntime(core) {
   if (!core || typeof core.enter !== 'function' || typeof core.exit !== 'function' || typeof core.active !== 'function') {
     throw new TypeError('Kinematics lifecycle guard requires enter/exit/active runtime methods')
@@ -35,6 +49,28 @@ export function guardKinematicsRuntime(core) {
   let entering = false
   let lastRollback = null
   let guarded = null
+  let originalV4Global = null
+  let compatibleV4Global = null
+
+  function prepareConnectorV4Compatibility() {
+    if (originalV4Global) return
+    const current = globalThis.BrickLabConnectorV4
+    if (!current || !Object.isFrozen(current)) return
+    originalV4Global = current
+    compatibleV4Global = mutableFacade(current)
+    globalThis.BrickLabConnectorV4 = compatibleV4Global
+  }
+
+  function restoreConnectorV4Compatibility() {
+    if (!originalV4Global) return
+    // The legacy Kinematics runtime restores the exact object it saw on entry. Only
+    // swap the authoritative frozen API back once that temporary facade is visible.
+    if (globalThis.BrickLabConnectorV4 === compatibleV4Global || !core.active()) {
+      globalThis.BrickLabConnectorV4 = originalV4Global
+      originalV4Global = null
+      compatibleV4Global = null
+    }
+  }
 
   function rollback(reason, error = null) {
     let rollbackError = null
@@ -43,6 +79,8 @@ export function guardKinematicsRuntime(core) {
     } catch (cause) {
       rollbackError = cause
       console.error?.('[BrickLab Kinematics] Editor rollback failed', cause)
+    } finally {
+      restoreConnectorV4Compatibility()
     }
     lastRollback = {
       reason,
@@ -60,6 +98,7 @@ export function guardKinematicsRuntime(core) {
     if (entering) return guarded
     const token = ++epoch
     entering = true
+    prepareConnectorV4Compatibility()
     try {
       await core.enter(...args)
       if (token !== epoch && core.active()) rollback('stale-enter-completed-after-exit')
@@ -69,13 +108,18 @@ export function guardKinematicsRuntime(core) {
       throw error
     } finally {
       if (token === epoch) entering = false
+      if (!core.active()) restoreConnectorV4Compatibility()
     }
   }
 
   function exit(options = { restore:true }) {
     epoch += 1
     entering = false
-    core.exit(options)
+    try {
+      core.exit(options)
+    } finally {
+      restoreConnectorV4Compatibility()
+    }
     return guarded
   }
 
@@ -86,5 +130,9 @@ export function guardKinematicsRuntime(core) {
     lifecycleGuardVersion:KINEMATICS_LIFECYCLE_GUARD_VERSION,
     lastRollback:() => lastRollback,
   })
+
+  // Escape/mode-button exits originate inside the legacy runtime rather than through
+  // the facade. Restore the authoritative V4 object when that runtime announces exit.
+  globalThis.addEventListener?.('bricklab:kinematicsexit', restoreConnectorV4Compatibility)
   return guarded
 }
