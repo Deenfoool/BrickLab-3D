@@ -1,13 +1,13 @@
 import { FAMILIES } from './library-model-v1.js?v=parts-library-20260912-v5'
 
-export const PARTS_LIBRARY_FAMILY_PRELOAD_VERSION = 'parts-library-family-preload-v1.0.0'
+export const PARTS_LIBRARY_FAMILY_PRELOAD_VERSION = 'parts-library-family-preload-v1.0.1'
 
 const keyFor=item=>item?.key||item?.id||(item?.file?`ldraw-${item.file}`:'')
 
 function signature(family,items){
   if(!family)return ''
   const list=items.filter(item=>item?.family===family)
-  return `${family}:${list.length}:${keyFor(list[0])}:${keyFor(list.at(-1))}`
+  return `${family}:${list.length}:${keyFor(list[0])}:${keyFor(list[list.length-1])}`
 }
 
 export function createPartsLibraryFamilyPreloader(root,{previewService,getItems=()=>[],getFamily=()=>null,language=()=>document.documentElement.lang}={}){
@@ -77,7 +77,8 @@ export function createPartsLibraryFamilyPreloader(root,{previewService,getItems=
       abort();activeFamily=null;activeSignature='';state=null
       root.querySelector('[data-family-preload]')?.remove();return
     }
-    const all=Array.isArray(getItems?.())?getItems():[]
+    const supplied=getItems?.()
+    const all=Array.isArray(supplied)?supplied:[]
     const familyItems=all.filter(item=>item?.family===family)
     const nextSignature=signature(family,all)
     if(family===activeFamily&&nextSignature===activeSignature){ensureUi();schedulePaint();return}
