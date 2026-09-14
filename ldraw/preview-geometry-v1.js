@@ -4,22 +4,23 @@ import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawCondit
 import { installLDrawCacheRecovery, parseCompleteLDraw } from './load-recovery-v1.js?v=ldraw-loading-20260912-v1'
 import { createLDrawTextTransport } from './text-transport-v1.js?v=ldraw-loading-20260912-v1'
 
-export const PARTS_PREVIEW_GEOMETRY_VERSION = 'parts-preview-geometry-v1.0.0'
+export const PARTS_PREVIEW_GEOMETRY_VERSION = 'parts-preview-geometry-v1.0.1'
 
 const LDRAW_RAW_ROOT = 'https://raw.githubusercontent.com/pybricks/ldraw/master/'
 const LDU_TO_STUD = 1 / 20
-const transport = createLDrawTextTransport()
+let transport = createLDrawTextTransport()
 let loaderPromise = null
 
 const normalizeFile = value => String(value || '').replace(/^parts\//i, '').replace(/\\/g, '/').trim()
 
 async function createLoader() {
+  const ownTransport = transport
   const loader = installLDrawCacheRecovery(new LDrawLoader())
   loader.setConditionalLineMaterial(LDrawConditionalLineMaterial)
   loader.setPartsLibraryPath(LDRAW_RAW_ROOT)
-  loader.partsCache.parseCache.fetchData = file => transport.subpart(file)
+  loader.partsCache.parseCache.fetchData = file => ownTransport.subpart(file)
   try {
-    const text = await transport.read('LDConfig.ldr')
+    const text = await ownTransport.read('LDConfig.ldr')
     await loader.preloadMaterials(`data:text/plain;charset=utf-8,${encodeURIComponent(text)}`)
   } catch (error) {
     console.debug?.('[BrickLab Library] Preview colour config unavailable.', error)
@@ -38,7 +39,8 @@ async function getLoader() {
 export async function loadPreviewLDrawModel(file) {
   const normalized = normalizeFile(file)
   if (!normalized) return null
-  const textTask = transport.read(`parts/${normalized}`)
+  const ownTransport = transport
+  const textTask = ownTransport.read(`parts/${normalized}`)
   const loader = await getLoader()
   loader.addDefaultMaterials()
   const model = await textTask.then(text => parseCompleteLDraw(loader, text))
@@ -54,9 +56,11 @@ export async function loadPreviewLDrawModel(file) {
   return { model, size:[size.x, size.y, size.z], file:normalized }
 }
 
-// LDrawLoader retains parsed subparts. Rotate the preview-only loader periodically so
-// browsing a huge family cannot make that parser cache grow for the lifetime of the tab.
-// Existing in-flight calls keep their local loader reference and finish normally.
+// LDrawLoader and text transport both retain caches. Rotate the whole preview-only
+// stack periodically so a 9k-part family cannot accumulate top-level .dat text,
+// parsed subparts and temporary geometry for the lifetime of the tab. Existing
+// in-flight calls retain their own loader/transport references and finish normally.
 export function resetPreviewGeometryLoader() {
   loaderPromise = null
+  transport = createLDrawTextTransport()
 }
