@@ -8,6 +8,15 @@ import {
   discoveryConnectorRoleV4,
   mergeDiscoveredConnectorsV4,
 } from '../connectors-v4/discovery-v4.js'
+import {
+  discoverSemanticSitesV4,
+  mergeSemanticSitesV4,
+  semanticConnectorRoleV4,
+} from '../connector-discovery/semantic-sites-v4.js'
+import {
+  CONNECTOR_DISCOVERY_VERSION_V4 as CONNECTOR_DISCOVERY_VERSION_V43,
+  discoverPrimitiveConnectorsV4 as discoverPrimitiveConnectorsV43,
+} from '../connector-discovery/discovery-v4.3.js'
 
 const identity=(file,x=0,y=0,z=0)=>`1 16 ${x} ${y} ${z} 1 0 0 0 1 0 0 0 1 ${file}`
 const pegholePair=(fileA='peghole.dat',fileB=fileA,x=0,y=0,z=0,span=20)=>[
@@ -17,6 +26,9 @@ const pegholePair=(fileA='peghole.dat',fileB=fileA,x=0,y=0,z=0,span=20)=>[
 
 async function scan(text,files={}){
   return discoverPrimitiveConnectorsV4('fixture.dat',text,async file=>files[String(file).replace(/\\/g,'/')]??null)
+}
+async function semanticScan(text,files={}){
+  return discoverSemanticSitesV4('fixture.dat',text,async file=>files[String(file).replace(/\\/g,'/')]??null)
 }
 
 test('Connector Discovery finds high-confidence Technic connection primitives missed by Shadow',async()=>{
@@ -138,10 +150,62 @@ test('two opposite pin halves remain two valid connection regions instead of bei
   assert.equal(merged.added.length,2)
 })
 
-test('production bootstrap mounts Connector Discovery after Connector V4 and before editor evaluation',async()=>{
+test('V4.3 recovers alternate standard studs and scaled anti-stud tubes',async()=>{
+  const result=await semanticScan([
+    identity('stud2.dat',0,0,0),
+    identity('stud2a.dat',20,0,0),
+    identity('studa.dat',40,0,0),
+    '1 16 60 4 0 1 0 0 0 -5 0 0 0 1 stud4.dat',
+  ].join('\n'))
+  assert.deepEqual(result.connectors.map(semanticConnectorRoleV4),['stud','stud','stud','anti-stud'])
+  const anti=result.connectors.at(-1)
+  assert.deepEqual(anti.frame.positionLdu,[60,24,0])
+  assert.equal(anti.geometry.sections[0].lengthLdu,20)
+})
+
+test('V4.3 centers real axle and axle-hole primitives over their transformed spans',async()=>{
+  const result=await semanticScan([
+    '1 16 80 0 0 0 -160 0 1 0 0 0 0 1 axle.dat',
+    '1 16 0 0 -20 1 0 0 0 0 1 0 40 0 axlehole.dat',
+  ].join('\n'))
+  assert.deepEqual(result.connectors.map(semanticConnectorRoleV4),['technic-axle','technic-axle-hole'])
+  assert.deepEqual(result.connectors[0].frame.positionLdu,[0,0,0])
+  assert.equal(result.connectors[0].geometry.sections[0].lengthLdu,160)
+  assert.deepEqual(result.connectors[1].frame.positionLdu,[0,0,0])
+  assert.equal(result.connectors[1].geometry.sections[0].lengthLdu,40)
+})
+
+test('V4.3 anti-stud merge is suppressed by the authoritative Shadow region',async()=>{
+  const discovered=(await semanticScan('1 16 0 4 0 1 0 0 0 -5 0 0 0 1 stud4.dat')).connectors[0]
+  const existing={
+    schemaVersion:4,family:'cylinder',gender:'female',group:null,
+    frame:{positionLdu:[0,24,0],orientation:[1,0,0,0,1,0,0,0,1]},
+    geometry:{sections:[{shape:'R',radiusLdu:6,lengthLdu:20}],caps:'one',centered:false},
+    snap:{slide:false},inheritance:{scale:'none',mirror:'cor'},
+  }
+  const merged=mergeSemanticSitesV4([existing],[discovered])
+  assert.equal(merged.added.length,0)
+  assert.equal(merged.suppressed,1)
+})
+
+test('V4.3 replaces the legacy axlehol0 origin candidate before endpoint identity assignment',async()=>{
+  const result=await discoverPrimitiveConnectorsV43(
+    'fixture.dat',
+    '1 16 0 0 -20 1 0 0 0 0 1 0 40 0 axlehol0.dat',
+    async()=>null,
+  )
+  assert.equal(CONNECTOR_DISCOVERY_VERSION_V43,'connector-discovery-v4.3.0')
+  assert.equal(result.stats.correctedAxleHints,1)
+  const hint=result.connectors.find(connector=>connector.discovery?.role==='technic-axle-hole')
+  assert.ok(hint)
+  assert.deepEqual(hint.frame.positionLdu,[0,0,0])
+  assert.equal(hint.geometry.sections[0].lengthLdu,40)
+})
+
+test('production bootstrap mounts Connector Discovery V4.3 after Connector V4 and before editor evaluation',async()=>{
   const bootstrap=await readFile(new URL('../bootstrap.js',import.meta.url),'utf8')
   const connectorV4=bootstrap.indexOf("await import('./connectors-v4/runtime-v4.js')")
-  const discovery=bootstrap.indexOf("./connectors-v4/discovery-runtime-v4.js?v=connector-discovery-20260912-v2")
+  const discovery=bootstrap.indexOf("./connectors-v4/discovery-runtime-v4.js?v=connector-discovery-20260914-v1")
   const app=bootstrap.indexOf("await import('./app.js')")
   assert.ok(connectorV4>=0)
   assert.ok(discovery>connectorV4)
