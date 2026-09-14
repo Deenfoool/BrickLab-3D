@@ -47,10 +47,11 @@ if (showMainMenu) {
 
 // app.js mounts the historical base topbar before later editor layers add Kinematics,
 // overlay controls, localized labels and build-instruction actions. Keep that mutable
-// chrome hidden until the full production bootstrap has finished, so New/Open/Continue
-// reveal one final header instead of flashing through legacy/intermediate variants.
+// chrome hidden only while those header contributors mount. Heavy catalog/project
+// modules must never be able to leave the production topbar permanently invisible.
 const EDITOR_CHROME_STYLE_ID = 'bricklab-editor-chrome-boot-guard'
 const EDITOR_CHROME_READY_CLASS = 'bricklab-editor-chrome-ready'
+let editorChromeFailSafe = 0
 function beginEditorChromeBoot() {
   if (!document.getElementById(EDITOR_CHROME_STYLE_ID)) {
     const style = document.createElement('style')
@@ -73,8 +74,14 @@ html.${EDITOR_CHROME_READY_CLASS} #app .topbar {
   }
   document.documentElement.classList.remove(EDITOR_CHROME_READY_CLASS)
   document.getElementById('app')?.setAttribute('aria-busy', 'true')
+  clearTimeout(editorChromeFailSafe)
+  editorChromeFailSafe = globalThis.setTimeout?.(() => revealEditorChrome(), 4500) || 0
 }
 function revealEditorChrome() {
+  if (editorChromeFailSafe) {
+    clearTimeout(editorChromeFailSafe)
+    editorChromeFailSafe = 0
+  }
   const reveal = () => {
     document.documentElement.classList.add(EDITOR_CHROME_READY_CLASS)
     document.getElementById('app')?.removeAttribute('aria-busy')
@@ -261,6 +268,11 @@ try {
   console.warn('[BrickLab Instructions] BOM/instruction UI unavailable; editor continues normally.', error)
 }
 
+// At this point every module that contributes to the current production topbar has
+// mounted. Reveal it now; LDraw catalog hydration and the project menu are unrelated
+// late boot work and must never gate header visibility.
+revealEditorChrome()
+
 await import('./ldraw/catalog-v3.js')
 // The family library owns lazy thumbnails; do not mount the superseded decorator.
 await import('./menu/project-menu-v1.js?v=project-menu-20260910-v1')
@@ -268,4 +280,5 @@ await import('./menu/project-menu-v1.js?v=project-menu-20260910-v1')
 const { assertPhysicsRuntimeContract } = await import('./physics-ownership-v1.js')
 assertPhysicsRuntimeContract()
 window.__bricklabRuntimeReady = true
+// Idempotent final reveal also clears the fail-safe if boot completed unusually fast.
 revealEditorChrome()
