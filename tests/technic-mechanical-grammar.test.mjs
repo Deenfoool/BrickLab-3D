@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   TECHNIC_INTERFACE_KINDS,
   TECHNIC_MATE_RULES,
+  TECHNIC_SPECIAL_GROUPS,
   TECHNIC_TRANSMISSION_KINDS,
   TECHNIC_SUPPORT_RULES,
   technicMateRule,
@@ -55,6 +56,16 @@ test('Technic grammar names advanced transmissions without pretending they are a
   assert.equal(TECHNIC_TRANSMISSION_KINDS.WORM.status, 'research-required')
   assert.equal(TECHNIC_TRANSMISSION_KINDS.RACK.status, 'research-required')
   assert.equal(TECHNIC_TRANSMISSION_KINDS.CHAIN_SPROCKET.status, 'research-required')
+})
+
+test('Technic Shadow special groups are explicit audit targets rather than generic guesses', () => {
+  assert.equal(TECHNIC_SPECIAL_GROUPS.techBallJnt.targetConstraint, 'spherical')
+  assert.equal(TECHNIC_SPECIAL_GROUPS.uniJnt.mechanism, 'universal-joint')
+  assert.equal(TECHNIC_SPECIAL_GROUPS.drivingRing1.mechanism, 'driving-ring-selector')
+  assert.equal(TECHNIC_SPECIAL_GROUPS.pneuCyl.targetConstraint, 'limited-prismatic')
+  assert.equal(TECHNIC_SPECIAL_GROUPS.steerHub1.mechanism, 'steering-hub')
+  assert.equal(TECHNIC_SPECIAL_GROUPS.z28Turntable.mechanism, 'technic-geared-turntable')
+  assert.ok(Object.keys(TECHNIC_SPECIAL_GROUPS).length >= 20)
 })
 
 test('Technic grammar includes support semantics, not only local connector compatibility', () => {
