@@ -2,10 +2,11 @@ import * as THREE from 'three'
 import * as V3 from '../snapping-v3.js'
 import { suppressNextConnectionForEndpoint } from '../connections.js'
 import { interactionGroupMembers } from '../editor-groups-v1.js'
+import { applyRackPinionSnapV1, findRackPinionSnapCandidateV1 } from '../technic/rack-pinion-v1.js?v=technic-family-20260915-v1'
 
 export * from '../snapping-v3.js'
 
-export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.6.0'
+export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.7.0'
 
 let preferredCandidateKey = null
 let preferredInteractionId = null
@@ -105,7 +106,7 @@ function warmNearbyConnectivity(v4,selected,objects) {
 }
 
 export function v4OwnsLegacyCandidate(selected, legacy) {
-  if (!legacy || legacy.kind === 'gear-mesh') return false
+  if (!legacy || legacy.kind === 'gear-mesh' || legacy.kind === 'rack-pinion-mesh') return false
   const target=legacy.targetObject
   return isLDrawPart(selected) && isLDrawPart(target)
 }
@@ -166,7 +167,14 @@ export function findSnapCandidate(selected, objects, options = {}) {
   const targets=spatial?.objects ?? externalTargets(selected,objects)
   const connectorTargets=spatial?.connectorObjects ?? targets
   const legacy = V3.findSnapCandidate(selected, targets, options)
-  if (legacy?.kind === 'gear-mesh') return legacy
+  const rackPinion = findRackPinionSnapCandidateV1(selected, targets, {
+    captureDistance:typeof options === 'number' ? options : options?.maxDistance,
+  })
+
+  const placementCandidate = rackPinion && candidateOrderValue(rackPinion) < candidateOrderValue(legacy)
+    ? rackPinion
+    : legacy
+  if (placementCandidate?.kind === 'gear-mesh' || placementCandidate?.kind === 'rack-pinion-mesh') return placementCandidate
 
   const v4 = runtime()
   const id=interactionId(selected)
@@ -184,7 +192,7 @@ export function findSnapCandidate(selected, objects, options = {}) {
         captureDistanceStud:typeof options === 'number' ? options : options?.maxDistance,
         minAxisAlignment:typeof options === 'object' ? options?.minAlignment : undefined,
       })
-      if (candidate) {
+      if (candidate && candidateOrderValue(candidate) <= candidateOrderValue(rackPinion)) {
         preferredCandidateKey=candidate.key
         return bridgeCandidate(candidate)
       }
@@ -195,12 +203,13 @@ export function findSnapCandidate(selected, objects, options = {}) {
     }
   }
 
+  if (rackPinion) return rackPinion
   if (v4OwnsLegacyCandidate(selected, legacy)) return null
   return legacy
 }
 
 export function orientForSnap(selected, candidate) {
-  if (candidate?.kind === 'connector-v4-active') return
+  if (candidate?.kind === 'connector-v4-active' || candidate?.kind === 'rack-pinion-mesh') return
   const state=captureGroupWorldState(selected)
   V3.orientForSnap(selected,candidate)
   propagateAnchorDelta(selected,state)
@@ -208,6 +217,13 @@ export function orientForSnap(selected, candidate) {
 
 export function applySnap(selected, candidate) {
   const state=captureGroupWorldState(selected)
+  if (candidate?.kind === 'rack-pinion-mesh') {
+    const endpointId=candidate?.source?.id
+    if (selected?.userData?.instanceId && endpointId) suppressNextConnectionForEndpoint(selected.userData.instanceId,endpointId)
+    const result=applyRackPinionSnapV1(selected,candidate)
+    propagateAnchorDelta(selected,state)
+    return result
+  }
   if (candidate?.kind !== 'connector-v4-active') {
     const result=V3.applySnap(selected,candidate)
     propagateAnchorDelta(selected,state)
