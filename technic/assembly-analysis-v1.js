@@ -1,9 +1,11 @@
 import { classifyTechnicConnectionV1 } from './interface-semantics-v1.js'
 import { technicPartProfileV1 } from './part-profile-v1.js'
 
-export const TECHNIC_ASSEMBLY_ANALYSIS_VERSION = 'technic-assembly-analysis-v1.0.0'
+export const TECHNIC_ASSEMBLY_ANALYSIS_VERSION = 'technic-assembly-analysis-v1.1.0'
 
 const ROTARY_SUPPORT_ROLES = new Set(['axle','axle-coupler','spur-gear','bevel-gear','crown-gear','clutch-gear','knob-wheel','worm','sprocket','pulley','rim','wheel-hub','driving-ring'])
+const ARTICULATION_KINDS = new Set(['pin-joint','hinge-joint','ball-joint'])
+const RIGID_CONNECTION_KINDS = new Set(['stud-structural-contact','technic-structural-special','fixed-structural-contact'])
 
 function unionFind(ids) {
   const parent = new Map(ids.map(id => [id, id]))
@@ -92,19 +94,93 @@ function diagnostic(code, severity, instanceIds, message, evidence = {}) {
   return { code, severity, instanceIds:[...new Set((instanceIds || []).filter(Boolean))], message, evidence }
 }
 
+function pairKey(a, b) { return [String(a || ''), String(b || '')].sort().join('|') }
+
+function structuralPairs(classified, profileById) {
+  const pairs = new Map()
+  for (const entry of classified) {
+    const a = profileById.get(entry.a)
+    const b = profileById.get(entry.b)
+    if (!a?.profile?.structural || !b?.profile?.structural) continue
+    const key = pairKey(entry.a, entry.b)
+    const pair = pairs.get(key) ?? {
+      key,
+      a:entry.a,
+      b:entry.b,
+      connections:[],
+      pinContacts:0,
+      fixedContacts:0,
+      articulationContacts:0,
+      effectiveRigid:false,
+      reason:null,
+    }
+    pair.connections.push(entry.connectionId)
+    if (entry.kind === 'pin-joint') pair.pinContacts += 1
+    if (ARTICULATION_KINDS.has(entry.kind)) pair.articulationContacts += 1
+    if (entry.constraint === 'fixed' || RIGID_CONNECTION_KINDS.has(entry.kind)) pair.fixedContacts += 1
+    pairs.set(key, pair)
+  }
+
+  for (const pair of pairs.values()) {
+    if (pair.fixedContacts > 0) {
+      pair.effectiveRigid = true
+      pair.reason = 'fixed-contact'
+    } else if (pair.pinContacts >= 2) {
+      // Two separate connector records are strong evidence for a rigid beam-to-beam
+      // relationship. Exact rank/collinearity still belongs to the geometric V4 layer,
+      // so this is an assembly-level rigidity classification rather than a new joint.
+      pair.effectiveRigid = true
+      pair.reason = 'multi-pin-contact'
+    } else if (pair.pinContacts === 1) {
+      pair.reason = 'single-pin-revolute'
+    } else if (pair.articulationContacts > 0) {
+      pair.reason = 'articulated'
+    } else {
+      pair.reason = 'unclassified-structural-contact'
+    }
+  }
+  return [...pairs.values()]
+}
+
+function adjacencyForRigidPairs(ids, pairs) {
+  const adjacency = new Map(ids.map(id => [id, new Set()]))
+  for (const pair of pairs) {
+    if (!pair.effectiveRigid || !adjacency.has(pair.a) || !adjacency.has(pair.b)) continue
+    adjacency.get(pair.a).add(pair.b)
+    adjacency.get(pair.b).add(pair.a)
+  }
+  return adjacency
+}
+
+function hasRigidPath(adjacency, start, target) {
+  if (!start || !target || !adjacency.has(start) || !adjacency.has(target)) return false
+  if (start === target) return true
+  const seen = new Set([start])
+  const queue = [start]
+  while (queue.length) {
+    const current = queue.shift()
+    for (const next of adjacency.get(current) ?? []) {
+      if (next === target) return true
+      if (seen.has(next)) continue
+      seen.add(next)
+      queue.push(next)
+    }
+  }
+  return false
+}
+
 export function analyzeTechnicAssemblyV1({
   objects = [],
   connections = [],
   getDefinition = () => null,
   getConnector = () => null,
   classifyConnection = null,
+  drivetrain = null,
 } = {}) {
   const profileById = new Map()
-  const objectById = new Map()
   for (const object of objects || []) {
     const record = profileRecord(object, getDefinition)
     if (!record.instanceId) continue
-    objectById.set(record.instanceId, object)
     profileById.set(record.instanceId, record)
   }
 
@@ -140,15 +216,20 @@ export function analyzeTechnicAssemblyV1({
   }
 
   const supportCounts = new Map([...shaftGroups.keys()].map(root => [root, 0]))
+  const supportParts = new Map([...shaftGroups.keys()].map(root => [root, new Set()]))
   const articulationCounts = new Map([...shaftGroups.keys()].map(root => [root, 0]))
   for (const entry of classified) {
     if (entry.kind === 'shaft-bearing') {
-      for (const instanceId of [entry.a, entry.b]) {
-        const root = uf.find(instanceId)
-        if (root) supportCounts.set(root, (supportCounts.get(root) || 0) + 1)
+      const rootA = uf.find(entry.a)
+      const rootB = uf.find(entry.b)
+      const rotaryRoot = rootA || rootB
+      if (rotaryRoot) {
+        supportCounts.set(rotaryRoot, (supportCounts.get(rotaryRoot) || 0) + 1)
+        const other = rootA ? entry.b : entry.a
+        if (profileById.get(other)?.profile?.structural) supportParts.get(rotaryRoot)?.add(other)
       }
     }
-    if (['pin-joint','hinge-joint','ball-joint'].includes(entry.kind)) {
+    if (ARTICULATION_KINDS.has(entry.kind)) {
       for (const instanceId of [entry.a, entry.b]) {
         const root = uf.find(instanceId)
         if (root) articulationCounts.set(root, (articulationCounts.get(root) || 0) + 1)
@@ -156,13 +237,30 @@ export function analyzeTechnicAssemblyV1({
     }
   }
 
+  const pairs = structuralPairs(classified, profileById)
+  const structuralIds = [...profileById.values()].filter(item => item.profile.structural).map(item => item.instanceId)
+  const rigidAdjacency = adjacencyForRigidPairs(structuralIds, pairs)
   const diagnostics = []
+
+  for (const pair of pairs) {
+    if (pair.reason === 'single-pin-revolute') {
+      diagnostics.push(diagnostic(
+        'structural-single-pin-hinge', 'info', [pair.a, pair.b],
+        'Two structural Technic parts are connected by one pin only; this remains a revolute joint unless another independent contact removes the rotation.',
+        { connections:pair.connections },
+      ))
+    }
+  }
+
   const shafts = []
+  const rootByMember = new Map()
   let shaftIndex = 1
   for (const [root, memberIds] of shaftGroups) {
+    for (const id of memberIds) rootByMember.set(id, root)
     const members = memberIds.map(id => profileById.get(id)).filter(Boolean)
     const profiles = members.map(item => item.profile)
     const bearingSupports = supportCounts.get(root) || 0
+    const bearingPartIds = [...(supportParts.get(root) ?? [])]
     const retainers = members.filter(item => item.profile.retainer).map(item => item.instanceId)
     const gears = members.filter(item => item.profile.transmission && /gear|worm|sprocket|pulley/.test(item.profile.role))
     const needsSupport = profiles.some(profile => ROTARY_SUPPORT_ROLES.has(profile.role))
@@ -175,10 +273,25 @@ export function analyzeTechnicAssemblyV1({
       ))
     } else if (needsSupport && bearingSupports === 1) {
       diagnostics.push(diagnostic(
-        'shaft-single-bearing-support', 'info', memberIds,
-        'Rotary Technic group has only one certified bearing support; a second separated support improves axis stability.',
-        { bearingSupports, retainers:retainers.length },
+        gears.length ? 'gear-shaft-single-bearing-support' : 'shaft-single-bearing-support',
+        gears.length ? 'warning' : 'info', memberIds,
+        gears.length
+          ? 'A geared shaft has only one certified bearing support; add a second separated support so gear center distance cannot cantilever under load.'
+          : 'Rotary Technic group has only one certified bearing support; a second separated support improves axis stability.',
+        { bearingSupports, retainers:retainers.length, gearMembers:gears.map(item => item.instanceId) },
       ))
+    }
+
+    if (bearingPartIds.length >= 2) {
+      const anchor = bearingPartIds[0]
+      const disconnected = bearingPartIds.slice(1).filter(id => !hasRigidPath(rigidAdjacency, anchor, id))
+      if (disconnected.length) {
+        diagnostics.push(diagnostic(
+          'shaft-support-frame-open', 'warning', [anchor, ...disconnected, ...memberIds],
+          'Bearing supports for the same shaft are not connected by a verified rigid structural path. Cross-brace the beams/frames so the shaft spacing stays fixed.',
+          { bearingParts:bearingPartIds, disconnected },
+        ))
+      }
     }
 
     if (profiles.some(profile => profile.role === 'axle') && retainers.length === 0) {
@@ -206,10 +319,39 @@ export function analyzeTechnicAssemblyV1({
       partIds:members.map(item => item.partId),
       roles:profiles.map(profile => profile.role),
       bearingSupports,
+      bearingPartIds,
       retainers,
       articulationContacts:articulationCounts.get(root) || 0,
       gearMembers:gears.map(item => item.instanceId),
     })
+  }
+
+  const gearMeshes = []
+  for (const mesh of drivetrain?.physicalGearMeshes ?? []) {
+    const aId = mesh?.a?.instanceId ?? null
+    const bId = mesh?.b?.instanceId ?? null
+    const rootA = rootByMember.get(aId)
+    const rootB = rootByMember.get(bId)
+    const supportA = rootA ? supportCounts.get(rootA) || 0 : 0
+    const supportB = rootB ? supportCounts.get(rootB) || 0 : 0
+    gearMeshes.push({
+      id:mesh.id ?? null,
+      kind:mesh.kind ?? 'gear',
+      a:aId,
+      b:bId,
+      teethA:mesh?.a?.teeth ?? null,
+      teethB:mesh?.b?.teeth ?? null,
+      ratioAB:mesh.ratioAB ?? null,
+      supportA,
+      supportB,
+    })
+    if (supportA < 1 || supportB < 1) {
+      diagnostics.push(diagnostic(
+        'gear-mesh-unsupported-shaft', 'warning', [aId, bId],
+        'Meshing gears were detected but at least one gear shaft has no certified bearing support.',
+        { meshId:mesh.id ?? null, supportA, supportB },
+      ))
+    }
   }
 
   for (const item of profileById.values()) {
@@ -239,7 +381,9 @@ export function analyzeTechnicAssemblyV1({
     version:TECHNIC_ASSEMBLY_ANALYSIS_VERSION,
     profiles,
     connections:classified,
+    structuralPairs:pairs,
     shafts,
+    gearMeshes,
     specialConnections,
     diagnostics,
     stats:{
@@ -251,7 +395,10 @@ export function analyzeTechnicAssemblyV1({
       shaftGroups:shafts.length,
       bearings:classified.filter(item => item.kind === 'shaft-bearing').length,
       torqueCouplings:classified.filter(item => item.transmitsTorque === true).length,
-      articulations:classified.filter(item => ['pin-joint','hinge-joint','ball-joint'].includes(item.kind)).length,
+      articulations:classified.filter(item => ARTICULATION_KINDS.has(item.kind)).length,
+      rigidStructuralPairs:pairs.filter(pair => pair.effectiveRigid).length,
+      singlePinStructuralPairs:pairs.filter(pair => pair.reason === 'single-pin-revolute').length,
+      gearMeshes:gearMeshes.length,
       warnings:diagnostics.filter(item => item.severity === 'warning').length,
       info:diagnostics.filter(item => item.severity === 'info').length,
     },
