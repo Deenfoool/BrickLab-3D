@@ -149,7 +149,7 @@ await import('./connectors-v4/physics-guard-v4.js')
 // Architecture API v1 is a compatibility facade, not a new owner. It exposes stable
 // subsystem contracts while BUILD remains owned by Connector V4/bridges and SIMULATE
 // remains owned by the fail-closed Connector V4 physics guard.
-await import('./architecture/runtime-v1.js?v=architecture-20260911-v1')
+await import('./architecture/runtime-v1.js?v=technic-family-20260915-v2')
 
 // app.js keeps selection state lexical. The editor-group layer installs a short-lived
 // Set wrapper before app evaluation. The selectedObjects Set promotes itself when it
@@ -192,7 +192,7 @@ try {
 // KINEMATICS is a lightweight mode activation shell. Its deterministic solver/runtime
 // loads only when the user enters the mode; Rapier is never started by this path.
 try {
-  await import('./kinematics/activation-v1.js?v=kinematics-rack-pinion-20260915-v1')
+  await import('./kinematics/activation-v1.js?v=kinematics-rack-pinion-20260915-v2')
 } catch (error) {
   console.warn('[BrickLab Kinematics] Activation unavailable; editor continues normally.', error)
 }
