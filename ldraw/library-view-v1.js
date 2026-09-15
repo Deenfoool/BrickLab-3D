@@ -20,6 +20,7 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
   let family=FAMILIES.some(f=>f.id===saved)?saved:null
   let favorites=array(LIBRARY_KEYS.favorites),recents=array(LIBRARY_KEYS.recents)
   let items=[],category='',query='',tab='all',page=0,selected=null,loading=true,warning='',busy=false,timer
+  let loadObserver=null
   let destroyed=false
   const counts=new Map()
   const expanded=new Set(['gears','wheels'])
@@ -115,16 +116,33 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
   }
 
   function filtered() { return filterLibrary(items,{family,category,query,tab,favorites,recents,...context()}) }
+  function disconnectLoadObserver(){loadObserver?.disconnect?.();loadObserver=null}
+  function loadNextBatch(){
+    const all=filtered(),next=(page+1)*PAGE_SIZE
+    if(next>=all.length)return false
+    page+=1;renderResults();return true
+  }
+  function observeLoadMore() {
+    disconnectLoadObserver()
+    const trigger=root.querySelector('[data-load-more]')
+    if(!trigger||typeof globalThis.IntersectionObserver!=='function')return
+    loadObserver=new globalThis.IntersectionObserver(entries=>{
+      if(entries.some(entry=>entry.isIntersecting))loadNextBatch()
+    },{root:root.querySelector('.pl-scroll'),rootMargin:'240px 0px',threshold:0})
+    loadObserver.observe(trigger)
+  }
   function renderResults() {
     if(!family)return
+    disconnectLoadObserver()
     const all=filtered();page=Math.min(page,Math.max(0,Math.ceil(all.length/PAGE_SIZE)-1))
     const repairButton=root.querySelector('[data-repair]');if(repairButton){repairButton.hidden=!repair||!context().failedCount;repairButton.disabled=busy}
-    const shown=all.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE)
+    const shown=all.slice(0,(page+1)*PAGE_SIZE),remaining=Math.max(0,all.length-shown.length)
     root.querySelector('.pl-summary').textContent=busy?t('Preparing model before placement…','Подготовка модели перед размещением…'):loading?t('Loading catalog…','Загрузка каталога…'):warning||`${all.length.toLocaleString()} ${t('parts','деталей')}${tab==='compatible'?t(' · verified matches only',' · только подтверждённые пары'):''}`
     root.querySelector('[data-results]').innerHTML=shown.length?shown.map(item=>`<article class="pl-card ${selected===item.key?'selected':''}" data-key="${escape(item.key)}"><button type="button" class="pl-select" data-select="${escape(item.key)}" aria-pressed="${selected===item.key}" title="${escape(item.name||item.description)}">${imageMarkup(item)}<strong>${escape(item.name||item.description)}</strong><small>${item.source} · ${escape(item.code)}</small></button><div class="pl-card-actions"><button type="button" data-favorite="${escape(item.key)}" aria-pressed="${favorites.includes(item.key)}" aria-label="${t('Favorite','В избранное')}">${favorites.includes(item.key)?'★':'☆'}</button><button type="button" data-add="${escape(item.key)}" ${busy?'disabled':''} aria-label="${t('Add','Добавить')} ${escape(item.code)}">+ ${t('Add','Добавить')}</button></div></article>`).join(''):`<div class="pl-empty">${icon('search')}<strong>${t('No matching parts','Нет подходящих деталей')}</strong><p>${tab==='compatible'?t('Select a part with a verified Smart Assembly pairing. Unverified fits are never guessed.','Выберите деталь с проверенной парой Smart Assembly. Неподтверждённые сопряжения не угадываются.'):t('Try a shorter search or another category. Sections stay within this family.','Попробуйте другой запрос или категорию. Разделы ограничены выбранным семейством.')}</p></div>`
     for(const card of root.querySelectorAll('.pl-card')){const item=byKey(card.dataset.key);if(item?.file){card.classList.add('ld2-card');card.dataset.file=item.file}}
-    root.querySelector('.pl-paging').innerHTML=`<button type="button" data-page="-1" ${page===0?'disabled':''}>${t('Previous','Назад')}</button><span>${all.length?page+1:0} / ${Math.ceil(all.length/PAGE_SIZE)}</span><button type="button" data-page="1" ${(page+1)*PAGE_SIZE>=all.length?'disabled':''}>${t('Next','Далее')}</button>`
+    root.querySelector('.pl-paging').innerHTML=remaining?`<button type="button" data-load-more>${t('Show more','Показать ещё')} · ${Math.min(PAGE_SIZE,remaining).toLocaleString()}</button><span>${shown.length.toLocaleString()} / ${all.length.toLocaleString()}</span>`:`<span>${shown.length.toLocaleString()} / ${all.length.toLocaleString()}</span>`
     bindImages(root.querySelector('[data-results]'))
+    observeLoadMore()
     icons()
   }
 
@@ -162,7 +180,7 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
     else if(b.hasAttribute('data-favorite')){const key=b.dataset.favorite;favorites=favorites.includes(key)?favorites.filter(x=>x!==key):[key,...favorites].slice(0,600);writePreference(storage,LIBRARY_KEYS.favorites,favorites);renderResults()}
     else if(b.hasAttribute('data-add'))void add(b.dataset.add)
     else if(b.hasAttribute('data-repair')&&!busy){busy=true;warning='';renderResults();Promise.resolve().then(()=>repair()).catch(error=>{warning=error.message}).finally(()=>{busy=false;renderResults()})}
-    else if(b.hasAttribute('data-page')){page+=Number(b.dataset.page);renderResults();root.querySelector('.pl-scroll').scrollTop=0}
+    else if(b.hasAttribute('data-load-more'))loadNextBatch()
   }
 
   function input(event){if(event.target.id!=='plSearch')return;query=event.target.value;page=0;clearTimeout(timer);timer=setTimeout(()=>renderResults(),100)}
@@ -184,7 +202,7 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
     focus(){if(!family){family=FAMILIES.some(f=>f.id===saved)?saved:'system';render()}root.querySelector('input')?.focus()},
     showFamily(id){if(!FAMILIES.some(f=>f.id===id))return;family=id;category='';query='';page=0;writePreference(storage,LIBRARY_KEYS.family,id);render()},
     showSection(value){tab=value;page=0;if(!family)family='system';render()},
-    state:()=>({family,category,query,tab,page,selected,total:items.length}),
-    destroy(){destroyed=true;clearTimeout(timer);root.removeEventListener('click',click);root.removeEventListener('input',input);root.removeEventListener('dblclick',dblclick);root.removeEventListener('keydown',keydown);root.removeEventListener('pointerdown',isolatePointer);root.replaceChildren()},
+    state:()=>({family,category,query,tab,page,selected,total:items.length,rendered:root.querySelectorAll('.pl-card').length}),
+    destroy(){destroyed=true;disconnectLoadObserver();clearTimeout(timer);root.removeEventListener('click',click);root.removeEventListener('input',input);root.removeEventListener('dblclick',dblclick);root.removeEventListener('keydown',keydown);root.removeEventListener('pointerdown',isolatePointer);root.replaceChildren()},
   })
 }
