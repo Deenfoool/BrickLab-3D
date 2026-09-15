@@ -1,8 +1,17 @@
-export const PARTS_LIBRARY_ATLAS_VERSION='parts-library-atlas-v1.1.0'
+export const PARTS_LIBRARY_ATLAS_VERSION='parts-library-atlas-v1.1.1'
 const MANIFEST_URL=new URL('./previews-v1/manifest.json.gz?v=ldraw-atlas-20260915-v1',import.meta.url)
 const ASSET_VERSION='ldraw-atlas-20260915-v1'
 const DISPLAY_VERSION='ldraw-atlas-display-20260915-v3'
 const NEUTRAL_FILTER='grayscale(1) brightness(2.15) contrast(.88)'
+const DISPLAY_STYLE_ID='bricklab-atlas-display-v3'
+
+function installDisplayStyle(){
+  if(!globalThis.document||document.getElementById(DISPLAY_STYLE_ID))return
+  const style=document.createElement('style')
+  style.id=DISPLAY_STYLE_ID
+  style.textContent='.pl-atlas-image{transform:translate(-50%,-50%) scale(.68)!important;filter:drop-shadow(0 4px 4px #0006)!important}.pl-large .pl-atlas-image{transform:translate(-50%,-50%) scale(.72)!important}'
+  document.head.append(style)
+}
 
 function atlasUrl(entry){
   return new URL(`./previews-v1/${entry.f}/atlas-${String(entry.p).padStart(3,'0')}.webp?v=${ASSET_VERSION}`,import.meta.url).href
@@ -71,6 +80,7 @@ async function normalizeAtlasPage(url,fetchImpl){
 }
 
 export function createPartsLibraryAtlasService({fetchImpl=globalThis.fetch}={}){
+  installDisplayStyle()
   let manifest=null,pending=null,error=null
   const pages=new Map(),pagePending=new Map(),pageErrors=new Map()
   const load=()=>{
