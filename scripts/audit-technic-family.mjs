@@ -4,6 +4,7 @@ import { finalizeConnectorIdentitiesV4 } from '../connectors-v4/identity-v4.js'
 import { classifyTechnicPinInterfaceV4 } from '../connectors-v4/pin-semantics-v4.js'
 import { classifyPart } from '../ldraw/library-model-v1.js'
 import { classifyLDrawDefinition } from '../ldraw/mechanical-intelligence-v1.js'
+import { classifyTechnicShadowGroupV1, TECHNIC_UPSTREAM_SHADOW_VERSION } from '../technic/upstream-shadow-v1.js'
 
 const [geometryRoot, shadowRoot, output] = process.argv.slice(2)
 if (!geometryRoot || !shadowRoot || !output) {
@@ -70,11 +71,14 @@ const report = {
   generatedAt:new Date().toISOString(),
   scope:'BrickLab library family=technic; top-level official LDraw parts only',
   note:'Family membership is presentation classification only. Connector/mechanical evidence comes from resolved LDraw/LDCad data.',
+  upstreamShadowVocabulary:TECHNIC_UPSTREAM_SHADOW_VERSION,
   totals:{ officialTopLevel:files.length, technicFamily:0, withConnectors:0, withoutConnectors:0, warningParts:0 },
   categories:{},
   endpointRoles:{},
   connectorFamilies:{},
   genericGroups:{},
+  knownTechnicShadowGroups:{},
+  unknownTechnicLookingGroups:{},
   mechanicalClasses:{},
   confidence:{},
   parts:[],
@@ -99,6 +103,7 @@ for (const [index, file] of files.entries()) {
   const roles = {}
   const families = {}
   const groups = {}
+  const technicGroups = {}
   for (const connector of connectors) {
     const role = connectorRole(connector)
     bump(roles, role)
@@ -109,6 +114,13 @@ for (const [index, file] of files.entries()) {
       const group = String(connector.group || '').trim() || '<ungrouped>'
       bump(groups, group)
       bump(report.genericGroups, group)
+      const known = classifyTechnicShadowGroupV1(group)
+      if (known) {
+        bump(technicGroups, `${known.key}:${known.kind}`)
+        bump(report.knownTechnicShadowGroups, `${known.key}:${known.kind}`)
+      } else if (/technic|tech|axle|gear|rack|steer|wheel|rim|turn|drive|cyl|pneu|crane|bumper/i.test(group)) {
+        bump(report.unknownTechnicLookingGroups, group)
+      }
     }
   }
 
@@ -132,12 +144,12 @@ for (const [index, file] of files.entries()) {
     roles,
     families,
     genericGroups:groups,
+    knownTechnicShadowGroups:technicGroups,
     mechanicalClass:mechanical.class,
     mechanicalConfidence:mechanical.confidence,
     warnings:resolved.warnings || [],
   })
 
-  // Bound resolver cache independently of library size.
   if ((index + 1) % 400 === 0) resolver.clearCache?.()
 }
 
@@ -149,6 +161,8 @@ console.log(JSON.stringify({
   withoutConnectors:report.totals.withoutConnectors,
   warningParts:report.totals.warningParts,
   endpointRoles:report.endpointRoles,
+  knownTechnicShadowGroups:Object.keys(report.knownTechnicShadowGroups).length,
+  unknownTechnicLookingGroups:report.unknownTechnicLookingGroups,
   genericGroups:Object.keys(report.genericGroups).length,
   mechanicalClasses:report.mechanicalClasses,
 }))
