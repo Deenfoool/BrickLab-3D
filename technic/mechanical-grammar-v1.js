@@ -1,4 +1,4 @@
-export const TECHNIC_MECHANICAL_GRAMMAR_VERSION = 'technic-mechanical-grammar-v1.0.0'
+export const TECHNIC_MECHANICAL_GRAMMAR_VERSION = 'technic-mechanical-grammar-v1.1.0'
 
 const freeze = value => Object.freeze(value)
 
@@ -102,6 +102,40 @@ export const TECHNIC_TRANSMISSION_KINDS = freeze({
   PULLEY_BELT: freeze({ id:'pulley-belt', motion:'rotary-to-rotary', axisRelation:'usually-parallel', direction:'same-open/opposite-crossed', phase:'continuous', status:'research-required' }),
 })
 
+// Known LDCad Shadow groups with Technic-specific meaning. These entries are routing
+// hints for the audit/review process, not permission to invent a connector. Production
+// behavior may use a group only when the corresponding effective Shadow endpoint exists.
+export const TECHNIC_SPECIAL_GROUPS = freeze({
+  diffHouse: freeze({ mechanism:'differential-housing', targetConstraint:'reviewed-compound', status:'partial' }),
+  drivingRing1: freeze({ mechanism:'driving-ring-selector', targetConstraint:'prismatic-plus-conditional-rotary-coupling', status:'research-required' }),
+  drivingRing2: freeze({ mechanism:'driving-ring-selector', targetConstraint:'prismatic-plus-conditional-rotary-coupling', status:'research-required' }),
+  linAct1: freeze({ mechanism:'linear-actuator-small', targetConstraint:'prismatic-plus-screw-conversion', status:'research-required' }),
+  linAct2: freeze({ mechanism:'linear-actuator-large', targetConstraint:'prismatic-plus-screw-conversion', status:'research-required' }),
+  linearActBody: freeze({ mechanism:'linear-actuator-body', targetConstraint:'prismatic-guide', status:'research-required' }),
+  cylSlide: freeze({ mechanism:'cylinder-slider', targetConstraint:'prismatic', status:'research-required' }),
+  pneuCyl: freeze({ mechanism:'pneumatic-cylinder', targetConstraint:'limited-prismatic', status:'research-required' }),
+  steerHold1: freeze({ mechanism:'steering-holder', targetConstraint:'reviewed-revolute/compound', status:'research-required' }),
+  steerHub1: freeze({ mechanism:'steering-hub', targetConstraint:'reviewed-revolute/ball-joint', status:'research-required' }),
+  techBallJnt: freeze({ mechanism:'technic-ball-joint', targetConstraint:'spherical', status:'geometry-supported' }),
+  nudge1: freeze({ mechanism:'technic-spindle-ball', targetConstraint:'reviewed-spherical', status:'research-required' }),
+  nudge2: freeze({ mechanism:'technic-spindle-ball', targetConstraint:'reviewed-spherical', status:'research-required' }),
+  uniJnt: freeze({ mechanism:'universal-joint', targetConstraint:'compound-revolute', status:'partial' }),
+  techGearRack: freeze({ mechanism:'flexible-gear-rack', targetConstraint:'rack-path-and-mesh', status:'research-required' }),
+  techTrnTbl60: freeze({ mechanism:'technic-turntable', targetConstraint:'retained-revolute', status:'research-required' }),
+  turnTablePin: freeze({ mechanism:'turntable-pin', targetConstraint:'retained-revolute', status:'research-required' }),
+  turntable5x5: freeze({ mechanism:'technic-turntable', targetConstraint:'retained-revolute', status:'research-required' }),
+  z28Turntable: freeze({ mechanism:'technic-geared-turntable', targetConstraint:'retained-revolute-plus-gear-mesh', status:'research-required' }),
+  z56TurnTableT1: freeze({ mechanism:'technic-geared-turntable', targetConstraint:'retained-revolute-plus-gear-mesh', status:'research-required' }),
+  wpAxHole: freeze({ mechanism:'wheel-pin-axle-hole', targetConstraint:'reviewed-wheel-bearing', status:'research-required' }),
+  sglWhlAxle: freeze({ mechanism:'single-wheel-axle', targetConstraint:'reviewed-wheel-bearing', status:'research-required' }),
+  techWhlCon1: freeze({ mechanism:'click-wheel-connection', targetConstraint:'indexed-revolute', status:'research-required' }),
+  techEngine: freeze({ mechanism:'technic-engine-cylinder-head', targetConstraint:'guided-reciprocating', status:'research-required' }),
+  bumper: freeze({ mechanism:'technic-bumper', targetConstraint:'part-specific', status:'research-required' }),
+  craneArmW16: freeze({ mechanism:'slim-crane-arm', targetConstraint:'part-specific-pivot', status:'research-required' }),
+  craneArmW20: freeze({ mechanism:'crane-arm', targetConstraint:'part-specific-pivot', status:'research-required' }),
+  techFlexEnd: freeze({ mechanism:'technic-flex-end', targetConstraint:'flexible-segment-end', status:'research-required' }),
+})
+
 export const TECHNIC_SUPPORT_RULES = freeze({
   SHAFT_SUPPORT: freeze({
     id:'shaft-support',
@@ -166,6 +200,7 @@ export const BrickLabTechnicMechanicalGrammar = freeze({
   interfaces:TECHNIC_INTERFACE_KINDS,
   mates:TECHNIC_MATE_RULES,
   transmissions:TECHNIC_TRANSMISSION_KINDS,
+  specialGroups:TECHNIC_SPECIAL_GROUPS,
   supports:TECHNIC_SUPPORT_RULES,
   mateRule:technicMateRule,
   spurPitchRadiusStuds:technicSpurPitchRadiusStuds,
