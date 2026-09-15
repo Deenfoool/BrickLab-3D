@@ -23,7 +23,9 @@
     "test:audio": "node --test tests/audio.test.mjs",
     "test:menu": "node --test tests/main-menu.test.mjs",
     "render:audio": "node scripts/render-audio.mjs",
-    "test:connector-discovery": "node --test tests/connectors-v4-discovery.test.mjs tests/connectors-v4-inheritance-discovery.test.mjs"
+    "test:connector-discovery": "node --test tests/connectors-v4-discovery.test.mjs tests/connectors-v4-inheritance-discovery.test.mjs",
+    "test:technic-grammar": "node --test tests/technic-mechanical-grammar.test.mjs",
+    "audit:technic": "node scripts/audit-technic-family.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"
