@@ -33,6 +33,13 @@ test('BrickLabTechnic publishes capabilities, upstream Shadow vocabulary and rac
   assert.match(runtime, /rackPinionDetectVersion/)
 })
 
+test('canonical runtime version generator includes the complete Technic directory', async () => {
+  const generator = await text('scripts/version-runtime.mjs')
+  assert.match(generator, /['"]technic['"]/)
+  assert.match(generator, /for \(const dir of \[/)
+  assert.match(generator, /legacyAliases/)
+})
+
 test('rack-pinion BUILD snap remains placement-only and never fabricates a connector graph edge', async () => {
   const [bridge, rack] = await Promise.all([
     text('connectors-v4/snapping-bridge-v4.js'),
