@@ -13,9 +13,14 @@ import {
   technicProfileIsStructural,
   TECHNIC_PART_PROFILE_VERSION,
 } from './part-profile-v1.js'
+import {
+  applyTechnicMechanicalHintsV1,
+  technicMechanicalHintsV1,
+  TECHNIC_MECHANICAL_HINTS_VERSION,
+} from './mechanical-hints-v1.js'
 import * as transmissionMath from './transmission-math-v1.js'
 
-export const BRICKLAB_TECHNIC_RUNTIME_VERSION = 'bricklab-technic-runtime-v1.0.1'
+export const BRICKLAB_TECHNIC_RUNTIME_VERSION = 'bricklab-technic-runtime-v1.1.0'
 
 function definitionOf(value) {
   if (!value) return null
@@ -56,29 +61,21 @@ function analyze({ objects = null, connections = null } = {}) {
   })
 }
 
-function applyKinematicSelectionHint(definition) {
-  if (!definition) return false
-  const partProfile = profile(definition)
-  if (!partProfile.rotary) return false
-  const mechanics = definition.mechanics && typeof definition.mechanics === 'object' ? definition.mechanics : {}
-  if (mechanics.gear || mechanics.shaft || mechanics.wheel || mechanics.motor || mechanics.transmission || mechanics.differential) return false
-  // `shaft` is the historical Kinematics selection capability flag. It does not
-  // create connectors or physics constraints; V4 remains the connection authority.
-  definition.mechanics = { ...mechanics, shaft:true, technicRotary:true }
-  return true
+function applyMechanicalHints(definition) {
+  return applyTechnicMechanicalHintsV1(definition)
 }
 
-function syncKinematicSelectionHints() {
+function syncMechanicalHints() {
   let changed = 0
-  for (const definition of PARTS) if (applyKinematicSelectionHint(definition)) changed += 1
+  for (const definition of PARTS) if (applyMechanicalHints(definition)) changed += 1
   return changed
 }
 
 let syncQueued = false
-function scheduleKinematicSelectionHints() {
+function scheduleMechanicalHints() {
   if (syncQueued) return
   syncQueued = true
-  queueMicrotask(() => { syncQueued = false; syncKinematicSelectionHints() })
+  queueMicrotask(() => { syncQueued = false; syncMechanicalHints() })
 }
 
 function coverage() {
@@ -97,6 +94,7 @@ function coverage() {
     rotaryParts:recognized.filter(item => item.profile.rotary).length,
     structuralParts:recognized.filter(item => item.profile.structural).length,
     transmissionParts:recognized.filter(item => item.profile.transmission).length,
+    hintedGears:entries.filter(item => Boolean(item.definition?.mechanics?.gear?.source?.startsWith?.(TECHNIC_MECHANICAL_HINTS_VERSION))).length,
     roles:Object.freeze({ ...roleCounts }),
     confidence:Object.freeze({ ...confidence }),
   })
@@ -108,22 +106,27 @@ export const BrickLabTechnic = Object.freeze({
   interfaceVersion:TECHNIC_INTERFACE_SEMANTICS_VERSION,
   profileVersion:TECHNIC_PART_PROFILE_VERSION,
   assemblyVersion:TECHNIC_ASSEMBLY_ANALYSIS_VERSION,
+  hintsVersion:TECHNIC_MECHANICAL_HINTS_VERSION,
   grammar:BrickLabTechnicMechanicalGrammar,
   math:Object.freeze({ ...transmissionMath }),
   profile,
+  hints(value) { return technicMechanicalHintsV1(definitionOf(value) || (typeof value === 'string' ? { id:value } : value || {})) },
   endpoint,
   connection,
   analyze,
   coverage,
-  syncKinematicSelectionHints,
+  syncMechanicalHints,
+  // Backward-compatible name retained for callers created during the first Technic pass.
+  syncKinematicSelectionHints:syncMechanicalHints,
   isGear(value) { return technicProfileIsGear(profile(value)) },
   isRotary(value) { return technicProfileIsRotary(profile(value)) },
   isStructural(value) { return technicProfileIsStructural(profile(value)) },
 })
 
-syncKinematicSelectionHints()
-globalThis.addEventListener?.('bricklab:partcatalogchange', scheduleKinematicSelectionHints)
-globalThis.addEventListener?.('bricklab:ldrawloaded', event => applyKinematicSelectionHint(findPart(event.detail?.id)))
+syncMechanicalHints()
+globalThis.addEventListener?.('bricklab:partcatalogchange', scheduleMechanicalHints)
+globalThis.addEventListener?.('bricklab:ldrawlegacyready', scheduleMechanicalHints)
+globalThis.addEventListener?.('bricklab:ldrawloaded', event => applyMechanicalHints(findPart(event.detail?.id)))
 
 globalThis.BrickLabTechnic = BrickLabTechnic
 globalThis.dispatchEvent?.(new CustomEvent('bricklab:technicready', {
@@ -133,5 +136,6 @@ globalThis.dispatchEvent?.(new CustomEvent('bricklab:technicready', {
     interfaceVersion:TECHNIC_INTERFACE_SEMANTICS_VERSION,
     profileVersion:TECHNIC_PART_PROFILE_VERSION,
     assemblyVersion:TECHNIC_ASSEMBLY_ANALYSIS_VERSION,
+    hintsVersion:TECHNIC_MECHANICAL_HINTS_VERSION,
   },
 }))
