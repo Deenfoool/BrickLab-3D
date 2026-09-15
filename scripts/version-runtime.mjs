@@ -25,6 +25,7 @@ for (const dir of [
   'parts6',
   'performance',
   'projects',
+  'technic',
   'testlab',
 ]) {
   for (const name of await readdir(new URL(dir + '/', root))) if (name.endsWith('.js')) files.push(`${dir}/${name}`)
