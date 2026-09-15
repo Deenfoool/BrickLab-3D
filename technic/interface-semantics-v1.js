@@ -2,7 +2,7 @@ import { classifyConnectorV4 } from '../connectors-v4/activation-v4.js'
 import { matchConnectorV4 } from '../connectors-v4/matcher-v4.js'
 import { technicPinPairV4 } from '../connectors-v4/pin-semantics-v4.js'
 
-export const TECHNIC_INTERFACE_SEMANTICS_VERSION = 'technic-interface-semantics-v1.0.0'
+export const TECHNIC_INTERFACE_SEMANTICS_VERSION = 'technic-interface-semantics-v1.1.0'
 
 const SPECIAL_GROUPS = Object.freeze({
   diffhouse: { kind:'differential-housing', role:'differential-internal-interface', constraint:'special', transmission:'differential' },
@@ -28,7 +28,14 @@ const SPECIAL_GROUPS = Object.freeze({
   wpaxhole: { kind:'wheel-axle-interface', role:'wheel-shaft-coupling', constraint:'prismatic', torque:true },
   sglwhlaxle: { kind:'wheel-axle-interface', role:'wheel-shaft-coupling', constraint:'prismatic', torque:true },
   techwhlcon1: { kind:'wheel-retainer', role:'wheel-click-connection', constraint:'revolute' },
+  clkrot: { kind:'indexed-revolute', role:'click-rotation-connection', constraint:'revolute' },
   techengine: { kind:'engine-slider', role:'piston-cylinder-guide', constraint:'prismatic', transmission:'piston-crank' },
+  techfigelbw: { kind:'technic-figure-joint', role:'technic-figure-elbow', constraint:'revolute' },
+  techfigfoot: { kind:'technic-figure-joint', role:'technic-figure-foot', constraint:'revolute' },
+  techfighips: { kind:'technic-figure-joint', role:'technic-figure-hips', constraint:'revolute' },
+  techfigknee: { kind:'technic-figure-joint', role:'technic-figure-knee', constraint:'revolute' },
+  techfigpel: { kind:'technic-figure-joint', role:'technic-figure-pelvis', constraint:'revolute' },
+  techfigvis: { kind:'technic-figure-clip', role:'technic-figure-visor', constraint:'revolute' },
   bumper: { kind:'technic-structural-special', role:'bumper-connection', constraint:'fixed' },
   cranearmw16: { kind:'technic-structural-special', role:'crane-arm-joint', constraint:'fixed' },
   cranearmw20: { kind:'technic-structural-special', role:'crane-arm-joint', constraint:'fixed' },
@@ -39,8 +46,17 @@ function normalizedGroup(connector) {
   return String(connector?.group || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
+function dynamicSpecialGroup(group) {
+  // LDCad encodes tyre/rim fit dimensions in groups such as rim42_31. Normalizing
+  // punctuation yields rim4231. We deliberately retain it as a sizing key instead of
+  // trying to infer physical dimensions from the mesh.
+  if (/^rim\d{2,}$/.test(group)) return { kind:'rim-tire-interface', role:'rim-size-fit', constraint:'fixed-size-fit', groupKey:group }
+  return null
+}
+
 function specialGroup(connector) {
-  return SPECIAL_GROUPS[normalizedGroup(connector)] || null
+  const group=normalizedGroup(connector)
+  return SPECIAL_GROUPS[group] || dynamicSpecialGroup(group)
 }
 
 function roleFromConnector(connector) {
@@ -127,15 +143,19 @@ function semanticFromActivationFamily(family, a, b, match) {
 function specialPair(a, b, match) {
   const aa = specialGroup(a)
   const bb = specialGroup(b)
-  const special = aa && bb && normalizedGroup(a) === normalizedGroup(b) ? aa : aa || bb
+  const sameGroup=normalizedGroup(a)===normalizedGroup(b)
+  const special = aa && bb && sameGroup ? aa : aa || bb
   if (!special) return null
+  // Rim groups are size keys; a different encoded size must never match even if a
+  // generic matcher happened to consider the bounding shapes compatible.
+  if ((aa?.kind==='rim-tire-interface'||bb?.kind==='rim-tire-interface')&&!sameGroup) return semantics('incompatible-rim-size',{constraint:null,transmitsTorque:false,supportRole:false,match})
   const torque = special.torque === true || special.torque === 'conditional'
   return semantics(special.kind, {
     role:special.role,
     constraint:special.constraint,
     transmission:special.transmission || null,
     transmitsTorque:torque ? special.torque : false,
-    supportRole:['revolute','spherical','fixed'].includes(special.constraint) ? 'structural-special' : false,
+    supportRole:['revolute','spherical','fixed','fixed-size-fit'].includes(special.constraint) ? 'structural-special' : false,
     group:normalizedGroup(a) || normalizedGroup(b) || null,
     match,
   })
