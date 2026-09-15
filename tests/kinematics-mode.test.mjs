@@ -92,7 +92,7 @@ test('Production Kinematics is direct-manipulation, inertial and no-Rapier', asy
   assert.match(activation, /runtime-v1\.js\?v=kinematics-interactive-20260915-v1/)
   assert.match(activation, /kinematics-v1\.css\?v=kinematics-interactive-20260915-v1/)
   assert.match(activation, /lifecycle-guard-v1\.js\?v=kinematics-recovery-20260914-v2/)
-  assert.match(activation, /rack-pinion-runtime-v1\.js\?v=kinematics-rack-pinion-20260915-v1/)
+  assert.match(activation, /rack-pinion-runtime-v1\.js\?v=kinematics-rack-pinion-20260915-v2/)
   assert.ok(
     activation.indexOf('rack-pinion-runtime-v1.js') < activation.indexOf('await api.enter()'),
     'rack follower must subscribe before the kinematicsenter event fires',
@@ -105,7 +105,7 @@ test('Production Kinematics is direct-manipulation, inertial and no-Rapier', asy
   const activationOrder = bootstrap.indexOf('./kinematics/activation-v1.js')
   const projectMenuOrder = bootstrap.indexOf('./menu/project-menu-v1.js')
   assert.ok(activationOrder >= 0 && projectMenuOrder > activationOrder, 'Kinematics Escape capture must register before Project Menu capture')
-  assert.match(bootstrap, /kinematics\/activation-v1\.js\?v=kinematics-rack-pinion-20260915-v1/)
+  assert.match(bootstrap, /kinematics\/activation-v1\.js\?v=kinematics-rack-pinion-20260915-v2/)
 
   assert.match(lifecycle, /rollback\('enter-failed', error\)/)
   assert.match(lifecycle, /core\.exit\(\{ restore:true \}\)/)
@@ -134,8 +134,8 @@ test('Production Kinematics is direct-manipulation, inertial and no-Rapier', asy
   assert.doesNotMatch(runtime, /data-kinematics-angle|data-kinematics-driver|renderPanel\(/, 'direct Kinematics must not render control-panel sliders/selects')
 
   assert.match(rackRuntime, /detectRackPinionMeshesV1/)
+  assert.match(rackRuntime, /rackTravelFromRadiansV1/)
   assert.match(rackRuntime, /signedQuaternionDelta/)
-  assert.match(rackRuntime, /angleRad \* Number\(mesh\.pitchRadius/)
   assert.match(rackRuntime, /maxTravelStud/)
   assert.match(rackRuntime, /rack-pinion-conflict|kinematicsrackconflict/)
   assert.match(rackRuntime, /bricklab:kinematicsenter/)
