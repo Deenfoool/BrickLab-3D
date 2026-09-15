@@ -1,4 +1,4 @@
-export const TECHNIC_CAPABILITIES_VERSION = 'technic-capabilities-v1.0.0'
+export const TECHNIC_CAPABILITIES_VERSION = 'technic-capabilities-v1.0.1'
 
 const freeze = value => Object.freeze(value)
 
@@ -15,7 +15,7 @@ export const TECHNIC_MECHANISM_CAPABILITIES = freeze({
   'spur-gear': freeze({ recognition:'active', build:'active', kinematics:'active', simulate:'active', source:'Parts-5 gear mesh + Technic hints' }),
   'bevel-gear': freeze({ recognition:'active', build:'active', kinematics:'active', simulate:'active', source:'Parts-5 bevel mesh + Technic hints' }),
   'worm-drive': freeze({ recognition:'active', build:'metadata', kinematics:'active', simulate:'active', source:'packaged transmission metadata', arbitraryLDraw:'semantic' }),
-  'rack-pinion': freeze({ recognition:'active', build:'metadata', kinematics:'metadata', simulate:'active', source:'Parts-4 steering rack metadata', arbitraryLDraw:'semantic' }),
+  'rack-pinion': freeze({ recognition:'active', build:'metadata', kinematics:'active', simulate:'metadata', source:'module-matched rack metadata + deterministic Kinematics follower; SIMULATE currently uses packaged steering-rack mechanics rather than a generic Rapier tooth coupling', arbitraryLDraw:'semantic' }),
   'differential': freeze({ recognition:'active', build:'metadata', kinematics:'active', simulate:'active', source:'drivetrain differential metadata', arbitraryLDraw:'semantic' }),
   'universal-joint': freeze({ recognition:'active', build:'metadata', kinematics:'active', simulate:'active', source:'articulated driveline metadata', arbitraryLDraw:'semantic' }),
   'cv-joint': freeze({ recognition:'active', build:'metadata', kinematics:'active', simulate:'active', source:'articulated driveline metadata', arbitraryLDraw:'semantic' }),
