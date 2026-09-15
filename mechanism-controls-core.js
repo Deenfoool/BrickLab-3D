@@ -332,6 +332,9 @@ PhysicsSession.prototype.applyGearCouplingTorques = function applyControlledTran
   for (const [coupling, wasFailed] of neutralStates) coupling.failed = wasFailed
   return result
 }
+if (oldApplyGearTorques?.__bricklabOwner) {
+  PhysicsSession.prototype.applyGearCouplingTorques.__bricklabOwner = oldApplyGearTorques.__bricklabOwner
+}
 
 const oldDispose = PhysicsSession.prototype.dispose
 PhysicsSession.prototype.dispose = function disposeControlledSession(...args) {
