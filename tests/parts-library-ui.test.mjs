@@ -67,12 +67,13 @@ test('Search input, favorites, sections and keyboard isolation',async()=>{
   view.destroy();await window.happyDOM.close()
 })
 
-test('17000 metadata entries render no more than 48 cards',async()=>{
+test('17000 metadata entries render cards lazily in cumulative batches of 48',async()=>{
   const {root,window,view,click}=setup()
   view.setItems(libraryItems(Array.from({length:17000},(_,i)=>({file:`${i}.dat`,code:String(i),description:`Technic Axle ${i}`})),[]))
   click('[data-family="technic"]');assert.equal(root.querySelectorAll('.pl-card').length,48)
-  click('[data-page="1"]');assert.equal(root.querySelectorAll('.pl-card').length,48)
-  assert.equal(view.state().page,1);view.destroy();await window.happyDOM.close()
+  assert.match(root.querySelector('[data-load-more]').textContent,/Show more/)
+  click('[data-load-more]');assert.equal(root.querySelectorAll('.pl-card').length,96)
+  assert.equal(view.state().page,1);assert.equal(view.state().rendered,96);view.destroy();await window.happyDOM.close()
 })
 
 test('Rendered cards request bounded real previews and selected detail requests high priority',async()=>{
@@ -185,10 +186,10 @@ test('Production catalog uses an isolated cache generation for family preview wa
   assert.match(map['./ldraw/catalog-v3.js'],/^\.\/ldraw\/catalog-v3\.js\?v=/)
   assert.equal(map['./app.js'],'./app.js?v=parts-6-20260911-editor-groups-v2')
   assert.match(map['./ldraw/runtime-v3.js?v=ldraw-catalog-20260910-v3'],/runtime-metadata-cache-v1/)
-  assert.match(bootstrap,/\.\/ldraw\/catalog-v3\.js\?v=parts-library-family-preload-20260914-v1/)
+  assert.match(bootstrap,/\.\/ldraw\/catalog-v3\.js\?v=parts-library-lazy-cards-20260915-v1/)
   assert.match(catalog,/\.\/library-model-v1\.js\?v=parts-library-20260912-v5/)
-  assert.match(catalog,/\.\/library-view-v1\.js\?v=parts-library-20260912-v5/)
+  assert.match(catalog,/\.\/library-view-v1\.js\?v=parts-library-lazy-cards-20260915-v1/)
   assert.match(catalog,/\.\/library-preview-v1\.js\?v=parts-library-family-preload-20260914-v1/)
-  assert.match(catalog,/\.\/library-family-preload-v1\.js\?v=parts-library-family-preload-20260914-v1/)
+  assert.match(catalog,/\.\/library-family-preload-v1\.js\?v=parts-library-lazy-cards-20260915-v1/)
   for(const match of view.matchAll(/\.\/library-[^'" ]+/g))assert.match(match[0],/\?v=parts-library-20260912-v5$/)
 })
