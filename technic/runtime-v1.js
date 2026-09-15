@@ -18,9 +18,15 @@ import {
   technicMechanicalHintsV1,
   TECHNIC_MECHANICAL_HINTS_VERSION,
 } from './mechanical-hints-v1.js'
+import {
+  TECHNIC_CAPABILITIES_VERSION,
+  TECHNIC_MECHANISM_CAPABILITIES,
+  technicCapabilitySummaryV1,
+  technicCapabilityV1,
+} from './capabilities-v1.js'
 import * as transmissionMath from './transmission-math-v1.js'
 
-export const BRICKLAB_TECHNIC_RUNTIME_VERSION = 'bricklab-technic-runtime-v1.1.0'
+export const BRICKLAB_TECHNIC_RUNTIME_VERSION = 'bricklab-technic-runtime-v1.2.0'
 
 function definitionOf(value) {
   if (!value) return null
@@ -49,7 +55,7 @@ function connection(record) {
   })
 }
 
-function analyze({ objects = null, connections = null } = {}) {
+function analyze({ objects = null, connections = null, drivetrain = null } = {}) {
   const runtime = v4()
   const sceneObjects = objects ?? runtime?.objects?.() ?? []
   const records = connections ?? runtime?.projectConnections?.() ?? []
@@ -58,6 +64,7 @@ function analyze({ objects = null, connections = null } = {}) {
     connections:records,
     getDefinition:findPart,
     getConnector:(partId, endpointId) => runtime?.getConnector?.(partId, endpointId) ?? null,
+    drivetrain,
   })
 }
 
@@ -95,6 +102,7 @@ function coverage() {
     structuralParts:recognized.filter(item => item.profile.structural).length,
     transmissionParts:recognized.filter(item => item.profile.transmission).length,
     hintedGears:entries.filter(item => Boolean(item.definition?.mechanics?.gear?.source?.startsWith?.(TECHNIC_MECHANICAL_HINTS_VERSION))).length,
+    mechanisms:technicCapabilitySummaryV1(),
     roles:Object.freeze({ ...roleCounts }),
     confidence:Object.freeze({ ...confidence }),
   })
@@ -107,7 +115,11 @@ export const BrickLabTechnic = Object.freeze({
   profileVersion:TECHNIC_PART_PROFILE_VERSION,
   assemblyVersion:TECHNIC_ASSEMBLY_ANALYSIS_VERSION,
   hintsVersion:TECHNIC_MECHANICAL_HINTS_VERSION,
+  capabilitiesVersion:TECHNIC_CAPABILITIES_VERSION,
   grammar:BrickLabTechnicMechanicalGrammar,
+  capabilities:TECHNIC_MECHANISM_CAPABILITIES,
+  capability:technicCapabilityV1,
+  capabilitySummary:technicCapabilitySummaryV1,
   math:Object.freeze({ ...transmissionMath }),
   profile,
   hints(value) { return technicMechanicalHintsV1(definitionOf(value) || (typeof value === 'string' ? { id:value } : value || {})) },
@@ -116,7 +128,6 @@ export const BrickLabTechnic = Object.freeze({
   analyze,
   coverage,
   syncMechanicalHints,
-  // Backward-compatible name retained for callers created during the first Technic pass.
   syncKinematicSelectionHints:syncMechanicalHints,
   isGear(value) { return technicProfileIsGear(profile(value)) },
   isRotary(value) { return technicProfileIsRotary(profile(value)) },
@@ -137,5 +148,6 @@ globalThis.dispatchEvent?.(new CustomEvent('bricklab:technicready', {
     profileVersion:TECHNIC_PART_PROFILE_VERSION,
     assemblyVersion:TECHNIC_ASSEMBLY_ANALYSIS_VERSION,
     hintsVersion:TECHNIC_MECHANICAL_HINTS_VERSION,
+    capabilitiesVersion:TECHNIC_CAPABILITIES_VERSION,
   },
 }))
