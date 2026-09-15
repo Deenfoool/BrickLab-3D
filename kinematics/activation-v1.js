@@ -1,4 +1,4 @@
-export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.2.0'
+export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.3.0'
 
 const LANGUAGE_KEY = 'bricklab.ui.language.v1'
 
@@ -65,6 +65,33 @@ localizeButton(button)
 
 let loading = false
 
+// Kinematics is mounted before Project Menu. Own Escape while Kinematics is entering
+// or active so its internal selection-clear Escape cannot open the project menu, and
+// a real user Escape exits Kinematics directly instead of being consumed by the menu.
+function captureKinematicsEscape(event) {
+  if (event.code !== 'Escape') return
+  const entering = button.dataset.kinematicsState === 'entering'
+  const api = globalThis.BrickLabKinematics
+  const active = api?.active?.() === true
+  if (!entering && !active) return
+
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  if (!active) return
+
+  try { api.exit?.({ restore:true }) }
+  finally {
+    button.dataset.kinematicsState = 'ready'
+    localizeButton(button)
+  }
+}
+
+globalThis.addEventListener?.('keydown', captureKinematicsEscape, true)
+globalThis.addEventListener?.('bricklab:kinematicsexit', () => {
+  button.dataset.kinematicsState = 'ready'
+  localizeButton(button)
+})
+
 async function activate(event) {
   event?.preventDefault?.()
   event?.stopPropagation?.()
@@ -72,6 +99,8 @@ async function activate(event) {
   const existing = globalThis.BrickLabKinematics
   if (existing?.active?.()) {
     existing.exit?.({ restore:true })
+    button.dataset.kinematicsState = 'ready'
+    localizeButton(button)
     return
   }
 
@@ -91,9 +120,11 @@ async function activate(event) {
     if (!core?.enter) throw new Error('Kinematics runtime loaded without an enter API')
     const api = guardKinematicsRuntime(core)
     globalThis.BrickLabKinematics = api
-    button.dataset.kinematicsState = 'ready'
-    localizeButton(button)
+    button.dataset.kinematicsState = 'entering'
+    button.title = copy().loading
     await api.enter()
+    button.dataset.kinematicsState = api.active?.() ? 'active' : 'ready'
+    localizeButton(button)
   } catch (error) {
     try {
       globalThis.BrickLabKinematics?.exit?.({ restore:true })
