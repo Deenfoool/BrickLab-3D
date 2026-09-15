@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { findPart } from '../parts.js'
 
-export const TECHNIC_RACK_PINION_VERSION = 'technic-rack-pinion-v1.0.0'
+export const TECHNIC_RACK_PINION_VERSION = 'technic-rack-pinion-v1.0.1'
 const TAU = Math.PI * 2
 const DEFAULT_MODULE = 1 / 8
 const EPS = 1e-9
@@ -114,7 +114,6 @@ export function solveRackPinionPhaseV1(pinion,rack,geometry) {
   const toothPitchRad=TAU/pinion.teeth
   const angle=signedAngleAround(pinion.reference,contactDirection,pinion.axis)
   const rackPhase=positiveModulo((geometry.along-Number(rack.rack.phaseOriginStud||0))/rack.rack.linearPitchStud,1)
-  // Rack tooth centre at phase 0 meets a pinion gap centre (half angular tooth pitch).
   const desiredPinionPhase=positiveModulo(.5-rackPhase,1)
   const desiredAngle=desiredPinionPhase*toothPitchRad
   return {
@@ -143,8 +142,6 @@ export function findRackPinionSnapCandidateV1(selected,objects,options={}) {
     if (!geometry.valid) continue
     const phase=solveRackPinionPhaseV1(pinion,rack,geometry)
     const movingKind=movingPinion?'pinion':'rack'
-    // When the rack itself moves, invert the pinion-centre correction so the pitch
-    // line moves to the already fixed gear instead.
     const translation=movingPinion?geometry.translation.clone():geometry.translation.clone().multiplyScalar(-1)
     const score=geometry.centerError/Math.max(geometry.captureDistance,EPS)+(1-geometry.axisAlignment)*.15
     const candidate={
@@ -154,6 +151,8 @@ export function findRackPinionSnapCandidateV1(selected,objects,options={}) {
       targetObject,
       source:movingPinion?.connector??movingRack?.connector,
       target:fixedRack?.connector??fixedPinion?.connector,
+      targetWorld:geometry.pitchPoint.clone(),
+      distance:geometry.centerError,
       pinion,rack,geometry,phase,translation,score,
       key:`rack-pinion:${selected.userData?.instanceId}>${targetObject.userData?.instanceId}`,
       ratio:null,
