@@ -10,7 +10,7 @@ test('predictive LDraw loader starts before app and never blocks normal fallback
   const preload = bootstrap.indexOf("await import('./ldraw/fast-loader-v1.js')")
   const app = bootstrap.indexOf("await import('./app.js')")
   assert.ok(preload >= 0, 'fast loader is wired into production bootstrap')
-  assert.ok(app > preload, 'predictive warming starts before app/project instantiation')
+  assert.ok(app > preload, 'project/intent warming starts before app/project instantiation')
   assert.match(bootstrap,/Predictive fast loader unavailable; using normal on-demand loading/)
 })
 
@@ -24,16 +24,16 @@ test('shared Three.js cache is enabled before any LDraw runtime can start loadin
   assert.match(boost,/THREE\.Cache\.clear\(\)/,'cache remains explicitly clearable for diagnostics')
 })
 
-test('fast loader predicts visible, hovered, clicked, recent, favorite and saved-project parts without cold-loading a canned catalog set', async () => {
+test('atlas-backed catalog only preloads full geometry on explicit placement intent', async () => {
   const source = await text('ldraw/fast-loader-v1.js')
-  assert.match(source,/new IntersectionObserver/,'visible catalog cards are warmed')
-  assert.match(source,/pointerover/,'hover warms the likely next part')
-  assert.match(source,/pointerdown/,'click intent is promoted before the click handler')
-  assert.match(source,/bricklab\.ldraw\.recents\.v3/,'recent parts are idle-warmed')
-  assert.match(source,/bricklab\.ldraw\.favorites\.v3/,'favorites are idle-warmed')
-  assert.match(source,/startRegisteredWarmup\(\)/,'saved-project definitions are warmed before restore')
-  assert.doesNotMatch(source,/HOME_WARM/,'static atlas previews make unconditional canned geometry warmup wasteful')
-  assert.match(source,/idleWarmRequests/,'idle warmup remains observable in diagnostics')
+  assert.doesNotMatch(source,/new IntersectionObserver/,'visible cards must not trigger full LDraw geometry loads')
+  assert.doesNotMatch(source,/pointerover/,'hover must not trigger full LDraw geometry loads')
+  assert.doesNotMatch(source,/focusin/,'keyboard focus must not trigger speculative geometry loads')
+  assert.doesNotMatch(source,/bricklab\.ldraw\.recents\.v3/,'recent catalog history no longer cold-loads geometry')
+  assert.doesNotMatch(source,/bricklab\.ldraw\.favorites\.v3/,'favorites no longer cold-load geometry')
+  assert.match(source,/closest\?\.\('\[data-add\]'\)/,'+ Add starts critical preload')
+  assert.match(source,/addEventListener\('dblclick'/,'double-click placement starts critical preload')
+  assert.match(source,/startRegisteredWarmup\(\)/,'already registered project parts are still warmed before restore')
 })
 
 test('critical requests can bypass a saturated background queue while background work stays bounded', async () => {
