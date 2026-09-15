@@ -104,12 +104,14 @@ export function createPartsLibraryFamilyPreloader(root,{previewService,getItems=
     if(!button||!root.contains(button))return
     if(button.hasAttribute('data-family')||button.hasAttribute('data-change'))queueMicrotask(sync)
   }
-  root.addEventListener('click',click)
+  // Capture the family action before the library view replaces the clicked button.
+  // In bubble phase root.contains(button) is already false after a full remount.
+  root.addEventListener('click',click,true)
 
   return Object.freeze({
     version:PARTS_LIBRARY_FAMILY_PRELOAD_VERSION,
     sync,
     state:()=>state?Object.freeze({...state,familyId:activeFamily,signature:activeSignature}):null,
-    destroy(){destroyed=true;abort();root.removeEventListener('click',click);root.querySelector('[data-family-preload]')?.remove()},
+    destroy(){destroyed=true;abort();root.removeEventListener('click',click,true);root.querySelector('[data-family-preload]')?.remove()},
   })
 }
