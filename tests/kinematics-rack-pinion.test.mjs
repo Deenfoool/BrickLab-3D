@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  rackTravelFromRadiansV1,
   rackTravelFromRotationV1,
   solveRackPinionFollowersV1,
 } from '../kinematics/rack-pinion-follow-v1.js'
@@ -9,6 +10,7 @@ test('rack travel follows pinion pitch radius and signed shaft ratio', () => {
   assert.ok(Math.abs(rackTravelFromRotationV1(360, 1, 1, 1) - Math.PI * 2) < 1e-12)
   assert.ok(Math.abs(rackTravelFromRotationV1(180, -2, 0.5, 1) + Math.PI) < 1e-12)
   assert.ok(Math.abs(rackTravelFromRotationV1(90, 1, 1, -1) + Math.PI / 2) < 1e-12)
+  assert.ok(Math.abs(rackTravelFromRadiansV1(Math.PI, 2, 0.5, -1) + Math.PI) < 1e-12)
 })
 
 test('rack follower uses propagated shaft ratio, not only the directly dragged pinion', () => {
