@@ -8,6 +8,18 @@ import {
   dynamicJointKind,
   jointControlAxes,
 } from '../kinematics/solver-v1.js'
+import {
+  circularDragDegrees,
+  linearDragDegrees,
+  normalizePointerAngleDelta,
+} from '../kinematics/drag-v1.js'
+
+test('Kinematics pointer drag follows the visible rotation direction without wrap jumps', () => {
+  assert.ok(Math.abs(normalizePointerAngleDelta(Math.PI * 2 - .1) + .1) < 1e-12)
+  assert.ok(circularDragDegrees(0, Math.PI / 2, 1) < 0)
+  assert.ok(circularDragDegrees(0, Math.PI / 2, -1) > 0)
+  assert.equal(linearDragDegrees(20, 2, 1), 13)
+})
 
 test('Kinematics counts only free/limited certified constraint DOF', () => {
   const revolute = { dof:{ tx:{state:'locked'},ty:{state:'locked'},tz:{state:'locked'},rx:{state:'locked'},ry:{state:'free'},rz:{state:'locked'} } }
@@ -61,8 +73,10 @@ test('Production Kinematics is a lazy no-Rapier mode that protects project and V
   const lifecycle = await readFile(new URL('../kinematics/lifecycle-guard-v1.js', import.meta.url), 'utf8')
   const bootstrap = await readFile(new URL('../bootstrap.js', import.meta.url), 'utf8')
   const index = await readFile(new URL('../index.html', import.meta.url), 'utf8')
+  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8')
+  const editorAdapter = await readFile(new URL('../architecture/editor-adapter-v1.js', import.meta.url), 'utf8')
 
-  assert.match(activation, /data\.mode = 'kinematics'/)
+  assert.match(activation, /dataset\.mode = 'kinematics'/)
   assert.match(activation, /runtime-v1\.js\?v=kinematics-recovery-20260914-v2/)
   assert.match(activation, /lifecycle-guard-v1\.js\?v=kinematics-recovery-20260914-v2/)
   assert.match(activation, /BrickLabKinematics\?\.exit\?\.\(\{ restore:true \}\)/, 'failed activation must defensively restore BUILD')
@@ -80,6 +94,13 @@ test('Production Kinematics is a lazy no-Rapier mode that protects project and V
   assert.match(runtime, /subsystems\.mechanics\.analyze/)
   assert.match(runtime, /updateEditor'\) return \(\) => undefined/, 'temporary poses must not invalidate the persistent V4 graph')
   assert.match(runtime, /restoreBaseline/)
+  assert.match(runtime, /pickedMechanicalObject/)
+  assert.match(runtime, /setPointerCapture/)
+  assert.match(runtime, /circularDragDegrees/)
+  assert.match(runtime, /mechanics\?\.gear \|\| mechanics\?\.shaft \|\| mechanics\?\.wheel/)
+  assert.match(app, /BrickLabViewportV1/)
+  assert.match(editorAdapter, /BrickLabViewportV1\?\.camera/)
+  assert.match(runtime, /BrickLabViewportV1\?\.camera/)
   assert.match(runtime, /Exit Kinematics before changing or saving the project/)
   assert.match(runtime, /event\.code === 'Tab'/)
   assert.doesNotMatch(runtime, /PhysicsSession|Rapier|createSession\(/, 'KINEMATICS must not start dynamic physics')

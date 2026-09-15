@@ -1,4 +1,4 @@
-export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.1.1'
+export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.2.0'
 
 const LANGUAGE_KEY = 'bricklab.ui.language.v1'
 
@@ -28,7 +28,7 @@ function ensureStylesheet() {
   if (!globalThis.document?.head || document.querySelector('link[data-bricklab-kinematics]')) return
   const link = document.createElement('link')
   link.rel = 'stylesheet'
-  link.href = './kinematics/kinematics-v1.css?v=kinematics-20260912-v1'
+  link.href = './kinematics/kinematics-v1.css?v=kinematics-drag-20260915-v1'
   link.dataset.bricklabKinematics = 'v1'
   document.head.append(link)
 }

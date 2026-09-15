@@ -1487,6 +1487,15 @@ function animate() {
 
 globalThis.BrickLabConnectorV4?.attachEditor(() => buildRoot.children)
 
+// Read-only viewport boundary for optional editor subsystems. The active camera is
+// lexical state and changes when projection mode toggles, so consumers must request
+// it lazily instead of searching the scene graph (the cameras are not scene children).
+globalThis.BrickLabViewportV1 = Object.freeze({
+  version:'bricklab-viewport-v1.0.0',
+  camera:() => camera,
+  canvas:renderer.domElement,
+})
+
 try { installAudio() } catch (error) { console.warn('Optional audio setup unavailable', error) }
 renderCatalog()
 loadLocal()

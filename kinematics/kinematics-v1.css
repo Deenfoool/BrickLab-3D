@@ -198,6 +198,19 @@
   opacity: .42;
 }
 
+.bricklab-kinematics-active #viewport canvas {
+  cursor: grab;
+  touch-action: none;
+}
+
+.bricklab-kinematics-active #viewport canvas.kinematics-dragging {
+  cursor: grabbing;
+}
+
+.kinematics-panel[data-dragging="true"] {
+  border-color: rgba(116,230,166,.28);
+}
+
 @media (max-width: 780px) {
   .kinematics-panel {
     top: 62px;

@@ -39,6 +39,8 @@ function multiplyMatrixVector(matrix, vector) {
 }
 
 function editorCameraFor(object) {
+  const active = globalThis.BrickLabViewportV1?.camera?.()
+  if (active?.isCamera) return active
   if (!object) return null
   let root = object
   while (root?.parent) root = root.parent

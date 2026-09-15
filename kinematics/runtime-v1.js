@@ -7,8 +7,13 @@ import {
   solveShaftRatios,
   summarizePlanDof,
 } from './solver-v1.js?v=kinematics-20260912-v1'
+import {
+  circularDragDegrees,
+  KINEMATICS_DRAG_VERSION,
+  linearDragDegrees,
+} from './drag-v1.js'
 
-export const KINEMATICS_RUNTIME_VERSION = 'kinematics-runtime-v1.0.0'
+export const KINEMATICS_RUNTIME_VERSION = 'kinematics-runtime-v1.1.0'
 
 const LANGUAGE_KEY = 'bricklab.ui.language.v1'
 const subsystems = globalThis.BrickLabSubsystems
@@ -36,6 +41,9 @@ let previousStatusText = ''
 let toolbarWasDisabled = false
 let snapWasHidden = false
 let selectedBeforeEnterId = null
+let pointerDrag = null
+const dragRaycaster = new THREE.Raycaster()
+const dragPointer = new THREE.Vector2()
 
 function language() {
   try {
@@ -77,6 +85,70 @@ const panel = layer.querySelector('.kinematics-panel')
 
 function objects() { return subsystems.editor.objects?.() ?? [] }
 function currentDriver() { return drivers.find(driver => driver.id === currentDriverId) ?? null }
+
+function driverForInstance(instanceId) {
+  return drivers.find(driver => driver.type === 'shaft' && driver.memberIds.includes(instanceId)) ?? null
+}
+
+function mechanicalDragEligible(object) {
+  const mechanics = subsystems.parts.get(object?.userData?.partId)?.mechanics
+  return Boolean(mechanics?.gear || mechanics?.shaft || mechanics?.wheel)
+}
+
+function sceneCamera() {
+  const active = globalThis.BrickLabViewportV1?.camera?.()
+  if (active?.isCamera) return active
+  const first = objects()[0]
+  let root = first
+  while (root?.parent) root = root.parent
+  let camera = null
+  root?.traverse?.(node => { if (!camera && node?.isCamera) camera = node })
+  return camera
+}
+
+function pickedMechanicalObject(event) {
+  const canvas = viewport.querySelector('canvas')
+  const camera = sceneCamera()
+  const rect = canvas?.getBoundingClientRect?.()
+  if (!canvas || !camera || !rect?.width || !rect?.height) return null
+  dragPointer.set(
+    ((event.clientX - rect.left) / rect.width) * 2 - 1,
+    -((event.clientY - rect.top) / rect.height) * 2 + 1,
+  )
+  dragRaycaster.setFromCamera(dragPointer, camera)
+  for (const hit of dragRaycaster.intersectObjects(objects(), true)) {
+    const object = hit.object?.userData?.instanceRoot
+    if (!object || !mechanicalDragEligible(object)) continue
+    const driver = driverForInstance(object.userData?.instanceId)
+    if (driver) return { object, driver, camera, canvas }
+  }
+  return null
+}
+
+function pointerPolarAngle(event, center) {
+  return Math.atan2(event.clientY - center.y, event.clientX - center.x)
+}
+
+function shaftViewSign(driver, object, camera) {
+  const shaft = analysis?.drivetrain?.shafts?.find(item => item.id === driver.shaftId)
+  if (!shaft?.axisWorld || !camera) return 1
+  const objectPosition = new THREE.Vector3()
+  const cameraPosition = new THREE.Vector3()
+  object.getWorldPosition?.(objectPosition)
+  camera.getWorldPosition?.(cameraPosition)
+  const towardCamera = camera.isOrthographicCamera
+    ? camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(-1)
+    : cameraPosition.sub(objectPosition).normalize()
+  const dot = shaft.axisWorld.dot(towardCamera)
+  return Math.abs(dot) < .08 ? 1 : Math.sign(dot)
+}
+
+function updateAngleReadout() {
+  const output = panel.querySelector('[data-kinematics-angle-value]')
+  if (output) output.textContent = `${Math.round(angleDeg)}°`
+  const range = panel.querySelector('[data-kinematics-angle]')
+  if (range) range.value = String(Math.max(-180, Math.min(180, angleDeg)))
+}
 
 function captureBaseline(items) {
   const result = new Map()
@@ -495,10 +567,70 @@ function modeCapture(event) {
   queueMicrotask(() => document.querySelector(`.mode[data-mode="${targetMode}"]`)?.click?.())
 }
 
-function canvasCapture(event) {
-  if (!active || event.button !== 0) return
+function canvasPointerDown(event) {
+  if (!active || analyzing || event.button !== 0) return
+  const picked = pickedMechanicalObject(event)
+  if (!picked) return
   event.preventDefault()
   event.stopImmediatePropagation()
+
+  if (currentDriverId !== picked.driver.id) {
+    restoreBaseline({ update:true })
+    currentDriverId = picked.driver.id
+    angleDeg = 0
+    slideStud = 0
+    renderPanel()
+  }
+
+  const point = subsystems.editor.viewportPoint?.(picked.object, { offsetY:0 })
+  const viewportRect = viewport.getBoundingClientRect()
+  const center = point
+    ? { x:viewportRect.left + point.x, y:viewportRect.top + point.y }
+    : { x:event.clientX, y:event.clientY }
+  const radius = Math.hypot(event.clientX - center.x, event.clientY - center.y)
+  pointerDrag = {
+    pointerId:event.pointerId,
+    canvas:picked.canvas,
+    center,
+    previousX:event.clientX,
+    previousY:event.clientY,
+    previousAngle:pointerPolarAngle(event, center),
+    circular:radius >= 12,
+    viewSign:shaftViewSign(picked.driver, picked.object, picked.camera),
+  }
+  picked.canvas.setPointerCapture?.(event.pointerId)
+  picked.canvas.classList.add('kinematics-dragging')
+  panel.dataset.dragging = 'true'
+}
+
+function canvasPointerMove(event) {
+  if (!active || !pointerDrag || event.pointerId !== pointerDrag.pointerId) return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  const currentAngle = pointerPolarAngle(event, pointerDrag.center)
+  const delta = pointerDrag.circular
+    ? circularDragDegrees(pointerDrag.previousAngle, currentAngle, pointerDrag.viewSign)
+    : linearDragDegrees(
+        event.clientX - pointerDrag.previousX,
+        event.clientY - pointerDrag.previousY,
+        pointerDrag.viewSign,
+      )
+  if (Number.isFinite(delta)) angleDeg += delta
+  pointerDrag.previousAngle = currentAngle
+  pointerDrag.previousX = event.clientX
+  pointerDrag.previousY = event.clientY
+  updateAngleReadout()
+  applyControls()
+}
+
+function finishPointerDrag(event) {
+  if (!pointerDrag || (event?.pointerId != null && event.pointerId !== pointerDrag.pointerId)) return
+  event?.preventDefault?.()
+  event?.stopImmediatePropagation?.()
+  pointerDrag.canvas.releasePointerCapture?.(pointerDrag.pointerId)
+  pointerDrag.canvas.classList.remove('kinematics-dragging')
+  panel.dataset.dragging = 'false'
+  pointerDrag = null
 }
 
 function keyCapture(event) {
@@ -551,6 +683,7 @@ async function enter() {
 
 function exit({ restore = true } = {}) {
   if (!active && !analyzing) return api
+  finishPointerDrag()
   if (restore) restoreBaseline({ update:true })
   restoreV4Global()
   try { authoritativeV4.reconcileGraph?.(objects(), { persist:false }) } catch (error) { console.warn('[BrickLab Kinematics] Baseline graph reconcile failed.', error) }
@@ -580,7 +713,11 @@ function reset() {
 
 modeBar.addEventListener('click', modeCapture, true)
 document.querySelector('.top-actions')?.addEventListener('click', blockEditorClick, true)
-viewport.querySelector('canvas')?.addEventListener('pointerdown', canvasCapture, true)
+const canvas = viewport.querySelector('canvas')
+canvas?.addEventListener('pointerdown', canvasPointerDown, true)
+canvas?.addEventListener('pointermove', canvasPointerMove, true)
+canvas?.addEventListener('pointerup', finishPointerDrag, true)
+canvas?.addEventListener('pointercancel', finishPointerDrag, true)
 globalThis.addEventListener?.('keydown', keyCapture, true)
 globalThis.addEventListener?.('bricklab:languagechange', () => { if (active) renderPanel() })
 
@@ -598,6 +735,7 @@ const api = Object.freeze({
     driverCount:drivers.length,
     dof:analysis?.dof ?? null,
     blockers:analysis?.plan?.blockers?.length ?? 0,
+    dragging:Boolean(pointerDrag),
   }),
   drivers:() => drivers.map(driver => Object.freeze({ id:driver.id, type:driver.type, kind:driver.kind ?? null, label:driver.label })),
   setDriver(id) {
@@ -612,6 +750,7 @@ const api = Object.freeze({
   setAngle(degrees) { angleDeg = Math.max(-180, Math.min(180, Number(degrees) || 0)); applyControls(); return angleDeg },
   setSlide(studs) { slideStud = Math.max(-4, Math.min(4, Number(studs) || 0)); applyControls(); return slideStud },
   projectStateSnapshot:() => baselineProject,
+  dragVersion:KINEMATICS_DRAG_VERSION,
 })
 
 globalThis.BrickLabKinematics = api
