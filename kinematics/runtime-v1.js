@@ -8,14 +8,19 @@ import {
   summarizePlanDof,
 } from './solver-v1.js?v=kinematics-20260912-v1'
 import {
+  angularVelocityFromDelta,
   circularDragDegrees,
+  decayAngularVelocity,
   KINEMATICS_DRAG_VERSION,
   linearDragDegrees,
 } from './drag-v1.js'
 
-export const KINEMATICS_RUNTIME_VERSION = 'kinematics-runtime-v1.1.0'
+export const KINEMATICS_RUNTIME_VERSION = 'kinematics-runtime-v1.2.0'
 
 const LANGUAGE_KEY = 'bricklab.ui.language.v1'
+const INERTIA_STOP_DPS = 3
+const INERTIA_DAMPING = 2.65
+const MAX_INERTIA_DPS = 1440
 const subsystems = globalThis.BrickLabSubsystems
 const authoritativeV4 = globalThis.BrickLabConnectorV4
 if (!subsystems?.editor?.ready?.() || !authoritativeV4?.projectConnections) {
@@ -29,11 +34,13 @@ if (!viewport || !modeBar || !modeButton) throw new Error('Kinematics UI activat
 
 let active = false
 let analyzing = false
+let entryBaseline = new Map()
 let baseline = new Map()
 let baselineProject = null
 let analysis = null
 let drivers = []
 let currentDriverId = null
+let selectedInstanceId = null
 let angleDeg = 0
 let slideStud = 0
 let originalV4Global = null
@@ -42,6 +49,10 @@ let toolbarWasDisabled = false
 let snapWasHidden = false
 let selectedBeforeEnterId = null
 let pointerDrag = null
+let angularVelocityDps = 0
+let inertiaFrame = 0
+let inertiaLastTime = 0
+let lastLockReason = ''
 const dragRaycaster = new THREE.Raycaster()
 const dragPointer = new THREE.Vector2()
 
@@ -55,7 +66,7 @@ function language() {
 
 function t(en, ru) { return language() === 'ru' ? ru : en }
 
-function toast(message, timeout = 3000) {
+function toast(message, timeout = 2600) {
   const node = document.querySelector('#toast')
   if (!node) return
   node.textContent = message
@@ -63,31 +74,38 @@ function toast(message, timeout = 3000) {
   globalThis.setTimeout?.(() => node.classList.remove('show'), timeout)
 }
 
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, char => ({
-    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;',
-  })[char])
-}
-
-function createUi() {
+function createInteractionLayer() {
   let layer = viewport.querySelector('.kinematics-layer')
-  if (layer) return layer
-  layer = document.createElement('div')
-  layer.className = 'kinematics-layer'
-  layer.hidden = true
-  layer.innerHTML = '<section class="kinematics-panel" role="region" aria-label="Kinematics"></section>'
-  viewport.append(layer)
+  if (!layer) {
+    layer = document.createElement('div')
+    layer.className = 'kinematics-layer'
+    layer.hidden = true
+    layer.innerHTML = '<div class="kinematics-selection-marker" aria-hidden="true"></div>'
+    viewport.append(layer)
+  } else {
+    layer.querySelector('.kinematics-panel')?.remove()
+    if (!layer.querySelector('.kinematics-selection-marker')) {
+      const marker = document.createElement('div')
+      marker.className = 'kinematics-selection-marker'
+      marker.setAttribute('aria-hidden', 'true')
+      layer.append(marker)
+    }
+  }
   return layer
 }
 
-const layer = createUi()
-const panel = layer.querySelector('.kinematics-panel')
+const layer = createInteractionLayer()
+const selectionMarker = layer.querySelector('.kinematics-selection-marker')
 
 function objects() { return subsystems.editor.objects?.() ?? [] }
 function currentDriver() { return drivers.find(driver => driver.id === currentDriverId) ?? null }
 
 function driverForInstance(instanceId) {
-  return drivers.find(driver => driver.type === 'shaft' && driver.memberIds.includes(instanceId)) ?? null
+  return drivers.find(driver => driver.type === 'shaft' && driver.memberIds.includes(instanceId))
+    ?? drivers.find(driver => driver.type === 'joint'
+      && driver.controls?.angle
+      && driver.movingObject?.userData?.instanceId === instanceId)
+    ?? null
 }
 
 function mechanicalDragEligible(object) {
@@ -96,8 +114,8 @@ function mechanicalDragEligible(object) {
 }
 
 function sceneCamera() {
-  const active = globalThis.BrickLabViewportV1?.camera?.()
-  if (active?.isCamera) return active
+  const activeCamera = globalThis.BrickLabViewportV1?.camera?.()
+  if (activeCamera?.isCamera) return activeCamera
   const first = objects()[0]
   let root = first
   while (root?.parent) root = root.parent
@@ -129,9 +147,21 @@ function pointerPolarAngle(event, center) {
   return Math.atan2(event.clientY - center.y, event.clientX - center.x)
 }
 
-function shaftViewSign(driver, object, camera) {
-  const shaft = analysis?.drivetrain?.shafts?.find(item => item.id === driver.shaftId)
-  if (!shaft?.axisWorld || !camera) return 1
+function driverAxisWorld(driver) {
+  if (driver?.type === 'shaft') {
+    return analysis?.drivetrain?.shafts?.find(item => item.id === driver.shaftId)?.axisWorld?.clone?.() ?? null
+  }
+  if (driver?.type === 'joint') {
+    try { return authoritativeV4.worldFrame(driver.targetObject, driver.targetConnector)?.axis?.clone?.() ?? null }
+    catch { return null }
+  }
+  return null
+}
+
+function driverViewSign(driver, object, camera) {
+  const axis = driverAxisWorld(driver)
+  if (!axis || !camera) return 1
+  axis.normalize()
   const objectPosition = new THREE.Vector3()
   const cameraPosition = new THREE.Vector3()
   object.getWorldPosition?.(objectPosition)
@@ -139,15 +169,8 @@ function shaftViewSign(driver, object, camera) {
   const towardCamera = camera.isOrthographicCamera
     ? camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(-1)
     : cameraPosition.sub(objectPosition).normalize()
-  const dot = shaft.axisWorld.dot(towardCamera)
+  const dot = axis.dot(towardCamera)
   return Math.abs(dot) < .08 ? 1 : Math.sign(dot)
-}
-
-function updateAngleReadout() {
-  const output = panel.querySelector('[data-kinematics-angle-value]')
-  if (output) output.textContent = `${Math.round(angleDeg)}°`
-  const range = panel.querySelector('[data-kinematics-angle]')
-  if (range) range.value = String(Math.max(-180, Math.min(180, angleDeg)))
 }
 
 function captureBaseline(items) {
@@ -165,8 +188,8 @@ function captureBaseline(items) {
   return result
 }
 
-function restoreBaseline({ update = true } = {}) {
-  for (const pose of baseline.values()) {
+function restorePoseMap(map, { update = true } = {}) {
+  for (const pose of map.values()) {
     pose.object.position.copy(pose.position)
     pose.object.quaternion.copy(pose.quaternion)
     pose.object.scale.copy(pose.scale)
@@ -174,13 +197,13 @@ function restoreBaseline({ update = true } = {}) {
   }
 }
 
+function restoreBaseline(options) { restorePoseMap(baseline, options) }
+function restoreEntryBaseline(options) { restorePoseMap(entryBaseline, options) }
+
 function replaceV4WithKinematicsProxy() {
   if (originalV4Global) return
   originalV4Global = globalThis.BrickLabConnectorV4
   const target = originalV4Global
-  // app.js runs Connector V4 updateEditor every BUILD frame. Kinematics intentionally
-  // changes live transforms without changing the construction graph, so suppress only
-  // that editor-reconcile hook while this temporary mode is active.
   globalThis.BrickLabConnectorV4 = new Proxy(target, {
     get(object, property, receiver) {
       if (property === 'updateEditor') return () => undefined
@@ -232,23 +255,14 @@ function fixedComponents(plan, sceneObjects) {
   return byInstance
 }
 
-function definitionName(object) {
-  return subsystems.parts.get(object?.userData?.partId)?.name ?? object?.userData?.partId ?? t('Part','Деталь')
-}
-
 function shaftDrivers(drivetrain) {
-  return (drivetrain?.shafts ?? []).map(shaft => {
-    const representative = subsystems.editor.objectById?.(shaft.memberIds?.[0])
-    const label = `${t('Shaft','Вал')} · ${definitionName(representative)}${shaft.memberIds?.length > 1 ? ` · ${shaft.memberIds.length} ${t('parts','дет.')}` : ''}`
-    return {
-      id:`shaft:${shaft.id}`,
-      type:'shaft',
-      shaftId:shaft.id,
-      label,
-      memberIds:[...(shaft.memberIds ?? [])],
-      controls:{ angle:true, slide:false },
-    }
-  })
+  return (drivetrain?.shafts ?? []).map(shaft => ({
+    id:`shaft:${shaft.id}`,
+    type:'shaft',
+    shaftId:shaft.id,
+    memberIds:[...(shaft.memberIds ?? [])],
+    controls:{ angle:true, slide:false },
+  }))
 }
 
 function jointDrivers(plan) {
@@ -274,7 +288,6 @@ function jointDrivers(plan) {
         movingConnector,
         targetConnector,
         controls,
-        label:`${kind} · ${definitionName(movingObject)} → ${definitionName(targetObject)}`,
       })
     }
   }
@@ -282,16 +295,19 @@ function jointDrivers(plan) {
 }
 
 function preferredDriver(previousInstanceId) {
-  if (!previousInstanceId) return drivers[0]?.id ?? null
-  return drivers.find(driver => driver.type === 'shaft' && driver.memberIds.includes(previousInstanceId))?.id
-    ?? drivers.find(driver => driver.type === 'joint' && driver.movingObject?.userData?.instanceId === previousInstanceId)?.id
-    ?? drivers[0]?.id
-    ?? null
+  if (!previousInstanceId) return null
+  return driverForInstance(previousInstanceId)?.id ?? null
+}
+
+function setStatus(message) {
+  const status = document.querySelector('#statusText')
+  if (status) status.textContent = message
 }
 
 async function analyze() {
   analyzing = true
-  renderPanel()
+  document.body.dataset.bricklabKinematicsAnalyzing = 'true'
+  setStatus(t('KINEMATICS · analyzing mechanism…','КИНЕМАТИКА · анализ механизма…'))
   const sceneObjects = objects()
   try {
     await authoritativeV4.hydrateObjects?.(sceneObjects)
@@ -331,10 +347,13 @@ async function analyze() {
   }
   drivers = [...shaftDrivers(drivetrain), ...jointDrivers(plan)]
   currentDriverId = preferredDriver(selectedBeforeEnterId)
+  selectedInstanceId = currentDriverId ? selectedBeforeEnterId : null
   angleDeg = 0
   slideStud = 0
   analyzing = false
-  renderPanel()
+  delete document.body.dataset.bricklabKinematicsAnalyzing
+  setStatus(t('KINEMATICS · LMB select + drag to rotate · Esc BUILD','КИНЕМАТИКА · ЛКМ выбрать + тянуть для вращения · Esc СБОРКА'))
+  updateSelectionMarker()
 }
 
 function parentLocalAxis(object, worldAxis) {
@@ -351,7 +370,6 @@ function applyShaftDriver(driver) {
     restoreBaseline()
     return { locked:true, reason:t('Conflicting gear ratios lock this drivetrain loop.','Конфликт передаточных отношений блокирует эту кинематическую петлю.'), solution }
   }
-
   restoreBaseline({ update:true })
   const shaftById = new Map((analysis?.drivetrain?.shafts ?? []).map(shaft => [shaft.id, shaft]))
   for (const [shaftId, ratio] of Object.entries(solution.ratios)) {
@@ -392,130 +410,100 @@ function applyJointDriver(driver) {
   const targetId = driver.targetObject?.userData?.instanceId
   const component = analysis?.fixedByInstance?.get(movingId) ?? [driver.movingObject]
   if (component.some(object => object?.userData?.instanceId === targetId)) {
-    return { locked:true, reason:t('A rigid alternate path connects both sides of this joint.','Обе стороны шарнира соединены альтернативным жёстким путём.'), solution:null }
+    return { locked:true, reason:t('A rigid alternate path connects both sides of this joint.','Обе стороны шарнира соединены альтернативным жёстким путём.') }
   }
-
   let frame
   try { frame = authoritativeV4.worldFrame(driver.targetObject, driver.targetConnector) }
-  catch (error) { return { locked:true, reason:String(error?.message || error), solution:null } }
+  catch (error) { return { locked:true, reason:String(error?.message || error) } }
   const axis = frame.axis.clone().normalize()
   const pivot = frame.position.clone()
-  const controls = driver.controls
-  const radians = controls.angle ? THREE.MathUtils.degToRad(angleDeg) : 0
-  const slide = controls.slide ? slideStud : 0
-
+  const radians = driver.controls?.angle ? THREE.MathUtils.degToRad(angleDeg) : 0
+  const slide = driver.controls?.slide ? slideStud : 0
   const rotation = new THREE.Matrix4().makeRotationAxis(axis, radians)
   const aroundPivot = new THREE.Matrix4().makeTranslation(pivot.x,pivot.y,pivot.z)
     .multiply(rotation)
     .multiply(new THREE.Matrix4().makeTranslation(-pivot.x,-pivot.y,-pivot.z))
   const translation = new THREE.Matrix4().makeTranslation(axis.x*slide,axis.y*slide,axis.z*slide)
-  const delta = translation.multiply(aroundPivot)
-  transformComponent(component, delta)
-  return { locked:false, solution:null }
+  transformComponent(component, translation.multiply(aroundPivot))
+  return { locked:false }
+}
+
+function stopInertia() {
+  if (inertiaFrame) cancelAnimationFrame(inertiaFrame)
+  inertiaFrame = 0
+  inertiaLastTime = 0
+  angularVelocityDps = 0
+  document.body.classList.remove('bricklab-kinematics-inertia')
 }
 
 function applyControls() {
-  if (!active || analyzing || !analysis) return
+  if (!active || analyzing || !analysis) return { locked:false }
   const driver = currentDriver()
-  if (!driver) {
-    restoreBaseline()
-    renderPanel()
-    return
-  }
+  if (!driver) return { locked:false }
   const result = driver.type === 'shaft' ? applyShaftDriver(driver) : applyJointDriver(driver)
-  panel.dataset.locked = result?.locked ? 'true' : 'false'
-  panel.dataset.driverType = driver.type
-  renderReadout(result)
-}
-
-function driverOptions() {
-  return drivers.map(driver => `<option value="${escapeHtml(driver.id)}"${driver.id === currentDriverId ? ' selected' : ''}>${escapeHtml(driver.label)}</option>`).join('')
-}
-
-function renderReadout(lastResult = null) {
-  const node = panel.querySelector('[data-kinematics-readout]')
-  if (!node || !analysis) return
-  const driver = currentDriver()
-  let extra = ''
-  if (lastResult?.locked) extra = `<div class="kinematics-alert error">${escapeHtml(lastResult.reason)}</div>`
-  else if (driver?.type === 'shaft') {
-    const solution = lastResult?.solution ?? solveShaftRatios(driver.shaftId, analysis.drivetrain?.gearMeshes ?? [])
-    const driven = Object.keys(solution.ratios).length
-    const ambiguous = solution.ambiguous.length
-    extra = `<div class="kinematics-readout-line"><span>${t('Driven shafts','Ведомые валы')}</span><b>${driven}</b></div>`
-    if (ambiguous) extra += `<div class="kinematics-alert warning">${t('Differential branch is under-constrained and is not propagated automatically.','Ветвь дифференциала недоопределена и не распространяется автоматически.')}</div>`
+  if (result?.locked) {
+    stopInertia()
+    if (result.reason && result.reason !== lastLockReason) {
+      lastLockReason = result.reason
+      toast(result.reason)
+    }
+  } else {
+    lastLockReason = ''
   }
-  const blockers = analysis.plan?.blockers?.length ?? 0
-  if (blockers) extra += `<div class="kinematics-alert warning">${blockers} ${t('uncertified V4 relationship(s) are excluded from direct joint driving.','несертифицированных V4-связей исключены из прямого управления шарнирами.')}</div>`
-  node.innerHTML = extra
+  updateSelectionMarker()
+  return result
 }
 
-function wirePanel() {
-  panel.querySelector('[data-kinematics-driver]')?.addEventListener('change', event => {
-    currentDriverId = event.target.value || null
-    angleDeg = 0
-    slideStud = 0
-    restoreBaseline()
-    renderPanel()
-  })
-  panel.querySelector('[data-kinematics-angle]')?.addEventListener('input', event => {
-    angleDeg = Number(event.target.value) || 0
-    const output = panel.querySelector('[data-kinematics-angle-value]')
-    if (output) output.textContent = `${Math.round(angleDeg)}°`
-    applyControls()
-  })
-  panel.querySelector('[data-kinematics-slide]')?.addEventListener('input', event => {
-    slideStud = Number(event.target.value) || 0
-    const output = panel.querySelector('[data-kinematics-slide-value]')
-    if (output) output.textContent = `${slideStud.toFixed(2)} stud`
-    applyControls()
-  })
-  panel.querySelector('[data-kinematics-reset]')?.addEventListener('click', () => {
-    angleDeg = 0
-    slideStud = 0
-    restoreBaseline()
-    renderPanel()
-  })
-  panel.querySelector('[data-kinematics-exit]')?.addEventListener('click', () => exit({ restore:true }))
-}
-
-function renderPanel() {
-  if (!active) return
-  if (analyzing || !analysis) {
-    panel.innerHTML = `<div class="kinematics-head"><div><small>KINEMATICS V1</small><h3>${t('Analyzing mechanism…','Анализ механизма…')}</h3></div><span class="kinematics-spinner"></span></div><p>${t('Building a deterministic constraint and drivetrain model. No physics session is started.','Строится детерминированная модель ограничений и трансмиссии. Физическая симуляция не запускается.')}</p>`
+function updateSelectionMarker() {
+  if (!selectionMarker) return
+  const object = selectedInstanceId ? subsystems.editor.objectById?.(selectedInstanceId) : null
+  const point = object ? subsystems.editor.viewportPoint?.(object, { offsetY:0 }) : null
+  if (!active || !object || !point?.visible) {
+    selectionMarker.hidden = true
     return
   }
+  selectionMarker.hidden = false
+  selectionMarker.style.left = `${point.x}px`
+  selectionMarker.style.top = `${point.y}px`
+}
 
-  const driver = currentDriver()
-  const controls = driver?.controls ?? {angle:false,slide:false}
-  const dof = analysis.dof
-  const status = dof.blockers
-    ? t('Certified subset','Сертифицированное подмножество')
-    : t('Certified','Сертифицировано')
-  panel.innerHTML = `
-    <div class="kinematics-head">
-      <div><small>KINEMATICS V1 · ${escapeHtml(status)}</small><h3>${t('Mechanism motion','Движение механизма')}</h3></div>
-      <button type="button" class="kinematics-close" data-kinematics-exit aria-label="Exit">×</button>
-    </div>
-    <div class="kinematics-metrics">
-      <div><span>${t('Mechanism DOF','Степеней свободы')}</span><b>${dof.total}</b></div>
-      <div><span>${t('Shafts','Валы')}</span><b>${analysis.drivetrain?.shafts?.length ?? 0}</b></div>
-      <div><span>${t('Gear links','Передачи')}</span><b>${analysis.drivetrain?.gearMeshes?.length ?? 0}</b></div>
-    </div>
-    <label class="kinematics-field"><span>${t('Driver','Ведущий элемент')}</span>
-      <select data-kinematics-driver ${drivers.length ? '' : 'disabled'}>
-        ${drivers.length ? driverOptions() : `<option>${t('No deterministic driver found','Нет детерминированного ведущего элемента')}</option>`}
-      </select>
-    </label>
-    ${controls.angle ? `<label class="kinematics-control"><span>${t('Rotation','Вращение')} <b data-kinematics-angle-value>${Math.round(angleDeg)}°</b></span><input data-kinematics-angle type="range" min="-180" max="180" step="1" value="${angleDeg}"></label>` : ''}
-    ${controls.slide ? `<label class="kinematics-control"><span>${t('Axial travel','Осевое перемещение')} <b data-kinematics-slide-value>${slideStud.toFixed(2)} stud</b></span><input data-kinematics-slide type="range" min="-4" max="4" step="0.05" value="${slideStud}"></label>` : ''}
-    <div data-kinematics-readout></div>
-    ${drivers.length ? '' : `<div class="kinematics-alert info">${t('Add a supported shaft/gear train or a certified revolute, prismatic or cylindrical V4 joint.','Добавьте поддерживаемую передачу/вал или сертифицированный V4-шарнир: revolute, prismatic или cylindrical.')}</div>`}
-    <div class="kinematics-actions"><button type="button" data-kinematics-reset>${t('Reset pose','Сбросить позу')}</button><button type="button" class="primary" data-kinematics-exit>${t('Back to BUILD','Вернуться в СБОРКУ')}</button></div>
-    <footer>${t('Temporary motion only · gravity off · collision impulses off · project is not saved','Только временное движение · без гравитации · без импульсов столкновений · проект не сохраняется')}</footer>
-  `
-  wirePanel()
-  renderReadout()
+function rebaseForDriver(driver, instanceId) {
+  if (currentDriverId === driver.id) {
+    selectedInstanceId = instanceId
+    updateSelectionMarker()
+    return
+  }
+  stopInertia()
+  baseline = captureBaseline(objects())
+  angleDeg = 0
+  slideStud = 0
+  currentDriverId = driver.id
+  selectedInstanceId = instanceId
+  updateSelectionMarker()
+}
+
+function startInertia() {
+  if (!active || !currentDriver()?.controls?.angle || Math.abs(angularVelocityDps) < 12) {
+    angularVelocityDps = 0
+    return
+  }
+  angularVelocityDps = Math.max(-MAX_INERTIA_DPS, Math.min(MAX_INERTIA_DPS, angularVelocityDps))
+  document.body.classList.add('bricklab-kinematics-inertia')
+  inertiaLastTime = performance.now()
+  const frame = now => {
+    if (!active || pointerDrag || Math.abs(angularVelocityDps) < INERTIA_STOP_DPS) {
+      stopInertia()
+      return
+    }
+    const dt = Math.max(0, Math.min(.05, (now - inertiaLastTime) / 1000))
+    inertiaLastTime = now
+    angleDeg += angularVelocityDps * dt
+    const result = applyControls()
+    if (result?.locked) return
+    angularVelocityDps = decayAngularVelocity(angularVelocityDps, dt, INERTIA_DAMPING)
+    inertiaFrame = requestAnimationFrame(frame)
+  }
+  inertiaFrame = requestAnimationFrame(frame)
 }
 
 function setModeVisual() {
@@ -529,11 +517,11 @@ function setModeVisual() {
   snap?.classList.add('hidden')
   const status = document.querySelector('#statusText')
   previousStatusText = status?.textContent ?? ''
-  if (status) status.textContent = t('KINEMATICS · deterministic motion · no physics','КИНЕМАТИКА · детерминированное движение · без физики')
 }
 
 function restoreModeVisual() {
-  document.body.classList.remove('bricklab-kinematics-active')
+  document.body.classList.remove('bricklab-kinematics-active','bricklab-kinematics-inertia')
+  delete document.body.dataset.bricklabKinematicsAnalyzing
   for (const button of document.querySelectorAll('.mode')) button.classList.toggle('active', button.dataset.mode === 'build')
   const toolbar = document.querySelector('.viewport-toolbar')
   const snap = document.querySelector('#snapToolbar')
@@ -541,10 +529,7 @@ function restoreModeVisual() {
   if (!snapWasHidden) snap?.classList.remove('hidden')
   const status = document.querySelector('#statusText')
   if (status && previousStatusText) status.textContent = previousStatusText
-}
-
-function clearEditorSelection() {
-  globalThis.dispatchEvent?.(new KeyboardEvent('keydown', { key:'Escape', code:'Escape', bubbles:true }))
+  if (selectionMarker) selectionMarker.hidden = true
 }
 
 function blockEditorClick(event) {
@@ -573,14 +558,8 @@ function canvasPointerDown(event) {
   if (!picked) return
   event.preventDefault()
   event.stopImmediatePropagation()
-
-  if (currentDriverId !== picked.driver.id) {
-    restoreBaseline({ update:true })
-    currentDriverId = picked.driver.id
-    angleDeg = 0
-    slideStud = 0
-    renderPanel()
-  }
+  stopInertia()
+  rebaseForDriver(picked.driver, picked.object.userData?.instanceId)
 
   const point = subsystems.editor.viewportPoint?.(picked.object, { offsetY:0 })
   const viewportRect = viewport.getBoundingClientRect()
@@ -595,42 +574,48 @@ function canvasPointerDown(event) {
     previousX:event.clientX,
     previousY:event.clientY,
     previousAngle:pointerPolarAngle(event, center),
+    previousTime:Number(event.timeStamp) || performance.now(),
+    velocity:0,
+    moved:false,
     circular:radius >= 12,
-    viewSign:shaftViewSign(picked.driver, picked.object, picked.camera),
+    viewSign:driverViewSign(picked.driver, picked.object, picked.camera),
   }
   picked.canvas.setPointerCapture?.(event.pointerId)
   picked.canvas.classList.add('kinematics-dragging')
-  panel.dataset.dragging = 'true'
 }
 
 function canvasPointerMove(event) {
+  if (active && selectedInstanceId) updateSelectionMarker()
   if (!active || !pointerDrag || event.pointerId !== pointerDrag.pointerId) return
   event.preventDefault()
   event.stopImmediatePropagation()
   const currentAngle = pointerPolarAngle(event, pointerDrag.center)
   const delta = pointerDrag.circular
     ? circularDragDegrees(pointerDrag.previousAngle, currentAngle, pointerDrag.viewSign)
-    : linearDragDegrees(
-        event.clientX - pointerDrag.previousX,
-        event.clientY - pointerDrag.previousY,
-        pointerDrag.viewSign,
-      )
-  if (Number.isFinite(delta)) angleDeg += delta
+    : linearDragDegrees(event.clientX - pointerDrag.previousX, event.clientY - pointerDrag.previousY, pointerDrag.viewSign)
+  const now = Number(event.timeStamp) || performance.now()
+  if (Number.isFinite(delta)) {
+    angleDeg += delta
+    pointerDrag.velocity = angularVelocityFromDelta(delta, now - pointerDrag.previousTime, pointerDrag.velocity, .42, MAX_INERTIA_DPS)
+    if (Math.abs(delta) > .02) pointerDrag.moved = true
+  }
   pointerDrag.previousAngle = currentAngle
   pointerDrag.previousX = event.clientX
   pointerDrag.previousY = event.clientY
-  updateAngleReadout()
+  pointerDrag.previousTime = now
   applyControls()
 }
 
-function finishPointerDrag(event) {
+function finishPointerDrag(event, allowInertia = event?.type !== 'pointercancel') {
   if (!pointerDrag || (event?.pointerId != null && event.pointerId !== pointerDrag.pointerId)) return
   event?.preventDefault?.()
   event?.stopImmediatePropagation?.()
-  pointerDrag.canvas.releasePointerCapture?.(pointerDrag.pointerId)
-  pointerDrag.canvas.classList.remove('kinematics-dragging')
-  panel.dataset.dragging = 'false'
+  const finished = pointerDrag
+  finished.canvas.releasePointerCapture?.(finished.pointerId)
+  finished.canvas.classList.remove('kinematics-dragging')
   pointerDrag = null
+  angularVelocityDps = allowInertia && finished.moved ? finished.velocity : 0
+  if (allowInertia) startInertia()
 }
 
 function keyCapture(event) {
@@ -646,8 +631,6 @@ function keyCapture(event) {
   }
   const safeViewCodes = new Set(['Home','Digit1','Digit2','Digit3','Digit5','Slash'])
   if (safeViewCodes.has(event.code)) return
-  // Prevent BUILD edit/save shortcuts while app.js internally remains in BUILD. The
-  // temporary pose is never allowed to enter history or persistence.
   event.preventDefault()
   event.stopImmediatePropagation()
 }
@@ -667,13 +650,12 @@ async function enter() {
   globalThis.BrickLabDesignDoctor?.close?.()
   selectedBeforeEnterId = subsystems.editor.primarySelection?.()?.userData?.instanceId ?? null
   baselineProject = subsystems.editor.projectState?.() ?? null
+  entryBaseline = captureBaseline(sceneObjects)
   baseline = captureBaseline(sceneObjects)
-  clearEditorSelection()
   replaceV4WithKinematicsProxy()
   active = true
   layer.hidden = false
   setModeVisual()
-  renderPanel()
   await analyze()
   globalThis.dispatchEvent?.(new CustomEvent('bricklab:kinematicsenter', {
     detail:{ version:KINEMATICS_RUNTIME_VERSION, solverVersion:KINEMATICS_SOLVER_VERSION, drivers:drivers.length },
@@ -683,8 +665,9 @@ async function enter() {
 
 function exit({ restore = true } = {}) {
   if (!active && !analyzing) return api
-  finishPointerDrag()
-  if (restore) restoreBaseline({ update:true })
+  stopInertia()
+  finishPointerDrag(null, false)
+  if (restore) restoreEntryBaseline({ update:true })
   restoreV4Global()
   try { authoritativeV4.reconcileGraph?.(objects(), { persist:false }) } catch (error) { console.warn('[BrickLab Kinematics] Baseline graph reconcile failed.', error) }
   active = false
@@ -692,8 +675,10 @@ function exit({ restore = true } = {}) {
   analysis = null
   drivers = []
   currentDriverId = null
+  selectedInstanceId = null
   angleDeg = 0
   slideStud = 0
+  entryBaseline.clear()
   baseline.clear()
   baselineProject = null
   selectedBeforeEnterId = null
@@ -705,10 +690,12 @@ function exit({ restore = true } = {}) {
 }
 
 function reset() {
+  stopInertia()
+  restoreEntryBaseline({ update:true })
+  baseline = captureBaseline(objects())
   angleDeg = 0
   slideStud = 0
-  restoreBaseline({ update:true })
-  renderPanel()
+  updateSelectionMarker()
 }
 
 modeBar.addEventListener('click', modeCapture, true)
@@ -719,7 +706,7 @@ canvas?.addEventListener('pointermove', canvasPointerMove, true)
 canvas?.addEventListener('pointerup', finishPointerDrag, true)
 canvas?.addEventListener('pointercancel', finishPointerDrag, true)
 globalThis.addEventListener?.('keydown', keyCapture, true)
-globalThis.addEventListener?.('bricklab:languagechange', () => { if (active) renderPanel() })
+globalThis.addEventListener?.('resize', updateSelectionMarker)
 
 const api = Object.freeze({
   version:KINEMATICS_RUNTIME_VERSION,
@@ -732,22 +719,28 @@ const api = Object.freeze({
     active,
     analyzing,
     driverId:currentDriverId,
+    selectedInstanceId,
     driverCount:drivers.length,
     dof:analysis?.dof ?? null,
     blockers:analysis?.plan?.blockers?.length ?? 0,
     dragging:Boolean(pointerDrag),
+    inertia:Boolean(inertiaFrame),
+    angularVelocityDps,
   }),
-  drivers:() => drivers.map(driver => Object.freeze({ id:driver.id, type:driver.type, kind:driver.kind ?? null, label:driver.label })),
+  drivers:() => drivers.map(driver => Object.freeze({ id:driver.id, type:driver.type, kind:driver.kind ?? null })),
   setDriver(id) {
-    if (!drivers.some(driver => driver.id === id)) return false
+    const driver = drivers.find(item => item.id === id)
+    if (!driver) return false
+    stopInertia()
+    baseline = captureBaseline(objects())
     currentDriverId = id
+    selectedInstanceId = driver.type === 'shaft' ? driver.memberIds[0] ?? null : driver.movingObject?.userData?.instanceId ?? null
     angleDeg = 0
     slideStud = 0
-    restoreBaseline()
-    renderPanel()
+    updateSelectionMarker()
     return true
   },
-  setAngle(degrees) { angleDeg = Math.max(-180, Math.min(180, Number(degrees) || 0)); applyControls(); return angleDeg },
+  setAngle(degrees) { angleDeg = Number(degrees) || 0; applyControls(); return angleDeg },
   setSlide(studs) { slideStud = Math.max(-4, Math.min(4, Number(studs) || 0)); applyControls(); return slideStud },
   projectStateSnapshot:() => baselineProject,
   dragVersion:KINEMATICS_DRAG_VERSION,
