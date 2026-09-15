@@ -129,13 +129,16 @@ PhysicsSession.prototype.build = function buildTestLabProfile(...args) {
 }
 
 const originalTireForces = PhysicsSession.prototype.applyTireForcesV2
-if (originalTireForces) PhysicsSession.prototype.applyTireForcesV2 = function applyTestLabSurfaceZones(...args) {
-  const zones=this.scenarioData?.surfaceZones
-  if (!this.testLabProfile || !zones?.length || !this.scenarioData) return originalTireForces.apply(this,args)
-  const z=bodyZStud(this),zone=zones.find(item=>z>=Math.min(item.startZStud,item.endZStud)&&z<=Math.max(item.startZStud,item.endZStud)),base=this.scenarioData.surface
-  if (zone && SURFACES[zone.surface]) this.scenarioData.surface=zone.surface
-  this.scenarioData.activeSurface=this.scenarioData.surface
-  try { return originalTireForces.apply(this,args) } finally { this.scenarioData.surface=base }
+if (originalTireForces) {
+  PhysicsSession.prototype.applyTireForcesV2 = function applyTestLabSurfaceZones(...args) {
+    const zones=this.scenarioData?.surfaceZones
+    if (!this.testLabProfile || !zones?.length || !this.scenarioData) return originalTireForces.apply(this,args)
+    const z=bodyZStud(this),zone=zones.find(item=>z>=Math.min(item.startZStud,item.endZStud)&&z<=Math.max(item.startZStud,item.endZStud)),base=this.scenarioData.surface
+    if (zone && SURFACES[zone.surface]) this.scenarioData.surface=zone.surface
+    this.scenarioData.activeSurface=this.scenarioData.surface
+    try { return originalTireForces.apply(this,args) } finally { this.scenarioData.surface=base }
+  }
+  if (originalTireForces.__bricklabOwner) PhysicsSession.prototype.applyTireForcesV2.__bricklabOwner = originalTireForces.__bricklabOwner
 }
 
 const originalScenarioForces = PhysicsSession.prototype.applyScenarioForcesV2
