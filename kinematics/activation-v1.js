@@ -1,4 +1,4 @@
-export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.4.0'
+export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.5.0'
 
 const LANGUAGE_KEY = 'bricklab.ui.language.v1'
 
@@ -119,6 +119,9 @@ async function activate(event) {
     if (!core?.enter) throw new Error('Kinematics runtime loaded without an enter API')
     const api = guardKinematicsRuntime(core)
     globalThis.BrickLabKinematics = api
+    // Rack/pinion following is additive. It observes temporary shaft rotation and
+    // never owns project state, Connector V4 or Rapier constraints.
+    await import('./rack-pinion-runtime-v1.js?v=kinematics-rack-pinion-20260915-v1')
     button.dataset.kinematicsState = 'entering'
     button.title = copy().loading
     await api.enter()
