@@ -192,7 +192,7 @@ try {
 // KINEMATICS is a lightweight mode activation shell. Its deterministic solver/runtime
 // loads only when the user enters the mode; Rapier is never started by this path.
 try {
-  await import('./kinematics/activation-v1.js?v=kinematics-20260912-v1')
+  await import('./kinematics/activation-v1.js?v=kinematics-rack-pinion-20260915-v1')
 } catch (error) {
   console.warn('[BrickLab Kinematics] Activation unavailable; editor continues normally.', error)
 }
