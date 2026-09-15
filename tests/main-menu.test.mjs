@@ -90,7 +90,7 @@ test('hero helper text and menu actions are separated from the 3D canvas', () =>
   assert.doesNotMatch(menu, /bl4-hero-hint/)
 })
 
-test('project loader preloads actual v4 menu assets and reports real transfer progress', () => {
+test('project loader preloads real menu assets without probing absent background videos', () => {
   assert.match(preloader, /main-menu-v4\.js\?v=hero-reducer-20260910-v1/)
   assert.match(preloader, /main-menu-v4\.css/)
   assert.match(preloader, /script\[type=\"importmap\"\]/)
@@ -98,7 +98,8 @@ test('project loader preloads actual v4 menu assets and reports real transfer pr
   assert.match(preloader, /moduleSpecifiers/)
   assert.match(preloader, /content-length/)
   assert.match(preloader, /received \/ totalBytes/)
-  assert.match(preloader, /background\.webm/)
+  assert.match(preloader, /const VIDEO_CANDIDATES = \[\]/)
+  assert.match(preloader, /disableUnavailableMenuVideo/)
   assert.match(preloader, /workbench\.ogg/)
   assert.match(bootstrap, /project-preloader-v4\.js\?v=hero-reducer-20260910-v1/)
   assert.match(bootstrap, /await projectPreloader\.preload\(\)/)
