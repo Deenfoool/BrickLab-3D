@@ -1,6 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { PHYSICS_PHASES, PHYSICS_PIPELINE_VERSION, runPhysicsMicrostep } from '../physics-pipeline-v1.js'
+
+const root = new URL('../', import.meta.url)
+const text = path => readFile(new URL(path, root), 'utf8')
 
 test('physics microstep has one explicit subsystem order', () => {
   assert.deepEqual(PHYSICS_PHASES, [
@@ -35,4 +39,18 @@ test('physics microstep has one explicit subsystem order', () => {
     'phase', 'torque-reset', 'force:false', 'vehicle', 'drive', 'motor', 'suspension',
     'drivetrain', 'tires', 'scenario', 'world', 'validate', 'metrics', 'performance',
   ])
+})
+
+test('transparent physics middleware preserves authoritative ownership metadata', async () => {
+  const [diagnostics, controls, testlab] = await Promise.all([
+    text('physics-stage-diagnostics.js'),
+    text('mechanism-controls-core.js'),
+    text('testlab/runtime-v2.js'),
+  ])
+  assert.match(diagnostics,/original\?\.__bricklabOwner/,'stage diagnostics preserves createJoint/chassis owner metadata')
+  assert.match(diagnostics,/wrapper\.__bricklabOwner = original\.__bricklabOwner/)
+  assert.match(controls,/oldApplyGearTorques\?\.__bricklabOwner/,'mechanism controls preserves drivetrain owner metadata')
+  assert.match(controls,/applyGearCouplingTorques\.__bricklabOwner = oldApplyGearTorques\.__bricklabOwner/)
+  assert.match(testlab,/originalTireForces\.__bricklabOwner/,'TEST Lab preserves outer tire owner metadata')
+  assert.match(testlab,/applyTireForcesV2\.__bricklabOwner = originalTireForces\.__bricklabOwner/)
 })
