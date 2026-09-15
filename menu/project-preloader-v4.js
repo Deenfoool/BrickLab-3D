@@ -1,7 +1,10 @@
 const LOADER_ID = 'bricklab-project-loader-v4'
 const STYLE_ID = 'bricklab-project-loader-style-v4'
 const AUDIO_CANDIDATES = ['./assets/audio/music/workbench.ogg']
-const VIDEO_CANDIDATES = ['./assets/menu/background.webm', './assets/menu/background.mp4']
+// No background video exists in assets/menu on gh-pages. Keep this list empty so the
+// loader and menu do not generate HEAD/GET 404s on every visit. Re-enable only when a
+// real asset is committed.
+const VIDEO_CANDIDATES = []
 const MENU_ASSETS = ['./menu/main-menu-v5.js?v=hero-reducer-20260910-v1', './menu/main-menu-v4.js?v=hero-reducer-20260910-v1', './menu/hero-reducer.js?v=hero-reducer-20260910-v1', './menu/main-menu-v4.css']
 
 function ensureStyle() {
@@ -100,7 +103,17 @@ async function consume(response, progress) {
   return new TextDecoder().decode(merged)
 }
 
+function disableUnavailableMenuVideo() {
+  try {
+    const key = 'bricklab.menu.v4'
+    const current = JSON.parse(localStorage.getItem(key) || '{}') || {}
+    if (current.backgroundVideo === false) return
+    localStorage.setItem(key, JSON.stringify({ ...current, backgroundVideo:false }))
+  } catch { /* storage may be unavailable */ }
+}
+
 async function existingVideo() {
+  if (!VIDEO_CANDIDATES.length) return null
   for (const candidate of VIDEO_CANDIDATES) {
     const url = new URL(candidate, location.href).href
     try {
@@ -172,6 +185,7 @@ export function createProjectPreloader() {
     await Promise.all(Array.from({ length: Math.min(6, Math.max(1, queue.length)) }, worker))
 
     const videoUrl = await existingVideo()
+    if (!videoUrl) disableUnavailableMenuVideo()
     if (videoUrl && !seen.has(videoUrl)) {
       total += 1
       render(completed / total, 'Предзагрузка фонового видео')
