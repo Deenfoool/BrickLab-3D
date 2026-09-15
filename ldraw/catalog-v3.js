@@ -187,7 +187,7 @@ function install() {
   panel=document.querySelector('.parts-panel')
   if(!panel||!document.getElementById('partsList'))return
   if(document.getElementById('ldrawCatalogV3'))return
-  const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./library-v1.css?v=ldraw-atlas-20260915-v1',import.meta.url).href;document.head.append(css)
+  const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./library-v1.css?v=ldraw-atlas-display-20260915-v2',import.meta.url).href;document.head.append(css)
   migratePreferences()
   panel.classList.add('parts-library-v1')
   root=document.createElement('div');root.id='ldrawCatalogV3';panel.append(root)

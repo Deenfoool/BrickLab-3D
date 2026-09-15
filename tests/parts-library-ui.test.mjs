@@ -150,7 +150,7 @@ test('Production catalog uses an isolated cache generation for atlas previews',a
   assert.match(map['./ldraw/catalog-v3.js'],/^\.\/ldraw\/catalog-v3\.js\?v=/)
   assert.equal(map['./app.js'],'./app.js?v=parts-6-20260911-editor-groups-v2')
   assert.match(map['./ldraw/runtime-v3.js?v=ldraw-catalog-20260910-v3'],/runtime-metadata-cache-v1/)
-  assert.match(bootstrap,/\.\/ldraw\/catalog-v3\.js\?v=ldraw-atlas-20260915-v1/)
+  assert.match(bootstrap,/\.\/ldraw\/catalog-v3\.js\?v=ldraw-atlas-display-20260915-v2/)
   assert.match(catalog,/\.\/library-model-v1\.js\?v=parts-library-20260912-v5/)
   assert.match(catalog,/\.\/library-view-v1\.js\?v=ldraw-atlas-20260915-v1/)
   assert.match(catalog,/\.\/library-atlas-v1\.js\?v=ldraw-atlas-20260915-v1/)

@@ -279,7 +279,7 @@ try {
 // late boot work and must never gate header visibility.
 revealEditorChrome()
 
-await import('./ldraw/catalog-v3.js?v=ldraw-atlas-20260915-v1')
+await import('./ldraw/catalog-v3.js?v=ldraw-atlas-display-20260915-v2')
 // The family library owns lazy thumbnails; do not mount the superseded decorator.
 await import('./menu/project-menu-v1.js?v=project-menu-20260910-v1')
 
