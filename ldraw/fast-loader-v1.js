@@ -1,8 +1,7 @@
 import { PARTS } from '../parts.js'
 
-export const LDRAW_FAST_LOADER_VERSION = 'ldraw-fast-loader-v1.3.0'
+export const LDRAW_FAST_LOADER_VERSION = 'ldraw-fast-loader-v1.4.0'
 
-const HOME_WARM = ['3001.dat','3003.dat','3004.dat','3005.dat','3020.dat','3022.dat','3023.dat','3894.dat','3895.dat','2780.dat','3673.dat','6558.dat','3705.dat','3706.dat','3707.dat','3708.dat']
 const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null
 const constrainedNetwork = Boolean(connection?.saveData || /(?:^|-)2g$/.test(connection?.effectiveType || ''))
 const deviceMemory = Number(navigator.deviceMemory || 4)
@@ -26,7 +25,7 @@ let mutationObserver = null
 const diagnostics = {
   queued:0, active:0, prepared:0, failed:0, backgroundStarted:0,
   cacheHits:0, hoverRequests:0, visibleRequests:0, criticalRequests:0,
-  projectWarmRequests:0, directPrototypePreloads:0,
+  projectWarmRequests:0, idleWarmRequests:0, directPrototypePreloads:0,
   connectorWarm:0, connectorWarmFailed:0, totalPrepareMs:0, lastPrepareMs:0,
 }
 
@@ -247,11 +246,15 @@ function startRegisteredWarmup() {
 function startIdleWarmup() {
   if (constrainedNetwork || backgroundLimit <= 0) return
   idle(() => {
-    const recent=[...warmSavedList('bricklab.library.recents.v1',8),...warmSavedList('bricklab.ldraw.recents.v3',8)]
-    const favorites=[...warmSavedList('bricklab.library.favorites.v1',8),...warmSavedList('bricklab.ldraw.favorites.v3',8)]
-    const files=[...new Set([...recent,...favorites,...HOME_WARM])].slice(0,backgroundLimit)
-    files.forEach((file,index) => idle(() => void preloadLDrawPart(file,{priority:'idle',background:true}).catch(()=>{}),700+index*120))
-  },900)
+    // Static atlas previews removed the reason to cold-load a canned HOME_WARM set on
+    // every visit. Only parts the user actually touched before are worth speculative
+    // geometry work; everything else stays on-demand and leaves CPU/network idle.
+    const recent=[...warmSavedList('bricklab.library.recents.v1',4),...warmSavedList('bricklab.ldraw.recents.v3',4)]
+    const favorites=[...warmSavedList('bricklab.library.favorites.v1',4),...warmSavedList('bricklab.ldraw.favorites.v3',4)]
+    const files=[...new Set([...recent,...favorites])].slice(0,Math.min(backgroundLimit,8))
+    diagnostics.idleWarmRequests = files.length
+    files.forEach((file,index) => idle(() => void preloadLDrawPart(file,{priority:'idle',background:true}).catch(()=>{}),900+index*180))
+  },1800)
 }
 
 installPrediction()
