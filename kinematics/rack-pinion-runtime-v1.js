@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import { detectRackPinionMeshesV1 } from '../technic/rack-pinion-detect-v1.js?v=technic-rack-pinion-20260915-v2'
+import { rackTravelFromRadiansV1 } from './rack-pinion-follow-v1.js?v=kinematics-rack-pinion-20260915-v2'
 
-export const KINEMATICS_RACK_PINION_RUNTIME_VERSION = 'kinematics-rack-pinion-runtime-v1.0.0'
+export const KINEMATICS_RACK_PINION_RUNTIME_VERSION = 'kinematics-rack-pinion-runtime-v1.1.0'
 
 const CONFLICT_TOLERANCE_STUD = 0.02
 const EPS = 1e-10
@@ -109,7 +110,7 @@ function rackTargets(state) {
   const values = new Map()
   for (const item of state.meshStates) {
     const mesh = item.mesh
-    const travel = item.angleRad * Number(mesh.pitchRadius || 0) * (Number(mesh.travelSign) || 1)
+    const travel = rackTravelFromRadiansV1(item.angleRad, 1, mesh.pitchRadius, mesh.travelSign)
     if (!Number.isFinite(travel)) continue
     const list = values.get(mesh.rackInstanceId) ?? []
     list.push(travel)
