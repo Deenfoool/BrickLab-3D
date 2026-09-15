@@ -1,4 +1,4 @@
-export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.3.0'
+export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.4.0'
 
 const LANGUAGE_KEY = 'bricklab.ui.language.v1'
 
@@ -12,8 +12,8 @@ function language() {
 
 function copy() {
   return language() === 'ru'
-    ? { label:'КИНЕМАТИКА', title:'Кинематика — движение механизма без гравитации и столкновений', loading:'Загрузка кинематики…', error:'Кинематика не запустилась' }
-    : { label:'KINEMATICS', title:'Kinematics — mechanism motion without gravity or collision impulses', loading:'Loading Kinematics…', error:'Kinematics could not start' }
+    ? { label:'КИНЕМАТИКА', title:'Кинематика — прямое вращение механизма без гравитации и столкновений', loading:'Загрузка кинематики…', error:'Кинематика не запустилась' }
+    : { label:'KINEMATICS', title:'Kinematics — direct mechanism rotation without gravity or collision impulses', loading:'Loading Kinematics…', error:'Kinematics could not start' }
 }
 
 function toast(message, timeout = 3600) {
@@ -28,7 +28,7 @@ function ensureStylesheet() {
   if (!globalThis.document?.head || document.querySelector('link[data-bricklab-kinematics]')) return
   const link = document.createElement('link')
   link.rel = 'stylesheet'
-  link.href = './kinematics/kinematics-v1.css?v=kinematics-drag-20260915-v1'
+  link.href = './kinematics/kinematics-v1.css?v=kinematics-interactive-20260915-v1'
   link.dataset.bricklabKinematics = 'v1'
   document.head.append(link)
 }
@@ -65,9 +65,8 @@ localizeButton(button)
 
 let loading = false
 
-// Kinematics is mounted before Project Menu. Own Escape while Kinematics is entering
-// or active so its internal selection-clear Escape cannot open the project menu, and
-// a real user Escape exits Kinematics directly instead of being consumed by the menu.
+// Kinematics mounts before Project Menu and owns Escape while it is entering/active.
+// This guarantees Escape exits Kinematics instead of opening the project menu.
 function captureKinematicsEscape(event) {
   if (event.code !== 'Escape') return
   const entering = button.dataset.kinematicsState === 'entering'
@@ -114,7 +113,7 @@ async function activate(event) {
   button.dataset.kinematicsState = 'loading'
   button.title = copy().loading
   try {
-    await import('./runtime-v1.js?v=kinematics-recovery-20260914-v2')
+    await import('./runtime-v1.js?v=kinematics-interactive-20260915-v1')
     const { guardKinematicsRuntime } = await import('./lifecycle-guard-v1.js?v=kinematics-recovery-20260914-v2')
     const core = globalThis.BrickLabKinematics
     if (!core?.enter) throw new Error('Kinematics runtime loaded without an enter API')
