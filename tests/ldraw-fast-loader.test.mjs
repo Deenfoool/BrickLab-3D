@@ -24,7 +24,7 @@ test('shared Three.js cache is enabled before any LDraw runtime can start loadin
   assert.match(boost,/THREE\.Cache\.clear\(\)/,'cache remains explicitly clearable for diagnostics')
 })
 
-test('fast loader predicts visible, hovered, clicked, recent, favorite and saved-project parts', async () => {
+test('fast loader predicts visible, hovered, clicked, recent, favorite and saved-project parts without cold-loading a canned catalog set', async () => {
   const source = await text('ldraw/fast-loader-v1.js')
   assert.match(source,/new IntersectionObserver/,'visible catalog cards are warmed')
   assert.match(source,/pointerover/,'hover warms the likely next part')
@@ -32,7 +32,8 @@ test('fast loader predicts visible, hovered, clicked, recent, favorite and saved
   assert.match(source,/bricklab\.ldraw\.recents\.v3/,'recent parts are idle-warmed')
   assert.match(source,/bricklab\.ldraw\.favorites\.v3/,'favorites are idle-warmed')
   assert.match(source,/startRegisteredWarmup\(\)/,'saved-project definitions are warmed before restore')
-  assert.match(source,/HOME_WARM/,'common LDraw parts are warmed in idle time')
+  assert.doesNotMatch(source,/HOME_WARM/,'static atlas previews make unconditional canned geometry warmup wasteful')
+  assert.match(source,/idleWarmRequests/,'idle warmup remains observable in diagnostics')
 })
 
 test('critical requests can bypass a saturated background queue while background work stays bounded', async () => {
