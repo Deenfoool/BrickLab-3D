@@ -1,0 +1,47 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import {
+  TECHNIC_SHADOW_GROUPS,
+  TECHNIC_SHADOW_IDS,
+  classifyTechnicShadowGroupV1,
+  classifyTechnicShadowIdV1,
+  normalizeShadowTokenV1,
+} from '../technic/upstream-shadow-v1.js'
+
+test('known low-level LDCad Technic ids normalize to explicit interface vocabulary', () => {
+  assert.equal(classifyTechnicShadowIdV1('axle')?.kind, 'technic-axle')
+  assert.equal(classifyTechnicShadowIdV1('axleHole')?.kind, 'technic-axle-hole')
+  assert.equal(classifyTechnicShadowIdV1('connhole')?.kind, 'technic-pin-hole')
+  assert.equal(classifyTechnicShadowIdV1('fpin10')?.kind, 'technic-friction-pin')
+  assert.equal(classifyTechnicShadowIdV1('wpAxHole')?.kind, 'wheel-pin-axle-hole')
+  assert.equal(Object.keys(TECHNIC_SHADOW_IDS).length >= 10, true)
+})
+
+test('known Technic-specific groups include articulated, selector, figure and turntable families', () => {
+  for (const group of ['diffHouse','drivingRing1','linAct1','techBallJnt','uniJnt','techFigElbw','techFigKnee','clkRot','z56TurnTableT1']) {
+    assert.ok(classifyTechnicShadowGroupV1(group), group)
+  }
+  assert.equal(Object.keys(TECHNIC_SHADOW_GROUPS).length >= 30, true)
+})
+
+test('parameterized rim groups keep size-fit semantics without enumerating every rim', () => {
+  assert.equal(normalizeShadowTokenV1('rim47_31'), 'rim4731')
+  assert.equal(classifyTechnicShadowGroupV1('rim47_31')?.kind, 'rim-size-fit')
+  assert.equal(classifyTechnicShadowGroupV1('rim8_6')?.kind, 'rim-size-fit')
+})
+
+test('unknown Shadow tokens do not invent Technic behavior', () => {
+  assert.equal(classifyTechnicShadowGroupV1('madeUpMechanism'), null)
+  assert.equal(classifyTechnicShadowIdV1('madeUpPrimitive'), null)
+})
+
+test('every audited fixed Technic Shadow group is represented by runtime semantics or an explicit semantic-only registry', async () => {
+  const semantics = (await readFile(new URL('../technic/interface-semantics-v1.js', import.meta.url), 'utf8')).toLowerCase()
+  const grammar = (await readFile(new URL('../technic/mechanical-grammar-v1.js', import.meta.url), 'utf8')).toLowerCase()
+  const capabilities = (await readFile(new URL('../technic/capabilities-v1.js', import.meta.url), 'utf8')).toLowerCase()
+  const coveredText = `${semantics}\n${grammar}\n${capabilities}`
+
+  const missing = Object.keys(TECHNIC_SHADOW_GROUPS).filter(group => !coveredText.includes(group))
+  assert.deepEqual(missing, [], `unreviewed upstream Technic groups: ${missing.join(', ')}`)
+})
