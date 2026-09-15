@@ -3,9 +3,9 @@ import { retryLoad, withLoadDeadline } from './load-recovery-v1.js?v=ldraw-loadi
 import { PARTS, findPart } from '../parts.js'
 import { compatibleAssemblyChoices } from '../guidance/assembly-compatibility-v1.js?v=smart-assembly-20260911-v6'
 import { libraryItems, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v5'
-import { mountPartsLibrary, LIBRARY_KEYS } from './library-view-v1.js?v=parts-library-20260912-v5'
+import { mountPartsLibrary, LIBRARY_KEYS } from './library-view-v1.js?v=parts-library-lazy-cards-20260915-v1'
 import { createPartsLibraryPreviewService } from './library-preview-v1.js?v=parts-library-family-preload-20260914-v1'
-import { createPartsLibraryFamilyPreloader } from './library-family-preload-v1.js?v=parts-library-family-preload-20260914-v1'
+import { createPartsLibraryFamilyPreloader } from './library-family-preload-v1.js?v=parts-library-lazy-cards-20260915-v1'
 
 const INDEX_URLS=Object.freeze({
   current:'https://raw.githubusercontent.com/partcad/partcad-ldraw/main/parts-index.zip',
@@ -192,7 +192,7 @@ function install() {
   panel=document.querySelector('.parts-panel')
   if(!panel||!document.getElementById('partsList'))return
   if(document.getElementById('ldrawCatalogV3'))return
-  const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./library-v1.css?v=parts-library-family-preload-20260914-v1',import.meta.url).href;document.head.append(css)
+  const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./library-v1.css?v=parts-library-lazy-cards-20260915-v1',import.meta.url).href;document.head.append(css)
   migratePreferences()
   panel.classList.add('parts-library-v1')
   root=document.createElement('div');root.id='ldrawCatalogV3';panel.append(root)
