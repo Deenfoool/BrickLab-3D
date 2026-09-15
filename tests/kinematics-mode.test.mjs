@@ -9,7 +9,9 @@ import {
   jointControlAxes,
 } from '../kinematics/solver-v1.js'
 import {
+  angularVelocityFromDelta,
   circularDragDegrees,
+  decayAngularVelocity,
   linearDragDegrees,
   normalizePointerAngleDelta,
 } from '../kinematics/drag-v1.js'
@@ -19,6 +21,14 @@ test('Kinematics pointer drag follows the visible rotation direction without wra
   assert.ok(circularDragDegrees(0, Math.PI / 2, 1) < 0)
   assert.ok(circularDragDegrees(0, Math.PI / 2, -1) > 0)
   assert.equal(linearDragDegrees(20, 2, 1), 13)
+})
+
+test('Kinematics release inertia derives bounded angular velocity and decays smoothly', () => {
+  const velocity = angularVelocityFromDelta(12, 16, 0, .42, 1440)
+  assert.ok(velocity > 0 && velocity <= 1440)
+  const decayed = decayAngularVelocity(velocity, .5, 2.65)
+  assert.ok(decayed > 0 && decayed < velocity)
+  assert.ok(Math.abs(decayAngularVelocity(-velocity, .5, 2.65) + decayed) < 1e-9)
 })
 
 test('Kinematics counts only free/limited certified constraint DOF', () => {
@@ -67,9 +77,10 @@ test('Joint control shape follows certified revolute/prismatic/cylindrical seman
   assert.deepEqual(jointControlAxes({rule:{kind:'fixed'}}), { angle:false, slide:false })
 })
 
-test('Production Kinematics is a lazy no-Rapier mode that protects project and V4 graph state', async () => {
+test('Production Kinematics is direct-manipulation, inertial and no-Rapier', async () => {
   const activation = await readFile(new URL('../kinematics/activation-v1.js', import.meta.url), 'utf8')
   const runtime = await readFile(new URL('../kinematics/runtime-v1.js', import.meta.url), 'utf8')
+  const styles = await readFile(new URL('../kinematics/kinematics-v1.css', import.meta.url), 'utf8')
   const lifecycle = await readFile(new URL('../kinematics/lifecycle-guard-v1.js', import.meta.url), 'utf8')
   const bootstrap = await readFile(new URL('../bootstrap.js', import.meta.url), 'utf8')
   const index = await readFile(new URL('../index.html', import.meta.url), 'utf8')
@@ -77,13 +88,14 @@ test('Production Kinematics is a lazy no-Rapier mode that protects project and V
   const editorAdapter = await readFile(new URL('../architecture/editor-adapter-v1.js', import.meta.url), 'utf8')
 
   assert.match(activation, /dataset\.mode = 'kinematics'/)
-  assert.match(activation, /runtime-v1\.js\?v=kinematics-recovery-20260914-v2/)
+  assert.match(activation, /runtime-v1\.js\?v=kinematics-interactive-20260915-v1/)
+  assert.match(activation, /kinematics-v1\.css\?v=kinematics-interactive-20260915-v1/)
   assert.match(activation, /lifecycle-guard-v1\.js\?v=kinematics-recovery-20260914-v2/)
   assert.match(activation, /BrickLabKinematics\?\.exit\?\.\(\{ restore:true \}\)/, 'failed activation must defensively restore BUILD')
   assert.match(activation, /captureKinematicsEscape/, 'activation must own Escape before the project menu')
-  assert.match(activation, /kinematicsState = 'entering'/, 'startup Escape must be distinguishable from ordinary BUILD Escape')
-  assert.match(activation, /event\.stopImmediatePropagation\(\)/, 'Kinematics-owned Escape must not reach the project menu')
-  assert.match(activation, /api\.exit\?\.\(\{ restore:true \}\)/, 'real Escape must exit Kinematics directly')
+  assert.match(activation, /kinematicsState = 'entering'/)
+  assert.match(activation, /event\.stopImmediatePropagation\(\)/)
+  assert.match(activation, /api\.exit\?\.\(\{ restore:true \}\)/)
   const activationOrder = bootstrap.indexOf("./kinematics/activation-v1.js")
   const projectMenuOrder = bootstrap.indexOf("./menu/project-menu-v1.js")
   assert.ok(activationOrder >= 0 && projectMenuOrder > activationOrder, 'Kinematics Escape capture must register before Project Menu capture')
@@ -91,21 +103,31 @@ test('Production Kinematics is a lazy no-Rapier mode that protects project and V
   assert.match(lifecycle, /rollback\('enter-failed', error\)/)
   assert.match(lifecycle, /core\.exit\(\{ restore:true \}\)/)
   assert.match(lifecycle, /stale-enter-completed-after-exit/)
-  assert.match(lifecycle, /Object\.isFrozen\(current\)/, 'frozen Connector V4 must receive a compatibility facade before legacy proxying')
+  assert.match(lifecycle, /Object\.isFrozen\(current\)/)
   assert.match(lifecycle, /mutableFacade\(current\)/)
   assert.doesNotMatch(lifecycle, /new Proxy\(/, 'lifecycle guard itself must never proxy a frozen runtime API')
   assert.match(bootstrap, /kinematics\/activation-v1\.js\?v=/)
-  assert.equal((index.match(/bootstrap\.js\?v=[^"']+/g) ?? []).length, 2, 'import map and production script must both reference versioned bootstrap')
+  assert.equal((index.match(/bootstrap\.js\?v=[^"']+/g) ?? []).length, 2)
 
   assert.match(runtime, /buildPhysicsPlanV4/)
   assert.match(runtime, /drivetrainSemanticLinksV4/)
   assert.match(runtime, /subsystems\.mechanics\.analyze/)
-  assert.match(runtime, /updateEditor'\) return \(\) => undefined/, 'temporary poses must not invalidate the persistent V4 graph')
-  assert.match(runtime, /restoreBaseline/)
+  assert.match(runtime, /updateEditor'\) return \(\) => undefined/)
   assert.match(runtime, /pickedMechanicalObject/)
   assert.match(runtime, /setPointerCapture/)
-  assert.match(runtime, /circularDragDegrees/)
   assert.match(runtime, /mechanics\?\.gear \|\| mechanics\?\.shaft \|\| mechanics\?\.wheel/)
+  assert.match(runtime, /solveShaftRatios\(driver\.shaftId/)
+  assert.match(runtime, /angularVelocityFromDelta/)
+  assert.match(runtime, /decayAngularVelocity/)
+  assert.match(runtime, /requestAnimationFrame\(frame\)/)
+  assert.match(runtime, /entryBaseline = captureBaseline/)
+  assert.match(runtime, /baseline = captureBaseline\(objects\(\)\)/, 'switching drivers must rebase from the current temporary pose')
+  assert.match(runtime, /restoreEntryBaseline/, 'exit/reset must still restore the original BUILD pose')
+  assert.match(runtime, /kinematics-selection-marker/)
+  assert.doesNotMatch(runtime, /<section class="kinematics-panel"/)
+  assert.doesNotMatch(runtime, /data-kinematics-angle|data-kinematics-driver|renderPanel\(/, 'direct Kinematics must not render control-panel sliders/selects')
+  assert.match(styles, /\.kinematics-selection-marker/)
+  assert.doesNotMatch(styles, /\.kinematics-panel\s*\{/)
   assert.match(app, /BrickLabViewportV1/)
   assert.match(editorAdapter, /BrickLabViewportV1\?\.camera/)
   assert.match(runtime, /BrickLabViewportV1\?\.camera/)
