@@ -2,6 +2,11 @@ import { PhysicsSession } from './physics.js'
 
 const marker = Symbol.for('bricklab.physicsStageDiagnostics.v1')
 
+function preserveOwner(wrapper, original) {
+  if (original?.__bricklabOwner) wrapper.__bricklabOwner = original.__bricklabOwner
+  return wrapper
+}
+
 if (!PhysicsSession.prototype[marker]) {
   const stages = [
     'buildScenario',
@@ -18,7 +23,7 @@ if (!PhysicsSession.prototype[marker]) {
     const original = PhysicsSession.prototype[name]
     if (typeof original !== 'function') continue
 
-    PhysicsSession.prototype[name] = function bricklabStageWrapped(...args) {
+    const wrapped = function bricklabStageWrapped(...args) {
       window.__bricklabPhysicsStage = name
       try {
         return original.apply(this, args)
@@ -29,6 +34,7 @@ if (!PhysicsSession.prototype[marker]) {
         throw error
       }
     }
+    PhysicsSession.prototype[name] = preserveOwner(wrapped, original)
   }
 
   Object.defineProperty(PhysicsSession.prototype, marker, {
