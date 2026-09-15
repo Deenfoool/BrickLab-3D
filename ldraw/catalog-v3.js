@@ -3,9 +3,8 @@ import { retryLoad, withLoadDeadline } from './load-recovery-v1.js?v=ldraw-loadi
 import { PARTS, findPart } from '../parts.js'
 import { compatibleAssemblyChoices } from '../guidance/assembly-compatibility-v1.js?v=smart-assembly-20260911-v6'
 import { libraryItems, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v5'
-import { mountPartsLibrary, LIBRARY_KEYS } from './library-view-v1.js?v=parts-library-lazy-cards-20260915-v1'
-import { createPartsLibraryPreviewService } from './library-preview-v1.js?v=parts-library-family-preload-20260914-v1'
-import { createPartsLibraryFamilyPreloader } from './library-family-preload-v1.js?v=parts-library-lazy-cards-20260915-v1'
+import { mountPartsLibrary, LIBRARY_KEYS } from './library-view-v1.js?v=ldraw-atlas-20260915-v1'
+import { createPartsLibraryAtlasService } from './library-atlas-v1.js?v=ldraw-atlas-20260915-v1'
 
 const INDEX_URLS=Object.freeze({
   current:'https://raw.githubusercontent.com/partcad/partcad-ldraw/main/parts-index.zip',
@@ -13,7 +12,7 @@ const INDEX_URLS=Object.freeze({
 })
 const ZIP_LOCAL=0x04034b50,ZIP_CENTRAL=0x02014b50,ZIP_EOCD=0x06054b50
 const utf8=new TextDecoder()
-let index=[],view=null,root=null,panel=null,pending=null,refreshTimer,indexSource='unloaded',familyPreloader=null,currentItems=[]
+let index=[],view=null,root=null,panel=null,pending=null,refreshTimer,indexSource='unloaded',currentItems=[]
 const t=(en,ru)=>document.documentElement.lang==='ru'?ru:en
 
 async function inflateBytes(bytes,format){
@@ -84,13 +83,10 @@ async function loadCatalogIndex(){
   catch(error){throw Error(`LDraw catalog indexes unavailable: ${currentError?.message||currentError}; ${error?.message||error}`)}
 }
 
-// Exact geometry previews share one bounded offscreen renderer. Visible cards stay at
-// normal/high priority while the selected family warms every remaining preview at
-// background priority into persistent browser storage.
-const previewService=createPartsLibraryPreviewService()
+// Static WebP atlases are the only preview source.
+const previewService=createPartsLibraryAtlasService()
 const preview=item=>previewService.peek(item)
-preview.request=(item,options)=>previewService.request(item,options)
-preview.preloadFamily=(familyId,items,options)=>previewService.preloadFamily(familyId,items,options)
+preview.request=item=>previewService.request(item)
 
 function migratePreferences() {
   for(const [oldKey,newKey] of [['bricklab.ldraw.favorites.v3',LIBRARY_KEYS.favorites],['bricklab.ldraw.recents.v3',LIBRARY_KEYS.recents]]) {
@@ -155,7 +151,6 @@ async function insert(item) {
 function refresh({pending=false,message=''}={}) {
   currentItems=libraryItems(index,PARTS)
   view?.setItems(currentItems,{pending,message})
-  familyPreloader?.sync()
 }
 
 async function loadIndex() {
@@ -192,33 +187,30 @@ function install() {
   panel=document.querySelector('.parts-panel')
   if(!panel||!document.getElementById('partsList'))return
   if(document.getElementById('ldrawCatalogV3'))return
-  const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./library-v1.css?v=parts-library-lazy-cards-20260915-v1',import.meta.url).href;document.head.append(css)
+  const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./library-v1.css?v=ldraw-atlas-20260915-v1',import.meta.url).href;document.head.append(css)
   migratePreferences()
   panel.classList.add('parts-library-v1')
   root=document.createElement('div');root.id='ldrawCatalogV3';panel.append(root)
   const title=panel.querySelector('.panel-title>span:first-child');if(title)title.textContent=t('PARTS LIBRARY','БИБЛИОТЕКА ДЕТАЛЕЙ')
   view=mountPartsLibrary(root,{language:()=>document.documentElement.lang,insert,repair,preview,info,context,onClose:()=>panel.querySelector('.panel-float-close')?.click()})
-  familyPreloader=createPartsLibraryFamilyPreloader(root,{previewService,getItems:()=>currentItems,getFamily:()=>view?.state()?.family,language:()=>document.documentElement.lang})
   refresh({pending:true})
-  // Metadata stays compact. Selecting a family starts a bounded preview warm-up; its
-  // transient 3D geometry is released after each render and only the 2D WebP survives.
   void loadIndex()
   root.addEventListener('change',event=>{if(event.target.id==='plSearch')void lookupCode(event.target.value)})
   const schedule=()=>{clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>view?.refresh(),120)}
   globalThis.addEventListener('bricklab:partcatalogchange',()=>refresh())
-  globalThis.addEventListener('bricklab:languagechange',()=>{view.languageChanged();familyPreloader?.sync();if(title)title.textContent=t('PARTS LIBRARY','БИБЛИОТЕКА ДЕТАЛЕЙ')})
+  globalThis.addEventListener('bricklab:languagechange',()=>{view.languageChanged();if(title)title.textContent=t('PARTS LIBRARY','БИБЛИОТЕКА ДЕТАЛЕЙ')})
   for(const name of ['bricklab:editorexternalmutation','bricklab:selectionchange','bricklab:editorselectionchange','bricklab:smartassemblyinstalled','bricklab:ldrawloaded'])globalThis.addEventListener(name,schedule)
   new MutationObserver(()=>{if(!panel.classList.contains('panel-hidden'))schedule()}).observe(panel,{attributes:true,attributeFilter:['class']})
   document.addEventListener('keydown',event=>{
     if(!(event.ctrlKey||event.metaKey)||event.code!=='KeyK'||panel.classList.contains('panel-hidden'))return
-    event.preventDefault();event.stopImmediatePropagation();view.focus();familyPreloader?.sync()
+    event.preventDefault();event.stopImmediatePropagation();view.focus()
   },true)
 }
 install()
 globalThis.BrickLabLDrawCatalog=Object.freeze({
-  focus:()=>{view?.focus();familyPreloader?.sync()},
-  showCategory:name=>{view?.showFamily(/technic|wheel|tyre/i.test(name)?'technic':'system');familyPreloader?.sync()},
-  showAll:()=>{view?.showSection('all');familyPreloader?.sync()},showFavorites:()=>{view?.showSection('favorites');familyPreloader?.sync()},
-  state:()=>view?.state(),previewStatus:()=>previewService.status(),familyPreviewStatus:()=>familyPreloader?.state(),
+  focus:()=>view?.focus(),
+  showCategory:name=>view?.showFamily(/technic|wheel|tyre/i.test(name)?'technic':'system'),
+  showAll:()=>view?.showSection('all'),showFavorites:()=>view?.showSection('favorites'),
+  state:()=>view?.state(),previewStatus:()=>previewService.status(),
   indexStatus:()=>({source:indexSource,items:index.length}),
 })

@@ -67,46 +67,28 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
     tree.innerHTML=`<button type="button" class="pl-tree-all" data-category="" aria-current="${!category}">${t('All categories','Все категории')} <small>${count(family)}</small></button>${familyDef().tree.map(n=>row(n)).join('')}`
   }
 
+  function atlasStyle(source){return source?`background-image:url('${escape(source.url)}');background-position:-${source.x}px -${source.y}px;background-size:${source.page}px ${source.page}px;width:${source.w}px;height:${source.h}px`:''}
   function imageMarkup(item,large=false) {
-    const url=preview(item)
+    const source=preview(item)
     const canRender=typeof preview.request==='function'
-    const fallbackText=url?'':canRender?t('Rendering preview…','Создаём превью…'):t('Preview unavailable','Нет превью')
-    return `<span class="pl-thumb ${large?'pl-large':''}${url?' has-image':''}" data-preview-key="${escape(item.key)}"><span class="pl-preview-fallback">${illustration(familyDef()||FAMILIES[0])}<small data-preview-label>${fallbackText}</small></span>${url?`<img src="${escape(url)}" alt="${escape(item.name||item.description)}" loading="lazy" decoding="async">`:''}<code>${escape(item.code)}</code></span>`
-  }
-
-  function bindImage(img) {
-    if(img.dataset.previewBound==='true')return
-    img.dataset.previewBound='true'
-    img.onload=()=>{
-      const thumb=img.parentElement
-      thumb?.classList.add('has-image')
-      thumb?.classList.remove('preview-loading','preview-failed')
-    }
-    img.onerror=()=>{
-      const thumb=img.parentElement
-      img.remove()
-      thumb?.classList.remove('has-image','preview-loading')
-      thumb?.classList.add('preview-failed')
-      const label=thumb?.querySelector('[data-preview-label]');if(label)label.textContent=t('Preview unavailable','Нет превью')
-    }
-    if(img.complete&&img.naturalWidth)img.onload()
+    const fallbackText=source?'':canRender?t('Loading preview…','Загружаем превью…'):t('Preview unavailable','Нет превью')
+    return `<span class="pl-thumb ${large?'pl-large':''}${source?' has-image':''}" data-preview-key="${escape(item.key)}"><span class="pl-preview-fallback">${illustration(familyDef()||FAMILIES[0])}<small data-preview-label>${fallbackText}</small></span>${source?`<span class="pl-atlas-image" role="img" aria-label="${escape(item.name||item.description)}" style="${atlasStyle(source)}"></span>`:''}<code>${escape(item.code)}</code></span>`
   }
 
   function bindImages(host) {
-    host.querySelectorAll('.pl-thumb img').forEach(bindImage)
     if(typeof preview.request!=='function')return
     host.querySelectorAll('.pl-thumb[data-preview-key]').forEach(thumb=>{
-      if(thumb.querySelector('img')||thumb.dataset.previewPending==='true')return
+      if(thumb.querySelector('.pl-atlas-image')||thumb.dataset.previewPending==='true')return
       const item=byKey(thumb.dataset.previewKey);if(!item)return
       thumb.dataset.previewPending='true';thumb.classList.add('preview-loading');thumb.classList.remove('preview-failed')
-      const label=thumb.querySelector('[data-preview-label]');if(label)label.textContent=t('Rendering preview…','Создаём превью…')
-      const priority=thumb.classList.contains('pl-large')?'high':'normal'
-      Promise.resolve(preview.request(item,{priority})).then(url=>{
+      const label=thumb.querySelector('[data-preview-label]');if(label)label.textContent=t('Loading preview…','Загружаем превью…')
+      Promise.resolve(preview.request(item)).then(source=>{
         if(destroyed||!thumb.isConnected)return
         delete thumb.dataset.previewPending;thumb.classList.remove('preview-loading')
-        if(!url){thumb.classList.add('preview-failed');if(label)label.textContent=t('Preview unavailable','Нет превью');return}
-        const img=root.ownerDocument.createElement('img')
-        img.alt=item.name||item.description||'';img.loading='lazy';img.decoding='async';bindImage(img);thumb.append(img);img.src=url
+        if(!source){thumb.classList.add('preview-failed');if(label)label.textContent=t('Preview unavailable','Нет превью');return}
+        const image=root.ownerDocument.createElement('span')
+        image.className='pl-atlas-image';image.setAttribute('role','img');image.setAttribute('aria-label',item.name||item.description||'');image.style.cssText=atlasStyle(source)
+        thumb.append(image);thumb.classList.add('has-image')
       }).catch(()=>{
         if(destroyed||!thumb.isConnected)return
         delete thumb.dataset.previewPending;thumb.classList.remove('preview-loading');thumb.classList.add('preview-failed')

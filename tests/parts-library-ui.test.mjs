@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { Window } from 'happy-dom'
 import { mountPartsLibrary, LIBRARY_KEYS, hasNewPreview } from '../ldraw/library-view-v1.js'
 import { libraryItems } from '../ldraw/library-model-v1.js'
-import { createPartsLibraryFamilyPreloader } from '../ldraw/library-family-preload-v1.js'
+import { createPartsLibraryAtlasService } from '../ldraw/library-atlas-v1.js'
 
 const fixtures=libraryItems([
   {file:'32073.dat',code:'32073',description:'Technic Axle 5',category:'Technic'},
@@ -76,55 +76,30 @@ test('17000 metadata entries render cards lazily in cumulative batches of 48',as
   assert.equal(view.state().page,1);assert.equal(view.state().rendered,96);view.destroy();await window.happyDOM.close()
 })
 
-test('Rendered cards request bounded real previews and selected detail requests high priority',async()=>{
+test('Rendered cards request atlas entries only for lazy card batches',async()=>{
   const requested=[]
   const preview=()=>null
-  preview.request=async(item,options={})=>{requested.push([item.key,options.priority]);return `data:image/png;base64,${item.code}`}
+  preview.request=async item=>{requested.push(item.key);return {url:'/atlas.webp',x:8,y:8,w:128,h:128,page:2048}}
   const {root,window,view,click}=setup({preview})
   click('[data-family="technic"]')
   await new Promise(resolve=>setTimeout(resolve,0))
-  assert.equal(requested.filter(([,priority])=>priority==='normal').length,3,'only rendered Technic cards request normal previews')
-  assert.equal(requested.some(([key])=>key==='ldraw-3020'),false,'parts outside the rendered family are not previewed')
+  assert.equal(requested.length,3,'only rendered Technic cards request atlas entries')
+  assert.equal(requested.includes('ldraw-3020'),false,'parts outside the rendered family are not requested')
   click('[data-select="ldraw-3648"]')
   await new Promise(resolve=>setTimeout(resolve,0))
-  assert.equal(requested.some(([key,priority])=>key==='ldraw-3648'&&priority==='high'),true)
-  assert.ok(root.querySelector('.pl-detail img'),'resolved preview is attached directly without rebuilding the catalog')
+  assert.equal(requested.includes('ldraw-3648'),true)
+  assert.ok(root.querySelector('.pl-detail .pl-atlas-image'),'atlas cell is attached directly without rebuilding the catalog')
   view.destroy();await window.happyDOM.close()
 })
 
-test('Choosing a family warms every preview in that family and reports progress',async()=>{
-  const {root,window,view,click}=setup()
-  const calls=[]
-  const service={
-    async preloadFamily(familyId,items,{onProgress,signal}={}){
-      calls.push({familyId,keys:items.map(item=>item.key),signal})
-      onProgress?.({phase:'loading',familyId,total:items.length,done:1,failed:0,cached:0,percent:33,cancelled:false})
-      await Promise.resolve()
-      const result={phase:'complete',familyId,total:items.length,done:items.length,failed:0,cached:items.length,percent:100,cancelled:false}
-      onProgress?.(result)
-      return result
-    },
-  }
-  const warmer=createPartsLibraryFamilyPreloader(root,{previewService:service,getItems:()=>fixtures,getFamily:()=>view.state().family,language:()=> 'en'})
-  click('[data-family="technic"]')
-  await new Promise(resolve=>setTimeout(resolve,10))
-  assert.equal(calls.length,1)
-  assert.equal(calls[0].familyId,'technic')
-  assert.deepEqual(calls[0].keys.sort(),['ldraw-32073','ldraw-32270','ldraw-3648'].sort(),'family warm-up ignores System parts')
-  assert.match(root.querySelector('[data-family-preload-label]').textContent,/All Technic previews are ready/)
-  assert.equal(root.querySelector('[data-family-preload-track]').getAttribute('aria-valuenow'),'100')
-  assert.match(root.querySelector('[data-family-preload-count]').textContent,/3 \/ 3/)
-  warmer.destroy();view.destroy();await window.happyDOM.close()
-})
-
-test('Leaving a family aborts its unfinished background preview warm-up',async()=>{
-  const {root,window,view,click}=setup()
-  let signal=null,finish=null
-  const service={preloadFamily(familyId,items,options={}){signal=options.signal;return new Promise(resolve=>{finish=()=>resolve({phase:'cancelled',familyId,total:items.length,done:0,failed:0,cached:0,percent:0,cancelled:true})})}}
-  const warmer=createPartsLibraryFamilyPreloader(root,{previewService:service,getItems:()=>fixtures,getFamily:()=>view.state().family,language:()=> 'en'})
-  click('[data-family="technic"]');await new Promise(resolve=>setTimeout(resolve,0));assert.ok(signal)
-  click('[data-change]');await new Promise(resolve=>setTimeout(resolve,0));assert.equal(signal.aborted,true)
-  finish?.();warmer.destroy();view.destroy();await window.happyDOM.close()
+test('Atlas service resolves a manifest cell to one static WebP page',async()=>{
+  const payload=new TextEncoder().encode(JSON.stringify({version:1,page:2048,parts:{'ldraw-32073':{f:'technic',p:2,x:280,y:144,w:128,h:128}}}))
+  const compressed=await new Response(new Blob([payload]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()
+  const service=createPartsLibraryAtlasService({fetchImpl:async()=>new Response(compressed,{status:200})})
+  const cell=await service.request({key:'ldraw-32073'})
+  assert.match(cell.url,/previews-v1\/technic\/atlas-002\.webp/)
+  assert.deepEqual({x:cell.x,y:cell.y,w:cell.w,h:cell.h,page:cell.page},{x:280,y:144,w:128,h:128,page:2048})
+  assert.equal(service.status().parts,1)
 })
 
 test('Failed insertion never records a recent part',async()=>{
@@ -142,7 +117,7 @@ test('Failed previews keep an explicit illustrated fallback',async()=>{
   const thumb=root.querySelector('.pl-thumb')
   assert.match(thumb.textContent,/Preview unavailable/)
   assert.ok(thumb.querySelector('svg'))
-  assert.equal(thumb.querySelector('img'),null)
+  assert.equal(thumb.querySelector('.pl-atlas-image'),null)
   view.destroy();await window.happyDOM.close()
 })
 
@@ -152,31 +127,20 @@ test('Untrusted metadata is escaped and does not become markup',async()=>{
   view.destroy();await window.happyDOM.close()
 })
 
-test('Production retains native insertion plus bounded persistent preview warming without catalog registration side effects',async()=>{
+test('Production retains native insertion and uses static atlases without preview-render side effects',async()=>{
   const catalog=await readFile(new URL('../ldraw/catalog-v3.js',import.meta.url),'utf8')
-  const previews=await readFile(new URL('../ldraw/library-preview-v1.js',import.meta.url),'utf8')
-  const geometry=await readFile(new URL('../ldraw/preview-geometry-v1.js',import.meta.url),'utf8')
-  const familyWarmup=await readFile(new URL('../ldraw/library-family-preload-v1.js',import.meta.url),'utf8')
+  const atlas=await readFile(new URL('../ldraw/library-atlas-v1.js',import.meta.url),'utf8')
   assert.match(catalog,/registerLDrawPart\(\{\.\.\.item,category:item.sourceCategory\}\)/)
   assert.match(catalog,/card\.click\(\)/);assert.match(catalog,/BrickLabKinematics\?\.active/)
-  assert.match(catalog,/createPartsLibraryPreviewService/)
-  assert.match(catalog,/createPartsLibraryFamilyPreloader/)
+  assert.match(catalog,/createPartsLibraryAtlasService/)
   assert.doesNotMatch(catalog,/www\.ldraw\.org\/library\/official\/images/,'library must not depend on the failed remote thumbnail endpoint')
-  assert.match(previews,/loadPreviewLDrawModel/)
-  assert.match(previews,/globalThis\.caches\.open/,'completed family previews persist in browser Cache Storage')
-  assert.match(previews,/priority === 'background'/,'family warming stays below visible-card work')
-  assert.match(previews,/const MAX_CACHE = 240/,'RAM thumbnail cache remains bounded')
-  assert.match(previews,/const MAX_CONCURRENT = 2/,'geometry preview loading remains bounded')
-  assert.match(geometry,/parseCompleteLDraw/)
-  assert.match(geometry,/resetPreviewGeometryLoader/,'preview-only parser cache can be rotated during huge families')
-  assert.match(familyWarmup,/data-family-preload-track/)
-  assert.doesNotMatch(previews,/registerLDrawPart/,'previewing must not mutate the authoritative PARTS registry')
-  assert.doesNotMatch(geometry,/registerLDrawPart/,'transient preview geometry must not register parts')
-  assert.equal((previews.match(/new THREE\.WebGLRenderer/g)||[]).length,1,'one shared offscreen renderer owns all library previews')
+  assert.match(atlas,/manifest\.json\.gz/);assert.match(atlas,/atlas-\$\{String\(entry\.p\)/)
+  assert.doesNotMatch(atlas,/WebGLRenderer|CacheStorage|caches\.open|loadPreviewLDrawModel/)
+  assert.doesNotMatch(catalog,/library-preview-v1|library-family-preload-v1|preview-geometry-v1/)
   assert.doesNotMatch(catalog,/new PhysicsSession|createRigidBody|insertPart\(/)
 })
 
-test('Production catalog uses an isolated cache generation for family preview warming',async()=>{
+test('Production catalog uses an isolated cache generation for atlas previews',async()=>{
   const index=await readFile(new URL('../index.html',import.meta.url),'utf8')
   const bootstrap=await readFile(new URL('../bootstrap.js',import.meta.url),'utf8')
   const catalog=await readFile(new URL('../ldraw/catalog-v3.js',import.meta.url),'utf8')
@@ -186,10 +150,9 @@ test('Production catalog uses an isolated cache generation for family preview wa
   assert.match(map['./ldraw/catalog-v3.js'],/^\.\/ldraw\/catalog-v3\.js\?v=/)
   assert.equal(map['./app.js'],'./app.js?v=parts-6-20260911-editor-groups-v2')
   assert.match(map['./ldraw/runtime-v3.js?v=ldraw-catalog-20260910-v3'],/runtime-metadata-cache-v1/)
-  assert.match(bootstrap,/\.\/ldraw\/catalog-v3\.js\?v=parts-library-lazy-cards-20260915-v1/)
+  assert.match(bootstrap,/\.\/ldraw\/catalog-v3\.js\?v=ldraw-atlas-20260915-v1/)
   assert.match(catalog,/\.\/library-model-v1\.js\?v=parts-library-20260912-v5/)
-  assert.match(catalog,/\.\/library-view-v1\.js\?v=parts-library-lazy-cards-20260915-v1/)
-  assert.match(catalog,/\.\/library-preview-v1\.js\?v=parts-library-family-preload-20260914-v1/)
-  assert.match(catalog,/\.\/library-family-preload-v1\.js\?v=parts-library-lazy-cards-20260915-v1/)
+  assert.match(catalog,/\.\/library-view-v1\.js\?v=ldraw-atlas-20260915-v1/)
+  assert.match(catalog,/\.\/library-atlas-v1\.js\?v=ldraw-atlas-20260915-v1/)
   for(const match of view.matchAll(/\.\/library-[^'" ]+/g))assert.match(match[0],/\?v=parts-library-20260912-v5$/)
 })
