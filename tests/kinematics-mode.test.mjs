@@ -80,6 +80,7 @@ test('Joint control shape follows certified revolute/prismatic/cylindrical seman
 test('Production Kinematics is direct-manipulation, inertial and no-Rapier', async () => {
   const activation = await readFile(new URL('../kinematics/activation-v1.js', import.meta.url), 'utf8')
   const runtime = await readFile(new URL('../kinematics/runtime-v1.js', import.meta.url), 'utf8')
+  const rackRuntime = await readFile(new URL('../kinematics/rack-pinion-runtime-v1.js', import.meta.url), 'utf8')
   const styles = await readFile(new URL('../kinematics/kinematics-v1.css', import.meta.url), 'utf8')
   const lifecycle = await readFile(new URL('../kinematics/lifecycle-guard-v1.js', import.meta.url), 'utf8')
   const bootstrap = await readFile(new URL('../bootstrap.js', import.meta.url), 'utf8')
@@ -91,14 +92,20 @@ test('Production Kinematics is direct-manipulation, inertial and no-Rapier', asy
   assert.match(activation, /runtime-v1\.js\?v=kinematics-interactive-20260915-v1/)
   assert.match(activation, /kinematics-v1\.css\?v=kinematics-interactive-20260915-v1/)
   assert.match(activation, /lifecycle-guard-v1\.js\?v=kinematics-recovery-20260914-v2/)
+  assert.match(activation, /rack-pinion-runtime-v1\.js\?v=kinematics-rack-pinion-20260915-v1/)
+  assert.ok(
+    activation.indexOf('rack-pinion-runtime-v1.js') < activation.indexOf('await api.enter()'),
+    'rack follower must subscribe before the kinematicsenter event fires',
+  )
   assert.match(activation, /BrickLabKinematics\?\.exit\?\.\(\{ restore:true \}\)/, 'failed activation must defensively restore BUILD')
   assert.match(activation, /captureKinematicsEscape/, 'activation must own Escape before the project menu')
   assert.match(activation, /kinematicsState = 'entering'/)
   assert.match(activation, /event\.stopImmediatePropagation\(\)/)
   assert.match(activation, /api\.exit\?\.\(\{ restore:true \}\)/)
-  const activationOrder = bootstrap.indexOf("./kinematics/activation-v1.js")
-  const projectMenuOrder = bootstrap.indexOf("./menu/project-menu-v1.js")
+  const activationOrder = bootstrap.indexOf('./kinematics/activation-v1.js')
+  const projectMenuOrder = bootstrap.indexOf('./menu/project-menu-v1.js')
   assert.ok(activationOrder >= 0 && projectMenuOrder > activationOrder, 'Kinematics Escape capture must register before Project Menu capture')
+  assert.match(bootstrap, /kinematics\/activation-v1\.js\?v=kinematics-rack-pinion-20260915-v1/)
 
   assert.match(lifecycle, /rollback\('enter-failed', error\)/)
   assert.match(lifecycle, /core\.exit\(\{ restore:true \}\)/)
@@ -106,7 +113,6 @@ test('Production Kinematics is direct-manipulation, inertial and no-Rapier', asy
   assert.match(lifecycle, /Object\.isFrozen\(current\)/)
   assert.match(lifecycle, /mutableFacade\(current\)/)
   assert.doesNotMatch(lifecycle, /new Proxy\(/, 'lifecycle guard itself must never proxy a frozen runtime API')
-  assert.match(bootstrap, /kinematics\/activation-v1\.js\?v=/)
   assert.equal((index.match(/bootstrap\.js\?v=[^"']+/g) ?? []).length, 2)
 
   assert.match(runtime, /buildPhysicsPlanV4/)
@@ -126,6 +132,17 @@ test('Production Kinematics is direct-manipulation, inertial and no-Rapier', asy
   assert.match(runtime, /kinematics-selection-marker/)
   assert.doesNotMatch(runtime, /<section class="kinematics-panel"/)
   assert.doesNotMatch(runtime, /data-kinematics-angle|data-kinematics-driver|renderPanel\(/, 'direct Kinematics must not render control-panel sliders/selects')
+
+  assert.match(rackRuntime, /detectRackPinionMeshesV1/)
+  assert.match(rackRuntime, /signedQuaternionDelta/)
+  assert.match(rackRuntime, /angleRad \* Number\(mesh\.pitchRadius/)
+  assert.match(rackRuntime, /maxTravelStud/)
+  assert.match(rackRuntime, /rack-pinion-conflict|kinematicsrackconflict/)
+  assert.match(rackRuntime, /bricklab:kinematicsenter/)
+  assert.match(rackRuntime, /bricklab:kinematicsexit/)
+  assert.doesNotMatch(rackRuntime, /PhysicsSession|Rapier|createSession\(/, 'rack follower must remain deterministic and no-Rapier')
+  assert.doesNotMatch(rackRuntime, /commitHistory|saveLocal|localStorage\.setItem/, 'rack follower must not persist temporary motion')
+
   assert.match(styles, /\.kinematics-selection-marker/)
   assert.doesNotMatch(styles, /\.kinematics-panel\s*\{/)
   assert.match(app, /BrickLabViewportV1/)
