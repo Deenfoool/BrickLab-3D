@@ -1,4 +1,4 @@
-export const KINEMATICS_RACK_PINION_FOLLOW_VERSION = 'kinematics-rack-pinion-follow-v1.0.0'
+export const KINEMATICS_RACK_PINION_FOLLOW_VERSION = 'kinematics-rack-pinion-follow-v1.1.0'
 
 const DEG2RAD = Math.PI / 180
 const DEFAULT_CONFLICT_TOLERANCE_STUD = 0.02
@@ -13,13 +13,19 @@ function shaftIdForPart(shaftIdByPart, instanceId) {
   return typeof value === 'string' ? value : value?.id ?? null
 }
 
-export function rackTravelFromRotationV1(angleDeg, shaftRatio, pitchRadiusStud, travelSign = 1) {
-  const angle = Number(angleDeg)
+export function rackTravelFromRadiansV1(angleRad, shaftRatio, pitchRadiusStud, travelSign = 1) {
+  const angle = Number(angleRad)
   const ratio = Number(shaftRatio)
   const radius = Number(pitchRadiusStud)
   const sign = Number(travelSign) || 1
   if (!Number.isFinite(angle) || !Number.isFinite(ratio) || !(radius > 0)) return null
-  return angle * DEG2RAD * ratio * radius * sign
+  return angle * ratio * radius * sign
+}
+
+export function rackTravelFromRotationV1(angleDeg, shaftRatio, pitchRadiusStud, travelSign = 1) {
+  const angle = Number(angleDeg)
+  if (!Number.isFinite(angle)) return null
+  return rackTravelFromRadiansV1(angle * DEG2RAD, shaftRatio, pitchRadiusStud, travelSign)
 }
 
 export function solveRackPinionFollowersV1({
