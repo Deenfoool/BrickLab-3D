@@ -13,7 +13,7 @@ import {
   decayAngularVelocity,
   KINEMATICS_DRAG_VERSION,
   linearDragDegrees,
-} from './drag-v1.js'
+} from './drag-v1.js?v=kinematics-interactive-20260915-v1'
 
 export const KINEMATICS_RUNTIME_VERSION = 'kinematics-runtime-v1.2.0'
 
