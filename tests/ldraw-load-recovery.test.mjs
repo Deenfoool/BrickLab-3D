@@ -30,6 +30,39 @@ test('Known subpart and hi-res primitive prefixes avoid speculative directory se
   await transport.subpart('s\\test.dat');await transport.subpart('48/test.dat')
   assert.deepEqual(paths,['test/parts/s/test.dat','test/p/48/test.dat'])
 })
+test('Bare primitives go to p first while normal part IDs go to parts first',async()=>{
+  const paths=[]
+  const transport=createLDrawTextTransport({mirrors:['test/'],fetcher:async url=>{paths.push(url);return new Response(part)}})
+  await transport.subpart('stud.dat')
+  await transport.subpart('1-4chrd.dat')
+  await transport.subpart('axlehole.dat')
+  await transport.subpart('3001.dat')
+  await transport.subpart('u9134.dat')
+  assert.deepEqual(paths,[
+    'test/p/stud.dat',
+    'test/p/1-4chrd.dat',
+    'test/p/axlehole.dat',
+    'test/parts/3001.dat',
+    'test/parts/u9134.dat',
+  ])
+})
+test('A path-level 404 is not repeated on the same-library mirror or later in the session',async()=>{
+  const calls=[]
+  const transport=createLDrawTextTransport({mirrors:['primary/','mirror/'],fetcher:async url=>{calls.push(url);return new Response('',{status:404})}})
+  await assert.rejects(transport.read('p/missing.dat'),/404/)
+  await assert.rejects(transport.read('p/missing.dat'),/404/)
+  assert.deepEqual(calls,['primary/p/missing.dat'])
+  assert.equal(transport.stats().network404,1)
+  assert.equal(transport.stats().avoided404,1)
+})
+test('Resolved bare-name location is remembered across repeated subpart reads',async()=>{
+  const calls=[]
+  const transport=createLDrawTextTransport({mirrors:['test/'],fetcher:async url=>{calls.push(url);return new Response(part)}})
+  assert.equal(await transport.subpart('stud.dat'),part)
+  assert.equal(await transport.subpart('stud.dat'),part)
+  assert.deepEqual(calls,['test/p/stud.dat'])
+  assert.equal(transport.stats().locationHits,1)
+})
 test('Actual Three LDraw parser recovers from a rejected child cache entry',async()=>{
   const loader=installLDrawCacheRecovery(new LDrawLoader());loader.setConditionalLineMaterial(LDrawConditionalLineMaterial);loader.addDefaultMaterials()
   let failures=1,calls=0
