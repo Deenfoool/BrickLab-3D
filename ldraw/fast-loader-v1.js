@@ -1,6 +1,6 @@
 import { PARTS } from '../parts.js'
 
-export const LDRAW_FAST_LOADER_VERSION = 'ldraw-fast-loader-v1.4.0'
+export const LDRAW_FAST_LOADER_VERSION = 'ldraw-fast-loader-v1.5.0'
 
 const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null
 const constrainedNetwork = Boolean(connection?.saveData || /(?:^|-)2g$/.test(connection?.effectiveType || ''))
@@ -18,14 +18,11 @@ const warmRoots = new Map()
 const connectorWarm = new Map()
 let workers = 0
 let backgroundStarted = 0
-let observedCards = new WeakSet()
-let cardObserver = null
-let mutationObserver = null
 
 const diagnostics = {
   queued:0, active:0, prepared:0, failed:0, backgroundStarted:0,
-  cacheHits:0, hoverRequests:0, visibleRequests:0, criticalRequests:0,
-  projectWarmRequests:0, idleWarmRequests:0, directPrototypePreloads:0,
+  cacheHits:0, intentRequests:0, criticalRequests:0,
+  projectWarmRequests:0, directPrototypePreloads:0,
   connectorWarm:0, connectorWarmFailed:0, totalPrepareMs:0, lastPrepareMs:0,
 }
 
@@ -109,9 +106,6 @@ async function perform(file) {
   const started = performance.now()
   let root = null
   try {
-    // runtime-v3.1 publishes the reusable visual prototype before its legacy recursive
-    // connector inference completes. This is the fastest path and avoids constructing
-    // a loading placeholder just to warm network/parser caches.
     if (typeof runtime?.preload === 'function') {
       diagnostics.directPrototypePreloads += 1
       await runtime.preload(normalized)
@@ -124,9 +118,6 @@ async function perform(file) {
     const elapsed = performance.now() - started
     diagnostics.lastPrepareMs = elapsed
     diagnostics.totalPrepareMs += elapsed
-    // Connector hydration is deliberately detached from the visual worker. Once the
-    // reusable LDraw prototype exists, the next geometry preload can start while V4
-    // Shadow metadata finishes on the retained temporary root.
     void startConnectorWarm(normalized, def, root)
     return def
   } catch (error) {
@@ -193,73 +184,34 @@ export function preloadLDrawPart(file, { priority='visible', background=false } 
 }
 
 function cardFile(target) { return target?.closest?.('.ld2-card[data-file]')?.dataset?.file || '' }
-function observeCard(card) {
-  if (!card || observedCards.has(card)) return
-  observedCards.add(card)
-  cardObserver?.observe(card)
-}
-function scanCards(root=document) { root.querySelectorAll?.('.ld2-card[data-file]').forEach(observeCard) }
-function installPrediction() {
-  cardObserver = new IntersectionObserver(entries => {
-    for (const entry of entries) {
-      if (!entry.isIntersecting) continue
-      const file = entry.target.dataset.file
-      if (file) { diagnostics.visibleRequests += 1; void preloadLDrawPart(file,{priority:'visible',background:true}).catch(()=>{}) }
-      cardObserver.unobserve(entry.target)
-    }
-  }, { rootMargin:'320px 180px', threshold:0.01 })
-  mutationObserver = new MutationObserver(records => {
-    for (const record of records) for (const node of record.addedNodes) if (node?.nodeType === 1) { if (node.matches?.('.ld2-card[data-file]')) observeCard(node); scanCards(node) }
-  })
-  mutationObserver.observe(document.documentElement,{subtree:true,childList:true})
-  scanCards()
-  document.addEventListener('pointerover', event => {
-    const file=cardFile(event.target); if (!file) return
-    diagnostics.hoverRequests += 1
-    void preloadLDrawPart(file,{priority:'hover'}).catch(()=>{})
-  }, {capture:true,passive:true})
-  document.addEventListener('focusin', event => {
-    const file=cardFile(event.target); if (file) void preloadLDrawPart(file,{priority:'hover'}).catch(()=>{})
-  }, true)
+function installIntentPreload() {
+  // Atlas sprites already provide immediate catalog previews. Loading full LDraw
+  // geometry merely because a card becomes visible or receives hover wastes network,
+  // CPU and parser work, and also probes catalog entries absent from the active source.
+  // Only an explicit placement gesture gets a head start before the add handler runs.
   document.addEventListener('pointerdown', event => {
+    if (!event.target?.closest?.('[data-add]')) return
     const file=cardFile(event.target); if (!file) return
+    diagnostics.intentRequests += 1
     diagnostics.criticalRequests += 1
     void preloadLDrawPart(file,{priority:'critical'}).catch(()=>{})
   }, {capture:true,passive:true})
-}
-function idle(callback, timeout=1500) {
-  if (typeof requestIdleCallback === 'function') return requestIdleCallback(callback,{timeout})
-  return setTimeout(callback,Math.min(timeout,600))
-}
-function warmSavedList(key, max) {
-  try {
-    const items=JSON.parse(localStorage.getItem(key)||'[]')
-    if (!Array.isArray(items)) return []
-    return items.slice(0,max).map(item=>normalizeFile(typeof item==='string'&&item.startsWith('ldraw-')?`${item.slice(6)}.dat`:item?.file)).filter(Boolean)
-  } catch { return [] }
+  document.addEventListener('dblclick', event => {
+    if (!event.target?.closest?.('[data-select]')) return
+    const file=cardFile(event.target); if (!file) return
+    diagnostics.intentRequests += 1
+    diagnostics.criticalRequests += 1
+    void preloadLDrawPart(file,{priority:'critical'}).catch(()=>{})
+  }, {capture:true,passive:true})
 }
 function startRegisteredWarmup() {
   const files = [...new Set(PARTS.filter(def => String(def?.id || '').startsWith('ldraw-') && def?.ldraw?.file && !def.ldraw.ready).map(def => normalizeFile(def.ldraw.file)))].slice(0,24)
   diagnostics.projectWarmRequests = files.length
   files.forEach((file,index) => void preloadLDrawPart(file,{priority:index < 4 ? 'critical' : 'hover'}).catch(()=>{}))
 }
-function startIdleWarmup() {
-  if (constrainedNetwork || backgroundLimit <= 0) return
-  idle(() => {
-    // Static atlas previews removed the reason to cold-load a canned HOME_WARM set on
-    // every visit. Only parts the user actually touched before are worth speculative
-    // geometry work; everything else stays on-demand and leaves CPU/network idle.
-    const recent=[...warmSavedList('bricklab.library.recents.v1',4),...warmSavedList('bricklab.ldraw.recents.v3',4)]
-    const favorites=[...warmSavedList('bricklab.library.favorites.v1',4),...warmSavedList('bricklab.ldraw.favorites.v3',4)]
-    const files=[...new Set([...recent,...favorites])].slice(0,Math.min(backgroundLimit,8))
-    diagnostics.idleWarmRequests = files.length
-    files.forEach((file,index) => idle(() => void preloadLDrawPart(file,{priority:'idle',background:true}).catch(()=>{}),900+index*180))
-  },1800)
-}
 
-installPrediction()
+installIntentPreload()
 startRegisteredWarmup()
-startIdleWarmup()
 
 export const BrickLabLDrawFastLoader = Object.freeze({
   version:LDRAW_FAST_LOADER_VERSION,
