@@ -5,10 +5,28 @@ import { posix as path } from 'node:path'
 
 const root = new URL('../', import.meta.url)
 const tag = process.argv[2] ?? 'parts-6-20260911-editor-groups-v2'
-if (!/^(?:runtime|connect|connector|physics|parts)-\d+-[a-z0-9-]+$/.test(tag)) throw new Error('Invalid runtime tag')
-const id = tag.match(/^(?:runtime|connect|connector|physics|parts)-\d+/)[0].toUpperCase()
+if (!/^(?:(?:runtime|connect|connector|physics|parts)-\d+|connector-v4-physics)-[a-z0-9-]+$/.test(tag)) throw new Error('Invalid runtime tag')
+const id = tag.match(/^(?:(?:runtime|connect|connector|physics|parts)-\d+|connector-v4-physics)/)[0].toUpperCase()
 const files = (await readdir(root)).filter(name => name.endsWith('.js')).sort()
-for (const dir of ['audio', 'assets/audio', 'connectors-v4', 'ldraw']) {
+for (const dir of [
+  'architecture',
+  'audio',
+  'assets/audio',
+  'connector-discovery',
+  'connectors-v4',
+  'editor',
+  'guidance',
+  'kinematics',
+  'ldraw',
+  'menu',
+  'parts3',
+  'parts4',
+  'parts5',
+  'parts6',
+  'performance',
+  'projects',
+  'testlab',
+]) {
   for (const name of await readdir(new URL(dir + '/', root))) if (name.endsWith('.js')) files.push(`${dir}/${name}`)
 }
 const versioned = Object.fromEntries(files.map(name => [`./${name}`, `./${name}?v=${tag}`]))
@@ -38,6 +56,16 @@ const connectorAliases = {
   './snapping.js': `./connectors-v4/snapping-bridge-v4.js?v=${tag}`,
   './connector-validation.js': `./connector-validation-v3.js?v=${tag}`,
   './structural-auto-weld-v2.js': `./connector-physics-v3.js?v=${tag}`,
+  './main-menu.js': `./menu/main-menu-v5.js?v=${tag}`,
+  './testlab.js': `./testlab-v2.js?v=${tag}`,
+  './powertrain-physics-v2.js': `./physics-stability-v3.js?v=${tag}`,
+  './ldraw/catalog-v1.js': `./ldraw/catalog-v3.js?v=${tag}`,
+  './ldraw/catalog-v2.js': `./ldraw/catalog-v3.js?v=${tag}`,
+  './ldraw/runtime-v1.js': `./ldraw/runtime-v3.js?v=${tag}`,
+  './ldraw/runtime-v2.js': `./ldraw/runtime-v3.js?v=${tag}`,
+  './ldraw/runtime-v2.js?v=ldraw-20260910-v2': `./ldraw/runtime-v3.js?v=${tag}`,
+  './ldraw/runtime-v3.js?v=ldraw-20260910-v3': `./ldraw/runtime-v3.js?v=${tag}`,
+  './ldraw/runtime-v3.js?v=ldraw-catalog-20260910-v3': `./ldraw/runtime-metadata-cache-v1.js?v=${tag}`,
 }
 
 const imports = {
