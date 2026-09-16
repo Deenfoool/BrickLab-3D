@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { matchConnectorV4 } from './matcher-v4.js'
 import { nearestAxialOffsetV4, evaluateAxialOffsetV4 } from './axial-fit-v4.js'
 
-export const PLACEMENT_SOLVER_VERSION_V4 = 'placement-solver-v4.3.0'
+export const PLACEMENT_SOLVER_VERSION_V4 = 'placement-solver-v4.4.0'
 const EPS = 1e-8
 
 function matrixFromConnector(connector) {
@@ -68,6 +68,21 @@ function fullOrientationCorrection(sourceReference, targetReference, axis, match
   return raw
 }
 
+function cylinderFemaleConnector(a,b) {
+  if (a?.family === 'cylinder' && a.gender === 'female') return a
+  if (b?.family === 'cylinder' && b.gender === 'female') return b
+  return null
+}
+
+// A caps=none female cylinder is a physical through-hole. Its local axis is a
+// coordinate convention, not a preferred insertion side, so either polarity is
+// valid. Capped cylinders remain directional.
+export function bidirectionalCylinderPairV4(a,b,match) {
+  if (match?.family !== 'cylinder' || a?.family !== 'cylinder' || b?.family !== 'cylinder') return false
+  const female = cylinderFemaleConnector(a,b)
+  return Boolean(female && String(female.geometry?.caps || 'one').trim().toLowerCase() === 'none')
+}
+
 function toParentLocalPose(object, worldPosition, worldQuaternion) {
   if (!object.parent) return { position:worldPosition.clone(), quaternion:worldQuaternion.clone() }
   object.parent.updateWorldMatrix?.(true,false)
@@ -119,6 +134,10 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
   const initialAxialSeparationStud = initialDelta.dot(targetFrame.axis)
   const initialLateralDistanceStud = initialDelta.clone().addScaledVector(targetFrame.axis,-initialAxialSeparationStud).length()
   const initialConnectorDistanceStud = initialDelta.length()
+  const initialAxisDot = movingFrame.axis.dot(targetFrame.axis)
+  const bidirectionalAxis = bidirectionalCylinderPairV4(movingConnector,targetConnector,match)
+  const axisPolarity = bidirectionalAxis && initialAxisDot < 0 ? -1 : 1
+  const alignmentAxis = targetFrame.axis.clone().multiplyScalar(axisPolarity)
 
   let desiredQuaternion = movingPose.quaternion.clone()
   let rotationDelta = new THREE.Quaternion()
@@ -127,7 +146,7 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
   let appliedTwistCorrectionRad = 0
 
   if (!preserveMovingOrientation) {
-    const axisAlign = new THREE.Quaternion().setFromUnitVectors(movingFrame.axis,targetFrame.axis)
+    const axisAlign = new THREE.Quaternion().setFromUnitVectors(movingFrame.axis,alignmentAxis)
     desiredQuaternion = axisAlign.clone().multiply(desiredQuaternion)
     rotationDelta.copy(axisAlign)
 
@@ -135,9 +154,9 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
     const requestedTwist = Number(options.twistCorrectionRad)
     const correctionAngle = Number.isFinite(requestedTwist)
       ? requestedTwist
-      : fullOrientationCorrection(alignedReference,targetFrame.reference,targetFrame.axis,match)
+      : fullOrientationCorrection(alignedReference,targetFrame.reference,alignmentAxis,match)
     if (Math.abs(correctionAngle) > 1e-9) {
-      const twist = new THREE.Quaternion().setFromAxisAngle(targetFrame.axis,correctionAngle)
+      const twist = new THREE.Quaternion().setFromAxisAngle(alignmentAxis,correctionAngle)
       desiredQuaternion = twist.clone().multiply(desiredQuaternion)
       rotationDelta = twist.clone().multiply(rotationDelta)
       appliedTwistCorrectionRad = correctionAngle
@@ -149,6 +168,8 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
 
   const objectOrigin = movingPose.position
   const sourceOffset = movingFrame.position.clone().sub(objectOrigin).applyQuaternion(rotationDelta)
+  // Axial offset remains expressed in the target connector's canonical axis so
+  // occupancy/persistence signs stay stable regardless of the chosen entry side.
   const desiredConnectorPosition = targetFrame.position.clone().addScaledVector(targetFrame.axis,axial.offsetStud)
   const desiredWorldPosition = desiredConnectorPosition.clone().sub(sourceOffset)
   const localPose = toParentLocalPose(movingObject,desiredWorldPosition,desiredQuaternion)
@@ -162,7 +183,10 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
     axial,
     placementMode,
     preserveMovingOrientation,
+    bidirectionalAxis,
+    axisPolarity,
     targetAxisWorld:targetFrame.axis.toArray(),
+    alignmentAxisWorld:alignmentAxis.toArray(),
     targetPositionWorld:targetFrame.position.toArray(),
     desiredConnectorPositionWorld:desiredConnectorPosition.toArray(),
     worldPosition:desiredWorldPosition.toArray(),
@@ -170,7 +194,10 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
     localPosition:localPose.position.toArray(),
     localQuaternion:localPose.quaternion.toArray(),
     diagnostics:{
-      initialAxisDot:movingFrame.axis.dot(targetFrame.axis),
+      initialAxisDot,
+      effectiveAxisDot:movingFrame.axis.dot(alignmentAxis),
+      bidirectionalAxis,
+      axisPolarity,
       initialConnectorDistanceStud,
       initialLateralDistanceStud,
       initialAxialSeparationStud,
