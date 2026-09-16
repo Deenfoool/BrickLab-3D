@@ -43,7 +43,7 @@ Connector System V4
 
 ## Geometry source
 
-The production LDraw runtime currently uses the version-controlled `pybricks/ldraw` mirror. Geometry is requested from `raw.githubusercontent.com`; the top-level `parts/` filename index is obtained lazily from GitHub's Trees API.
+The production LDraw runtime loads geometry from a current release mirror and falls back to the version-controlled `pybricks/ldraw` mirror. A missing path is remembered only after all release mirrors return 404, so newer official parts remain loadable. The top-level `parts/` filename index is obtained lazily from the existing `pybricks/ldraw` GitHub Trees API.
 
 This keeps BrickLab small and avoids downloading the complete parts library on startup.
 

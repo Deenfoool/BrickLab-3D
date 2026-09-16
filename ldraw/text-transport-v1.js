@@ -1,10 +1,11 @@
 export const LDRAW_MIRRORS = [
+  'https://raw.githubusercontent.com/mrkrstphr/ldraw-parts/main/',
   'https://raw.githubusercontent.com/pybricks/ldraw/master/',
-  'https://cdn.jsdelivr.net/gh/pybricks/ldraw@master/',
 ]
 
-// Same library on both hosts. A path-level 404 is authoritative for this session;
-// retrying the identical path on the second mirror only adds latency and console noise.
+// Mirrors can carry different LDraw releases. A 404 is authoritative only after
+// every configured mirror has been checked; this keeps newer official parts such
+// as 71708 available while retaining the established pybricks source as fallback.
 export function createLDrawTextTransport({fetcher=globalThis.fetch,mirrors=LDRAW_MIRRORS,timeoutMs=15000}={}) {
   const cache=new Map()
   const missingPaths=new Set()
@@ -25,7 +26,7 @@ export function createLDrawTextTransport({fetcher=globalThis.fetch,mirrors=LDRAW
     if(missingPaths.has(path)){diagnostics.avoided404+=1;throw missingError(path)}
     if(cache.has(path))return cache.get(path)
     const task=(async()=>{
-      let last
+      let last,allNotFound=true
       for(let index=0;index<mirrors.length;index+=1){
         const mirror=mirrors[index]
         const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs)
@@ -34,7 +35,8 @@ export function createLDrawTextTransport({fetcher=globalThis.fetch,mirrors=LDRAW
           const response=await fetcher(mirror+path,{mode:'cors',cache:'force-cache',signal:controller.signal})
           if(!response.ok){
             const error=Error(`LDraw HTTP ${response.status}: ${path}`);error.status=response.status
-            if(response.status===404){missingPaths.add(path);diagnostics.network404+=1;throw error}
+            if(response.status===404)diagnostics.network404+=1
+            else allNotFound=false
             throw error
           }
           const text=await response.text()
@@ -42,13 +44,11 @@ export function createLDrawTextTransport({fetcher=globalThis.fetch,mirrors=LDRAW
           return text
         }catch(error){
           last=error
-          // Both configured mirrors expose the same pybricks/ldraw tree. If the first
-          // one says the path does not exist, the useful fallback is another LDraw
-          // directory (p/ vs parts/), not the same missing path on another host.
-          if(error?.status===404)break
+          if(error?.status!==404)allNotFound=false
           if(index+1<mirrors.length)diagnostics.mirrorFallbacks+=1
         }finally{clearTimeout(timer)}
       }
+      if(allNotFound&&last?.status===404)missingPaths.add(path)
       throw last
     })()
     cache.set(path,task)

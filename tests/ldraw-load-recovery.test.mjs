@@ -5,7 +5,7 @@ import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawCondit
 import { installLDrawCacheRecovery,retryLoad,withLoadDeadline,parseCompleteLDraw } from '../ldraw/load-recovery-v1.js'
 import { createLDrawTextTransport } from '../ldraw/text-transport-v1.js'
 const part='0 Test part\n0 !LDRAW_ORG Part\n3 16 0 0 0 20 0 0 0 20 0\n'
-test('Transport falls back to the same library mirror and deduplicates requests',async()=>{
+test('Transport falls back across library mirrors and deduplicates requests',async()=>{
   let calls=0
   const transport=createLDrawTextTransport({mirrors:['primary/','mirror/'],fetcher:async url=>{calls++;return url.startsWith('primary')?new Response('',{status:503}):new Response(part)}})
   const [a,b]=await Promise.all([transport.read('parts/test.dat'),transport.read('parts/test.dat')])
@@ -46,14 +46,36 @@ test('Bare primitives go to p first while normal part IDs go to parts first',asy
     'test/parts/u9134.dat',
   ])
 })
-test('A path-level 404 is not repeated on the same-library mirror or later in the session',async()=>{
+test('A path-level 404 checks every release mirror once and is then remembered',async()=>{
   const calls=[]
   const transport=createLDrawTextTransport({mirrors:['primary/','mirror/'],fetcher:async url=>{calls.push(url);return new Response('',{status:404})}})
   await assert.rejects(transport.read('p/missing.dat'),/404/)
   await assert.rejects(transport.read('p/missing.dat'),/404/)
-  assert.deepEqual(calls,['primary/p/missing.dat'])
-  assert.equal(transport.stats().network404,1)
+  assert.deepEqual(calls,['primary/p/missing.dat','mirror/p/missing.dat'])
+  assert.equal(transport.stats().network404,2)
   assert.equal(transport.stats().avoided404,1)
+})
+test('A newer part missing from the legacy mirror loads from the current release mirror',async()=>{
+  const calls=[]
+  const transport=createLDrawTextTransport({mirrors:['legacy/','current/'],fetcher:async url=>{
+    calls.push(url)
+    return url.startsWith('legacy/')?new Response('',{status:404}):new Response(part)
+  }})
+  assert.equal(await transport.read('parts/71708.dat'),part)
+  assert.deepEqual(calls,['legacy/parts/71708.dat','current/parts/71708.dat'])
+  assert.equal(transport.stats().mirrorFallbacks,1)
+})
+test('A mixed network failure and 404 is retried instead of being remembered as missing',async()=>{
+  let recovered=false,calls=0
+  const transport=createLDrawTextTransport({mirrors:['current/','legacy/'],fetcher:async url=>{
+    calls+=1
+    if(url.startsWith('current/'))return recovered?new Response(part):new Response('',{status:503})
+    return new Response('',{status:404})
+  }})
+  await assert.rejects(transport.read('parts/71708.dat'))
+  recovered=true
+  assert.equal(await transport.read('parts/71708.dat'),part)
+  assert.equal(calls,3)
 })
 test('Resolved bare-name location is remembered across repeated subpart reads',async()=>{
   const calls=[]
