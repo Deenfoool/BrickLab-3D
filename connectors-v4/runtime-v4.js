@@ -13,6 +13,7 @@ import { ACTIVATION_POLICY_VERSION_V4, certifyCandidateV4, certifyConnectivityV4
 import { runConnectorV4SelfTest } from './selftest-v4.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 import { nearestTechnicPinSlotOffsetsV4 } from './pin-slots-v4.js?v=connector-axle-pin-slots-20260916-v1'
+import { fetchLDrawText } from '../ldraw/runtime-v3.js'
 import {
   clearPersistedGraphV4,
   persistGraphV4,
@@ -55,6 +56,22 @@ async function fetchTextOrNull(url) {
   return response.text()
 }
 
+async function fetchOfficialText(path) {
+  const normalized = normalizedPath(path)
+  if (normalized.startsWith('parts/')) {
+    try {
+      // Use the same mirrored transport as the visual LDraw loader. Otherwise a
+      // part such as 71708 can be visible in the editor while connector hydration
+      // independently fails against pybricks/ldraw with HTTP 404.
+      return await fetchLDrawText(normalized)
+    } catch (error) {
+      if (error?.status === 404) return null
+      throw error
+    }
+  }
+  return fetchTextOrNull(`${LDRAW_RAW_ROOT}${encodedPath(normalized)}`)
+}
+
 async function shadowManifest() {
   if (shadowManifestPromise) return shadowManifestPromise
   shadowManifestPromise = (async () => {
@@ -87,7 +104,7 @@ async function fetchShadowText(path) {
 }
 
 const resolver = createShadowResolverV4({
-  fetchOfficialText: path => fetchTextOrNull(`${LDRAW_RAW_ROOT}${encodedPath(path)}`),
+  fetchOfficialText,
   fetchShadowText,
 })
 
