@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { classifyTechnicPinInterfaceV4 } from './connectors-v4/pin-semantics-v4.js?v=connector-pin-gender-20260912-v1'
 
 export const COLLIDER_PROFILE_VERSION = 'collider-profiles-v5'
+export const LDRAW_SURFACE_COLLIDER_VERSION = 'ldraw-surface-collider-v1'
 // Visual pin-hole radius is 0.300 stud (4.8 mm). Rapier gets a small extra skin
 // so a snapped pin never starts the first SIMULATE step in penetration.
 export const HOLE_CLEARANCE_STUD = 0.3125
@@ -14,6 +15,10 @@ const AXIS_INDEX = Object.freeze({ x:0, y:1, z:2 })
 const CARDINAL_MIN = 0.90
 const OFF_AXIS_MAX = 0.18
 const ROW_EPS = 0.08
+const LDRAW_MIN_CELL_STUD = 0.16
+const LDRAW_MAX_CELL_STUD = 0.42
+const LDRAW_MAX_SPECS = 72
+const ldrawProfileCache = new Map()
 
 function localBounds(object) {
   object.updateWorldMatrix(true, true)
@@ -37,6 +42,128 @@ function localBounds(object) {
   const center = box.getCenter(new THREE.Vector3())
   size.set(Math.max(size.x, .12), Math.max(size.y, .12), Math.max(size.z, .12))
   return { size, center }
+}
+
+function isLDrawDefinition(definition) {
+  return String(definition?.id || '').startsWith('ldraw-') || Boolean(definition?.ldraw?.file)
+}
+
+function effectivelyVisible(node, root) {
+  let cursor=node
+  while(cursor){
+    if(cursor.visible===false)return false
+    if(cursor===root)break
+    cursor=cursor.parent
+  }
+  return true
+}
+
+function poseKey(object, definition) {
+  const pose=object?.userData?.mechanismPose
+  return `${definition?.id || definition?.ldraw?.code || 'ldraw'}:${pose?JSON.stringify(pose):'rigid'}`
+}
+
+function cloneSpec(spec) {
+  return {
+    ...spec,
+    center:spec.center.clone(),
+    size:spec.size?.clone?.() ?? spec.size,
+  }
+}
+
+function cacheLDrawProfile(key,specs) {
+  if(ldrawProfileCache.has(key))ldrawProfileCache.delete(key)
+  ldrawProfileCache.set(key,specs.map(cloneSpec))
+  while(ldrawProfileCache.size>256)ldrawProfileCache.delete(ldrawProfileCache.keys().next().value)
+}
+
+function meshTrianglesLocal(object) {
+  object.updateWorldMatrix(true,true)
+  const inverse=object.matrixWorld.clone().invert(),triangles=[]
+  const a=new THREE.Vector3(),b=new THREE.Vector3(),c=new THREE.Vector3()
+  object.traverse(child=>{
+    if(!child.isMesh||!child.geometry||child.userData?.physicsIgnore||!effectivelyVisible(child,object))return
+    const position=child.geometry.getAttribute?.('position')
+    if(!position||position.count<3)return
+    const index=child.geometry.index, transform=inverse.clone().multiply(child.matrixWorld)
+    const count=index?index.count:position.count
+    for(let i=0;i+2<count;i+=3){
+      const ia=index?index.getX(i):i,ib=index?index.getX(i+1):i+1,ic=index?index.getX(i+2):i+2
+      a.fromBufferAttribute(position,ia).applyMatrix4(transform)
+      b.fromBufferAttribute(position,ib).applyMatrix4(transform)
+      c.fromBufferAttribute(position,ic).applyMatrix4(transform)
+      if(new THREE.Triangle(a,b,c).getArea()<1e-7)continue
+      triangles.push(new THREE.Triangle(a.clone(),b.clone(),c.clone()))
+    }
+  })
+  return triangles
+}
+
+const cellId=(x,y,z)=>`${x},${y},${z}`
+
+function occupiedSurfaceCells(triangles,bounds,cell) {
+  const occupied=new Set(),halfDiagonal=Math.sqrt(3)*cell*.58
+  const triBox=new THREE.Box3(),center=new THREE.Vector3(),closest=new THREE.Vector3()
+  for(const triangle of triangles){
+    triBox.setFromPoints([triangle.a,triangle.b,triangle.c]).expandByScalar(cell*.12)
+    const min=triBox.min.clone().sub(bounds.min).divideScalar(cell).floor()
+    const max=triBox.max.clone().sub(bounds.min).divideScalar(cell).floor()
+    for(let x=Math.max(0,min.x);x<=max.x;x+=1)for(let y=Math.max(0,min.y);y<=max.y;y+=1)for(let z=Math.max(0,min.z);z<=max.z;z+=1){
+      center.set(bounds.min.x+(x+.5)*cell,bounds.min.y+(y+.5)*cell,bounds.min.z+(z+.5)*cell)
+      triangle.closestPointToPoint(center,closest)
+      if(closest.distanceToSquared(center)<=halfDiagonal*halfDiagonal)occupied.add(cellId(x,y,z))
+    }
+  }
+  return occupied
+}
+
+function mergeSurfaceCells(occupied,bounds,cell) {
+  const remaining=new Set(occupied),specs=[]
+  const has=(x,y,z)=>remaining.has(cellId(x,y,z))
+  while(remaining.size){
+    const first=remaining.values().next().value.split(',').map(Number)
+    const [x0,y0,z0]=first
+    let x1=x0
+    while(has(x1+1,y0,z0))x1+=1
+    let z1=z0,can=true
+    while(can){
+      const next=z1+1
+      for(let x=x0;x<=x1;x+=1)if(!has(x,y0,next)){can=false;break}
+      if(can)z1=next
+    }
+    let y1=y0;can=true
+    while(can){
+      const next=y1+1
+      for(let x=x0;x<=x1;x+=1)for(let z=z0;z<=z1;z+=1)if(!has(x,next,z)){can=false;break}
+      if(can)y1=next
+    }
+    for(let x=x0;x<=x1;x+=1)for(let y=y0;y<=y1;y+=1)for(let z=z0;z<=z1;z+=1)remaining.delete(cellId(x,y,z))
+    const minX=bounds.min.x+x0*cell,maxX=Math.min(bounds.max.x,bounds.min.x+(x1+1)*cell)
+    const minY=bounds.min.y+y0*cell,maxY=Math.min(bounds.max.y,bounds.min.y+(y1+1)*cell)
+    const minZ=bounds.min.z+z0*cell,maxZ=Math.min(bounds.max.z,bounds.min.z+(z1+1)*cell)
+    addBox(specs,minX,maxX,minY,maxY,minZ,maxZ)
+  }
+  return specs
+}
+
+function ldrawSurfaceProfile(object,definition) {
+  if(!isLDrawDefinition(definition)||object?.userData?.ldraw?.status==='loading')return null
+  const key=poseKey(object,definition),cached=ldrawProfileCache.get(key)
+  if(cached)return {kind:'ldraw-surface-cache',specs:cached.map(cloneSpec)}
+  const triangles=meshTrianglesLocal(object)
+  if(!triangles.length)return null
+  const bounds=new THREE.Box3()
+  for(const triangle of triangles)bounds.expandByPoint(triangle.a).expandByPoint(triangle.b).expandByPoint(triangle.c)
+  if(bounds.isEmpty())return null
+  let cell=LDRAW_MIN_CELL_STUD,specs=[]
+  while(cell<=LDRAW_MAX_CELL_STUD+1e-6){
+    specs=mergeSurfaceCells(occupiedSurfaceCells(triangles,bounds,cell),bounds,cell)
+    if(specs.length&&specs.length<=LDRAW_MAX_SPECS)break
+    cell=Math.min(LDRAW_MAX_CELL_STUD+.01,cell*1.28)
+  }
+  if(!specs.length||specs.length>LDRAW_MAX_SPECS)return null
+  cacheLDrawProfile(key,specs)
+  return {kind:'ldraw-surface',specs,cellStud:cell,triangles:triangles.length}
 }
 
 function addBox(specs, minX, maxX, minY, maxY, minZ, maxZ) {
@@ -338,6 +465,8 @@ export function buildColliderProfile(object, definition) {
   if (studded) return { kind: 'studded-core', specs: studded }
   const rotational = rotationalProfile(definition, fallback)
   if (rotational) return { kind: 'rotational', specs: rotational }
+  const ldraw = ldrawSurfaceProfile(object, definition)
+  if (ldraw) return ldraw
   return {
     kind: 'bounds',
     specs: [{
@@ -348,3 +477,7 @@ export function buildColliderProfile(object, definition) {
     }],
   }
 }
+
+export function clearLDrawColliderProfileCache() { ldrawProfileCache.clear() }
+
+export function ldrawColliderProfileCacheSize() { return ldrawProfileCache.size }

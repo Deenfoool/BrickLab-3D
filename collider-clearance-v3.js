@@ -5,6 +5,7 @@ import { physicalDefinition } from './physical-parts.js'
 import {
   buildColliderProfile,
   COLLIDER_PROFILE_VERSION,
+  LDRAW_SURFACE_COLLIDER_VERSION,
   HOLE_CLEARANCE_STUD,
 } from './collider-profiles-v3.js'
 
@@ -225,5 +226,6 @@ globalThis.BrickLabColliderModel = Object.freeze({
   explicitProfiles: 'visual-independent box/cylinder-x/y/z compound proxies for complex parts',
   shafts: 'axial cylinder proxy where applicable',
   wheels: 'radius+width-aware cylinder proxies from mechanics.wheel metadata',
+  ldrawGeometry: `${LDRAW_SURFACE_COLLIDER_VERSION}; cached merged surface voxels preserve arbitrary openings without dynamic trimesh`,
   holeClearanceStud: HOLE_CLEARANCE_STUD,
 })
