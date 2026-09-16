@@ -92,6 +92,6 @@ test('slot enumeration is limited to certified pin-hole pairs',()=>{
 
 test('production import map publishes the occupancy-aware pin runtime',async()=>{
   const html=await readFile(new URL('../index.html',import.meta.url),'utf8')
-  const needle='"./connectors-v4/runtime-v4.js": "./connectors-v4/runtime-v4.js?v=runtime-10-connector-axle-pin-slots-20260916-v1"'
+  const needle='"./connectors-v4/runtime-v4.js": "./connectors-v4/runtime-v4.js?v=runtime-11-axle-hole-primitives-20260916-v1"'
   assert.equal(html.split(needle).length-1,1)
 })

@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
+import { parseShadowTextV4 } from '../connectors-v4/ldcad-parser-v4.js'
+import { matchConnectorV4 } from '../connectors-v4/matcher-v4.js'
+import { activationForMatchV4 } from '../connectors-v4/activation-v4.js'
 
 import {
   CONNECTOR_DISCOVERY_VERSION_V4,
@@ -170,6 +173,27 @@ test('V4.3 centers real axle and axle-hole primitives over their transformed spa
   assert.equal(result.connectors[0].geometry.sections[0].lengthLdu,160)
   assert.deepEqual(result.connectors[1].frame.positionLdu,[0,0,0])
   assert.equal(result.connectors[1].geometry.sections[0].lengthLdu,40)
+})
+
+test('71708 axl3hole receiver accepts the 2L axle of 65249',async()=>{
+  const part71708=[
+    '0 Technic Beam 2 x 3 Liftarm Bent 90 Quarter Ellipse',
+    '1 16 0 -10 0 0 0 -1 0 20 0 1 0 0 axl3hole.dat',
+  ].join('\n')
+  const result=await semanticScan(part71708)
+  assert.equal(result.connectors.length,1)
+  const receiver=result.connectors[0]
+  assert.equal(semanticConnectorRoleV4(receiver),'technic-axle-hole')
+  assert.deepEqual(receiver.frame.positionLdu,[0,0,0])
+  assert.equal(receiver.geometry.sections[0].lengthLdu,20)
+
+  const axlePin=parseShadowTextV4('0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2 R 6 16 R 8 2 A 6 40] [center=true] [slide=true]').operations[0].connector
+  const match=matchConnectorV4(axlePin,receiver)
+  assert.equal(match.compatible,true)
+  assert.equal(match.keyed,true)
+  const activation=activationForMatchV4(axlePin,receiver,match)
+  assert.equal(activation.active,true)
+  assert.equal(activation.family,'technic-axle-keyed-hole')
 })
 
 test('Shadow-only anti-stud remains unchanged when tube fallback is disabled',async()=>{
