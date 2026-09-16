@@ -45,6 +45,16 @@ function adaptiveAlignmentThreshold(distance,captureDistance,minAxisAlignment) {
   return THREE.MathUtils.clamp(relaxed,CLOSE_RANGE_MIN_AXIS_ALIGNMENT_V4,1)
 }
 
+function bidirectionalCylinderPair(source,target,match) {
+  if(match?.family!=='cylinder' || source?.family!=='cylinder' || target?.family!=='cylinder')return false
+  const female=source.gender==='female'?source:target.gender==='female'?target:null
+  return Boolean(female && String(female.geometry?.caps||'').toLowerCase()==='none')
+}
+
+function connectorAxisAlignment(source,target,match,dot) {
+  return bidirectionalCylinderPair(source,target,match)?Math.abs(dot):dot
+}
+
 function cachedPair(source,target) {
   let targets=pairCompatibilityCache.get(source)
   if (!targets) {
@@ -229,7 +239,7 @@ function genericBoundingMismatch(source,target) {
   return 0
 }
 
-function candidateScore(solution,captureDistance,minAxisAlignment,orientationFree,{preferred=false,active=true,supportCount=1,boundingMismatch=0,pinMateBonus=0}={}) {
+function candidateScore(solution,captureDistance,minAxisAlignment,orientationFree,{preferred=false,active=true,supportCount=1,boundingMismatch=0,pinMateBonus=0,axisAlignment=null}={}) {
   const distance=captureError(solution)
   const distanceScore=distance/Math.max(captureDistance,1e-6)
   const rotation=Math.min(Math.PI,Math.abs(solution.diagnostics?.rotationRad ?? 0))
@@ -240,7 +250,7 @@ function candidateScore(solution,captureDistance,minAxisAlignment,orientationFre
 
   let score=distanceScore
   if (!orientationFree) {
-    const alignment=THREE.MathUtils.clamp(solution.diagnostics?.initialAxisDot ?? -1,-1,1)
+    const alignment=THREE.MathUtils.clamp(Number.isFinite(axisAlignment)?axisAlignment:(solution.diagnostics?.initialAxisDot ?? -1),-1,1)
     const required=adaptiveAlignmentThreshold(distance,captureDistance,minAxisAlignment)
     const range=Math.max(1e-5,1-required)
     score+=Math.max(0,(1-alignment)/range)*0.13
@@ -265,6 +275,7 @@ function rescore(candidate,captureDistance,minAxisAlignment,preferredKey) {
     supportCount:candidate.supportCount,
     boundingMismatch:candidate.boundingMismatch,
     pinMateBonus:candidate.pinMatePreference?.scoreBonus,
+    axisAlignment:candidate.alignment,
   })
   return candidate
 }
@@ -377,7 +388,8 @@ export function findPlacementCandidatesV4(movingObject,targets,{
         const distance=captureError(solution)
         if (!(distance <= captureDistanceStud)) continue
         const orientationFree=isOrientationFree(source,solution.match)
-        const alignment=THREE.MathUtils.clamp(solution.diagnostics?.initialAxisDot ?? -1,-1,1)
+        const rawAlignment=THREE.MathUtils.clamp(solution.diagnostics?.initialAxisDot ?? -1,-1,1)
+        const alignment=connectorAxisAlignment(source,target,solution.match,rawAlignment)
         const requiredAlignment=adaptiveAlignmentThreshold(distance,captureDistanceStud,minAxisAlignment)
         if (!orientationFree && alignment < requiredAlignment) continue
         const key=candidateKey(movingObject,source,targetObject,target)
