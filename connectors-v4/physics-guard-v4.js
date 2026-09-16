@@ -1,13 +1,17 @@
 import { PhysicsSession } from '../physics.js'
 import { analyzeTechnicAwareDrivetrain } from '../technic/drivetrain-v1.js?v=technic-family-20260915-v1'
+import {
+  installRackPinionPhysicsV1,
+  TECHNIC_RACK_PINION_PHYSICS_VERSION,
+} from '../technic/rack-pinion-physics-v1.js?v=technic-rack-pinion-physics-20260916-v1'
 import { buildPhysicsPlanV4, drivetrainSemanticLinksV4, PHYSICS_POLICY_VERSION_V4 } from './physics-policy-v4.js'
 import { hardenPhysicsPlanV4, PHYSICS_PLAN_SAFETY_VERSION_V4 } from './physics-plan-safety-v4.js'
 import { installConnectorPhysicsV4, PHYSICS_ADAPTER_VERSION_V4 } from './physics-adapter-v4.js?v=connector-resistance-20260914-v1'
 
-export const PHYSICS_GUARD_VERSION_V4 = 'connector-physics-guard-v4.5.2'
+export const PHYSICS_GUARD_VERSION_V4 = 'connector-physics-guard-v4.6.0'
 export const PHYSICS_GUARD_ERROR_CODE_V4 = 'BRICKLAB_CONNECTOR_V4_PHYSICS_NOT_CERTIFIED'
 
-const marker = Symbol.for('bricklab.connectorV4.physicsGuard.v4.5.2')
+const marker = Symbol.for('bricklab.connectorV4.physicsGuard.v4.6.0')
 let lastPlan = null
 let lastFailure = null
 
@@ -109,6 +113,11 @@ if (!PhysicsSession[marker]) {
         installConnectorPhysicsV4(session, plan, v4)
         rebuildDrivetrainSemanticsV4(session, liveV4Records)
       }
+
+      // Rack/pinion is a contact coupling, not a second joint owner. Rebuild it only
+      // after every certified V4 prismatic guide has been installed so metadata-backed
+      // racks can use either the legacy slider guide or a Connector V4 guide.
+      installRackPinionPhysicsV1(session, { force:true })
       lastFailure = null
       return session
     } catch (error) {
@@ -138,6 +147,7 @@ globalThis.BrickLabConnectorV4PhysicsGuard = Object.freeze({
   safetyVersion:PHYSICS_PLAN_SAFETY_VERSION_V4,
   policyVersion:PHYSICS_POLICY_VERSION_V4,
   adapterVersion:PHYSICS_ADAPTER_VERSION_V4,
+  rackPinionPhysicsVersion:TECHNIC_RACK_PINION_PHYSICS_VERSION,
   errorCode:PHYSICS_GUARD_ERROR_CODE_V4,
   active:true,
   createOwner:PhysicsSession.create?.__bricklabOwner ?? null,
