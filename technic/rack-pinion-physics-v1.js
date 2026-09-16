@@ -8,7 +8,7 @@ import {
   TECHNIC_RACK_PINION_PHYSICS_MATH_VERSION,
 } from './rack-pinion-physics-math-v1.js?v=technic-rack-pinion-physics-20260916-v1'
 
-export const TECHNIC_RACK_PINION_PHYSICS_VERSION = 'technic-rack-pinion-physics-v1.1.0'
+export const TECHNIC_RACK_PINION_PHYSICS_VERSION = 'technic-rack-pinion-physics-v1.2.0'
 
 const STUD = PHYSICS_UNITS.studMeters
 const DEFAULT_MAX_CONTACT_TORQUE_NM = 0.060
@@ -17,6 +17,7 @@ const MAX_CENTER_ERROR_STUD = 0.16
 const MAX_WIDTH_OFFSET_STUD = 0.14
 const MIN_AXIS_ALIGNMENT = 0.96
 const MIN_TANGENT_ALIGNMENT = 0.92
+const MIN_GUIDE_ALIGNMENT = 0.96
 const CORRECTION_FRACTION = 0.92
 const EPS = 1e-10
 const INSTANCE_HOOK = Symbol.for('bricklab.technic.rackPinionPhysics.instanceHook.v1')
@@ -128,6 +129,17 @@ function rackGuide(session, rackInstanceId) {
     ?? guideFromConnectorV4(session, rackInstanceId)
 }
 
+function guideAxisWorld(guide) {
+  const localAxis = guide?.source === 'legacy-prismatic'
+    ? guide.record?.axisA
+    : guide?.monitor?.localAxisA
+  const memberA = guide?.source === 'legacy-prismatic'
+    ? guide.record?.memberA
+    : guide?.monitor?.memberA
+  if (!localAxis?.clone || !memberA?.body) return null
+  return worldDirection(memberA.body, localAxis)
+}
+
 function maxRackTravelStud(mesh) {
   const definition = findPart(mesh?.rackPartId)
   const rack = Number(definition?.mechanics?.rackGear?.maxTravelStud)
@@ -155,6 +167,11 @@ function buildCoupling(session, mesh) {
 
   const guide = rackGuide(session, mesh.rackInstanceId)
   if (!guide) return { skipped:'rack-not-prismatic-guided' }
+  const guideAxis = guideAxisWorld(guide)
+  const meshTravel = mesh.travelAxisWorld?.clone?.().normalize?.() ?? null
+  const guideAlignment = guideAxis && meshTravel ? Math.abs(guideAxis.dot(meshTravel)) : 0
+  if (guideAlignment < MIN_GUIDE_ALIGNMENT) return { skipped:'rack-guide-axis-mismatch' }
+
   if (!mesh.pinionCenterWorld?.clone || !mesh.rackPitchOriginWorld?.clone) return { skipped:'mesh-frame-incomplete' }
   if (!mesh.travelAxisWorld?.clone || !mesh.rackNormalWorld?.clone || !mesh.rackWidthAxisWorld?.clone || !mesh.pinionAxisWorld?.clone) {
     return { skipped:'mesh-axes-incomplete' }
@@ -172,6 +189,7 @@ function buildCoupling(session, mesh) {
       pinionMember,
       rackMember,
       guide,
+      guideAlignment,
       localPinionCenter:bodyLocalPointFromWorldStud(pinionMember, mesh.pinionCenterWorld),
       localPinionAxis:bodyLocalDirectionFromWorld(pinionMember, mesh.pinionAxisWorld),
       localRackPitchOrigin:bodyLocalPointFromWorldStud(rackMember, mesh.rackPitchOriginWorld),
@@ -363,6 +381,7 @@ function stateSnapshot(state) {
       pinionInstanceId:item.mesh.pinionInstanceId,
       rackInstanceId:item.mesh.rackInstanceId,
       guideSource:item.guide.source,
+      guideAlignment:item.guideAlignment,
       engaged:item.engaged,
       reason:item.lastReason,
       centerErrorStud:item.centerErrorStud,
@@ -380,18 +399,27 @@ export function installRackPinionPhysicsV1(session, { force = false } = {}) {
 
   installInstanceHooks(session)
 
-  const meshes = detectRackPinionMeshesV1(session.objects ?? [], {
-    toleranceStud:0.08,
-    widthTolerance:0.10,
-    minAxisAlignment:0.985,
-  })
   const couplings = []
   const skipped = []
+  let meshes = []
+  try {
+    meshes = detectRackPinionMeshesV1(session.objects ?? [], {
+      toleranceStud:0.08,
+      widthTolerance:0.10,
+      minAxisAlignment:0.985,
+    })
+  } catch (error) {
+    skipped.push(Object.freeze({ id:null, reason:`detection-error:${error?.message || error}` }))
+  }
 
   for (const mesh of meshes) {
-    const built = buildCoupling(session, mesh)
-    if (built.coupling) couplings.push(built.coupling)
-    else skipped.push(Object.freeze({ id:mesh.id, reason:built.skipped ?? 'unknown' }))
+    try {
+      const built = buildCoupling(session, mesh)
+      if (built.coupling) couplings.push(built.coupling)
+      else skipped.push(Object.freeze({ id:mesh.id, reason:built.skipped ?? 'unknown' }))
+    } catch (error) {
+      skipped.push(Object.freeze({ id:mesh?.id ?? null, reason:`coupling-error:${error?.message || error}` }))
+    }
   }
 
   const drivenRackIds = new Set(couplings.map(item => item.mesh.rackInstanceId))
@@ -408,13 +436,15 @@ export function installRackPinionPhysicsV1(session, { force = false } = {}) {
     drivenRackIds,
   }
 
-  globalThis.dispatchEvent?.(new CustomEvent('bricklab:rackpinionphysicsready', {
-    detail:{
-      version:TECHNIC_RACK_PINION_PHYSICS_VERSION,
-      active:couplings.length,
-      skipped:skipped.length,
-    },
-  }))
+  if (typeof globalThis.dispatchEvent === 'function' && typeof globalThis.CustomEvent === 'function') {
+    globalThis.dispatchEvent(new CustomEvent('bricklab:rackpinionphysicsready', {
+      detail:{
+        version:TECHNIC_RACK_PINION_PHYSICS_VERSION,
+        active:couplings.length,
+        skipped:skipped.length,
+      },
+    }))
+  }
   return session.rackPinionPhysicsV1
 }
 
