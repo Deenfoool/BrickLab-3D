@@ -65,6 +65,22 @@ test('32270 double bevel gear discovers its composed axl2hole as a keyed sliding
   assert.equal(activation.family,'technic-axle-keyed-hole')
 })
 
+test('32270 Shadow inheritance resolves axl2hole through axl2hol8 as a usable A6 receiver',async()=>{
+  const gear='1 16 0 0 -10 1 0 0 0 0 1 0 20 0 axl2hole.dat'
+  const opts={
+    ...options,
+    fetchOfficialText:async p=>p==='parts/32270.dat'?gear:options.fetchOfficialText(p),
+  }
+  const result=await createShadowResolverV4(opts).resolve('32270.dat')
+  assert.deepEqual(result.warnings,[])
+  assert.equal(result.connectors.length,1)
+  const hole=result.connectors[0]
+  assert.equal(hole.gender,'female')
+  assert.equal(hole.geometry.caps,'none')
+  assert.equal(hole.snap.slide,true)
+  assert.deepEqual(hole.geometry.sections.map(s=>[s.shape,s.radiusLdu,s.lengthLdu]),[['A',6,20]])
+})
+
 test('nested ordinary-part inheritance composes translation and honors parent SNAP_CLEAR',async()=>{
   const official={'parts/root.dat':ref('child.dat',20),'parts/child.dat':ref('stud.dat',10)}
   let clear=false
