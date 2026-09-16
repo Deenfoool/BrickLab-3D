@@ -8,9 +8,9 @@ import {
   discoverPrimitiveConnectorsV4,
   discoveryConnectorRoleV4,
   mergeDiscoveredConnectorsV4,
-} from '../connector-discovery/discovery-v4.3.js?v=connector-sites-20260916-axl2hole-v3'
+} from '../connector-discovery/discovery-v4.3.js?v=connector-bush-through-holes-20260916-v1'
 
-export const CONNECTOR_DISCOVERY_RUNTIME_VERSION_V4 = 'connector-discovery-runtime-v4.4.0'
+export const CONNECTOR_DISCOVERY_RUNTIME_VERSION_V4 = 'connector-discovery-runtime-v4.5.0'
 
 const MAX_CONNECTORS_PER_PART=4096
 const inFlight=new Map()
