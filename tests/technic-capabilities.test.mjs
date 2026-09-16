@@ -16,11 +16,12 @@ test('implemented shaft and gear mechanisms are active across supported modes', 
   }
 })
 
-test('rack-pinion reports deterministic Kinematics but does not overclaim generic Rapier tooth coupling', () => {
+test('rack-pinion is active for guided metadata-backed racks while arbitrary LDraw remains fail-closed', () => {
   const capability = technicCapabilityV1('rack-pinion')
   assert.equal(capability.kinematics, 'active')
-  assert.equal(capability.simulate, 'metadata')
+  assert.equal(capability.simulate, 'active')
   assert.equal(capability.arbitraryLDraw, 'semantic')
+  assert.match(capability.source, /guided Rapier pitch-contact coupling/)
 })
 
 test('uncertified advanced mechanisms remain semantic instead of fabricating physics', () => {
