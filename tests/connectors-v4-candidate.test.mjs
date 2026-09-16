@@ -3,8 +3,10 @@ import assert from 'node:assert/strict'
 import * as THREE from 'three'
 
 import { findBestPlacementCandidateV4, findPlacementCandidatesV4 } from '../connectors-v4/candidate-v4.js'
+import { applyPlacementV4 } from '../connectors-v4/placement-solver-v4.js'
+import { validateConnectedGeometryV4 } from '../connectors-v4/validity-v4.js'
 
-function cylinder({endpointId,gender,shape='R',length=20,position=[0,0,0]}={}) {
+function cylinder({endpointId,gender,shape='R',length=20,position=[0,0,0],caps='none'}={}) {
   return {
     schemaVersion:4,endpointId,family:'cylinder',gender,group:null,
     frame:{
@@ -14,7 +16,7 @@ function cylinder({endpointId,gender,shape='R',length=20,position=[0,0,0]}={}) {
       orientationBrickLab:[1,0,0,0,1,0,0,0,1],
       axis:[0,-1,0],
     },
-    geometry:{sections:[{shape,radiusLdu:6,lengthLdu:length,elastic:false}],caps:'none',centered:true},
+    geometry:{sections:[{shape,radiusLdu:6,lengthLdu:length,elastic:false}],caps,centered:true},
     snap:{slide:true},inheritance:{scale:'none',mirror:'cor'},source:{kind:'test'},
   }
 }
@@ -93,10 +95,40 @@ test('default V4 discovery cone catches a nearby connector around 35 degrees off
   assert.ok(candidate.alignment>0.8)
 })
 
-test('opposite LDCad connector axes are rejected instead of treated as perfect via abs(dot)',()=>{
+test('caps=none through hole preserves reverse-side insertion instead of flipping to the canonical side',()=>{
   const male=cylinder({endpointId:'male',gender:'male',shape:'A',length:20})
-  const female=cylinder({endpointId:'female',gender:'female',shape:'A',length:20})
-  const moving=object('moving','moving-part',[0.05,0,0])
+  const female=cylinder({endpointId:'female',gender:'female',shape:'A',length:20,caps:'none'})
+  const moving=object('moving','moving-part',[0,0.25,0])
+  moving.rotation.z=Math.PI
+  moving.updateMatrixWorld(true)
+  const initialQuaternion=moving.quaternion.clone()
+  const target=object('target','target-part',[0,0,0])
+  const defs=new Map([
+    ['moving-part',definition('moving-part',[male])],
+    ['target-part',definition('target-part',[female])],
+  ])
+
+  const candidate=findBestPlacementCandidateV4(moving,[target],{getDefinition:id=>defs.get(id)})
+  assert.ok(candidate,'reverse side of a physical through-hole must be discoverable')
+  assert.equal(candidate.solution.bidirectionalAxis,true)
+  assert.equal(candidate.solution.axisPolarity,-1)
+  assert.ok(candidate.solution.diagnostics.rotationRad<1e-7,'reverse-side insertion must not force a 180-degree flip')
+  const solvedQuaternion=new THREE.Quaternion().fromArray(candidate.solution.worldQuaternion).normalize()
+  assert.ok(Math.abs(initialQuaternion.dot(solvedQuaternion))>0.999999,'moving part must preserve the approached side/orientation')
+  assert.ok(Math.abs(candidate.solution.worldPosition[1]-0.25)<1e-8,'solver must keep the connector on the approached side')
+
+  applyPlacementV4(moving,candidate.solution)
+  const validity=validateConnectedGeometryV4(moving,male,target,female)
+  assert.equal(validity.valid,true,validity.reason)
+  assert.equal(validity.bidirectionalAxis,true)
+  assert.equal(validity.axisPolarity,-1)
+  assert.ok(validity.rawAxisDot<-0.9999)
+})
+
+test('capped cylinder remains directional and rejects reverse-side insertion',()=>{
+  const male=cylinder({endpointId:'male',gender:'male',shape:'A',length:20})
+  const female=cylinder({endpointId:'female',gender:'female',shape:'A',length:20,caps:'one'})
+  const moving=object('moving','moving-part',[0,0.05,0])
   moving.rotation.z=Math.PI
   moving.updateMatrixWorld(true)
   const target=object('target','target-part',[0,0,0])
