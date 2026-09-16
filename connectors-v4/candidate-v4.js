@@ -4,8 +4,9 @@ import { matchConnectorV4 } from './matcher-v4.js'
 import { activationForMatchV4, classifyConnectorV4 } from './activation-v4.js'
 import { applyPinMateScoreBonusV4, pinMatePreferenceV4 } from './pin-ranking-v4.js?v=connector-pin-ranking-20260912-v1'
 import { connectorWorldFrameV4, objectWorldPoseV4, solvePlacementV4 } from './placement-solver-v4.js'
+import { bidirectionalCylinderReceiverV4 } from './through-hole-v4.js'
 
-export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.7.0'
+export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.8.0'
 export const DEFAULT_CAPTURE_DISTANCE_STUD_V4 = 0.72
 export const DEFAULT_MIN_AXIS_ALIGNMENT_V4 = 0.72
 export const CLOSE_RANGE_MIN_AXIS_ALIGNMENT_V4 = 0.55
@@ -48,7 +49,7 @@ function adaptiveAlignmentThreshold(distance,captureDistance,minAxisAlignment) {
 function bidirectionalCylinderPair(source,target,match) {
   if(match?.family!=='cylinder' || source?.family!=='cylinder' || target?.family!=='cylinder')return false
   const female=source.gender==='female'?source:target.gender==='female'?target:null
-  return Boolean(female && String(female.geometry?.caps||'').toLowerCase()==='none')
+  return bidirectionalCylinderReceiverV4(female)
 }
 
 function connectorAxisAlignment(source,target,match,dot) {
