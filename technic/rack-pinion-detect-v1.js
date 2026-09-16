@@ -1,6 +1,18 @@
 import { findRackPinionSnapCandidateV1 } from './rack-pinion-v1.js'
 
-export const TECHNIC_RACK_PINION_DETECT_VERSION = 'technic-rack-pinion-detect-v1.1.0'
+export const TECHNIC_RACK_PINION_DETECT_VERSION = 'technic-rack-pinion-detect-v1.2.0'
+
+function rackContactSpan(rackMetadata) {
+  const pitch = Number(rackMetadata?.linearPitchStud)
+  const count = Math.floor(Number(rackMetadata?.toothCount))
+  const first = Number(rackMetadata?.phaseOriginStud)
+  if (!(pitch > 0) || !(count > 0) || !Number.isFinite(first)) return null
+  const halfPitch = pitch * 0.5
+  return Object.freeze({
+    minStud:first - halfPitch,
+    maxStud:first + (count - 1) * pitch + halfPitch,
+  })
+}
 
 export function detectRackPinionMeshesV1(objects = [], options = {}) {
   const tolerance = Number(options.toleranceStud ?? 0.08)
@@ -28,6 +40,7 @@ export function detectRackPinionMeshesV1(objects = [], options = {}) {
     if (tangent.lengthSq() < 1e-10) continue
     tangent.normalize()
     const travelSign = Math.sign(tangent.dot(candidate.rack.travelAxis)) || 1
+    const contactSpan = rackContactSpan(candidate.rack?.rack)
 
     result.push(Object.freeze({
       id:`rack-pinion:${pinionId}:${rackId}`,
@@ -46,6 +59,8 @@ export function detectRackPinionMeshesV1(objects = [], options = {}) {
       rackNormalWorld:candidate.rack.normal.clone(),
       rackWidthAxisWorld:candidate.rack.widthAxis.clone(),
       pinionAxisWorld:candidate.pinion.axis.clone(),
+      rackContactMinStud:contactSpan?.minStud ?? null,
+      rackContactMaxStud:contactSpan?.maxStud ?? null,
       travelSign,
       centerError:candidate.geometry.centerError,
       widthOffset:candidate.geometry.widthOffset,
