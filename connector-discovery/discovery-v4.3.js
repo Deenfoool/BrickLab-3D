@@ -10,8 +10,12 @@ import {
   mergeSemanticSitesV4,
   semanticConnectorRoleV4,
 } from './semantic-sites-v4.js?v=connector-sites-20260916-axl2hole-v3'
+import {
+  COMPOSITE_THROUGH_HOLES_VERSION_V4,
+  discoverCompositeThroughHolesV4,
+} from './composite-through-holes-v4.js?v=connector-bush-through-holes-20260916-v1'
 
-export const CONNECTOR_DISCOVERY_VERSION_V4='connector-discovery-v4.5.0'
+export const CONNECTOR_DISCOVERY_VERSION_V4='connector-discovery-v4.6.0'
 export { pairPegholeEndsV4 }
 
 const normalize=value=>String(value||'').replace(/\\/g,'/').split('/').pop()?.toLowerCase()||''
@@ -26,9 +30,10 @@ export function mergeDiscoveredConnectorsV4(existing,discovered){
 }
 
 export async function discoverPrimitiveConnectorsV4(file,text,fetchText,options={}){
-  const [legacy,semantic]=await Promise.all([
+  const [legacy,semantic,composite]=await Promise.all([
     discoverLegacyPrimitiveConnectorsV4(file,text,fetchText,options),
     discoverSemanticSitesV4(file,text,fetchText,options),
+    discoverCompositeThroughHolesV4(file,text,fetchText,options),
   ])
 
   // v4.2 placed axlehol0 at the primitive origin even though LDraw documents the
@@ -37,12 +42,12 @@ export async function discoverPrimitiveConnectorsV4(file,text,fetchText,options=
   // the corrected midpoint connector with the full scaled span.
   const legacyConnectors=(legacy.connectors??[]).filter(connector=>!isLegacyAxleHint(connector))
   const correctedAxleHints=(legacy.connectors?.length||0)-legacyConnectors.length
-  const combined=[...legacyConnectors,...(semantic.connectors??[])]
+  const combined=[...legacyConnectors,...(semantic.connectors??[]),...(composite.connectors??[])]
   const merged=mergeDiscoveredConnectorsV4([],combined)
 
   return{
     version:CONNECTOR_DISCOVERY_VERSION_V4,
-    file:legacy.file||semantic.file||file,
+    file:legacy.file||semantic.file||composite.file||file,
     connectors:merged.added,
     stats:{
       ...(legacy.stats||{}),
@@ -52,7 +57,9 @@ export async function discoverPrimitiveConnectorsV4(file,text,fetchText,options=
       correctedAxleHints,
       legacyVersion:LEGACY_DISCOVERY_VERSION_V4,
       semanticVersion:CONNECTOR_SEMANTIC_SITES_VERSION_V4,
+      compositeVersion:COMPOSITE_THROUGH_HOLES_VERSION_V4,
       semanticSites:semantic.stats||null,
+      compositeThroughHoles:composite.stats||null,
     },
   }
 }
