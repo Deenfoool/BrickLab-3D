@@ -1,5 +1,4 @@
 import * as THREE from 'three'
-import { PhysicsSession } from '../physics.js'
 import { PHYSICS_UNITS } from '../physical-parts.js'
 import { findPart } from '../parts.js'
 import { detectRackPinionMeshesV1 } from './rack-pinion-detect-v1.js?v=technic-rack-pinion-physics-20260916-v1'
@@ -9,7 +8,7 @@ import {
   TECHNIC_RACK_PINION_PHYSICS_MATH_VERSION,
 } from './rack-pinion-physics-math-v1.js?v=technic-rack-pinion-physics-20260916-v1'
 
-export const TECHNIC_RACK_PINION_PHYSICS_VERSION = 'technic-rack-pinion-physics-v1.0.0'
+export const TECHNIC_RACK_PINION_PHYSICS_VERSION = 'technic-rack-pinion-physics-v1.1.0'
 
 const STUD = PHYSICS_UNITS.studMeters
 const DEFAULT_MAX_CONTACT_TORQUE_NM = 0.060
@@ -20,7 +19,7 @@ const MIN_AXIS_ALIGNMENT = 0.96
 const MIN_TANGENT_ALIGNMENT = 0.92
 const CORRECTION_FRACTION = 0.92
 const EPS = 1e-10
-const marker = Symbol.for('bricklab.technic.rackPinionPhysics.v1')
+const INSTANCE_HOOK = Symbol.for('bricklab.technic.rackPinionPhysics.instanceHook.v1')
 
 const vec = value => ({ x:value.x, y:value.y, z:value.z })
 
@@ -259,9 +258,10 @@ function applyCoupling(coupling, dt) {
   coupling.requestedForceN = 0
   coupling.limited = false
 
-  if (!(dt > 0) || !guideAvailable(coupling)) {
+  const guideReady = guideAvailable(coupling)
+  if (!(dt > 0) || !guideReady) {
     coupling.engaged = false
-    coupling.lastReason = guideAvailable(coupling) ? 'invalid-dt' : 'guide-released'
+    coupling.lastReason = guideReady ? 'invalid-dt' : 'guide-released'
     return
   }
 
@@ -315,6 +315,42 @@ function applyCoupling(coupling, dt) {
   coupling.transferForceN = Math.abs(solved.forceN)
 }
 
+function installInstanceHooks(session) {
+  if (session[INSTANCE_HOOK]) return
+
+  const previousCoupling = typeof session.applyGearCouplingTorques === 'function'
+    ? session.applyGearCouplingTorques.bind(session)
+    : null
+  session.applyGearCouplingTorques = function applyRackPinionAfterAuthoritativeDrivetrain(dt = 1 / (this.quality?.hz ?? 120)) {
+    const result = previousCoupling?.(dt)
+    for (const coupling of this.rackPinionPhysicsV1?.couplings ?? []) applyCoupling(coupling, dt)
+    return result
+  }
+
+  const previousVehicleControls = typeof session.updateVehicleControlsV1 === 'function'
+    ? session.updateVehicleControlsV1.bind(session)
+    : null
+  session.updateVehicleControlsV1 = function updateRackPinionServoIsolation(dt) {
+    const result = previousVehicleControls?.(dt)
+    const driven = this.rackPinionPhysicsV1?.drivenRackIds
+    if (!driven?.size) return result
+    for (const rack of this.steeringRacksV1 ?? []) {
+      if (!driven.has(rack.id)) continue
+      rack.rackPinionDriven = true
+      rack.driveMode = 'rack-pinion'
+      rack.joint?.configureMotorPosition?.(0, 0, 0)
+    }
+    return result
+  }
+
+  Object.defineProperty(session, INSTANCE_HOOK, {
+    value:true,
+    enumerable:false,
+    configurable:false,
+    writable:false,
+  })
+}
+
 function stateSnapshot(state) {
   return Object.freeze({
     version:TECHNIC_RACK_PINION_PHYSICS_VERSION,
@@ -342,6 +378,8 @@ export function installRackPinionPhysicsV1(session, { force = false } = {}) {
   if (!session?.world || !session?.members) return null
   if (session.rackPinionPhysicsV1 && !force) return session.rackPinionPhysicsV1
 
+  installInstanceHooks(session)
+
   const meshes = detectRackPinionMeshesV1(session.objects ?? [], {
     toleranceStud:0.08,
     widthTolerance:0.10,
@@ -359,7 +397,7 @@ export function installRackPinionPhysicsV1(session, { force = false } = {}) {
   const drivenRackIds = new Set(couplings.map(item => item.mesh.rackInstanceId))
   for (const rack of session.steeringRacksV1 ?? []) {
     rack.rackPinionDriven = drivenRackIds.has(rack.id)
-    if (rack.rackPinionDriven) rack.driveMode = 'rack-pinion'
+    rack.driveMode = rack.rackPinionDriven ? 'rack-pinion' : (rack.driveMode ?? 'steering-servo')
   }
 
   session.rackPinionPhysicsV1 = {
@@ -378,46 +416,6 @@ export function installRackPinionPhysicsV1(session, { force = false } = {}) {
     },
   }))
   return session.rackPinionPhysicsV1
-}
-
-if (!PhysicsSession.prototype[marker]) {
-  const previousBuildChassisMonitor = PhysicsSession.prototype.buildChassisMonitor
-  PhysicsSession.prototype.buildChassisMonitor = function buildChassisWithRackPinionPhysics(...args) {
-    const result = previousBuildChassisMonitor.apply(this, args)
-    installRackPinionPhysicsV1(this, { force:true })
-    return result
-  }
-  PhysicsSession.prototype.buildChassisMonitor.__bricklabOwner = TECHNIC_RACK_PINION_PHYSICS_VERSION
-
-  const previousApplyGearCouplingTorques = PhysicsSession.prototype.applyGearCouplingTorques
-  PhysicsSession.prototype.applyGearCouplingTorques = function applyGearAndRackPinionCouplings(dt = 1 / (this.quality?.hz ?? 120)) {
-    const result = previousApplyGearCouplingTorques.call(this, dt)
-    for (const coupling of this.rackPinionPhysicsV1?.couplings ?? []) applyCoupling(coupling, dt)
-    return result
-  }
-  PhysicsSession.prototype.applyGearCouplingTorques.__bricklabOwner = TECHNIC_RACK_PINION_PHYSICS_VERSION
-
-  const previousUpdateVehicleControls = PhysicsSession.prototype.updateVehicleControlsV1
-  PhysicsSession.prototype.updateVehicleControlsV1 = function updateVehicleControlsWithoutRackServoConflict(dt) {
-    const result = previousUpdateVehicleControls?.call(this, dt)
-    const driven = this.rackPinionPhysicsV1?.drivenRackIds
-    if (!driven?.size) return result
-    for (const rack of this.steeringRacksV1 ?? []) {
-      if (!driven.has(rack.id)) continue
-      rack.rackPinionDriven = true
-      rack.driveMode = 'rack-pinion'
-      rack.joint?.configureMotorPosition?.(0, 0, 0)
-    }
-    return result
-  }
-  PhysicsSession.prototype.updateVehicleControlsV1.__bricklabOwner = TECHNIC_RACK_PINION_PHYSICS_VERSION
-
-  Object.defineProperty(PhysicsSession.prototype, marker, {
-    value:true,
-    enumerable:false,
-    configurable:false,
-    writable:false,
-  })
 }
 
 globalThis.BrickLabRackPinionPhysicsV1 = Object.freeze({
