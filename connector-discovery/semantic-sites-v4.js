@@ -1,4 +1,4 @@
-export const CONNECTOR_SEMANTIC_SITES_VERSION_V4='connector-semantic-sites-v4.3.0'
+export const CONNECTOR_SEMANTIC_SITES_VERSION_V4='connector-semantic-sites-v4.4.0'
 
 const IDENTITY_3=Object.freeze([1,0,0,0,1,0,0,0,1])
 const ORTHO_EPS=2e-4
@@ -11,11 +11,11 @@ const DEFAULT_MAX_NODES=192
 const MAX_AXIAL_SCALE=1024
 const STANDARD_STUD_PRIMITIVES=new Set(['stud2.dat','stud2a.dat','studa.dat'])
 // These official primitives share the same documented Y-scaled A6 receiver.
-// Newer compact liftarms (including 71708) use axl3hole.dat rather than the
-// older axlehole.dat/axlehol0.dat pair.
+// axl2hole.dat is the composed reduced axle-hole primitive used directly by
+// classic Technic gears such as 32270; its Y scale is the physical bore length.
 const AXLE_HOLE_PRIMITIVES=new Set([
   'axlehole.dat','axlehol0.dat','axlehol4.dat','axlehol5.dat',
-  'axl2hol8.dat','axl3hole.dat','axl3hol8.dat',
+  'axl2hole.dat','axl2hol8.dat','axl3hole.dat','axl3hol8.dat',
 ])
 
 const normalizePath=value=>String(value||'').replace(/\\/g,'/').replace(/^\.\//,'').replace(/^parts\//i,'').replace(/\/+/g,'/').trim()
