@@ -8,7 +8,7 @@ import {
   TECHNIC_RACK_PINION_PHYSICS_MATH_VERSION,
 } from './rack-pinion-physics-math-v1.js?v=technic-rack-pinion-physics-20260916-v1'
 
-export const TECHNIC_RACK_PINION_PHYSICS_VERSION = 'technic-rack-pinion-physics-v1.2.0'
+export const TECHNIC_RACK_PINION_PHYSICS_VERSION = 'technic-rack-pinion-physics-v1.3.0'
 
 const STUD = PHYSICS_UNITS.studMeters
 const DEFAULT_MAX_CONTACT_TORQUE_NM = 0.060
@@ -181,6 +181,8 @@ function buildCoupling(session, mesh) {
   const pitchRadiusM = Number(mesh.pitchRadius) * STUD
   if (!(pitchRadiusM > EPS)) return { skipped:'invalid-pitch-radius' }
   const maxForceN = Math.min(MAX_CONTACT_FORCE_N, DEFAULT_MAX_CONTACT_TORQUE_NM / pitchRadiusM)
+  const contactMinM = Number.isFinite(mesh.rackContactMinStud) ? mesh.rackContactMinStud * STUD : null
+  const contactMaxM = Number.isFinite(mesh.rackContactMaxStud) ? mesh.rackContactMaxStud * STUD : null
 
   return {
     coupling:Object.seal({
@@ -197,12 +199,15 @@ function buildCoupling(session, mesh) {
       localRackNormal:bodyLocalDirectionFromWorld(rackMember, mesh.rackNormalWorld),
       localRackWidth:bodyLocalDirectionFromWorld(rackMember, mesh.rackWidthAxisWorld),
       pitchRadiusM,
+      contactMinM,
+      contactMaxM,
       maxForceN,
       maxTravelStud:maxRackTravelStud(mesh),
       engaged:true,
       lastReason:'ready',
       centerErrorStud:0,
       widthOffsetStud:0,
+      alongStud:0,
       axisAlignment:1,
       tangentAlignment:1,
       relativeSpeedMps:0,
@@ -233,6 +238,8 @@ function geometry(coupling) {
   const centerErrorStud = pinionCenter.distanceTo(desiredCenter) / STUD
   const widthOffsetStud = Math.abs(delta.dot(width)) / STUD
   const axisAlignment = Math.abs(pinionAxis.dot(width))
+  const withinRack = (coupling.contactMinM == null || along >= coupling.contactMinM - EPS)
+    && (coupling.contactMaxM == null || along <= coupling.contactMaxM + EPS)
 
   const radial = pitchPoint.clone().sub(pinionCenter)
   let tangentAlignment = 0
@@ -246,13 +253,16 @@ function geometry(coupling) {
     }
   }
 
-  const valid = centerErrorStud <= MAX_CENTER_ERROR_STUD
+  const contactGeometryValid = centerErrorStud <= MAX_CENTER_ERROR_STUD
     && widthOffsetStud <= MAX_WIDTH_OFFSET_STUD
     && axisAlignment >= MIN_AXIS_ALIGNMENT
     && tangentAlignment >= MIN_TANGENT_ALIGNMENT
+  const valid = contactGeometryValid && withinRack
+  const reason = !withinRack ? 'outside-rack-teeth' : (contactGeometryValid ? 'engaged' : 'mesh-disengaged')
 
   return {
     valid,
+    reason,
     pinionCenter,
     pinionAxis,
     pitchPoint,
@@ -260,6 +270,7 @@ function geometry(coupling) {
     surfaceTangent,
     centerErrorStud,
     widthOffsetStud,
+    alongStud:along / STUD,
     axisAlignment,
     tangentAlignment,
   }
@@ -286,11 +297,12 @@ function applyCoupling(coupling, dt) {
   const state = geometry(coupling)
   coupling.centerErrorStud = state.centerErrorStud
   coupling.widthOffsetStud = state.widthOffsetStud
+  coupling.alongStud = state.alongStud
   coupling.axisAlignment = state.axisAlignment
   coupling.tangentAlignment = state.tangentAlignment
   if (!state.valid) {
     coupling.engaged = false
-    coupling.lastReason = 'mesh-disengaged'
+    coupling.lastReason = state.reason
     return
   }
 
@@ -386,6 +398,7 @@ function stateSnapshot(state) {
       reason:item.lastReason,
       centerErrorStud:item.centerErrorStud,
       widthOffsetStud:item.widthOffsetStud,
+      alongStud:item.alongStud,
       relativeSpeedMps:item.relativeSpeedMps,
       transferForceN:item.transferForceN,
       limited:item.limited,
@@ -425,7 +438,7 @@ export function installRackPinionPhysicsV1(session, { force = false } = {}) {
   const drivenRackIds = new Set(couplings.map(item => item.mesh.rackInstanceId))
   for (const rack of session.steeringRacksV1 ?? []) {
     rack.rackPinionDriven = drivenRackIds.has(rack.id)
-    rack.driveMode = rack.rackPinionDriven ? 'rack-pinion' : (rack.driveMode ?? 'steering-servo')
+    rack.driveMode = rack.rackPinionDriven ? 'rack-pinion' : 'steering-servo'
   }
 
   session.rackPinionPhysicsV1 = {
