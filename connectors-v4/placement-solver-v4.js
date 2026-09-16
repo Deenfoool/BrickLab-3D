@@ -1,8 +1,9 @@
 import * as THREE from 'three'
 import { matchConnectorV4 } from './matcher-v4.js'
 import { nearestAxialOffsetV4, evaluateAxialOffsetV4 } from './axial-fit-v4.js'
+import { bidirectionalCylinderReceiverV4 } from './through-hole-v4.js'
 
-export const PLACEMENT_SOLVER_VERSION_V4 = 'placement-solver-v4.4.0'
+export const PLACEMENT_SOLVER_VERSION_V4 = 'placement-solver-v4.5.0'
 const EPS = 1e-8
 
 function matrixFromConnector(connector) {
@@ -74,13 +75,12 @@ function cylinderFemaleConnector(a,b) {
   return null
 }
 
-// A caps=none female cylinder is a physical through-hole. Its local axis is a
-// coordinate convention, not a preferred insertion side, so either polarity is
-// valid. Capped cylinders remain directional.
+// Only a physically symmetric open receiver is bidirectional. LDCad also has
+// explicit one-sided open receivers (for example connhol3), so caps=none alone
+// is not sufficient evidence that reverse-side insertion is valid.
 export function bidirectionalCylinderPairV4(a,b,match) {
   if (match?.family !== 'cylinder' || a?.family !== 'cylinder' || b?.family !== 'cylinder') return false
-  const female = cylinderFemaleConnector(a,b)
-  return Boolean(female && String(female.geometry?.caps || 'one').trim().toLowerCase() === 'none')
+  return bidirectionalCylinderReceiverV4(cylinderFemaleConnector(a,b))
 }
 
 function toParentLocalPose(object, worldPosition, worldQuaternion) {
