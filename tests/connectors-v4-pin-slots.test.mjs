@@ -7,12 +7,15 @@ import { createConnectionGraphV4, createConnectionProposalV4 } from '../connecto
 import { matchConnectorV4 } from '../connectors-v4/matcher-v4.js'
 import { technicPinSlotOffsetsV4 } from '../connectors-v4/pin-slots-v4.js'
 
-const LONG_PIN='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2 R 6 16 R 8 4 R 6 16 _L 6.25 4 R 6 16 _L 6.25 2] [center=true] [slide=true]'
+// Exact LDCad Shadow profile for 42924. It intentionally omits slide=true;
+// Technic pin slot semantics must still expose all three physical bands.
+const LONG_PIN='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2 R 6 16 R 8 4 R 6 16 _L 6.25 4 R 6 16 _L 6.25 2] [center=true] [ori=0 -1 0 1 0 0 0 0 1]'
 const PIN_2L='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2 R 6 16 R 8 4 R 6 16 _L 6.25 2] [center=true] [slide=true]'
 const LONG_PIN_6558='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.5 2 R 6 16 R 8 4 R 6 16 _L 6.5 4 R 6 16 _L 6.5 2] [center=true] [slide=true]'
 const STOP_PIN_32054='0 !LDCAD SNAP_CYL [gender=M] [caps=one] [secs=R 8 2 R 6 16 _L 6.5 4 R 6 16 _L 6.5 2] [slide=true]'
 const AXLE_PIN_43093='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2 R 6 16 R 8 2 A 6 20] [center=true] [slide=true]'
 const AXLE_PIN_18651='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2 R 6 16 R 8 2 A 6 40] [center=true] [slide=true]'
+const AXLE_PIN_11214='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2 R 6 16 _L 6.25 4 R 6 16 R 8 2 A 6 20] [center=true] [slide=true]'
 const AXLE_HOLE='0 !LDCAD SNAP_CYL [gender=F] [caps=none] [secs=A 6 20] [center=true] [slide=true]'
 const HOLE='0 !LDCAD SNAP_CYL [gender=F] [caps=none] [secs=R 8 2 R 6 16 R 8 2] [center=true] [slide=true]'
 
@@ -64,6 +67,12 @@ test('18651 exposes one pin band and two independent 2L axle bands',()=>{
   assert.deepEqual(technicPinSlotOffsetsV4(axleHole,hybrid),[0,20])
 })
 
+test('11214 exposes both long-pin bands and its separate axle band',()=>{
+  const hybrid=connector(AXLE_PIN_11214,'11214')
+  assert.deepEqual(technicPinSlotOffsetsV4(connector(HOLE,'pin-hole'),hybrid),[-20,0])
+  assert.deepEqual(technicPinSlotOffsetsV4(connector(AXLE_HOLE,'axle-hole'),hybrid),[20])
+})
+
 test('18651 accepts three simultaneous parts across its pin and axle regions',()=>{
   const hybrid=connector(AXLE_PIN_18651,'18651')
   const hybridObject={userData:{instanceId:'axle-pin-18651',partId:'ldraw-18651'}}
@@ -92,6 +101,6 @@ test('slot enumeration is limited to certified pin-hole pairs',()=>{
 
 test('production import map publishes the occupancy-aware pin runtime',async()=>{
   const html=await readFile(new URL('../index.html',import.meta.url),'utf8')
-  const needle='"./connectors-v4/runtime-v4.js": "./connectors-v4/runtime-v4.js?v=runtime-12-shared-ldraw-transport-20260916-v1"'
+  const needle='"./connectors-v4/runtime-v4.js": "./connectors-v4/runtime-v4.js?v=runtime-13-pin-long-production-20260916-v1"'
   assert.equal(html.split(needle).length-1,1)
 })
