@@ -1,7 +1,7 @@
 import { readFile, readdir, writeFile } from 'node:fs/promises'
 import { createShadowResolverV4 } from '../connectors-v4/shadow-resolver-v4.js'
 import { finalizeConnectorIdentitiesV4 } from '../connectors-v4/identity-v4.js'
-import { classifyTechnicPinInterfaceV4 } from '../connectors-v4/pin-semantics-v4.js'
+import { classifyConnectorV4 } from '../connectors-v4/activation-v4.js'
 import { classifyPart } from '../ldraw/library-model-v1.js'
 import { classifyLDrawDefinition } from '../ldraw/mechanical-intelligence-v1.js'
 import { classifyTechnicShadowGroupV1, TECHNIC_UPSTREAM_SHADOW_VERSION } from '../technic/upstream-shadow-v1.js'
@@ -31,14 +31,14 @@ function rigidShape(section) {
 }
 
 function connectorRole(connector) {
-  const pin = classifyTechnicPinInterfaceV4(connector)
-  if (pin?.role) return pin.role
+  const certified = classifyConnectorV4(connector)
+  if (certified && !['other','cylinder-other'].includes(certified)) return certified
 
   if (connector?.family === 'cylinder') {
     const shapes = new Set((connector.geometry?.sections || []).map(rigidShape))
-    if (connector.gender === 'male' && shapes.has('A')) return 'technic-axle'
-    if (connector.gender === 'female' && shapes.has('A')) return 'technic-axle-hole'
-    if (connector.gender === 'female' && shapes.has('R')) return 'technic-round-hole'
+    if (connector.gender === 'male' && shapes.has('A')) return 'keyed-male-unknown'
+    if (connector.gender === 'female' && shapes.has('A')) return 'keyed-female-unknown'
+    if (connector.gender === 'female' && shapes.has('R')) return 'round-female-unknown'
     if (connector.gender === 'male' && shapes.has('R')) return 'round-male-unknown'
     return `cylinder-${connector.gender || 'unknown'}-${[...shapes].sort().join('') || 'unknown'}`
   }
