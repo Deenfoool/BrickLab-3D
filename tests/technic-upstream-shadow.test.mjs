@@ -71,6 +71,35 @@ test('through-hole policy keeps symmetric Technic receivers bidirectional and co
   assert.equal(audit.pass,true,audit.findings.join(', '))
 })
 
+test('Technic audit certifies clip, ball, hinge and named generic mating families', () => {
+  const baseFrame={positionLdu:[0,0,0],orientation:[1,0,0,0,1,0,0,0,1]}
+  const samples=[
+    {
+      schemaVersion:4,family:'clip',gender:'female',group:null,frame:structuredClone(baseFrame),
+      geometry:{radiusLdu:4,lengthLdu:8,centered:true},snap:{slide:true},inheritance:{scale:'none',mirror:'none'},source:{kind:'test'},
+    },
+    {
+      schemaVersion:4,family:'sphere',gender:'male',group:'techBallJnt',frame:structuredClone(baseFrame),
+      geometry:{radiusLdu:10},snap:{placement:'free',match:'size',slide:false},inheritance:{scale:'none',mirror:'none'},source:{kind:'test'},
+    },
+    {
+      schemaVersion:4,family:'fingers',gender:'mixed',group:'clkRot',frame:structuredClone(baseFrame),
+      geometry:{firstGender:'male',sequenceLdu:[4,4,4],radiusLdu:6,centered:true},snap:{slide:false},inheritance:{scale:'none',mirror:'none'},source:{kind:'test'},
+    },
+    {
+      schemaVersion:4,family:'generic',gender:'male',group:'rim47_31',frame:structuredClone(baseFrame),
+      geometry:{bounding:{kind:'cylinder',radiusLdu:47,lengthLdu:31}},snap:{placement:'aligned',match:'size',slide:false},inheritance:{scale:'none',mirror:'none'},source:{kind:'test'},
+    },
+  ]
+
+  for(const sample of samples){
+    const audit=auditTechnicConnectorV1(sample)
+    assert.equal(audit.pass,true,`${sample.family}/${sample.group||'none'}: ${audit.findings.join(', ')}`)
+    assert.ok(audit.required.some(pair=>pair.probe.startsWith('dynamic:')),sample.family)
+    assert.ok(audit.required.every(pair=>pair.compatible&&pair.active),sample.family)
+  }
+})
+
 test('every audited fixed Technic Shadow group is represented by runtime semantics or an explicit semantic-only registry', async () => {
   const semantics = (await readFile(new URL('../technic/interface-semantics-v1.js', import.meta.url), 'utf8')).toLowerCase()
   const grammar = (await readFile(new URL('../technic/mechanical-grammar-v1.js', import.meta.url), 'utf8')).toLowerCase()
