@@ -5,6 +5,7 @@ import { classifyTechnicPinInterfaceV4 } from '../connectors-v4/pin-semantics-v4
 import { classifyPart } from '../ldraw/library-model-v1.js'
 import { classifyLDrawDefinition } from '../ldraw/mechanical-intelligence-v1.js'
 import { classifyTechnicShadowGroupV1, TECHNIC_UPSTREAM_SHADOW_VERSION } from '../technic/upstream-shadow-v1.js'
+import { auditTechnicPartConnectorsV1, TECHNIC_CONNECTIVITY_AUDIT_VERSION } from '../technic/connectivity-audit-v1.js'
 
 const [geometryRoot, shadowRoot, output] = process.argv.slice(2)
 if (!geometryRoot || !shadowRoot || !output) {
@@ -70,9 +71,21 @@ const files = (await readdir(`${geometryRoot}/parts`)).filter(value => value.toL
 const report = {
   generatedAt:new Date().toISOString(),
   scope:'BrickLab library family=technic; top-level official LDraw parts only',
-  note:'Family membership is presentation classification only. Connector/mechanical evidence comes from resolved LDraw/LDCad data.',
+  note:'Family membership is presentation classification only. Connector/mechanical evidence comes from resolved LDraw/LDCad data. Mating audit verifies standard Technic axle/pin/receiver compatibility and entry direction for every resolved endpoint.',
   upstreamShadowVocabulary:TECHNIC_UPSTREAM_SHADOW_VERSION,
-  totals:{ officialTopLevel:files.length, technicFamily:0, withConnectors:0, withoutConnectors:0, warningParts:0 },
+  connectivityAuditVersion:TECHNIC_CONNECTIVITY_AUDIT_VERSION,
+  totals:{
+    officialTopLevel:files.length,
+    technicFamily:0,
+    withConnectors:0,
+    withoutConnectors:0,
+    warningParts:0,
+    auditedEndpoints:0,
+    bidirectionalReceivers:0,
+    directionalReceivers:0,
+    partsWithMatingAuditFailures:0,
+    matingAuditFailures:0,
+  },
   categories:{},
   endpointRoles:{},
   connectorFamilies:{},
@@ -81,6 +94,7 @@ const report = {
   unknownTechnicLookingGroups:{},
   mechanicalClasses:{},
   confidence:{},
+  matingAuditFindings:{},
   parts:[],
 }
 
@@ -124,6 +138,16 @@ for (const [index, file] of files.entries()) {
     }
   }
 
+  const matingAudit = auditTechnicPartConnectorsV1(connectors)
+  report.totals.auditedEndpoints += matingAudit.checked
+  report.totals.bidirectionalReceivers += matingAudit.bidirectionalReceivers
+  report.totals.directionalReceivers += matingAudit.directionalReceivers
+  if (!matingAudit.pass) {
+    report.totals.partsWithMatingAuditFailures += 1
+    report.totals.matingAuditFailures += matingAudit.findings.length
+    for (const finding of matingAudit.findings) bump(report.matingAuditFindings, finding.finding)
+  }
+
   const mechanical = classifyLDrawDefinition({
     id:item.id,
     name:item.name,
@@ -148,6 +172,14 @@ for (const [index, file] of files.entries()) {
     mechanicalClass:mechanical.class,
     mechanicalConfidence:mechanical.confidence,
     warnings:resolved.warnings || [],
+    matingAudit:{
+      pass:matingAudit.pass,
+      checked:matingAudit.checked,
+      bidirectionalReceivers:matingAudit.bidirectionalReceivers,
+      directionalReceivers:matingAudit.directionalReceivers,
+      findings:matingAudit.findings,
+      endpoints:matingAudit.endpoints,
+    },
   })
 
   if ((index + 1) % 400 === 0) resolver.clearCache?.()
@@ -160,6 +192,12 @@ console.log(JSON.stringify({
   withConnectors:report.totals.withConnectors,
   withoutConnectors:report.totals.withoutConnectors,
   warningParts:report.totals.warningParts,
+  auditedEndpoints:report.totals.auditedEndpoints,
+  bidirectionalReceivers:report.totals.bidirectionalReceivers,
+  directionalReceivers:report.totals.directionalReceivers,
+  partsWithMatingAuditFailures:report.totals.partsWithMatingAuditFailures,
+  matingAuditFailures:report.totals.matingAuditFailures,
+  matingAuditFindings:report.matingAuditFindings,
   endpointRoles:report.endpointRoles,
   knownTechnicShadowGroups:Object.keys(report.knownTechnicShadowGroups).length,
   unknownTechnicLookingGroups:report.unknownTechnicLookingGroups,
