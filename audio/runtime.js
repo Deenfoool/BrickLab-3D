@@ -27,11 +27,15 @@ export function installAudio() {
     if(type==='physics-step'){ mechanics.contactsAfterStep(detail.session,detail.dt);return }
     if(type==='frame'){ mode=detail.mode; mechanics.update(detail.session,mode,detail.camera);return }
     semanticAt=performance.now()
-    if(type==='connector') audio.play(connectorSound(detail))
-    else if(type==='notification') {
-      if(/could not|failed|error/i.test(detail.text)) audio.play('error')
-      else if(/select .*first|at least|reserved|not grouped/i.test(detail.text)) audio.play('warning')
-      else if(/saved|exported|imported|grouped|duplicated/i.test(detail.text)) audio.play('success')
+    if(type==='connector') {
+      audio.play('connect',{volume:.72,cooldown:70,key:`connect:${connectorSound(detail)}`})
+    } else if(type==='notification') {
+      const text=String(detail.text??'')
+      const duplicateCount=Number(text.match(/^(\d+)\s+parts?\s+duplicated/i)?.[1]??0)
+      if(/project imported/i.test(text) || duplicateCount>1) audio.play('scatter',{volume:.58,cooldown:250})
+      else if(/could not|failed|error/i.test(text)) audio.play('error')
+      else if(/select .*first|at least|reserved|not grouped/i.test(text)) audio.play('warning')
+      else if(/saved|exported|imported|grouped|duplicated/i.test(text)) audio.play('success')
     } else audio.play(type,detail)
   })
   window.addEventListener('bricklab:gearmeshsnap',()=>{semanticAt=performance.now();audio.play('gear-mesh')})
