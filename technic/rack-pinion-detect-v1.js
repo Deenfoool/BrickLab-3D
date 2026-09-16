@@ -1,6 +1,6 @@
 import { findRackPinionSnapCandidateV1 } from './rack-pinion-v1.js'
 
-export const TECHNIC_RACK_PINION_DETECT_VERSION = 'technic-rack-pinion-detect-v1.0.0'
+export const TECHNIC_RACK_PINION_DETECT_VERSION = 'technic-rack-pinion-detect-v1.1.0'
 
 export function detectRackPinionMeshesV1(objects = [], options = {}) {
   const tolerance = Number(options.toleranceStud ?? 0.08)
@@ -38,7 +38,13 @@ export function detectRackPinionMeshesV1(objects = [], options = {}) {
       rackPartId:candidate.rack.object.userData?.partId ?? null,
       teeth:candidate.pinion.teeth,
       pitchRadius:candidate.pinion.pitchRadius,
+      pinionCenterWorld:candidate.pinion.center.clone(),
+      rackPitchOriginWorld:candidate.rack.pitchOrigin.clone(),
+      pitchPointWorld:candidate.geometry.pitchPoint.clone(),
+      radialWorld:radial.clone(),
       travelAxisWorld:candidate.rack.travelAxis.clone(),
+      rackNormalWorld:candidate.rack.normal.clone(),
+      rackWidthAxisWorld:candidate.rack.widthAxis.clone(),
       pinionAxisWorld:candidate.pinion.axis.clone(),
       travelSign,
       centerError:candidate.geometry.centerError,
