@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 const {
   defaultLDrawMechanismPose,
+  flexAxleControlPoints,
   ldrawMechanismDescriptor,
   normalizeLDrawMechanismPose,
 }=await import('../ldraw/mechanism-registry-v1.js')
@@ -35,6 +36,15 @@ test('mechanism poses are complete, finite and clamped to physical editor limits
   assert.deepEqual(normalizeLDrawMechanismPose('ldraw-32199',{bendXDeg:-999,bendYDeg:20}),{
     bendXDeg:-95,bendYDeg:20,
   })
+})
+
+test('flexible axle stores three independent interactive control points',()=>{
+  const pose=normalizeLDrawMechanismPose('ldraw-32199',{
+    bendXDeg:0,bendYDeg:0,
+    flexPoints:[[-99,1,2],[99,-2,3],[0,4,-9]],
+  })
+  assert.deepEqual(pose.flexPoints,[[-2.544,1,2],[0,-2,3],[2.544,4,-5.088]])
+  assert.deepEqual(flexAxleControlPoints(pose),pose.flexPoints)
 })
 
 test('complete assemblies describe independent movable components',()=>{

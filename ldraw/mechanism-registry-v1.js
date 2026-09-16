@@ -1,6 +1,10 @@
 import * as THREE from 'three'
 
-export const LDRAW_MECHANISM_REGISTRY_VERSION = 'ldraw-mechanism-registry-v1.1.0'
+export const LDRAW_MECHANISM_REGISTRY_VERSION = 'ldraw-mechanism-registry-v1.2.0'
+
+const FLEX_LENGTH=10.6
+const FLEX_CONTROL_X=Object.freeze([-FLEX_LENGTH*.24,0,FLEX_LENGTH*.24])
+const FLEX_MAX_OFFSET=FLEX_LENGTH*.48
 
 const freeze = value => Object.freeze(value)
 
@@ -63,6 +67,13 @@ export function normalizeLDrawMechanismPose(value, pose = {}) {
     const number=Number(pose?.[key])
     result[key]=Math.min(range[1],Math.max(range[0],Number.isFinite(number)?number:fallback))
   }
+  if(descriptor.kind==='flex-axle'&&Array.isArray(pose?.flexPoints)&&pose.flexPoints.length===3){
+    result.flexPoints=pose.flexPoints.map((point,index)=>[
+      FLEX_CONTROL_X[index],
+      THREE.MathUtils.clamp(Number(point?.[1])||0,-FLEX_MAX_OFFSET,FLEX_MAX_OFFSET),
+      THREE.MathUtils.clamp(Number(point?.[2])||0,-FLEX_MAX_OFFSET,FLEX_MAX_OFFSET),
+    ])
+  }
   return result
 }
 
@@ -83,16 +94,23 @@ function disposeFlexVisual(root) {
   previous.removeFromParent?.()
 }
 
+export function flexAxleControlPoints(pose={}) {
+  if(Array.isArray(pose.flexPoints)&&pose.flexPoints.length===3)return pose.flexPoints.map((point,index)=>[
+    FLEX_CONTROL_X[index],
+    THREE.MathUtils.clamp(Number(point?.[1])||0,-FLEX_MAX_OFFSET,FLEX_MAX_OFFSET),
+    THREE.MathUtils.clamp(Number(point?.[2])||0,-FLEX_MAX_OFFSET,FLEX_MAX_OFFSET),
+  ])
+  const x=Math.tan(THREE.MathUtils.degToRad(pose.bendXDeg || 0))*FLEX_LENGTH*.28
+  const y=Math.tan(THREE.MathUtils.degToRad(pose.bendYDeg || 0))*FLEX_LENGTH*.28
+  return [[FLEX_CONTROL_X[0],y*.35,x*.35],[0,y,x],[FLEX_CONTROL_X[2],y*.35,x*.35]]
+}
+
 function flexCurve(pose) {
-  const length=10.6
-  const x=Math.tan(THREE.MathUtils.degToRad(pose.bendXDeg || 0))*length*.28
-  const y=Math.tan(THREE.MathUtils.degToRad(pose.bendYDeg || 0))*length*.28
+  const controls=flexAxleControlPoints(pose)
   return new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-length/2,0,0),
-    new THREE.Vector3(-length*.24,y*.35,x*.35),
-    new THREE.Vector3(0,y,x),
-    new THREE.Vector3(length*.24,y*.35,x*.35),
-    new THREE.Vector3(length/2,0,0),
+    new THREE.Vector3(-FLEX_LENGTH/2,0,0),
+    ...controls.map(point=>new THREE.Vector3(...point)),
+    new THREE.Vector3(FLEX_LENGTH/2,0,0),
   ],false,'catmullrom',.52)
 }
 

@@ -191,6 +191,7 @@ try {
 
 try {
   await import('./ldraw/mechanism-inspector-v1.js?v=ldraw-mechanisms-20260916-v1')
+  await import('./ldraw/flex-axle-editor-v1.js?v=flex-axle-editor-20260916-v1')
 } catch (error) {
   console.warn('[BrickLab LDraw] Mechanism pose editor unavailable; rigid editing remains available.', error)
 }
