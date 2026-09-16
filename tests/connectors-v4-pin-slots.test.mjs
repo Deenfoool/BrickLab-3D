@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises'
 import { parseShadowTextV4 } from '../connectors-v4/ldcad-parser-v4.js'
 import { createConnectionGraphV4, createConnectionProposalV4 } from '../connectors-v4/connections-v4.js'
 import { matchConnectorV4 } from '../connectors-v4/matcher-v4.js'
+import { nearestAxialOffsetV4 } from '../connectors-v4/axial-fit-v4.js'
 import { technicPinSlotOffsetsV4 } from '../connectors-v4/pin-slots-v4.js'
 
 // Exact LDCad Shadow profile for 42924. It intentionally omits slide=true;
@@ -16,7 +17,8 @@ const STOP_PIN_32054='0 !LDCAD SNAP_CYL [gender=M] [caps=one] [secs=R 8 2 R 6 16
 const AXLE_PIN_43093='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2 R 6 16 R 8 2 A 6 20] [center=true] [slide=true]'
 const AXLE_PIN_18651='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2 R 6 16 R 8 2 A 6 40] [center=true] [slide=true]'
 const AXLE_PIN_11214='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2 R 6 16 _L 6.25 4 R 6 16 R 8 2 A 6 20] [center=true] [slide=true]'
-const AXLE_4L='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=A 6 80] [center=true] [slide=true]'
+// Exact pinned LDCad Shadow profile for Technic Axle 5 / 32073.dat.
+const AXLE_5='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=A 6 100] [center=true] [slide=true]'
 const AXLE_HOLE='0 !LDCAD SNAP_CYL [gender=F] [caps=none] [secs=A 6 20] [center=true] [slide=true]'
 const HOLE='0 !LDCAD SNAP_CYL [gender=F] [caps=none] [secs=R 8 2 R 6 16 R 8 2] [center=true] [slide=true]'
 
@@ -51,43 +53,58 @@ test('ordinary 2L friction pin keeps exactly two attachment bands',()=>{
   assert.deepEqual(technicPinSlotOffsetsV4(pin,hole),[-10,10])
 })
 
-test('canonical pin and axle-pin profiles expose every compatible physical band',()=>{
+test('axle-pin keeps discrete pin fallback but never discretizes its axle section',()=>{
   const hole=connector(HOLE,'hole')
   assert.deepEqual(technicPinSlotOffsetsV4(hole,connector(LONG_PIN_6558,'6558')),[-20,0,20])
   assert.deepEqual(technicPinSlotOffsetsV4(hole,connector(STOP_PIN_32054,'32054')),[10,30])
   const axlePin=connector(AXLE_PIN_43093,'43093')
-  assert.deepEqual(technicPinSlotOffsetsV4(hole,axlePin),[-10,10])
-  assert.deepEqual(technicPinSlotOffsetsV4(connector(AXLE_HOLE,'axle-hole'),axlePin),[10])
+  assert.deepEqual(technicPinSlotOffsetsV4(hole,axlePin),[-10])
+  assert.deepEqual(technicPinSlotOffsetsV4(connector(AXLE_HOLE,'axle-hole'),axlePin),[])
 })
 
-test('18651 exposes all three round-hole bands and both axle-hole bands',()=>{
+test('18651 keeps only its pin band discrete while the 2L axle section stays continuous',()=>{
   const hybrid=connector(AXLE_PIN_18651,'18651')
   const pinHole=connector(HOLE,'pin-hole')
   const axleHole=connector(AXLE_HOLE,'axle-hole')
-  assert.deepEqual(technicPinSlotOffsetsV4(pinHole,hybrid),[-20,0,20])
-  assert.deepEqual(technicPinSlotOffsetsV4(axleHole,hybrid),[0,20])
+  assert.deepEqual(technicPinSlotOffsetsV4(pinHole,hybrid),[-20])
+  assert.deepEqual(technicPinSlotOffsetsV4(axleHole,hybrid),[])
 })
 
-test('11214 keeps all three round-hole bands while axle hole stays on axle section',()=>{
+test('11214 keeps its two pin bands discrete while its axle end stays continuous',()=>{
   const hybrid=connector(AXLE_PIN_11214,'11214')
-  assert.deepEqual(technicPinSlotOffsetsV4(connector(HOLE,'pin-hole'),hybrid),[-20,0,20])
-  assert.deepEqual(technicPinSlotOffsetsV4(connector(AXLE_HOLE,'axle-hole'),hybrid),[20])
+  assert.deepEqual(technicPinSlotOffsetsV4(connector(HOLE,'pin-hole'),hybrid),[-20,0])
+  assert.deepEqual(technicPinSlotOffsetsV4(connector(AXLE_HOLE,'axle-hole'),hybrid),[])
 })
 
-test('pure 4L axle exposes four independent bands to round and axle holes',()=>{
-  const axle=connector(AXLE_4L,'axle-4l')
-  assert.deepEqual(technicPinSlotOffsetsV4(connector(HOLE,'round-hole'),axle),[-30,-10,10,30])
-  assert.deepEqual(technicPinSlotOffsetsV4(connector(AXLE_HOLE,'axle-hole'),axle),[-30,-10,10,30])
+test('Technic Axle 5 is one continuous connector, not five 1L snap points',()=>{
+  const axle=connector(AXLE_5,'32073-axle-5')
+  const axleHole=connector(AXLE_HOLE,'axle-hole')
+  const roundHole=connector(HOLE,'round-hole')
+
+  assert.deepEqual(technicPinSlotOffsetsV4(axle,axleHole),[])
+  assert.deepEqual(technicPinSlotOffsetsV4(axle,roundHole),[])
+
+  for(const requested of [-39.25,-17.6,0,12.75,39.1]){
+    const keyed=nearestAxialOffsetV4(axle,axleHole,requested)
+    assert.equal(keyed.valid,true)
+    assert.equal(keyed.clamped,false)
+    assert.ok(Math.abs(keyed.offsetLdu-requested)<1e-6,`${requested} became ${keyed.offsetLdu}`)
+
+    const round=nearestAxialOffsetV4(axle,roundHole,requested)
+    assert.equal(round.valid,true)
+    assert.equal(round.clamped,false)
+    assert.ok(Math.abs(round.offsetLdu-requested)<1e-6,`${requested} became ${round.offsetLdu}`)
+  }
 })
 
-test('18651 accepts simultaneous round-hole parts on pin, middle axle and end axle regions',()=>{
+test('18651 accepts simultaneous round-hole parts on pin and arbitrary axle regions',()=>{
   const hybrid=connector(AXLE_PIN_18651,'18651')
   const hybridObject={userData:{instanceId:'axle-pin-18651',partId:'ldraw-18651'}}
   const graph=createConnectionGraphV4()
   const contacts=[
     {offsetLdu:-20,instanceId:'beam-pin'},
-    {offsetLdu:0,instanceId:'beam-axle-middle'},
-    {offsetLdu:20,instanceId:'beam-axle-end'},
+    {offsetLdu:2.5,instanceId:'beam-axle-middle'},
+    {offsetLdu:24.5,instanceId:'beam-axle-end'},
   ]
   for(const [index,contact] of contacts.entries()){
     const receiver=connector(HOLE,`round-hole-${index}`)
@@ -101,11 +118,12 @@ test('18651 accepts simultaneous round-hole parts on pin, middle axle and end ax
   assert.equal(graph.axialReservations('axle-pin-18651::18651').length,3)
 })
 
-test('pure axle occupancy remains independent when middle and end bands are used',()=>{
-  const axle=connector(AXLE_4L,'axle-4l')
-  const axleObject={userData:{instanceId:'axle-4l-instance',partId:'ldraw-axle-4l'}}
+test('pure axle occupancy accepts multiple non-grid positions along the shaft',()=>{
+  const axle=connector(AXLE_5,'axle-5')
+  const axleObject={userData:{instanceId:'axle-5-instance',partId:'ldraw-32073'}}
   const graph=createConnectionGraphV4()
-  for(const [index,offsetLdu] of [-30,-10,10,30].entries()){
+  const arbitraryOffsets=[-37.5,-12.5,12.5,37.5]
+  for(const [index,offsetLdu] of arbitraryOffsets.entries()){
     const receiver=connector(HOLE,`round-${index}`)
     const receiverObject={userData:{instanceId:`beam-${index}`,partId:'ldraw-beam'}}
     const candidate={source:receiver,target:axle,sourceObject:receiverObject,targetObject:axleObject,
@@ -114,7 +132,7 @@ test('pure axle occupancy remains independent when middle and end bands are used
     assert.equal(added.accepted,true,JSON.stringify(added.conflicts))
   }
   assert.equal(graph.list().length,4)
-  assert.equal(graph.axialReservations('axle-4l-instance::axle-4l').length,4)
+  assert.equal(graph.axialReservations('axle-5-instance::axle-5').length,4)
 })
 
 test('round pins are still rejected by axle holes',()=>{
