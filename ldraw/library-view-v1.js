@@ -23,10 +23,18 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
   let loadObserver=null
   let destroyed=false
   const counts=new Map()
-  const expanded=new Set(['gears','wheels'])
+  const expanded=new Set(['beams','axles','pins','connectors','gears','wheels'])
   const t=(en,ru)=>language()==='ru'?ru:en
   const label=n=>t(n.en,n.ru)
   const familyDef=()=>FAMILIES.find(f=>f.id===family)
+  const categoryLabel=item=>{
+    let nodes=FAMILIES.find(f=>f.id===item.family)?.tree||[],found=[]
+    for(const segment of String(item.category||'').split('/')){
+      const entry=nodes.find(node=>node.id===segment);if(!entry)break
+      found.push(label(entry));nodes=entry.children||[]
+    }
+    return found.join(' / ')||item.source
+  }
   const byKey=key=>items.find(item=>item.key===key)
   const icon=name=>`<i data-lucide="${name}" aria-hidden="true"></i>`
   const icons=()=>globalThis.lucide?.createIcons?.({attrs:{'aria-hidden':'true','stroke-width':1.6}})
@@ -120,7 +128,7 @@ export function mountPartsLibrary(root, { storage=globalThis.localStorage, langu
     const repairButton=root.querySelector('[data-repair]');if(repairButton){repairButton.hidden=!repair||!context().failedCount;repairButton.disabled=busy}
     const shown=all.slice(0,(page+1)*PAGE_SIZE),remaining=Math.max(0,all.length-shown.length)
     root.querySelector('.pl-summary').textContent=busy?t('Preparing model before placement…','Подготовка модели перед размещением…'):loading?t('Loading catalog…','Загрузка каталога…'):warning||`${all.length.toLocaleString()} ${t('parts','деталей')}${tab==='compatible'?t(' · verified matches only',' · только подтверждённые пары'):''}`
-    root.querySelector('[data-results]').innerHTML=shown.length?shown.map(item=>`<article class="pl-card ${selected===item.key?'selected':''}" data-key="${escape(item.key)}"><button type="button" class="pl-select" data-select="${escape(item.key)}" aria-pressed="${selected===item.key}" title="${escape(item.name||item.description)}">${imageMarkup(item)}<strong>${escape(item.name||item.description)}</strong><small>${item.source} · ${escape(item.code)}</small></button><div class="pl-card-actions"><button type="button" data-favorite="${escape(item.key)}" aria-pressed="${favorites.includes(item.key)}" aria-label="${t('Favorite','В избранное')}">${favorites.includes(item.key)?'★':'☆'}</button><button type="button" data-add="${escape(item.key)}" ${busy?'disabled':''} aria-label="${t('Add','Добавить')} ${escape(item.code)}">+ ${t('Add','Добавить')}</button></div></article>`).join(''):`<div class="pl-empty">${icon('search')}<strong>${t('No matching parts','Нет подходящих деталей')}</strong><p>${tab==='compatible'?t('Select a part with a verified Smart Assembly pairing. Unverified fits are never guessed.','Выберите деталь с проверенной парой Smart Assembly. Неподтверждённые сопряжения не угадываются.'):t('Try a shorter search or another category. Sections stay within this family.','Попробуйте другой запрос или категорию. Разделы ограничены выбранным семейством.')}</p></div>`
+    root.querySelector('[data-results]').innerHTML=shown.length?shown.map(item=>`<article class="pl-card ${selected===item.key?'selected':''}" data-key="${escape(item.key)}"><button type="button" class="pl-select" data-select="${escape(item.key)}" aria-pressed="${selected===item.key}" title="${escape(item.name||item.description)}">${imageMarkup(item)}<strong>${escape(item.name||item.description)}</strong><small>${escape(categoryLabel(item))} · ${escape(item.code)}</small></button><div class="pl-card-actions"><button type="button" data-favorite="${escape(item.key)}" aria-pressed="${favorites.includes(item.key)}" aria-label="${t('Favorite','В избранное')}">${favorites.includes(item.key)?'★':'☆'}</button><button type="button" data-add="${escape(item.key)}" ${busy?'disabled':''} aria-label="${t('Add','Добавить')} ${escape(item.code)}">+ ${t('Add','Добавить')}</button></div></article>`).join(''):`<div class="pl-empty">${icon('search')}<strong>${t('No matching parts','Нет подходящих деталей')}</strong><p>${tab==='compatible'?t('Select a part with a verified Smart Assembly pairing. Unverified fits are never guessed.','Выберите деталь с проверенной парой Smart Assembly. Неподтверждённые сопряжения не угадываются.'):t('Try a shorter search or another category. Sections stay within this family.','Попробуйте другой запрос или категорию. Разделы ограничены выбранным семейством.')}</p></div>`
     for(const card of root.querySelectorAll('.pl-card')){const item=byKey(card.dataset.key);if(item?.file){card.classList.add('ld2-card');card.dataset.file=item.file}}
     root.querySelector('.pl-paging').innerHTML=remaining?`<button type="button" data-load-more>${t('Show more','Показать ещё')} · ${Math.min(PAGE_SIZE,remaining).toLocaleString()}</button><span>${shown.length.toLocaleString()} / ${all.length.toLocaleString()}</span>`:`<span>${shown.length.toLocaleString()} / ${all.length.toLocaleString()}</span>`
     bindImages(root.querySelector('[data-results]'))
