@@ -8,6 +8,8 @@ import {
   classifyTechnicShadowIdV1,
   normalizeShadowTokenV1,
 } from '../technic/upstream-shadow-v1.js'
+import { auditTechnicConnectorV1, TECHNIC_MATING_PROBES_V1 } from '../technic/connectivity-audit-v1.js'
+import { bidirectionalCylinderReceiverV4 } from '../connectors-v4/through-hole-v4.js'
 
 test('known low-level LDCad Technic ids normalize to explicit interface vocabulary', () => {
   assert.equal(classifyTechnicShadowIdV1('axle')?.kind, 'technic-axle')
@@ -34,6 +36,39 @@ test('parameterized rim groups keep size-fit semantics without enumerating every
 test('unknown Shadow tokens do not invent Technic behavior', () => {
   assert.equal(classifyTechnicShadowGroupV1('madeUpMechanism'), null)
   assert.equal(classifyTechnicShadowIdV1('madeUpPrimitive'), null)
+})
+
+test('Technic mating probes certify the expected axle, pin and receiver matrix', () => {
+  const expectedRoles={
+    axle:'technic-axle',
+    axleHole:'technic-axle-hole',
+    pin:'technic-pin',
+    pinHole:'technic-pin-hole',
+    roundHole:'technic-round-hole',
+    axlePin:'technic-axle-pin',
+  }
+  for(const [name,connector] of Object.entries(TECHNIC_MATING_PROBES_V1)){
+    const audit=auditTechnicConnectorV1(connector)
+    assert.equal(audit.role,expectedRoles[name],name)
+    assert.equal(audit.pass,true,`${name}: ${audit.findings.join(', ')}`)
+  }
+})
+
+test('through-hole policy keeps symmetric Technic receivers bidirectional and connhol3 directional', () => {
+  assert.equal(bidirectionalCylinderReceiverV4(TECHNIC_MATING_PROBES_V1.axleHole),true)
+  assert.equal(bidirectionalCylinderReceiverV4(TECHNIC_MATING_PROBES_V1.pinHole),true)
+  assert.equal(bidirectionalCylinderReceiverV4(TECHNIC_MATING_PROBES_V1.roundHole),true)
+
+  const oneSided=structuredClone(TECHNIC_MATING_PROBES_V1.pinHole)
+  oneSided.id='connhol3'
+  oneSided.geometry.sections=[
+    {shape:'R',radiusLdu:6,lengthLdu:16,elastic:false},
+    {shape:'R',radiusLdu:8,lengthLdu:2,elastic:false},
+  ]
+  assert.equal(bidirectionalCylinderReceiverV4(oneSided),false)
+  const audit=auditTechnicConnectorV1(oneSided)
+  assert.equal(audit.entryPolicy,'canonical-side')
+  assert.equal(audit.pass,true,audit.findings.join(', '))
 })
 
 test('every audited fixed Technic Shadow group is represented by runtime semantics or an explicit semantic-only registry', async () => {
