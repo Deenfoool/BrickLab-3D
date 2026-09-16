@@ -66,6 +66,7 @@ test('SIMULATE rack-pinion runtime stays inside the authoritative physics micros
   assert.match(source, /session\.prismaticJoints/)
   assert.match(source, /session\.connectorV4Physics\?\.monitors/)
   assert.match(source, /mesh-disengaged/)
+  assert.match(source, /outside-rack-teeth/)
   assert.match(source, /installInstanceHooks/)
   assert.match(source, /session\.applyGearCouplingTorques = function/)
   assert.match(source, /session\.updateVehicleControlsV1 = function/)
@@ -84,12 +85,16 @@ test('Connector V4 guide installation happens before rack-pinion rescan', async 
   assert.ok(rackInstall > v4Install)
 })
 
-test('rack detector exports the full moving contact frame for physics validation', async () => {
+test('rack detector exports the moving contact frame and finite tooth span', async () => {
   const detector = await text('technic/rack-pinion-detect-v1.js')
   assert.match(detector, /pinionCenterWorld/)
   assert.match(detector, /rackPitchOriginWorld/)
   assert.match(detector, /rackNormalWorld/)
   assert.match(detector, /rackWidthAxisWorld/)
+  assert.match(detector, /rackContactMinStud/)
+  assert.match(detector, /rackContactMaxStud/)
+  assert.match(detector, /toothCount/)
+  assert.match(detector, /linearPitchStud/)
 })
 
 test('rack-pinion capability advertises guided simulation but keeps arbitrary LDraw fail-closed', async () => {
