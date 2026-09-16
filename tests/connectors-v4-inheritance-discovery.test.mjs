@@ -4,7 +4,10 @@ import { readFile } from 'node:fs/promises'
 import { createShadowResolverV4 } from '../connectors-v4/shadow-resolver-v4.js'
 import { finalizeConnectorIdentitiesV4 } from '../connectors-v4/identity-v4.js'
 import { validateConnectorV4 } from '../connectors-v4/schema-v4.js'
+import { matchConnectorV4 } from '../connectors-v4/matcher-v4.js'
+import { activationForMatchV4 } from '../connectors-v4/activation-v4.js'
 import { mergeDiscoveredConnectorsV4 } from '../connector-discovery/discovery-v4.3.js'
+import { discoverSemanticSitesV4 } from '../connector-discovery/semantic-sites-v4.js'
 
 const fixture = JSON.parse(await readFile(new URL('./fixtures/connector-inheritance-v4.json',import.meta.url),'utf8'))
 const options = { fetchOfficialText: async p => fixture.official[p] ?? null, fetchShadowText: async p => fixture.shadow[p] ?? null }
@@ -34,6 +37,34 @@ for (const file of ['3001.dat','3708.dat','3894.dat','3648.dat']) test(`existing
 })
 
 const ref=(file,x=0)=>`1 16 ${x} 0 0 1 0 0 0 1 0 0 0 1 ${file}`
+test('32270 double bevel gear discovers its composed axl2hole as a keyed sliding axle receiver',async()=>{
+  const gear='1 16 0 0 -10 1 0 0 0 0 1 0 20 0 axl2hole.dat'
+  const result=await discoverSemanticSitesV4('32270.dat',gear,async()=>null)
+  assert.equal(result.connectors.length,1)
+  const hole=result.connectors[0]
+  assert.equal(hole.discovery?.role,'technic-axle-hole')
+  assert.equal(hole.gender,'female')
+  assert.equal(hole.geometry.centered,true)
+  assert.equal(hole.geometry.caps,'none')
+  assert.equal(hole.snap.slide,true)
+  assert.deepEqual(hole.frame.positionLdu,[0,0,0])
+  assert.deepEqual(hole.geometry.sections.map(s=>[s.shape,s.radiusLdu,s.lengthLdu]),[['A',6,20]])
+
+  const axle={
+    schemaVersion:4,family:'cylinder',gender:'male',group:null,
+    frame:{positionLdu:[0,0,0],orientation:[1,0,0,0,1,0,0,0,1]},
+    geometry:{sections:[{shape:'A',radiusLdu:6,lengthLdu:100,elastic:false}],caps:'none',centered:true},
+    snap:{slide:true},inheritance:{scale:'none',mirror:'cor'},source:{kind:'fixture'},
+  }
+  const match=matchConnectorV4(axle,hole)
+  assert.equal(match.compatible,true)
+  assert.equal(match.keyed,true)
+  assert.equal(match.kinematicHint,'prismatic')
+  const activation=activationForMatchV4(axle,hole,match)
+  assert.equal(activation.active,true)
+  assert.equal(activation.family,'technic-axle-keyed-hole')
+})
+
 test('nested ordinary-part inheritance composes translation and honors parent SNAP_CLEAR',async()=>{
   const official={'parts/root.dat':ref('child.dat',20),'parts/child.dat':ref('stud.dat',10)}
   let clear=false
