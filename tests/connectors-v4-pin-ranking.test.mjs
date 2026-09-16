@@ -63,6 +63,6 @@ test('candidate search consumes the semantic pin-mate bonus without replacing ge
 
 test('production import map cache-bumps the pin-aware candidate search',async()=>{
   const html=await readFile(new URL('../index.html',import.meta.url),'utf8')
-  const needle='"./connectors-v4/candidate-v4.js": "./connectors-v4/candidate-v4.js?v=runtime-13-pin-long-production-20260916-v1"'
+  const needle='"./connectors-v4/candidate-v4.js": "./connectors-v4/candidate-v4.js?v=runtime-14-bidirectional-pin-snap-20260916-v1"'
   assert.equal(html.split(needle).length-1,1)
 })
