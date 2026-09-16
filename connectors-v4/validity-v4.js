@@ -1,9 +1,9 @@
 import * as THREE from 'three'
 import { evaluateAxialOffsetV4 } from './axial-fit-v4.js'
 import { matchConnectorV4 } from './matcher-v4.js'
-import { connectorWorldFrameV4 } from './placement-solver-v4.js'
+import { bidirectionalCylinderPairV4, connectorWorldFrameV4 } from './placement-solver-v4.js'
 
-export const CONNECTION_VALIDITY_VERSION_V4 = 'connection-validity-v4.1.0'
+export const CONNECTION_VALIDITY_VERSION_V4 = 'connection-validity-v4.2.0'
 export const CONNECTION_VALIDITY_LIMITS_V4 = Object.freeze({
   minAxisDot: 0.9995,
   maxLateralErrorStud: 0.035,
@@ -19,9 +19,9 @@ function signedAngleAround(from, to, axis) {
   return Math.atan2(axis.dot(cross), THREE.MathUtils.clamp(a.dot(b), -1, 1))
 }
 
-function keyedTwistError(frameA, frameB, symmetry) {
+function keyedTwistError(frameA, frameB, symmetry, axis = frameB.axis) {
   if (!Number.isFinite(symmetry)) return 0
-  const angle = signedAngleAround(frameA.reference, frameB.reference, frameB.axis)
+  const angle = signedAngleAround(frameA.reference, frameB.reference, axis)
   const step = Math.PI * 2 / symmetry
   return Math.abs(angle - Math.round(angle / step) * step)
 }
@@ -45,30 +45,37 @@ export function validateConnectedGeometryV4(objectA, connectorA, objectB, connec
     const error = frameA.position.distanceTo(frameB.position)
     return {valid:error<=limits.maxLateralErrorStud, reason:error<=limits.maxLateralErrorStud?'connected-geometry-valid':'center',match,lateralErrorStud:error,axialOffsetStud:0}
   }
-  const axisDot = frameA.axis.dot(frameB.axis)
-  if (axisDot < limits.minAxisDot) return { valid:false, reason:'axis', axisDot, match }
+
+  const rawAxisDot = frameA.axis.dot(frameB.axis)
+  const bidirectionalAxis = bidirectionalCylinderPairV4(connectorA,connectorB,match)
+  const axisPolarity = bidirectionalAxis && rawAxisDot < 0 ? -1 : 1
+  const axisDot = bidirectionalAxis ? Math.abs(rawAxisDot) : rawAxisDot
+  if (axisDot < limits.minAxisDot) return { valid:false, reason:'axis', axisDot, rawAxisDot, axisPolarity, bidirectionalAxis, match }
 
   const delta = frameA.position.clone().sub(frameB.position)
+  // Keep the canonical B-axis for axial coordinates. Reverse-side entry changes
+  // orientation polarity only; stored offsets and occupancy intervals stay stable.
   const axialOffsetStud = delta.dot(frameB.axis)
   const lateral = delta.clone().addScaledVector(frameB.axis, -axialOffsetStud)
   const lateralErrorStud = lateral.length()
   if (lateralErrorStud > limits.maxLateralErrorStud) {
-    return { valid:false, reason:'lateral', axisDot, axialOffsetStud, lateralErrorStud, match }
+    return { valid:false, reason:'lateral', axisDot, rawAxisDot, axisPolarity, bidirectionalAxis, axialOffsetStud, lateralErrorStud, match }
   }
 
   let axial = null
   if (['cylinder','clip-cylinder'].includes(match.family)) {
     axial = evaluateAxialOffsetV4(connectorA, connectorB, axialOffsetStud * 20)
     if (!axial.valid) {
-      return { valid:false, reason:`axial:${axial.reason}`, axisDot, axialOffsetStud, lateralErrorStud, axial, match }
+      return { valid:false, reason:`axial:${axial.reason}`, axisDot, rawAxisDot, axisPolarity, bidirectionalAxis, axialOffsetStud, lateralErrorStud, axial, match }
     }
   }
 
   if (!['cylinder','clip-cylinder'].includes(match.family) && Math.abs(axialOffsetStud)>limits.maxLateralErrorStud) return {valid:false,reason:'center',match}
 
-  const twistErrorRad = match.keyed ? keyedTwistError(frameA, frameB, match.rotationalSymmetry) : 0
+  const twistAxis = frameB.axis.clone().multiplyScalar(axisPolarity)
+  const twistErrorRad = match.keyed ? keyedTwistError(frameA, frameB, match.rotationalSymmetry, twistAxis) : 0
   if (match.keyed && twistErrorRad > limits.maxKeyedTwistErrorRad) {
-    return { valid:false, reason:'keyed-twist', axisDot, axialOffsetStud, lateralErrorStud, twistErrorRad, axial, match }
+    return { valid:false, reason:'keyed-twist', axisDot, rawAxisDot, axisPolarity, bidirectionalAxis, axialOffsetStud, lateralErrorStud, twistErrorRad, axial, match }
   }
 
   return {
@@ -76,6 +83,9 @@ export function validateConnectedGeometryV4(objectA, connectorA, objectB, connec
     reason:'connected-geometry-valid',
     version:CONNECTION_VALIDITY_VERSION_V4,
     axisDot,
+    rawAxisDot,
+    axisPolarity,
+    bidirectionalAxis,
     axialOffsetStud,
     lateralErrorStud,
     twistErrorRad,
