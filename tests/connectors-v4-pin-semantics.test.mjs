@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { parseShadowTextV4 } from '../connectors-v4/ldcad-parser-v4.js'
 import { matchConnectorV4 } from '../connectors-v4/matcher-v4.js'
 import { activationForMatchV4, classifyConnectorV4 } from '../connectors-v4/activation-v4.js'
-import { classifyTechnicPinInterfaceV4, technicPinPairV4 } from '../connectors-v4/pin-semantics-v4.js'
+import { classifyTechnicAxlePinInterfaceV4, classifyTechnicPinInterfaceV4, technicPinPairV4 } from '../connectors-v4/pin-semantics-v4.js'
 
 const PIN_3673_SHADOW=[
   '0 !LDCAD SNAP_CLEAR',
@@ -15,6 +15,7 @@ const CONNHOLE_SHADOW='0 !LDCAD SNAP_CYL [id=connhole] [gender=F] [caps=none] [s
 const ROUND_HOLE_SHADOW='0 !LDCAD SNAP_CYL [gender=F] [caps=none] [secs=R 6 20] [center=true] [slide=true]'
 const AXLE_SHADOW='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=A 6 80] [center=true] [slide=true]'
 const STUD_SHADOW='0 !LDCAD SNAP_CYL [gender=M] [caps=one] [secs=R 6 4]'
+const AXLE_PIN_18651_SHADOW='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2 R 6 16 R 8 2 A 6 40] [center=true] [slide=true]'
 
 function connectors(text,file='fixture.dat') {
   const parsed=parseShadowTextV4(text,{file})
@@ -83,4 +84,22 @@ test('male Technic pin still pairs with a simple R6 receiver while axle compatib
   const axleActivation=activationForMatchV4(axle,pinHole,matchConnectorV4(axle,pinHole))
   assert.equal(axleActivation.active,true)
   assert.equal(axleActivation.family,'technic-axle-round-hole')
+})
+
+test('18651 mixed axle-pin is certified for both of its physical interfaces',()=>{
+  const [hybrid]=connectors(AXLE_PIN_18651_SHADOW,'parts/18651.dat')
+  const semantic=classifyTechnicAxlePinInterfaceV4(hybrid)
+  assert.equal(semantic.role,'technic-axle-pin')
+  assert.equal(semantic.axleLengthLdu,40)
+  assert.equal(classifyConnectorV4(hybrid),'technic-axle-pin')
+
+  const [pinHole]=connectors(CONNHOLE_SHADOW,'p/connhole.dat')
+  const pinActivation=activationForMatchV4(hybrid,pinHole,matchConnectorV4(hybrid,pinHole))
+  assert.equal(pinActivation.active,true)
+  assert.equal(pinActivation.family,'technic-pin-hole')
+
+  const [axleHole]=connectors('0 !LDCAD SNAP_CYL [gender=F] [caps=none] [secs=A 6 20] [center=true] [slide=true]','parts/axle-hole.dat')
+  const axleActivation=activationForMatchV4(hybrid,axleHole,matchConnectorV4(hybrid,axleHole))
+  assert.equal(axleActivation.active,true)
+  assert.equal(axleActivation.family,'technic-axle-keyed-hole')
 })

@@ -12,6 +12,8 @@ const PIN_2L='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2 R 6 16 R 
 const LONG_PIN_6558='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.5 2 R 6 16 R 8 4 R 6 16 _L 6.5 4 R 6 16 _L 6.5 2] [center=true] [slide=true]'
 const STOP_PIN_32054='0 !LDCAD SNAP_CYL [gender=M] [caps=one] [secs=R 8 2 R 6 16 _L 6.5 4 R 6 16 _L 6.5 2] [slide=true]'
 const AXLE_PIN_43093='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2 R 6 16 R 8 2 A 6 20] [center=true] [slide=true]'
+const AXLE_PIN_18651='0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2 R 6 16 R 8 2 A 6 40] [center=true] [slide=true]'
+const AXLE_HOLE='0 !LDCAD SNAP_CYL [gender=F] [caps=none] [secs=A 6 20] [center=true] [slide=true]'
 const HOLE='0 !LDCAD SNAP_CYL [gender=F] [caps=none] [secs=R 8 2 R 6 16 R 8 2] [center=true] [slide=true]'
 
 function connector(meta,id){
@@ -45,11 +47,41 @@ test('ordinary 2L friction pin keeps exactly two attachment bands',()=>{
   assert.deepEqual(technicPinSlotOffsetsV4(pin,hole),[-10,10])
 })
 
-test('other canonical long-pin profiles expose their physical bands without splitting axle-pin hybrids',()=>{
+test('canonical pin and axle-pin profiles expose only their physical interface bands',()=>{
   const hole=connector(HOLE,'hole')
   assert.deepEqual(technicPinSlotOffsetsV4(hole,connector(LONG_PIN_6558,'6558')),[-20,0,20])
   assert.deepEqual(technicPinSlotOffsetsV4(hole,connector(STOP_PIN_32054,'32054')),[10,30])
-  assert.deepEqual(technicPinSlotOffsetsV4(hole,connector(AXLE_PIN_43093,'43093')),[])
+  const axlePin=connector(AXLE_PIN_43093,'43093')
+  assert.deepEqual(technicPinSlotOffsetsV4(hole,axlePin),[-10])
+  assert.deepEqual(technicPinSlotOffsetsV4(connector(AXLE_HOLE,'axle-hole'),axlePin),[10])
+})
+
+test('18651 exposes one pin band and two independent 2L axle bands',()=>{
+  const hybrid=connector(AXLE_PIN_18651,'18651')
+  const pinHole=connector(HOLE,'pin-hole')
+  const axleHole=connector(AXLE_HOLE,'axle-hole')
+  assert.deepEqual(technicPinSlotOffsetsV4(pinHole,hybrid),[-20])
+  assert.deepEqual(technicPinSlotOffsetsV4(axleHole,hybrid),[0,20])
+})
+
+test('18651 accepts three simultaneous parts across its pin and axle regions',()=>{
+  const hybrid=connector(AXLE_PIN_18651,'18651')
+  const hybridObject={userData:{instanceId:'axle-pin-18651',partId:'ldraw-18651'}}
+  const graph=createConnectionGraphV4()
+  const contacts=[
+    {receiver:connector(HOLE,'pin-hole'),offsetLdu:-20,instanceId:'beam-pin'},
+    {receiver:connector(AXLE_HOLE,'axle-hole-a'),offsetLdu:0,instanceId:'beam-axle-a'},
+    {receiver:connector(AXLE_HOLE,'axle-hole-b'),offsetLdu:20,instanceId:'beam-axle-b'},
+  ]
+  for(const contact of contacts){
+    const receiverObject={userData:{instanceId:contact.instanceId,partId:'ldraw-beam'}}
+    const candidate={source:contact.receiver,target:hybrid,sourceObject:receiverObject,targetObject:hybridObject,
+      match:matchConnectorV4(contact.receiver,hybrid),solution:{valid:true,solverVersion:'test',placementMode:'aligned',axial:{offsetLdu:contact.offsetLdu}}}
+    const added=graph.add(createConnectionProposalV4(candidate))
+    assert.equal(added.accepted,true,JSON.stringify(added.conflicts))
+  }
+  assert.equal(graph.list().length,3)
+  assert.equal(graph.axialReservations('axle-pin-18651::18651').length,3)
 })
 
 test('slot enumeration is limited to certified pin-hole pairs',()=>{
@@ -60,6 +92,6 @@ test('slot enumeration is limited to certified pin-hole pairs',()=>{
 
 test('production import map publishes the occupancy-aware pin runtime',async()=>{
   const html=await readFile(new URL('../index.html',import.meta.url),'utf8')
-  const needle='"./connectors-v4/runtime-v4.js": "./connectors-v4/runtime-v4.js?v=connector-pin-slots-20260916-v1"'
+  const needle='"./connectors-v4/runtime-v4.js": "./connectors-v4/runtime-v4.js?v=runtime-10-connector-axle-pin-slots-20260916-v1"'
   assert.equal(html.split(needle).length-1,1)
 })

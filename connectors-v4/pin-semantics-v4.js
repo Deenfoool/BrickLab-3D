@@ -1,4 +1,4 @@
-export const PIN_SEMANTICS_VERSION_V4 = 'pin-semantics-v4.1.0'
+export const PIN_SEMANTICS_VERSION_V4 = 'pin-semantics-v4.2.0'
 
 const RADIUS_EPS_LDU = 0.18
 const CORE_RADIUS_LDU = 6
@@ -75,6 +75,23 @@ export function classifyTechnicPinInterfaceV4(connector) {
   }
 
   return null
+}
+
+export function classifyTechnicAxlePinInterfaceV4(connector) {
+  const p=profile(connector)
+  if (!p || connector?.gender!=='male' || !p.centered || p.caps!=='none' || !p.slide || !p.elastic) return null
+  const shapes=p.sections.map(rigidShape)
+  if (!shapes.includes('R') || !shapes.includes('A') || shapes.some(shape=>!['R','A'].includes(shape))) return null
+  const axleLength=p.sections.reduce((sum,section)=>sum+(rigidShape(section)==='A'?Math.max(0,Number(section.lengthLdu)||0):0),0)
+  if (p.coreLength<MIN_PIN_CORE_LENGTH_LDU || axleLength<MIN_PIN_CORE_LENGTH_LDU || !plausibleTechnicRadius(p)) return null
+  return Object.freeze({
+    role:'technic-axle-pin',
+    gender:'male',
+    confidence:'profile-verified',
+    frictionFit:true,
+    pinCoreLengthLdu:p.coreLength,
+    axleLengthLdu:axleLength,
+  })
 }
 
 export function technicPinPairV4(a,b) {

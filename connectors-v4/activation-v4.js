@@ -1,5 +1,5 @@
 import { CONNECTOR_SCHEMA_VERSION_V4, CONNECTOR_SYSTEM_VERSION_V4, validateConnectorV4 } from './schema-v4.js'
-import { classifyTechnicPinInterfaceV4, technicPinPairV4 } from './pin-semantics-v4.js?v=connector-pin-gender-20260912-v1'
+import { classifyTechnicAxlePinInterfaceV4, classifyTechnicPinInterfaceV4, technicPinPairV4 } from './pin-semantics-v4.js?v=connector-axle-pin-slots-20260916-v1'
 
 export const ACTIVATION_POLICY_VERSION_V4 = 'connector-activation-v4.3.0'
 
@@ -62,6 +62,8 @@ export function classifyConnectorV4(connector) {
 
   const pinSemantic=classifyTechnicPinInterfaceV4(connector)
   if (pinSemantic) return pinSemantic.role
+  const axlePinSemantic=classifyTechnicAxlePinInterfaceV4(connector)
+  if (axlePinSemantic) return axlePinSemantic.role
 
   if (
     connector.gender === 'female' && connector.snap?.slide === true && connector.geometry?.centered === true && allR &&
@@ -145,7 +147,7 @@ export function activationForMatchV4(source, target, match) {
   const pinPair = technicPinPairV4(source,target)
 
   if (
-    roles.has('technic-axle') && roles.has('technic-axle-hole') &&
+    (roles.has('technic-axle') || roles.has('technic-axle-pin')) && roles.has('technic-axle-hole') &&
     match?.compatible === true && match?.family === 'cylinder' && match?.keyed === true &&
     match?.rotationalSymmetry === 4 && match?.kinematicHint === 'prismatic'
   ) return activeResult('technic-axle-keyed-hole','prismatic',sourceRole,targetRole,'ldcad-shadow:exact-A6-keyed-profile')
@@ -159,7 +161,7 @@ export function activationForMatchV4(source, target, match) {
     let family = null
     const kind = match.kinematicHint
     if (roles.has('technic-axle') && roundReceiver) family='technic-axle-round-hole'
-    else if (roles.has('technic-pin') && roundReceiver && match.family === 'cylinder' && Math.abs(match.fit?.clearanceLdu ?? Infinity) <= PROFILE_EPS_LDU) family='technic-pin-hole'
+    else if ((roles.has('technic-pin') || roles.has('technic-axle-pin')) && roundReceiver && match.family === 'cylinder' && Math.abs(match.fit?.clearanceLdu ?? Infinity) <= PROFILE_EPS_LDU) family='technic-pin-hole'
     else if (roles.has('stud') && roles.has('anti-stud')) family='stud-anti-stud'
     else if (match.family === 'cylinder' && Math.abs(match.fit?.clearanceLdu ?? Infinity) <= PROFILE_EPS_LDU) {
       const m=match.male, f=match.female

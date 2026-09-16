@@ -12,7 +12,7 @@ import { createAxialOccupancyV4 } from './occupancy-v4.js'
 import { ACTIVATION_POLICY_VERSION_V4, certifyCandidateV4, certifyConnectivityV4, activationForMatchV4 } from './activation-v4.js'
 import { runConnectorV4SelfTest } from './selftest-v4.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
-import { nearestTechnicPinSlotOffsetsV4 } from './pin-slots-v4.js?v=connector-pin-slots-20260916-v1'
+import { nearestTechnicPinSlotOffsetsV4 } from './pin-slots-v4.js?v=connector-axle-pin-slots-20260916-v1'
 import {
   clearPersistedGraphV4,
   persistGraphV4,
