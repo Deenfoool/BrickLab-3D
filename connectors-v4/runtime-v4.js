@@ -12,6 +12,7 @@ import { createAxialOccupancyV4 } from './occupancy-v4.js'
 import { ACTIVATION_POLICY_VERSION_V4, certifyCandidateV4, certifyConnectivityV4, activationForMatchV4 } from './activation-v4.js'
 import { runConnectorV4SelfTest } from './selftest-v4.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
+import { nearestTechnicPinSlotOffsetsV4 } from './pin-slots-v4.js?v=connector-pin-slots-20260916-v1'
 import {
   clearPersistedGraphV4,
   persistGraphV4,
@@ -312,20 +313,35 @@ function certifiedCandidate(movingObject, targetObjects, options = {}) {
   // Candidate targets may be a spatial subset: only the project owner prunes the graph.
   const candidates = findPlacementCandidatesV4(movingObject, targetObjects, candidateOptions({ ...options, maxResults:Math.max(24, options.maxResults ?? 0) }))
   for (const candidate of candidates) {
-    const certification = certifyCandidateV4(candidate, findPart)
-    if (!certification.pass || !certification.activation?.editor || !certification.activation?.graph) continue
-    let proposal
-    try { proposal = createConnectionProposalV4(candidate, { metadata:{ activation:certification.activation } }) }
-    catch { continue }
-    if (!proposal.occupancyReady || connectionGraph.get(proposal.id)) continue
-    const availability = connectionGraph.canAdd(proposal)
-    if (!availability.accepted) continue
-    return {
-      ...candidate,
-      v4Active:true,
-      placementOnly:true,
-      certification,
-      proposal,
+    const variants=[candidate]
+    const requestedLdu=candidate.solution?.axial?.offsetLdu ?? 0
+    for(const offsetLdu of nearestTechnicPinSlotOffsetsV4(candidate.source,candidate.target,requestedLdu)){
+      if(Math.abs(offsetLdu-requestedLdu)<1e-4)continue
+      let solution
+      try{
+        solution=solvePlacementV4(candidate.sourceObject,candidate.source,candidate.targetObject,candidate.target,{match:candidate.match,axialOffsetStud:offsetLdu/20})
+      }catch{continue}
+      if(!solution.valid)continue
+      const captureLimit=Number.isFinite(options.captureDistanceStud)?options.captureDistanceStud:0.72
+      if((solution.diagnostics?.captureCorrectionStud??Infinity)>captureLimit)continue
+      variants.push({...candidate,solution,distanceStud:solution.diagnostics.captureCorrectionStud})
+    }
+    for(const variant of variants){
+      const certification = certifyCandidateV4(variant, findPart)
+      if (!certification.pass || !certification.activation?.editor || !certification.activation?.graph) continue
+      let proposal
+      try { proposal = createConnectionProposalV4(variant, { metadata:{ activation:certification.activation } }) }
+      catch { continue }
+      if (!proposal.occupancyReady || connectionGraph.get(proposal.id)) continue
+      const availability = connectionGraph.canAdd(proposal)
+      if (!availability.accepted) continue
+      return {
+        ...variant,
+        v4Active:true,
+        placementOnly:true,
+        certification,
+        proposal,
+      }
     }
   }
   return null
@@ -340,7 +356,10 @@ function restorePose(object, position, quaternion) {
 function commitCertifiedCandidate(candidate) {
   if (!selfTest.pass || !candidate?.v4Active) return { accepted:false, reason:'v4-not-active' }
   // Preview transforms can be stale by pointer-up; solve once more atomically.
-  candidate = {...candidate,solution:solvePlacementV4(candidate.sourceObject,candidate.source,candidate.targetObject,candidate.target)}
+  candidate = {...candidate,solution:solvePlacementV4(candidate.sourceObject,candidate.source,candidate.targetObject,candidate.target,{
+    match:candidate.match,
+    axialOffsetStud:candidate.solution?.axial?.offsetStud,
+  })}
   candidate.match=candidate.solution.match
   const certification = certifyCandidateV4(candidate, findPart)
   if (!certification.pass) return { accepted:false, reason:`certification:${certification.reason}`, certification }
