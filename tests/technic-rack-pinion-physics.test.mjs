@@ -56,7 +56,7 @@ test('rack-pinion contact force respects the explicit force ceiling', () => {
   assert.ok(result.predictedRelativeSpeedMps > 0)
 })
 
-test('SIMULATE rack-pinion runtime stays inside the authoritative physics microstep', async () => {
+test('SIMULATE rack-pinion runtime stays inside the authoritative physics microstep and preserves prototype owners', async () => {
   const source = await text('technic/rack-pinion-physics-v1.js')
   assert.match(source, /addForceAtPoint/)
   assert.match(source, /effectiveInverseMassAtPoint/)
@@ -64,6 +64,10 @@ test('SIMULATE rack-pinion runtime stays inside the authoritative physics micros
   assert.match(source, /session\.prismaticJoints/)
   assert.match(source, /session\.connectorV4Physics\?\.monitors/)
   assert.match(source, /mesh-disengaged/)
+  assert.match(source, /installInstanceHooks/)
+  assert.match(source, /session\.applyGearCouplingTorques = function/)
+  assert.match(source, /session\.updateVehicleControlsV1 = function/)
+  assert.doesNotMatch(source, /PhysicsSession\.prototype/)
   assert.doesNotMatch(source, /world\.step\s*\(/)
   assert.doesNotMatch(source, /setLinvel|setAngvel|createImpulseJoint/)
 })
