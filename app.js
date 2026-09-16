@@ -511,6 +511,7 @@ function projectState() {
       groupId: object.userData.groupId ?? null,
       position: object.position.toArray(),
       rotation: [object.rotation.x, object.rotation.y, object.rotation.z],
+      mechanismPose: object.userData.mechanismPose ? cloneState(object.userData.mechanismPose) : undefined,
     })),
     connections: cloneState(connections),
     connectorSystemV4:{version:4},
@@ -593,6 +594,10 @@ function applyProject(data, { reset = false, persist = true } = {}) {
     object.userData.groupId = item.groupId || null
     if (Array.isArray(item.position)) object.position.fromArray(item.position)
     if (Array.isArray(item.rotation)) object.rotation.set(...item.rotation)
+    if (item.mechanismPose && typeof item.mechanismPose === 'object') {
+      object.userData.mechanismPose = cloneState(item.mechanismPose)
+      globalThis.BrickLabLDrawMechanisms?.applyPose?.(object,object.userData.mechanismPose)
+    }
     buildRoot.add(object)
   }
 

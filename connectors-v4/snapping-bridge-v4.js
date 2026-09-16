@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import * as V3 from '../snapping-v3.js'
-import { suppressNextConnectionForEndpoint } from '../connections.js'
+import { suppressNextConnectionForEndpoint } from '../connections-v3.js'
 import { interactionGroupMembers } from '../editor-groups-v1.js'
 import { applyRackPinionSnapV1, findRackPinionSnapCandidateV1 } from '../technic/rack-pinion-v1.js?v=technic-family-20260915-v1'
 

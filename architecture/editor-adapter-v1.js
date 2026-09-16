@@ -23,6 +23,7 @@ function serializePart(object) {
     groupId:object?.userData?.groupId ?? null,
     position:object?.position?.toArray?.() ?? [0,0,0],
     rotation:[object?.rotation?.x ?? 0, object?.rotation?.y ?? 0, object?.rotation?.z ?? 0],
+    mechanismPose:object?.userData?.mechanismPose ? JSON.parse(JSON.stringify(object.userData.mechanismPose)) : undefined,
   }
 }
 

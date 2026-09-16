@@ -189,6 +189,12 @@ try {
   console.warn('[BrickLab Connector V4] Inspector graph sync unavailable; editor continues normally.', error)
 }
 
+try {
+  await import('./ldraw/mechanism-inspector-v1.js?v=ldraw-mechanisms-20260916-v1')
+} catch (error) {
+  console.warn('[BrickLab LDraw] Mechanism pose editor unavailable; rigid editing remains available.', error)
+}
+
 // KINEMATICS is a lightweight mode activation shell. Its deterministic solver/runtime
 // loads only when the user enters the mode; Rapier is never started by this path.
 try {

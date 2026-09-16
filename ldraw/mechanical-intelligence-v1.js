@@ -22,6 +22,9 @@ export const MECHANICAL_CLASSES = Object.freeze([
   'differential-like',
   'gearbox-like',
   'power-unit',
+  'flex-axle',
+  'ball-joint',
+  'hinge-joint',
 ])
 
 const CLASS_SET = new Set(MECHANICAL_CLASSES)
@@ -44,6 +47,13 @@ const BUILTIN_OVERRIDES = new Map([
   ['3708', { class:'axle', properties:{ lengthL:12, keyed:true } }],
   ['3713', { class:'bush', properties:{ stopper:true } }],
   ['4265c', { class:'bush', properties:{ half:true, stopper:true } }],
+  ['32199', { class:'flex-axle', properties:{ lengthL:11, flexible:true } }],
+  ['55709', { class:'flex-axle', properties:{ lengthL:11, flexible:true, aliasOf:'32199' } }],
+  ['3712c01', { class:'universal-joint', properties:{ articulated:true } }],
+  ['9244', { class:'universal-joint', properties:{ articulated:true, aliasOf:'3712c01' } }],
+  ['43056c01', { class:'hinge-joint', properties:{ articulated:true, friction:true } }],
+  ['50923', { class:'ball-joint', properties:{ maleBall:true } }],
+  ['59141', { class:'ball-joint', properties:{ maleBall:true, aliasOf:'50923' } }],
 ])
 
 const RUNTIME_OVERRIDES = new Map()
@@ -205,7 +215,12 @@ export function classifyLDrawDefinition(definition = {}) {
     return inferred('rim', evidence, namedDimensionsMm(raw, '(?:Wheel|Rim)') || {})
   }
 
-  if (/\b(?:technic\s+)?axle\b/i.test(raw) && !/\b(?:hole|connector|joiner|coupler|gear|rack)\b/i.test(lower)) {
+  if (/\b(?:flex(?:ible)?\s+axle|axle\s+flexible)\b/i.test(raw)) {
+    const lengthL = axleLength(raw)
+    return inferred('flex-axle', evidence, { flexible:true, ...(lengthL ? { lengthL } : {}) })
+  }
+
+  if (/\b(?:technic\s+)?axle\b/i.test(raw) && !/\b(?:hole|connector|joiner|coupler|gear|rack|flexible)\b/i.test(lower)) {
     const lengthL = axleLength(raw)
     return inferred('axle', evidence, { keyed:true, ...(lengthL ? { lengthL } : {}) })
   }

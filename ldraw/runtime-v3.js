@@ -4,6 +4,7 @@ import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawCondit
 import { PARTS } from '../parts.js'
 import { installLDrawCacheRecovery, retryLoad, parseCompleteLDraw } from './load-recovery-v1.js?v=ldraw-loading-20260912-v1'
 import { createLDrawTextTransport } from './text-transport-v1.js?v=ldraw-loading-20260912-v1'
+import { applyLDrawMechanismPose, defaultLDrawMechanismPose, ldrawMechanismDescriptor } from './mechanism-registry-v1.js'
 
 export const LDRAW_SOURCE = Object.freeze({
   repository: 'pybricks/ldraw',
@@ -83,6 +84,7 @@ function type1References(text) {
     if (!values.every(Number.isFinite)) continue
     const [x, y, z, a, b, c, d, e, f, g, h, i] = values
     result.push({
+      color:tokens[1],
       file: normalizeFile(tokens.slice(14).join(' ')).toLowerCase(),
       matrix: new THREE.Matrix4().set(
         a, b, c, x,
@@ -93,6 +95,35 @@ function type1References(text) {
     })
   }
   return result
+}
+
+async function loadArticulatedModel(loader, normalized, text, descriptor) {
+  if (!descriptor?.components?.length) return null
+  const sourceFile=normalizeFile(descriptor.assemblyFile || normalized)
+  const sourceText=sourceFile===normalized ? text : await fetchLDrawText(sourceFile)
+  const refs=type1References(sourceText)
+  const occurrence=new Map(), group=new THREE.Group()
+  for(const ref of refs){
+    const file=normalizeFile(ref.file).toLowerCase()
+    const index=occurrence.get(file)||0;occurrence.set(file,index+1)
+    const component=descriptor.components.find(item=>normalizeFile(item.file).toLowerCase()===file&&(item.occurrence??0)===index)
+    if(!component)continue
+    const childText=await fetchLDrawText(file)
+    const child=await parseCompleteLDraw(loader,childText)
+    child.applyMatrix4(ref.matrix)
+    const pivot=new THREE.Group()
+    pivot.name=`bricklab-mechanism-${component.role}`
+    pivot.userData.mechanismRole=component.role
+    if(component.poseKey)pivot.userData.mechanismPoseKey=component.poseKey
+    if(component.axis)pivot.userData.mechanismAxis=[...component.axis]
+    const point=new THREE.Vector3(...(component.pivotLdu||[0,0,0]))
+    pivot.position.copy(point)
+    child.position.sub(point)
+    pivot.add(child)
+    pivot.userData.mechanismBindQuaternion=pivot.quaternion.toArray()
+    group.add(pivot)
+  }
+  return group.children.length?group:null
 }
 
 function convertedPoint(matrix, local = new THREE.Vector3()) {
@@ -340,7 +371,10 @@ async function loadPrototype(file) {
     const loader = await loaderTask
     // Reuse the same top-level text as metadata: no duplicate geometry download.
     loader.addDefaultMaterials()
-    const modelTask = textTask.then(text=>parseCompleteLDraw(loader,text))
+    const modelTask = textTask.then(async text=>{
+      const descriptor=ldrawMechanismDescriptor(normalized)
+      return await loadArticulatedModel(loader,normalized,text,descriptor) || parseCompleteLDraw(loader,text)
+    })
     const [model, text] = await Promise.all([modelTask, textTask])
     model.rotation.x = Math.PI
     model.scale.setScalar(LDU_TO_STUD)
@@ -444,6 +478,11 @@ function attachPrototype(root, def, payload, color, fallback = null, announce = 
     if (child.isMesh) { child.castShadow = true; child.receiveShadow = true }
   })
   root.add(visual)
+  if(!root.userData.mechanismPose){
+    const pose=defaultLDrawMechanismPose(def)
+    if(pose)root.userData.mechanismPose=pose
+  }
+  applyLDrawMechanismPose(root,root.userData.mechanismPose)
   def.connectors.splice(0, def.connectors.length, ...payload.connectors)
   def.name = payload.metadata.description || def.name
   def.description = `${payload.metadata.description || def.description}${payload.metadata.license ? ` · ${payload.metadata.license}` : ''}`

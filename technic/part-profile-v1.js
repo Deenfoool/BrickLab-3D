@@ -18,6 +18,13 @@ const VERIFIED = Object.freeze({
   '3708': { role:'axle', lengthL:12 },
   '3713': { role:'bush', retainer:true },
   '4265c': { role:'bush', retainer:true, half:true },
+  '32199': { role:'flex-axle', lengthL:11 },
+  '55709': { role:'flex-axle', lengthL:11, aliasOf:'32199' },
+  '3712c01': { role:'universal-joint' },
+  '9244': { role:'universal-joint', aliasOf:'3712c01' },
+  '43056c01': { role:'hinge-joint', friction:true },
+  '50923': { role:'ball-joint' },
+  '59141': { role:'ball-joint', aliasOf:'50923' },
 })
 
 const SPECIAL_GROUP_ROLE = Object.freeze({

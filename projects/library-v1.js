@@ -13,7 +13,7 @@ const uid=()=>globalThis.crypto?.randomUUID?.()||`project-${Date.now().toString(
 function colorHex(value){if(typeof value==='string'&&/^#[0-9a-f]{6}$/i.test(value))return value;const n=Number(value);return Number.isFinite(n)?`#${(n>>>0).toString(16).padStart(6,'0').slice(-6)}`:'#7b8794'}
 function hashText(text){let hash=0x811c9dc5;for(let i=0;i<text.length;i+=1){hash^=text.charCodeAt(i);hash=Math.imul(hash,0x01000193)}return(hash>>>0).toString(16).padStart(8,'0')}
 export function projectSnapshotFingerprint(snapshot){
-  const payload={name:snapshot?.name||'',parts:(snapshot?.parts||[]).map(p=>[p.instanceId,p.partId,p.color,p.groupId,p.position,p.rotation]),connections:(snapshot?.connections||[]).map(c=>c.id||c),connectionsV4:(snapshot?.connectionsV4||[]).map(c=>c.id||[c.a?.instanceId,c.a?.endpointId,c.b?.instanceId,c.b?.endpointId])}
+  const payload={name:snapshot?.name||'',parts:(snapshot?.parts||[]).map(p=>[p.instanceId,p.partId,p.color,p.groupId,p.position,p.rotation,p.mechanismPose||null]),connections:(snapshot?.connections||[]).map(c=>c.id||c),connectionsV4:(snapshot?.connectionsV4||[]).map(c=>c.id||[c.a?.instanceId,c.a?.endpointId,c.b?.instanceId,c.b?.endpointId])}
   return hashText(JSON.stringify(payload))
 }
 

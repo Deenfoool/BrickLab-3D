@@ -6,7 +6,7 @@ import {
   motorConnectionInfo,
 } from '../drivetrain.js'
 import { findPart } from '../parts.js'
-import { connectorWorldAxis, connectorWorldPosition } from '../snapping.js'
+import { connectorWorldAxis, connectorWorldPosition } from '../connectors-v4/snapping-bridge-v4.js'
 import { connectorWorldFrameV4 } from '../connectors-v4/placement-solver-v4.js'
 import { evaluateBevelMesh, evaluateSpurMesh } from '../parts5/gear-mesh-math-v1.js'
 import { gearPitchRadius } from '../parts5/part-geometry-metrics-v1.js'
