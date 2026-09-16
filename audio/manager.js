@@ -4,6 +4,8 @@ export const DEFAULTS = Object.freeze({ master: .7, sfx: .7, music: .23, mute: f
 const EXTERNAL_SFX = Object.freeze({
   delete: new URL('../delete.mp3', import.meta.url).href,
   tool: new URL('../toggle-switch.mp3', import.meta.url).href,
+  connect: new URL('../Звук соединения двух деталей в Лего.mp3', import.meta.url).href,
+  scatter: new URL('../Звук детали от лего рассыпали перед собой.mp3', import.meta.url).href,
 })
 const MUSIC_TRACKS = Object.freeze([
   new URL('../sound1.mp3', import.meta.url).href,
