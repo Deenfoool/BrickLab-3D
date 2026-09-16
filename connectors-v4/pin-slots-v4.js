@@ -1,7 +1,7 @@
 import { cylinderAxialWindowsV4 } from './axial-fit-v4.js'
 import { axialSpanV4 } from './schema-v4.js'
 
-export const PIN_SLOTS_VERSION_V4 = 'pin-slots-v4.2.0'
+export const PIN_SLOTS_VERSION_V4 = 'pin-slots-v4.3.0'
 export const TECHNIC_MODULE_LDU_V4 = 20
 const EPS = 1e-4
 const RADIUS_EPS = .55
@@ -39,7 +39,10 @@ function maleTechnicProfile(male) {
   const pureAxle = value.hasAxle && !value.hasRound && sections.every(section => near(section?.radiusLdu, 6))
   const hybrid = value.hasAxle && value.hasRound
   const pin = !value.hasAxle && value.hasRound && (value.hasElastic || value.hasShoulder)
-  return pureAxle || hybrid || pin ? { ...value, sections } : null
+  if (pureAxle) return { ...value, sections, kind:'axle' }
+  if (hybrid) return { ...value, sections, kind:'hybrid' }
+  if (pin) return { ...value, sections, kind:'pin' }
+  return null
 }
 
 function receiverProfile(female) {
@@ -53,16 +56,22 @@ function receiverProfile(female) {
   return null
 }
 
-// Long Technic pins, axle-pins and axles are one continuous LDCad cylinder,
-// while LEGO uses independent 1-module engagement zones along that cylinder.
-// Enumerating every compatible zone lets occupancy reject only the band that is
-// already used and lets the runtime retry the next free end/middle section.
+// Technic pins have discrete physical retention bands, so the runtime may retry
+// another free 1L pin band when the requested one is occupied. Axles are the
+// opposite: an A-profile is a continuous sliding rail along its full usable
+// length. Never quantize a pure axle, and never turn the A section of an
+// axle-pin into fake 1L snap points. Continuous axle placement is handled by
+// axial-fit-v4; this helper only supplies fallback positions for R pin bands.
 export function technicPinSlotOffsetsV4(moving, target) {
   const male = moving?.gender === 'male' ? moving : target?.gender === 'male' ? target : null
   const female = moving?.gender === 'female' ? moving : target?.gender === 'female' ? target : null
   const maleProfile = maleTechnicProfile(male)
   const receiver = receiverProfile(female)
   if (!maleProfile || !receiver) return []
+
+  // Axle holes can only engage A-profile material, which is continuous. Pure
+  // axles are also continuous even when the receiver is a round Technic bore.
+  if (receiver === 'axle' || maleProfile.kind === 'axle') return []
 
   const fit = cylinderAxialWindowsV4(moving, target)
   if (!fit.valid) return []
@@ -74,9 +83,9 @@ export function technicPinSlotOffsetsV4(moving, target) {
     const start = cursor
     const end = start + sectionLength(section)
     cursor = end
-    const shape = rigidShape(section?.shape)
-    const compatible = receiver === 'round' ? ['R', 'A'].includes(shape) : shape === 'A'
-    if (compatible) selected.push([start, end])
+    // Only round pin material gets discrete retry slots. A-profile material in
+    // a hybrid axle-pin remains continuously usable by the primary axial solver.
+    if (rigidShape(section?.shape) === 'R') selected.push([start, end])
   }
 
   const runs = []
