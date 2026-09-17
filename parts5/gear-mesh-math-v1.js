@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 
-export const GEAR_MESH_MATH_VERSION = 'gear-mesh-math-v3'
-export const GEAR_MESH_CLEARANCE_STUD = Object.freeze({ spur:0.018, bevel:0.060 })
+export const GEAR_MESH_MATH_VERSION = 'gear-mesh-math-v3.1'
+export const GEAR_MESH_CLEARANCE_STUD = Object.freeze({ spur:0.018, bevel:0.100 })
 
 function stablePerpendicular(axis) {
   const basis = Math.abs(axis.y) < 0.82 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)
@@ -118,7 +118,7 @@ export function solveBevelSnap(moving, fixed, options = {}) {
   }
   const rawPitchDistance=Math.hypot(moving.pitchRadius,fixed.pitchRadius)
   const targetDistance=Math.hypot(fixedLeg,movingLeg)
-  const captureDistance=options.captureDistance ?? Math.max(0.28,Math.min(0.58,targetDistance*0.24+clearanceStud))
+  const captureDistance=options.captureDistance ?? Math.max(0.28,Math.min(0.62,targetDistance*0.24+clearanceStud))
   if(!best||best.error>captureDistance)return null
   return {kind:'bevel',...best,captureDistance,axisOrthogonality,targetDistance,rawPitchDistance,clearanceStud,contactPoint:best.apex.clone()}
 }
