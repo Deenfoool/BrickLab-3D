@@ -6,7 +6,7 @@ const text = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 
 test('production runtime mounts the Technic semantic layer before editor mechanics are consumed', async () => {
   const architecture = await text('architecture/runtime-v1.js')
-  assert.match(architecture, /technic\/runtime-v1\.js\?v=technic-family-20260915-v2/)
+  assert.match(architecture, /technic\/runtime-v1\.js\?v=technic-family-20260917-differential-bevel-v1/)
 })
 
 test('Architecture and Connector V4 physics use the same Technic-aware drivetrain analyzer', async () => {
@@ -17,6 +17,7 @@ test('Architecture and Connector V4 physics use the same Technic-aware drivetrai
   ])
   assert.match(architecture, /analyzeTechnicAwareDrivetrain/)
   assert.match(guard, /analyzeTechnicAwareDrivetrain/)
+  assert.match(guard, /technic-family-20260917-differential-bevel-v1/)
   assert.match(drivetrain, /connectorWorldFrameV4/)
   assert.match(drivetrain, /analyzeLegacyDrivetrain/)
   assert.match(drivetrain, /if \(!needsEnhancedAnalysis\(objects\)\) return base/)
