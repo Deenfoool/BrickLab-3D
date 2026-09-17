@@ -8,9 +8,9 @@ import {
   discoverPrimitiveConnectorsV4,
   discoveryConnectorRoleV4,
   mergeDiscoveredConnectorsV4,
-} from '../connector-discovery/discovery-v4.3.js?v=connector-bush-through-holes-20260916-v1'
+} from '../connector-discovery/discovery-v4.3.js?v=connector-beam-holes-20260917-v1'
 
-export const CONNECTOR_DISCOVERY_RUNTIME_VERSION_V4 = 'connector-discovery-runtime-v4.5.0'
+export const CONNECTOR_DISCOVERY_RUNTIME_VERSION_V4 = 'connector-discovery-runtime-v4.6.0'
 
 const MAX_CONNECTORS_PER_PART=4096
 const inFlight=new Map()
@@ -41,6 +41,14 @@ function publish(def,detail={}){
   }))
 }
 
+function refreshLiveSearch(def){
+  try{
+    globalThis.BrickLabPerformance?.refreshPart?.(def?.id)
+  }catch(error){
+    console.debug?.('[BrickLab Connector Discovery] live snap index refresh failed',error)
+  }
+}
+
 async function augmentDefinition(def,{force=false}={}){
   if(!isReadyLDraw(def))return null
   const previous=def.connectivityV4.discovery
@@ -67,7 +75,11 @@ async function augmentDefinition(def,{force=false}={}){
         additions.push(converted)
       }
 
-      if(additions.length)def.connectivityV4.connectors.push(...additions)
+      if(additions.length){
+        // Replace the array instead of mutating it in place. Runtime consumers such
+        // as the spatial endpoint index can now observe a connector-generation change.
+        def.connectivityV4.connectors=[...(def.connectivityV4.connectors??[]),...additions]
+      }
       def.connectivityV4.stats={
         ...(def.connectivityV4.stats||{}),
         discoveryCandidates:discovery.connectors.length,
@@ -87,6 +99,7 @@ async function augmentDefinition(def,{force=false}={}){
       }
       if(def.connectivityV4.health)def.connectivityV4.health={...def.connectivityV4.health,connectors:def.connectivityV4.connectors.length}
       scanState.set(def.id,'ready')
+      if(additions.length)refreshLiveSearch(def)
       publish(def,{status:'ready',...def.connectivityV4.discovery})
       if(additions.length){
         window.dispatchEvent(new CustomEvent('bricklab:mechanicalintelligencechange',{detail:{partId:def.id,reason:'connector-discovery',added:additions.length}}))
