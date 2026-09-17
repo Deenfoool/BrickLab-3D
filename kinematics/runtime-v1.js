@@ -14,8 +14,13 @@ import {
   KINEMATICS_DRAG_VERSION,
   linearDragDegrees,
 } from './drag-v1.js?v=kinematics-interactive-20260915-v1'
+import {
+  ENGINE_CAM_KINEMATICS_VERSION,
+  engineCamFollowerDisplacementV1,
+  engineCamPairV1,
+} from './engine-cam-v1.js?v=kinematics-engine-4368-4369-20260917-v1'
 
-export const KINEMATICS_RUNTIME_VERSION = 'kinematics-runtime-v1.2.0'
+export const KINEMATICS_RUNTIME_VERSION = 'kinematics-runtime-v1.3.0'
 
 const LANGUAGE_KEY = 'bricklab.ui.language.v1'
 const INERTIA_STOP_DPS = 3
@@ -218,7 +223,35 @@ function restoreV4Global() {
   originalV4Global = null
 }
 
-function fixedComponents(plan, sceneObjects) {
+function recordConnectors(record) {
+  const connectorA=authoritativeV4.getConnector?.(record?.a?.partId,record?.a?.endpointId) ?? null
+  const connectorB=authoritativeV4.getConnector?.(record?.b?.partId,record?.b?.endpointId) ?? null
+  return {connectorA,connectorB}
+}
+
+function engineCamLinks(records, sceneObjects) {
+  const byId=new Map(sceneObjects.map(object=>[object.userData?.instanceId,object]).filter(([id])=>id))
+  const result=[]
+  for(const record of records??[]){
+    const {connectorA,connectorB}=recordConnectors(record)
+    const pair=engineCamPairV1(connectorA,connectorB)
+    if(!pair)continue
+    const objectA=byId.get(record.a?.instanceId)
+    const objectB=byId.get(record.b?.instanceId)
+    if(!objectA||!objectB)continue
+    const crankSide=pair.crankSide
+    result.push({
+      connectionId:record.id,
+      diskObject:crankSide==='a'?objectA:objectB,
+      pistonObject:crankSide==='a'?objectB:objectA,
+      diskConnector:pair.crank,
+      pistonConnector:pair.follower,
+    })
+  }
+  return result
+}
+
+function fixedComponents(plan, sceneObjects, records = []) {
   const parent = new Map(sceneObjects.map(object => [object.userData?.instanceId, object.userData?.instanceId]).filter(([id]) => id))
   const find = id => {
     if (!parent.has(id)) return null
@@ -240,6 +273,16 @@ function fixedComponents(plan, sceneObjects) {
     if ((joint?.rule?.kind || joint?.constraint?.kindHint) !== 'fixed') continue
     const entry = joint.entry
     union(entry?.objectA?.userData?.instanceId, entry?.objectB?.userData?.instanceId)
+  }
+  // Kinematics also keeps editor-rigid attachments together. This is important for
+  // a 4369 piston cap: a single stud is intentionally not promoted to a SIMULATE
+  // fixed joint, but it must translate with the piston during mechanism preview.
+  for(const record of records??[]){
+    const {connectorA,connectorB}=recordConnectors(record)
+    if(engineCamPairV1(connectorA,connectorB))continue
+    const family=record?.activation?.family||record?.metadata?.activation?.family||null
+    const rigid=record?.constraint?.kindHint==='fixed'||family==='stud-anti-stud'
+    if(rigid)union(record?.a?.instanceId,record?.b?.instanceId)
   }
   const groups = new Map()
   for (const object of sceneObjects) {
@@ -272,6 +315,9 @@ function jointDrivers(plan) {
     if (!kind) continue
     const entry = joint.entry
     if (!entry?.objectA || !entry?.objectB || !entry?.connectorA || !entry?.connectorB) continue
+    // The 4368/4369 relation is a cam follower, not a user-draggable revolute joint.
+    // Its DOF is solved after the driving shaft rotates.
+    if(engineCamPairV1(entry.connectorA,entry.connectorB))continue
     const controls = jointControlAxes(joint)
     for (const side of ['a','b']) {
       const movingObject = side === 'a' ? entry.objectA : entry.objectB
@@ -343,7 +389,8 @@ async function analyze() {
     drivetrain,
     plan,
     dof:summarizePlanDof(plan),
-    fixedByInstance:fixedComponents(plan, sceneObjects),
+    camFollowers:engineCamLinks(records,sceneObjects),
+    fixedByInstance:fixedComponents(plan, sceneObjects, records),
   }
   drivers = [...shaftDrivers(drivetrain), ...jointDrivers(plan)]
   currentDriverId = preferredDriver(selectedBeforeEnterId)
@@ -362,6 +409,31 @@ function parentLocalAxis(object, worldAxis) {
   const parentQ = new THREE.Quaternion()
   object.parent.getWorldQuaternion?.(parentQ)
   return worldAxis.clone().applyQuaternion(parentQ.invert()).normalize()
+}
+
+function applyEngineCamFollowers() {
+  const movedComponents=new Set()
+  for(const link of analysis?.camFollowers??[]){
+    const diskId=link.diskObject?.userData?.instanceId
+    const pistonId=link.pistonObject?.userData?.instanceId
+    const diskBaseline=baseline.get(diskId)
+    const pistonBaseline=baseline.get(pistonId)
+    if(!diskBaseline||!pistonBaseline)continue
+    link.diskObject.updateWorldMatrix?.(true,false)
+    const motion=engineCamFollowerDisplacementV1({
+      diskBaselineMatrix:diskBaseline.worldMatrix,
+      diskCurrentMatrix:link.diskObject.matrixWorld,
+      pistonBaselineMatrix:pistonBaseline.worldMatrix,
+    })
+    if(!motion.valid||!motion.slideAxisWorld)continue
+    const component=analysis?.fixedByInstance?.get(pistonId)??[link.pistonObject]
+    const componentKey=component.map(object=>object.userData?.instanceId).filter(Boolean).sort().join('|')
+    if(movedComponents.has(componentKey))continue
+    movedComponents.add(componentKey)
+    const axis=motion.slideAxisWorld
+    const d=motion.displacementStud
+    transformComponent(component,new THREE.Matrix4().makeTranslation(axis.x*d,axis.y*d,axis.z*d))
+  }
 }
 
 function applyShaftDriver(driver) {
@@ -386,6 +458,7 @@ function applyShaftDriver(driver) {
       pose.object.updateMatrixWorld?.(true)
     }
   }
+  applyEngineCamFollowers()
   return { locked:false, solution }
 }
 
@@ -658,7 +731,7 @@ async function enter() {
   setModeVisual()
   await analyze()
   globalThis.dispatchEvent?.(new CustomEvent('bricklab:kinematicsenter', {
-    detail:{ version:KINEMATICS_RUNTIME_VERSION, solverVersion:KINEMATICS_SOLVER_VERSION, drivers:drivers.length },
+    detail:{ version:KINEMATICS_RUNTIME_VERSION, solverVersion:KINEMATICS_SOLVER_VERSION, camVersion:ENGINE_CAM_KINEMATICS_VERSION, drivers:drivers.length, camFollowers:analysis?.camFollowers?.length??0 },
   }))
   return api
 }
@@ -711,6 +784,7 @@ globalThis.addEventListener?.('resize', updateSelectionMarker)
 const api = Object.freeze({
   version:KINEMATICS_RUNTIME_VERSION,
   solverVersion:KINEMATICS_SOLVER_VERSION,
+  camVersion:ENGINE_CAM_KINEMATICS_VERSION,
   enter,
   exit,
   reset,
@@ -721,6 +795,7 @@ const api = Object.freeze({
     driverId:currentDriverId,
     selectedInstanceId,
     driverCount:drivers.length,
+    camFollowers:analysis?.camFollowers?.length ?? 0,
     dof:analysis?.dof ?? null,
     blockers:analysis?.plan?.blockers?.length ?? 0,
     dragging:Boolean(pointerDrag),
@@ -748,5 +823,5 @@ const api = Object.freeze({
 
 globalThis.BrickLabKinematics = api
 globalThis.dispatchEvent?.(new CustomEvent('bricklab:kinematicsready', {
-  detail:{ version:KINEMATICS_RUNTIME_VERSION, solverVersion:KINEMATICS_SOLVER_VERSION },
+  detail:{ version:KINEMATICS_RUNTIME_VERSION, solverVersion:KINEMATICS_SOLVER_VERSION, camVersion:ENGINE_CAM_KINEMATICS_VERSION },
 }))
