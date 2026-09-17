@@ -1,4 +1,4 @@
-export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.7.0'
+export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.8.0'
 
 const LANGUAGE_KEY = 'bricklab.ui.language.v1'
 
@@ -114,7 +114,7 @@ async function activate(event) {
   button.title = copy().loading
   try {
     await import('./runtime-v1.js?v=kinematics-mechanical-pivots-20260917-v2')
-    const { guardKinematicsRuntime } = await import('./lifecycle-guard-v1.js?v=kinematics-recovery-20260914-v2')
+    const { guardKinematicsRuntime } = await import('./lifecycle-guard-v1.js?v=kinematics-connection-transaction-20260917-v1')
     const core = globalThis.BrickLabKinematics
     if (!core?.enter) throw new Error('Kinematics runtime loaded without an enter API')
     const api = guardKinematicsRuntime(core)
