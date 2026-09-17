@@ -22,8 +22,12 @@ import {
   DIFFERENTIAL_FIXTURES_VERSION_V4,
   discoverDifferentialFixturesV4,
 } from './differential-fixtures-v4.js?v=connector-differential-62821-20260917-v1'
+import {
+  ENGINE_PISTON_FIXTURES_VERSION_V4,
+  discoverEnginePistonFixturesV4,
+} from './engine-piston-fixtures-v4.js?v=connector-engine-4368-4369-20260917-v1'
 
-export const CONNECTOR_DISCOVERY_VERSION_V4='connector-discovery-v4.8.0'
+export const CONNECTOR_DISCOVERY_VERSION_V4='connector-discovery-v4.9.0'
 export { pairPegholeEndsV4 }
 
 const normalize=value=>String(value||'').replace(/\\/g,'/').split('/').pop()?.toLowerCase()||''
@@ -38,12 +42,13 @@ export function mergeDiscoveredConnectorsV4(existing,discovered){
 }
 
 export async function discoverPrimitiveConnectorsV4(file,text,fetchText,options={}){
-  const [legacy,semantic,composite,beamHoles,differentialFixtures]=await Promise.all([
+  const [legacy,semantic,composite,beamHoles,differentialFixtures,enginePistonFixtures]=await Promise.all([
     discoverLegacyPrimitiveConnectorsV4(file,text,fetchText,options),
     discoverSemanticSitesV4(file,text,fetchText,options),
     discoverCompositeThroughHolesV4(file,text,fetchText,options),
     discoverBeamHolePrimitivesV4(file,text,fetchText,options),
     Promise.resolve(discoverDifferentialFixturesV4(file)),
+    Promise.resolve(discoverEnginePistonFixturesV4(file)),
   ])
 
   // v4.2 placed axlehol0 at the primitive origin even though LDraw documents the
@@ -58,12 +63,13 @@ export async function discoverPrimitiveConnectorsV4(file,text,fetchText,options=
     ...(composite.connectors??[]),
     ...(beamHoles.connectors??[]),
     ...(differentialFixtures.connectors??[]),
+    ...(enginePistonFixtures.connectors??[]),
   ]
   const merged=mergeDiscoveredConnectorsV4([],combined)
 
   return{
     version:CONNECTOR_DISCOVERY_VERSION_V4,
-    file:legacy.file||semantic.file||composite.file||beamHoles.file||differentialFixtures.file||file,
+    file:legacy.file||semantic.file||composite.file||beamHoles.file||differentialFixtures.file||enginePistonFixtures.file||file,
     connectors:merged.added,
     stats:{
       ...(legacy.stats||{}),
@@ -76,10 +82,12 @@ export async function discoverPrimitiveConnectorsV4(file,text,fetchText,options=
       compositeVersion:COMPOSITE_THROUGH_HOLES_VERSION_V4,
       beamHoleVersion:BEAM_HOLE_PRIMITIVES_VERSION_V4,
       differentialFixtureVersion:DIFFERENTIAL_FIXTURES_VERSION_V4,
+      enginePistonFixtureVersion:ENGINE_PISTON_FIXTURES_VERSION_V4,
       semanticSites:semantic.stats||null,
       compositeThroughHoles:composite.stats||null,
       beamHoles:beamHoles.stats||null,
       differentialFixtures:differentialFixtures.stats||null,
+      enginePistonFixtures:enginePistonFixtures.stats||null,
     },
   }
 }
