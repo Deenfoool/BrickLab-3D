@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-export const GEAR_MESH_MATH_VERSION = 'gear-mesh-math-v3.1'
+export const GEAR_MESH_MATH_VERSION = 'gear-mesh-math-v3.2'
 export const GEAR_MESH_CLEARANCE_STUD = Object.freeze({ spur:0.018, bevel:0.100 })
 
 function stablePerpendicular(axis) {
@@ -14,6 +14,11 @@ function wrapPeriod(value, period) { return positiveModulo(value + period / 2, p
 function meshClearance(kind,options={}) {
   const explicit=Number(options.clearanceStud ?? options.meshClearanceStud)
   return Number.isFinite(explicit) ? Math.max(0,explicit) : (GEAR_MESH_CLEARANCE_STUD[kind] ?? 0)
+}
+function bevelSigns(gear) {
+  const explicit=Array.isArray(gear?.bevelApexSigns) ? gear.bevelApexSigns.map(Number) : []
+  const valid=[...new Set(explicit.filter(value=>value===-1||value===1))]
+  return valid.length ? valid : [-1,1]
 }
 
 function signedAngleAround(from, to, axis) {
@@ -88,9 +93,9 @@ export function evaluateBevelMesh(a, b, options = {}) {
   const legA=b.pitchRadius+clearanceStud
   const legB=a.pitchRadius+clearanceStud
   let best=null
-  for(const signA of [-1,1]){
+  for(const signA of bevelSigns(a)){
     const apexA=a.center.clone().addScaledVector(axisA,signA*legA)
-    for(const signB of [-1,1]){
+    for(const signB of bevelSigns(b)){
       const apexB=b.center.clone().addScaledVector(axisB,signB*legB)
       const apexError=apexA.distanceTo(apexB)
       if(!best||apexError<best.apexError)best={signA,signB,apexA,apexB,apexError}
@@ -110,7 +115,7 @@ export function solveBevelSnap(moving, fixed, options = {}) {
   const fixedLeg=moving.pitchRadius+clearanceStud
   const movingLeg=fixed.pitchRadius+clearanceStud
   let best=null
-  for(const signA of [-1,1])for(const signB of [-1,1]){
+  for(const signA of bevelSigns(moving))for(const signB of bevelSigns(fixed)){
     const apex=fixed.center.clone().addScaledVector(axisB,signB*fixedLeg)
     const desiredCenter=apex.clone().addScaledVector(axisA,-signA*movingLeg)
     const translation=desiredCenter.clone().sub(moving.center),error=translation.length()
