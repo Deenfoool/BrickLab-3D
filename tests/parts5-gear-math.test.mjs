@@ -7,6 +7,7 @@ import {
   gearPitchRadius,
 } from '../parts5/part-geometry-metrics-v1.js'
 import {
+  GEAR_MESH_CLEARANCE_STUD,
   evaluateBevelMesh,
   evaluateSpurMesh,
   solveBevelSnap,
@@ -38,9 +39,9 @@ test('all spur gears share one module and canonical pitch radius', () => {
 })
 
 for (const [aTeeth, bTeeth] of [[8, 24], [12, 12], [12, 20]]) {
-  test(`${aTeeth}T ↔ ${bTeeth}T spur snap lands on exact pitch-circle distance`, () => {
+  test(`${aTeeth}T ↔ ${bTeeth}T spur snap lands on working pitch distance`, () => {
     const fixed = spur(bTeeth, 0)
-    const target = gearPitchRadius(aTeeth) + gearPitchRadius(bTeeth)
+    const target = gearPitchRadius(aTeeth) + gearPitchRadius(bTeeth) + GEAR_MESH_CLEARANCE_STUD.spur
     const moving = spur(aTeeth, target + 0.19, 0.04, 0.03)
     const solution = solveSpurSnap(moving, fixed, { captureDistance: 0.4 })
     assert.ok(solution)
@@ -73,7 +74,7 @@ test('spur phase solver turns a tooth-to-tooth contact into tooth-to-gap', () =>
 
 test('spur snap carries phase correction from the same contact line', () => {
   const fixed = spur(24, 0)
-  const target = gearPitchRadius(8) + gearPitchRadius(24)
+  const target = gearPitchRadius(8) + gearPitchRadius(24) + GEAR_MESH_CLEARANCE_STUD.spur
   const moving = spur(8, target + 0.12, 0.02, 0.01)
   const solution = solveSpurSnap(moving, fixed, { captureDistance: 0.4 })
   assert.ok(solution)
@@ -82,7 +83,7 @@ test('spur snap carries phase correction from the same contact line', () => {
   assert.ok(solution.phaseAxis.distanceTo(new THREE.Vector3(0, 1, 0)) < 1e-9)
 })
 
-test('bevel 12T ↔ 20T snap solves one exact shared pitch-cone apex', () => {
+test('bevel 12T ↔ 20T snap solves one shared working-cone apex with clearance', () => {
   const moving = {
     teeth: 12,
     pitchRadius: gearPitchRadius(12),
@@ -96,11 +97,12 @@ test('bevel 12T ↔ 20T snap solves one exact shared pitch-cone apex', () => {
     axis: new THREE.Vector3(0, 0, 1),
   }
 
-  const solution = solveBevelSnap(moving, fixed, { captureDistance: 0.6, maxAxisDot: 1e-9 })
+  const solution = solveBevelSnap(moving, fixed, { captureDistance: 0.8, maxAxisDot: 1e-9 })
   assert.ok(solution)
   const snapped = { ...moving, center: solution.desiredCenter.clone() }
   const result = evaluateBevelMesh(snapped, fixed, { maxAxisDot: 1e-9, apexTolerance: 1e-9 })
   assert.equal(result.valid, true)
   assert.ok(result.apexError < 1e-9)
-  assert.ok(Math.abs(result.centerDistance - Math.hypot(moving.pitchRadius, fixed.pitchRadius)) < 1e-9)
+  const expected=Math.hypot(moving.pitchRadius+GEAR_MESH_CLEARANCE_STUD.bevel,fixed.pitchRadius+GEAR_MESH_CLEARANCE_STUD.bevel)
+  assert.ok(Math.abs(result.centerDistance - expected) < 1e-9)
 })
