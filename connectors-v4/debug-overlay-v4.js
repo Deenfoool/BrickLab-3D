@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import './auto-link-v4.js?v=connector-auto-link-20260917-v1'
+import '../ldraw/gear-mechanics-patch-v1.js?v=ldraw-gear-mechanics-20260917-v1'
 
-export const CONNECTOR_DEBUG_VERSION_V4='connector-debug-overlay-v4.3.0'
+export const CONNECTOR_DEBUG_VERSION_V4='connector-debug-overlay-v4.3.1'
 const ROOT_NAME='__bricklabConnectorV4Debug'
 const MAX_ENDPOINTS_PER_PART=384
 let enabled=false
