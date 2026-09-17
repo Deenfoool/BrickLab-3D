@@ -3,10 +3,11 @@ import * as V3 from '../snapping-v3.js'
 import { suppressNextConnectionForEndpoint } from '../connections-v3.js'
 import { interactionGroupMembers } from '../editor-groups-v1.js'
 import { applyRackPinionSnapV1, findRackPinionSnapCandidateV1 } from '../technic/rack-pinion-v1.js?v=technic-family-20260915-v1'
+import { commitAlignedAxialContactsV4 } from './multi-contact-bridge-v4.js?v=connector-multi-contact-20260917-v1'
 
 export * from '../snapping-v3.js'
 
-export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.7.0'
+export const SNAPPING_BRIDGE_VERSION_V4 = 'connector-snapping-bridge-v4.8.0'
 
 let preferredCandidateKey = null
 let preferredInteractionId = null
@@ -248,12 +249,22 @@ export function applySnap(selected, candidate) {
   }
   try {
     const result = v4.commitActiveCandidate(rawCandidate)
-    candidate.v4Commit = result
-    globalThis.__bricklabLastConnectorV4Commit = result
     if (result?.accepted) {
       propagateAnchorDelta(sourceObject,state)
+      const projectObjects=v4.objects?.()??[]
+      const bundleResults=[]
+      for(const member of groupMembers(selected).filter(isLDrawPart)){
+        const extra=commitAlignedAxialContactsV4(v4,member,externalTargets(member,projectObjects))
+        if(extra.committed.length)bundleResults.push({instanceId:member.userData?.instanceId,connectionIds:extra.committed})
+      }
+      if(bundleResults.length){
+        result.additionalConnectionIds=bundleResults.flatMap(item=>item.connectionIds)
+        result.multiContactBundles=bundleResults
+      }
       preferredCandidateKey=null
     }
+    candidate.v4Commit = result
+    globalThis.__bricklabLastConnectorV4Commit = result
     if (!result?.accepted) console.warn('[BrickLab Connector V4] Snap candidate failed final commit validation.', result)
   } catch (error) {
     candidate.v4Commit = { accepted:false, reason:'bridge-exception', error:String(error?.message || error) }
