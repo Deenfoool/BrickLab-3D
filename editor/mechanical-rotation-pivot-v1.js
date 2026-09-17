@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-export const MECHANICAL_ROTATION_PIVOT_VERSION='mechanical-rotation-pivot-v1.0.0'
+export const MECHANICAL_ROTATION_PIVOT_VERSION='mechanical-rotation-pivot-v1.1.0'
 
 const subsystems=globalThis.BrickLabSubsystems
 const viewport=document.querySelector('#viewport')
@@ -10,6 +10,19 @@ let queued=false
 
 function buildRotateActive(){
   return subsystems?.editor?.mode?.()==='build' && document.querySelector('#rotateTool')?.classList.contains('active')===true
+}
+
+function rotaryMechanicalPart(object){
+  const partId=object?.userData?.partId
+  if(!partId)return false
+  const mechanics=subsystems?.parts?.get?.(partId)?.mechanics
+  if(mechanics?.gear||mechanics?.shaft||mechanics?.wheel)return true
+  const connectivity=globalThis.BrickLabConnectorV4?.get?.(partId)
+  return Boolean(connectivity?.connectors?.some?.(connector=>
+    connector?.family==='cylinder' && (connector.geometry?.sections??[]).some(section=>
+      section?.shape==='A' && Math.abs((section.radiusLdu??0)-6)<.1
+    )
+  ))
 }
 
 function ldrawPivotLocal(object){
@@ -54,8 +67,9 @@ function scheduleCorrection(){
 function begin(event){
   if(event.button!==0||!buildRotateActive())return
   const object=subsystems?.editor?.primarySelection?.()
+  if(!object||!rotaryMechanicalPart(object))return
   const pivotLocal=ldrawPivotLocal(object)
-  if(!object||!pivotLocal)return
+  if(!pivotLocal)return
   const world=pivotWorld(object,pivotLocal)
   if(!world)return
   drag={
@@ -85,6 +99,7 @@ canvas?.addEventListener('pointercancel',finish,true)
 
 globalThis.BrickLabMechanicalRotationPivot=Object.freeze({
   version:MECHANICAL_ROTATION_PIVOT_VERSION,
+  eligible:rotaryMechanicalPart,
   pivotLocal(object){return ldrawPivotLocal(object)?.toArray?.()??null},
   pivotWorld(object){const local=ldrawPivotLocal(object);return local?pivotWorld(object,local)?.toArray?.()??null:null},
 })
