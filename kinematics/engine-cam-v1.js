@@ -2,12 +2,12 @@ import * as THREE from 'three'
 import {
   ENGINE_CRANK_RIM_OFFSET_LDU_V4,
   ENGINE_PISTON_FIXTURE_GROUP_V4,
-} from '../connector-discovery/engine-piston-fixtures-v4.js?v=connector-engine-4368-4369-20260917-v1'
+} from '../connector-discovery/engine-piston-fixtures-v4.js?v=connector-engine-continuous-rim-20260917-v2'
 
-export const ENGINE_CAM_KINEMATICS_VERSION='engine-cam-kinematics-v1.0.0'
+export const ENGINE_CAM_KINEMATICS_VERSION='engine-cam-kinematics-v1.1.0'
 export const ENGINE_CAM_ECCENTRICITY_STUD=ENGINE_CRANK_RIM_OFFSET_LDU_V4/20
 
-const CRANK_ROLE='technic-engine-crank-rim-site'
+const CRANK_ROLE='technic-engine-crank-rim-track'
 const FOLLOWER_ROLE='technic-engine-piston-follower'
 
 function role(connector){return connector?.discovery?.role||null}
