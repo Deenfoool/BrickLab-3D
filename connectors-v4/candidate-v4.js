@@ -5,8 +5,9 @@ import { activationForMatchV4, classifyConnectorV4 } from './activation-v4.js'
 import { applyPinMateScoreBonusV4, pinMatePreferenceV4 } from './pin-ranking-v4.js?v=connector-pin-ranking-20260912-v1'
 import { connectorWorldFrameV4, objectWorldPoseV4, solvePlacementV4 } from './placement-solver-v4.js'
 import { bidirectionalCylinderReceiverV4 } from './through-hole-v4.js'
+import { axlePairContactDistanceStudV4 } from './axle-contact-v4.js?v=connector-axle-contact-20260917-v1'
 
-export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.8.0'
+export const CANDIDATE_SEARCH_VERSION_V4 = 'candidate-search-v4.9.0'
 export const DEFAULT_CAPTURE_DISTANCE_STUD_V4 = 0.72
 export const DEFAULT_MIN_AXIS_ALIGNMENT_V4 = 0.72
 export const CLOSE_RANGE_MIN_AXIS_ALIGNMENT_V4 = 0.55
@@ -19,6 +20,7 @@ const MULTI_TWIST_TRIAL_LIMIT = 10
 const MULTI_TWIST_MIN_BASE_STUD = 0.45
 const MULTI_TWIST_LENGTH_TOL_STUD = 0.12
 const MULTI_TWIST_MAX_RAD = Math.PI / 2 + 0.05
+const AXLE_CONTACT_FAMILIES=new Set(['technic-axle-keyed-hole','technic-axle-round-hole','keyed-shaft-interface'])
 const pairCompatibilityCache = new WeakMap()
 
 function definitionConnectors(definition) {
@@ -37,6 +39,8 @@ function isOrientationFree(source,match) {
 }
 
 function captureError(solution) {
+  const rail=solution?.diagnostics?.continuousAxleContactStud
+  if(Number.isFinite(rail))return rail
   return solution.diagnostics?.captureCorrectionStud ?? solution.diagnostics?.translationStud ?? Infinity
 }
 
@@ -98,7 +102,7 @@ function nearbySupportEntries(index,position) {
 
 function buildSupportIndex(targetObject,targetConnectors,role,isAvailable,targetFrameCache) {
   const index=new Map()
-  for(const target of targetConnectors) {
+  for (const target of targetConnectors) {
     if(classifyConnectorV4(target)!==role || !target?.endpointId || !isAvailable(targetObject,target))continue
     let frame=targetFrameCache.get(target.endpointId)
     if(!frame){
@@ -386,6 +390,10 @@ export function findPlacementCandidatesV4(movingObject,targets,{
           continue
         }
         if (!solution.valid) continue
+        if(AXLE_CONTACT_FAMILIES.has(activationPreview?.family)){
+          const contact=axlePairContactDistanceStudV4(source,target,movingFrame,targetFrame,match)
+          if(Number.isFinite(contact))solution={...solution,diagnostics:{...solution.diagnostics,continuousAxleContactStud:contact}}
+        }
         const distance=captureError(solution)
         if (!(distance <= captureDistanceStud)) continue
         const orientationFree=isOrientationFree(source,solution.match)
