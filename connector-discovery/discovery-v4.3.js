@@ -25,9 +25,9 @@ import {
 import {
   ENGINE_PISTON_FIXTURES_VERSION_V4,
   discoverEnginePistonFixturesV4,
-} from './engine-piston-fixtures-v4.js?v=connector-engine-4368-4369-20260917-v1'
+} from './engine-piston-fixtures-v4.js?v=connector-engine-continuous-rim-20260917-v2'
 
-export const CONNECTOR_DISCOVERY_VERSION_V4='connector-discovery-v4.9.0'
+export const CONNECTOR_DISCOVERY_VERSION_V4='connector-discovery-v4.10.0'
 export { pairPegholeEndsV4 }
 
 const normalize=value=>String(value||'').replace(/\\/g,'/').split('/').pop()?.toLowerCase()||''
