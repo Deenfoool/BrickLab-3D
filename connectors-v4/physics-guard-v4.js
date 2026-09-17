@@ -1,5 +1,5 @@
 import { PhysicsSession } from '../physics.js'
-import { analyzeTechnicAwareDrivetrain } from '../technic/drivetrain-v1.js?v=technic-family-20260915-v1'
+import { analyzeTechnicAwareDrivetrain } from '../technic/drivetrain-v1.js?v=technic-family-20260917-differential-bevel-v1'
 import {
   installRackPinionPhysicsV1,
   TECHNIC_RACK_PINION_PHYSICS_VERSION,
@@ -8,10 +8,10 @@ import { buildPhysicsPlanV4, drivetrainSemanticLinksV4, PHYSICS_POLICY_VERSION_V
 import { hardenPhysicsPlanV4, PHYSICS_PLAN_SAFETY_VERSION_V4 } from './physics-plan-safety-v4.js'
 import { installConnectorPhysicsV4, PHYSICS_ADAPTER_VERSION_V4 } from './physics-adapter-v4.js?v=connector-resistance-20260914-v1'
 
-export const PHYSICS_GUARD_VERSION_V4 = 'connector-physics-guard-v4.6.1'
+export const PHYSICS_GUARD_VERSION_V4 = 'connector-physics-guard-v4.6.2'
 export const PHYSICS_GUARD_ERROR_CODE_V4 = 'BRICKLAB_CONNECTOR_V4_PHYSICS_NOT_CERTIFIED'
 
-const marker = Symbol.for('bricklab.connectorV4.physicsGuard.v4.6.1')
+const marker = Symbol.for('bricklab.connectorV4.physicsGuard.v4.6.2')
 let lastPlan = null
 let lastFailure = null
 
