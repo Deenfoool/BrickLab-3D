@@ -1,4 +1,4 @@
-export const MULTI_CONTACT_BRIDGE_VERSION_V4='multi-contact-bridge-v4.1.0'
+export const MULTI_CONTACT_BRIDGE_VERSION_V4='multi-contact-bridge-v4.2.0'
 
 const DEFAULT_MAX_CONTACTS=32
 const DEFAULT_CAPTURE_EPS_STUD=0.005
@@ -55,7 +55,12 @@ export function commitAlignedAxialContactsV4(v4,sourceObject,targetObjects,{
       stopped='non-axial-family'
       break
     }
-    const correction=finiteOr(candidate.solution?.diagnostics?.captureCorrectionStud,Number.POSITIVE_INFINITY)
+    // For axles candidate.distanceStud is measured to the nearest point on the
+    // continuous A6 rail. Using only root/connector-centre correction here would
+    // incorrectly reject gears/bushes that are already aligned farther along a shaft.
+    const correction=finiteOr(candidate.distanceStud,
+      finiteOr(candidate.solution?.diagnostics?.continuousAxleContactStud,
+        finiteOr(candidate.solution?.diagnostics?.captureCorrectionStud,Number.POSITIVE_INFINITY)))
     const rotation=Math.abs(finiteOr(candidate.solution?.diagnostics?.rotationRad,Number.POSITIVE_INFINITY))
     if(correction>captureEpsilonStud||rotation>rotationEpsilonRad){
       stopped='not-already-aligned'
