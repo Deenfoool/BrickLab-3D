@@ -11,9 +11,10 @@ import { connectorWorldFrameV4 } from '../connectors-v4/placement-solver-v4.js'
 import { evaluateBevelMesh, evaluateSpurMesh } from '../parts5/gear-mesh-math-v1.js'
 import { gearPitchRadius } from '../parts5/part-geometry-metrics-v1.js'
 import { classifyTechnicEndpointV1 } from './interface-semantics-v1.js'
+import { technicMechanicalHintsV1 } from './mechanical-hints-v1.js?v=technic-differential-bevel-20260917-v1'
 import { technicPartProfileV1 } from './part-profile-v1.js'
 
-export const TECHNIC_DRIVETRAIN_VERSION = 'technic-drivetrain-v1.0.0'
+export const TECHNIC_DRIVETRAIN_VERSION = 'technic-drivetrain-v1.1.0'
 
 const DEFAULT_STALL_TORQUE = 5.5
 const DEFAULT_GEAR_EFFICIENCY = 0.92
@@ -50,11 +51,39 @@ function portFrame(object, connector) {
   } catch { return null }
 }
 function profileFor(object) { return technicPartProfileV1(definitionFor(object) || { id:object?.userData?.partId }) }
+
+function numericTriple(value) {
+  if (!Array.isArray(value) || value.length < 3) return null
+  const result=value.slice(0,3).map(Number)
+  return result.every(Number.isFinite) ? result : null
+}
+
+function explicitGearFrame(object, gear) {
+  const anchor=numericTriple(gear?.meshAnchorLdu)
+  const localAxis=numericTriple(gear?.meshAxisLdu)
+  if (!object || !anchor || !localAxis) return null
+  const visual=object.children?.find?.(child=>child?.userData?.ldrawVisual) ?? null
+  if (!visual) return null
+  visual.updateMatrix?.()
+  object.updateWorldMatrix?.(true,false)
+  const center=new THREE.Vector3(...anchor).applyMatrix4(visual.matrix).applyMatrix4(object.matrixWorld)
+  const axisRoot=new THREE.Vector3(...localAxis).applyMatrix3(new THREE.Matrix3().setFromMatrix4(visual.matrix))
+  if (axisRoot.lengthSq()<1e-10) return null
+  const axis=axisRoot.normalize().transformDirection(object.matrixWorld)
+  if (axis.lengthSq()<1e-10) return null
+  return { position:center,axis:axis.normalize(),source:'ldraw-mesh-anchor' }
+}
 function v4TechnicRotary(object) {
   const definition = definitionFor(object)
   return profileFor(object).rotary && v4Ports(definition).length > 0
 }
-function needsEnhancedAnalysis(objects) { return (objects ?? []).some(v4TechnicRotary) }
+function hintedGear(definition) { return technicMechanicalHintsV1(definition || {}).mechanics?.gear ?? null }
+function needsEnhancedAnalysis(objects) {
+  return (objects ?? []).some(object => {
+    const definition=definitionFor(object)
+    return v4TechnicRotary(object) || Boolean(definition?.mechanics?.gear) || Boolean(hintedGear(definition))
+  })
+}
 
 function shaftEligible(object) {
   const definition = definitionFor(object)
@@ -124,15 +153,18 @@ function buildUnifiedShaftGraph(objects, connections) {
 function gearInfo(object, shaftByPart) {
   const definition = definitionFor(object)
   if (!definition) return null
-  const legacy = definition.mechanics?.gear ?? null
+  const currentGear=definition.mechanics?.gear ?? null
+  const hinted=hintedGear(definition)
+  const legacy=hinted?.authoritative ? { ...(currentGear || {}), ...hinted } : (currentGear ?? hinted)
   const profile = profileFor(object)
   const profiled = ['spur-gear','bevel-gear'].includes(profile.role) && Number(profile.toothCount) > 0
   if (!legacy && !profiled) return null
   const teeth = Number(legacy?.teeth ?? profile.toothCount)
   if (!(teeth > 0)) return null
-  const frame = portFrame(object, rotaryPort(definition, true))
+  const frame = explicitGearFrame(object, legacy) ?? portFrame(object, rotaryPort(definition, true))
   if (!frame) return null
   const kind = legacy?.kind ?? (profile.role === 'bevel-gear' ? 'bevel' : 'spur')
+  const tolerance = Number(legacy?.meshApexToleranceStud)
   return {
     object,
     instanceId:object.userData.instanceId,
@@ -145,6 +177,9 @@ function gearInfo(object, shaftByPart) {
     axis:frame.axis.clone().normalize(),
     shaft:shaftByPart.get(object.userData.instanceId) ?? null,
     technicProfile:profile,
+    gearFrameSource:frame.source ?? 'rotary-port',
+    bevelApexSigns:Array.isArray(legacy?.bevelApexSigns) ? [...legacy.bevelApexSigns] : null,
+    meshApexToleranceStud:Number.isFinite(tolerance) && tolerance > 0 ? tolerance : null,
   }
 }
 
@@ -168,9 +203,10 @@ function spurMesh(a, b, options = {}) {
 }
 
 function bevelMesh(a, b, options = {}) {
+  const specificTolerance = Math.max(a.meshApexToleranceStud ?? 0, b.meshApexToleranceStud ?? 0)
   const geometry = evaluateBevelMesh(a, b, {
     maxAxisDot:options.bevelAxisDotTolerance ?? 0.12,
-    apexTolerance:options.bevelApexTolerance ?? 0.08,
+    apexTolerance:specificTolerance || options.bevelApexTolerance || 0.08,
   })
   if (!geometry.valid) return null
   const directionSign = -(geometry.signA * geometry.signB)
