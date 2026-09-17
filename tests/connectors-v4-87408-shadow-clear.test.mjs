@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { classifyConnectorV4 } from '../connectors-v4/activation-v4.js'
 import { expandGridV4, parseShadowTextV4 } from '../connectors-v4/ldcad-parser-v4.js'
 import {
   discoveredConnectorClearIdsV4,
@@ -37,6 +38,8 @@ test('87408 root Shadow defines exactly two axle holes and four pin holes',()=>{
   const pin=expanded.filter(item=>item.operation.connector.geometry.sections.some(section=>section.shape==='R'))
   assert.equal(axle.length,2)
   assert.equal(pin.length,4)
+  assert.ok(axle.every(item=>item.operation.connector.geometry.caps==='one'))
+  assert.ok(axle.every(item=>classifyConnectorV4(item.operation.connector)==='technic-axle-hole'))
 })
 
 test('87408 SNAP_CLEAR axleHole survives into discovery policy',()=>{
