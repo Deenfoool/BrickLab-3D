@@ -1,7 +1,8 @@
 import { CONNECTOR_SCHEMA_VERSION_V4, CONNECTOR_SYSTEM_VERSION_V4, validateConnectorV4 } from './schema-v4.js'
 import { classifyTechnicAxlePinInterfaceV4, classifyTechnicPinInterfaceV4, technicPinPairV4 } from './pin-semantics-v4.js?v=connector-axle-pin-slots-20260916-v1'
+import { ENGINE_PISTON_FIXTURE_GROUP_V4 } from '../connector-discovery/engine-piston-fixtures-v4.js?v=connector-engine-4368-4369-20260917-v1'
 
-export const ACTIVATION_POLICY_VERSION_V4 = 'connector-activation-v4.4.0'
+export const ACTIVATION_POLICY_VERSION_V4 = 'connector-activation-v4.5.0'
 
 const CRITICAL_WARNING_CODES = new Set([
   'invalid-snap-meta',
@@ -152,6 +153,15 @@ export function activationForMatchV4(source, target, match) {
   const roles = new Set([sourceRole, targetRole])
   const roundReceiver = roles.has('technic-round-hole') || roles.has('technic-pin-hole')
   const pinPair = technicPinPairV4(source,target)
+  const engineCamPair = source?.group===ENGINE_PISTON_FIXTURE_GROUP_V4 && target?.group===ENGINE_PISTON_FIXTURE_GROUP_V4
+    && new Set([source?.discovery?.role,target?.discovery?.role]).size===2
+    && [source?.discovery?.role,target?.discovery?.role].includes('technic-engine-crank-rim-site')
+    && [source?.discovery?.role,target?.discovery?.role].includes('technic-engine-piston-follower')
+
+  if (
+    engineCamPair && match?.compatible === true && match?.family === 'cylinder' &&
+    match?.kinematicHint === 'revolute'
+  ) return activeResult('technic-engine-cam-follower','revolute',sourceRole,targetRole,'verified-ldraw-help:4368+4369')
 
   if (
     (roles.has('technic-axle') || roles.has('technic-axle-pin')) && roles.has('technic-axle-hole') &&
