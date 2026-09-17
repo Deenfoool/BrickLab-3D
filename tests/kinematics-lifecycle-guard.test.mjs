@@ -130,3 +130,101 @@ test('Kinematics lifecycle guard leaves a successful active session alone', asyn
   assert.equal(guarded.active(), false)
   assert.equal(exits, 1)
 })
+
+test('Kinematics restores the entry Connector V4 graph after temporary preview motion', async () => {
+  const before = globalThis.BrickLabConnectorV4
+  let active = false
+  let runtimeTarget = null
+  let graph = [{ id:'connection-a', a:{instanceId:'axle'}, b:{instanceId:'gear'} }]
+  const entryGraph = structuredClone(graph)
+  let restoreCalls = 0
+  const frozenV4 = Object.freeze({
+    projectConnections:() => structuredClone(graph),
+    restoreConnections(records, options) {
+      restoreCalls += 1
+      assert.deepEqual(options, { replace:true })
+      graph = structuredClone(records)
+    },
+    updateEditor:() => undefined,
+  })
+  globalThis.BrickLabConnectorV4 = frozenV4
+
+  const core = Object.freeze({
+    async enter() {
+      runtimeTarget = globalThis.BrickLabConnectorV4
+      active = true
+      return core
+    },
+    exit() {
+      active = false
+      globalThis.BrickLabConnectorV4 = runtimeTarget
+      return core
+    },
+    active:() => active,
+  })
+
+  try {
+    const guarded = guardKinematicsRuntime(core)
+    await guarded.enter()
+    graph = [] // ordinary V4 reconciliation may prune links while the preview is rotated
+    guarded.exit({ restore:true })
+    assert.deepEqual(graph, entryGraph)
+    assert.equal(restoreCalls, 1)
+    assert.equal(guarded.lastConnectionRestoreError(), null)
+    assert.strictEqual(globalThis.BrickLabConnectorV4, frozenV4)
+  } finally {
+    globalThis.BrickLabConnectorV4 = before
+  }
+})
+
+test('Kinematics restores the graph for mode-button exits that bypass the guarded facade', async () => {
+  const beforeV4 = globalThis.BrickLabConnectorV4
+  const beforeAddEventListener = globalThis.addEventListener
+  let internalExitListener = null
+  globalThis.addEventListener = (type, listener) => {
+    if (type === 'bricklab:kinematicsexit') internalExitListener = listener
+  }
+
+  let active = false
+  let runtimeTarget = null
+  let graph = [{ id:'connection-b', a:{instanceId:'shaft'}, b:{instanceId:'bush'} }]
+  const entryGraph = structuredClone(graph)
+  const frozenV4 = Object.freeze({
+    projectConnections:() => structuredClone(graph),
+    restoreConnections(records) { graph = structuredClone(records) },
+    updateEditor:() => undefined,
+  })
+  globalThis.BrickLabConnectorV4 = frozenV4
+
+  const core = Object.freeze({
+    async enter() {
+      runtimeTarget = globalThis.BrickLabConnectorV4
+      active = true
+      return core
+    },
+    exit() {
+      active = false
+      globalThis.BrickLabConnectorV4 = runtimeTarget
+      return core
+    },
+    active:() => active,
+  })
+
+  try {
+    const guarded = guardKinematicsRuntime(core)
+    await guarded.enter()
+    assert.equal(typeof internalExitListener, 'function')
+    graph = []
+    // This mirrors runtime-v1's BUILD/Escape/Tab path: core.exit happens internally,
+    // then bricklab:kinematicsexit is emitted without calling guarded.exit().
+    active = false
+    globalThis.BrickLabConnectorV4 = runtimeTarget
+    internalExitListener()
+    assert.deepEqual(graph, entryGraph)
+    assert.strictEqual(globalThis.BrickLabConnectorV4, frozenV4)
+  } finally {
+    globalThis.BrickLabConnectorV4 = beforeV4
+    if (beforeAddEventListener === undefined) delete globalThis.addEventListener
+    else globalThis.addEventListener = beforeAddEventListener
+  }
+})
