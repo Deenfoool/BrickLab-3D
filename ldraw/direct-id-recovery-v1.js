@@ -1,4 +1,6 @@
-export const LDRAW_DIRECT_ID_RECOVERY_VERSION='ldraw-direct-id-recovery-v1.0.0'
+import { canonicalLDrawCode, ldrawAliasInfo } from './part-aliases-v1.js?v=ldraw-aliases-20260917-v1'
+
+export const LDRAW_DIRECT_ID_RECOVERY_VERSION='ldraw-direct-id-recovery-v1.1.0'
 
 const DESIGN_ID=/^[0-9][a-z0-9_-]*$/i
 const LOADABLE_PART_TYPE=/^(?:Part|Unofficial_Part)$/i
@@ -19,22 +21,24 @@ function inferredCategory(metadata,item){
 }
 
 export async function recoverLDrawDesignId(query,{currentIndex=[],getIndex,getMetadata}={}){
-  const code=normalizeLDrawDesignIdQuery(query)
-  if(!code)return null
-  if((currentIndex??[]).some(item=>String(item?.code||'').toLowerCase()===code.toLowerCase()))return null
+  const requestedCode=normalizeLDrawDesignIdQuery(query)
+  if(!requestedCode)return null
+  if((currentIndex??[]).some(item=>String(item?.code||'').toLowerCase()===requestedCode.toLowerCase()))return null
   if(typeof getMetadata!=='function')throw Error('recoverLDrawDesignId requires getMetadata')
 
+  const alias=ldrawAliasInfo(requestedCode)
+  const canonicalCode=canonicalLDrawCode(requestedCode)
   let indexed=null
   if(typeof getIndex==='function'){
     try{
       const known=await getIndex()
-      indexed=(known??[]).find(item=>String(item?.code||'').toLowerCase()===code.toLowerCase())||null
+      indexed=(known??[]).find(item=>String(item?.code||'').toLowerCase()===canonicalCode.toLowerCase())||null
     }catch{
       // The direct metadata probe below intentionally survives an unavailable index.
     }
   }
 
-  const file=indexed?.file||`${code}.dat`
+  const file=indexed?.file||`${canonicalCode}.dat`
   const metadata=await getMetadata(file)
   if(!LOADABLE_PART_TYPE.test(String(metadata?.type||'')))return null
 
@@ -42,10 +46,12 @@ export async function recoverLDrawDesignId(query,{currentIndex=[],getIndex,getMe
     ...(indexed||{}),
     ...metadata,
     file:metadata?.file||file,
-    code,
+    code:requestedCode,
+    canonicalCode,
+    aliasOf:alias.isAlias?canonicalCode:null,
     category:inferredCategory(metadata,indexed),
-    description:metadata?.description||indexed?.description||`LDraw ${code}`,
+    description:metadata?.description||indexed?.description||`LDraw ${requestedCode}`,
     unofficial:/^Unofficial_/i.test(String(metadata?.type||'')),
-    recoveredBy:'direct-design-id',
+    recoveredBy:alias.isAlias?'design-id-alias':'direct-design-id',
   }
 }
