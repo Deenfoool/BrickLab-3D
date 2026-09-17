@@ -1,6 +1,10 @@
 export const PROJECT_GRAPH_STORAGE_KEY_V4 = 'bricklab.connector-v4.graph.v1'
-export const PROJECT_GRAPH_PERSISTENCE_VERSION_V4 = 'connector-project-graph-v4.1.0'
+export const PROJECT_GRAPH_PERSISTENCE_VERSION_V4 = 'connector-project-graph-v4.1.1'
 const MAX_CONNECTIONS = 10000
+const SUPPORTED_GRAPH_VERSIONS = new Set([
+  'connection-graph-v4.0.1',
+  'connection-graph-v4.0.2',
+])
 
 function storageOrNull(storage) {
   if (storage) return storage
@@ -9,7 +13,7 @@ function storageOrNull(storage) {
 
 function validRecord(record) {
   return Boolean(
-    record && (!record.graphVersion || record.graphVersion === 'connection-graph-v4.0.1') && record.schemaVersion === 4 && typeof record.id === 'string' && record.id &&
+    record && (!record.graphVersion || SUPPORTED_GRAPH_VERSIONS.has(record.graphVersion)) && record.schemaVersion === 4 && typeof record.id === 'string' && record.id &&
     record.a?.instanceId && record.a?.endpointId && record.b?.instanceId && record.b?.endpointId &&
     record.a.instanceId !== record.b.instanceId
   )
