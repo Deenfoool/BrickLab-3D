@@ -8,14 +8,14 @@ import {
   discoverPrimitiveConnectorsV4,
   discoveryConnectorRoleV4,
   mergeDiscoveredConnectorsV4,
-} from '../connector-discovery/discovery-v4.3.js?v=connector-beam-holes-20260917-v1'
+} from '../connector-discovery/discovery-v4.3.js?v=connector-differential-62821-20260917-v1'
 import {
   SHADOW_CLEAR_POLICY_VERSION_V4,
   filterShadowClearedDiscoveryV4,
   rootShadowClearIdsV4,
 } from '../connector-discovery/shadow-clear-policy-v4.js?v=connector-shadow-clear-20260917-v1'
 
-export const CONNECTOR_DISCOVERY_RUNTIME_VERSION_V4 = 'connector-discovery-runtime-v4.7.0'
+export const CONNECTOR_DISCOVERY_RUNTIME_VERSION_V4 = 'connector-discovery-runtime-v4.8.0'
 
 const MAX_CONNECTORS_PER_PART=4096
 const SHADOW_RAW_ROOT=`https://raw.githubusercontent.com/${SHADOW_SOURCE_V4.repository}/${SHADOW_SOURCE_V4.commit}/`
