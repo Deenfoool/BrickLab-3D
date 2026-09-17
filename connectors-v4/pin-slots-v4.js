@@ -113,3 +113,17 @@ export function nearestTechnicPinSlotOffsetsV4(moving, target, requestedOffsetLd
   return technicPinSlotOffsetsV4(moving, target)
     .sort((a, b) => Math.abs(a - requested) - Math.abs(b - requested) || a - b)
 }
+
+// Reserve only the contacted band, in male-local coordinates. The signs change
+// when dragging the shaft instead of its receiver; no module grid is assumed.
+export function adjacentAxialOffsetsV4(moving, target, reservations, requestedOffsetLdu = 0) {
+  if (moving?.family !== 'cylinder' || target?.family !== 'cylinder') return []
+  const female = moving.gender === 'female' ? moving : target.gender === 'female' ? target : null
+  if (!female) return []
+  const [start, end] = axialSpanV4(female)
+  const sign = moving.gender === 'male' ? 1 : -1
+  return [...new Set(reservations.flatMap(({interval}) => [
+    sign * (end - interval[0]),
+    sign * (start - interval[1]),
+  ]))].sort((a,b) => Math.abs(a-requestedOffsetLdu)-Math.abs(b-requestedOffsetLdu))
+}

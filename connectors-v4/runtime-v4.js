@@ -12,7 +12,7 @@ import { createAxialOccupancyV4 } from './occupancy-v4.js'
 import { ACTIVATION_POLICY_VERSION_V4, certifyCandidateV4, certifyConnectivityV4, activationForMatchV4 } from './activation-v4.js'
 import { runConnectorV4SelfTest } from './selftest-v4.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
-import { nearestTechnicPinSlotOffsetsV4 } from './pin-slots-v4.js?v=connector-axle-pin-slots-20260916-v1'
+import { adjacentAxialOffsetsV4, nearestTechnicPinSlotOffsetsV4 } from './pin-slots-v4.js?v=connector-axle-pin-slots-20260916-v1'
 import { fetchLDrawText } from '../ldraw/runtime-v3.js'
 import {
   clearPersistedGraphV4,
@@ -330,15 +330,24 @@ function certifiedCandidate(movingObject, targetObjects, options = {}) {
   // Candidate targets may be a spatial subset: only the project owner prunes the graph.
   const candidates = findPlacementCandidatesV4(movingObject, targetObjects, candidateOptions({ ...options, maxResults:Math.max(24, options.maxResults ?? 0) }))
   for (const candidate of candidates) {
-    const variants=[candidate]
+    const variants=[]
     const requestedLdu=candidate.solution?.axial?.offsetLdu ?? 0
-    for(const offsetLdu of nearestTechnicPinSlotOffsetsV4(candidate.source,candidate.target,requestedLdu)){
-      if(Math.abs(offsetLdu-requestedLdu)<1e-4)continue
+    const slots=nearestTechnicPinSlotOffsetsV4(candidate.source,candidate.target,requestedLdu)
+    const male=candidate.source.gender==='male'?candidate.source:candidate.target
+    const maleObject=candidate.source.gender==='male'?candidate.sourceObject:candidate.targetObject
+    const reservations=connectionGraph.axialReservations(`${maleObject.userData.instanceId}::${male.endpointId}`)
+    const adjacent=adjacentAxialOffsetsV4(candidate.source,candidate.target,reservations,requestedLdu)
+    // Settle pin latches on their module centres before accepting a continuous
+    // offset that spills into the next band. Axles retain continuous placement.
+    const offsets=[...new Set([...slots,requestedLdu,...adjacent])]
+    for(const offsetLdu of offsets){
+      if(Math.abs(offsetLdu-requestedLdu)<1e-6){variants.push(candidate);continue}
       let solution
       try{
         solution=solvePlacementV4(candidate.sourceObject,candidate.source,candidate.targetObject,candidate.target,{match:candidate.match,axialOffsetStud:offsetLdu/20})
       }catch{continue}
       if(!solution.valid)continue
+      if(Math.abs(solution.axial.offsetLdu-offsetLdu)>1e-4)continue
       const captureLimit=Number.isFinite(options.captureDistanceStud)?options.captureDistanceStud:0.72
       if((solution.diagnostics?.captureCorrectionStud??Infinity)>captureLimit)continue
       variants.push({...candidate,solution,distanceStud:solution.diagnostics.captureCorrectionStud})

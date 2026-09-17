@@ -49,10 +49,15 @@ export function classifyConnectorV4(connector) {
   const shapes = sections.map(rigidShape)
   const allA6 = sections.length > 0 && sections.every((section, index) => shapes[index] === 'A' && approx(section.radiusLdu, 6))
   const allR = sections.length > 0 && shapes.every(shape => shape === 'R')
+  const axleIndices=sections.flatMap((section,index)=>shapes[index]==='A'&&approx(section.radiusLdu,6)?[index]:[])
+  const stoppedAxle=axleIndices.length>0 && sections.every((section,index)=>
+    (shapes[index]==='A'&&approx(section.radiusLdu,6)) ||
+    (shapes[index]==='R'&&approx(section.radiusLdu,8)&&section.lengthLdu<=4&&
+      (index<axleIndices[0]||index>axleIndices.at(-1))))
 
   if (
     connector.gender === 'male' && connector.snap?.slide === true && connector.geometry?.centered === true &&
-    String(connector.geometry?.caps || '').toLowerCase() === 'none' && allA6
+    String(connector.geometry?.caps || '').toLowerCase() === 'none' && (allA6 || stoppedAxle)
   ) return 'technic-axle'
 
   if (

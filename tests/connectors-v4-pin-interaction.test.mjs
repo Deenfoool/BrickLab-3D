@@ -66,3 +66,54 @@ test('65249 accepts a pin receiver and two sequential axle-hole snaps',()=>{
   }
   assert.equal(v4.projectConnections().length,3)
 })
+
+test('ordinary axle leaves neighbouring bores available after an off-grid first snap',()=>{
+  v4.clearGraph()
+  const axle=part('ldraw-regression-axle','0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=A 6 60] [center=true] [slide=true] [ori=0 -1 0 1 0 0 0 0 1]','regression-axle')
+  for(const [index,x] of [-.94,.02,1.04].entries()){
+    const hole=part(`ldraw-regression-axle-hole-${index}`,AXLE_HOLE,`regression-axle-hole-${index}`)
+    hole.position.x=x
+    connect(hole,axle)
+  }
+  assert.equal(v4.projectConnections().length,3)
+})
+
+test('pin and hybrid retain all bands after a slightly off-centre first placement',()=>{
+  for(const [id,line] of [['42924',LONG_PIN],['65249',AXLE_PIN_65249]]){
+    v4.clearGraph()
+    const pin=part(`ldraw-offset-${id}`,line,`offset-${id}`)
+    for(const [index,x] of [.06,1.02,-.96].entries()){
+      const receiver=part(`ldraw-offset-${id}-${index}`,id==='65249'&&index!==2?AXLE_HOLE:PIN_HOLE,`offset-${id}-${index}`)
+      receiver.position.x=x
+      connect(receiver,pin)
+    }
+    assert.equal(v4.projectConnections().length,3)
+  }
+})
+
+test('real 32270 gear snaps next to the 55013 stop and cannot overlap the collar',async()=>{
+  const {readFileSync}=await import('node:fs')
+  const {discoverPrimitiveConnectorsV4}=await import('../connector-discovery/discovery-v4.3.js')
+  const {evaluateAxialOffsetV4}=await import('../connectors-v4/axial-fit-v4.js')
+  v4.clearGraph()
+  const shaft=part('ldraw-stop-55013',readFileSync(new URL('fixtures/55013-shadow.dat',import.meta.url),'utf8'),'stop-55013')
+  const discovered=await discoverPrimitiveConnectorsV4('32270.dat',readFileSync(new URL('fixtures/32270.dat',import.meta.url),'utf8'),async()=>null)
+  const holes=discovered.connectors.filter(c=>c.family==='cylinder'&&c.gender==='female'&&c.geometry.sections.every(s=>s.shape==='A'))
+  assert.equal(holes.length,1)
+  const id='ldraw-real-32270'
+  const connectors=finalizeConnectorIdentitiesV4('parts/32270.dat',holes).connectors.map(c=>connectorToBrickLabV4(c))
+  PARTS.push({id,connectivityV4:{status:'ready',schemaVersion:4,systemVersion:CONNECTOR_SYSTEM_VERSION_V4,connectors,warnings:[]}})
+  const gear=new THREE.Group()
+  gear.userData={partId:id,instanceId:'real-32270'}
+  const axis=new THREE.Vector3(...connectors[0].frame.axis)
+  gear.quaternion.setFromUnitVectors(axis,new THREE.Vector3(1,0,0))
+  gear.position.x=3.4 // gear end at 78 LDU, immediately before the R8 collar
+  gear.updateMatrixWorld(true)
+  const candidate=v4.findActiveCandidate(gear,[shaft],{captureDistanceStud:.72})
+  assert.ok(candidate,'stopped A6 shaft must remain active')
+  assert.equal(v4.commitActiveCandidate(candidate).accepted,true)
+  assert.ok(Math.abs(gear.position.x-3.4)<1e-4)
+  const male=PARTS.find(p=>p.id==='ldraw-stop-55013').connectivityV4.connectors[0]
+  assert.equal(evaluateAxialOffsetV4(connectors[0],male,70).valid,false,'R8 collar still blocks the gear')
+  assert.equal(v4.reconcileGraph([gear,shaft]).kept,1)
+})

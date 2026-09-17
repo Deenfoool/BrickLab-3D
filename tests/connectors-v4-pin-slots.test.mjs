@@ -143,6 +143,8 @@ test('round pins are still rejected by axle holes',()=>{
 
 test('production import map publishes the occupancy-aware pin runtime',async()=>{
   const html=await readFile(new URL('../index.html',import.meta.url),'utf8')
-  const needle='"./connectors-v4/runtime-v4.js": "./connectors-v4/runtime-v4.js?v=runtime-14-bidirectional-pin-snap-20260916-v1"'
-  assert.equal(html.split(needle).length-1,1)
+  const {imports}=JSON.parse(html.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1])
+  const runtime=imports['./connectors-v4/runtime-v4.js']
+  assert.match(runtime,/runtime-15-shaft-occupancy-stop-/)
+  assert.equal(imports['./connectors-v4/pin-slots-v4.js'].split('?')[1],runtime.split('?')[1])
 })
