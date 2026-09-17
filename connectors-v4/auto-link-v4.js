@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-export const AUTO_LINK_VERSION_V4='connector-auto-link-v4.1.0'
+export const AUTO_LINK_VERSION_V4='connector-auto-link-v4.1.1'
 export const AUTO_LINK_HOTKEY_V4='Shift+L'
 
 const MAX_TRANSLATION_STUD=0.015
@@ -22,6 +22,17 @@ function toast(text){
   node.textContent=text
   node.classList.add('show')
   globalThis.setTimeout?.(()=>node.classList.remove('show'),2600)
+}
+
+function installShortcutHint(){
+  const groups=[...document.querySelectorAll('.shortcut-group')]
+  const mechanics=groups.find(group=>String(group.querySelector('h3')?.textContent||'').trim().toLowerCase()==='mechanics')
+  if(!mechanics||mechanics.querySelector('[data-auto-link-shortcut]'))return
+  const row=document.createElement('div')
+  row.className='shortcut-row'
+  row.dataset.autoLinkShortcut='true'
+  row.innerHTML='<span>Auto-link safe contacts</span><kbd>Shift+L</kbd>'
+  mechanics.append(row)
 }
 
 function worldPose(object){
@@ -160,6 +171,7 @@ async function onHotkey(event){
 }
 
 window.addEventListener('keydown',onHotkey,true)
+installShortcutHint()
 
 export const BrickLabConnectorV4AutoLink=Object.freeze({
   version:AUTO_LINK_VERSION_V4,
