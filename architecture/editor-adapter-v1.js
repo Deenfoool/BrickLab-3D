@@ -221,7 +221,7 @@ export function bindLegacyEditorAdapter(options = {}) {
 if (globalThis.BrickLabSubsystems) bindLegacyEditorAdapter()
 
 try {
-  await import('../editor/mechanical-rotation-pivot-v1.js?v=mechanical-rotation-pivot-20260917-v1')
+  await import('../editor/mechanical-rotation-pivot-v1.js?v=mechanical-rotation-pivot-20260917-v2')
 } catch (error) {
   console.warn('[BrickLab Editor] Mechanical rotation pivot correction unavailable.', error)
 }
