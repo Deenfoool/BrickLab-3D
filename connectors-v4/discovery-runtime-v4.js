@@ -1,6 +1,6 @@
 import { PARTS, findPart } from '../parts.js'
 import { fetchLDrawText } from '../ldraw/runtime-v3.js'
-import { validateConnectorV4 } from './schema-v4.js'
+import { SHADOW_SOURCE_V4, validateConnectorV4 } from './schema-v4.js'
 import { finalizeConnectorIdentitiesV4 } from './identity-v4.js'
 import { connectorToBrickLabV4 } from './shadow-resolver-v4.js'
 import {
@@ -9,12 +9,22 @@ import {
   discoveryConnectorRoleV4,
   mergeDiscoveredConnectorsV4,
 } from '../connector-discovery/discovery-v4.3.js?v=connector-beam-holes-20260917-v1'
+import {
+  SHADOW_CLEAR_POLICY_VERSION_V4,
+  filterShadowClearedDiscoveryV4,
+  rootShadowClearIdsV4,
+} from '../connector-discovery/shadow-clear-policy-v4.js?v=connector-shadow-clear-20260917-v1'
 
-export const CONNECTOR_DISCOVERY_RUNTIME_VERSION_V4 = 'connector-discovery-runtime-v4.6.0'
+export const CONNECTOR_DISCOVERY_RUNTIME_VERSION_V4 = 'connector-discovery-runtime-v4.7.0'
 
 const MAX_CONNECTORS_PER_PART=4096
+const SHADOW_RAW_ROOT=`https://raw.githubusercontent.com/${SHADOW_SOURCE_V4.repository}/${SHADOW_SOURCE_V4.commit}/`
 const inFlight=new Map()
 const scanState=new Map()
+const shadowClearCache=new Map()
+
+const normalizePath=value=>String(value||'').replace(/\\/g,'/').replace(/^\.\//,'').replace(/^parts\//i,'').trim()
+const encodedPath=value=>String(value||'').split('/').map(encodeURIComponent).join('/')
 
 function isReadyLDraw(def){
   return Boolean(def?.ldraw?.file&&String(def.id||'').startsWith('ldraw-')&&def.ldraw.ready&&def.connectivityV4?.status==='ready')
@@ -49,18 +59,42 @@ function refreshLiveSearch(def){
   }
 }
 
+async function rootShadowClearIds(def){
+  const normalized=normalizePath(def?.ldraw?.file)
+  if(!normalized)return[]
+  const path=`parts/${normalized}`.toLowerCase()
+  if(shadowClearCache.has(path))return shadowClearCache.get(path)
+  const task=(async()=>{
+    const response=await fetch(`${SHADOW_RAW_ROOT}${encodedPath(path)}`,{mode:'cors',cache:'force-cache'})
+    if(response.status===404)return[]
+    if(!response.ok)throw new Error(`Shadow HTTP ${response.status}: ${path}`)
+    return rootShadowClearIdsV4(await response.text(),{file:path})
+  })()
+  shadowClearCache.set(path,task)
+  try{return await task}
+  catch(error){
+    if(shadowClearCache.get(path)===task)shadowClearCache.delete(path)
+    console.debug?.(`[BrickLab Connector Discovery] Shadow clear policy unavailable for ${path}`,error)
+    return[]
+  }
+}
+
 async function augmentDefinition(def,{force=false}={}){
   if(!isReadyLDraw(def))return null
   const previous=def.connectivityV4.discovery
-  if(!force&&previous?.version===CONNECTOR_DISCOVERY_VERSION_V4&&previous?.complete===true)return previous
+  if(!force&&previous?.version===CONNECTOR_DISCOVERY_VERSION_V4&&previous?.runtimeVersion===CONNECTOR_DISCOVERY_RUNTIME_VERSION_V4&&previous?.complete===true)return previous
   if(inFlight.has(def.id))return inFlight.get(def.id)
 
   const task=(async()=>{
     scanState.set(def.id,'loading')
     try{
-      const text=await fetchLDrawText(def.ldraw.file)
+      const [text,clearIds]=await Promise.all([
+        fetchLDrawText(def.ldraw.file),
+        rootShadowClearIds(def),
+      ])
       const discovery=await discoverPrimitiveConnectorsV4(def.ldraw.file,text,fetchLDrawText)
-      const merged=mergeDiscoveredConnectorsV4(def.connectivityV4.connectors,discovery.connectors)
+      const clearPolicy=filterShadowClearedDiscoveryV4(discovery.connectors,clearIds)
+      const merged=mergeDiscoveredConnectorsV4(def.connectivityV4.connectors,clearPolicy.kept)
       const validRaw=merged.added.filter(connector=>validateConnectorV4(connector).valid)
       const identities=finalizeConnectorIdentitiesV4(def.ldraw.file,validRaw)
       const existingIds=new Set((def.connectivityV4.connectors??[]).map(connector=>connector.endpointId).filter(Boolean))
@@ -80,19 +114,24 @@ async function augmentDefinition(def,{force=false}={}){
         // as the spatial endpoint index can now observe a connector-generation change.
         def.connectivityV4.connectors=[...(def.connectivityV4.connectors??[]),...additions]
       }
+      const totalSuppressed=merged.suppressed+clearPolicy.suppressed.length
       def.connectivityV4.stats={
         ...(def.connectivityV4.stats||{}),
         discoveryCandidates:discovery.connectors.length,
-        discoverySuppressed:merged.suppressed,
+        discoverySuppressed:totalSuppressed,
+        discoveryShadowCleared:clearPolicy.suppressed.length,
         discoveryAdded:additions.length,
         discoveryRejected:merged.added.length-validRaw.length,
       }
       def.connectivityV4.discovery={
         version:CONNECTOR_DISCOVERY_VERSION_V4,
         runtimeVersion:CONNECTOR_DISCOVERY_RUNTIME_VERSION_V4,
+        clearPolicyVersion:SHADOW_CLEAR_POLICY_VERSION_V4,
         complete:true,
         candidates:discovery.connectors.length,
-        suppressed:merged.suppressed,
+        suppressed:totalSuppressed,
+        shadowCleared:clearPolicy.suppressed.length,
+        shadowClearIds:clearIds,
         added:additions.length,
         roles:summarizeRoles(additions),
         scanStats:discovery.stats,
@@ -139,13 +178,14 @@ globalThis.BrickLabConnectorDiscovery=Object.freeze({
   state(partId){return scanState.get(partId)||'idle'},
   status(partId){return findPart(partId)?.connectivityV4?.discovery||null},
   stats(){
-    let ready=0,error=0,added=0
+    let ready=0,error=0,added=0,shadowCleared=0
     for(const def of PARTS){
       const info=def?.connectivityV4?.discovery
       if(!info)continue
       if(info.complete)ready+=1;else if(info.error)error+=1
       added+=Number(info.added)||0
+      shadowCleared+=Number(info.shadowCleared)||0
     }
-    return Object.freeze({ready,error,added,inFlight:inFlight.size})
+    return Object.freeze({ready,error,added,shadowCleared,inFlight:inFlight.size})
   },
 })
