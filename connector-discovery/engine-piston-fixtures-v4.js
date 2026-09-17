@@ -1,4 +1,4 @@
-export const ENGINE_PISTON_FIXTURES_VERSION_V4='engine-piston-fixtures-v4.2.0'
+export const ENGINE_PISTON_FIXTURES_VERSION_V4='engine-piston-fixtures-v4.2.1'
 export const ENGINE_PISTON_FIXTURE_GROUP_V4='technic-engine-crank-4368-piston-4369'
 export const ENGINE_CRANK_RIM_OFFSET_LDU_V4=4
 export const ENGINE_CRANK_RIM_RADIUS_LDU_V4=15
@@ -40,7 +40,7 @@ function pistonFollower(file){
     group:ENGINE_PISTON_FIXTURE_GROUP_V4,
     frame:{positionLdu:[ENGINE_PISTON_TAIL_X_LDU_V4,0,0],orientation:[...PISTON_ORIENTATION]},
     geometry:{sections:PROFILE.map(section=>({...section})),caps:'none',centered:true},
-    snap:{slide:false,placement:'retain'},
+    snap:{slide:false},
     inheritance:{scale:'none',mirror:'cor'},
     source:{kind:'bricklab-verified-assembly-fixture',file,primitive:null,meta:'TECHNIC_ENGINE_4368_4369_FOLLOWER',raw:''},
     provenance:[{type:'verified-ldraw-help-fixture',pair:'4368+4369',role:'follower'}],
