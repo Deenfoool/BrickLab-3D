@@ -1,4 +1,4 @@
-export const EDITOR_ADAPTER_VERSION = 'editor-adapter-v1.1.0'
+export const EDITOR_ADAPTER_VERSION = 'editor-adapter-v1.2.0'
 
 function safeParse(value) {
   if (!value) return null
@@ -219,3 +219,9 @@ export function bindLegacyEditorAdapter(options = {}) {
 }
 
 if (globalThis.BrickLabSubsystems) bindLegacyEditorAdapter()
+
+try {
+  await import('../editor/mechanical-rotation-pivot-v1.js?v=mechanical-rotation-pivot-20260917-v1')
+} catch (error) {
+  console.warn('[BrickLab Editor] Mechanical rotation pivot correction unavailable.', error)
+}
