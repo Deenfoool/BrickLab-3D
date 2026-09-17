@@ -1,3 +1,5 @@
+import { canonicalLDrawFile } from './part-aliases-v1.js?v=ldraw-aliases-20260917-v1'
+
 export const LDRAW_UNOFFICIAL_MIRROR = 'https://raw.githubusercontent.com/brycewalls/ldraw-parts-mirror/304f0153dad23d3eebef1c1e85789a85973ee1e8/ldraw/UnOfficial/'
 
 export const LDRAW_MIRRORS = [
@@ -5,6 +7,11 @@ export const LDRAW_MIRRORS = [
   'https://raw.githubusercontent.com/pybricks/ldraw/master/',
   LDRAW_UNOFFICIAL_MIRROR,
 ]
+
+function canonicalReadPath(value){
+  const path=String(value||'').replace(/\\/g,'/').trim()
+  return /^parts\/[^/]+\.dat$/i.test(path)?canonicalLDrawFile(path):path
+}
 
 // Official mirrors stay first. The pinned unofficial Parts Tracker mirror is a
 // last-resort fallback only, so a part automatically migrates to the official
@@ -14,7 +21,7 @@ export function createLDrawTextTransport({fetcher=globalThis.fetch,mirrors=LDRAW
   const cache=new Map()
   const missingPaths=new Set()
   const resolvedSubparts=new Map()
-  const diagnostics={requests:0,network404:0,avoided404:0,mirrorFallbacks:0,locationHits:0}
+  const diagnostics={requests:0,network404:0,avoided404:0,mirrorFallbacks:0,locationHits:0,aliasHits:0}
 
   const missingError=path=>{const error=Error(`LDraw HTTP 404: ${path}`);error.status=404;return error}
   const bareKey=value=>String(value||'').replace(/\\/g,'/').trim().toLowerCase()
@@ -24,7 +31,9 @@ export function createLDrawTextTransport({fetcher=globalThis.fetch,mirrors=LDRAW
   // go to p/ first instead of deliberately missing parts/ on every model parse.
   const looksLikePartFile=name=>/^(?:\d{3,}|[a-z]\d{3,})[a-z0-9_.-]*\.dat$/i.test(String(name||'').split('/').pop()||'')
 
-  async function read(path) {
+  async function read(requestedPath) {
+    const path=canonicalReadPath(requestedPath)
+    if(path!==String(requestedPath||'').replace(/\\/g,'/').trim())diagnostics.aliasHits+=1
     if(!/^(?:parts|p|models)\/[\w/.-]+\.dat$/i.test(path) && path!=='LDConfig.ldr')throw Error(`Invalid LDraw path: ${path}`)
     if(path.split('/').includes('..'))throw Error('Invalid LDraw traversal')
     if(missingPaths.has(path)){diagnostics.avoided404+=1;throw missingError(path)}
@@ -76,7 +85,7 @@ export function createLDrawTextTransport({fetcher=globalThis.fetch,mirrors=LDRAW
     for(const path of [...new Set(paths)]){
       try{
         const text=await read(path)
-        resolvedSubparts.set(key,path)
+        resolvedSubparts.set(key,canonicalReadPath(path))
         return text
       }catch(error){last=error;if(error.status!==404)throw error}
     }
