@@ -1,7 +1,7 @@
 import { approveConstraintV4, proposeConstraintV4 } from './constraints-v4.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.3.0'
+export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.4.0'
 
 const MIN_DISTINCT_STUD_DISTANCE = 0.45
 const PARALLEL_STUD_AXIS_DOT = 0.9995
@@ -54,6 +54,13 @@ function ruleFor(entry, studBundleSize = 1) {
     return studBundleSize >= 2
       ? { supported:true, kind:'fixed', retention:'captured', release:null, contacts:'disabled', bundle:'multi-stud-rigid' }
       : { supported:false, reason:'single-stud-collider-envelope-not-proven' }
+  }
+
+  // 4368/4369 is a geometric cam follower, not a fixed revolute/cylindrical joint.
+  // KINEMATICS solves the eccentric profile explicitly. Creating a Rapier joint here
+  // would pin the piston to one material point on the rotating rim and be physically wrong.
+  if (family === 'technic-engine-cam-follower') {
+    return { supported:true, skip:true, kind:null, retention:'kinematics-cam-profile', release:null }
   }
 
   if (family === 'technic-axle-keyed-hole' || family === 'keyed-shaft-interface') {
@@ -240,6 +247,10 @@ export function buildPhysicsPlanV4({ objects = [], connections = [], getConnecto
       blockers.push({connectionId:entry.connection.id,family:entry.family,reason:rule.reason})
       continue
     }
+    if(rule.skip){
+      consumed.add(entry.connection.id)
+      continue
+    }
     const key=axialBundleKey(entry,rule)
     if (!key) {
       joints.push(physicsItem(entry,rule))
@@ -271,6 +282,7 @@ export function buildPhysicsPlanV4({ objects = [], connections = [], getConnecto
       connections:connections.length,
       joints:joints.length,
       blockers:blockers.length,
+      kinematicsOnly:consumed.size,
       axialBundles:[...axialGroups.values()].filter(bundle=>bundle.length>1).length,
       bundledAxialConnections:[...axialGroups.values()].filter(bundle=>bundle.length>1).reduce((sum,bundle)=>sum+bundle.length,0),
     },
