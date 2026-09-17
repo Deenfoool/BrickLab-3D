@@ -1,5 +1,6 @@
 import { getLDrawIndex, getLDrawMetadata, registerLDrawPart, preloadLDrawPrototype } from './runtime-v3.js?v=ldraw-catalog-20260910-v3'
 import { retryLoad, withLoadDeadline } from './load-recovery-v1.js?v=ldraw-loading-20260912-v1'
+import { recoverLDrawDesignId } from './direct-id-recovery-v1.js?v=ldraw-unofficial-design-id-20260917-v1'
 import { PARTS, findPart } from '../parts.js'
 import { compatibleAssemblyChoices } from '../guidance/assembly-compatibility-v1.js?v=smart-assembly-20260911-v6'
 import { libraryItems, readPreference, writePreference } from './library-model-v1.js?v=parts-library-20260912-v5'
@@ -12,7 +13,7 @@ const INDEX_URLS=Object.freeze({
 })
 const ZIP_LOCAL=0x04034b50,ZIP_CENTRAL=0x02014b50,ZIP_EOCD=0x06054b50
 const utf8=new TextDecoder()
-let index=[],view=null,root=null,panel=null,pending=null,refreshTimer,indexSource='unloaded',currentItems=[]
+let index=[],view=null,root=null,panel=null,pending=null,refreshTimer,indexSource='unloaded',currentItems=[],lookupTimer=null
 const t=(en,ru)=>document.documentElement.lang==='ru'?ru:en
 
 async function inflateBytes(bytes,format){
@@ -170,17 +171,20 @@ async function loadIndex() {
   return pending
 }
 
-// Retain explicit Design-ID recovery without issuing thousands of metadata requests.
+// Exact Design-ID recovery also probes loadable unofficial Parts Tracker files.
+// This avoids issuing thousands of metadata requests during normal browsing.
 async function lookupCode(query) {
-  const code=String(query).trim().replace(/^ldraw-/i,'').replace(/\.dat$/i,'')
-  if(!/^[0-9][a-z0-9_-]*$/i.test(code)||index.some(x=>x.code===code))return
   try {
-    const known=await getLDrawIndex();const item=known.find(x=>x.code.toLowerCase()===code.toLowerCase())
+    const item=await recoverLDrawDesignId(query,{currentIndex:index,getIndex:getLDrawIndex,getMetadata:getLDrawMetadata})
     if(!item)return
-    const meta=await getLDrawMetadata(item.file)
-    index.push({...item,...meta,code,description:meta.description||`LDraw ${code}`})
+    index.push(item)
     refresh()
   } catch(error){console.warn('[BrickLab Library] Design ID lookup unavailable.',error)}
+}
+
+function scheduleLookup(value){
+  clearTimeout(lookupTimer)
+  lookupTimer=setTimeout(()=>void lookupCode(value),180)
 }
 
 function install() {
@@ -195,6 +199,7 @@ function install() {
   view=mountPartsLibrary(root,{language:()=>document.documentElement.lang,insert,repair,preview,info,context,onClose:()=>panel.querySelector('.panel-float-close')?.click()})
   refresh({pending:true})
   void loadIndex()
+  root.addEventListener('input',event=>{if(event.target.id==='plSearch')scheduleLookup(event.target.value)})
   root.addEventListener('change',event=>{if(event.target.id==='plSearch')void lookupCode(event.target.value)})
   const schedule=()=>{clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>view?.refresh(),120)}
   globalThis.addEventListener('bricklab:partcatalogchange',()=>refresh())
