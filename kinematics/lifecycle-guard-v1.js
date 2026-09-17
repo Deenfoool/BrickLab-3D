@@ -1,4 +1,4 @@
-export const KINEMATICS_LIFECYCLE_GUARD_VERSION = 'kinematics-lifecycle-guard-v1.1.0'
+export const KINEMATICS_LIFECYCLE_GUARD_VERSION = 'kinematics-lifecycle-guard-v1.1.1'
 
 const guardedMarker = Symbol.for('bricklab.kinematics.lifecycle-guard.v1')
 
@@ -45,6 +45,15 @@ function cloneRecords(records) {
   return JSON.parse(JSON.stringify(records))
 }
 
+function compatibilityRecords(records) {
+  return cloneRecords(records).map(record => {
+    if (!record || typeof record !== 'object') return record
+    const copy={...record}
+    delete copy.graphVersion
+    return copy
+  })
+}
+
 export function guardKinematicsRuntime(core) {
   if (!core || typeof core.enter !== 'function' || typeof core.exit !== 'function' || typeof core.active !== 'function') {
     throw new TypeError('Kinematics lifecycle guard requires enter/exit/active runtime methods')
@@ -78,7 +87,20 @@ export function guardKinematicsRuntime(core) {
     const runtime = connectorAuthority()
     if (typeof runtime?.restoreConnections !== 'function') return false
     try {
-      runtime.restoreConnections(cloneRecords(connectionSnapshot), { replace:true })
+      const records=cloneRecords(connectionSnapshot)
+      let result=runtime.restoreConnections(records, { replace:true })
+      if ((Number(result?.rejected) || 0) > 0 && records.some(record=>record?.graphVersion)) {
+        // Older cached persistence-v4 accepted only the previous graph generation.
+        // Missing graphVersion is explicitly backward-compatible, so retry without
+        // weakening the authoritative records kept in the session snapshot.
+        result=runtime.restoreConnections(compatibilityRecords(records), { replace:true })
+      }
+      const expected=records.length
+      const rejected=Number(result?.rejected) || 0
+      const restored=Number(result?.restored)
+      if (rejected > 0 || (Number.isFinite(restored) && restored !== expected)) {
+        throw new Error(`restored ${Number.isFinite(restored)?restored:'?'} of ${expected}; rejected ${rejected}`)
+      }
       lastConnectionRestoreError = null
       return true
     } catch (error) {
