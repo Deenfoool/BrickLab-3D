@@ -2,7 +2,7 @@ import { CONNECTOR_SCHEMA_VERSION_V4, CONNECTOR_SYSTEM_VERSION_V4, validateConne
 import { classifyTechnicAxlePinInterfaceV4, classifyTechnicPinInterfaceV4, technicPinPairV4 } from './pin-semantics-v4.js?v=connector-axle-pin-slots-20260916-v1'
 import { ENGINE_PISTON_FIXTURE_GROUP_V4 } from '../connector-discovery/engine-piston-fixtures-v4.js?v=connector-engine-continuous-rim-20260917-v2'
 
-export const ACTIVATION_POLICY_VERSION_V4 = 'connector-activation-v4.6.0'
+export const ACTIVATION_POLICY_VERSION_V4 = 'connector-activation-v4.7.0'
 
 const CRITICAL_WARNING_CODES = new Set([
   'invalid-snap-meta',
@@ -51,14 +51,16 @@ export function classifyConnectorV4(connector) {
   const allA6 = sections.length > 0 && sections.every((section, index) => shapes[index] === 'A' && approx(section.radiusLdu, 6))
   const allR = sections.length > 0 && shapes.every(shape => shape === 'R')
   const axleIndices=sections.flatMap((section,index)=>shapes[index]==='A'&&approx(section.radiusLdu,6)?[index]:[])
-  const stoppedAxle=axleIndices.length>0 && sections.every((section,index)=>
+  const axleRail=axleIndices.length>0 && sections.every((section,index)=>
     (shapes[index]==='A'&&approx(section.radiusLdu,6)) ||
     (shapes[index]==='R'&&approx(section.radiusLdu,8)&&section.lengthLdu<=4&&
       (index<axleIndices[0]||index>axleIndices.at(-1))))
 
+  // Centering and caps describe the coordinate origin/end closure, not whether the
+  // material is an axle. Any sliding male A6 rail (optionally with a terminal R8 stop)
+  // is a Technic axle; axial-fit enforces the actual usable interval and stop collision.
   if (
-    connector.gender === 'male' && connector.snap?.slide === true && connector.geometry?.centered === true &&
-    String(connector.geometry?.caps || '').toLowerCase() === 'none' && (allA6 || stoppedAxle)
+    connector.gender === 'male' && connector.snap?.slide === true && axleRail
   ) return 'technic-axle'
 
   // caps describes which end of a female bore is physically open; it must not
@@ -73,8 +75,10 @@ export function classifyConnectorV4(connector) {
   const axlePinSemantic=classifyTechnicAxlePinInterfaceV4(connector)
   if (axlePinSemantic) return axlePinSemantic.role
 
+  // As with axle holes, centered/caps are geometry constraints, not semantic type.
+  // A sliding all-round R6 bore can accept a continuous axle with free twist.
   if (
-    connector.gender === 'female' && connector.snap?.slide === true && connector.geometry?.centered === true && allR &&
+    connector.gender === 'female' && connector.snap?.slide === true && allR &&
     sections.some(section => approx(section.radiusLdu, 6))
   ) return 'technic-round-hole'
 
