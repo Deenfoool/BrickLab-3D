@@ -2,9 +2,10 @@ import { axialConnectorV4 } from './axial-fit-v4.js'
 import { axialSpanV4 } from './schema-v4.js?v=connector-v4-20260910-v3'
 import { proposeConstraintV4 } from './constraints-v4.js?v=connector-v4-20260910-v1'
 import { axialOverlapV4, createAxialOccupancyV4 } from './occupancy-v4.js?v=connector-v4-20260910-v1'
+import { engineCamTrackPairV4 } from './engine-cam-track-v4.js?v=connector-engine-continuous-rim-20260917-v2'
 
 export const CONNECTION_SCHEMA_VERSION_V4 = 4
-export const CONNECTION_GRAPH_VERSION_V4 = 'connection-graph-v4.0.1'
+export const CONNECTION_GRAPH_VERSION_V4 = 'connection-graph-v4.0.2'
 const EPS = 1e-6
 
 export function endpointKeyV4(instanceId, endpointId) {
@@ -34,6 +35,10 @@ function maleFemaleCandidate(candidate) {
 }
 
 function cylinderReservation(candidate) {
+  // A circular cam track is a surface/path, not one occupied axial shaft interval.
+  // Multiple independent 4369 followers may contact different points of the same
+  // 4368 circumference simultaneously, so the track endpoint itself is shareable.
+  if(engineCamTrackPairV4(candidate?.source,candidate?.target))return null
   const pair=maleFemaleCandidate(candidate)
   if (!pair) return null
   const axial=candidate.solution?.axial
@@ -61,6 +66,11 @@ function cylinderReservation(candidate) {
 function exclusiveEndpointsFor(candidate) {
   const source=endpointFrom(candidate.sourceObject,candidate.source)
   const target=endpointFrom(candidate.targetObject,candidate.target)
+  const trackPair=engineCamTrackPairV4(candidate.source,candidate.target)
+  if(trackPair){
+    // The follower itself can only ride one cam track; the circular track is shared.
+    return [trackPair.follower===candidate.source?source:target]
+  }
   if (candidate.source.family==='cylinder' && candidate.target.family==='cylinder') {
     // A female bore cannot accept two physical shafts at once. A long male profile
     // is intentionally NOT exclusive; interval occupancy decides whether another
@@ -80,6 +90,7 @@ export function createConnectionProposalV4(candidate,{metadata=null}={}) {
   if (!candidate?.solution?.valid || !candidate?.match?.compatible) throw new TypeError('A valid V4 placement candidate is required')
   const a=endpointFrom(candidate.sourceObject,candidate.source)
   const b=endpointFrom(candidate.targetObject,candidate.target)
+  const continuousTrack=Boolean(engineCamTrackPairV4(candidate.source,candidate.target))
   const reservation=cylinderReservation(candidate)
   const exclusiveEndpoints=exclusiveEndpointsFor(candidate)
   const constraint=proposeConstraintV4(candidate.match,{source:'connector-v4-geometry'})
@@ -102,10 +113,11 @@ export function createConnectionProposalV4(candidate,{metadata=null}={}) {
       solverVersion:candidate.solution.solverVersion,
       axialOffsetLdu:candidate.solution.axial?.offsetLdu ?? 0,
       placementMode:candidate.solution.placementMode || 'aligned',
+      continuousPath:candidate.solution.continuousPath?structuredClone(candidate.solution.continuousPath):null,
     },
     constraint,
     occupancy:reservation,
-    occupancyReady:Boolean(reservation || !['cylinder','clip-cylinder'].includes(candidate.match.family)),
+    occupancyReady:Boolean(continuousTrack || reservation || !['cylinder','clip-cylinder'].includes(candidate.match.family)),
     exclusiveEndpointKeys:exclusiveEndpoints.map(endpoint=>endpointKeyV4(endpoint.instanceId,endpoint.endpointId)),
     provenance:{a:candidate.source.source ?? null,b:candidate.target.source ?? null},
     metadata:metadata && typeof metadata==='object'?structuredClone(metadata):null,
