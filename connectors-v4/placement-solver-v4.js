@@ -109,11 +109,15 @@ function solveAxialOffset(movingConnector,targetConnector,match,movingFrame,targ
   const requestedStud = Number.isFinite(options.axialOffsetStud)
     ? options.axialOffsetStud
     : movingFrame.position.clone().sub(targetFrame.position).dot(targetFrame.axis)
-  const windows = nearestAxialOffsetV4(movingConnector,targetConnector,requestedStud*20)
+  // The fit solver assumes parallel profile axes. For a reversed moving shaft,
+  // the target-frame displacement must be reflected into the shaft's axis.
+  // A reversed symmetric moving receiver already uses the stationary male axis.
+  const polarity=movingConnector.gender==='male' && bidirectionalCylinderPairV4(movingConnector,targetConnector,match) && movingFrame.axis.dot(targetFrame.axis)<0 ? -1 : 1
+  const windows = nearestAxialOffsetV4(movingConnector,targetConnector,requestedStud*20*polarity)
   if (!windows.valid || windows.offsetLdu == null) return { offsetStud:0, offsetLdu:0, clamped:true, windows, fit:null, rejected:true }
   const fit = evaluateAxialOffsetV4(movingConnector,targetConnector,windows.offsetLdu)
   if (!fit.valid) return { offsetStud:0, offsetLdu:0, clamped:true, windows, fit, rejected:true }
-  return { offsetStud:windows.offsetLdu/20, offsetLdu:windows.offsetLdu, clamped:windows.clamped, windows, fit, rejected:false }
+  return { offsetStud:windows.offsetLdu*polarity/20, offsetLdu:windows.offsetLdu*polarity, profileOffsetLdu:windows.offsetLdu, clamped:windows.clamped, windows, fit, rejected:false }
 }
 
 function movingPlacementMode(connector, match) {

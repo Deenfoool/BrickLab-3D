@@ -38,7 +38,8 @@ function cylinderReservation(candidate) {
   if (!pair) return null
   const axial=candidate.solution?.axial
   if (!axial || !Number.isFinite(axial.offsetLdu)) return null
-  const maleOffset=axial.offsetLdu*(pair.movingMale?1:-1)
+  const profileOffset=axial.profileOffsetLdu ?? axial.offsetLdu*(pair.movingMale && candidate.solution?.axisPolarity===-1 ? -1 : 1)
+  const maleOffset=profileOffset*(pair.movingMale?1:-1)
   const maleSpan=axialSpanV4(pair.male)
   const femaleSpan=axialSpanV4(pair.female)
   // evaluateMaleOffset defines male coordinates shifted by `maleOffset` into the

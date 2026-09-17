@@ -117,3 +117,52 @@ test('real 32270 gear snaps next to the 55013 stop and cannot overlap the collar
   assert.equal(evaluateAxialOffsetV4(connectors[0],male,70).valid,false,'R8 collar still blocks the gear')
   assert.equal(v4.reconcileGraph([gear,shaft]).kept,1)
 })
+
+test('moving the hybrid into an oppositely oriented pin hole preserves the free axle bands',()=>{
+  v4.clearGraph()
+  const shaft=part('ldraw-reverse-moving-65249',AXLE_PIN_65249,'reverse-moving-65249')
+  const receiver=part('ldraw-reverse-fixed-hole',PIN_HOLE,'reverse-fixed-hole')
+  receiver.rotation.z=Math.PI/2
+  receiver.position.x=-1
+  receiver.updateMatrixWorld(true)
+  const candidate=v4.findActiveCandidate(shaft,[receiver],{captureDistanceStud:.72})
+  assert.ok(candidate,'the short pin end must fit without moving to the axle end')
+  assert.ok(Math.abs(candidate.solution.worldPosition[0])<1e-4,'must keep the selected physical band')
+  assert.equal(v4.commitActiveCandidate(candidate).accepted,true)
+  const objects=[shaft,receiver]
+  for(const [index,x] of [0,1].entries()){
+    const hole=part(`ldraw-reverse-axle-${index}`,AXLE_HOLE,`reverse-axle-${index}`)
+    hole.position.x=x
+    connect(hole,shaft,{opposed:index===1})
+    objects.push(hole)
+  }
+  assert.equal(v4.reconcileGraph(objects).kept,3)
+})
+
+test('all shaft bands remain usable in every assembly order and entry direction',()=>{
+  const profiles=[['pin',LONG_PIN],['hybrid',AXLE_PIN_65249],['axle','0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=A 6 60] [center=true] [slide=true] [ori=0 -1 0 1 0 0 0 0 1]']]
+  const orders=[[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]]
+  for(const [kind,line] of profiles)for(const order of orders)for(const opposed of [false,true]){
+    v4.clearGraph()
+    const key=`${kind}-${order.join('')}-${opposed}`
+    const shaft=part(`ldraw-order-${key}`,line,`order-${key}`)
+    const holes=[0,1,2].map(index=>{
+      const hole=part(`ldraw-order-${key}-${index}`,kind==='pin'||kind==='hybrid'&&index===0?PIN_HOLE:AXLE_HOLE,`order-${key}-${index}`)
+      hole.rotation.z=opposed?Math.PI/2:-Math.PI/2
+      hole.position.x=index-1
+      hole.updateMatrixWorld(true)
+      return hole
+    })
+    const first=v4.findActiveCandidate(shaft,[holes[order[0]]],{captureDistanceStud:.72})
+    assert.ok(first,key)
+    assert.equal(v4.commitActiveCandidate(first).accepted,true,key)
+    assert.ok(shaft.position.length()<1e-4,key)
+    for(const index of order.slice(1))connect(holes[index],shaft,{opposed})
+    assert.equal(v4.reconcileGraph([shaft,...holes]).kept,3,key)
+    const intervals=v4.projectConnections().map(c=>c.occupancy.interval).sort((a,b)=>a[0]-b[0])
+    for(let index=0;index<3;index++){
+      assert.ok(Math.abs(intervals[index][0]-(-30+index*20))<1e-4,key)
+      assert.ok(Math.abs(intervals[index][1]-(-10+index*20))<1e-4,key)
+    }
+  }
+})

@@ -64,7 +64,7 @@ export function validateConnectedGeometryV4(objectA, connectorA, objectB, connec
 
   let axial = null
   if (['cylinder','clip-cylinder'].includes(match.family)) {
-    axial = evaluateAxialOffsetV4(connectorA, connectorB, axialOffsetStud * 20)
+    axial = evaluateAxialOffsetV4(connectorA, connectorB, axialOffsetStud * 20 * (connectorA.gender==='male'?axisPolarity:1))
     if (!axial.valid) {
       return { valid:false, reason:`axial:${axial.reason}`, axisDot, rawAxisDot, axisPolarity, bidirectionalAxis, axialOffsetStud, lateralErrorStud, axial, match }
     }

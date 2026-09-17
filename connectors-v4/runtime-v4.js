@@ -299,7 +299,7 @@ function reconcileGraph(objects, { persist = true } = {}) {
     }
     const fresh = createConnectionProposalV4({source:connectorA,target:connectorB,sourceObject:objectA,targetObject:objectB,
       match:validity.match,solution:{valid:true,solverVersion:record.placement?.solverVersion,placementMode:record.placement?.placementMode,
-        axial:{offsetLdu:validity.axialOffsetStud*20}}}, {metadata:record.metadata})
+        axisPolarity:validity.axisPolarity,axial:{offsetLdu:validity.axialOffsetStud*20}}}, {metadata:record.metadata})
     fresh.activation=activation
     if (fresh.id !== record.id || !fresh.occupancyReady || !staged.add(fresh).accepted) {
       removed.push({connectionId:record.id,reason:'occupancy-or-identity'})
@@ -332,11 +332,12 @@ function certifiedCandidate(movingObject, targetObjects, options = {}) {
   for (const candidate of candidates) {
     const variants=[]
     const requestedLdu=candidate.solution?.axial?.offsetLdu ?? 0
-    const slots=nearestTechnicPinSlotOffsetsV4(candidate.source,candidate.target,requestedLdu)
+    const polarity=candidate.source.gender==='male' && candidate.solution.axisPolarity===-1 ? -1 : 1
+    const slots=nearestTechnicPinSlotOffsetsV4(candidate.source,candidate.target,requestedLdu*polarity).map(offset=>offset*polarity)
     const male=candidate.source.gender==='male'?candidate.source:candidate.target
     const maleObject=candidate.source.gender==='male'?candidate.sourceObject:candidate.targetObject
     const reservations=connectionGraph.axialReservations(`${maleObject.userData.instanceId}::${male.endpointId}`)
-    const adjacent=adjacentAxialOffsetsV4(candidate.source,candidate.target,reservations,requestedLdu)
+    const adjacent=adjacentAxialOffsetsV4(candidate.source,candidate.target,reservations,requestedLdu*polarity).map(offset=>offset*polarity)
     // Settle pin latches on their module centres before accepting a continuous
     // offset that spills into the next band. Axles retain continuous placement.
     const offsets=[...new Set([...slots,requestedLdu,...adjacent])]
