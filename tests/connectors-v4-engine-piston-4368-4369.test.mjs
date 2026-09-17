@@ -16,6 +16,7 @@ import {
 } from '../connectors-v4/engine-cam-track-v4.js'
 import { matchConnectorV4 } from '../connectors-v4/matcher-v4.js'
 import { activationForMatchV4 } from '../connectors-v4/activation-v4.js'
+import { createConnectionGraphV4, createConnectionProposalV4 } from '../connectors-v4/connections-v4.js'
 
 const close=(a,b,eps=1e-9)=>Math.abs(a-b)<=eps
 
@@ -90,4 +91,36 @@ test('continuous rim projection accepts arbitrary angles, not just cardinal HELP
   assert.ok(close(corrected.nearest.distanceTo(frame.position),radius,1e-10))
   assert.ok(close(corrected.radialErrorStud,.06,1e-10))
   assert.ok(close(corrected.normalOffsetStud,.02,1e-10))
+})
+
+test('one 4368 circular track can carry several independent 4369 followers',()=>{
+  const track={...discoverEnginePistonFixturesV4('4368.dat').connectors[0],endpointId:'crank-track'}
+  const followerA={...discoverEnginePistonFixturesV4('4369.dat').connectors[0],endpointId:'follower'}
+  const followerB={...discoverEnginePistonFixturesV4('4369.dat').connectors[0],endpointId:'follower'}
+  const matchA=matchConnectorV4(followerA,track)
+  const matchB=matchConnectorV4(followerB,track)
+  const disk={userData:{instanceId:'disk',partId:'ldraw-4368'}}
+  const pistonA={userData:{instanceId:'piston-a',partId:'ldraw-4369'}}
+  const pistonB={userData:{instanceId:'piston-b',partId:'ldraw-4369'}}
+  const solution={
+    valid:true,
+    solverVersion:'test-continuous-track',
+    placementMode:'aligned',
+    axisPolarity:1,
+    axial:{offsetLdu:0,profileOffsetLdu:0},
+    continuousPath:{kind:'circle',radiusStud:.75},
+  }
+  const proposalA=createConnectionProposalV4({source:followerA,target:track,sourceObject:pistonA,targetObject:disk,match:matchA,solution})
+  const proposalB=createConnectionProposalV4({source:followerB,target:track,sourceObject:pistonB,targetObject:disk,match:matchB,solution})
+  assert.equal(proposalA.occupancy,null)
+  assert.equal(proposalB.occupancy,null)
+  assert.equal(proposalA.occupancyReady,true)
+  assert.equal(proposalA.exclusiveEndpointKeys.includes('disk::crank-track'),false)
+  assert.deepEqual(proposalA.exclusiveEndpointKeys,['piston-a::follower'])
+  assert.deepEqual(proposalB.exclusiveEndpointKeys,['piston-b::follower'])
+
+  const graph=createConnectionGraphV4()
+  assert.equal(graph.add(proposalA).accepted,true)
+  assert.equal(graph.add(proposalB).accepted,true)
+  assert.equal(graph.list().length,2)
 })
