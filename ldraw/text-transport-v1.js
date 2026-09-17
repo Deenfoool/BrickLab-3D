@@ -1,11 +1,15 @@
+export const LDRAW_UNOFFICIAL_MIRROR = 'https://raw.githubusercontent.com/brycewalls/ldraw-parts-mirror/304f0153dad23d3eebef1c1e85789a85973ee1e8/ldraw/UnOfficial/'
+
 export const LDRAW_MIRRORS = [
   'https://raw.githubusercontent.com/mrkrstphr/ldraw-parts/main/',
   'https://raw.githubusercontent.com/pybricks/ldraw/master/',
+  LDRAW_UNOFFICIAL_MIRROR,
 ]
 
-// Mirrors can carry different LDraw releases. A 404 is authoritative only after
-// every configured mirror has been checked; this keeps newer official parts such
-// as 71708 available while retaining the established pybricks source as fallback.
+// Official mirrors stay first. The pinned unofficial Parts Tracker mirror is a
+// last-resort fallback only, so a part automatically migrates to the official
+// geometry as soon as either official mirror contains it.
+// A 404 is authoritative only after every configured mirror has been checked.
 export function createLDrawTextTransport({fetcher=globalThis.fetch,mirrors=LDRAW_MIRRORS,timeoutMs=15000}={}) {
   const cache=new Map()
   const missingPaths=new Set()
