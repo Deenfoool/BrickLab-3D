@@ -37,7 +37,7 @@ test('4369 exposes the retained follower at its verified tail location',()=>{
   assert.equal(follower.discovery.role,'technic-engine-piston-follower')
 })
 
-test('4369 follower snaps to every 4368 crank rim site as a retained revolute pair',()=>{
+test('4369 follower snaps to every 4368 crank rim site as the dedicated cam follower pair',()=>{
   const follower=discoverEnginePistonFixturesV4('4369.dat').connectors[0]
   for(const crank of discoverEnginePistonFixturesV4('4368.dat').connectors){
     const match=matchConnectorV4(follower,crank)
@@ -46,7 +46,9 @@ test('4369 follower snaps to every 4368 crank rim site as a retained revolute pa
     assert.equal(match.kinematicHint,'revolute')
     const activation=activationForMatchV4(follower,crank,match)
     assert.equal(activation.active,true)
+    assert.equal(activation.family,'technic-engine-cam-follower')
     assert.equal(activation.constraintKind,'revolute')
+    assert.equal(activation.evidence,'verified-ldraw-help:4368+4369')
   }
   assert.equal(matchConnectorV4(follower,{...discoverEnginePistonFixturesV4('4368.dat').connectors[0],group:'other'}).compatible,false)
 })
