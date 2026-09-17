@@ -18,9 +18,9 @@ import {
   ENGINE_CAM_KINEMATICS_VERSION,
   engineCamFollowerDisplacementV1,
   engineCamPairV1,
-} from './engine-cam-v1.js?v=kinematics-engine-4368-4369-20260917-v1'
+} from './engine-cam-v1.js?v=kinematics-engine-continuous-rim-20260917-v2'
 
-export const KINEMATICS_RUNTIME_VERSION = 'kinematics-runtime-v1.3.0'
+export const KINEMATICS_RUNTIME_VERSION = 'kinematics-runtime-v1.4.0'
 
 const LANGUAGE_KEY = 'bricklab.ui.language.v1'
 const INERTIA_STOP_DPS = 3
@@ -105,6 +105,35 @@ const selectionMarker = layer.querySelector('.kinematics-selection-marker')
 function objects() { return subsystems.editor.objects?.() ?? [] }
 function currentDriver() { return drivers.find(driver => driver.id === currentDriverId) ?? null }
 
+function ldrawMechanicalPivotLocal(object) {
+  const visual=object?.children?.find?.(child=>child?.userData?.ldrawVisual)
+  return visual?.position?.clone?.() ?? new THREE.Vector3()
+}
+
+function mechanicalPivotWorld(object) {
+  if(!object)return null
+  object.updateWorldMatrix?.(true,false)
+  return ldrawMechanicalPivotLocal(object).applyMatrix4(object.matrixWorld)
+}
+
+function mechanicalPivotWorldFromPose(pose) {
+  if(!pose?.worldMatrix)return null
+  return ldrawMechanicalPivotLocal(pose.object).applyMatrix4(pose.worldMatrix)
+}
+
+function viewportPointForWorld(point,camera) {
+  if(!point?.isVector3||!camera?.isCamera)return null
+  const rect=viewport.getBoundingClientRect?.()
+  if(!rect?.width||!rect?.height)return null
+  camera.updateMatrixWorld?.(true)
+  const ndc=point.clone().project(camera)
+  return{
+    x:(ndc.x*.5+.5)*rect.width,
+    y:(-.5*ndc.y+.5)*rect.height,
+    visible:ndc.z>=-1&&ndc.z<=1&&ndc.x>=-1.2&&ndc.x<=1.2&&ndc.y>=-1.2&&ndc.y<=1.2,
+  }
+}
+
 function driverForInstance(instanceId) {
   return drivers.find(driver => driver.type === 'shaft' && driver.memberIds.includes(instanceId))
     ?? drivers.find(driver => driver.type === 'joint'
@@ -114,8 +143,13 @@ function driverForInstance(instanceId) {
 }
 
 function mechanicalDragEligible(object) {
-  const mechanics = subsystems.parts.get(object?.userData?.partId)?.mechanics
-  return Boolean(mechanics?.gear || mechanics?.shaft || mechanics?.wheel)
+  const partId=object?.userData?.partId
+  const mechanics = subsystems.parts.get(partId)?.mechanics
+  if(mechanics?.gear || mechanics?.shaft || mechanics?.wheel)return true
+  const connectivity=authoritativeV4.get?.(partId)
+  return Boolean(connectivity?.connectors?.some?.(connector=>
+    connector?.family==='cylinder' && (connector.geometry?.sections??[]).some(section=>section?.shape==='A'&&Math.abs((section.radiusLdu??0)-6)<.1)
+  ))
 }
 
 function sceneCamera() {
@@ -167,9 +201,8 @@ function driverViewSign(driver, object, camera) {
   const axis = driverAxisWorld(driver)
   if (!axis || !camera) return 1
   axis.normalize()
-  const objectPosition = new THREE.Vector3()
+  const objectPosition = mechanicalPivotWorld(object) ?? new THREE.Vector3()
   const cameraPosition = new THREE.Vector3()
-  object.getWorldPosition?.(objectPosition)
   camera.getWorldPosition?.(cameraPosition)
   const towardCamera = camera.isOrthographicCamera
     ? camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(-1)
@@ -403,12 +436,25 @@ async function analyze() {
   updateSelectionMarker()
 }
 
-function parentLocalAxis(object, worldAxis) {
-  if (!object.parent) return worldAxis.clone().normalize()
-  object.parent.updateWorldMatrix?.(true,false)
-  const parentQ = new THREE.Quaternion()
-  object.parent.getWorldQuaternion?.(parentQ)
-  return worldAxis.clone().applyQuaternion(parentQ.invert()).normalize()
+function applyWorldMatrixFromBaseline(pose,worldMatrix) {
+  let local=worldMatrix
+  if(pose.object.parent){
+    pose.object.parent.updateWorldMatrix?.(true,false)
+    local=pose.object.parent.matrixWorld.clone().invert().multiply(worldMatrix)
+  }
+  local.decompose(pose.object.position,pose.object.quaternion,pose.object.scale)
+  pose.object.updateMatrixWorld?.(true)
+}
+
+function applyWorldDeltaToBaselinePose(pose,deltaWorld) {
+  applyWorldMatrixFromBaseline(pose,deltaWorld.clone().multiply(pose.worldMatrix))
+}
+
+function rotationAroundWorldPivot(axis,pivot,radians) {
+  const rotation=new THREE.Matrix4().makeRotationAxis(axis.clone().normalize(),radians)
+  return new THREE.Matrix4().makeTranslation(pivot.x,pivot.y,pivot.z)
+    .multiply(rotation)
+    .multiply(new THREE.Matrix4().makeTranslation(-pivot.x,-pivot.y,-pivot.z))
 }
 
 function applyEngineCamFollowers() {
@@ -449,13 +495,16 @@ function applyShaftDriver(driver) {
     if (!shaft?.axisWorld) continue
     const radians = THREE.MathUtils.degToRad(angleDeg * ratio)
     if (Math.abs(radians) < 1e-12) continue
+    const axisWorld=shaft.axisWorld.clone().normalize()
     for (const instanceId of shaft.memberIds ?? []) {
       const pose = baseline.get(instanceId)
       if (!pose) continue
-      const axisLocal = parentLocalAxis(pose.object, shaft.axisWorld)
-      const delta = new THREE.Quaternion().setFromAxisAngle(axisLocal, radians)
-      pose.object.quaternion.copy(delta.multiply(pose.quaternion.clone()))
-      pose.object.updateMatrixWorld?.(true)
+      // LDraw visuals are re-centered for BUILD placement, so the root origin is
+      // usually not the mechanical axle centre. Rotate the whole root around the
+      // original LDraw origin (the visual offset) instead of around root (0,0,0).
+      const pivot=mechanicalPivotWorldFromPose(pose)
+      if(!pivot)continue
+      applyWorldDeltaToBaselinePose(pose,rotationAroundWorldPivot(axisWorld,pivot,radians))
     }
   }
   applyEngineCamFollowers()
@@ -466,14 +515,7 @@ function transformComponent(component, deltaWorld) {
   for (const object of component) {
     const pose = baseline.get(object.userData?.instanceId)
     if (!pose) continue
-    const world = deltaWorld.clone().multiply(pose.worldMatrix)
-    let local = world
-    if (object.parent) {
-      object.parent.updateWorldMatrix?.(true,false)
-      local = object.parent.matrixWorld.clone().invert().multiply(world)
-    }
-    local.decompose(object.position, object.quaternion, object.scale)
-    object.updateMatrixWorld?.(true)
+    applyWorldDeltaToBaselinePose(pose,deltaWorld)
   }
 }
 
@@ -530,7 +572,8 @@ function applyControls() {
 function updateSelectionMarker() {
   if (!selectionMarker) return
   const object = selectedInstanceId ? subsystems.editor.objectById?.(selectedInstanceId) : null
-  const point = object ? subsystems.editor.viewportPoint?.(object, { offsetY:0 }) : null
+  const camera=sceneCamera()
+  const point = object && camera ? viewportPointForWorld(mechanicalPivotWorld(object),camera) : null
   if (!active || !object || !point?.visible) {
     selectionMarker.hidden = true
     return
@@ -634,7 +677,8 @@ function canvasPointerDown(event) {
   stopInertia()
   rebaseForDriver(picked.driver, picked.object.userData?.instanceId)
 
-  const point = subsystems.editor.viewportPoint?.(picked.object, { offsetY:0 })
+  const pivotPoint=mechanicalPivotWorld(picked.object)
+  const point = pivotPoint ? viewportPointForWorld(pivotPoint,picked.camera) : null
   const viewportRect = viewport.getBoundingClientRect()
   const center = point
     ? { x:viewportRect.left + point.x, y:viewportRect.top + point.y }
