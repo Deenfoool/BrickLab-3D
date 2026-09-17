@@ -2,8 +2,13 @@ import * as THREE from 'three'
 import { matchConnectorV4 } from './matcher-v4.js'
 import { nearestAxialOffsetV4, evaluateAxialOffsetV4 } from './axial-fit-v4.js'
 import { bidirectionalCylinderReceiverV4 } from './through-hole-v4.js'
+import {
+  circularTrackRadiusStudV4,
+  engineCamTrackPairV4,
+  projectCircularTrackPointV4,
+} from './engine-cam-track-v4.js?v=connector-engine-continuous-rim-20260917-v2'
 
-export const PLACEMENT_SOLVER_VERSION_V4 = 'placement-solver-v4.5.0'
+export const PLACEMENT_SOLVER_VERSION_V4 = 'placement-solver-v4.6.0'
 const EPS = 1e-8
 
 function matrixFromConnector(connector) {
@@ -127,22 +132,11 @@ function movingPlacementMode(connector, match) {
   return 'aligned'
 }
 
-export function solvePlacementV4(movingObject,movingConnector,targetObject,targetConnector,options={}) {
-  const match = options.match ?? matchConnectorV4(movingConnector,targetConnector)
-  if (!match?.compatible) return { valid:false, reason:match?.reason || 'incompatible', match }
-
-  const movingFrame = options.movingFrame ?? connectorWorldFrameV4(movingObject,movingConnector)
-  const targetFrame = options.targetFrame ?? connectorWorldFrameV4(targetObject,targetConnector)
-  const movingPose = options.movingPose ?? objectWorldPoseV4(movingObject)
-  const initialDelta = movingFrame.position.clone().sub(targetFrame.position)
-  const initialAxialSeparationStud = initialDelta.dot(targetFrame.axis)
-  const initialLateralDistanceStud = initialDelta.clone().addScaledVector(targetFrame.axis,-initialAxialSeparationStud).length()
-  const initialConnectorDistanceStud = initialDelta.length()
+function orientationSolution(movingConnector,targetConnector,match,movingFrame,targetFrame,movingPose,options) {
   const initialAxisDot = movingFrame.axis.dot(targetFrame.axis)
   const bidirectionalAxis = bidirectionalCylinderPairV4(movingConnector,targetConnector,match)
   const axisPolarity = bidirectionalAxis && initialAxisDot < 0 ? -1 : 1
   const alignmentAxis = targetFrame.axis.clone().multiplyScalar(axisPolarity)
-
   let desiredQuaternion = movingPose.quaternion.clone()
   let rotationDelta = new THREE.Quaternion()
   const placementMode = movingPlacementMode(movingConnector,match)
@@ -153,7 +147,6 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
     const axisAlign = new THREE.Quaternion().setFromUnitVectors(movingFrame.axis,alignmentAxis)
     desiredQuaternion = axisAlign.clone().multiply(desiredQuaternion)
     rotationDelta.copy(axisAlign)
-
     const alignedReference = movingFrame.reference.clone().applyQuaternion(axisAlign)
     const requestedTwist = Number(options.twistCorrectionRad)
     const correctionAngle = Number.isFinite(requestedTwist)
@@ -166,17 +159,126 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
       appliedTwistCorrectionRad = correctionAngle
     }
   }
+  return {initialAxisDot,bidirectionalAxis,axisPolarity,alignmentAxis,desiredQuaternion,rotationDelta,placementMode,preserveMovingOrientation,appliedTwistCorrectionRad}
+}
+
+function solveContinuousCircularTrackPlacement(movingObject,movingConnector,targetObject,targetConnector,match,movingFrame,targetFrame,movingPose,options) {
+  const pair=engineCamTrackPairV4(movingConnector,targetConnector)
+  if(!pair)return null
+  const trackIsMoving=pair.track===movingConnector
+  const trackFrame=trackIsMoving?movingFrame:targetFrame
+  const followerFrame=trackIsMoving?targetFrame:movingFrame
+  const radiusStud=circularTrackRadiusStudV4(pair.track)
+  if(!(radiusStud>0))return{valid:false,reason:'continuous-track-radius',match}
+
+  const orientation=orientationSolution(movingConnector,targetConnector,match,movingFrame,targetFrame,movingPose,options)
+  const objectOrigin=movingPose.position
+  let trackCenter=trackFrame.position.clone()
+  let trackAxis=trackFrame.axis.clone()
+  let trackReference=trackFrame.reference.clone()
+  let followerPosition=followerFrame.position.clone()
+
+  if(trackIsMoving){
+    trackCenter=objectOrigin.clone().add(trackFrame.position.clone().sub(objectOrigin).applyQuaternion(orientation.rotationDelta))
+    trackAxis=trackFrame.axis.clone().applyQuaternion(orientation.rotationDelta).normalize()
+    trackReference=trackFrame.reference.clone().applyQuaternion(orientation.rotationDelta).normalize()
+  }else{
+    followerPosition=objectOrigin.clone().add(movingFrame.position.clone().sub(objectOrigin).applyQuaternion(orientation.rotationDelta))
+  }
+
+  const projected=projectCircularTrackPointV4(
+    {position:trackCenter,axis:trackAxis,reference:trackReference},
+    followerPosition,
+    {fallbackDirection:trackReference,radiusStud},
+  )
+  if(!projected.valid)return{valid:false,reason:projected.reason||'continuous-track-project',match}
+
+  let desiredWorldPosition
+  let desiredConnectorPosition
+  if(trackIsMoving){
+    const correction=followerPosition.clone().sub(projected.nearest)
+    desiredWorldPosition=objectOrigin.clone().add(correction)
+    desiredConnectorPosition=trackCenter.clone().add(correction)
+  }else{
+    const sourceOffset=followerPosition.clone().sub(objectOrigin)
+    desiredConnectorPosition=projected.nearest.clone()
+    desiredWorldPosition=desiredConnectorPosition.clone().sub(sourceOffset)
+  }
+
+  const localPose=toParentLocalPose(movingObject,desiredWorldPosition,orientation.desiredQuaternion)
+  const initialDelta=movingFrame.position.clone().sub(targetFrame.position)
+  const initialAxialSeparationStud=initialDelta.dot(targetFrame.axis)
+  const initialLateralDistanceStud=projected.captureErrorStud
+  const initialConnectorDistanceStud=initialDelta.length()
+  const axialFit=evaluateAxialOffsetV4(movingConnector,targetConnector,0)
+  const axial={offsetStud:0,offsetLdu:0,profileOffsetLdu:0,clamped:false,windows:null,fit:axialFit,rejected:!axialFit.valid}
+  if(axial.rejected)return{valid:false,reason:'continuous-track-profile',match,axial}
+
+  return{
+    valid:true,
+    reason:'solved-continuous-circular-track',
+    solverVersion:PLACEMENT_SOLVER_VERSION_V4,
+    match,
+    axial,
+    placementMode:orientation.placementMode,
+    preserveMovingOrientation:orientation.preserveMovingOrientation,
+    bidirectionalAxis:orientation.bidirectionalAxis,
+    axisPolarity:orientation.axisPolarity,
+    targetAxisWorld:targetFrame.axis.toArray(),
+    alignmentAxisWorld:orientation.alignmentAxis.toArray(),
+    targetPositionWorld:targetFrame.position.toArray(),
+    desiredConnectorPositionWorld:desiredConnectorPosition.toArray(),
+    worldPosition:desiredWorldPosition.toArray(),
+    worldQuaternion:orientation.desiredQuaternion.toArray(),
+    localPosition:localPose.position.toArray(),
+    localQuaternion:localPose.quaternion.toArray(),
+    continuousPath:{kind:'circle',radiusStud,trackEndpointId:pair.track.endpointId||null,trackSide:pair.trackSide,radialWorld:projected.radial.toArray()},
+    diagnostics:{
+      initialAxisDot:orientation.initialAxisDot,
+      effectiveAxisDot:movingFrame.axis.dot(orientation.alignmentAxis),
+      bidirectionalAxis:orientation.bidirectionalAxis,
+      axisPolarity:orientation.axisPolarity,
+      initialConnectorDistanceStud,
+      initialLateralDistanceStud,
+      initialAxialSeparationStud,
+      captureCorrectionStud:projected.captureErrorStud,
+      translationStud:movingPose.position.distanceTo(desiredWorldPosition),
+      rotationRad:2*Math.acos(THREE.MathUtils.clamp(Math.abs(orientation.rotationDelta.w),-1,1)),
+      twistCorrectionRad:orientation.appliedTwistCorrectionRad,
+      engagementLdu:axial.fit?.engagementLdu ?? 0,
+      circularTrackRadiusStud:radiusStud,
+      circularTrackRadialErrorStud:projected.radialErrorStud,
+      circularTrackNormalErrorStud:projected.normalOffsetStud,
+    },
+  }
+}
+
+export function solvePlacementV4(movingObject,movingConnector,targetObject,targetConnector,options={}) {
+  const match = options.match ?? matchConnectorV4(movingConnector,targetConnector)
+  if (!match?.compatible) return { valid:false, reason:match?.reason || 'incompatible', match }
+
+  const movingFrame = options.movingFrame ?? connectorWorldFrameV4(movingObject,movingConnector)
+  const targetFrame = options.targetFrame ?? connectorWorldFrameV4(targetObject,targetConnector)
+  const movingPose = options.movingPose ?? objectWorldPoseV4(movingObject)
+  const continuous=solveContinuousCircularTrackPlacement(movingObject,movingConnector,targetObject,targetConnector,match,movingFrame,targetFrame,movingPose,options)
+  if(continuous)return continuous
+
+  const initialDelta = movingFrame.position.clone().sub(targetFrame.position)
+  const initialAxialSeparationStud = initialDelta.dot(targetFrame.axis)
+  const initialLateralDistanceStud = initialDelta.clone().addScaledVector(targetFrame.axis,-initialAxialSeparationStud).length()
+  const initialConnectorDistanceStud = initialDelta.length()
+  const orientation=orientationSolution(movingConnector,targetConnector,match,movingFrame,targetFrame,movingPose,options)
 
   const axial = solveAxialOffset(movingConnector,targetConnector,match,movingFrame,targetFrame,options)
   if (axial.rejected) return { valid:false, reason:'axial-profile-no-fit', match, axial }
 
   const objectOrigin = movingPose.position
-  const sourceOffset = movingFrame.position.clone().sub(objectOrigin).applyQuaternion(rotationDelta)
+  const sourceOffset = movingFrame.position.clone().sub(objectOrigin).applyQuaternion(orientation.rotationDelta)
   // Axial offset remains expressed in the target connector's canonical axis so
   // occupancy/persistence signs stay stable regardless of the chosen entry side.
   const desiredConnectorPosition = targetFrame.position.clone().addScaledVector(targetFrame.axis,axial.offsetStud)
   const desiredWorldPosition = desiredConnectorPosition.clone().sub(sourceOffset)
-  const localPose = toParentLocalPose(movingObject,desiredWorldPosition,desiredQuaternion)
+  const localPose = toParentLocalPose(movingObject,desiredWorldPosition,orientation.desiredQuaternion)
   const captureCorrectionStud = movingFrame.position.distanceTo(desiredConnectorPosition)
 
   return {
@@ -185,30 +287,30 @@ export function solvePlacementV4(movingObject,movingConnector,targetObject,targe
     solverVersion:PLACEMENT_SOLVER_VERSION_V4,
     match,
     axial,
-    placementMode,
-    preserveMovingOrientation,
-    bidirectionalAxis,
-    axisPolarity,
+    placementMode:orientation.placementMode,
+    preserveMovingOrientation:orientation.preserveMovingOrientation,
+    bidirectionalAxis:orientation.bidirectionalAxis,
+    axisPolarity:orientation.axisPolarity,
     targetAxisWorld:targetFrame.axis.toArray(),
-    alignmentAxisWorld:alignmentAxis.toArray(),
+    alignmentAxisWorld:orientation.alignmentAxis.toArray(),
     targetPositionWorld:targetFrame.position.toArray(),
     desiredConnectorPositionWorld:desiredConnectorPosition.toArray(),
     worldPosition:desiredWorldPosition.toArray(),
-    worldQuaternion:desiredQuaternion.toArray(),
+    worldQuaternion:orientation.desiredQuaternion.toArray(),
     localPosition:localPose.position.toArray(),
     localQuaternion:localPose.quaternion.toArray(),
     diagnostics:{
-      initialAxisDot,
-      effectiveAxisDot:movingFrame.axis.dot(alignmentAxis),
-      bidirectionalAxis,
-      axisPolarity,
+      initialAxisDot:orientation.initialAxisDot,
+      effectiveAxisDot:movingFrame.axis.dot(orientation.alignmentAxis),
+      bidirectionalAxis:orientation.bidirectionalAxis,
+      axisPolarity:orientation.axisPolarity,
       initialConnectorDistanceStud,
       initialLateralDistanceStud,
       initialAxialSeparationStud,
       captureCorrectionStud,
       translationStud:movingPose.position.distanceTo(desiredWorldPosition),
-      rotationRad:2*Math.acos(THREE.MathUtils.clamp(Math.abs(rotationDelta.w),-1,1)),
-      twistCorrectionRad:appliedTwistCorrectionRad,
+      rotationRad:2*Math.acos(THREE.MathUtils.clamp(Math.abs(orientation.rotationDelta.w),-1,1)),
+      twistCorrectionRad:orientation.appliedTwistCorrectionRad,
       engagementLdu:axial.fit?.engagementLdu ?? 0,
     },
   }
