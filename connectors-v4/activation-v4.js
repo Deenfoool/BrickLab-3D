@@ -1,7 +1,7 @@
 import { CONNECTOR_SCHEMA_VERSION_V4, CONNECTOR_SYSTEM_VERSION_V4, validateConnectorV4 } from './schema-v4.js'
 import { classifyTechnicAxlePinInterfaceV4, classifyTechnicPinInterfaceV4, technicPinPairV4 } from './pin-semantics-v4.js?v=connector-axle-pin-slots-20260916-v1'
 
-export const ACTIVATION_POLICY_VERSION_V4 = 'connector-activation-v4.3.0'
+export const ACTIVATION_POLICY_VERSION_V4 = 'connector-activation-v4.4.0'
 
 const CRITICAL_WARNING_CODES = new Set([
   'invalid-snap-meta',
@@ -60,9 +60,11 @@ export function classifyConnectorV4(connector) {
     String(connector.geometry?.caps || '').toLowerCase() === 'none' && (allA6 || stoppedAxle)
   ) return 'technic-axle'
 
+  // caps describes which end of a female bore is physically open; it must not
+  // change the semantic type. One-sided A6 receivers such as 87408 are still
+  // Technic axle holes, with entry direction enforced later by placement/fit.
   if (
-    connector.gender === 'female' && connector.snap?.slide === true &&
-    String(connector.geometry?.caps || '').toLowerCase() === 'none' && allA6
+    connector.gender === 'female' && connector.snap?.slide === true && allA6
   ) return 'technic-axle-hole'
 
   const pinSemantic=classifyTechnicPinInterfaceV4(connector)
