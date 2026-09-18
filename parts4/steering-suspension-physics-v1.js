@@ -160,6 +160,8 @@ PhysicsSession.prototype.initializeParts4LinearMechanisms = function initializeP
   return { steeringRacks: this.steeringRacksV1, shocks: this.shockAbsorbersV1 }
 }
 
+PhysicsSession.prototype.initializeParts4LinearMechanisms.__mechanicsNextBypass = true
+
 const previousBuildChassisMonitor = PhysicsSession.prototype.buildChassisMonitor
 PhysicsSession.prototype.buildChassisMonitor = function buildChassisWithParts4LinearMechanisms(...args) {
   const result = previousBuildChassisMonitor.apply(this, args)
