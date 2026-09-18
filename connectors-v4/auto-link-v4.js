@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-export const AUTO_LINK_VERSION_V4='connector-auto-link-v4.1.1'
+export const AUTO_LINK_VERSION_V4='connector-auto-link-v4.2.0'
 export const AUTO_LINK_HOTKEY_V4='Shift+L'
 
 const MAX_TRANSLATION_STUD=0.015
@@ -86,7 +86,7 @@ function activeSources(all){
   return selected.length?selected:all
 }
 
-export async function autoLinkCurrentPoseV4(){
+export async function autoLinkCurrentPoseV4({all:useAll=false,silent=false}={}){
   if(running)return {accepted:0,skipped:0,running:true}
   const api=runtime()
   const architecture=subsystems()
@@ -98,7 +98,7 @@ export async function autoLinkCurrentPoseV4(){
   running=true
   try{
     const all=(architecture.editor.objects?.()??[]).filter(Boolean)
-    const sources=activeSources(all).filter(Boolean)
+    const sources=(useAll?all:activeSources(all)).filter(Boolean)
     await hydrate(all)
 
     let accepted=0
@@ -148,6 +148,26 @@ export async function autoLinkCurrentPoseV4(){
     running=false
   }
 }
+
+let backfillTimer=0
+function scheduleExactContactBackfill(){
+  globalThis.clearTimeout?.(backfillTimer)
+  backfillTimer=globalThis.setTimeout?.(()=>{
+    if(subsystems()?.editor?.mode?.()!=='build')return
+    void autoLinkCurrentPoseV4({all:true,silent:true}).catch(error=>
+      console.debug?.('[BrickLab Auto Link] Exact-contact backfill skipped.',error))
+  },420)??0
+}
+
+// Projects created before multi-contact V4 can contain perfectly positioned Technic
+// assemblies with no graph records. Rebuild only contacts whose current pose already
+// satisfies the strict translation/rotation limits; this never moves a part.
+for(const eventName of [
+  'bricklab:ldrawloaded',
+  'bricklab:projectlibrarychange',
+  'bricklab:editorexternalmutation',
+]) globalThis.addEventListener?.(eventName,scheduleExactContactBackfill)
+scheduleExactContactBackfill()
 
 async function onHotkey(event){
   if(event.code!=='KeyL'||!event.shiftKey||event.ctrlKey||event.metaKey||event.altKey)return

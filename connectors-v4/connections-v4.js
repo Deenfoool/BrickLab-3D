@@ -25,6 +25,10 @@ function endpointFrom(object,connector) {
   }
 }
 
+function designCode(connector){
+  return String(connector?.source?.file||'').replace(/\\/g,'/').split('/').pop()?.replace(/\.dat$/i,'').toLowerCase()||null
+}
+
 function maleFemaleCandidate(candidate) {
   const a=axialConnectorV4(candidate?.source)
   const b=axialConnectorV4(candidate?.target)
@@ -60,7 +64,16 @@ function cylinderReservation(candidate) {
     maleSpan:[...maleSpan],
     femaleSpan:[...femaleSpan],
     maleOffsetLdu:maleOffset,
+    femaleDesignCode:designCode(pair.female),
   }
+}
+
+function differentialNestedOverlap(existing,proposal){
+  const codes=new Set([
+    existing?.metadata?.femaleDesignCode,
+    proposal?.occupancy?.femaleDesignCode,
+  ].filter(Boolean))
+  return codes.has('6589')&&(codes.has('62821')||codes.has('62821b'))
 }
 
 function exclusiveEndpointsFor(candidate) {
@@ -138,7 +151,7 @@ export function createConnectionGraphV4() {
       connectionId:proposal.id,
       occupantId:proposal.b?.instanceId || null,
       interval:reservation.interval,
-      metadata:{a:proposal.a,b:proposal.b},
+      metadata:{a:proposal.a,b:proposal.b,femaleDesignCode:reservation.femaleDesignCode??null},
     }
   }
 
@@ -153,6 +166,7 @@ export function createConnectionGraphV4() {
     if (reservation && candidateReservation) {
       const found=axial.conflicts(reservation.channelKey,candidateReservation,{ignoreConnectionId:proposal.id})
       for (const existing of found) {
+        if(differentialNestedOverlap(existing,proposal))continue
         conflicts.push({
           type:'axial-overlap',
           channelKey:reservation.channelKey,
@@ -171,7 +185,10 @@ export function createConnectionGraphV4() {
     if (conflicts.length) return {accepted:false,reason:'occupied',conflicts}
 
     if (proposal.occupancy) {
-      const reserved=axial.reserve(proposal.occupancy.channelKey,occupancyReservation(proposal))
+      const candidateReservation=occupancyReservation(proposal)
+      const liveConflicts=axial.conflicts(proposal.occupancy.channelKey,candidateReservation,{ignoreConnectionId:proposal.id})
+      const nestedShare=liveConflicts.length>0&&liveConflicts.every(existing=>differentialNestedOverlap(existing,proposal))
+      const reserved=axial.reserve(proposal.occupancy.channelKey,candidateReservation,{allowOverlap:nestedShare})
       if (!reserved.accepted) return {accepted:false,reason:'axial-overlap',conflicts:reserved.conflicts}
     }
     for (const key of proposal.exclusiveEndpointKeys ?? []) exclusiveOwners.set(key,proposal.id)

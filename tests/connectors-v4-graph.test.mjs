@@ -3,16 +3,31 @@ import assert from 'node:assert/strict'
 
 import { CONNECTION_SCHEMA_VERSION_V4, createConnectionGraphV4, createConnectionProposalV4 } from '../connectors-v4/connections-v4.js'
 
-function endpoint({id,gender,length=80,centered=true,shape='A'}={}) {
+function endpoint({id,gender,length=80,centered=true,shape='A',file='test.dat'}={}) {
   return {
     schemaVersion:4,
     endpointId:id,
     family:'cylinder',gender,group:null,
     frame:{positionLdu:[0,0,0],orientation:[1,0,0,0,1,0,0,0,1]},
     geometry:{sections:[{shape,radiusLdu:6,lengthLdu:length,elastic:false}],caps:'none',centered},
-    snap:{slide:true},inheritance:{scale:'none',mirror:'cor'},source:{kind:'test'},
+    snap:{slide:true},inheritance:{scale:'none',mirror:'cor'},source:{kind:'test',file},
   }
 }
+
+test('62821 bearing and nested 6589 gear may share one Axle 3 band',()=>{
+  const graph=createConnectionGraphV4()
+  const housing=createConnectionProposalV4(candidate({femaleId:'carrier-bearing',femaleInstance:'diff-62821',offsetLdu:0}))
+  housing.occupancy.femaleDesignCode='62821'
+  const gear=createConnectionProposalV4(candidate({femaleId:'gear-axle-hole',femaleInstance:'gear-6589',offsetLdu:0}))
+  gear.occupancy.femaleDesignCode='6589'
+  assert.equal(graph.add(housing).accepted,true)
+  assert.equal(graph.add(gear).accepted,true)
+  assert.equal(graph.stats().connections,2)
+  assert.equal(graph.axialReservations('axle-1::axle-profile').length,2)
+  const secondGear=createConnectionProposalV4(candidate({femaleId:'second-gear',femaleInstance:'gear-6589-b',offsetLdu:0}))
+  secondGear.occupancy.femaleDesignCode='6589'
+  assert.equal(graph.add(secondGear).accepted,false)
+})
 
 function object(instanceId,partId) { return {userData:{instanceId,partId}} }
 

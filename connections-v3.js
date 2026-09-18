@@ -137,6 +137,9 @@ export function removeConnectionsForPart(connections, instanceId) {
 
 export function createConnection(sourceObject, sourceConnector, targetObject, targetConnector) {
   const rule = connectorRule(sourceConnector.type, targetConnector.type)
+  const mechanicalKind = sourceConnector?.type === 'gear-mesh' && targetConnector?.type === 'gear-mesh'
+    ? 'gear-mesh'
+    : null
   const contacts = rule?.multiContact ? consumeConnectionBundle(sourceObject, sourceConnector, targetObject, targetConnector) : []
   const primarySignature = pairSignature(
     { instanceId: sourceObject.userData.instanceId, connectorId: sourceConnector.id },
@@ -154,7 +157,7 @@ export function createConnection(sourceObject, sourceConnector, targetObject, ta
   return {
     id: crypto.randomUUID(),
     schemaVersion: CONNECTOR_SCHEMA_VERSION,
-    kind: rule?.kind ?? 'generic',
+    kind: mechanicalKind ?? rule?.kind ?? 'generic',
     ruleVersion: CONNECTOR_RULE_VERSION,
     contactCount: 1 + extras.length,
     a: {

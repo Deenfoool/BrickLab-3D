@@ -165,13 +165,22 @@ function gearDescriptor(object) {
 
   const frame = explicitLDrawGearFrame(object, gear)
   const legacyConnector = definition.connectors?.find(item => item.type === 'axle-hole') ?? null
-  const connector = legacyConnector ?? (frame ? {
+  const basisConnector = legacyConnector ?? (frame ? {
     id:'gear-mesh-anchor',
     type:'gear-mesh',
     position:frame.localPosition.toArray(),
     axis:frame.localAxis.toArray(),
   } : null)
-  if (!connector) return null
+  if (!basisConnector) return null
+
+  // The pitch-circle endpoint is deliberately distinct from the axle hole. A gear
+  // can simultaneously be keyed to an axle and meshed with another gear.
+  const connector = {
+    id:'gear-mesh-anchor',
+    type:'gear-mesh',
+    position:frame?.localPosition?.toArray?.() ?? [...basisConnector.position],
+    axis:frame?.localAxis?.toArray?.() ?? [...basisConnector.axis],
+  }
 
   const axis = frame?.axis ?? connectorWorldAxis(object, connector)
   const center = frame?.center ?? connectorWorldPosition(object, connector)
@@ -189,7 +198,7 @@ function gearDescriptor(object) {
     axis,
     reference: gearWorldReference(object, axis),
     gearFrameSource: frame?.source ?? 'axle-hole',
-    virtualConnector: !legacyConnector,
+    virtualConnector: true,
     meshLocalPosition: frame?.localPosition?.toArray?.() ?? [...connector.position],
     meshLocalAxis: frame?.localAxis?.toArray?.() ?? [...connector.axis],
     bevelApexSigns: Array.isArray(gear.bevelApexSigns) ? [...gear.bevelApexSigns] : null,
@@ -243,10 +252,29 @@ function findGearSnapCandidate(selected, objects) {
       fixedGear: fixed,
       meshSolution: solution,
       ratio: fixed.teeth ? moving.teeth / fixed.teeth : 0,
-      placementOnly: true,
+      // A mesh is not a rigid connector, but it is still a persistent mechanical
+      // graph edge. app.js stores it as `gear-mesh`; drivetrain analysis continues
+      // to solve the live geometry and ratio independently.
+      placementOnly: false,
     }
   }
   return best
+}
+
+export function findExactGearMeshPairs(objects,{maxErrorStud=.02}={}) {
+  const list=(objects??[]).filter(Boolean)
+  const pairs=[]
+  const seen=new Set()
+  for(const movingObject of list){
+    const candidate=findGearSnapCandidate(movingObject,list)
+    if(!candidate||candidate.distance>maxErrorStud)continue
+    const ids=[candidate.movingGear.object.userData.instanceId,candidate.fixedGear.object.userData.instanceId].sort()
+    const key=ids.join('<>')
+    if(seen.has(key))continue
+    seen.add(key)
+    pairs.push(candidate)
+  }
+  return pairs
 }
 
 function publishGearCandidate(candidate) {
@@ -463,7 +491,6 @@ export function applySnap(selected, candidate) {
         candidate.meshSolution.phaseCorrection ?? 0,
       )
     }
-    if (!candidate.movingGear?.virtualConnector) suppressNextConnectionForEndpoint(selected.userData.instanceId, candidate.source.id)
     window.dispatchEvent(new CustomEvent('bricklab:gearmeshsnap', {
       detail: {
         kind: candidate.gearKind,

@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { PARTS, findPart } from './parts.js'
-import { applySnap, connectorWorldPosition, findSnapCandidate, orientForSnap } from './snapping.js'
+import { applySnap, connectorWorldPosition, findExactGearMeshPairs, findSnapCandidate, orientForSnap } from './snapping.js'
 import {
   connectionsForPart,
   createConnection,
@@ -499,6 +499,43 @@ function attachSnapConnection(candidate) {
   return connection
 }
 
+function sameConnectionPair(connection,aId,bId){
+  const ids=[connection?.a?.instanceId,connection?.b?.instanceId].sort()
+  return ids[0]===String(aId<bId?aId:bId)&&ids[1]===String(aId<bId?bId:aId)
+}
+
+function backfillExactGearMeshes(){
+  if(mode!=='build')return 0
+  let changed=0
+  for(const candidate of findExactGearMeshPairs(buildRoot.children)){
+    const aId=candidate.movingGear.object.userData.instanceId
+    const bId=candidate.fixedGear.object.userData.instanceId
+    const existing=connections.find(connection=>sameConnectionPair(connection,aId,bId))
+    if(existing?.kind==='gear-mesh')continue
+    // Older runtimes accidentally wrote the exact same pitch contact as GENERIC
+    // (often labelled axle-hole). Replace only an exact live gear pair.
+    if(existing)connections=connections.filter(connection=>connection!==existing)
+    connections.push(createConnection(candidate.movingGear.object,candidate.source,candidate.fixedGear.object,candidate.target))
+    changed+=1
+  }
+  if(changed){
+    updateConnectionVisuals()
+    updateProjectStats()
+    updateInspector()
+    saveLocal()
+    window.dispatchEvent(new CustomEvent('bricklab:editorexternalmutation',{detail:{reason:'gear-mesh-backfill',count:changed}}))
+  }
+  return changed
+}
+
+let gearMeshBackfillTimer=0
+function scheduleGearMeshBackfill(){
+  clearTimeout(gearMeshBackfillTimer)
+  gearMeshBackfillTimer=setTimeout(backfillExactGearMeshes,480)
+}
+window.addEventListener('bricklab:ldrawloaded',scheduleGearMeshBackfill)
+window.addEventListener('bricklab:projectlibrarychange',scheduleGearMeshBackfill)
+
 function projectState() {
   if (mode === 'build') globalThis.BrickLabConnectorV4?.reconcileGraph(buildRoot.children, {persist:false})
   return {
@@ -565,6 +602,10 @@ function connectionIsValid(connection, usedEndpoints) {
   if (!connection?.a?.instanceId || !connection?.a?.connectorId || !connection?.b?.instanceId || !connection?.b?.connectorId) return false
   const objectA = objectByInstanceId(connection.a.instanceId)
   const objectB = objectByInstanceId(connection.b.instanceId)
+  // Gear meshes use virtual pitch-circle endpoints rather than physical connector
+  // definitions. They are persistent mechanical edges and must survive project load,
+  // but they do not reserve either gear's axle connector.
+  if (connection.kind === 'gear-mesh') return Boolean(objectA && objectB)
   const connectorA = connectorById(objectA, connection.a.connectorId)
   const connectorB = connectorById(objectB, connection.b.connectorId)
   if (!objectA || !objectB || !connectorA || !connectorB) return false
@@ -612,6 +653,8 @@ function applyProject(data, { reset = false, persist = true } = {}) {
   updateInspector()
   connectorGuides()
   refreshSnap()
+
+  scheduleGearMeshBackfill()
 
   if (reset) resetHistory()
   else if (persist) saveLocal()
