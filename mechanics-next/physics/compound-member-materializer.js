@@ -17,7 +17,7 @@ function worldMatrixFor(spec){
   )
 }
 
-function createMember(session,spec){
+function createMember(session,spec,worldUnitsPerStud){
   const RAPIER=session.RAPIER
   const world=session.world
   if(!RAPIER?.RigidBodyDesc?.dynamic||!RAPIER?.ColliderDesc?.cuboid){
@@ -25,15 +25,19 @@ function createMember(session,spec){
   }
 
   const bodyDesc=RAPIER.RigidBodyDesc.dynamic()
-    .setTranslation(...spec.position)
+    .setTranslation(...spec.position.map(value=>value*worldUnitsPerStud))
     .setRotation(quat(spec.quaternion))
     .setCanSleep(false)
   const body=world.createRigidBody(bodyDesc)
   if(!body)throw new Error(`Could not create compound body ${spec.memberId}`)
 
   const h=spec.collider.halfExtents
-  const collider=RAPIER.ColliderDesc.cuboid(h[0],h[1],h[2])
-    .setTranslation(...spec.collider.center)
+  const collider=RAPIER.ColliderDesc.cuboid(
+      h[0]*worldUnitsPerStud,
+      h[1]*worldUnitsPerStud,
+      h[2]*worldUnitsPerStud,
+    )
+    .setTranslation(...spec.collider.center.map(value=>value*worldUnitsPerStud))
     .setFriction(.9)
     .setRestitution(.02)
     .setDensity(.7)
@@ -93,9 +97,10 @@ function internalStructuralPlan(plan){
   })
 }
 
-function localPoint(entry,worldPoint){
-  return new THREE.Vector3(...worldPoint)
+function localPoint(entry,worldPointStud,worldUnitsPerStud){
+  return new THREE.Vector3(...worldPointStud)
     .applyMatrix4(entry.component.bodyWorldInverse)
+    .multiplyScalar(worldUnitsPerStud)
 }
 
 function bodyCenter(entry){
@@ -104,7 +109,7 @@ function bodyCenter(entry){
   return new THREE.Vector3().setFromMatrixPosition(entry.component.bodyWorldMatrix)
 }
 
-function materializeSpring(session,dynamic,createdById){
+function materializeSpring(session,dynamic,createdById,worldUnitsPerStud){
   const housing=createdById.get(dynamic.housingMemberId)
   const rod=createdById.get(dynamic.rodMemberId)
   if(!housing||!rod)throw new Error('Spring-damper members are unavailable')
@@ -115,15 +120,18 @@ function materializeSpring(session,dynamic,createdById){
   const centerB=bodyCenter(rod)
   const distance=centerA.distanceTo(centerB)
   const rest=Number.isFinite(Number(dynamic.restLengthStud))
-    ?Number(dynamic.restLengthStud)
+    ?Number(dynamic.restLengthStud)*worldUnitsPerStud
     :distance
   const stiffness=Number(dynamic.springStiffness)
   const damping=Number(dynamic.damping)
   if(!(Number.isFinite(stiffness)&&stiffness>=0&&Number.isFinite(damping)&&damping>=0)){
     throw new Error('Spring-damper parameters are not verified')
   }
-  const anchorA=localPoint(housing,centerA)
-  const anchorB=localPoint(rod,centerB)
+  // Rapier body translations are already in physics units, but component matrices
+  // intentionally stay in scene studs for editor/world-frame math. Spring anchors
+  // are the member origins, so local zero is exact and avoids cross-unit inversion.
+  const anchorA=new THREE.Vector3()
+  const anchorB=new THREE.Vector3()
   const data=session.RAPIER.JointData.spring(
     rest,stiffness,damping,vec(anchorA.toArray()),vec(anchorB.toArray()),
   )
@@ -154,7 +162,9 @@ export function preflightCompoundMemberMaterialization(session,plan){
   })
 }
 
-export function materializeCompoundMemberPhysics(session,plan){
+export function materializeCompoundMemberPhysics(session,plan,{
+  worldUnitsPerStud=.008,
+}={}){
   const preflight=preflightCompoundMemberMaterialization(session,plan)
   if(!preflight.pass){
     const error=new Error(`Compound member materialization blocked: ${preflight.failures.length}`)
@@ -171,7 +181,7 @@ export function materializeCompoundMemberPhysics(session,plan){
 
   try{
     for(const spec of plan.bodies||[]){
-      const entry=createMember(session,spec)
+      const entry=createMember(session,spec,worldUnitsPerStud)
       created.push(entry)
       createdById.set(spec.memberId,entry)
       session.members.set(spec.memberId,entry.member)
@@ -181,13 +191,13 @@ export function materializeCompoundMemberPhysics(session,plan){
     const structural=internalStructuralPlan(plan)
     internalJoints=materializeRapierMechanicsPlan(session,structural,{
       resolveMember:id=>createdById.get(id)?.member??null,
-      worldUnitsPerStud:1,
+      worldUnitsPerStud,
       contactsEnabled:false,
     })
 
     for(const dynamic of plan.dynamics||[]){
       if(dynamic.kind!=='spring-damper')continue
-      springJoints.push(materializeSpring(session,dynamic,createdById))
+      springJoints.push(materializeSpring(session,dynamic,createdById,worldUnitsPerStud))
     }
 
     const replacementMap=new Map()
