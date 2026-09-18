@@ -129,11 +129,19 @@ if(!PhysicsSession[marker]){
     const compatibility=fixedCompatibilityConnections(physics.structuralPlan,baseIds)
     let session=null
     try{
+      const requestedOptions=
+        rest.length===1&&rest[0]&&typeof rest[0]==='object'&&!Array.isArray(rest[0])
+          ?rest[0]
+          :{}
       session=await legacyGuard.createBaseSession(
         baseObjects,
         compatibility,
-        ...rest,
-        {mechanicsNextOwned:true,mechanicsNextOwnerVersion:MECHANICS_NEXT_PHYSICS_OWNER_VERSION},
+        {
+          ...requestedOptions,
+          mechanicsNextOwned:true,
+          mechanicsNextOwnerVersion:MECHANICS_NEXT_PHYSICS_OWNER_VERSION,
+          mechanicsNextVehiclePlan:physics.vehiclePlan,
+        },
       )
       const preflight=physics.preflightSession(session)
       if(!preflight.pass){
