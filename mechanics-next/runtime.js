@@ -215,6 +215,15 @@ export function createMechanicsNextRuntime({
     return owner
   }
 
+  const restoreCompoundStateSnapshot = snapshot => {
+    compoundState.clear()
+    const states=snapshot?.states
+    if(states&&typeof states==='object'){
+      for(const[key,value]of Object.entries(states))compoundState.set(key,value)
+    }
+    return compoundState.snapshot()
+  }
+
   const mechanicalRecords = () => {
     if (!sceneObserver || !subsystems?.editor?.ready?.()) return Object.freeze([])
     const records = []
@@ -538,6 +547,35 @@ export function createMechanicsNextRuntime({
         }),
       })
     },
+    clearProjectState({keepAuthority=true}={}) {
+      if(activeDragSession?.active){
+        activeDragSession.cancel()
+        activeDragSession=null
+        activeDragApply=false
+      }
+      nativeObservedRecords.clear()
+      nativeRestoredRelations=Object.freeze([])
+      occupancy.clear()
+      compoundState.clear()
+      connectionInterpreter?.sync?.([])
+      transmissionCompiler.clear()
+      for(const edge of [...graph.edges()])graph.removeEdge(edge.id)
+      lastPersistenceReport=null
+      lastTransmissionSync=null
+      physicsPreview=null
+      if(!keepAuthority){
+        nativeProjectAuthoritative=false
+        buildOwnershipPublished=false
+        if(globals.BrickLabMechanicsNextBuildOwner?.version===MECHANICS_NEXT_BUILD_OWNER_VERSION){
+          delete globals.BrickLabMechanicsNextBuildOwner
+        }
+      }
+      return Object.freeze({
+        cleared:true,
+        keepAuthority:Boolean(keepAuthority),
+        graphRevision:graph.revision,
+      })
+    },
     exportProjectState() {
       return exportMechanicsProjectState({
         graph,
@@ -563,6 +601,7 @@ export function createMechanicsNextRuntime({
         replace,
       })
       nativeRestoredRelations=result.relations??Object.freeze([])
+      restoreCompoundStateSnapshot(result.compoundState)
       nativeProjectAuthoritative=result.rejected===0
       if(nativeProjectAuthoritative)publishBuildOwnership('native-project-restore')
       lastPersistenceReport=persistenceCompatibilityReport({
