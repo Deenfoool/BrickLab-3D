@@ -109,13 +109,17 @@ function dynamicsFor(constraints){
   const values=constraints.map(item=>item?.metadata?.dynamics).filter(Boolean)
   if(!values.length)return null
   const springMotors=values.map(value=>value.springMotor).filter(Boolean)
+  const suspensionMotors=values.map(value=>value.suspensionMotor).filter(Boolean)
   const springMotor=springMotors.length===1?springMotors[0]:null
+  const suspensionMotor=suspensionMotors.length===1?suspensionMotors[0]:null
   return Object.freeze({
     rotationalResistance:values.map(value=>value.rotationalResistance).find(Boolean)??null,
     axialResistance:values.map(value=>value.axialResistance).find(Boolean)??null,
     retention:constraints.map(item=>item?.metadata?.topology?.retained).some(Boolean),
     springMotor,
     springMotorConflict:springMotors.length>1,
+    suspensionMotor,
+    suspensionMotorConflict:suspensionMotors.length>1,
     raw:Object.freeze(values),
   })
 }
@@ -196,6 +200,18 @@ function physicsJointForBundle(pair,constraints,componentsByBody){
     }),
   }
 
+  const dynamics=dynamicsFor(constraints)
+  if(dynamics?.springMotorConflict||dynamics?.suspensionMotorConflict)return{
+    blocker:Object.freeze({
+      code:'conflicting-joint-motors',
+      pairKey:pairKey(...pair),
+      bodyIds:Object.freeze([...pair]),
+      constraintIds:Object.freeze(constraints.map(item=>item.id)),
+      springMotorConflict:Boolean(dynamics.springMotorConflict),
+      suspensionMotorConflict:Boolean(dynamics.suspensionMotorConflict),
+    }),
+  }
+
   const limits=limitsFor(constraints,kind)
   if(limits?.invalid)return{
     blocker:Object.freeze({
@@ -219,7 +235,7 @@ function physicsJointForBundle(pair,constraints,componentsByBody){
       sourceConstraintIds:Object.freeze(constraints.map(item=>item.id)),
       frame,
       limits,
-      dynamics:dynamicsFor(constraints),
+      dynamics,
       release:releasePolicy(constraints),
       contacts:'disabled-for-connected-pair',
       solution,
