@@ -50,6 +50,7 @@ export function createMechanicsNextRuntime({
   const compoundState = createCompoundStateRegistry()
   const occupancy = new OccupancyLedger()
   const nativeObservedRecords = new Map()
+  const releasedObservedConnectionIds = new Set()
   let nativeProjectAuthoritative = false
   let legacySnapshot = snapshotLegacyV4(legacyProvider)
   let decompositionRefreshQueued = false
@@ -309,6 +310,8 @@ export function createMechanicsNextRuntime({
     const result=[]
     const seen=new Set()
     const add=record=>{
+      const recordId=String(record?.id||'')
+      if(recordId&&releasedObservedConnectionIds.has(recordId))return
       const a=record?.a,b=record?.b
       if(!a?.instanceId||!b?.instanceId)return
       const endpointA=a.endpointId??a.connectorId
@@ -455,6 +458,39 @@ export function createMechanicsNextRuntime({
     })
   }
 
+  const handlePhysicsJointRelease = event => {
+    const observedIds=new Set()
+    const occupancyIds=new Set()
+    const removedConstraints=[]
+    for(const constraintId of event?.constraintIds||[]){
+      const edge=graph.edge(String(constraintId))
+      if(!edge)continue
+      const observedId=edge?.metadata?.observedConnectionId
+      const occupancyId=edge?.metadata?.occupancy?.connectionId
+      if(observedId)observedIds.add(String(observedId))
+      if(occupancyId)occupancyIds.add(String(occupancyId))
+      if(graph.removeEdge(String(constraintId)))removedConstraints.push(String(constraintId))
+    }
+
+    for(const observedId of observedIds){
+      releasedObservedConnectionIds.add(observedId)
+      nativeObservedRecords.delete(observedId)
+      occupancy.release(observedId)
+    }
+    for(const occupancyId of occupancyIds)occupancy.release(occupancyId)
+
+    const detail=Object.freeze({
+      jointId:event?.jointId??null,
+      reason:event?.reason??'profile-disengaged',
+      constraintIds:Object.freeze([...(event?.constraintIds||[])].map(String)),
+      removedConstraints:Object.freeze(removedConstraints),
+      observedConnectionIds:Object.freeze([...observedIds]),
+      occupancyConnectionIds:Object.freeze([...occupancyIds]),
+    })
+    globals.dispatchEvent?.(new CustomEvent('bricklab:mechanicsnextjointrelease',{detail}))
+    return detail
+  }
+
   const refreshLegacySnapshot = () => {
     legacySnapshot = snapshotLegacyV4(legacyProvider || globals.BrickLabConnectorV4)
     assertLegacyReadOnly(legacySnapshot)
@@ -506,6 +542,7 @@ export function createMechanicsNextRuntime({
       records,
       worldUnitsPerStud:.008,
       controlState:instanceId=>globals.BrickLabControls?.getRuntime?.(instanceId)??null,
+      onJointRelease:handlePhysicsJointRelease,
     })
     lastSceneSync = Object.freeze({
       scene,
@@ -613,6 +650,7 @@ export function createMechanicsNextRuntime({
         activeDragApply=false
       }
       nativeObservedRecords.clear()
+      releasedObservedConnectionIds.clear()
       nativeRestoredRelations=Object.freeze([])
       occupancy.clear()
       compoundState.clear()
@@ -645,6 +683,7 @@ export function createMechanicsNextRuntime({
       })
     },
     restoreProjectState(state, { replace = false } = {}) {
+      releasedObservedConnectionIds.clear()
       const result=restoreMechanicsProjectState(state,{
         graph,
         sceneObserver,
@@ -821,6 +860,7 @@ export function createMechanicsNextRuntime({
         validate:()=>validateCommittedCandidate(candidate),
         commitConnection:async()=>{
           const record=recordFromCandidate(candidate)
+          releasedObservedConnectionIds.delete(record.id)
           nativeObservedRecords.set(record.id,record)
           const refreshed=syncScene()
           const unresolved=connectionInterpreter?.unresolved?.().find(item=>item.recordId===record.id)
