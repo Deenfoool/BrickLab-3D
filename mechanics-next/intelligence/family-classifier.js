@@ -9,7 +9,7 @@ const TRANSMISSION = new Set([
   'spur-gear','bevel-gear','crown-gear','clutch-gear','worm','rack','pulley','sprocket',
   'differential','packaged-differential','gearbox','driving-ring','universal-joint','cv-joint','linear-actuator',
 ])
-const STRUCTURAL = new Set(['beam','technic-brick','technic-frame','connector','brick','plate'])
+const STRUCTURAL = new Set(['beam','technic-brick','technic-frame','connector','brick','plate','steering-link'])
 
 function textOf(observation) {
   return [
@@ -67,6 +67,7 @@ function roleFromText(raw) {
   if (/\btechnic\s+brick\b/.test(value)) return 'technic-brick'
   if (/\b(?:ball\s+joint|ball\s+socket)\b/.test(value)) return 'ball-joint'
   if (/\bhinge\b/.test(value)) return 'hinge'
+  if (/\b(?:steering\s+tie\s*rod|tie\s*rod)\b/.test(value)) return 'steering-link'
   if (/\b(?:wheel\s+hub|hub\s+carrier|steering\s+hub|steering\s+knuckle)\b/.test(value)) return 'wheel-hub'
   if (/\b(?:tyre|tire)\b/.test(value)) return 'tire'
   if (/\b(?:wheel|rim)\b/.test(value) && !/\b(?:gear|pulley)\b/.test(value)) return 'rim'
@@ -314,6 +315,9 @@ export function classifyPartFamily(observation, endpoints = []) {
     ...(packagedTransmission ? { packagedTransmission } : {}),
     ...(packagedDifferential ? { packagedDifferential } : {}),
     ...(rackGeometry ? { rackGeometry } : {}),
+    ...(legacySteeringRack&&typeof legacySteeringRack==='object'
+      ?{steeringRack:Object.freeze({...legacySteeringRack})}
+      :{}),
     ...(legacySteeringKnuckle&&typeof legacySteeringKnuckle==='object'
       ?{steeringKnuckle:Object.freeze({...legacySteeringKnuckle})}
       :{}),
