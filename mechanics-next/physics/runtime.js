@@ -1,5 +1,11 @@
 import { buildMechanicsPhysicsPlan } from './plan.js'
 import { buildCompoundMemberPhysicsPlan } from './compound-member-plan.js'
+import { expandCompoundPhysicsGraph } from './compound-graph-expansion.js'
+import {
+  disposeCompoundMemberPhysics,
+  materializeCompoundMemberPhysics,
+  preflightCompoundMemberMaterialization,
+} from './compound-member-materializer.js'
 import { buildMechanicsCouplingPlan } from './coupling-plan.js'
 import {
   disposeRapierMechanicsPlan,
@@ -22,8 +28,18 @@ export function createMechanicsPhysicsRuntime({
   records=[],
   worldUnitsPerStud=1,
 }={}){
-  const structuralPlan=buildMechanicsPhysicsPlan({graph,discovery})
   const compoundMemberPlan=buildCompoundMemberPhysicsPlan({records,discovery})
+  const compoundGraphExpansion=expandCompoundPhysicsGraph({
+    graph,
+    compoundMemberPlan,
+  })
+  const structuralGraph=compoundGraphExpansion.graph
+  const structuralPlan=buildMechanicsPhysicsPlan({
+    graph:structuralGraph,
+    discovery,
+    materializedCompoundRootIds:compoundGraphExpansion.materializedRootIds,
+    excludeRigidMergeBodyIds:compoundGraphExpansion.memberBodyIds,
+  })
   const couplingPlan=buildMechanicsCouplingPlan({
     graph,
     discovery,
@@ -34,6 +50,7 @@ export function createMechanicsPhysicsRuntime({
   const blockers=Object.freeze([
     ...(structuralPlan.blockers||[]),
     ...(compoundMemberPlan.blockers||[]),
+    ...(compoundGraphExpansion.blockers||[]),
     ...(couplingPlan.blockers||[]),
     ...(motorPlan.blockers||[]),
   ])
@@ -43,18 +60,40 @@ export function createMechanicsPhysicsRuntime({
   const api={
     version:MECHANICS_PHYSICS_RUNTIME_VERSION,
     structuralPlan,
+    structuralGraph,
     compoundMemberPlan,
+    compoundGraphExpansion,
     couplingPlan,
     motorPlan,
     blockers,
     pass:structuralPlan.pass&&compoundMemberPlan.pass&&couplingPlan.pass&&motorPlan.pass,
     preflightSession(session){
-      const bridge=buildPhysicsSessionBridge({session,graph,plan:structuralPlan})
+      if(compoundMemberPlan.replacements.length){
+        const compound=preflightCompoundMemberMaterialization(session,compoundMemberPlan)
+        return Object.freeze({
+          pass:api.pass&&compound.pass,
+          bridge:null,
+          rapier:null,
+          compound,
+          deferredRapier:true,
+          failures:Object.freeze([
+            ...(api.pass?[]:blockers),
+            ...compound.failures,
+          ]),
+        })
+      }
+
+      const bridge=buildPhysicsSessionBridge({
+        session,
+        graph:structuralGraph,
+        plan:structuralPlan,
+      })
       if(!bridge.pass){
         return Object.freeze({
           pass:false,
           bridge,
           rapier:null,
+          compound:null,
           failures:bridge.failures,
         })
       }
@@ -66,6 +105,8 @@ export function createMechanicsPhysicsRuntime({
         pass:rapier.pass,
         bridge,
         rapier,
+        compound:null,
+        deferredRapier:false,
         failures:Object.freeze([
           ...bridge.failures,
           ...rapier.failures,
@@ -83,35 +124,66 @@ export function createMechanicsPhysicsRuntime({
         throw error
       }
 
-      const bridge=buildPhysicsSessionBridge({session,graph,plan:structuralPlan})
-      if(!bridge.pass){
-        const error=new Error('Production Rapier body topology does not match Mechanics Next rigid islands')
-        error.failures=bridge.failures
-        throw error
-      }
+      let compoundMembers=null
+      let joints=null
+      let bridge=null
+      let couplings=null
+      let motors=null
 
-      const joints=materializeRapierMechanicsPlan(session,structuralPlan,{
-        resolveMember:bridge.resolveMember,
-        worldUnitsPerStud,
-        contactsEnabled,
-      })
-      let couplings,motors
       try{
-        couplings=createMechanicsCouplingRuntime(couplingPlan,{
+        if(compoundMemberPlan.replacements.length){
+          compoundMembers=materializeCompoundMemberPhysics(session,compoundMemberPlan)
+        }
+
+        bridge=buildPhysicsSessionBridge({
+          session,
+          graph:structuralGraph,
+          plan:structuralPlan,
+        })
+        if(!bridge.pass){
+          const error=new Error('Production Rapier body topology does not match Mechanics Next rigid islands')
+          error.failures=bridge.failures
+          throw error
+        }
+
+        const rapierPreflight=preflightRapierMechanicsPlan(structuralPlan,{
           resolveMember:bridge.resolveMember,
+          worldUnitsPerStud,
+        })
+        if(!rapierPreflight.pass){
+          const error=new Error('Mechanics Next Rapier preflight failed after compound materialization')
+          error.failures=rapierPreflight.failures
+          throw error
+        }
+
+        joints=materializeRapierMechanicsPlan(session,structuralPlan,{
+          resolveMember:bridge.resolveMember,
+          worldUnitsPerStud,
+          contactsEnabled,
+        })
+
+        const resolveRuntimeMember=bodyId=>
+          bridge.resolveMember(bodyId) ??
+          compoundMembers?.replacements?.get?.(String(bodyId))?.preferredMember ??
+          null
+
+        couplings=createMechanicsCouplingRuntime(couplingPlan,{
+          resolveMember:resolveRuntimeMember,
           stabilization,
         })
         motors=createMechanicsMotorRuntime(motorPlan,{
-          resolveMember:bridge.resolveMember,
+          resolveMember:resolveRuntimeMember,
         })
       }catch(error){
-        disposeRapierMechanicsPlan(session,joints)
+        if(joints)disposeRapierMechanicsPlan(session,joints)
+        if(compoundMembers)disposeCompoundMemberPhysics(session,compoundMembers)
         throw error
       }
 
       installed={
         session,
         bridge,
+        compoundMembers,
         joints,
         couplings,
         motors,
@@ -152,7 +224,10 @@ export function createMechanicsPhysicsRuntime({
     },
     dispose(){
       if(!installed||installed.disposed)return 0
-      const removed=disposeRapierMechanicsPlan(installed.session,installed.joints)
+      let removed=disposeRapierMechanicsPlan(installed.session,installed.joints)
+      if(installed.compoundMembers){
+        removed+=disposeCompoundMemberPhysics(installed.session,installed.compoundMembers)
+      }
       installed.disposed=true
       return removed
     },
@@ -163,10 +238,12 @@ export function createMechanicsPhysicsRuntime({
         installed:Boolean(installed&&!installed.disposed),
         structural:structuralPlan.stats,
         compoundMembers:compoundMemberPlan.stats,
+        compoundGraph:compoundGraphExpansion.stats,
         couplings:couplingPlan.stats,
         motors:motorPlan.stats,
         blockers,
         bridge:installed?.bridge?.stats??null,
+        compoundMaterialized:installed?.compoundMembers?.members?.length??0,
         joints:installed?.joints?.active??0,
         couplingState:installed?.couplings?.snapshot?.()??Object.freeze([]),
         motorState:installed?.motors?.snapshot?.()??Object.freeze([]),
