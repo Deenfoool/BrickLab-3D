@@ -7,6 +7,7 @@ import {
   preflightRapierMechanicsPlan,
 } from './rapier-adapter.js'
 import { createMechanicsCouplingRuntime } from './coupling-runtime.js'
+import { buildMechanicsMotorPlan, createMechanicsMotorRuntime } from './motor-runtime.js'
 import {
   applyMechanicsJointResistance,
   validateAndReleaseMechanicsJoints,
@@ -29,10 +30,12 @@ export function createMechanicsPhysicsRuntime({
     records,
     worldUnitsPerStud,
   })
+  const motorPlan=buildMechanicsMotorPlan({graph,records})
   const blockers=Object.freeze([
     ...(structuralPlan.blockers||[]),
     ...(compoundMemberPlan.blockers||[]),
     ...(couplingPlan.blockers||[]),
+    ...(motorPlan.blockers||[]),
   ])
 
   let installed=null
@@ -42,8 +45,9 @@ export function createMechanicsPhysicsRuntime({
     structuralPlan,
     compoundMemberPlan,
     couplingPlan,
+    motorPlan,
     blockers,
-    pass:structuralPlan.pass&&compoundMemberPlan.pass&&couplingPlan.pass,
+    pass:structuralPlan.pass&&compoundMemberPlan.pass&&couplingPlan.pass&&motorPlan.pass,
     preflightSession(session){
       const bridge=buildPhysicsSessionBridge({session,graph,plan:structuralPlan})
       if(!bridge.pass){
@@ -91,11 +95,14 @@ export function createMechanicsPhysicsRuntime({
         worldUnitsPerStud,
         contactsEnabled,
       })
-      let couplings
+      let couplings,motors
       try{
         couplings=createMechanicsCouplingRuntime(couplingPlan,{
           resolveMember:bridge.resolveMember,
           stabilization,
+        })
+        motors=createMechanicsMotorRuntime(motorPlan,{
+          resolveMember:bridge.resolveMember,
         })
       }catch(error){
         disposeRapierMechanicsPlan(session,joints)
@@ -107,6 +114,7 @@ export function createMechanicsPhysicsRuntime({
         bridge,
         joints,
         couplings,
+        motors,
         disposed:false,
         lastCouplingStep:null,
         lastResistanceStep:null,
@@ -116,10 +124,12 @@ export function createMechanicsPhysicsRuntime({
     },
     beforeStep(dt){
       if(!installed||installed.disposed)return Object.freeze({installed:false})
+      const motors=installed.motors.step(dt)
       installed.lastResistanceStep=applyMechanicsJointResistance(installed.joints,dt)
       installed.lastCouplingStep=installed.couplings.step(dt)
       return Object.freeze({
         installed:true,
+        motors,
         resistance:installed.lastResistanceStep,
         couplings:installed.lastCouplingStep,
       })
@@ -154,10 +164,12 @@ export function createMechanicsPhysicsRuntime({
         structural:structuralPlan.stats,
         compoundMembers:compoundMemberPlan.stats,
         couplings:couplingPlan.stats,
+        motors:motorPlan.stats,
         blockers,
         bridge:installed?.bridge?.stats??null,
         joints:installed?.joints?.active??0,
         couplingState:installed?.couplings?.snapshot?.()??Object.freeze([]),
+        motorState:installed?.motors?.snapshot?.()??Object.freeze([]),
         lastCouplingStep:installed?.lastCouplingStep??null,
         lastResistanceStep:installed?.lastResistanceStep??null,
         releaseEvents:Object.freeze([...(installed?.releaseEvents||[])]),
