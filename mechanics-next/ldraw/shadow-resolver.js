@@ -110,7 +110,7 @@ function scaledGeometry(connector, m) {
   return geometry
 }
 
-function transformConnector(connector, transform, warnings, context) {
+export function transformNativeConnector(connector, transform, warnings = [], context = 'native-transform') {
   const m = orientationScale(connector.frame.orientation, transform.linear)
   if (!geometryScaleAllowed(connector, m)) {
     warnings.push({
@@ -205,6 +205,7 @@ export function createNativeShadowResolver({
     stack = [],
     traversal = { nodes:0 },
     suppliedText = null,
+    seedConnectors = [],
   } = {}) {
     const key = normalizePath(path)
     if (depth > maxDepth) {
@@ -214,7 +215,7 @@ export function createNativeShadowResolver({
       return { connectors:[], warnings:[{code:'include-cycle',detail:[...stack,key].join(' -> ')}], found:false }
     }
 
-    const useCache = suppliedText == null
+    const useCache = suppliedText == null && seedConnectors.length === 0
     if (useCache && cache.has(key)) return clone(await cache.get(key))
 
     const promise = (async () => {
@@ -228,7 +229,7 @@ export function createNativeShadowResolver({
 
       const parsed = parseLdcadShadowText(text, { file:key })
       const warnings = [...parsed.warnings]
-      let connectors = []
+      let connectors = [...seedConnectors]
       const nextStack = [...stack, key]
 
       for (const operation of parsed.operations) {
@@ -258,7 +259,7 @@ export function createNativeShadowResolver({
         for (const offset of expandGrid(operation.grid)) {
           const transform = includeTransform(operation, offset)
           for (const connector of resolved.connectors) {
-            const transformed = transformConnector(
+            const transformed = transformNativeConnector(
               connector,
               transform,
               warnings,
@@ -305,6 +306,28 @@ export function createNativeShadowResolver({
     async resolve(path) {
       const traversal = { nodes:0 }
       const result = await resolvePath(path, { traversal })
+      return Object.freeze({
+        version:NATIVE_SHADOW_RESOLVER_VERSION,
+        file:normalizePath(path),
+        connectors:Object.freeze(result.connectors),
+        warnings:Object.freeze(result.warnings),
+        found:result.found,
+        stats:Object.freeze({
+          connectors:result.connectors.length,
+          warnings:result.warnings.length,
+          nodes:traversal.nodes,
+          maxDepth,
+          maxNodes,
+        }),
+      })
+    },
+    async apply(path, baseConnectors = [], suppliedText = null) {
+      const traversal = { nodes:0 }
+      const result = await resolvePath(path, {
+        traversal,
+        suppliedText,
+        seedConnectors:[...(baseConnectors || [])],
+      })
       return Object.freeze({
         version:NATIVE_SHADOW_RESOLVER_VERSION,
         file:normalizePath(path),
