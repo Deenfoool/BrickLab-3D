@@ -30,6 +30,7 @@ import { createCompoundDecompositionRegistry } from './compounds/decomposition-r
 import { mapDecompositionToScene } from './compounds/scene-member-map.js'
 import { assignCompoundEndpointOwnership } from './compounds/endpoint-ownership.js'
 import { createMechanicsPhysicsRuntime } from './physics/runtime.js'
+import { applyPhysicsJointRelease, createReleasedConnectionState } from './physics/release-state.js'
 import { exportMechanicsProjectState, persistenceCompatibilityReport, probeMechanicsProjectState, restoreMechanicsProjectState } from './migration/project-state.js'
 import { evaluateMechanicsMigrationGate } from './migration/gate.js'
 import { runMechanicsMigrationRegressionSuite } from './migration/regression-suite.js'
@@ -50,7 +51,7 @@ export function createMechanicsNextRuntime({
   const compoundState = createCompoundStateRegistry()
   const occupancy = new OccupancyLedger()
   const nativeObservedRecords = new Map()
-  const releasedObservedConnectionIds = new Set()
+  const releasedObservedConnectionIds = createReleasedConnectionState()
   let nativeProjectAuthoritative = false
   let legacySnapshot = snapshotLegacyV4(legacyProvider)
   let decompositionRefreshQueued = false
@@ -459,33 +460,11 @@ export function createMechanicsNextRuntime({
   }
 
   const handlePhysicsJointRelease = event => {
-    const observedIds=new Set()
-    const occupancyIds=new Set()
-    const removedConstraints=[]
-    for(const constraintId of event?.constraintIds||[]){
-      const edge=graph.edge(String(constraintId))
-      if(!edge)continue
-      const observedId=edge?.metadata?.observedConnectionId
-      const occupancyId=edge?.metadata?.occupancy?.connectionId
-      if(observedId)observedIds.add(String(observedId))
-      if(occupancyId)occupancyIds.add(String(occupancyId))
-      if(graph.removeEdge(String(constraintId)))removedConstraints.push(String(constraintId))
-    }
-
-    for(const observedId of observedIds){
-      releasedObservedConnectionIds.add(observedId)
-      nativeObservedRecords.delete(observedId)
-      occupancy.release(observedId)
-    }
-    for(const occupancyId of occupancyIds)occupancy.release(occupancyId)
-
-    const detail=Object.freeze({
-      jointId:event?.jointId??null,
-      reason:event?.reason??'profile-disengaged',
-      constraintIds:Object.freeze([...(event?.constraintIds||[])].map(String)),
-      removedConstraints:Object.freeze(removedConstraints),
-      observedConnectionIds:Object.freeze([...observedIds]),
-      occupancyConnectionIds:Object.freeze([...occupancyIds]),
+    const detail=applyPhysicsJointRelease(event,{
+      graph,
+      occupancy,
+      nativeObservedRecords,
+      releasedConnections:releasedObservedConnectionIds,
     })
     globals.dispatchEvent?.(new CustomEvent('bricklab:mechanicsnextjointrelease',{detail}))
     return detail
@@ -860,7 +839,7 @@ export function createMechanicsNextRuntime({
         validate:()=>validateCommittedCandidate(candidate),
         commitConnection:async()=>{
           const record=recordFromCandidate(candidate)
-          releasedObservedConnectionIds.delete(record.id)
+          releasedObservedConnectionIds.reconnect(record.id)
           nativeObservedRecords.set(record.id,record)
           const refreshed=syncScene()
           const unresolved=connectionInterpreter?.unresolved?.().find(item=>item.recordId===record.id)
