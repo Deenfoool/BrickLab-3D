@@ -75,7 +75,7 @@ async function fetchOfficialText(path) {
 async function shadowManifest() {
   if (shadowManifestPromise) return shadowManifestPromise
   shadowManifestPromise = (async () => {
-    const response = await fetch(new URL('./shadow-manifest.json?v=connector-v4-20260910-v4', import.meta.url))
+    const response = await fetch(new URL('./shadow-manifest.json?v=connector-v4-20260918-v5', import.meta.url), { cache:'no-cache' })
     if (!response.ok) throw new Error(`Shadow manifest HTTP ${response.status}`)
     const data = await response.json()
     if (data.commit !== SHADOW_SOURCE_V4.commit || !Array.isArray(data.files)) throw new Error('Shadow manifest generation mismatch')

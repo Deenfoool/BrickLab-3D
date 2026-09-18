@@ -292,8 +292,22 @@ export function buildPhysicsPlanV4({ objects = [], connections = [], getConnecto
 export function drivetrainSemanticLinksV4(connections = [], releasedConnectionIds = new Set()) {
   const released = releasedConnectionIds instanceof Set ? releasedConnectionIds : new Set(releasedConnectionIds ?? [])
   const groups=new Map()
+  const differentialSeats=[]
+  const sourceCode=side=>String(side?.file||'').replace(/\\/g,'/').split('/').pop()?.replace(/\.dat$/i,'').toLowerCase()||''
   for (const connection of connections) {
-    if (!connection?.id || released.has(connection.id) || !ROTATION_TRANSMITTING_FAMILIES.has(familyOf(connection))) continue
+    if (!connection?.id || released.has(connection.id)) continue
+    const codes=new Set([sourceCode(connection.provenance?.a),sourceCode(connection.provenance?.b)])
+    if(familyOf(connection)==='round-revolute-interface'&&codes.has('6589')&&(codes.has('62821')||codes.has('62821b'))){
+      differentialSeats.push({
+        id:`v4differential-seat:${connection.id}`,
+        kind:'differential-seat',
+        a:{instanceId:connection.a.instanceId,connectorId:connection.a.endpointId},
+        b:{instanceId:connection.b.instanceId,connectorId:connection.b.endpointId},
+        metadata:{v4SemanticOnly:true,v4ConnectionId:connection.id,v4Family:familyOf(connection)},
+      })
+      continue
+    }
+    if (!ROTATION_TRANSMITTING_FAMILIES.has(familyOf(connection))) continue
     const family=familyOf(connection)
     const key=`${family}|${pairKey(connection.a.instanceId,connection.b.instanceId)}`
     if (!groups.has(key)) groups.set(key,[])
@@ -314,7 +328,7 @@ export function drivetrainSemanticLinksV4(connections = [], releasedConnectionId
         v4Family:familyOf(connection),
       },
     }
-  })
+  }).concat(differentialSeats)
 }
 
 export function physicsRulePreviewV4(family, { match = null, connectorA = null, connectorB = null, studBundleSize = 1 } = {}) {

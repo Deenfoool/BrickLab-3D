@@ -8,6 +8,14 @@ export const LDRAW_MIRRORS = [
   LDRAW_UNOFFICIAL_MIRROR,
 ]
 
+// These files currently exist only in the pinned unofficial snapshot. Probing both
+// official mirrors first adds four expected 404s to every engine load and makes real
+// connector failures hard to spot in DevTools.
+const UNOFFICIAL_ONLY_PATHS = new Set([
+  'parts/4368.dat', 'parts/4369.dat',
+  'parts/s/4368s01.dat', 'parts/s/4369s01.dat',
+])
+
 function canonicalReadPath(value){
   const path=String(value||'').replace(/\\/g,'/').trim()
   return /^parts\/[^/]+\.dat$/i.test(path)?canonicalLDrawFile(path):path
@@ -40,8 +48,11 @@ export function createLDrawTextTransport({fetcher=globalThis.fetch,mirrors=LDRAW
     if(cache.has(path))return cache.get(path)
     const task=(async()=>{
       let last,allNotFound=true
-      for(let index=0;index<mirrors.length;index+=1){
-        const mirror=mirrors[index]
+      const readMirrors=UNOFFICIAL_ONLY_PATHS.has(path.toLowerCase())&&mirrors.includes(LDRAW_UNOFFICIAL_MIRROR)
+        ? [LDRAW_UNOFFICIAL_MIRROR,...mirrors.filter(mirror=>mirror!==LDRAW_UNOFFICIAL_MIRROR)]
+        : mirrors
+      for(let index=0;index<readMirrors.length;index+=1){
+        const mirror=readMirrors[index]
         const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs)
         try{
           diagnostics.requests+=1
@@ -58,7 +69,7 @@ export function createLDrawTextTransport({fetcher=globalThis.fetch,mirrors=LDRAW
         }catch(error){
           last=error
           if(error?.status!==404)allNotFound=false
-          if(index+1<mirrors.length)diagnostics.mirrorFallbacks+=1
+          if(index+1<readMirrors.length)diagnostics.mirrorFallbacks+=1
         }finally{clearTimeout(timer)}
       }
       if(allNotFound&&last?.status===404)missingPaths.add(path)

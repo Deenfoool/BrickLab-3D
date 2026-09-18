@@ -20,7 +20,7 @@ import {
   engineCamPairV1,
 } from './engine-cam-v1.js?v=kinematics-engine-continuous-rim-20260917-v2'
 
-export const KINEMATICS_RUNTIME_VERSION = 'kinematics-runtime-v1.4.0'
+export const KINEMATICS_RUNTIME_VERSION = 'kinematics-runtime-v1.5.0'
 
 const LANGUAGE_KEY = 'bricklab.ui.language.v1'
 const INERTIA_STOP_DPS = 3
@@ -482,6 +482,28 @@ function applyEngineCamFollowers() {
   }
 }
 
+function applyDifferentialCarrierFollowers(solution,shaftById){
+  for(const seat of analysis?.drivetrain?.differentialSeats??[]){
+    // Coaxial side gears are already handled by the deterministic 1:1 preview
+    // mesh. An orthogonal spider gear must orbit with the carrier instead.
+    if(seat.axisAlignment>.98)continue
+    const ratio=solution.ratios?.[seat.housingShaftId]
+    const housingShaft=shaftById.get(seat.housingShaftId)
+    const housingPose=baseline.get(seat.housingId)
+    if(!Number.isFinite(ratio)||!housingShaft?.axisWorld||!housingPose)continue
+    const pivot=mechanicalPivotWorldFromPose(housingPose)
+    if(!pivot)continue
+    const radians=THREE.MathUtils.degToRad(angleDeg*ratio)
+    if(Math.abs(radians)<1e-12)continue
+    const delta=rotationAroundWorldPivot(housingShaft.axisWorld,pivot,radians)
+    for(const instanceId of seat.gearMemberIds??[]){
+      const pose=baseline.get(instanceId)
+      if(!pose)continue
+      applyWorldDeltaToBaselinePose(pose,delta)
+    }
+  }
+}
+
 function applyShaftDriver(driver) {
   const solution = solveShaftRatios(driver.shaftId, analysis?.drivetrain?.gearMeshes ?? [])
   if (solution.conflicts.length) {
@@ -507,6 +529,7 @@ function applyShaftDriver(driver) {
       applyWorldDeltaToBaselinePose(pose,rotationAroundWorldPivot(axisWorld,pivot,radians))
     }
   }
+  applyDifferentialCarrierFollowers(solution,shaftById)
   applyEngineCamFollowers()
   return { locked:false, solution }
 }

@@ -23,6 +23,13 @@ const EXACT_LDRAW_GEARS = new Map([
     meshCaptureDistanceStud:1.15,
     authoritative:true,
   })],
+  ['6589', Object.freeze({
+    kind:'bevel', teeth:12, pitchRadius:12/16, efficiency:.90,
+    meshAnchorLdu:Object.freeze([0,0,0]),
+    meshAxisLdu:Object.freeze([0,0,1]),
+    bevelApexSigns:Object.freeze([-1]),
+    authoritative:true,
+  })],
 ])
 
 function codeOf(definition) {

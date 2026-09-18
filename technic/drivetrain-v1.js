@@ -14,7 +14,7 @@ import { classifyTechnicEndpointV1 } from './interface-semantics-v1.js'
 import { technicMechanicalHintsV1 } from './mechanical-hints-v1.js?v=technic-differential-bevel-20260917-v1'
 import { technicPartProfileV1 } from './part-profile-v1.js'
 
-export const TECHNIC_DRIVETRAIN_VERSION = 'technic-drivetrain-v1.1.0'
+export const TECHNIC_DRIVETRAIN_VERSION = 'technic-drivetrain-v1.2.0'
 
 const DEFAULT_STALL_TORQUE = 5.5
 const DEFAULT_GEAR_EFFICIENCY = 0.92
@@ -221,8 +221,23 @@ function bevelMesh(a, b, options = {}) {
   }
 }
 
-function detectUnifiedGearMeshes(objects, shaftByPart, options = {}) {
+function linkedGearMesh(a,b,connection,options={}){
+  if(!a?.shaft||!b?.shaft||a.shaft.id===b.shaft.id||a.kind!==b.kind)return null
+  const geometric=a.kind==='bevel'?bevelMesh(a,b,options):spurMesh(a,b,options)
+  if(geometric)return{...geometric,id:`linked:${connection.id}`,authoritativeGraphLink:true}
+  const directionSign=-1
+  return{
+    id:`linked:${connection.id}`,kind:a.kind==='bevel'?'bevel':'gear',a,b,
+    shaftA:a.shaft.id,shaftB:b.shaft.id,
+    ratioAB:directionSign*(a.teeth/b.teeth),ratioBA:directionSign*(b.teeth/a.teeth),
+    efficiency:Math.min(a.efficiency,b.efficiency),torqueShare:1,
+    error:0,authoritativeGraphLink:true,
+  }
+}
+
+function detectUnifiedGearMeshes(objects, shaftByPart, connections=[], options = {}) {
   const gears = (objects ?? []).map(object => gearInfo(object, shaftByPart)).filter(Boolean)
+  const byId=new Map(gears.map(gear=>[gear.instanceId,gear]))
   const meshes = []
   for (let i = 0; i < gears.length; i += 1) {
     for (let j = i + 1; j < gears.length; j += 1) {
@@ -232,7 +247,42 @@ function detectUnifiedGearMeshes(objects, shaftByPart, options = {}) {
       if (mesh) meshes.push(mesh)
     }
   }
+  const linkedPairs=new Set(meshes.map(mesh=>[mesh.a.instanceId,mesh.b.instanceId].sort().join('<>')))
+  for(const connection of connections??[]){
+    if(connection?.kind!=='gear-mesh')continue
+    const a=byId.get(connection.a?.instanceId),b=byId.get(connection.b?.instanceId)
+    const key=[a?.instanceId,b?.instanceId].sort().join('<>')
+    if(!a||!b||linkedPairs.has(key))continue
+    const mesh=linkedGearMesh(a,b,connection,options)
+    if(mesh){meshes.push(mesh);linkedPairs.add(key)}
+  }
   return meshes
+}
+
+function differentialSeatState(objects,connections,shaftByPart){
+  const byId=new Map((objects??[]).map(object=>[object.userData?.instanceId,object]))
+  const seats=[]
+  for(const connection of connections??[]){
+    if(connection?.kind!=='differential-seat')continue
+    const objectA=byId.get(connection.a?.instanceId),objectB=byId.get(connection.b?.instanceId)
+    if(!objectA||!objectB)continue
+    const definitionA=definitionFor(objectA),definitionB=definitionFor(objectB)
+    const gearA={...(definitionA?.mechanics?.gear??{}),...(hintedGear(definitionA)??{})}
+    const gearB={...(definitionB?.mechanics?.gear??{}),...(hintedGear(definitionB)??{})}
+    const housing=gearA.differentialHousing?objectA:gearB.differentialHousing?objectB:null
+    const gear=housing===objectA?objectB:housing===objectB?objectA:null
+    if(!housing||!gear)continue
+    const housingShaft=shaftByPart.get(housing.userData.instanceId)
+    const gearShaft=shaftByPart.get(gear.userData.instanceId)
+    if(!housingShaft||!gearShaft||housingShaft.id===gearShaft.id)continue
+    const alignment=Math.abs(housingShaft.axisWorld.dot(gearShaft.axisWorld))
+    seats.push({
+      id:connection.id,housingId:housing.userData.instanceId,gearId:gear.userData.instanceId,
+      housingShaftId:housingShaft.id,gearShaftId:gearShaft.id,axisAlignment:alignment,
+      gearMemberIds:[...gearShaft.memberIds],
+    })
+  }
+  return seats
 }
 
 function remapBaseShaftId(base, unifiedShaftByPart, shaftId) {
@@ -362,9 +412,15 @@ export function analyzeTechnicAwareDrivetrain(objects, connections) {
 
   for (const object of objects ?? []) object.updateWorldMatrix?.(true, false)
   const { shafts, shaftByPart } = buildUnifiedShaftGraph(objects, connections)
-  const physicalGearMeshes = detectUnifiedGearMeshes(objects, shaftByPart)
+  const physicalGearMeshes = detectUnifiedGearMeshes(objects, shaftByPart, connections)
+  const differentialSeats=differentialSeatState(objects,connections,shaftByPart)
+  const differentialPreviewMeshes=differentialSeats.filter(seat=>seat.axisAlignment>.98).map(seat=>({
+    id:`differential-preview:${seat.id}`,kind:'differential-preview',
+    shaftA:seat.housingShaftId,shaftB:seat.gearShaftId,
+    ratioAB:1,ratioBA:1,efficiency:1,torqueShare:1,error:0,
+  }))
   const semanticMeshes = remapSemanticMeshes(base, shaftByPart)
-  const gearMeshes = [...physicalGearMeshes, ...semanticMeshes]
+  const gearMeshes = [...physicalGearMeshes, ...differentialPreviewMeshes, ...semanticMeshes]
   const motors = unifiedMotorSeeds(objects, connections, shaftByPart)
   const propagated = propagate(shafts, gearMeshes, motors)
   const shaftResults = shafts.map(shaft => {
@@ -401,6 +457,7 @@ export function analyzeTechnicAwareDrivetrain(objects, connections) {
     shaftByPart,
     gearMeshes,
     physicalGearMeshes,
+    differentialSeats,
     transmissions,
     differentials,
     motors,

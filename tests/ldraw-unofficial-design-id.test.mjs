@@ -64,4 +64,6 @@ test('text transport falls back to unofficial 4368 and its subpart after officia
   assert.match(subpart,/Crank Disk Half/)
   assert.ok(requested.includes(`${LDRAW_UNOFFICIAL_MIRROR}parts/4368.dat`))
   assert.ok(requested.includes(`${LDRAW_UNOFFICIAL_MIRROR}parts/s/4368s01.dat`))
+  assert.equal(requested[0],`${LDRAW_UNOFFICIAL_MIRROR}parts/4368.dat`)
+  assert.equal(requested[1],`${LDRAW_UNOFFICIAL_MIRROR}parts/s/4368s01.dat`)
 })

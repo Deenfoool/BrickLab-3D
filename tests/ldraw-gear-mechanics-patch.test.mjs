@@ -33,4 +33,14 @@ assert.deepEqual(reinforced?.meshAxisLdu,[0,0,1])
 assert.deepEqual(reinforced?.bevelApexSigns,[-1,1])
 assert.equal(reinforced?.meshCaptureDistanceStud,1.15)
 
+const internalBevel=technicMechanicalHintsV1({
+  id:'ldraw-6589',
+  ldraw:{code:'6589',file:'6589.dat'},
+  name:'Technic Gear 12 Tooth Bevel',
+}).mechanics.gear
+assert.equal(internalBevel?.teeth,12)
+assert.equal(internalBevel?.kind,'bevel')
+assert.equal(internalBevel?.authoritative,true)
+assert.deepEqual(internalBevel?.meshAxisLdu,[0,0,1])
+
 console.log('LDraw differential/bevel gear mechanics regression: ok')
