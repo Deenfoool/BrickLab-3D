@@ -157,7 +157,8 @@ export function createBrickLabSubsystemApi({
   const connectivity = Object.freeze({
     authority:Object.freeze({
       get build(){
-        return globals?.BrickLabMechanicsNextBuildOwner?.active
+        return globals?.BrickLabMechanicsNextBuildOwner?.active &&
+          globals?.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true
           ?'mechanics-next-build-owner'
           :'connector-v4-with-legacy-bridge'
       },
