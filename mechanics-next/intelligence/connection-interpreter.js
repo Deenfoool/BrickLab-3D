@@ -1,5 +1,5 @@
 import { deterministicId, evidence } from '../core/model.js'
-import { createConstraint } from '../constraints/dof.js'
+import { constraintDof, createConstraint } from '../constraints/dof.js'
 import { endpointSemanticKind } from './endpoint-semantics.js'
 import { mechanicalInterfaceRule } from './interface-rules.js'
 
@@ -84,6 +84,37 @@ function specialRelation(kindA, kindB) {
   return null
 }
 
+function motorOutputRule(kindA,kindB,partRoleA,partRoleB){
+  const motorSide=partRoleA==='motor'?'a':partRoleB==='motor'?'b':null
+  if(!motorSide)return null
+  const motorKind=motorSide==='a'?kindA:kindB
+  const drivenKind=motorSide==='a'?kindB:kindA
+  if(motorKind!=='technic-axle')return null
+  if(!['technic-axle-hole','technic-pin-hole','technic-round-hole'].includes(drivenKind))return null
+  return Object.freeze({
+    motorSide,
+    rule:Object.freeze({
+      kind:'revolute',
+      topology:Object.freeze({
+        dof:constraintDof('revolute'),
+        axis:'y',
+        motorOutput:true,
+        keyedRotation:false,
+        retained:true,
+      }),
+      dynamics:Object.freeze({
+        rotationalResistance:'low',
+        motorDriven:true,
+      }),
+      evidence:Object.freeze({
+        tier:'A',
+        source:'BrickLab motor output semantics',
+      }),
+    }),
+    interfacePair:Object.freeze(['motor-output','rotary-receiver']),
+  })
+}
+
 function resolveRule(endpointA, endpointB, {
   match = null,
   partRoleA = null,
@@ -91,6 +122,15 @@ function resolveRule(endpointA, endpointB, {
 } = {}) {
   const kindA = endpointSemanticKind(endpointA)
   const kindB = endpointSemanticKind(endpointB)
+  const motor=motorOutputRule(kindA,kindB,partRoleA,partRoleB)
+  if(motor)return{
+    kindA,
+    kindB,
+    rule:motor.rule,
+    interfacePair:motor.interfacePair,
+    special:null,
+    motorSide:motor.motorSide,
+  }
   const special = specialRelation(kindA, kindB)
   if (special) return { special, kindA, kindB, rule:null, interfacePair:null }
 
@@ -258,6 +298,15 @@ export function interpretObservedConnection(record, {
       topology:resolved.rule.topology,
       legacyMatchFamily:record?.match?.family ?? null,
       occupancy:record?.occupancy ?? null,
+      motorDrive:resolved.motorSide?Object.freeze({
+        motorSide:resolved.motorSide,
+        motorBodyId:resolved.motorSide==='a'?instanceA.body.id:instanceB.body.id,
+        drivenBodyId:resolved.motorSide==='a'?instanceB.body.id:instanceA.body.id,
+        motorInstanceId:resolved.motorSide==='a'?instanceA.body.instanceId:instanceB.body.instanceId,
+        drivenInstanceId:resolved.motorSide==='a'?instanceB.body.instanceId:instanceA.body.instanceId,
+        motorEndpointId:resolved.motorSide==='a'?endpointA.id:endpointB.id,
+        drivenEndpointId:resolved.motorSide==='a'?endpointB.id:endpointA.id,
+      }):null,
     },
     evidence:evidence({
       source:'mechanics-next:connection-interpreter',
