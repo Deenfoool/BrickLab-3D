@@ -447,6 +447,7 @@ export function createMechanicsNextRuntime({
         ...nativeRestoredRelations,
       ]),
       compoundState,
+      controlState:instanceId=>globals.BrickLabControls?.getRuntime?.(instanceId)??null,
     })
     lastTransmissionSync = transmissionCompiler.sync(discovery)
     const persistenceState=exportMechanicsProjectState({
@@ -1005,6 +1006,8 @@ export function createMechanicsNextRuntime({
     intelligence?.invalidateAll?.()
     scheduleSceneSync()
   })
+  globals.addEventListener?.('bricklab:control-runtime-change', scheduleSceneSync)
+  globals.addEventListener?.('bricklab:controls-runtime-reset', scheduleSceneSync)
   globals.addEventListener?.('bricklab:editorcontractready', scheduleSceneSync)
   globals.addEventListener?.('bricklab:editorexternalmutation', scheduleSceneSync)
 
