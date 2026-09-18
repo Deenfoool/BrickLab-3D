@@ -2765,3 +2765,143 @@ test('motor output connection becomes revolute drive instead of keyed rigid shaf
   assert.ok(Math.abs(torques.motor[0].y+torques.gear[0].y)<1e-12)
   assert.ok(Math.abs(torques.motor[0].z+torques.gear[0].z)<1e-12)
 })
+
+
+test('production migration gate accepts a fully proven empty project', () => {
+  const gate=evaluateMechanicsMigrationGate({
+    runtimeStatus:{
+      version:'test',
+      scene:{instances:0,roles:{unknown:0}},
+      interpretedConnections:{unresolved:0},
+      compoundDecompositions:{pending:0,failures:0},
+      transmissionCompiler:{diagnostics:{differentials:[]}},
+    },
+    physicsStatus:{pass:true,blockers:[]},
+    paritySummary:{
+      parts:0,
+      compared:0,
+      nativeOnly:0,
+      nativeUnavailable:0,
+      referenceUnavailable:0,
+      semanticPass:0,
+      geometryPass:0,
+      semanticFail:0,
+      geometryFail:0,
+    },
+    persistence:{pass:true,expected:0,restored:0,rejected:0,failures:[]},
+    regression:{status:'passed',passed:4,failed:0},
+  })
+  assert.equal(gate.pass,true)
+  assert.equal(gate.blockers.length,0)
+})
+
+test('native project schema preserves compound mechanism state across round trip', () => {
+  const source=createAssemblyGraph()
+  const compound=createCompoundStateRegistry()
+  compound.set('gearbox:instance-1',{
+    mode:'reverse',
+    engagement:'ring-b',
+    detentIndex:2,
+  })
+  const exported=exportMechanicsProjectState({
+    graph:source,
+    relations:[],
+    compoundState:compound,
+  })
+  assert.equal(exported.compoundState.states['gearbox:instance-1'].mode,'reverse')
+  assert.equal(exported.compoundState.states['gearbox:instance-1'].detentIndex,2)
+
+  const target=createAssemblyGraph()
+  const restored=restoreMechanicsProjectState(exported,{
+    graph:target,
+    sceneObserver:{instance:()=>null},
+    objectByInstanceId:()=>null,
+  })
+  assert.equal(restored.rejected,0)
+  assert.equal(restored.compoundState.states['gearbox:instance-1'].engagement,'ring-b')
+})
+
+test('native project state preserves long-shaft axial occupancy intervals', () => {
+  const bodyA=createBodyDescriptor({id:'shaft-body',instanceId:'shaft-instance',partId:'axle'})
+  const bodyB=createBodyDescriptor({id:'receiver-body',instanceId:'receiver-instance',partId:'beam'})
+  const endpointA=createEndpointDescriptor({
+    id:'shaft-endpoint',
+    bodyId:'shaft-body',
+    family:'cylinder',
+    gender:'male',
+    frame:{positionStud:[0,0,0],orientationBrickLab:[1,0,0,0,1,0,0,0,1]},
+    profile:{centered:true,caps:'none',sections:[{shape:'A',radiusLdu:6,lengthLdu:100}]},
+    capabilities:['slide'],
+    metadata:{semantics:{semanticKind:'technic-axle'}},
+  })
+  const endpointB=createEndpointDescriptor({
+    id:'receiver-endpoint',
+    bodyId:'receiver-body',
+    family:'cylinder',
+    gender:'female',
+    frame:{positionStud:[0,0,0],orientationBrickLab:[1,0,0,0,1,0,0,0,1]},
+    profile:{centered:true,caps:'none',sections:[{shape:'A',radiusLdu:6,lengthLdu:20}]},
+    capabilities:['slide'],
+    metadata:{semantics:{semanticKind:'technic-axle-hole'}},
+  })
+  const source=createAssemblyGraph()
+  source.addBody(bodyA)
+  source.addBody(bodyB)
+  source.addConstraint(createConstraint({
+    id:'occupancy-connection',
+    bodyA:'shaft-body',
+    bodyB:'receiver-body',
+    kind:'prismatic',
+    dof:constraintDof('prismatic'),
+    referenceFrame:{position:[0,0,0],axis:[0,1,0]},
+    metadata:{
+      instanceAId:'shaft-instance',
+      instanceBId:'receiver-instance',
+      endpointAId:'shaft-endpoint',
+      endpointBId:'receiver-endpoint',
+      semanticA:'technic-axle',
+      semanticB:'technic-axle-hole',
+      interfacePair:['axle','axle-hole'],
+      occupancy:{
+        connectionId:'occupancy-live-id',
+        exclusiveChannels:['receiver-body::receiver-endpoint'],
+        axialReservations:[{
+          channel:'shaft-body::shaft-endpoint',
+          interval:[10,30],
+          occupantBodyId:'receiver-body',
+          metadata:{family:'cylinder'},
+        }],
+      },
+    },
+  }))
+
+  const exported=exportMechanicsProjectState({graph:source,relations:[]})
+  assert.deepEqual(
+    exported.connections[0].occupancy.axialReservations[0].interval,
+    [10,30],
+  )
+
+  const target=createAssemblyGraph()
+  target.addBody(bodyA)
+  target.addBody(bodyB)
+  const instances=new Map([
+    ['shaft-instance',{body:bodyA,endpoints:[endpointA]}],
+    ['receiver-instance',{body:bodyB,endpoints:[endpointB]}],
+  ])
+  const objects=new Map([
+    ['shaft-instance',new THREE.Object3D()],
+    ['receiver-instance',new THREE.Object3D()],
+  ])
+  for(const object of objects.values())object.updateMatrixWorld(true)
+
+  const restored=restoreMechanicsProjectState(exported,{
+    graph:target,
+    sceneObserver:{instance:id=>instances.get(id)},
+    objectByInstanceId:id=>objects.get(id),
+  })
+  assert.equal(restored.rejected,0)
+  assert.deepEqual(
+    target.edge('occupancy-connection').metadata.occupancy.axialReservations[0].interval,
+    [10,30],
+  )
+})
