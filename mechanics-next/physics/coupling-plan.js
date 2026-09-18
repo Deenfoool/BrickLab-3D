@@ -79,7 +79,7 @@ function angularTerm(bodyId,coefficient,records,graph,islands,forcedReferenceBod
   })}
 }
 
-function linearTerm(bodyId,coefficient,motions,studMeters){
+function linearTerm(bodyId,coefficient,motions){
   const motion=motions.get(bodyId)
   if(!motion)return{blocker:{code:'coupling-linear-frame-missing',bodyId}}
   return{term:Object.freeze({
@@ -88,12 +88,11 @@ function linearTerm(bodyId,coefficient,motions,studMeters){
     referenceBodyId:motion.parentBodyId??null,
     coefficient:Number(coefficient),
     axisWorld:Object.freeze([...(motion.axis||[0,1,0])]),
-    sourceUnits:'stud-per-second',
-    coefficientSI:Number(coefficient)/studMeters,
+    sourceUnits:'scene-stud-per-second',
   })}
 }
 
-function convertEquation(equation,{records,graph,islands,motions,studMeters,nonlinearRelations}){
+function convertEquation(equation,{records,graph,islands,motions,nonlinearRelations}){
   if(Math.abs(Number(equation?.constant)||0)>EPS){
     return{blocker:Object.freeze({
       code:'nonzero-velocity-constraint-unsupported',
@@ -123,18 +122,16 @@ function convertEquation(equation,{records,graph,islands,motions,studMeters,nonl
         :null
     const result=item.channel==='omega'
       ?angularTerm(item.bodyId,item.coefficient,records,graph,islands,forcedReference)
-      :linearTerm(item.bodyId,item.coefficient,motions,studMeters)
+      :linearTerm(item.bodyId,item.coefficient,motions)
     if(result.blocker)return{blocker:Object.freeze({
       ...result.blocker,
       equationId:equation.id,
     })}
     let term=result.term
-    if(hasLinear&&term.coordinate==='angular'){
-      // Original screw/rack equations express slide in studs/s. Convert angular
-      // coefficients from studs/rad to metres/rad so the constraint is SI-consistent.
-      term=Object.freeze({...term,coefficient:Number(term.coefficient)*studMeters})
-    }else if(hasLinear&&term.coordinate==='linear'){
-      // Coefficient multiplies linear velocity already expressed in m/s.
+    if(hasLinear){
+      // BrickLab's production Rapier session uses scene units directly: one scene unit
+      // is one stud. Screw/rack coefficients are already expressed in stud/rad and
+      // linear velocity is stud/s, so no hidden metre conversion is valid here.
       term=Object.freeze({...term,coefficient:Number(term.coefficient)})
     }
     terms.push(term)
@@ -162,10 +159,8 @@ export function buildMechanicsCouplingPlan({
   graph,
   discovery,
   records=[],
-  studMeters=.008,
 }={}){
   if(!graph?.neighbors||!graph?.rigidIslands)throw new TypeError('AssemblyGraph is required')
-  if(!(Number.isFinite(studMeters)&&studMeters>0))throw new TypeError('Positive studMeters is required')
 
   const recordMap=recordIndex(records)
   const islands=componentIndex(graph)
@@ -185,7 +180,6 @@ export function buildMechanicsCouplingPlan({
       graph,
       islands,
       motions,
-      studMeters,
       nonlinearRelations:discovery?.nonlinearRelations||[],
     })
     if(result.coupler)couplers.push(result.coupler)
@@ -196,7 +190,6 @@ export function buildMechanicsCouplingPlan({
   return Object.freeze({
     version:MECHANICS_COUPLING_PLAN_VERSION,
     pass:blockers.length===0,
-    studMeters,
     couplers:Object.freeze(couplers),
     blockers:Object.freeze(blockers),
     skipped:Object.freeze(skipped),
