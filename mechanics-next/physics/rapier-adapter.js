@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 
 export const MECHANICS_RAPIER_ADAPTER_VERSION='mechanics-rapier-adapter-0.1.0'
-export const DEFAULT_STUD_METERS=.008
+export const DEFAULT_WORLD_UNITS_PER_STUD=1
 
 // Rapier GenericJoint axesMask describes LOCKED axes. The joint-frame X axis
 // is aligned to the Mechanics Next joint axis.
@@ -28,11 +28,11 @@ function memberComponent(member,label){
   return member.component
 }
 
-function localPoint(member,worldPointStud,studMeters){
+function localPoint(member,worldPointStud,worldUnitsPerStud){
   const component=memberComponent(member,'member')
   return worldPointStud.clone()
     .applyMatrix4(component.bodyWorldInverse)
-    .multiplyScalar(studMeters)
+    .multiplyScalar(worldUnitsPerStud)
 }
 
 function localDirection(member,worldDirection){
@@ -97,7 +97,7 @@ function configureLimits(handle,item){
   let min=Number(item.limits.min)
   let max=Number(item.limits.max)
   if(item.kind==='prismatic'){
-    const scale=Number(item.studMeters)||DEFAULT_STUD_METERS
+    const scale=Number(item.worldUnitsPerStud)||DEFAULT_WORLD_UNITS_PER_STUD
     min*=scale
     max*=scale
   }
@@ -108,12 +108,12 @@ function configureLimits(handle,item){
 }
 
 function createJointData(RAPIER,item,memberA,memberB,{
-  studMeters=DEFAULT_STUD_METERS,
+  worldUnitsPerStud=DEFAULT_WORLD_UNITS_PER_STUD,
 }={}){
   const axisWorld=finiteVector(item.frame.axisWorld,'joint axis').normalize()
   const pointWorld=finiteVector(item.frame.positionStud,'joint anchor')
-  const anchorA=localPoint(memberA,pointWorld,studMeters)
-  const anchorB=localPoint(memberB,pointWorld,studMeters)
+  const anchorA=localPoint(memberA,pointWorld,worldUnitsPerStud)
+  const anchorB=localPoint(memberB,pointWorld,worldUnitsPerStud)
   const axisA=localDirection(memberA,axisWorld)
   const axisB=localDirection(memberB,axisWorld)
   const worldFrame=worldJointQuaternion(axisWorld)
@@ -168,14 +168,14 @@ function sameRapierBody(memberA,memberB){
 
 export function preflightRapierMechanicsPlan(plan,{
   resolveMember,
-  studMeters=DEFAULT_STUD_METERS,
+  worldUnitsPerStud=DEFAULT_WORLD_UNITS_PER_STUD,
 }={}){
   if(!plan)throw new TypeError('Physics plan is required')
   if(typeof resolveMember!=='function')throw new TypeError('resolveMember(bodyId) is required')
   const failures=[]
 
-  if(!(Number.isFinite(studMeters)&&studMeters>0)){
-    failures.push(Object.freeze({code:'invalid-unit-scale',studMeters}))
+  if(!(Number.isFinite(worldUnitsPerStud)&&worldUnitsPerStud>0)){
+    failures.push(Object.freeze({code:'invalid-unit-scale',worldUnitsPerStud}))
   }
   for(const blocker of plan.blockers||[])failures.push(blocker)
 
@@ -251,13 +251,13 @@ export function preflightRapierMechanicsPlan(plan,{
 
 export function materializeRapierMechanicsPlan(session,plan,{
   resolveMember,
-  studMeters=DEFAULT_STUD_METERS,
+  worldUnitsPerStud=DEFAULT_WORLD_UNITS_PER_STUD,
   contactsEnabled=false,
 }={}){
   if(!session?.world||!session?.RAPIER){
     throw new TypeError('Rapier session with world and RAPIER is required')
   }
-  const preflight=preflightRapierMechanicsPlan(plan,{resolveMember,studMeters})
+  const preflight=preflightRapierMechanicsPlan(plan,{resolveMember,worldUnitsPerStud})
   if(!preflight.pass){
     const error=new Error(`Mechanics Next Rapier preflight failed: ${preflight.failures.length} blocker(s)`)
     error.failures=preflight.failures
@@ -268,7 +268,7 @@ export function materializeRapierMechanicsPlan(session,plan,{
   try{
     for(const item of plan.joints){
       const{memberA,memberB}=resolveMembers(item,resolveMember)
-      const frames=createJointData(session.RAPIER,item,memberA,memberB,{studMeters})
+      const frames=createJointData(session.RAPIER,item,memberA,memberB,{worldUnitsPerStud})
       const handle=session.world.createImpulseJoint(
         frames.data,
         memberA.body,
@@ -278,7 +278,7 @@ export function materializeRapierMechanicsPlan(session,plan,{
       if(!handle)throw new Error(`Rapier failed to create joint ${item.id}`)
       try{
         configureContacts(handle,contactsEnabled)
-        configureLimits(handle,{...item,studMeters})
+        configureLimits(handle,{...item,worldUnitsPerStud})
       }catch(error){
         session.world.removeImpulseJoint?.(handle,true)
         throw error
@@ -309,7 +309,7 @@ export function materializeRapierMechanicsPlan(session,plan,{
 
   return Object.freeze({
     version:MECHANICS_RAPIER_ADAPTER_VERSION,
-    studMeters,
+    worldUnitsPerStud,
     monitors:Object.freeze(created),
     active:created.length,
     transmissions:plan.transmissions?.length||0,
