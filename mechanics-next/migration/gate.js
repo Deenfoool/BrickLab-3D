@@ -15,6 +15,7 @@ export function evaluateMechanicsMigrationGate({
   paritySummary=null,
   regression=null,
   persistence=null,
+  nativeProjectAuthoritative=false,
 }={}){
   const checks=[]
 
@@ -22,6 +23,26 @@ export function evaluateMechanicsMigrationGate({
     'runtime-present',
     Boolean(runtimeStatus?.version),
     runtimeStatus?.version??null,
+  ))
+
+  const productionOwnership=runtimeStatus?.productionOwnership??null
+  const nativePhysicsOwner=String(productionOwnership?.physicsCreateOwner??'')
+    .startsWith('mechanics-next-physics-owner')
+  checks.push(check(
+    'native-ownership-convergence',
+    nativeProjectAuthoritative!==true||(
+      productionOwnership?.build===true&&nativePhysicsOwner
+    ),
+    {
+      nativeProjectAuthoritative:nativeProjectAuthoritative===true,
+      productionOwnership,
+      required:nativeProjectAuthoritative===true
+        ?Object.freeze({
+            build:true,
+            physicsCreateOwner:'mechanics-next-physics-owner*',
+          })
+        :null,
+    },
   ))
 
   const sceneUnknown=Number(runtimeStatus?.scene?.roles?.unknown||0)
