@@ -67,20 +67,76 @@ function motorForwardDirection(session, motorId, classifiedWheels) {
   return config?.motor?.initialDirection === -1 ? -1 : 1
 }
 
+function nativeMotorForwardDirection(session,motorId,plan){
+  const {forward,up}=chassisBasis(session)
+  const monitorByInstance=new Map(
+    (session.wheelMonitors??[])
+      .filter(wheel=>wheel?.object?.userData?.instanceId)
+      .map(wheel=>[String(wheel.object.userData.instanceId),wheel]),
+  )
+  let vote=0
+  for(const wheelPlan of plan?.wheels??[]){
+    const source=(wheelPlan.sourceMotors??[]).find(item=>String(item.controlId)===String(motorId))
+    if(!source)continue
+    const wheel=monitorByInstance.get(String(wheelPlan.instanceId))
+    const wheelAxis=wheelAxisWorld(wheel)
+    const ratio=Number(source.ratioFromMotor)
+    if(!wheelAxis||!Number.isFinite(ratio)||Math.abs(ratio)<EPS)continue
+    const rollingSign=Math.sign(wheelAxis.clone().cross(up).dot(forward))||1
+    vote+=rollingSign*(Math.sign(ratio)||1)
+  }
+  if(Math.abs(vote)>=EPS)return Math.sign(vote)
+  const config=globalThis.BrickLabControls?.getConfig?.(motorId)
+  return config?.motor?.initialDirection===-1?-1:1
+}
+
+function nativeVehicleClassification(session,plan){
+  const byInstance=new Map((plan?.wheels??[]).map(item=>[String(item.instanceId),item]))
+  const wheels=(session.wheelMonitors??[]).map(wheel=>{
+    const memberId=String(wheel.object?.userData?.instanceId??'')
+    const native=byInstance.get(memberId)
+    const sourceMotorIds=(native?.sourceMotors??[]).map(item=>String(item.controlId))
+    return{
+      id:wheel.id,
+      instanceId:memberId||null,
+      memberId:memberId||null,
+      axle:wheel.axleRole??'middle',
+      sourceMotorId:sourceMotorIds.length===1?sourceMotorIds[0]:null,
+      sourceMotorIds,
+      driven:sourceMotorIds.length>0,
+      ratioFromMotor:native?.ratioFromMotor??null,
+    }
+  })
+  const motorIds=[...new Set(wheels.flatMap(wheel=>wheel.sourceMotorIds))]
+  const driven=wheels.filter(wheel=>wheel.driven)
+  const axleRoles=new Set(driven.map(wheel=>wheel.axle).filter(Boolean))
+  let layout='FREE'
+  if(axleRoles.has('front')&&axleRoles.has('rear'))layout='AWD'
+  else if(axleRoles.has('front'))layout='FWD'
+  else if(axleRoles.has('rear'))layout='RWD'
+  else if(driven.length)layout='MULTI'
+  return{wheels,motorIds,drivenWheelCount:driven.length,layout}
+}
+
 function buildTopology(session) {
+  const nativePlan=session.drivetrain?.mechanicsNextVehiclePlan??null
   const wheelEntries = (session.wheelMonitors ?? []).map(wheel => ({
     id: wheel.id,
     instanceId: wheel.object?.userData?.instanceId ?? null,
     axle: wheel.axleRole ?? 'middle',
   }))
-  const classification = classifyDrivenWheels(wheelEntries, session.drivetrain?.shafts ?? [])
+  const classification = nativePlan
+    ?nativeVehicleClassification(session,nativePlan)
+    :classifyDrivenWheels(wheelEntries, session.drivetrain?.shafts ?? [])
   const controls = globalThis.BrickLabControls
   const motors = classification.motorIds.map(id => {
     const config = controls?.getConfig?.(id)
     if (config?.type !== 'motor') return null
     return {
       id,
-      forwardDirection: motorForwardDirection(session, id, classification.wheels),
+      forwardDirection: nativePlan
+        ?nativeMotorForwardDirection(session,id,nativePlan)
+        :motorForwardDirection(session, id, classification.wheels),
       commandRpm: Math.max(0, Number(config.motor?.baseRpm) || 0),
       maxRpm: Math.max(0, Number(config.motor?.maxRpm) || 0),
     }
