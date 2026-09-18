@@ -1,0 +1,126 @@
+import { mechanicalVariable } from '../core/model.js'
+
+export function linearEquation(id, coefficients, constant = 0, metadata = null) {
+  if (!id || !coefficients || typeof coefficients !== 'object') throw new TypeError('Equation requires id and coefficients')
+  const normalized = {}
+  for (const [variable, coefficient] of Object.entries(coefficients)) {
+    if (!Number.isFinite(Number(coefficient))) throw new TypeError(`Invalid coefficient for ${variable}`)
+    if (Number(coefficient) !== 0) normalized[String(variable)] = Number(coefficient)
+  }
+  if (!Number.isFinite(Number(constant))) throw new TypeError('Equation constant must be finite')
+  return Object.freeze({
+    id:String(id),
+    coefficients:Object.freeze(normalized),
+    constant:Number(constant),
+    metadata,
+  })
+}
+
+export function driverEquation({
+  id,
+  bodyId,
+  value,
+  channel = 'omega',
+  source = 'driver',
+} = {}) {
+  if (!Number.isFinite(value)) throw new TypeError('Driver value must be finite')
+  return linearEquation(
+    id || `driver:${bodyId}:${channel}`,
+    { [mechanicalVariable(bodyId, channel)]:1 },
+    value,
+    { kind:'driver', source, bodyId, channel },
+  )
+}
+
+export function rigidRotationEquation({
+  id,
+  bodyA,
+  bodyB,
+  channel = 'omega',
+} = {}) {
+  return linearEquation(
+    id || `rigid:${bodyA}:${bodyB}:${channel}`,
+    {
+      [mechanicalVariable(bodyA, channel)]:1,
+      [mechanicalVariable(bodyB, channel)]:-1,
+    },
+    0,
+    { kind:'rigid-rotation', bodyA, bodyB, channel },
+  )
+}
+
+export function gearMeshEquation({
+  id,
+  bodyA,
+  bodyB,
+  teethA,
+  teethB,
+  internal = false,
+  channel = 'omega',
+} = {}) {
+  if (!(Number.isFinite(teethA) && teethA > 0 && Number.isFinite(teethB) && teethB > 0)) {
+    throw new TypeError('Gear mesh requires positive tooth counts')
+  }
+  // External mesh: zA*wA + zB*wB = 0.
+  // Internal mesh: zA*wA - zB*wB = 0.
+  const signB = internal ? -1 : 1
+  return linearEquation(
+    id || `gear:${bodyA}:${bodyB}`,
+    {
+      [mechanicalVariable(bodyA, channel)]:Number(teethA),
+      [mechanicalVariable(bodyB, channel)]:signB * Number(teethB),
+    },
+    0,
+    { kind:internal ? 'internal-gear' : 'external-gear', bodyA, bodyB, teethA, teethB, channel },
+  )
+}
+
+export function differentialEquation({
+  id,
+  carrier,
+  left,
+  right,
+  carrierRatio = 1,
+  leftRatio = 1,
+  rightRatio = 1,
+  channel = 'omega',
+} = {}) {
+  for (const [name, value] of Object.entries({ carrierRatio, leftRatio, rightRatio })) {
+    if (!(Number.isFinite(value) && value > 0)) throw new TypeError(`${name} must be positive`)
+  }
+  // Generalized open differential relation:
+  // 2*Rc*wc - Rl*wl - Rr*wr = 0.
+  return linearEquation(
+    id || `differential:${carrier}:${left}:${right}`,
+    {
+      [mechanicalVariable(carrier, channel)]:2 * Number(carrierRatio),
+      [mechanicalVariable(left, channel)]:-Number(leftRatio),
+      [mechanicalVariable(right, channel)]:-Number(rightRatio),
+    },
+    0,
+    { kind:'differential', carrier, left, right, carrierRatio, leftRatio, rightRatio, channel },
+  )
+}
+
+export function rackPinionEquation({
+  id,
+  gearBody,
+  rackBody,
+  pitchRadius,
+  angularChannel = 'omega',
+  linearChannel = 'slide',
+  direction = 1,
+} = {}) {
+  if (!(Number.isFinite(pitchRadius) && pitchRadius > 0)) throw new TypeError('Rack/pinion requires positive pitchRadius')
+  const sign = Number(direction) < 0 ? -1 : 1
+  // v_rack = sign * r * omega_gear
+  return linearEquation(
+    id || `rack-pinion:${gearBody}:${rackBody}`,
+    {
+      [mechanicalVariable(rackBody, linearChannel)]:1,
+      [mechanicalVariable(gearBody, angularChannel)]:-sign * Number(pitchRadius),
+    },
+    0,
+    { kind:'rack-pinion', gearBody, rackBody, pitchRadius, direction:sign },
+  )
+}
