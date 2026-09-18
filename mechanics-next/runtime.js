@@ -56,17 +56,7 @@ export function createMechanicsNextRuntime({
         onUpdate(partId,value){
           intelligence?.invalidate?.(partId)
           sceneObserver?.invalidatePart?.(partId)
-          if(value?.status==='ready'){
-            const legacy=snapshotLegacyPartConnectivity(legacyProvider,partId)
-            if(legacy.status==='ready'){
-              parityLedger.record(compareNativeToLegacyConnectivity({
-                partId,
-                nativeConnectors:value.connectors,
-                legacyConnectors:legacy.connectors,
-              }))
-              parityEvidence=parityLedger.summary()
-            }
-          }
+          if(value?.status==='ready')refreshParityForPart(partId)
           scheduleSceneSync()
         },
       })
@@ -75,6 +65,19 @@ export function createMechanicsNextRuntime({
   const intelligence = catalog&&connectivity
     ? createPartIntelligenceRegistry({ catalog, connectivity })
     : null
+
+  const refreshParityForPart=partId=>{
+    const native=connectivity?.get?.(partId)
+    const legacy=snapshotLegacyPartConnectivity(legacyProvider,partId)
+    if(native?.status!=='ready'||legacy?.status!=='ready')return null
+    const result=parityLedger.record(compareNativeToLegacyConnectivity({
+      partId,
+      nativeConnectors:native.connectors,
+      legacyConnectors:legacy.connectors,
+    }))
+    parityEvidence=parityLedger.summary()
+    return result
+  }
 
   const sceneObserver = intelligence
     ? createSceneMechanicalObserver({
@@ -259,6 +262,34 @@ export function createMechanicsNextRuntime({
     compoundState,
     compoundDecompositions,
     physicsPreview:() => physicsPreview,
+    async prepareMigration() {
+      if(!sceneObserver||!subsystems?.editor?.ready?.()){
+        return Object.freeze({
+          pass:false,
+          blockers:Object.freeze([{id:'editor-contract-not-ready'}]),
+        })
+      }
+      const objects=subsystems.editor.objects?.()??[]
+      try{await legacyProvider?.hydrateObjects?.(objects)}catch{}
+      const initial=sceneObserver.sync(objects)
+      const instances=sceneObserver.instances()
+      await connectivity?.prefetch?.(instances.map(instance=>instance.body.partId))
+      intelligence?.invalidateAll?.()
+      sceneObserver.sync(objects)
+      await compoundDecompositions?.prefetch?.(sceneObserver.instances())
+      for(const instance of sceneObserver.instances())refreshParityForPart(instance.body.partId)
+      const refreshed=syncScene()
+      return Object.freeze({
+        ...api.migrationGate(),
+        prepared:Object.freeze({
+          objects:objects.length,
+          initial,
+          refreshed,
+          nativeConnectivity:connectivity?.stats?.()??null,
+          parity:parityLedger.summary(),
+        }),
+      })
+    },
     exportProjectState() {
       return exportMechanicsProjectState({
         graph,
