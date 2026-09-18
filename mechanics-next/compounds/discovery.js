@@ -506,15 +506,24 @@ function discoverSprings(records){
     if(role(record)!=='shock-absorber')continue
     const bodyId=record.instance.body.id
     const props=properties(record)
+    const trusted=trustedCompoundParameterEvidence(props)
+    const supplied=Object.freeze({
+      restLengthStud:Number.isFinite(Number(props.restLengthStud))?Number(props.restLengthStud):null,
+      travelStud:Number.isFinite(Number(props.travelStud))?Number(props.travelStud):null,
+      springStiffness:Number.isFinite(Number(props.springStiffness))?Number(props.springStiffness):null,
+      damping:Number.isFinite(Number(props.damping))?Number(props.damping):null,
+    })
     const data=Object.freeze({
       id:deterministicId('spring-damper',bodyId),
       kind:'spring-damper',
       bodyId,
       topology:'prismatic-internal',
-      restLengthStud:Number.isFinite(Number(props.restLengthStud))?Number(props.restLengthStud):null,
-      travelStud:Number.isFinite(Number(props.travelStud))?Number(props.travelStud):null,
-      springStiffness:Number.isFinite(Number(props.springStiffness))?Number(props.springStiffness):null,
-      damping:Number.isFinite(Number(props.damping))?Number(props.damping):null,
+      restLengthStud:trusted?supplied.restLengthStud:null,
+      travelStud:trusted?supplied.travelStud:null,
+      springStiffness:trusted?supplied.springStiffness:null,
+      damping:trusted?supplied.damping:null,
+      suppliedParameters:supplied,
+      parameterEvidence:props.compoundParameterEvidence??null,
       status:'awaiting-compound-decomposition',
       internalTopology:Object.freeze({
         rootBodyId:bodyId,
