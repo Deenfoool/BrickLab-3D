@@ -64,6 +64,7 @@ import { applyMotionPlanToBaseline, captureMotionBaseline, restoreMotionBaseline
 import { buildMechanicsPhysicsPlan } from '../mechanics-next/physics/plan.js'
 import { buildMechanicsCouplingPlan } from '../mechanics-next/physics/coupling-plan.js'
 import { materializeRapierMechanicsPlan, preflightRapierMechanicsPlan } from '../mechanics-next/physics/rapier-adapter.js'
+import { materializeCompoundMemberPhysics, preflightCompoundMemberMaterialization } from '../mechanics-next/physics/compound-member-materializer.js'
 import * as THREE from 'three'
 
 test('deterministic mechanical IDs are stable and namespace-sensitive', () => {
@@ -2298,4 +2299,175 @@ test('compound endpoint ownership assigns opposite external connectors to differ
     ownership.assignments.find(item=>item.endpointId==='bottom-eye').memberId,
     'rod-member',
   )
+})
+
+
+test('Rapier mechanics adapter keeps joint anchors in BrickLab stud units', () => {
+  const joint={
+    id:'unit-anchor',
+    kind:'spherical',
+    bodyA:'a',
+    bodyB:'b',
+    frame:{positionStud:[2,0,0],axisWorld:[1,0,0]},
+    limits:null,
+  }
+  const members=new Map([
+    ['a',mockPhysicsMember({handle:1})],
+    ['b',mockPhysicsMember({handle:2})],
+  ])
+  let anchorA=null
+  const session={
+    RAPIER:{
+      JointData:{
+        spherical(a){
+          anchorA=a
+          return{type:'spherical'}
+        },
+      },
+    },
+    world:{
+      createImpulseJoint(){
+        return{setContactsEnabled(){},isValid(){return true}}
+      },
+      removeImpulseJoint(){},
+    },
+  }
+  materializeRapierMechanicsPlan(
+    session,
+    minimalPhysicsPlan(joint),
+    {resolveMember:id=>members.get(id)},
+  )
+  assert.equal(anchorA.x,2)
+  assert.equal(anchorA.y,0)
+  assert.equal(anchorA.z,0)
+})
+
+test('compound materializer refuses to double-create bodies over an opaque root', () => {
+  const session={
+    world:{},
+    RAPIER:{},
+    members:new Map([['root-instance',{body:{handle:1}}]]),
+  }
+  const result=preflightCompoundMemberMaterialization(session,{
+    blockers:[],
+    replacements:[{
+      rootInstanceId:'root-instance',
+      rootBodyId:'root-body',
+    }],
+  })
+  assert.equal(result.pass,false)
+  assert.ok(result.failures.some(item=>item.code==='opaque-root-body-still-present'))
+})
+
+test('compound materializer creates child bodies, internal prismatic joint and spring transactionally', () => {
+  let bodyHandle=10
+  const bodies=[]
+  const colliders=[]
+  const joints=[]
+  const RAPIER={
+    RigidBodyDesc:{
+      dynamic(){
+        const state={translation:[0,0,0],rotation:[0,0,0,1]}
+        return{
+          state,
+          setTranslation(x,y,z){state.translation=[x,y,z];return this},
+          setRotation(q){state.rotation=[q.x,q.y,q.z,q.w];return this},
+          setCanSleep(){return this},
+        }
+      },
+    },
+    ColliderDesc:{
+      cuboid(x,y,z){
+        return{
+          half:[x,y,z],
+          center:[0,0,0],
+          setTranslation(a,b,c){this.center=[a,b,c];return this},
+          setFriction(){return this},
+          setRestitution(){return this},
+          setDensity(){return this},
+        }
+      },
+    },
+    JointData:{
+      generic(a,b,axis,mask){return{type:'generic',a,b,axis,mask}},
+      spring(rest,stiffness,damping,a,b){
+        return{type:'spring',rest,stiffness,damping,a,b}
+      },
+    },
+  }
+  const world={
+    createRigidBody(desc){
+      const body={
+        handle:bodyHandle++,
+        desc,
+        translation(){
+          return{x:desc.state.translation[0],y:desc.state.translation[1],z:desc.state.translation[2]}
+        },
+      }
+      bodies.push(body)
+      return body
+    },
+    createCollider(desc,body){colliders.push({desc,body});return{}},
+    createImpulseJoint(data,a,b){
+      const handle={
+        data,a,b,
+        setContactsEnabled(){},
+        isValid(){return true},
+      }
+      joints.push(handle)
+      return handle
+    },
+    removeImpulseJoint(){},
+    removeRigidBody(){},
+  }
+  const session={RAPIER,world,members:new Map(),components:[]}
+  const plan={
+    blockers:[],
+    bodies:[
+      {
+        memberId:'housing',
+        path:'housing.dat',
+        position:[0,0,0],
+        quaternion:[0,0,0,1],
+        collider:{center:[0,0,0],halfExtents:[.5,.5,.5]},
+      },
+      {
+        memberId:'rod',
+        path:'rod.dat',
+        position:[0,1,0],
+        quaternion:[0,0,0,1],
+        collider:{center:[0,0,0],halfExtents:[.25,.5,.25]},
+      },
+    ],
+    joints:[{
+      id:'internal-slide',
+      kind:'prismatic',
+      memberA:'housing',
+      memberB:'rod',
+      anchorWorldStud:[0,.5,0],
+      axisWorld:[0,1,0],
+    }],
+    dynamics:[{
+      kind:'spring-damper',
+      housingMemberId:'housing',
+      rodMemberId:'rod',
+      restLengthStud:1,
+      springStiffness:10,
+      damping:2,
+    }],
+    replacements:[{
+      rootBodyId:'shock-root',
+      rootInstanceId:'shock-instance',
+      preferredRootMemberId:'housing',
+      endpointOwners:{top:'housing',bottom:'rod'},
+    }],
+  }
+  const state=materializeCompoundMemberPhysics(session,plan)
+  assert.equal(state.members.length,2)
+  assert.equal(session.members.size,2)
+  assert.equal(colliders.length,2)
+  assert.equal(joints.length,2)
+  assert.equal(joints[0].data.type,'generic')
+  assert.equal(joints[1].data.type,'spring')
+  assert.equal(state.replacements.get('shock-root').resolveEndpoint('bottom').memberId,'rod')
 })
