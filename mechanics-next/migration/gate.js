@@ -31,6 +31,24 @@ export function evaluateMechanicsMigrationGate({
     {unknownParts:sceneUnknown,scene:runtimeStatus?.scene??null},
   ))
 
+  const sceneInstances=Number(runtimeStatus?.scene?.instances||0)
+  const observedRecords=Number(runtimeStatus?.lastSceneSync?.observedRecords??-1)
+  const recordFailures=runtimeStatus?.mechanicalRecordFailures
+    ??runtimeStatus?.lastSceneSync?.recordObservationFailures
+    ??null
+  checks.push(check(
+    'mechanical-record-coverage',
+    Array.isArray(recordFailures)&&
+      recordFailures.length===0&&
+      observedRecords===sceneInstances,
+    {
+      sceneInstances,
+      observedRecords,
+      failures:Object.freeze([...(Array.isArray(recordFailures)?recordFailures:[])]),
+      diagnosticsAvailable:Array.isArray(recordFailures),
+    },
+  ))
+
   const unresolvedConnections=Number(runtimeStatus?.interpretedConnections?.unresolved||0)
   checks.push(check(
     'live-connections-resolved',
@@ -100,7 +118,6 @@ export function evaluateMechanicsMigrationGate({
     },
   ))
 
-  const sceneInstances=Number(runtimeStatus?.scene?.instances||0)
   checks.push(check(
     'native-connectivity-parity',
     Boolean(paritySummary)&&
