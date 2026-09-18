@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { worldConnectorFrame } from '../connectors/world-frame.js'
+import { inverseAngularMass } from './coupling-runtime.js'
 
 export const MECHANICS_MOTOR_RUNTIME_VERSION='mechanics-motor-runtime-0.1.0'
 const TWO_PI=Math.PI*2
@@ -160,7 +161,11 @@ export function createMechanicsMotorRuntime(plan,{
         const error=targetOmega-relative
         const denominator=Math.max(Math.abs(targetOmega),1)
         const normalized=clamp(Math.abs(error)/denominator,0,1)
-        const torqueMagnitude=drive.stallTorque*normalized
+        const inverseEffective=inverseAngularMass(drive.driven.body,axis)+inverseAngularMass(drive.motor.body,axis)
+        // Torque is integrated over a fixed step. On light LEGO parts the stall
+        // torque can overshoot the requested speed by orders of magnitude.
+        const targetTorque=inverseEffective>EPS?Math.abs(error)/(dt*inverseEffective):Infinity
+        const torqueMagnitude=Math.min(drive.stallTorque*normalized,targetTorque)
         const sign=Math.sign(error||targetOmega||1)
         const torque=axis.clone().multiplyScalar(torqueMagnitude*sign)
 

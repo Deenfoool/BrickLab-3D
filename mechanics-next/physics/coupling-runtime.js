@@ -35,7 +35,7 @@ function inverseMass(body){
   return Number.isFinite(mass)&&mass>EPS?1/mass:0
 }
 
-function inverseAngularMass(body,worldJacobian){
+export function inverseAngularMass(body,worldJacobian){
   if(!body||!dynamic(body)||worldJacobian.lengthSq()<=EPS)return 0
   const inv=body.invPrincipalInertia?.()
   if(!inv)return 0
