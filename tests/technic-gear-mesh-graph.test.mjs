@@ -108,3 +108,18 @@ test('62821 and seated 6589 are recovered from scene geometry without a persiste
   assert.equal(drivetrain.differentialSeats[0].inferred,true)
   assert.equal(drivetrain.differentialSeats[0].source,'verified-ldraw-seat-geometry')
 })
+
+test('18575 ↔ 62821 mesh is recovered from scene geometry when an old project has no gear-mesh record',()=>{
+  const housing=objectFor(diff,'geometry-ring-carrier')
+  const pinion=objectFor(red,'geometry-ring-pinion')
+  // Deliberately outside the strict live apex tolerance used by normal detection,
+  // but still close to the verified assembled bevel relation.
+  pinion.position.set(2.2,0,.3)
+  pinion.rotation.y=Math.PI/2
+  housing.updateMatrixWorld(true);pinion.updateMatrixWorld(true)
+  const drivetrain=analyzeTechnicAwareDrivetrain([housing,pinion],[])
+  const mesh=drivetrain.physicalGearMeshes.find(item=>item.inferredFromScene)
+  assert.ok(mesh)
+  assert.equal(mesh.authoritativeVerifiedPair,true)
+  assert.deepEqual(new Set([mesh.a.teeth,mesh.b.teeth]),new Set([20,28]))
+})

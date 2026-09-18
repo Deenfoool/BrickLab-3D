@@ -15,7 +15,7 @@ import { technicMechanicalHintsV1 } from './mechanical-hints-v1.js?v=technic-dif
 import { technicPartProfileV1 } from './part-profile-v1.js'
 import { DIFFERENTIAL_62821_SEATS_V4 } from '../connector-discovery/differential-fixtures-v4.js'
 
-export const TECHNIC_DRIVETRAIN_VERSION = 'technic-drivetrain-v1.3.0'
+export const TECHNIC_DRIVETRAIN_VERSION = 'technic-drivetrain-v1.4.0'
 
 const DEFAULT_STALL_TORQUE = 5.5
 const DEFAULT_GEAR_EFFICIENCY = 0.92
@@ -197,8 +197,10 @@ function gearInfo(object, shaftByPart) {
     shaft:shaftByPart.get(object.userData.instanceId) ?? null,
     technicProfile:profile,
     gearFrameSource:frame.source ?? 'rotary-port',
+    ldrawCode:ldrawCode(definition),
     bevelApexSigns:Array.isArray(legacy?.bevelApexSigns) ? [...legacy.bevelApexSigns] : null,
     meshApexToleranceStud:Number.isFinite(tolerance) && tolerance > 0 ? tolerance : null,
+    meshCaptureDistanceStud:Number(legacy?.meshCaptureDistanceStud) || null,
   }
 }
 
@@ -240,6 +242,37 @@ function bevelMesh(a, b, options = {}) {
   }
 }
 
+function verifiedDifferentialRingPair(a,b){
+  const codes=new Set([a?.ldrawCode,b?.ldrawCode])
+  return codes.has('18575')&&(codes.has('62821')||codes.has('62821b'))
+}
+
+function recoverVerifiedDifferentialRingMesh(a,b,options={}){
+  if(!verifiedDifferentialRingPair(a,b)||a?.kind!=='bevel'||b?.kind!=='bevel')return null
+  const geometry=evaluateBevelMesh(a,b,{
+    maxAxisDot:options.bevelAxisDotTolerance ?? .18,
+    apexTolerance:Number.POSITIVE_INFINITY,
+  })
+  // This is intentionally much tighter than the 1.15-stud editor capture range:
+  // recovery should accept an already assembled old project, not magnetically join
+  // arbitrary nearby gears.
+  const recoveryTolerance=Math.min(.55,Math.max(.24,
+    Number(a.meshApexToleranceStud)||0,
+    Number(b.meshApexToleranceStud)||0,
+  ))
+  if(!geometry?.compatibleAxes||!Number.isFinite(geometry.apexError)||geometry.apexError>recoveryTolerance)return null
+  const directionSign=-(geometry.signA*geometry.signB)
+  return{
+    id:`recovered-bevel:${a.instanceId}:${b.instanceId}`,kind:'bevel',a,b,
+    shaftA:a.shaft.id,shaftB:b.shaft.id,
+    ratioAB:directionSign*(a.teeth/b.teeth),ratioBA:directionSign*(b.teeth/a.teeth),
+    efficiency:Math.min(a.efficiency,b.efficiency),torqueShare:1,
+    centerDistance:geometry.centerDistance,targetDistance:geometry.targetDistance,
+    apexError:geometry.apexError,error:geometry.apexError,
+    inferredFromScene:true,authoritativeVerifiedPair:true,
+  }
+}
+
 function linkedGearMesh(a,b,connection,options={}){
   if(!a?.shaft||!b?.shaft||a.shaft.id===b.shaft.id||a.kind!==b.kind)return null
   const geometric=a.kind==='bevel'?bevelMesh(a,b,options):spurMesh(a,b,options)
@@ -274,7 +307,8 @@ function detectUnifiedGearMeshes(objects, shaftByPart, connections=[], options =
     for (let j = i + 1; j < gears.length; j += 1) {
       const a = gears[i], b = gears[j]
       if (!a.shaft || !b.shaft || a.shaft.id === b.shaft.id || a.kind !== b.kind) continue
-      const mesh = a.kind === 'bevel' ? bevelMesh(a, b, options) : spurMesh(a, b, options)
+      let mesh = a.kind === 'bevel' ? bevelMesh(a, b, options) : spurMesh(a, b, options)
+      if(!mesh&&a.kind==='bevel')mesh=recoverVerifiedDifferentialRingMesh(a,b,options)
       if (mesh) meshes.push(mesh)
     }
   }
@@ -540,6 +574,7 @@ export function analyzeTechnicAwareDrivetrain(objects, connections) {
       drivenShafts:shaftResults.filter(shaft => shaft.rpm != null).length,
       motors:motors.length,
       gearMeshes:physicalGearMeshes.length,
+      inferredGearMeshes:physicalGearMeshes.filter(mesh=>mesh.inferredFromScene).length,
       differentialSeats:differentialSeats.length,
       inferredDifferentialSeats:differentialSeats.filter(seat=>seat.inferred).length,
       transmissions:transmissions.length,
