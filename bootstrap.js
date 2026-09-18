@@ -146,14 +146,15 @@ try {
 // unsupported/ambiguous connection blocks SIMULATE rather than downgrading silently.
 await import('./connectors-v4/physics-guard-v4.js')
 
-// Architecture API v1 is a compatibility facade, not a new owner. It exposes stable
-// subsystem contracts while BUILD remains owned by Connector V4/bridges and SIMULATE
-// remains owned by the fail-closed Connector V4 physics guard.
+// Architecture API v1 is the stable ownership facade. During Stage 11 it can report
+// either the certified Connector V4 compatibility owners or the converged Mechanics
+// Next BUILD/SIMULATE owners; split ownership is rejected by the architecture contract.
 await import('./architecture/runtime-v1.js?v=technic-family-20260915-v2')
 
-// Mechanics Next is developed beside the production engine on this branch. It is
-// observe-only: it may snapshot Connector V4 through its isolated read-only adapter,
-// but owns no snapping, graph mutation, persistence, kinematics or physics domain yet.
+// Mechanics Next is the Stage 11 migration candidate. It starts from a read-only V4
+// observation boundary, then may acquire BUILD, KINEMATICS and SIMULATE only after its
+// parity/persistence/regression gate passes. Once BUILD is native-authoritative, stale
+// legacy KINEMATICS/physics fallback is forbidden.
 try {
   await import('./mechanics-next/runtime.js')
   await import('./mechanics-next/production/physics-owner.js')
@@ -245,7 +246,7 @@ try {
 
 // Architecture Consolidation V1 is a production invariant now, not only documentation.
 // The runtime is allowed to continue only if editor/projects are bound and BUILD/SIMULATE
-// still resolve through Connector V4 and its fail-closed physics guard.
+// resolve to one certified ownership pair: Connector V4 compatibility or Mechanics Next.
 const { assertArchitectureContract } = await import('./architecture/contract-assert-v1.js?v=architecture-20260911-v1')
 assertArchitectureContract()
 
