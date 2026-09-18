@@ -22,6 +22,11 @@ import {
 } from '../mechanics-next/transmission/equations.js'
 import { createKinematicSolver } from '../mechanics-next/solver/kinematic-solver.js'
 import { snapshotLegacyV4 } from '../mechanics-next/adapters/legacy-v4-readonly.js'
+import {
+  frictionPinDynamics,
+  mechanicalInterfaceRule,
+  TRANSMISSION_SEMANTICS,
+} from '../mechanics-next/intelligence/interface-rules.js'
 
 test('deterministic mechanical IDs are stable and namespace-sensitive', () => {
   assert.equal(deterministicId('body', 'a', 1), deterministicId('body', 'a', 1))
@@ -164,4 +169,45 @@ test('legacy V4 snapshot is immutable and disconnected from live state', () => {
   records[0].metadata.nested = false
   assert.equal(snapshot.connections[0].metadata.nested, true)
   assert.equal(Object.isFrozen(snapshot.connections[0].metadata), true)
+})
+
+
+test('single stud contact remains a revolute clutch until contact composition removes twist', () => {
+  const rule = mechanicalInterfaceRule('stud', 'anti-stud')
+  assert.equal(rule.kind, 'revolute')
+  assert.equal(rule.topology.dof.ry.state, 'free')
+  assert.equal(rule.topology.bundleCanBecomeRigid, true)
+  assert.equal(rule.dynamics.clutchFriction, true)
+})
+
+test('axle in axle-hole is keyed but may slide until an axial stop is present', () => {
+  const sliding = mechanicalInterfaceRule('axle', 'axle-hole')
+  assert.equal(sliding.kind, 'prismatic')
+  assert.equal(sliding.topology.dof.ty.state, 'free')
+  assert.equal(sliding.topology.dof.ry.state, 'locked')
+
+  const stopped = mechanicalInterfaceRule('axle', 'axle-hole', { axialLocked:true })
+  assert.equal(stopped.topology.dof.ty.state, 'locked')
+  assert.equal(stopped.topology.dof.ry.state, 'locked')
+})
+
+test('round hole preserves axle rotation and axial slide by default', () => {
+  const rule = mechanicalInterfaceRule('axle', 'round-hole')
+  assert.equal(rule.kind, 'cylindrical')
+  assert.equal(rule.topology.dof.ty.state, 'free')
+  assert.equal(rule.topology.dof.ry.state, 'free')
+})
+
+test('friction pin changes resistance, not joint topology', () => {
+  const friction = frictionPinDynamics({ friction:true })
+  const smooth = frictionPinDynamics({ friction:false })
+  assert.equal(friction.topologyKind, 'revolute')
+  assert.equal(friction.topologicallyFixed, false)
+  assert.equal(friction.rotationalResistance, 'high')
+  assert.equal(smooth.rotationalResistance, 'low')
+})
+
+test('official worm semantics default to non-backdrivable transmission', () => {
+  assert.equal(TRANSMISSION_SEMANTICS.worm.defaultBackdrive, false)
+  assert.equal(TRANSMISSION_SEMANTICS.worm.evidence.tier, 'A')
 })
