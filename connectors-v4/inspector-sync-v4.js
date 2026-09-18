@@ -74,6 +74,8 @@ function resetSelectionState(key) {
 
 function syncInspector() {
   state.scheduled = false
+  if(globalThis.BrickLabMechanicsNextBuildOwner?.active===true &&
+     globalThis.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true) return
   const object = selectedObject()
   if (!object?.userData?.instanceId) return
 
