@@ -1,6 +1,7 @@
 import { deterministicId, createTransmission, evidence } from '../core/model.js'
 import {
   differentialEquation,
+  differentialSpiderEquation,
   gearMeshEquation,
   rigidRotationEquation,
 } from './equations.js'
@@ -129,6 +130,7 @@ function discoverDifferentials(records,relations=[]){
   const transmissions=[]
   const diagnostics=[]
   const balancedClosures=[]
+  const compoundMotions=[]
 
   for(const[carrierBody,innerRecords]of groups){
     const carrierRecord=byBody.get(carrierBody)
@@ -177,19 +179,50 @@ function discoverDifferentials(records,relations=[]){
       bodyA:left,
       bodyB:right,
     })
-    equations.push(equation)
+
+    const spiderEquations=[]
+    const referenceSpiderAxis=spider[0]?.gear?.axis??null
+    for(const item of spider){
+      const spiderBody=item.record.instance.body.id
+      const directionSign=referenceSpiderAxis
+        ?((item.gear.axis[0]*referenceSpiderAxis[0]+
+           item.gear.axis[1]*referenceSpiderAxis[1]+
+           item.gear.axis[2]*referenceSpiderAxis[2])>=0?1:-1)
+        :1
+      const spiderEquation=differentialSpiderEquation({
+        id:`${id}:spider:${spiderBody}`,
+        spider:spiderBody,
+        left,
+        right,
+        directionSign,
+      })
+      spiderEquations.push(spiderEquation)
+      compoundMotions.push(Object.freeze({
+        kind:'differential-spider',
+        bodyId:spiderBody,
+        parentBodyId:carrierBody,
+        orbitBodyId:carrierBody,
+        spinBodyId:spiderBody,
+        spinFrame:'carrier-relative',
+        localAxis:Object.freeze([...item.gear.axis]),
+        directionSign,
+      }))
+    }
+
+    equations.push(equation,...spiderEquations)
     balancedClosures.push(balance)
     transmissions.push(createTransmission({
       id,
       kind:'open-differential',
-      bodies:[carrierBody,left,right],
+      bodies:[carrierBody,left,right,...spider.map(item=>item.record.instance.body.id)],
       parameters:{
         sideBodies:[left,right],
         spiderBodies:spider.map(item=>item.record.instance.body.id),
         relation:'2*carrier-left-right=0',
+        spiderRelation:'2*spider+left-right=0',
         underdeterminedWithSingleDriver:true,
       },
-      equations:[equation],
+      equations:[equation,...spiderEquations],
       metadata:{
         carrierAxis:carrierGear.axis,
         carrierGearTeeth:carrierGear.teeth,
@@ -208,7 +241,7 @@ function discoverDifferentials(records,relations=[]){
     }))
   }
 
-  return{equations,transmissions,diagnostics,balancedClosures}
+  return{equations,transmissions,diagnostics,balancedClosures,compoundMotions}
 }
 
 export function discoverMechanicalTransmissions({
@@ -237,6 +270,7 @@ export function discoverMechanicalTransmissions({
       ...differentials.transmissions,
     ]),
     balancedDifferentialClosures:Object.freeze(differentials.balancedClosures),
+    compoundMotions:Object.freeze(differentials.compoundMotions),
     diagnostics:Object.freeze({
       gearPairs:Object.freeze(gears.diagnostics),
       differentials:Object.freeze(differentials.diagnostics),
