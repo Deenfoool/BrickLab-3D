@@ -98,6 +98,28 @@ function configureLimits(handle,item){
   handle.setLimits(min,max)
 }
 
+function configureSpringMotor(session,handle,item,worldUnitsPerStud){
+  const motor=item?.dynamics?.springMotor
+  if(!motor)return
+  if(item.kind!=='prismatic'){
+    throw new Error(`Spring motor requires prismatic joint: ${item.id}`)
+  }
+  if(item?.dynamics?.springMotorConflict){
+    throw new Error(`Conflicting spring motors in constraint bundle: ${item.id}`)
+  }
+  if(typeof handle?.configureMotorPosition!=='function'){
+    throw new Error('Rapier prismatic motor API unavailable')
+  }
+  const target=Number(motor.targetStud)*worldUnitsPerStud
+  const stiffness=Number(motor.stiffness)
+  const damping=Number(motor.damping)
+  if(![target,stiffness,damping].every(Number.isFinite)||stiffness<0||damping<0){
+    throw new Error(`Invalid spring motor parameters for ${item.id}`)
+  }
+  handle.configureMotorModel?.(session.RAPIER?.MotorModel?.ForceBased??1)
+  handle.configureMotorPosition(target,stiffness,damping)
+}
+
 function createJointData(RAPIER,item,memberA,memberB,{
   worldUnitsPerStud=DEFAULT_WORLD_UNITS_PER_STUD,
 }={}){
@@ -131,15 +153,20 @@ function createJointData(RAPIER,item,memberA,memberB,{
       if(typeof RAPIER.JointData.revolute!=='function')throw new Error('Rapier revolute joint unavailable')
       data=RAPIER.JointData.revolute(vec(anchorA),vec(anchorB),vec(axisA))
     }
-  }else if(item.kind==='prismatic'||item.kind==='cylindrical'){
+  }else if(item.kind==='prismatic'){
     if(!axesCompatible(axisA,axisB)){
-      throw new Error(`Rapier ${item.kind} GenericJoint cannot represent different local axes`)
+      throw new Error('Rapier prismatic joint cannot represent different local axes')
+    }
+    if(typeof RAPIER.JointData.prismatic!=='function')throw new Error('Rapier prismatic joint unavailable')
+    data=RAPIER.JointData.prismatic(vec(anchorA),vec(anchorB),vec(axisA))
+  }else if(item.kind==='cylindrical'){
+    if(!axesCompatible(axisA,axisB)){
+      throw new Error('Rapier cylindrical GenericJoint cannot represent different local axes')
     }
     if(typeof RAPIER.JointData.generic!=='function')throw new Error('Rapier GenericJoint unavailable')
-    const mask=item.kind==='prismatic'
-      ?RAPIER_LOCK_MASKS.prismaticX
-      :RAPIER_LOCK_MASKS.cylindricalX
-    data=RAPIER.JointData.generic(vec(anchorA),vec(anchorB),vec(axisA),mask)
+    data=RAPIER.JointData.generic(
+      vec(anchorA),vec(anchorB),vec(axisA),RAPIER_LOCK_MASKS.cylindricalX,
+    )
   }else{
     throw new Error(`Unsupported Mechanics Next Rapier joint kind: ${item.kind}`)
   }
@@ -277,6 +304,7 @@ export function materializeRapierMechanicsPlan(session,plan,{
       try{
         configureContacts(handle,contactsEnabled)
         configureLimits(handle,{...item,worldUnitsPerStud})
+        configureSpringMotor(session,handle,item,worldUnitsPerStud)
       }catch(error){
         session.world.removeImpulseJoint?.(handle,true)
         throw error
