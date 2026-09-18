@@ -314,10 +314,44 @@ export function probeMechanicsProjectState(state,{
       }))
       continue
     }
-    if(!objectByInstanceId(record.a.instanceId)||!objectByInstanceId(record.b.instanceId)){
+    const objectA=objectByInstanceId(record.a.instanceId)
+    const objectB=objectByInstanceId(record.b.instanceId)
+    if(!objectA||!objectB){
       failures.push(Object.freeze({
         code:'scene-object-not-found',
         connectionId:record.id,
+      }))
+      continue
+    }
+    try{
+      const interpretation=interpretObservedConnection({
+        id:record.id,
+        a:{
+          instanceId:record.a.instanceId,
+          endpointId:record.a.observedEndpointId??record.a.endpointId,
+        },
+        b:{
+          instanceId:record.b.instanceId,
+          endpointId:record.b.observedEndpointId??record.b.endpointId,
+        },
+        occupancy:clone(record.occupancy),
+      },{
+        sceneObserver,
+        objectById:objectByInstanceId,
+      })
+      if(!interpretation.valid||interpretation.type!=='constraint'){
+        failures.push(Object.freeze({
+          code:'connection-reinterpretation-failed',
+          connectionId:record.id,
+          reason:interpretation?.reason??interpretation?.type??'unknown',
+        }))
+        continue
+      }
+    }catch(error){
+      failures.push(Object.freeze({
+        code:'connection-reinterpretation-error',
+        connectionId:record.id,
+        detail:String(error?.message||error),
       }))
       continue
     }
