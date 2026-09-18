@@ -19,6 +19,7 @@ import { createAssemblyGraph } from '../mechanics-next/topology/assembly-graph.j
 import { solveConstraintBundle } from '../mechanics-next/constraints/bundle-solver.js'
 import {
   differentialEquation,
+  differentialSpiderEquation,
   driverEquation,
   gearMeshEquation,
   rigidRotationEquation,
@@ -56,6 +57,8 @@ import { createCompoundStateRegistry } from '../mechanics-next/compounds/state.j
 import { screenDragAngle, solveRotationalDrag } from '../mechanics-next/interaction/drag-driver.js'
 import { buildMotionPlan } from '../mechanics-next/interaction/motion-plan.js'
 import { applyMotionPlanToBaseline, captureMotionBaseline, restoreMotionBaseline } from '../mechanics-next/interaction/scene-motion-adapter.js'
+import { buildMechanicsPhysicsPlan } from '../mechanics-next/physics/plan.js'
+import { buildMechanicsCouplingPlan } from '../mechanics-next/physics/coupling-plan.js'
 import * as THREE from 'three'
 
 test('deterministic mechanical IDs are stable and namespace-sensitive', () => {
@@ -1777,4 +1780,139 @@ test('actuator drag produces slide displacement and translation motion plan', ()
   assert.ok(translation)
   assert.equal(translation.kind,'translation')
   assert.ok(Math.abs(translation.distanceStud-.25)<1e-9)
+})
+
+
+test('U-joint compound becomes spherical structural physics joint plus torsion relation', () => {
+  const jointBody='uj-physics'
+  const portA=compoundEndpoint({id:'uj-pa',bodyId:jointBody,semantic:'universal-joint-port'})
+  const portB=compoundEndpoint({
+    id:'uj-pb',
+    bodyId:jointBody,
+    semantic:'universal-joint-port',
+    orientationBrickLab:[1,0,0,0,0,-1,0,1,0],
+  })
+  const joint=compoundRecord({bodyId:jointBody,role:'universal-joint',endpoints:[portA,portB]})
+  const a=compoundRecord({bodyId:'uj-a',role:'axle'})
+  const b=compoundRecord({bodyId:'uj-b',role:'axle'})
+  const graph=createAssemblyGraph()
+  for(const id of [jointBody,'uj-a','uj-b'])graph.addBody(createBodyDescriptor({id}))
+
+  const compounds=discoverCompoundMechanisms({
+    records:[joint,a,b],
+    graph,
+    relations:[
+      {id:'uja',kind:'universal-joint-port',bodyA:jointBody,bodyB:'uj-a',endpointA:'uj-pa',endpointB:'a'},
+      {id:'ujb',kind:'universal-joint-port',bodyA:jointBody,bodyB:'uj-b',endpointA:'uj-pb',endpointB:'b'},
+    ],
+  })
+  const descriptor=compounds.descriptors.find(item=>item.kind==='universal-joint')
+  assert.ok(descriptor)
+  assert.equal(descriptor.virtualStructuralJoint,'spherical+tortion-coupling')
+  assert.equal(descriptor.externalBodies.length,2)
+  assert.equal(descriptor.pivotWorldStud.length,3)
+
+  const plan=buildMechanicsPhysicsPlan({
+    graph,
+    discovery:{
+      transmissions:compounds.transmissions,
+      dynamics:compounds.dynamics,
+      compoundDescriptors:compounds.descriptors,
+    },
+  })
+  const virtual=plan.joints.find(item=>item.compound?.kind==='universal-joint')
+  assert.ok(virtual)
+  assert.equal(virtual.kind,'spherical')
+  assert.deepEqual(new Set([virtual.bodyA,virtual.bodyB]),new Set(['uj-a','uj-b']))
+})
+
+test('differential spider physics coupling measures spider spin relative to carrier', () => {
+  const graph=createAssemblyGraph()
+  for(const id of ['carrier','spider','left','right'])graph.addBody(createBodyDescriptor({id}))
+  const records=[
+    transmissionRecord({bodyId:'carrier',role:'differential',teeth:28,axis:'y'}),
+    transmissionRecord({bodyId:'spider',role:'bevel-gear',teeth:12,axis:'x'}),
+    transmissionRecord({bodyId:'left',role:'bevel-gear',teeth:12,axis:'y'}),
+    transmissionRecord({bodyId:'right',role:'bevel-gear',teeth:12,axis:'y'}),
+  ]
+  const equation=differentialSpiderEquation({
+    id:'spider-rel',
+    spider:'spider',
+    carrier:'carrier',
+    left:'left',
+    right:'right',
+  })
+  const plan=buildMechanicsCouplingPlan({
+    graph,
+    records,
+    discovery:{
+      equations:[equation],
+      velocityEquations:[],
+      nonlinearRelations:[],
+      linearMotions:[],
+    },
+  })
+  assert.equal(plan.pass,true)
+  assert.equal(plan.blockers.length,0)
+  assert.equal(plan.couplers.length,1)
+  const spiderTerm=plan.couplers[0].terms.find(item=>item.bodyId==='spider')
+  assert.ok(spiderTerm)
+  assert.equal(spiderTerm.referenceBodyId,'carrier')
+  assert.equal(spiderTerm.referenceStatus,'forced-relative')
+})
+
+test('shock absorber without decomposed moving bodies remains a production physics blocker', () => {
+  const graph=createAssemblyGraph()
+  graph.addBody(createBodyDescriptor({id:'shock-body'}))
+  const discovery=discoverCompoundMechanisms({
+    records:[compoundRecord({
+      bodyId:'shock-body',
+      role:'shock-absorber',
+      properties:{
+        springStiffness:100,
+        damping:5,
+        compoundParameterEvidence:{confidence:'verified',source:'fixture'},
+      },
+    })],
+    graph,
+  })
+  const plan=buildMechanicsPhysicsPlan({
+    graph,
+    discovery:{
+      transmissions:discovery.transmissions,
+      dynamics:discovery.dynamics,
+      compoundDescriptors:discovery.descriptors,
+    },
+  })
+  assert.equal(plan.pass,false)
+  assert.ok(plan.blockers.some(item=>
+    item.code==='spring-dynamics-unverified'&&item.bodyId==='shock-body'))
+})
+
+test('scene motion adapter applies actuator translation from immutable baseline', () => {
+  const root=new THREE.Group()
+  const object=new THREE.Object3D()
+  object.userData.instanceId='rod-instance'
+  root.add(object)
+  root.updateMatrixWorld(true)
+
+  const baseline=captureMotionBaseline([{
+    object,
+    instance:{body:{id:'rod-body',instanceId:'rod-instance'}},
+  }])
+  const plan={
+    motions:[{
+      kind:'translation',
+      bodyId:'rod-body',
+      instanceId:'rod-instance',
+      axis:[0,1,0],
+      distanceStud:.75,
+    }],
+  }
+  applyMotionPlanToBaseline(plan,baseline)
+  assert.ok(Math.abs(object.position.y-.75)<1e-9)
+  applyMotionPlanToBaseline(plan,baseline)
+  assert.ok(Math.abs(object.position.y-.75)<1e-9)
+  restoreMotionBaseline(baseline)
+  assert.ok(Math.abs(object.position.y)<1e-12)
 })
