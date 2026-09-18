@@ -117,11 +117,15 @@ function recoverAxleConnections(objects, sourceConnections) {
 
 PhysicsSession.prototype.build = function buildWithMechanicalRecoveryV4() {
   if (this.mechanicsNextBootstrap) {
-    globalThis.__bricklabMechanicalRecovery = {
+    const stats = {
       recoveredAxleLinks:0,
       links:[],
       mechanicsNextBypass:true,
     }
+    this.mechanicalRecoveryStats = stats
+    this.mechanicsNextLegacyBypass ??= {}
+    this.mechanicsNextLegacyBypass.axleRecovery = true
+    globalThis.__bricklabMechanicalRecovery = stats
     return originalBuild.call(this)
   }
   const source = Array.isArray(this.connections) ? this.connections : []
