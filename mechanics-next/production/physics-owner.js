@@ -121,6 +121,30 @@ if(!PhysicsSession[marker]){
       return legacyFallback(legacyCreate,objects,connections,rest,lastAttempt)
     }
 
+    let buildOwnership=null
+    if(mechanics.nativeProjectAuthoritative?.()!==true){
+      buildOwnership=mechanics.adoptNativeProjectOwnership?.()??null
+      if(!buildOwnership?.accepted){
+        lastAttempt=Object.freeze({
+          owner:'legacy-fallback',
+          reason:'native-build-ownership-required',
+          gate:gate?.summary??null,
+          buildOwnership,
+        })
+        return legacyFallback(legacyCreate,objects,connections,rest,lastAttempt)
+      }
+    }
+    const buildOwner=globalThis.BrickLabMechanicsNextBuildOwner
+    if(buildOwner?.active!==true||buildOwner?.authoritative?.()!==true){
+      lastAttempt=Object.freeze({
+        owner:'legacy-fallback',
+        reason:'native-build-owner-not-published',
+        gate:gate?.summary??null,
+        buildOwnership,
+      })
+      return legacyFallback(legacyCreate,objects,connections,rest,lastAttempt)
+    }
+
     const excludedRoots=new Set(
       (physics.compoundGraphExpansion?.materializedRootInstanceIds||[]).map(String),
     )
