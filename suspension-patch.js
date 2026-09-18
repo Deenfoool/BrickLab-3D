@@ -58,6 +58,8 @@ PhysicsSession.prototype.initializeSuspensionJointsV1 = function initializeSuspe
   return this.suspensionJoints
 }
 
+PhysicsSession.prototype.initializeSuspensionJointsV1.__mechanicsNextBypass = true
+
 const originalMountTelemetry = PhysicsSession.prototype.mountTelemetry
 PhysicsSession.prototype.mountTelemetry = function mountTelemetryWithSuspension(...args) {
   // Joint-stability-v4 is the only revolute creator. Suspension decorates its
