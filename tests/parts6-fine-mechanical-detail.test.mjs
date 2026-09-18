@@ -206,7 +206,7 @@ test('fine pass source is visual-only and does not author physical/mechanical me
   assert.match(source, /physicsIgnore = true/)
   assert.match(source, /wrapPart\(/)
   assert.equal(globalThis.BrickLabParts6FineMechanicalDetail.upgraded.length, TARGETS.length)
-  assert.equal(globalThis.BrickLabParts6InterfacePhysicsSafety?.version, 'parts-6-interface-physics-safety-v2')
+  assert.equal(globalThis.BrickLabParts6InterfacePhysicsSafety?.version, 'parts-6-interface-physics-safety-v3')
 })
 
 await dom.happyDOM.close()

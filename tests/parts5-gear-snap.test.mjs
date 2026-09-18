@@ -18,7 +18,7 @@ await import('../parts5/visual-overhaul-v1.js')
 
 const { findPart } = await import('../parts.js')
 const { findSnapCandidate, applySnap, connectorWorldPosition } = await import('../snapping-v3.js')
-const { isEndpointOccupied } = await import('../connections-v3.js')
+const { isEndpointOccupied, createConnection } = await import('../connections-v3.js')
 const { evaluateSpurMesh } = await import('../parts5/gear-mesh-math-v1.js')
 
 function makeGear(partId, instanceId) {
@@ -39,7 +39,7 @@ function descriptor(object) {
   }
 }
 
-test('12T dragged near 20T gets exact placement snap and no persistent connector occupancy', () => {
+test('12T dragged near 20T gets exact placement snap and a persistent non-rigid transmission relation', () => {
   const fixed = makeGear('gear-20', 'fixed-20')
   const moving = makeGear('gear-12', 'moving-12')
   fixed.position.set(0, 0, 0)
@@ -50,7 +50,7 @@ test('12T dragged near 20T gets exact placement snap and no persistent connector
   const candidate = findSnapCandidate(moving, [fixed, moving], { isAvailable: () => true })
   assert.ok(candidate)
   assert.equal(candidate.kind, 'gear-mesh')
-  assert.equal(candidate.placementOnly, true)
+  assert.equal(candidate.placementOnly, false)
   assert.equal(candidate.movingGear.teeth, 12)
   assert.equal(candidate.fixedGear.teeth, 20)
 
@@ -65,10 +65,12 @@ test('12T dragged near 20T gets exact placement snap and no persistent connector
   assert.ok(result.distanceError < 1e-8)
   assert.ok(result.axialOffset < 1e-8)
 
-  // The app checks endpoint occupancy before creating a connector. The placement
-  // layer vetoes exactly that one call, then leaves the endpoint free because
-  // a gear mesh is not a connector or a Rapier joint.
-  assert.equal(isEndpointOccupied([], moving.userData.instanceId, candidate.source.id), true)
+  // A gear mesh persists as a transmission relation without reserving the
+  // axle interface or creating a rigid Rapier joint.
+  const relation=createConnection(moving,candidate.source,fixed,candidate.target)
+  assert.equal(relation.kind,'gear-mesh')
+  assert.equal(relation.a.connectorType,'gear-mesh')
+  assert.equal(relation.b.connectorType,'gear-mesh')
   assert.equal(isEndpointOccupied([], moving.userData.instanceId, candidate.source.id), false)
 })
 

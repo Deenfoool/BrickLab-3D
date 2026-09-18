@@ -62,7 +62,7 @@ test('Architecture Consolidation v1 has an executable completion contract', () =
   assert.equal(ARCHITECTURE_CONSOLIDATION_STATUS, 'complete')
   assert.equal(report.pass, true)
   assert.equal(report.milestoneStatus, 'complete')
-  assert.equal(assertArchitectureContract(subsystems), report)
+  assert.deepEqual(assertArchitectureContract(subsystems), report)
 })
 
 test('completion contract accepts converged Mechanics Next BUILD and SIMULATE ownership', () => {

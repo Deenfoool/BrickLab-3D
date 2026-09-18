@@ -48,7 +48,7 @@ test('critical requests can bypass a saturated background queue while background
 test('geometry workers release after prototype readiness while Connector V4 warms separately', async () => {
   const source = await text('ldraw/fast-loader-v1.js')
   const visualReady = source.indexOf('await waitForVisual(def, root)')
-  const detachedV4 = source.indexOf('void startConnectorWarm(normalized, def, root)')
+  const detachedV4 = source.indexOf('void startConnectorWarm(normalized, def, root)',visualReady)
   assert.ok(visualReady >= 0 && detachedV4 > visualReady)
   assert.doesNotMatch(source,/await\s+startConnectorWarm\(normalized, def, root\)/,'V4 network work must not hold the geometry worker')
   assert.match(source,/disposeWarmRoot\(root\)/,'temporary preview materials are cleaned up')

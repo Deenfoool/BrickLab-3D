@@ -1,3 +1,4 @@
+import { GEAR_MESH_CLEARANCE_STUD } from '../parts5/gear-mesh-math-v1.js'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Window } from 'happy-dom'
@@ -105,8 +106,8 @@ function placeGear(partId, instanceId, axis, center) {
 test('12T and 20T bevel gears mesh on perpendicular shafts using a shared pitch-cone apex', () => {
   const x = new THREE.Vector3(1, 0, 0)
   const z = new THREE.Vector3(0, 0, 1)
-  const r12 = 12 / 16
-  const r20 = 20 / 16
+  const r12 = 12 / 16 + GEAR_MESH_CLEARANCE_STUD.bevel
+  const r20 = 20 / 16 + GEAR_MESH_CLEARANCE_STUD.bevel
   const a = placeGear('bevel-gear-12', 'bevel-a', x, x.clone().multiplyScalar(r20))
   const b = placeGear('bevel-gear-20', 'bevel-b', z, z.clone().multiplyScalar(r12))
   const shaftByPart = new Map([

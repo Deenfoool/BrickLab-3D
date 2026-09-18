@@ -185,7 +185,7 @@ test('PARTS-6 interface detail remains excluded from bounds-derived physics', as
   assert.equal(nominal.PARTS6_NOMINAL_DIMENSION_VERSION, 'parts-6-nominal-dimension-fidelity-v1')
   assert.equal(fidelity.PARTS6_CONNECTOR_FIDELITY_VERSION, 'parts-6-connector-fidelity-v3')
   assert.equal(fit.PARTS6_INTERFACE_FIT_VERSION, 'parts-6-interface-fit-refinement-v2')
-  assert.equal(safety.PARTS6_INTERFACE_PHYSICS_SAFETY_VERSION, 'parts-6-interface-physics-safety-v1')
+  assert.equal(safety.PARTS6_INTERFACE_PHYSICS_SAFETY_VERSION, 'parts-6-interface-physics-safety-v3')
   const object = findPart('wheel-hub').create(findPart('wheel-hub').defaultColor)
   let interfaceMeshes = 0
   let unsafe = 0

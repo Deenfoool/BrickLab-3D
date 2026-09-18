@@ -18,8 +18,9 @@ test('shock fidelity v9 rebuilds body and rod as a coherent real damper family',
 
 test('shock fidelity v9 uses real bored eyes and close-range molded/mechanical details', () => {
   assert.match(source, /annulusShape\(0\.315, N\.pinHoleRadius\)/)
-  assert.match(source, /shock-lower-eye-bore/)
-  assert.match(source, /shock-upper-eye-bore/)
+  assert.match(source, /shock-lower-eye/)
+  assert.match(source, /shock-upper-eye/)
+  assert.match(source, /`\$\{featurePrefix\}-bore`/)
   assert.match(source, /shock-body-thread/)
   assert.match(source, /shock-preload-collar-notch/)
   assert.match(source, /shock-rod-seal/)

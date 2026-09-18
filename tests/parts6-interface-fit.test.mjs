@@ -83,7 +83,7 @@ test('interface-fit pass preserves connector and mechanics metadata byte-for-byt
     const part = findPart(id)
     assert.ok(part, `${id} exists`)
     assert.equal(
-      JSON.stringify({ connectors: part.connectors, mechanics: part.mechanics }),
+      JSON.stringify({ connectors: part.connectors ?? null, mechanics: part.mechanics ?? null }),
       metadataBefore.get(id),
       `${id} connector/mechanics metadata unchanged`,
     )

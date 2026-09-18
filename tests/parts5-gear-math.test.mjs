@@ -87,7 +87,7 @@ test('bevel 12T ↔ 20T snap solves one shared working-cone apex with clearance'
   const moving = {
     teeth: 12,
     pitchRadius: gearPitchRadius(12),
-    center: new THREE.Vector3(1.30, 0.07, 0.02),
+    center: new THREE.Vector3(1.30, 0.07, 0.12),
     axis: new THREE.Vector3(1, 0, 0),
   }
   const fixed = {

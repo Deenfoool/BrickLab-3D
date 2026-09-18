@@ -23,9 +23,12 @@ test('Smart Assembly starts as soon as the editor contract is bound and uses one
   assert.match(bootstrap, /void startSmartAssembly\(\)/, 'guidance startup must be non-blocking')
   assert.doesNotMatch(bootstrap, /requestIdleCallback/, 'Smart Assembly startup must not wait for browser idle time')
 
-  const bootstrapUrls = index.match(/bootstrap\.js\?v=smart-assembly-20260912-v1/g) ?? []
+  const {imports}=JSON.parse(index.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1])
+  const entry=index.match(/src="\.\/bootstrap\.js\?v=([^"]+)/)[1]
+  assert.equal(imports['./bootstrap.js'],'./bootstrap.js?v='+entry)
+  const bootstrapUrls = index.split('bootstrap.js?v='+entry).slice(1)
   assert.equal(bootstrapUrls.length, 2, 'import map and module script must both use the same fresh bootstrap generation')
-  assert.match(index, /"\.\/editor-groups-v1\.js": "\.\/editor-groups-v1\.js\?v=editor-selection-20260911-v1"/)
+  assert.equal(imports["./editor-groups-v1.js"],"./editor-groups-v1.js?v="+entry)
 
   assert.match(activation, /smart-assembly-runtime-v1\.js\?v=smart-assembly-20260911-v6/)
   assert.match(runtime, /assembly-compatibility-v1\.js\?v=smart-assembly-20260911-v6/)

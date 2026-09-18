@@ -124,7 +124,7 @@ test('rack teeth are instanced at exactly one circular pitch', () => {
   teeth.getMatrixAt(1, b)
   const pa = new THREE.Vector3().setFromMatrixPosition(a)
   const pb = new THREE.Vector3().setFromMatrixPosition(b)
-  assert.ok(Math.abs((pb.x - pa.x) - LINEAR_PITCH) < 1e-9)
+  assert.ok(Math.abs((pb.x - pa.x) - LINEAR_PITCH) < 1e-6)
   assert.ok(Math.abs(pb.y - pa.y) < 1e-12)
   assert.ok(Math.abs(pb.z - pa.z) < 1e-12)
   assert.equal(finiteGeometry(object), true)

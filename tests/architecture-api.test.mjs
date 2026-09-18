@@ -217,7 +217,7 @@ test('legacy editor adapter binds live editor state without making app internals
 test('production bootstrap installs Architecture API after the V4 physics guard and before app.js', async () => {
   const source = await readFile(new URL('../bootstrap.js', import.meta.url), 'utf8')
   const guard = source.indexOf("await import('./connectors-v4/physics-guard-v4.js')")
-  const architecture = source.indexOf("await import('./architecture/runtime-v1.js?v=architecture-20260911-v1')")
+  const architecture = source.indexOf("await import('./architecture/runtime-v1.js")
   const app = source.indexOf("await import('./app.js')")
   const editorAdapter = source.indexOf("await import('./architecture/editor-adapter-v1.js?v=architecture-20260911-v1')")
 

@@ -153,7 +153,10 @@ test('production Design Doctor mounts lazily and defaults to quiet non-invasive 
   assert.ok(doctorActivation < optionalUi, 'later optional UI must never gate Doctor toolbar activation')
   assert.doesNotMatch(bootstrap, /design-doctor-runtime-v1\.js/, 'heavy Doctor runtime must not be a bootstrap dependency')
 
-  const bootstrapUrls = index.match(/bootstrap\.js\?v=design-doctor-20260912-v2/g) ?? []
+  const {imports}=JSON.parse(index.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1])
+  const entry=index.match(/src="\.\/bootstrap\.js\?v=([^"]+)/)[1]
+  assert.equal(imports['./bootstrap.js'],'./bootstrap.js?v='+entry)
+  const bootstrapUrls = index.split('bootstrap.js?v='+entry).slice(1)
   assert.equal(bootstrapUrls.length, 2)
   assert.match(activation, /data-design-doctor/)
   assert.match(activation, /design-doctor-runtime-v1\.js\?v=design-doctor-20260912-v3/)

@@ -97,7 +97,7 @@ test('connector identity is preserved for representative refined parts', () => {
 })
 
 test('complex visual parts use explicit visual-independent collider profiles', () => {
-  assert.equal(COLLIDER_PROFILE_VERSION, 'collider-profiles-v4')
+  assert.equal(COLLIDER_PROFILE_VERSION, 'collider-profiles-v5')
   for (const id of [
     'beam-l-3x3', 'beam-angle-4x2', 'pin', 'axle-pin',
     'connector-perpendicular', 'connector-angle', 'bearing-block',

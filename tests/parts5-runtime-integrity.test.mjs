@@ -48,8 +48,8 @@ test('editor snap and drivetrain detection consume the same gear mesh math', asy
   assert.match(snapping, /solveBevelSnap/)
   assert.match(drivetrain, /evaluateSpurMesh/)
   assert.match(drivetrain, /evaluateBevelMesh/)
-  assert.match(math, /targetDistance = a\.pitchRadius \+ b\.pitchRadius/)
-  assert.match(math, /apexA = a\.center\.clone\(\)\.addScaledVector/)
+  assert.match(math, /rawPitchDistance\s*=\s*a\.pitchRadius\s*\+\s*b\.pitchRadius/)
+  assert.match(math, /apexA\s*=\s*a\.center\.clone\(\)\.addScaledVector/)
   assert.match(math, /solveSpurPhaseAlignment/)
   assert.match(snapping, /phaseCorrection/)
   assert.match(snapping, /gearWorldReference/)
@@ -57,7 +57,7 @@ test('editor snap and drivetrain detection consume the same gear mesh math', asy
 
 test('gear mesh preview renders pitch circles without becoming physics meshes', async () => {
   const ui = await readFile(new URL('parts5/gear-mesh-ui-v1.js', root), 'utf8')
-  assert.match(ui, /parts-5-gear-mesh-ui-v2/)
+  assert.match(ui, /parts-5-gear-mesh-ui-v3\.1/)
   assert.match(ui, /new THREE\.LineLoop/)
   assert.match(ui, /pitchRadius/)
   assert.match(ui, /parts5GearMeshGuide/)
@@ -65,12 +65,13 @@ test('gear mesh preview renders pitch circles without becoming physics meshes', 
   assert.doesNotMatch(ui, /new THREE\.Mesh\([^\n]*pitch/i)
 })
 
-test('gear mesh placement explicitly blocks a fake connector/joint', async () => {
+test('gear mesh placement persists a transmission relation without a rigid connector', async () => {
   const snapping = await readFile(new URL('snapping-v3.js', root), 'utf8')
   const connections = await readFile(new URL('connections-v3.js', root), 'utf8')
   assert.match(snapping, /kind: 'gear-mesh'/)
-  assert.match(snapping, /placementOnly: true/)
-  assert.match(snapping, /suppressNextConnectionForEndpoint/)
+  assert.match(snapping, /placementOnly: false/)
+  assert.match(connections, /mechanicalKind/ )
+  assert.match(connections, /gear-mesh/)
   assert.match(connections, /placementSuppressions/)
   assert.match(connections, /consumePlacementSuppression/)
 })
@@ -139,7 +140,7 @@ test('visual QA gallery loads retained PARTS-5 layers and exposes critical model
   assert.match(qa, /structural-refinement-v2/)
   assert.match(qa, /detail-refinement-v3/)
   assert.match(qa, /wheel-tractor/)
-  assert.match(qa, /gear-40/)
+  assert.match(qa, /spurTeeth = \[8, 12, 16, 20, 24, 36, 40\]/)
   assert.match(qa, /bevel-gear-20/)
   assert.match(qa, /wheel-hub/)
   assert.match(qa, /steering-rack-7/)

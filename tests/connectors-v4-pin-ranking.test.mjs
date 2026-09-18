@@ -54,7 +54,7 @@ test('non-pin activations receive no ranking advantage',()=>{
 
 test('candidate search consumes the semantic pin-mate bonus without replacing geometric scoring',async()=>{
   const source=await readFile(new URL('../connectors-v4/candidate-v4.js',import.meta.url),'utf8')
-  assert.match(source,/candidate-search-v4\.7\.0/)
+  assert.match(source,/candidate-search-v4\.9\.0/)
   assert.match(source,/pinMatePreferenceV4\(activationPreview\)/)
   assert.match(source,/pinMateBonus:candidate\.pinMatePreference\?\.scoreBonus/)
   assert.match(source,/applyPinMateScoreBonusV4\(score,\{ scoreBonus:pinMateBonus \}\)/)
@@ -63,6 +63,8 @@ test('candidate search consumes the semantic pin-mate bonus without replacing ge
 
 test('production import map cache-bumps the pin-aware candidate search',async()=>{
   const html=await readFile(new URL('../index.html',import.meta.url),'utf8')
-  const needle='"./connectors-v4/candidate-v4.js": "./connectors-v4/candidate-v4.js?v=runtime-14-bidirectional-pin-snap-20260916-v1"'
+  const {imports}=JSON.parse(html.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1])
+  const needle='"./connectors-v4/candidate-v4.js": "'+imports['./connectors-v4/candidate-v4.js']+'"'
+  assert.equal(imports['./connectors-v4/candidate-v4.js'].split('?v=')[1],imports['./app.js'].split('?v=')[1])
   assert.equal(html.split(needle).length-1,1)
 })

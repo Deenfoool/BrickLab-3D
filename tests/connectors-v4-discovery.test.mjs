@@ -215,7 +215,7 @@ test('V4.3 replaces the legacy axlehol0 origin candidate before endpoint identit
     '1 16 0 0 -20 1 0 0 0 0 1 0 40 0 axlehol0.dat',
     async()=>null,
   )
-  assert.equal(CONNECTOR_DISCOVERY_VERSION_V43,'connector-discovery-v4.4.0')
+  assert.equal(CONNECTOR_DISCOVERY_VERSION_V43,'connector-discovery-v4.10.0')
   assert.equal(result.stats.correctedAxleHints,1)
   const hint=result.connectors.find(connector=>connector.discovery?.role==='technic-axle-hole')
   assert.ok(hint)
@@ -226,7 +226,7 @@ test('V4.3 replaces the legacy axlehol0 origin candidate before endpoint identit
 test('production bootstrap mounts Connector Discovery V4.3 after Connector V4 and before editor evaluation',async()=>{
   const bootstrap=await readFile(new URL('../bootstrap.js',import.meta.url),'utf8')
   const connectorV4=bootstrap.indexOf("await import('./connectors-v4/runtime-v4.js')")
-  const discovery=bootstrap.indexOf("./connectors-v4/discovery-runtime-v4.js?v=connector-sites-20260914-v2")
+  const discovery=bootstrap.indexOf("./connectors-v4/discovery-runtime-v4.js")
   const app=bootstrap.indexOf("await import('./app.js')")
   assert.ok(connectorV4>=0)
   assert.ok(discovery>connectorV4)
