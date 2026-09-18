@@ -67,7 +67,11 @@ export function createMechanicsPhysicsRuntime({
     couplingPlan,
     motorPlan,
     blockers,
-    pass:structuralPlan.pass&&compoundMemberPlan.pass&&couplingPlan.pass&&motorPlan.pass,
+    pass:blockers.length===0&&
+      structuralPlan.pass&&
+      compoundMemberPlan.pass&&
+      couplingPlan.pass&&
+      motorPlan.pass,
     preflightSession(session){
       if(compoundMemberPlan.replacements.length){
         const compound=preflightCompoundMemberMaterialization(session,compoundMemberPlan)
