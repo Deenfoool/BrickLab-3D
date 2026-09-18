@@ -25,8 +25,9 @@ import { createCompoundDecompositionRegistry } from './compounds/decomposition-r
 import { mapDecompositionToScene } from './compounds/scene-member-map.js'
 import { assignCompoundEndpointOwnership } from './compounds/endpoint-ownership.js'
 import { createMechanicsPhysicsRuntime } from './physics/runtime.js'
-import { exportMechanicsProjectState, persistenceCompatibilityReport, restoreMechanicsProjectState } from './migration/project-state.js'
+import { exportMechanicsProjectState, persistenceCompatibilityReport, probeMechanicsProjectState, restoreMechanicsProjectState } from './migration/project-state.js'
 import { evaluateMechanicsMigrationGate } from './migration/gate.js'
+import { runMechanicsMigrationRegressionSuite } from './migration/regression-suite.js'
 
 export const MECHANICS_NEXT_RUNTIME_MODE = 'observe-only'
 
@@ -111,7 +112,7 @@ export function createMechanicsNextRuntime({
   let physicsPreview = null
   let nativeRestoredRelations = Object.freeze([])
   let lastPersistenceReport = null
-  let regressionEvidence = null
+  let regressionEvidence = runMechanicsMigrationRegressionSuite()
   let parityEvidence = null
   let activeDragSession = null
   let activeDragApply = false
@@ -189,6 +190,18 @@ export function createMechanicsNextRuntime({
       compoundState,
     })
     lastTransmissionSync = transmissionCompiler.sync(discovery)
+    const persistenceState=exportMechanicsProjectState({
+      graph,
+      relations:[
+        ...(connectionInterpreter?.relations?.() ?? []),
+        ...nativeRestoredRelations,
+      ],
+      compoundState,
+    })
+    lastPersistenceReport=probeMechanicsProjectState(persistenceState,{
+      sceneObserver,
+      objectByInstanceId:instanceId=>subsystems?.editor?.objectById?.(instanceId)??null,
+    })
     physicsPreview = createMechanicsPhysicsRuntime({
       graph,
       discovery,
