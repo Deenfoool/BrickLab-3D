@@ -93,8 +93,11 @@ export async function decomposeShortcutInstance({
 
   const members=[]
   const unresolved=[]
+  const occurrenceByPath=new Map()
   for(let index=0;index<references.length;index+=1){
     const reference=references[index]
+    const occurrence=occurrenceByPath.get(reference.path)||0
+    occurrenceByPath.set(reference.path,occurrence+1)
     const descriptor=await describePath(reference.path,{reference,index})
     const transform=ldrawReferenceTransformToBrickLab(reference)
     const childId=deterministicId(
@@ -120,6 +123,7 @@ export async function decomposeShortcutInstance({
       parentInstanceId:String(instanceId),
       parentPartId:partId??null,
       index,
+      occurrence,
       path:reference.path,
       type:reference.type,
       description:reference.description??descriptor.name??null,
