@@ -4,6 +4,7 @@ const marker = Symbol.for('bricklab.physicsStageDiagnostics.v1')
 
 function preserveOwner(wrapper, original) {
   if (original?.__bricklabOwner) wrapper.__bricklabOwner = original.__bricklabOwner
+  if (original?.__mechanicsNextBypass) wrapper.__mechanicsNextBypass = true
   return wrapper
 }
 

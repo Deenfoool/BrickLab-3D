@@ -813,7 +813,14 @@ export function createMechanicsNextRuntime({
           refreshed,
         })
       }
-      if(nativeProjectAuthoritative)rebuildNativeOccupancy()
+      if(nativeProjectAuthoritative){
+        rebuildNativeOccupancy()
+        api.handoffDomains(
+          ['connector-hydration','snapping','connection-graph','persistence'],
+          'validated native project restore',
+        )
+        publishBuildOwnership('native-project-restore')
+      }
       return Object.freeze({
         ...result,
         compatibility:lastPersistenceReport,

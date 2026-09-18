@@ -301,6 +301,7 @@ PhysicsSession.prototype.registerMotorDrive = function registerControlledMotor(.
 
 const oldApplyMotorTorques = PhysicsSession.prototype.applyMotorTorques
 PhysicsSession.prototype.applyMotorTorques = function applyControlledMotorTorques(dt) {
+  if (this.mechanicsNextBootstrap) return
   for (const drive of this.motorDrives ?? []) {
     const state = runtime.get(drive.controlId ?? drive.id)
     if (!state || state.type !== 'motor') continue
@@ -309,9 +310,11 @@ PhysicsSession.prototype.applyMotorTorques = function applyControlledMotorTorque
   }
   return oldApplyMotorTorques.call(this, dt)
 }
+PhysicsSession.prototype.applyMotorTorques.__mechanicsNextBypass = true
 
 const oldApplyGearTorques = PhysicsSession.prototype.applyGearCouplingTorques
 PhysicsSession.prototype.applyGearCouplingTorques = function applyControlledTransmissionTorques(...args) {
+  if (this.mechanicsNextBootstrap) return
   const neutralStates = []
   for (const coupling of this.gearCouplers ?? []) {
     if (!coupling.controlId) continue
@@ -335,6 +338,7 @@ PhysicsSession.prototype.applyGearCouplingTorques = function applyControlledTran
 if (oldApplyGearTorques?.__bricklabOwner) {
   PhysicsSession.prototype.applyGearCouplingTorques.__bricklabOwner = oldApplyGearTorques.__bricklabOwner
 }
+PhysicsSession.prototype.applyGearCouplingTorques.__mechanicsNextBypass = true
 
 const oldDispose = PhysicsSession.prototype.dispose
 PhysicsSession.prototype.dispose = function disposeControlledSession(...args) {

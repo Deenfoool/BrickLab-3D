@@ -75,8 +75,9 @@ function installDisposeBridge(session,physics){
 }
 
 async function legacyFallback(legacyCreate,objects,connections,rest,reason){
-  if(globalThis.BrickLabMechanicsNextBuildOwner?.active===true &&
-     globalThis.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true){
+  if(mechanics.nativeProjectAuthoritative?.()===true ||
+     (globalThis.BrickLabMechanicsNextBuildOwner?.active===true &&
+      globalThis.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true)){
     const error=new Error('Mechanics Next owns BUILD; stale legacy physics fallback is forbidden')
     error.code='BRICKLAB_MECHANICS_NEXT_AUTHORITATIVE_PHYSICS_BLOCKED'
     error.mechanicsNext=reason
@@ -251,7 +252,7 @@ if(!PhysicsSession[marker]){
         error:String(error?.message||error),
         failures:Object.freeze([...(error?.failures||[])]),
       })
-      console.warn('[BrickLab Mechanics Next] SIMULATE migration failed; creating isolated legacy fallback session.',lastAttempt)
+      console.warn('[BrickLab Mechanics Next] SIMULATE migration failed; native BUILD requires fail-closed recovery.',lastAttempt)
       return legacyFallback(legacyCreate,objects,connections,rest,lastAttempt)
     }
   }

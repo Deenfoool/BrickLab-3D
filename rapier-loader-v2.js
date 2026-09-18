@@ -69,7 +69,7 @@ async function loadRapierResilient() {
   return rapierPromise
 }
 
-PhysicsSession.create = async function createPhysicsSession(objects, connections) {
+PhysicsSession.create = async function createPhysicsSession(objects, connections, options = {}) {
   let RAPIER
   window.__bricklabPhysicsStage = 'rapier-load'
   try {
@@ -86,6 +86,8 @@ PhysicsSession.create = async function createPhysicsSession(objects, connections
   try {
     window.__bricklabPhysicsStage = 'session-constructor'
     session = new PhysicsSession(RAPIER, objects, connections, scenario)
+    session.creationOptions = options && typeof options === 'object' ? { ...options } : {}
+    session.mechanicsNextBootstrap = session.creationOptions.mechanicsNextOwned === true
     window.__bricklabPhysicsStage = 'build'
     session.build()
     window.__bricklabPhysicsStage = 'ready'
