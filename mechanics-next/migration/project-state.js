@@ -259,3 +259,61 @@ export function persistenceCompatibilityReport({
     failures:Object.freeze([...(restoredResult?.failures||[])]),
   })
 }
+
+
+export function probeMechanicsProjectState(state,{
+  sceneObserver,
+  objectByInstanceId=()=>null,
+}={}){
+  const validation=validateMechanicsProjectState(state)
+  if(!validation.pass)return Object.freeze({
+    pass:false,
+    expected:state?.connections?.length||0,
+    resolvable:0,
+    failures:validation.failures,
+    mode:'dry-run',
+  })
+  const failures=[]
+  let resolvable=0
+  for(const record of state.connections||[]){
+    const left=instanceEndpoint(sceneObserver,record.a.instanceId,record.a.endpointId)
+    const right=instanceEndpoint(sceneObserver,record.b.instanceId,record.b.endpointId)
+    if(!left.endpoint||!right.endpoint){
+      failures.push(Object.freeze({
+        code:'endpoint-not-found',
+        connectionId:record.id,
+        aFound:Boolean(left.endpoint),
+        bFound:Boolean(right.endpoint),
+      }))
+      continue
+    }
+    const actualA=endpointSemanticKind(left.endpoint)
+    const actualB=endpointSemanticKind(right.endpoint)
+    if((record.a.semantic&&record.a.semantic!==actualA)||
+       (record.b.semantic&&record.b.semantic!==actualB)){
+      failures.push(Object.freeze({
+        code:'endpoint-semantic-changed',
+        connectionId:record.id,
+        expected:[record.a.semantic,record.b.semantic],
+        actual:[actualA,actualB],
+      }))
+      continue
+    }
+    if(!objectByInstanceId(record.a.instanceId)||!objectByInstanceId(record.b.instanceId)){
+      failures.push(Object.freeze({
+        code:'scene-object-not-found',
+        connectionId:record.id,
+      }))
+      continue
+    }
+    resolvable+=1
+  }
+  return Object.freeze({
+    pass:failures.length===0&&resolvable===(state.connections?.length||0),
+    expected:state.connections?.length||0,
+    resolvable,
+    rejected:failures.length,
+    failures:Object.freeze(failures),
+    mode:'dry-run',
+  })
+}
