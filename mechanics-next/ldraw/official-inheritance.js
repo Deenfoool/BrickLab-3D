@@ -96,6 +96,8 @@ export function createNativeLDrawInheritanceResolver({
             ref:reference.ref,
             transform:reference.transform,
             type:childHeader.type,
+            description:childHeader.description??null,
+            header:childHeader,
             reason:policy.reason,
           }))
           continue
