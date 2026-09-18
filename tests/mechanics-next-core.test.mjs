@@ -39,6 +39,7 @@ import { createShadowConnectionInterpreter, interpretObservedConnection } from '
 import { expandGrid, parseCylinderSections, parseLdcadShadowText } from '../mechanics-next/ldraw/ldcad-parser.js'
 import { ldcadConnectorToEndpoint } from '../mechanics-next/ldraw/connector-adapter.js'
 import { createNativeShadowResolver } from '../mechanics-next/ldraw/shadow-resolver.js'
+import { createNativeConnectivityProvider } from '../mechanics-next/ldraw/native-connectivity-provider.js'
 import { compareNativeToLegacyConnectivity, ConnectivityParityLedger } from '../mechanics-next/diagnostics/native-v4-parity.js'
 import { inheritancePolicyForChild, parseLDrawHeader, parseType1References } from '../mechanics-next/ldraw/official-parser.js'
 import { createNativeLDrawInheritanceResolver } from '../mechanics-next/ldraw/official-inheritance.js'
@@ -63,6 +64,7 @@ import { buildMotionPlan } from '../mechanics-next/interaction/motion-plan.js'
 import { applyMotionPlanToBaseline, captureMotionBaseline, restoreMotionBaseline } from '../mechanics-next/interaction/scene-motion-adapter.js'
 import { buildMechanicsPhysicsPlan } from '../mechanics-next/physics/plan.js'
 import { buildMechanicsCouplingPlan } from '../mechanics-next/physics/coupling-plan.js'
+import { buildMechanicsMotorPlan, createMechanicsMotorRuntime } from '../mechanics-next/physics/motor-runtime.js'
 import { materializeRapierMechanicsPlan, preflightRapierMechanicsPlan } from '../mechanics-next/physics/rapier-adapter.js'
 import { materializeCompoundMemberPhysics, preflightCompoundMemberMaterialization } from '../mechanics-next/physics/compound-member-materializer.js'
 import { exportMechanicsProjectState, persistenceCompatibilityReport, restoreMechanicsProjectState, validateMechanicsProjectState } from '../mechanics-next/migration/project-state.js'
@@ -2619,4 +2621,147 @@ test('production migration gate remains closed without parity persistence and re
   assert.ok(gate.blockers.some(item=>item.id==='native-connectivity-parity'))
   assert.ok(gate.blockers.some(item=>item.id==='project-persistence-compatibility'))
   assert.ok(gate.blockers.some(item=>item.id==='regression-suite'))
+})
+
+
+test('builtin connector provider normalizes motor axle and receiver semantics', () => {
+  const definitions=new Map([
+    ['motor',{
+      id:'motor',
+      connectors:[{id:'output',type:'axle',position:[1,0,0],axis:[1,0,0]}],
+    }],
+    ['gear',{
+      id:'gear',
+      connectors:[{id:'axle-hole',type:'axle-hole',position:[0,0,0],axis:[1,0,0]}],
+    }],
+  ])
+  const provider=createNativeConnectivityProvider({
+    parts:{get:id=>definitions.get(id)},
+    ldraw:{readText:async()=>null},
+    fetchShadowText:async()=>null,
+  })
+  const motorRaw=provider.get('motor')
+  const gearRaw=provider.get('gear')
+  assert.equal(motorRaw.status,'ready')
+  assert.equal(gearRaw.status,'ready')
+  const motor=enrichEndpointSemantics(provider.toEndpoint(motorRaw.connectors[0],{
+    bodyId:'motor-body',
+    partId:'motor',
+  }))
+  const receiver=enrichEndpointSemantics(provider.toEndpoint(gearRaw.connectors[0],{
+    bodyId:'gear-body',
+    partId:'gear',
+  }))
+  assert.equal(motor.metadata.semantics.semanticKind,'technic-axle')
+  assert.equal(receiver.metadata.semantics.semanticKind,'technic-axle-hole')
+})
+
+test('motor output connection becomes revolute drive instead of keyed rigid shaft', () => {
+  const definitions=new Map([
+    ['motor',{
+      id:'motor',
+      connectors:[{id:'output',type:'axle',position:[0,0,0],axis:[1,0,0]}],
+    }],
+    ['gear',{
+      id:'gear',
+      connectors:[{id:'axle-hole',type:'axle-hole',position:[0,0,0],axis:[1,0,0]}],
+    }],
+  ])
+  const provider=createNativeConnectivityProvider({
+    parts:{get:id=>definitions.get(id)},
+    ldraw:{readText:async()=>null},
+    fetchShadowText:async()=>null,
+  })
+  const motorEndpoint=enrichEndpointSemantics(provider.toEndpoint(provider.get('motor').connectors[0],{
+    bodyId:'motor-body',
+    partId:'motor',
+  }))
+  const gearEndpoint=enrichEndpointSemantics(provider.toEndpoint(provider.get('gear').connectors[0],{
+    bodyId:'gear-body',
+    partId:'gear',
+  }))
+  const motorBody=createBodyDescriptor({id:'motor-body',instanceId:'motor-instance',partId:'motor'})
+  const gearBody=createBodyDescriptor({id:'gear-body',instanceId:'gear-instance',partId:'gear'})
+  const instances=new Map([
+    ['motor-instance',{
+      body:motorBody,
+      endpoints:[motorEndpoint],
+      descriptor:{classification:{
+        role:'motor',
+        properties:{motor:{rpm:120,direction:1,stallTorque:5.5,damping:1}},
+      }},
+    }],
+    ['gear-instance',{
+      body:gearBody,
+      endpoints:[gearEndpoint],
+      descriptor:{classification:{role:'spur-gear',properties:{}}},
+    }],
+  ])
+  const objects=new Map()
+  for(const id of instances.keys()){
+    const object=new THREE.Object3D()
+    object.updateMatrixWorld(true)
+    objects.set(id,object)
+  }
+  const interpreted=interpretObservedConnection({
+    id:'motor-link',
+    a:{instanceId:'motor-instance',endpointId:'output'},
+    b:{instanceId:'gear-instance',endpointId:'axle-hole'},
+  },{
+    sceneObserver:{instance:id=>instances.get(id)},
+    objectById:id=>objects.get(id),
+  })
+  assert.equal(interpreted.valid,true)
+  assert.equal(interpreted.type,'constraint')
+  assert.equal(interpreted.constraint.constraintKind,'revolute')
+  assert.equal(interpreted.constraint.metadata.motorDrive.motorBodyId,'motor-body')
+  assert.equal(interpreted.constraint.metadata.topology.keyedRotation,false)
+
+  const graph=createAssemblyGraph()
+  graph.addBody(motorBody)
+  graph.addBody(gearBody)
+  graph.addConstraint(interpreted.constraint)
+  const records=[
+    {
+      instance:instances.get('motor-instance'),
+      pose:{position:[0,0,0],quaternion:[0,0,0,1]},
+      visualOffsetStud:[0,0,0],
+    },
+    {
+      instance:instances.get('gear-instance'),
+      pose:{position:[0,0,0],quaternion:[0,0,0,1]},
+      visualOffsetStud:[0,0,0],
+    },
+  ]
+  const plan=buildMechanicsMotorPlan({graph,records})
+  assert.equal(plan.pass,true)
+  assert.equal(plan.drives.length,1)
+
+  const torques={motor:[],gear:[]}
+  const body=name=>({
+    rotation:()=>({x:0,y:0,z:0,w:1}),
+    angvel:()=>({x:0,y:0,z:0}),
+    isDynamic:()=>true,
+    addTorque(value){torques[name].push(value)},
+  })
+  const members=new Map([
+    ['motor-body',{
+      body:body('motor'),
+      component:{bodyWorldRotation:new THREE.Quaternion()},
+    }],
+    ['gear-body',{
+      body:body('gear'),
+      component:{bodyWorldRotation:new THREE.Quaternion()},
+    }],
+  ])
+  const runtime=createMechanicsMotorRuntime(plan,{
+    resolveMember:id=>members.get(id),
+  })
+  const step=runtime.step(1/60)
+  assert.equal(step.applied,1)
+  assert.equal(torques.motor.length,1)
+  assert.equal(torques.gear.length,1)
+  assert.ok(Math.abs(torques.motor[0].x+torques.gear[0].x)<1e-12)
+  assert.ok(Math.abs(torques.motor[0].y+torques.gear[0].y)<1e-12)
+  assert.ok(Math.abs(torques.motor[0].z+torques.gear[0].z)<1e-12)
 })
