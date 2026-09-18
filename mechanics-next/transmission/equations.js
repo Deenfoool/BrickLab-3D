@@ -49,6 +49,63 @@ export function rigidRotationEquation({
   )
 }
 
+export function rotationCouplingEquation({
+  id,
+  bodyA,
+  bodyB,
+  ratioAB = 1,
+  channel = 'omega',
+  kind = 'rotation-coupling',
+} = {}) {
+  if (!(Number.isFinite(Number(ratioAB)) && Math.abs(Number(ratioAB)) > 1e-12)) {
+    throw new TypeError('Rotation coupling requires a finite non-zero ratio')
+  }
+  const ratio = Number(ratioAB)
+  return linearEquation(
+    id || `rotation-coupling:${bodyA}:${bodyB}`,
+    {
+      [mechanicalVariable(bodyA, channel)]:-ratio,
+      [mechanicalVariable(bodyB, channel)]:1,
+    },
+    0,
+    { kind, bodyA, bodyB, ratioAB:ratio, channel },
+  )
+}
+
+export function screwLinearEquation({
+  id,
+  rotaryBody,
+  sliderBody,
+  leadStudPerTurn,
+  directionSign = 1,
+  angularChannel = 'omega',
+  linearChannel = 'slide',
+} = {}) {
+  if (!(Number.isFinite(Number(leadStudPerTurn)) && Math.abs(Number(leadStudPerTurn)) > 1e-12)) {
+    throw new TypeError('Screw-linear coupling requires finite non-zero leadStudPerTurn')
+  }
+  const sign = Number(directionSign) < 0 ? -1 : 1
+  const studPerRad = sign * Number(leadStudPerTurn) / (Math.PI * 2)
+  return linearEquation(
+    id || `screw-linear:${rotaryBody}:${sliderBody}`,
+    {
+      [mechanicalVariable(sliderBody, linearChannel)]:1,
+      [mechanicalVariable(rotaryBody, angularChannel)]:-studPerRad,
+    },
+    0,
+    {
+      kind:'screw-linear',
+      rotaryBody,
+      sliderBody,
+      leadStudPerTurn:Number(leadStudPerTurn),
+      studPerRad,
+      directionSign:sign,
+      angularChannel,
+      linearChannel,
+    },
+  )
+}
+
 export function gearMeshEquation({
   id,
   bodyA,
