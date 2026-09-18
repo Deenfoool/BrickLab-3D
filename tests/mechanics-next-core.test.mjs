@@ -65,6 +65,8 @@ import { buildMechanicsPhysicsPlan } from '../mechanics-next/physics/plan.js'
 import { buildMechanicsCouplingPlan } from '../mechanics-next/physics/coupling-plan.js'
 import { materializeRapierMechanicsPlan, preflightRapierMechanicsPlan } from '../mechanics-next/physics/rapier-adapter.js'
 import { materializeCompoundMemberPhysics, preflightCompoundMemberMaterialization } from '../mechanics-next/physics/compound-member-materializer.js'
+import { exportMechanicsProjectState, persistenceCompatibilityReport, restoreMechanicsProjectState, validateMechanicsProjectState } from '../mechanics-next/migration/project-state.js'
+import { evaluateMechanicsMigrationGate } from '../mechanics-next/migration/gate.js'
 import * as THREE from 'three'
 
 test('deterministic mechanical IDs are stable and namespace-sensitive', () => {
@@ -2470,4 +2472,151 @@ test('compound materializer creates child bodies, internal prismatic joint and s
   assert.equal(joints[0].data.type,'generic')
   assert.equal(joints[1].data.type,'spring')
   assert.equal(state.replacements.get('shock-root').resolveEndpoint('bottom').memberId,'rod')
+})
+
+
+test('native Mechanics project state round-trips stable endpoint identities', () => {
+  const endpoint=(id,bodyId,semantic)=>createEndpointDescriptor({
+    id,
+    bodyId,
+    family:'cylinder',
+    gender:id.includes('male')?'male':'female',
+    frame:{
+      positionStud:[0,0,0],
+      orientationBrickLab:[1,0,0,0,1,0,0,0,1],
+    },
+    profile:{
+      centered:true,
+      caps:'none',
+      sections:[{shape:'A',radiusLdu:6,lengthLdu:20}],
+    },
+    capabilities:['slide'],
+    metadata:{semantics:{semanticKind:semantic}},
+  })
+  const instanceA={
+    body:createBodyDescriptor({id:'body-a',instanceId:'instance-a',partId:'part-a'}),
+    endpoints:[endpoint('male-endpoint','body-a','technic-axle')],
+  }
+  const instanceB={
+    body:createBodyDescriptor({id:'body-b',instanceId:'instance-b',partId:'part-b'}),
+    endpoints:[endpoint('female-endpoint','body-b','technic-axle-hole')],
+  }
+
+  const source=createAssemblyGraph()
+  source.addBody(instanceA.body)
+  source.addBody(instanceB.body)
+  source.addConstraint(createConstraint({
+    id:'native-connection',
+    bodyA:'body-a',
+    bodyB:'body-b',
+    kind:'prismatic',
+    referenceFrame:{position:[0,0,0],axis:[0,1,0]},
+    metadata:{
+      instanceAId:'instance-a',
+      instanceBId:'instance-b',
+      endpointAId:'male-endpoint',
+      endpointBId:'female-endpoint',
+      semanticA:'technic-axle',
+      semanticB:'technic-axle-hole',
+      interfacePair:['axle','axle-hole'],
+      topology:{keyedRotation:true},
+    },
+  }))
+
+  const exported=exportMechanicsProjectState({graph:source,relations:[]})
+  assert.equal(validateMechanicsProjectState(exported).pass,true)
+  assert.equal(exported.connections.length,1)
+
+  const target=createAssemblyGraph()
+  target.addBody(instanceA.body)
+  target.addBody(instanceB.body)
+  const objects=new Map()
+  for(const id of ['instance-a','instance-b']){
+    const object=new THREE.Object3D()
+    object.userData.instanceId=id
+    object.updateMatrixWorld(true)
+    objects.set(id,object)
+  }
+  const instances=new Map([
+    ['instance-a',instanceA],
+    ['instance-b',instanceB],
+  ])
+  const restored=restoreMechanicsProjectState(exported,{
+    graph:target,
+    sceneObserver:{instance:id=>instances.get(id)},
+    objectByInstanceId:id=>objects.get(id),
+  })
+  assert.equal(restored.restored,1)
+  assert.equal(restored.rejected,0)
+  assert.ok(target.edge('native-connection'))
+  assert.equal(persistenceCompatibilityReport({
+    exportedState:exported,
+    restoredResult:restored,
+  }).pass,true)
+})
+
+test('native project restore fails closed when endpoint semantics changed', () => {
+  const bodyA=createBodyDescriptor({id:'pa',instanceId:'ia',partId:'a'})
+  const bodyB=createBodyDescriptor({id:'pb',instanceId:'ib',partId:'b'})
+  const changed=createEndpointDescriptor({
+    id:'ea',
+    bodyId:'pa',
+    family:'sphere',
+    gender:'male',
+    frame:{positionStud:[0,0,0],orientationBrickLab:[1,0,0,0,1,0,0,0,1]},
+    profile:{radiusLdu:10},
+    metadata:{semantics:{semanticKind:'ball'}},
+  })
+  const female=createEndpointDescriptor({
+    id:'eb',
+    bodyId:'pb',
+    family:'sphere',
+    gender:'female',
+    frame:{positionStud:[0,0,0],orientationBrickLab:[1,0,0,0,1,0,0,0,1]},
+    profile:{radiusLdu:10},
+    metadata:{semantics:{semanticKind:'socket'}},
+  })
+  const state={
+    schemaVersion:1,
+    engine:'mechanics-next',
+    connections:[{
+      id:'c',
+      kind:'spherical',
+      a:{instanceId:'ia',endpointId:'ea',semantic:'technic-axle'},
+      b:{instanceId:'ib',endpointId:'eb',semantic:'socket'},
+      dof:constraintDof('spherical'),
+      interfacePair:['ball','socket'],
+    }],
+    relations:[],
+  }
+  const graph=createAssemblyGraph()
+  graph.addBody(bodyA);graph.addBody(bodyB)
+  const instances=new Map([
+    ['ia',{body:bodyA,endpoints:[changed]}],
+    ['ib',{body:bodyB,endpoints:[female]}],
+  ])
+  const result=restoreMechanicsProjectState(state,{
+    graph,
+    sceneObserver:{instance:id=>instances.get(id)},
+    objectByInstanceId:()=>new THREE.Object3D(),
+  })
+  assert.equal(result.restored,0)
+  assert.equal(result.rejected,1)
+  assert.equal(result.failures[0].code,'endpoint-semantic-changed')
+})
+
+test('production migration gate remains closed without parity persistence and regression proof', () => {
+  const gate=evaluateMechanicsMigrationGate({
+    runtimeStatus:{
+      version:'test',
+      scene:{roles:{unknown:0}},
+      interpretedConnections:{unresolved:0},
+      compoundDecompositions:{pending:0,failures:0},
+    },
+    physicsStatus:{pass:true,blockers:[]},
+  })
+  assert.equal(gate.pass,false)
+  assert.ok(gate.blockers.some(item=>item.id==='native-connectivity-parity'))
+  assert.ok(gate.blockers.some(item=>item.id==='project-persistence-compatibility'))
+  assert.ok(gate.blockers.some(item=>item.id==='regression-suite'))
 })
