@@ -295,6 +295,42 @@ let gridSnapEnabled = true
 let connectorGuidesVisible = true
 let connectionVisualsVisible = true
 let transformSpace = 'world'
+let mechanicsNextBuildHandoffTask = null
+
+function scheduleMechanicsNextBuildHandoff(reason = 'scene-change') {
+  if (mechanicsNextBuildHandoffTask) return mechanicsNextBuildHandoffTask
+  const mechanics = globalThis.BrickLabMechanicsNext
+  if (!mechanics || globalThis.BrickLabSubsystems?.editor?.ready?.() !== true) {
+    return Promise.resolve(false)
+  }
+
+  mechanicsNextBuildHandoffTask = (async () => {
+    try {
+      const prepared = await mechanics.prepareMigration()
+      if (!prepared?.pass) {
+        console.info('[BrickLab Mechanics Next] BUILD handoff remains blocked.', { reason, prepared })
+        return false
+      }
+      const adopted = mechanics.adoptNativeProjectOwnership()
+      if (!adopted?.accepted) {
+        console.warn('[BrickLab Mechanics Next] BUILD handoff rejected.', { reason, adopted })
+        return false
+      }
+      updateProjectStats()
+      updateInspector()
+      connectorGuides()
+      refreshSnap()
+      updateConnectionVisuals()
+      return true
+    } catch (error) {
+      console.warn('[BrickLab Mechanics Next] BUILD handoff attempt failed.', { reason, error })
+      return false
+    } finally {
+      mechanicsNextBuildHandoffTask = null
+    }
+  })()
+  return mechanicsNextBuildHandoffTask
+}
 
 function toast(text) {
   emitAudioEvent('notification', { text })
@@ -616,7 +652,9 @@ function projectState() {
     })),
     connections: cloneState(connections),
     connectorSystemV4:{version:4},
-    connectionsV4:globalThis.BrickLabConnectorV4?.projectConnections() ?? [],
+    connectionsV4:mechanicsNextBuildActive()
+      ? []
+      : (globalThis.BrickLabConnectorV4?.projectConnections() ?? []),
     mechanicsNext:globalThis.BrickLabMechanicsNext?.exportProjectState?.() ?? undefined,
   }
 }
@@ -688,7 +726,7 @@ function applyProject(data, { reset = false, persist = true } = {}) {
   if (!data || !Array.isArray(data.parts)) throw new Error('Invalid BrickLab project')
 
   select(null)
-  globalThis.BrickLabMechanicsNext?.clearProjectState?.({keepAuthority:true})
+  globalThis.BrickLabMechanicsNext?.clearProjectState?.({keepAuthority:false})
   globalThis.BrickLabConnectorV4?.clearGraph()
   buildRoot.clear()
   connections = []
@@ -742,6 +780,7 @@ function applyProject(data, { reset = false, persist = true } = {}) {
   refreshSnap()
 
   scheduleGearMeshBackfill()
+  void scheduleMechanicsNextBuildHandoff('project-apply')
 
   if (reset) resetHistory()
   else if (persist) saveLocal()
@@ -1315,14 +1354,17 @@ function exportProject() {
 function newProject() {
   if (mode === 'simulate') setMode('build')
   select(null)
+  globalThis.BrickLabMechanicsNext?.clearProjectState?.({keepAuthority:false})
   globalThis.BrickLabConnectorV4?.clearGraph()
   buildRoot.clear()
   connections = []
+  delete globalThis.__bricklabPendingMechanicsNextProject
   projectName = 'Untitled Build'
   $('#projectName').textContent = projectName
   updateConnectionVisuals()
   updateProjectStats()
   resetHistory()
+  void scheduleMechanicsNextBuildHandoff('new-project')
   toast('New build')
 }
 
