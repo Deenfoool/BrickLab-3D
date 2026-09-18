@@ -183,6 +183,8 @@ export function classifyPartFamily(observation, endpoints = []) {
     :null
 
   const legacyProps=observation?.legacyMechanicalIntelligence?.properties || {}
+  const legacyParameterConfidence=String(observation?.legacyMechanicalIntelligence?.confidence||'unknown')
+  const legacyParameterSource=observation?.legacyMechanicalIntelligence?.source||'catalog-existing-mechanical-intelligence'
   const finiteProp=(...names)=>{
     for(const name of names){
       const value=Number(legacyProps?.[name])
@@ -207,6 +209,12 @@ export function classifyPartFamily(observation, endpoints = []) {
     ...(Number.isFinite(springStiffness) && springStiffness >= 0 ? { springStiffness } : {}),
     ...(Number.isFinite(damping) && damping >= 0 ? { damping } : {}),
     ...(Number.isFinite(maxBendAngleRad) && maxBendAngleRad > 0 ? { maxBendAngleRad } : {}),
+    ...([screwLeadStudPerTurn,travelStud,restLengthStud,springStiffness,damping,maxBendAngleRad].some(Number.isFinite)
+      ?{compoundParameterEvidence:Object.freeze({
+          confidence:legacyParameterConfidence,
+          source:legacyParameterSource,
+        })}
+      :{}),
     ...(role === 'axle' ? { keyed:true } : {}),
     ...(role === 'bush' ? { retainer:true } : {}),
   }
