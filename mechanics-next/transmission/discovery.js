@@ -279,6 +279,7 @@ export function discoverMechanicalTransmissions({
       ...differentials.transmissions,
       ...compounds.transmissions,
     ]),
+    velocityEquations:Object.freeze(compounds.velocityEquations||[]),
     balancedDifferentialClosures:Object.freeze(differentials.balancedClosures),
     compoundMotions:Object.freeze(differentials.compoundMotions),
     nonlinearRelations:Object.freeze(compounds.nonlinearRelations),
