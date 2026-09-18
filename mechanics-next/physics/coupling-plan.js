@@ -53,12 +53,14 @@ function linearMotionIndex(discovery){
   return new Map((discovery?.linearMotions||[]).map(item=>[String(item.bodyId),item]))
 }
 
-function angularTerm(bodyId,coefficient,records,graph,islands){
+function angularTerm(bodyId,coefficient,records,graph,islands,forcedReferenceBodyId=null){
   const record=records.get(bodyId)
   if(!record)return{blocker:{code:'coupling-record-missing',bodyId,channel:'omega'}}
   const frame=rotaryFrameForRecord(record)
   if(!frame)return{blocker:{code:'coupling-rotary-frame-missing',bodyId}}
-  const reference=angularReference(bodyId,graph,islands)
+  const reference=forcedReferenceBodyId
+    ?{referenceBodyId:String(forcedReferenceBodyId),status:'forced-relative'}
+    :angularReference(bodyId,graph,islands)
   if(reference.status==='ambiguous'){
     return{blocker:{
       code:'coupling-angular-reference-ambiguous',
@@ -99,14 +101,6 @@ function convertEquation(equation,{records,graph,islands,motions,studMeters,nonl
       constant:equation?.constant,
     })}
   }
-  if(equation?.metadata?.frame==='carrier-relative'){
-    return{blocker:Object.freeze({
-      code:'carrier-relative-equation-requires-compound-physics',
-      equationId:equation.id,
-      metadata:equation.metadata,
-    })}
-  }
-
   const parsed=[]
   for(const[variable,coefficient]of Object.entries(equation?.coefficients||{})){
     const item=parseVariable(variable)
@@ -122,8 +116,13 @@ function convertEquation(equation,{records,graph,islands,motions,studMeters,nonl
   const hasLinear=parsed.some(item=>item.channel==='slide')
   const terms=[]
   for(const item of parsed){
+    const forcedReference=
+      equation?.metadata?.kind==='differential-spider-spin' &&
+      item.bodyId===equation?.metadata?.spider
+        ?equation?.metadata?.carrier
+        :null
     const result=item.channel==='omega'
-      ?angularTerm(item.bodyId,item.coefficient,records,graph,islands)
+      ?angularTerm(item.bodyId,item.coefficient,records,graph,islands,forcedReference)
       :linearTerm(item.bodyId,item.coefficient,motions,studMeters)
     if(result.blocker)return{blocker:Object.freeze({
       ...result.blocker,
