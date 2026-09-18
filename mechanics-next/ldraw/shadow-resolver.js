@@ -225,7 +225,7 @@ export function createNativeShadowResolver({
       }
 
       const text = suppliedText == null ? await fetchShadowText(key) : suppliedText
-      if (text == null) return { connectors:[], warnings:[], found:false }
+      if (text == null) return { connectors:[...seedConnectors], warnings:[], found:false }
 
       const parsed = parseLdcadShadowText(text, { file:key })
       const warnings = [...parsed.warnings]
