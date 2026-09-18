@@ -63,13 +63,82 @@ export function screenDragAngle(start,current,pivot,{
   })
 }
 
+function variableBodyId(variable){
+  const value=String(variable||'')
+  const split=value.lastIndexOf('::')
+  return split>=0?value.slice(0,split):value
+}
+
+function rotationalAdjacency(discovery){
+  const adjacency=new Map()
+  const skipKinds=new Set([
+    'differential',
+    'packaged-differential',
+    'differential-spider-spin',
+  ])
+  const add=(a,b)=>{
+    if(!a||!b||a===b)return
+    if(!adjacency.has(a))adjacency.set(a,new Set())
+    if(!adjacency.has(b))adjacency.set(b,new Set())
+    adjacency.get(a).add(b)
+    adjacency.get(b).add(a)
+  }
+  for(const equation of discovery?.equations||[]){
+    if(skipKinds.has(String(equation?.metadata?.kind||'')))continue
+    const bodies=[...new Set(
+      Object.keys(equation?.coefficients||{})
+        .filter(variable=>String(variable).endsWith('::omega'))
+        .map(variableBodyId)
+        .filter(Boolean)
+    )]
+    for(let i=0;i<bodies.length;i++){
+      for(let j=i+1;j<bodies.length;j++)add(bodies[i],bodies[j])
+    }
+  }
+  return adjacency
+}
+
+function reaches(adjacency,start,target){
+  const source=String(start||''),wanted=String(target||'')
+  if(!source||!wanted)return false
+  if(source===wanted)return true
+  const queue=[source]
+  const seen=new Set(queue)
+  while(queue.length){
+    const current=queue.shift()
+    for(const next of adjacency.get(current)||[]){
+      if(next===wanted)return true
+      if(seen.has(next))continue
+      seen.add(next)
+      queue.push(next)
+    }
+  }
+  return false
+}
+
 function shouldBalanceDifferentials(discovery,bodyId,policy){
   if(policy===true)return true
   if(policy===false)return false
   if(policy!=='auto')return false
-  return (discovery?.transmissions||[]).some(transmission=>
-    transmission?.kind==='open-differential' &&
-    transmission?.bodies?.[0]===String(bodyId))
+
+  const driver=String(bodyId)
+  const adjacency=rotationalAdjacency(discovery)
+  return (discovery?.transmissions||[]).some(transmission=>{
+    if(transmission?.kind!=='open-differential')return false
+    const [carrier,left,right]=(transmission.bodies||[]).map(String)
+    if(!carrier)return false
+    if(driver===carrier)return true
+
+    // A gear/shaft upstream of the carrier is still a carrier drive. Auto-balance
+    // the two free outputs so a mouse drag propagates through the whole driveline.
+    // Conversely, anything attached to a side port is an explicit side drive and
+    // must stay underdetermined unless another physical condition closes the diff.
+    const reachesCarrier=reaches(adjacency,driver,carrier)
+    const reachesSide=
+      (left&&reaches(adjacency,driver,left))||
+      (right&&reaches(adjacency,driver,right))
+    return reachesCarrier&&!reachesSide
+  })
 }
 
 function displacementEquations(discovery,{balancedDifferentials=false}={}){
