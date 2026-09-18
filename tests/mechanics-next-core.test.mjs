@@ -31,6 +31,7 @@ import {
 import { classifyEndpointSemantics, enrichEndpointSemantics } from '../mechanics-next/intelligence/endpoint-semantics.js'
 import { buildMechanicalFingerprint } from '../mechanics-next/intelligence/fingerprint.js'
 import { createPartMechanicalDescriptor, instantiatePartMechanicalDescriptor } from '../mechanics-next/intelligence/part-descriptor.js'
+import { createShadowConnectionInterpreter, interpretObservedConnection } from '../mechanics-next/intelligence/connection-interpreter.js'
 
 test('deterministic mechanical IDs are stable and namespace-sensitive', () => {
   assert.equal(deterministicId('body', 'a', 1), deterministicId('body', 'a', 1))
@@ -429,4 +430,117 @@ test('diffhouse context does not turn an internal bevel gear into a differential
   assert.equal(descriptor.classification.role, 'bevel-gear')
   assert.equal(descriptor.classification.properties.toothCount, 12)
   assert.ok(descriptor.classification.contexts.includes('differential'))
+})
+
+
+function identityObject() {
+  return {
+    position:{ x:0, y:0, z:0 },
+    matrixWorld:{ elements:[1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1] },
+    updateMatrixWorld() {},
+  }
+}
+
+test('shadow interpreter derives keyed prismatic axle coupling independently of V4 constraint hint', () => {
+  const maleRaw = {
+    endpointId:'male-axle',
+    family:'cylinder',
+    gender:'male',
+    frame:{ positionLdu:[0,0,0], orientation:[1,0,0,0,1,0,0,0,1] },
+    geometry:{ centered:true, caps:'none', sections:[{ shape:'A', radiusLdu:6, lengthLdu:40 }] },
+    snap:{ slide:true },
+  }
+  const femaleRaw = {
+    endpointId:'female-axle-hole',
+    family:'cylinder',
+    gender:'female',
+    frame:{ positionLdu:[0,0,0], orientation:[1,0,0,0,1,0,0,0,1] },
+    geometry:{ centered:true, caps:'none', sections:[{ shape:'A', radiusLdu:6, lengthLdu:20 }] },
+    snap:{ slide:true },
+  }
+
+  const maleDescriptor = createPartMechanicalDescriptor({
+    observation:{ id:'axle-part', name:'Technic Axle 4L', tags:[] },
+    endpoints:[legacyV4ConnectorToEndpoint(maleRaw, { bodyId:'tm', partId:'axle-part' })],
+  })
+  const femaleDescriptor = createPartMechanicalDescriptor({
+    observation:{ id:'beam-part', name:'Technic Beam', tags:[] },
+    endpoints:[legacyV4ConnectorToEndpoint(femaleRaw, { bodyId:'tf', partId:'beam-part' })],
+  })
+  const male = instantiatePartMechanicalDescriptor(maleDescriptor, { instanceId:'axle-1' })
+  const female = instantiatePartMechanicalDescriptor(femaleDescriptor, { instanceId:'beam-1' })
+  const instances = new Map([['axle-1', male], ['beam-1', female]])
+  const objects = new Map([['axle-1', identityObject()], ['beam-1', identityObject()]])
+
+  const result = interpretObservedConnection({
+    id:'legacy-connection',
+    a:{ instanceId:'axle-1', endpointId:'male-axle' },
+    b:{ instanceId:'beam-1', endpointId:'female-axle-hole' },
+    // Deliberately wrong/irrelevant old hint: Mechanics Next must derive its own type.
+    constraint:{ kindHint:'fixed' },
+    match:{ family:'cylinder' },
+  }, {
+    sceneObserver:{ instance:id => instances.get(id) },
+    objectById:id => objects.get(id),
+  })
+
+  assert.equal(result.valid, true)
+  assert.equal(result.type, 'constraint')
+  assert.equal(result.constraint.kind, 'prismatic')
+  assert.equal(result.constraint.dof.ty.state, 'free')
+  assert.equal(result.constraint.dof.ry.state, 'locked')
+})
+
+test('two observed stud contacts become a rigid island through geometric bundle solving', () => {
+  const stud = (id, x) => ({
+    endpointId:id,
+    family:'cylinder',
+    gender:'male',
+    frame:{ positionLdu:[x,0,0], orientation:[1,0,0,0,1,0,0,0,1] },
+    geometry:{ centered:false, caps:'one', sections:[{ shape:'R', radiusLdu:6, lengthLdu:4 }] },
+    snap:{ slide:false },
+  })
+  const anti = (id, x) => ({
+    endpointId:id,
+    family:'cylinder',
+    gender:'female',
+    frame:{ positionLdu:[x,0,0], orientation:[1,0,0,0,1,0,0,0,1] },
+    geometry:{ centered:false, caps:'one', sections:[{ shape:'R', radiusLdu:6, lengthLdu:4 }] },
+    snap:{ slide:false },
+  })
+
+  const topDescriptor = createPartMechanicalDescriptor({
+    observation:{ id:'brick-top', name:'Brick 2 x 1', tags:[] },
+    endpoints:[
+      legacyV4ConnectorToEndpoint(stud('s0', 0), { bodyId:'t', partId:'brick-top' }),
+      legacyV4ConnectorToEndpoint(stud('s1', 20), { bodyId:'t', partId:'brick-top' }),
+    ],
+  })
+  const bottomDescriptor = createPartMechanicalDescriptor({
+    observation:{ id:'brick-bottom', name:'Brick 2 x 1', tags:[] },
+    endpoints:[
+      legacyV4ConnectorToEndpoint(anti('a0', 0), { bodyId:'b', partId:'brick-bottom' }),
+      legacyV4ConnectorToEndpoint(anti('a1', 20), { bodyId:'b', partId:'brick-bottom' }),
+    ],
+  })
+  const top = instantiatePartMechanicalDescriptor(topDescriptor, { instanceId:'top' })
+  const bottom = instantiatePartMechanicalDescriptor(bottomDescriptor, { instanceId:'bottom' })
+  const instances = new Map([['top',top],['bottom',bottom]])
+  const objects = new Map([['top',identityObject()],['bottom',identityObject()]])
+
+  const graph = createAssemblyGraph()
+  graph.addBody(top.body)
+  graph.addBody(bottom.body)
+  const interpreter = createShadowConnectionInterpreter({
+    graph,
+    sceneObserver:{ instance:id => instances.get(id) },
+    objectById:id => objects.get(id),
+  })
+  const result = interpreter.sync([
+    { id:'c0', a:{instanceId:'top',endpointId:'s0'}, b:{instanceId:'bottom',endpointId:'a0'}, match:{family:'cylinder'} },
+    { id:'c1', a:{instanceId:'top',endpointId:'s1'}, b:{instanceId:'bottom',endpointId:'a1'}, match:{family:'cylinder'} },
+  ])
+
+  assert.equal(result.constraints, 2)
+  assert.deepEqual(graph.rigidIslands(), [[top.body.id, bottom.body.id].sort()])
 })
