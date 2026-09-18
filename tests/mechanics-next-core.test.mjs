@@ -36,6 +36,8 @@ import { expandGrid, parseCylinderSections, parseLdcadShadowText } from '../mech
 import { ldcadConnectorToEndpoint } from '../mechanics-next/ldraw/connector-adapter.js'
 import { createNativeShadowResolver } from '../mechanics-next/ldraw/shadow-resolver.js'
 import { compareNativeToLegacyConnectivity, ConnectivityParityLedger } from '../mechanics-next/diagnostics/native-v4-parity.js'
+import { inheritancePolicyForChild, parseLDrawHeader, parseType1References } from '../mechanics-next/ldraw/official-parser.js'
+import { createNativeLDrawInheritanceResolver } from '../mechanics-next/ldraw/official-inheritance.js'
 
 test('deterministic mechanical IDs are stable and namespace-sensitive', () => {
   assert.equal(deterministicId('body', 'a', 1), deterministicId('body', 'a', 1))
@@ -751,4 +753,106 @@ test('native/V4 parity exposes missing semantics instead of hiding migration gap
     semanticFail:1,
     geometryFail:1,
   })
+})
+
+
+test('official parser distinguishes physical Shortcut from geometric Subpart', () => {
+  const shortcut=parseLDrawHeader([
+    '0 Technic Universal Joint Complete',
+    '0 !LDRAW_ORG Shortcut UPDATE 2025-01',
+  ].join('\n'))
+  const subpart=parseLDrawHeader([
+    '0 ~Technic Housing Subpart',
+    '0 !LDRAW_ORG Subpart UPDATE 2025-01',
+  ].join('\n'))
+  assert.equal(shortcut.type,'shortcut')
+  assert.equal(subpart.type,'subpart')
+  assert.equal(inheritancePolicyForChild(shortcut,'parts/x.dat').compound,true)
+  assert.equal(inheritancePolicyForChild(subpart,'parts/s/x.dat').inherit,true)
+})
+
+test('official parser reads type-1 transform without treating color as geometry', () => {
+  const refs=parseType1References('1 16 10 20 30 1 0 0 0 2 0 0 0 1 s/child.dat')
+  assert.equal(refs.length,1)
+  assert.deepEqual(refs[0].transform.translation,[10,20,30])
+  assert.deepEqual(refs[0].transform.linear,[1,0,0,0,2,0,0,0,1])
+  assert.equal(refs[0].ref,'s/child.dat')
+})
+
+test('official inheritance transforms Subpart connectors and preserves them without parent Shadow file', async () => {
+  const official=new Map([
+    ['parts/root.dat',[
+      '0 Root Part',
+      '0 !LDRAW_ORG Part UPDATE 2025-01',
+      '1 16 20 0 0 1 0 0 0 2 0 0 0 1 s/child.dat',
+    ].join('\n')],
+    ['parts/s/child.dat',[
+      '0 ~Child',
+      '0 !LDRAW_ORG Subpart UPDATE 2025-01',
+    ].join('\n')],
+  ])
+  const shadow=new Map([
+    ['parts/s/child.dat','0 !LDCAD SNAP_CYL [id=ax] [gender=M] [caps=none] [secs=A 6 10] [center=true] [slide=true] [pos=0 5 0]'],
+  ])
+  const nativeShadow=createNativeShadowResolver({fetchShadowText:async path=>shadow.get(path)??null})
+  const inheritance=createNativeLDrawInheritanceResolver({
+    fetchOfficialText:async path=>official.get(path)??null,
+    shadowResolver:nativeShadow,
+  })
+  const result=await inheritance.resolve('parts/root.dat')
+  assert.equal(result.warnings.length,0)
+  assert.equal(result.connectors.length,1)
+  assert.deepEqual(result.connectors[0].frame.positionLdu,[20,10,0])
+  assert.equal(result.connectors[0].geometry.sections[0].lengthLdu,20)
+})
+
+test('official inheritance keeps Shortcut references as compound boundaries instead of flattening bodies', async () => {
+  const official=new Map([
+    ['parts/root.dat',[
+      '0 Parent Part',
+      '0 !LDRAW_ORG Part UPDATE 2025-01',
+      '1 16 0 0 0 1 0 0 0 1 0 0 0 1 assembly.dat',
+    ].join('\n')],
+    ['parts/assembly.dat',[
+      '0 Preassembled Mechanism',
+      '0 !LDRAW_ORG Shortcut UPDATE 2025-01',
+      '1 16 0 0 0 1 0 0 0 1 0 0 0 1 a.dat',
+      '1 16 0 0 0 1 0 0 0 1 0 0 0 1 b.dat',
+    ].join('\n')],
+  ])
+  const nativeShadow=createNativeShadowResolver({fetchShadowText:async()=>null})
+  const inheritance=createNativeLDrawInheritanceResolver({
+    fetchOfficialText:async path=>official.get(path)??null,
+    shadowResolver:nativeShadow,
+  })
+  const result=await inheritance.resolve('parts/root.dat')
+  assert.equal(result.connectors.length,0)
+  assert.equal(result.compoundReferences.length,1)
+  assert.equal(result.compoundReferences[0].type,'shortcut')
+  assert.equal(result.compoundReferences[0].reason,'shortcut-boundary')
+})
+
+test('parent SNAP_CLEAR can remove inherited connector groups after geometric inheritance', async () => {
+  const official=new Map([
+    ['parts/root.dat',[
+      '0 Root Part',
+      '0 !LDRAW_ORG Part UPDATE 2025-01',
+      '1 16 0 0 0 1 0 0 0 1 0 0 0 1 s/child.dat',
+    ].join('\n')],
+    ['parts/s/child.dat',[
+      '0 ~Child',
+      '0 !LDRAW_ORG Subpart UPDATE 2025-01',
+    ].join('\n')],
+  ])
+  const shadow=new Map([
+    ['parts/s/child.dat','0 !LDCAD SNAP_CYL [id=removeMe] [gender=M] [secs=R 6 4] [caps=one]'],
+    ['parts/root.dat','0 !LDCAD SNAP_CLEAR [id=removeMe]'],
+  ])
+  const nativeShadow=createNativeShadowResolver({fetchShadowText:async path=>shadow.get(path)??null})
+  const inheritance=createNativeLDrawInheritanceResolver({
+    fetchOfficialText:async path=>official.get(path)??null,
+    shadowResolver:nativeShadow,
+  })
+  const result=await inheritance.resolve('parts/root.dat')
+  assert.equal(result.connectors.length,0)
 })
