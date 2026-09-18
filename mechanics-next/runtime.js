@@ -20,6 +20,7 @@ import { rotaryFrameForRecord } from './interaction/motion-plan.js'
 import { rotationalDragProjection } from './interaction/view-projection.js'
 import { createCompoundStateRegistry } from './compounds/state.js'
 import { createCompoundDecompositionRegistry } from './compounds/decomposition-registry.js'
+import { mapDecompositionToScene } from './compounds/scene-member-map.js'
 import { createMechanicsPhysicsRuntime } from './physics/runtime.js'
 
 export const MECHANICS_NEXT_RUNTIME_MODE = 'observe-only'
@@ -96,6 +97,10 @@ export function createMechanicsNextRuntime({
         if (!elements) continue
         const pose = rigidPoseFromMatrix4(Array.from(elements))
         const connectivitySnapshot = connectivity.get(instance.body.partId)
+        const compoundDecomposition=compoundDecompositions?.cached(instanceId) ?? null
+        const compoundSceneMap=compoundDecomposition
+          ?mapDecompositionToScene(object,compoundDecomposition)
+          :null
         records.push(Object.freeze({
           instance,
           pose,
@@ -104,7 +109,8 @@ export function createMechanicsNextRuntime({
               ? [...connectivitySnapshot.visualOffsetStud]
               : [0,0,0],
           ),
-          compoundDecomposition:compoundDecompositions?.cached(instanceId) ?? null,
+          compoundDecomposition,
+          compoundSceneMap,
           object,
         }))
       } catch (error) {
