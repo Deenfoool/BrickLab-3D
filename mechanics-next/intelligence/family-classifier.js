@@ -184,6 +184,8 @@ export function classifyPartFamily(observation, endpoints = []) {
   const legacyWormDrive=observation?.legacyMechanics?.wormDrive
   const legacyRackGear=observation?.legacyMechanics?.rackGear
   const legacySteeringRack=observation?.legacyMechanics?.steeringRack
+  const legacySteeringKnuckle=observation?.legacyMechanics?.steeringKnuckle
+  const legacySteeringBase=observation?.legacyMechanics?.steeringBase
   const legacyArticulatedCoupler=observation?.legacyMechanics?.articulatedCoupler
   const gearGeometry=legacyGear && typeof legacyGear==='object'
     ?Object.freeze({
@@ -310,6 +312,12 @@ export function classifyPartFamily(observation, endpoints = []) {
     ...(packagedTransmission ? { packagedTransmission } : {}),
     ...(packagedDifferential ? { packagedDifferential } : {}),
     ...(rackGeometry ? { rackGeometry } : {}),
+    ...(legacySteeringKnuckle&&typeof legacySteeringKnuckle==='object'
+      ?{steeringKnuckle:Object.freeze({...legacySteeringKnuckle})}
+      :{}),
+    ...(legacySteeringBase&&typeof legacySteeringBase==='object'
+      ?{steeringBase:Object.freeze({...legacySteeringBase})}
+      :{}),
     ...(role==='motor'&&legacyMotor&&typeof legacyMotor==='object'?{
       motor:Object.freeze({
         connectorId:legacyMotor.connectorId??null,
