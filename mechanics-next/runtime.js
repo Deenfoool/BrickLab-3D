@@ -30,6 +30,7 @@ import { createCompoundDecompositionRegistry } from './compounds/decomposition-r
 import { mapDecompositionToScene } from './compounds/scene-member-map.js'
 import { assignCompoundEndpointOwnership } from './compounds/endpoint-ownership.js'
 import { createMechanicsPhysicsRuntime } from './physics/runtime.js'
+import { createLiveJointValidator } from './physics/live-joint-validator.js'
 import { applyPhysicsJointRelease, createReleasedConnectionState } from './physics/release-state.js'
 import { exportMechanicsProjectState, persistenceCompatibilityReport, probeMechanicsProjectState, restoreMechanicsProjectState } from './migration/project-state.js'
 import { evaluateMechanicsMigrationGate } from './migration/gate.js'
@@ -470,6 +471,46 @@ export function createMechanicsNextRuntime({
     return detail
   }
 
+  const revalidateExistingConnections = records => {
+    const eligible=(graph.edges?.('constraint')||[]).filter(edge=>{
+      const metadata=edge?.metadata||{}
+      return Boolean(
+        metadata.observedConnectionId&&
+        metadata.instanceAId&&metadata.instanceBId&&
+        metadata.endpointAId&&metadata.endpointBId
+      )
+    })
+    if(!eligible.length)return Object.freeze({
+      checked:0,
+      released:0,
+      failures:Object.freeze([]),
+    })
+
+    const validator=createLiveJointValidator({graph,records})
+    const failures=[]
+    for(const edge of eligible){
+      const result=validator.validateConstraint(edge.id)
+      if(result.valid)continue
+      const detail=handlePhysicsJointRelease({
+        jointId:`scene-revalidation:${edge.id}`,
+        reason:result.reason??'scene-connection-invalid',
+        constraintIds:[edge.id],
+      })
+      failures.push(Object.freeze({
+        constraintId:edge.id,
+        observedConnectionId:edge.metadata?.observedConnectionId??null,
+        reason:result.reason??'scene-connection-invalid',
+        validation:result,
+        release:detail,
+      }))
+    }
+    return Object.freeze({
+      checked:eligible.length,
+      released:failures.length,
+      failures:Object.freeze(failures),
+    })
+  }
+
   const refreshLegacySnapshot = () => {
     legacySnapshot = snapshotLegacyV4(legacyProvider || globals.BrickLabConnectorV4)
     assertLegacyReadOnly(legacySnapshot)
@@ -489,9 +530,10 @@ export function createMechanicsNextRuntime({
     const scene = sceneObserver.sync()
     void connectivity?.prefetch?.(sceneObserver.instances().map(instance=>instance.body.partId))
     void compoundDecompositions?.prefetch?.(sceneObserver.instances())
+    const records = mechanicalRecords()
+    const revalidation=revalidateExistingConnections(records)
     const observedConnections=normalizedObservedConnections()
     const connections = connectionInterpreter?.sync(observedConnections) ?? null
-    const records = mechanicalRecords()
     const discovery = discoverMechanicalTransmissions({
       records,
       graph,
@@ -525,6 +567,7 @@ export function createMechanicsNextRuntime({
     })
     lastSceneSync = Object.freeze({
       scene,
+      revalidation,
       connections,
       transmissions:lastTransmissionSync,
       physics:Object.freeze({
