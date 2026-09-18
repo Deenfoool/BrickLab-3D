@@ -188,6 +188,7 @@ export function createMechanicsNextRuntime({
 
   let syncQueued = false
   let lastSceneSync = null
+  let lastMechanicalRecordFailures = Object.freeze([])
   let lastTransmissionSync = null
   let physicsPreview = null
   let nativeRestoredRelations = Object.freeze([])
@@ -234,14 +235,29 @@ export function createMechanicsNextRuntime({
   const mechanicalRecords = () => {
     if (!sceneObserver || !subsystems?.editor?.ready?.()) return Object.freeze([])
     const records = []
+    const failures = []
     for (const instance of sceneObserver.instances()) {
       const instanceId = instance?.body?.instanceId
       const object = subsystems.editor.objectById?.(instanceId)
-      if (!object) continue
+      if (!object) {
+        failures.push(Object.freeze({
+          instanceId:instanceId??null,
+          partId:instance?.body?.partId??null,
+          reason:'scene-object-missing',
+        }))
+        continue
+      }
       try {
         object.updateWorldMatrix?.(true, false)
         const elements = object.matrixWorld?.elements
-        if (!elements) continue
+        if (!elements) {
+          failures.push(Object.freeze({
+            instanceId:instanceId??null,
+            partId:instance?.body?.partId??null,
+            reason:'matrix-world-missing',
+          }))
+          continue
+        }
         const pose = rigidPoseFromMatrix4(Array.from(elements))
         const visual=object.children?.find?.(child=>child?.userData?.ldrawVisual)
         const visualOffsetStud=visual?.position
@@ -267,9 +283,17 @@ export function createMechanicsNextRuntime({
           compoundEndpointOwnership,
         }))
       } catch (error) {
+        const failure=Object.freeze({
+          instanceId:instanceId??null,
+          partId:instance?.body?.partId??null,
+          reason:'mechanical-record-observation-failed',
+          detail:String(error?.message||error),
+        })
+        failures.push(failure)
         console.warn('[BrickLab Mechanics Next] Could not observe rigid pose.', instanceId, error)
       }
     }
+    lastMechanicalRecordFailures=Object.freeze(failures)
     return Object.freeze(records)
   }
 
@@ -552,6 +576,7 @@ export function createMechanicsNextRuntime({
     })
     lastSceneSync = Object.freeze({
       scene,
+      recordObservationFailures:lastMechanicalRecordFailures,
       compoundEndpointOwnership,
       revalidation,
       connections,
@@ -1121,6 +1146,7 @@ export function createMechanicsNextRuntime({
         nativeConnectivity:connectivity?.stats?.() ?? null,
         nativeParity:parityLedger.summary(),
         scene:sceneObserver?.stats?.() ?? null,
+        mechanicalRecordFailures:lastMechanicalRecordFailures,
         interpretedConnections:connectionInterpreter?.stats?.() ?? null,
         transmissionCompiler:transmissionCompiler.snapshot(),
         transmissionSolve:transmissionCompiler.solve(),
