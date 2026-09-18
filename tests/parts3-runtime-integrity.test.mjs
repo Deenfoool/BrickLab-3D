@@ -25,7 +25,7 @@ test('all retained PARTS-3 dynamic imports exist and carry the PARTS-3 package t
 test('PARTS-3 package tag does not pin the newer production build id', async () => {
   const badge = await readFile(new URL('physics-error-ui.js', root), 'utf8')
   assert.match(badge, /const BUILD_ID = 'PARTS-\d+'/)
-  assert.match(badge, /const BUILD_TAG = 'parts-\d+-[a-z0-9-]+'/)
+  assert.match(badge, /const BUILD_TAG = new URL\(import\.meta\.url\)\.searchParams\.get\('v'\) \|\| 'unversioned-runtime'/)
 })
 
 test('authoritative wheel collider consumes mechanics width instead of a fixed legacy half-width', async () => {
