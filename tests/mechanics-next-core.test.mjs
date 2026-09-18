@@ -68,6 +68,7 @@ import { buildMotionPlan } from '../mechanics-next/interaction/motion-plan.js'
 import { applyMotionPlanToBaseline, captureMotionBaseline, restoreMotionBaseline } from '../mechanics-next/interaction/scene-motion-adapter.js'
 import { buildMechanicsPhysicsPlan } from '../mechanics-next/physics/plan.js'
 import { buildMechanicsCouplingPlan } from '../mechanics-next/physics/coupling-plan.js'
+import { createMechanicsCouplingRuntime } from '../mechanics-next/physics/coupling-runtime.js'
 import { buildMechanicsMotorPlan, createMechanicsMotorRuntime } from '../mechanics-next/physics/motor-runtime.js'
 import { expandCompoundPhysicsGraph } from '../mechanics-next/physics/compound-graph-expansion.js'
 import { materializeRapierMechanicsPlan, preflightRapierMechanicsPlan } from '../mechanics-next/physics/rapier-adapter.js'
@@ -2311,7 +2312,7 @@ test('compound endpoint ownership assigns opposite external connectors to differ
 })
 
 
-test('Rapier mechanics adapter keeps joint anchors in BrickLab stud units', () => {
+test('Rapier mechanics adapter converts joint anchors from studs to Physics V2 metres', () => {
   const joint={
     id:'unit-anchor',
     kind:'spherical',
@@ -2346,7 +2347,7 @@ test('Rapier mechanics adapter keeps joint anchors in BrickLab stud units', () =
     minimalPhysicsPlan(joint),
     {resolveMember:id=>members.get(id)},
   )
-  assert.equal(anchorA.x,2)
+  assert.equal(anchorA.x,.016)
   assert.equal(anchorA.y,0)
   assert.equal(anchorA.z,0)
 })
@@ -2476,6 +2477,9 @@ test('compound materializer creates child bodies, internal prismatic joint and s
   assert.equal(session.members.size,2)
   assert.equal(colliders.length,2)
   assert.equal(joints.length,2)
+  assert.equal(bodies[1].desc.state.translation[1],.008)
+  assert.equal(colliders[0].desc.half[0],.004)
+  assert.equal(joints[1].data.rest,.008)
   assert.equal(joints[0].data.type,'generic')
   assert.equal(joints[1].data.type,'spring')
   assert.equal(state.replacements.get('shock-root').resolveEndpoint('bottom').memberId,'rod')
@@ -3567,4 +3571,206 @@ test('failed project restore rolls back already-created constraints', () => {
   assert.ok(result.rejected>0)
   assert.equal(result.rolledBack,1)
   assert.equal(graph.edge('rollback-good'),null)
+})
+
+
+test('mixed rack coupling plan converts stud radius into metre Jacobian coefficient', () => {
+  const graph=createAssemblyGraph()
+  const gear=createBodyDescriptor({id:'gear-m',instanceId:'gear-mi',partId:'gear'})
+  const rack=createBodyDescriptor({id:'rack-m',instanceId:'rack-mi',partId:'rack'})
+  const guide=createBodyDescriptor({id:'guide-m',instanceId:'guide-mi',partId:'guide'})
+  for(const body of [gear,rack,guide])graph.addBody(body)
+  graph.addConstraint(createConstraint({
+    id:'rack-guide-m',
+    bodyA:rack.id,
+    bodyB:guide.id,
+    kind:'prismatic',
+    dof:constraintDof('prismatic'),
+    referenceFrame:{position:[0,0,0],axis:[1,0,0]},
+  }))
+
+  const records=[
+    {
+      instance:{
+        body:gear,
+        descriptor:{classification:{role:'spur-gear',capabilities:{rotary:true},properties:{}}},
+        endpoints:[],
+      },
+      pose:{position:[0,0,0],quaternion:[0,0,0,1]},
+    },
+    {
+      instance:{
+        body:rack,
+        descriptor:{classification:{role:'rack',capabilities:{rotary:false},properties:{}}},
+        endpoints:[],
+      },
+      pose:{position:[0,0,0],quaternion:[0,0,0,1]},
+    },
+    {
+      instance:{
+        body:guide,
+        descriptor:{classification:{role:'beam',capabilities:{rotary:false},properties:{}}},
+        endpoints:[],
+      },
+      pose:{position:[0,0,0],quaternion:[0,0,0,1]},
+    },
+  ]
+  const equation=rackPinionEquation({
+    id:'rack-physics-scale',
+    gearBody:gear.id,
+    rackBody:rack.id,
+    pitchRadius:.75,
+    direction:1,
+  })
+  const discovery={
+    equations:[equation],
+    velocityEquations:[],
+    nonlinearRelations:[],
+    linearMotions:[{
+      kind:'rack-pinion-output',
+      bodyId:rack.id,
+      parentBodyId:guide.id,
+      axis:[1,0,0],
+      channel:'slide',
+    }],
+    transmissions:[],
+  }
+  const plan=buildMechanicsCouplingPlan({
+    graph,
+    discovery,
+    records,
+    worldUnitsPerStud:.008,
+  })
+  assert.equal(plan.pass,true)
+  assert.equal(plan.couplers.length,1)
+  const angular=plan.couplers[0].terms.find(term=>term.coordinate==='angular')
+  const linear=plan.couplers[0].terms.find(term=>term.coordinate==='linear')
+  assert.ok(Math.abs(Math.abs(angular.coefficient)-.006)<1e-12)
+  assert.equal(Math.abs(linear.coefficient),1)
+})
+
+test('controlled gearbox physics runtime switches forward neutral reverse without rebuild', () => {
+  const makeBody=handle=>({
+    handle,
+    _omega:0,
+    rotation:()=>({x:0,y:0,z:0,w:1}),
+    angvel(){return{x:this._omega,y:0,z:0}},
+    linvel:()=>({x:0,y:0,z:0}),
+    invPrincipalInertia:()=>({x:1,y:1,z:1}),
+    principalInertiaLocalFrame:()=>({x:0,y:0,z:0,w:1}),
+    invMass:()=>1,
+    isDynamic:()=>true,
+    applyTorqueImpulse(v){this._lastTorque=v},
+    applyImpulse(){},
+  })
+  const member=(body)=>({
+    body,
+    component:{
+      bodyWorldRotation:new THREE.Quaternion(),
+      bodyWorldInverse:new THREE.Matrix4(),
+    },
+  })
+  const bodyA=makeBody(1),bodyB=makeBody(2)
+  const members=new Map([['a',member(bodyA)],['b',member(bodyB)]])
+  const mode={value:'forward'}
+  const plan={
+    pass:true,
+    couplers:[{
+      id:'controlled',
+      equationId:'controlled-eq',
+      kind:'angular',
+      terms:[
+        {coordinate:'angular',bodyId:'a',referenceBodyId:null,coefficient:-1,axisWorld:[1,0,0]},
+        {coordinate:'angular',bodyId:'b',referenceBodyId:null,coefficient:1,axisWorld:[1,0,0]},
+      ],
+      nonlinearRelation:null,
+      controlledTransmission:{
+        controlId:'gearbox-i',
+        modeRatios:{forward:1,neutral:0,reverse:-1},
+        defaultMode:'forward',
+        bodyA:'a',
+        bodyB:'b',
+        packageKind:'packaged-transmission',
+      },
+    }],
+  }
+  const runtime=createMechanicsCouplingRuntime(plan,{
+    resolveMember:id=>members.get(id),
+    controlState:()=>({type:'transmission',mode:mode.value}),
+  })
+
+  bodyA._omega=3
+  bodyB._omega=0
+  let step=runtime.step(1/60)
+  assert.equal(step.applied,1)
+  assert.equal(runtime.snapshot()[0].controlMode,'forward')
+  assert.equal(runtime.snapshot()[0].disconnected,false)
+
+  mode.value='neutral'
+  bodyA._lastTorque=null
+  bodyB._lastTorque=null
+  step=runtime.step(1/60)
+  assert.equal(step.applied,0)
+  assert.equal(runtime.snapshot()[0].disconnected,true)
+  assert.equal(bodyA._lastTorque,null)
+  assert.equal(bodyB._lastTorque,null)
+
+  mode.value='reverse'
+  bodyA._omega=3
+  bodyB._omega=0
+  step=runtime.step(1/60)
+  assert.equal(step.applied,1)
+  assert.equal(runtime.snapshot()[0].controlMode,'reverse')
+  assert.equal(runtime.snapshot()[0].instantaneousRatio,-1)
+})
+
+test('native motor runtime reads live RPM direction and stop state each step', () => {
+  const body=()=>({
+    rotation:()=>({x:0,y:0,z:0,w:1}),
+    angvel:()=>({x:0,y:0,z:0}),
+    isDynamic:()=>true,
+    addTorque(value){this.lastTorque=value},
+  })
+  const motorBody=body(),drivenBody=body()
+  const member=bodyObject=>({
+    body:bodyObject,
+    component:{bodyWorldRotation:new THREE.Quaternion()},
+  })
+  const state={rpm:120,direction:1,type:'motor'}
+  const runtime=createMechanicsMotorRuntime({
+    pass:true,
+    drives:[{
+      id:'motor-live',
+      controlId:'motor-instance',
+      motorBodyId:'motor-body',
+      drivenBodyId:'driven-body',
+      axisWorld:[1,0,0],
+      defaultRpm:120,
+      defaultDirection:1,
+      targetRpm:120,
+      stallTorque:5,
+      damping:1,
+      freeCurrent:.1,
+      stallCurrent:2,
+    }],
+  },{
+    resolveMember:id=>id==='motor-body'?member(motorBody):member(drivenBody),
+    controlState:()=>state,
+  })
+
+  runtime.step(1/60)
+  assert.ok(drivenBody.lastTorque.x>0)
+  assert.equal(runtime.snapshot()[0].targetRpm,120)
+
+  state.direction=-1
+  drivenBody.lastTorque=null
+  runtime.step(1/60)
+  assert.ok(drivenBody.lastTorque.x<0)
+  assert.equal(runtime.snapshot()[0].targetRpm,-120)
+
+  state.direction=0
+  drivenBody.lastTorque=null
+  runtime.step(1/60)
+  assert.equal(runtime.snapshot()[0].targetRpm,0)
+  assert.equal(runtime.snapshot()[0].running,false)
 })
