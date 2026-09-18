@@ -47,6 +47,7 @@ test('6589 gets one dedicated pivot that only mates with differential seats',()=
     assert.equal(match.kinematicHint,'revolute')
     const activation=activationForMatchV4(gear,seat,match)
     assert.equal(activation.active,true)
+    assert.equal(activation.family,'round-revolute-interface')
     assert.equal(activation.constraintKind,'revolute')
   }
 

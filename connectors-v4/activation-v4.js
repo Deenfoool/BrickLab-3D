@@ -1,8 +1,9 @@
 import { CONNECTOR_SCHEMA_VERSION_V4, CONNECTOR_SYSTEM_VERSION_V4, validateConnectorV4 } from './schema-v4.js'
 import { classifyTechnicAxlePinInterfaceV4, classifyTechnicPinInterfaceV4, technicPinPairV4 } from './pin-semantics-v4.js?v=connector-axle-pin-slots-20260916-v1'
 import { ENGINE_PISTON_FIXTURE_GROUP_V4 } from '../connector-discovery/engine-piston-fixtures-v4.js?v=connector-engine-continuous-rim-20260917-v2'
+import { DIFFERENTIAL_FIXTURE_GROUP_V4 } from '../connector-discovery/differential-fixtures-v4.js'
 
-export const ACTIVATION_POLICY_VERSION_V4 = 'connector-activation-v4.7.0'
+export const ACTIVATION_POLICY_VERSION_V4 = 'connector-activation-v4.7.1'
 
 const CRITICAL_WARNING_CODES = new Set([
   'invalid-snap-meta',
@@ -161,11 +162,20 @@ export function activationForMatchV4(source, target, match) {
     && new Set([source?.discovery?.role,target?.discovery?.role]).size===2
     && [source?.discovery?.role,target?.discovery?.role].includes('technic-engine-crank-rim-track')
     && [source?.discovery?.role,target?.discovery?.role].includes('technic-engine-piston-follower')
+  const differentialBevelSeatPair = source?.group===DIFFERENTIAL_FIXTURE_GROUP_V4 && target?.group===DIFFERENTIAL_FIXTURE_GROUP_V4
 
   if (
     engineCamPair && match?.compatible === true && match?.family === 'cylinder' &&
     match?.kinematicHint === 'revolute'
   ) return activeResult('technic-engine-cam-follower','revolute',sourceRole,targetRole,'verified-ldraw-help:4368-continuous-rim+4369')
+
+  // The verified 62821/6589 fixture is an internal differential pivot, not a
+  // generic R4 bar-in-round-hole interface. This must be classified before the
+  // generic R4 fallback below or Kinematics never receives a differential-seat.
+  if (
+    differentialBevelSeatPair && match?.compatible === true && match?.family === 'cylinder' &&
+    match?.kinematicHint === 'revolute'
+  ) return activeResult('round-revolute-interface','revolute',sourceRole,targetRole,'verified-ldraw-assembly-fixture:62821+6589')
 
   if (
     (roles.has('technic-axle') || roles.has('technic-axle-pin')) && roles.has('technic-axle-hole') &&
