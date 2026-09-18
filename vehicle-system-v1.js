@@ -385,6 +385,70 @@ function resetVisuals() {
   session?.resetVehicleVisualsV1?.()
 }
 
+function installMechanicsNextSteering(session,bindings=[]){
+  if(!session)return Object.freeze({installed:0,skipped:bindings.length})
+  const chassis=session.chassisMonitor?.body
+  if(!chassis)return Object.freeze({installed:0,skipped:bindings.length})
+  const chassisUp=new THREE.Vector3(0,1,0).applyQuaternion(bodyRotation(chassis)).normalize()
+  const wheelByInstance=new Map(
+    (session.wheelMonitors??[])
+      .filter(wheel=>wheel?.object?.userData?.instanceId)
+      .map(wheel=>[String(wheel.object.userData.instanceId),wheel]),
+  )
+
+  session.steeringJointsV1=[]
+  for(const wheel of session.wheelMonitors??[])wheel.physicalSteeringV1=null
+  let skipped=0
+  for(const binding of bindings??[]){
+    const wheel=wheelByInstance.get(String(binding.wheelInstanceId))
+    if(!wheel||!binding?.joint||!binding?.member?.body||!binding?.localAxis?.clone){
+      skipped+=1
+      continue
+    }
+    const maxSteerRadians=Math.max(0,Number(binding.maxSteerRadians)||THREE.MathUtils.degToRad(DEFAULT_MAX_STEER_DEG))
+    const stiffness=Math.max(0,Number(binding.stiffness)||DEFAULT_STEER_STIFFNESS)
+    const damping=Math.max(0,Number(binding.damping)||DEFAULT_STEER_DAMPING)
+    const axisWorld=binding.localAxis.clone()
+      .applyQuaternion(bodyRotation(binding.member.body))
+      .normalize()
+    const axisSign=Math.sign(axisWorld.dot(chassisUp))||1
+
+    binding.joint.configureMotorModel?.(session.RAPIER.MotorModel?.ForceBased??1)
+    binding.joint.setLimits?.(-maxSteerRadians,maxSteerRadians)
+    binding.joint.configureMotorPosition?.(0,stiffness,damping)
+
+    const steeringJoint={
+      id:String(binding.knuckleInstanceId),
+      joint:binding.joint,
+      connection:null,
+      wheel,
+      knuckle:binding.member.object??null,
+      maxSteerRadians,
+      stiffness,
+      damping,
+      axisSign,
+      targetAngle:0,
+      mechanicsNext:true,
+      physicsJointId:binding.physicsJointId,
+    }
+    wheel.physicalSteeringV1=steeringJoint
+    session.steeringJointsV1.push(steeringJoint)
+  }
+
+  if(session.vehicleControlV1){
+    const physicalFront=session.steeringJointsV1.filter(item=>item.wheel?.axleRole==='front')
+    const frontCount=Math.max(1,session.vehicleControlV1.frontWheelCount||0)
+    session.vehicleControlV1.steeringMode=
+      physicalFront.length>=frontCount?'physical':
+      physicalFront.length?'mixed':'virtual'
+  }
+
+  return Object.freeze({
+    installed:session.steeringJointsV1.length,
+    skipped,
+  })
+}
+
 function diagnostics() {
   const session = currentSession()
   const control = session?.vehicleControlV1
@@ -425,6 +489,7 @@ function diagnostics() {
 
 globalThis.BrickLabVehicle = {
   version: VEHICLE_SYSTEM_VERSION,
+  installMechanicsNextSteering,
   setSteering,
   setBrake,
   setParkingBrake,
