@@ -105,10 +105,19 @@ function prepareCoupler(coupler,resolveMember){
     lastImpulse:0,
     lastEffectiveInverseMass:0,
     lastRatio:coupler.nonlinearRelation?.velocityRatio?.(0)??null,
+    lastControlMode:coupler.controlledTransmission?.defaultMode??null,
+    controlDisconnected:false,
   }
 }
 
 function coefficientFor(runtimeTerm,coupler){
+  if(coupler.controlledTransmission){
+    const control=coupler.controlledTransmission
+    const ratio=Number(coupler.lastRatio)
+    if(runtimeTerm.coordinate!=='angular')return Number(runtimeTerm.coefficient)
+    if(runtimeTerm.bodyId===control.bodyA)return-ratio
+    if(runtimeTerm.bodyId===control.bodyB)return 1
+  }
   if(!coupler.nonlinearRelation)return Number(runtimeTerm.coefficient)
   const relation=coupler.nonlinearRelation
   if(runtimeTerm.coordinate!=='angular')return Number(runtimeTerm.coefficient)
@@ -230,6 +239,7 @@ function primaryInputVelocity(coupler){
 export function createMechanicsCouplingRuntime(couplingPlan,{
   resolveMember,
   stabilization=1,
+  controlState=null,
 }={}){
   if(!couplingPlan?.pass){
     throw new Error('Cannot create coupling runtime from blocked plan')
@@ -238,6 +248,18 @@ export function createMechanicsCouplingRuntime(couplingPlan,{
   const gain=Math.max(0,Math.min(1,Number(stabilization)))
   const couplers=couplingPlan.couplers.map(item=>prepareCoupler(item,resolveMember))
 
+  const updateControlledTransmission=coupler=>{
+    const control=coupler.controlledTransmission
+    if(!control)return true
+    const state=typeof controlState==='function'?controlState(control.controlId):null
+    const mode=String(state?.mode||control.defaultMode||'forward')
+    const ratio=Number(control.modeRatios?.[mode]??control.modeRatios?.forward??0)
+    coupler.lastControlMode=mode
+    coupler.lastRatio=Number.isFinite(ratio)?ratio:0
+    coupler.controlDisconnected=!Number.isFinite(ratio)||Math.abs(ratio)<=EPS
+    return !coupler.controlDisconnected
+  }
+
   return Object.freeze({
     version:MECHANICS_COUPLING_RUNTIME_VERSION,
     couplers:Object.freeze(couplers),
@@ -245,6 +267,13 @@ export function createMechanicsCouplingRuntime(couplingPlan,{
       if(!(Number.isFinite(dt)&&dt>0))return Object.freeze({applied:0,skipped:couplers.length})
       let applied=0,skipped=0
       for(const coupler of couplers){
+        if(!updateControlledTransmission(coupler)){
+          coupler.lastResidual=0
+          coupler.lastImpulse=0
+          coupler.lastEffectiveInverseMass=0
+          skipped+=1
+          continue
+        }
         if(coupler.nonlinearRelation){
           coupler.phaseDeltaRad+=primaryInputVelocity(coupler)*dt
         }
@@ -284,6 +313,8 @@ export function createMechanicsCouplingRuntime(couplingPlan,{
         effectiveInverseMass:coupler.lastEffectiveInverseMass,
         phaseDeltaRad:coupler.phaseDeltaRad,
         instantaneousRatio:coupler.lastRatio,
+        controlMode:coupler.lastControlMode,
+        disconnected:coupler.controlDisconnected,
       })))
     },
   })
