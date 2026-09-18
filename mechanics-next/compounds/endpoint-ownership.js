@@ -139,3 +139,40 @@ export function assignCompoundEndpointOwnership(record,{
     unresolved:Object.freeze(unresolved),
   })
 }
+
+
+export function summarizeCompoundEndpointOwnership(records=[]){
+  const compounds=(records||[]).filter(record=>record?.compoundDecomposition)
+  const unresolved=[]
+  let complete=0
+  let assignments=0
+
+  for(const record of compounds){
+    const ownership=record?.compoundEndpointOwnership
+    assignments+=Array.isArray(ownership?.assignments)?ownership.assignments.length:0
+    if(ownership?.complete===true){
+      complete+=1
+      continue
+    }
+
+    const issues=Array.isArray(ownership?.unresolved)&&ownership.unresolved.length
+      ?ownership.unresolved
+      :[Object.freeze({reason:'compound-endpoint-ownership-unavailable'})]
+    for(const issue of issues){
+      unresolved.push(Object.freeze({
+        instanceId:record?.instance?.body?.instanceId??null,
+        partId:record?.instance?.body?.partId??null,
+        ...issue,
+      }))
+    }
+  }
+
+  return Object.freeze({
+    version:COMPOUND_ENDPOINT_OWNERSHIP_VERSION,
+    compounds:compounds.length,
+    complete,
+    assignments,
+    unresolvedCount:unresolved.length,
+    unresolved:Object.freeze(unresolved),
+  })
+}
