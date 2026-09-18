@@ -71,6 +71,9 @@ export function buildMechanicsMotorPlan({graph,records=[]}={}){
       damping:Number.isFinite(Number(params.damping))?Math.max(0,Number(params.damping)):1,
       freeCurrent:Number.isFinite(Number(params.freeCurrent))?Number(params.freeCurrent):null,
       stallCurrent:Number.isFinite(Number(params.stallCurrent))?Number(params.stallCurrent):null,
+      voltage:Number.isFinite(Number(params.voltage))?Math.max(0,Number(params.voltage)):9,
+      nominalEfficiency:Number.isFinite(Number(params.nominalEfficiency))
+        ?Math.min(1,Math.max(0,Number(params.nominalEfficiency))):null,
     }))
   }
   return Object.freeze({
@@ -123,6 +126,11 @@ export function createMechanicsMotorRuntime(plan,{
       current:item.freeCurrent,
       stalled:false,
       stallTime:0,
+      powerW:0,
+      inputPowerW:0,
+      efficiency:0,
+      externalBrakeTorqueNm:0,
+      externalBrakePowerW:0,
     }
   })
 
@@ -165,12 +173,59 @@ export function createMechanicsMotorRuntime(plan,{
         if(drive.freeCurrent!=null&&drive.stallCurrent!=null){
           drive.current=drive.freeCurrent+(drive.stallCurrent-drive.freeCurrent)*drive.load
         }
+        drive.powerW=Math.abs(torqueMagnitude*relative)
+        drive.inputPowerW=drive.current==null?0:drive.voltage*drive.current
+        drive.efficiency=drive.inputPowerW>EPS
+          ?clamp(drive.powerW/drive.inputPowerW,0,1)
+          :0
+        drive.externalBrakeTorqueNm=0
+        drive.externalBrakePowerW=0
         const lowSpeed=Math.abs(targetRpm)>10&&Math.abs(actualRpm)<Math.abs(targetRpm)*.12
         drive.stallTime=lowSpeed&&drive.load>.82?drive.stallTime+dt:0
         drive.stalled=drive.stallTime>.65
         applied+=1
       }
       return Object.freeze({applied})
+    },
+    applyExternalBrake({
+      controlId=null,
+      maxTorqueNm=0,
+      gain=0,
+    }={}){
+      const target=controlId==null
+        ?drives[0]
+        :drives.find(drive=>String(drive.controlId)===String(controlId))
+      if(!target)return Object.freeze({applied:false,reason:'motor-drive-missing'})
+      const axis=target.localAxisMotor.clone()
+        .applyQuaternion(bodyRotation(target.motor.body)).normalize()
+      const relative=angular(target.driven.body).sub(angular(target.motor.body)).dot(axis)
+      const capacity=Math.max(0,Number(maxTorqueNm)||0)
+      const brakeGain=Math.max(0,Number(gain)||0)
+      const torque=Math.min(capacity,Math.abs(relative)*brakeGain)
+      if(!(torque>EPS)||Math.abs(relative)<=EPS){
+        target.externalBrakeTorqueNm=0
+        target.externalBrakePowerW=0
+        return Object.freeze({
+          applied:false,
+          controlId:target.controlId,
+          actualRpm:target.actualRpm,
+          torqueNm:0,
+          powerW:0,
+        })
+      }
+      const signed=-Math.sign(relative)*torque
+      if(dynamic(target.driven.body)){
+        target.driven.body.addTorque?.(vec(axis.clone().multiplyScalar(signed)),true)
+      }
+      target.externalBrakeTorqueNm=torque
+      target.externalBrakePowerW=Math.abs(torque*relative)
+      return Object.freeze({
+        applied:true,
+        controlId:target.controlId,
+        actualRpm:target.actualRpm,
+        torqueNm:torque,
+        powerW:target.externalBrakePowerW,
+      })
     },
     snapshot(){
       return Object.freeze(drives.map(drive=>Object.freeze({
@@ -183,6 +238,11 @@ export function createMechanicsMotorRuntime(plan,{
         load:drive.load,
         torque:drive.torque,
         current:drive.current,
+        powerW:drive.powerW,
+        inputPowerW:drive.inputPowerW,
+        efficiency:drive.efficiency,
+        externalBrakeTorqueNm:drive.externalBrakeTorqueNm,
+        externalBrakePowerW:drive.externalBrakePowerW,
         stalled:drive.stalled,
       })))
     },
