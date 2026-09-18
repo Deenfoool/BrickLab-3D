@@ -1,4 +1,5 @@
 import { buildMechanicsPhysicsPlan } from './plan.js'
+import { buildCompoundMemberPhysicsPlan } from './compound-member-plan.js'
 import { buildMechanicsCouplingPlan } from './coupling-plan.js'
 import {
   disposeRapierMechanicsPlan,
@@ -21,6 +22,7 @@ export function createMechanicsPhysicsRuntime({
   studMeters=.008,
 }={}){
   const structuralPlan=buildMechanicsPhysicsPlan({graph,discovery})
+  const compoundMemberPlan=buildCompoundMemberPhysicsPlan({records,discovery})
   const couplingPlan=buildMechanicsCouplingPlan({
     graph,
     discovery,
@@ -29,6 +31,7 @@ export function createMechanicsPhysicsRuntime({
   })
   const blockers=Object.freeze([
     ...(structuralPlan.blockers||[]),
+    ...(compoundMemberPlan.blockers||[]),
     ...(couplingPlan.blockers||[]),
   ])
 
@@ -37,9 +40,10 @@ export function createMechanicsPhysicsRuntime({
   const api={
     version:MECHANICS_PHYSICS_RUNTIME_VERSION,
     structuralPlan,
+    compoundMemberPlan,
     couplingPlan,
     blockers,
-    pass:structuralPlan.pass&&couplingPlan.pass,
+    pass:structuralPlan.pass&&compoundMemberPlan.pass&&couplingPlan.pass,
     preflightSession(session){
       const bridge=buildPhysicsSessionBridge({session,graph,plan:structuralPlan})
       if(!bridge.pass){
@@ -148,6 +152,7 @@ export function createMechanicsPhysicsRuntime({
         pass:api.pass,
         installed:Boolean(installed&&!installed.disposed),
         structural:structuralPlan.stats,
+        compoundMembers:compoundMemberPlan.stats,
         couplings:couplingPlan.stats,
         blockers,
         bridge:installed?.bridge?.stats??null,
