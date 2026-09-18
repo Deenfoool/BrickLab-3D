@@ -1,5 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { createBodyDescriptor, createEndpointDescriptor } from '../mechanics-next/core/model.js'
 import { createConstraint } from '../mechanics-next/constraints/dof.js'
@@ -9,6 +12,10 @@ import {
   restoreMechanicsProjectState,
 } from '../mechanics-next/migration/project-state.js'
 import { revalidateSceneConnections } from '../mechanics-next/physics/scene-connection-revalidator.js'
+
+const here=dirname(fileURLToPath(import.meta.url))
+const root=resolve(here,'..')
+const source=path=>readFileSync(resolve(root,path),'utf8')
 
 function cylinderEndpoint({id,bodyId,gender}){
   return createEndpointDescriptor({
@@ -220,4 +227,25 @@ test('restore keeps persisted geometry so a moved-open project cannot bless its 
   })
   assert.equal(afterUndo.released,0)
   assert.ok(undoGraph.edge('history-edge'))
+})
+
+
+test('production Undo Redo and Open persist the Mechanics Next graph with geometry', () => {
+  const app=source('app.js')
+  assert.ok(
+    app.includes("mechanicsNext:globalThis.BrickLabMechanicsNext?.exportProjectState?.()"),
+    'project snapshots must serialize Mechanics Next state',
+  )
+  assert.ok(
+    app.includes("restoreProjectState?.(data.mechanicsNext,{replace:true})"),
+    'project application must restore Mechanics Next state transactionally',
+  )
+  assert.ok(
+    app.includes("applyProject(history[historyIndex])"),
+    'Undo/Redo must traverse the same project restore path',
+  )
+  assert.ok(
+    app.includes("globalThis.BrickLabMechanicsNext?.clearProjectState?.({keepAuthority:false})"),
+    'project replacement must revoke stale native graph state first',
+  )
 })
