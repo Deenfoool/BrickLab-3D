@@ -2,7 +2,43 @@ import { deterministicId } from '../core/model.js'
 import { legacyV4ConnectorToEndpoint } from '../adapters/legacy-v4-readonly.js'
 import { ldcadConnectorToEndpoint } from '../ldraw/connector-adapter.js'
 import { enrichEndpointSemantics, endpointSemanticKind } from '../intelligence/endpoint-semantics.js'
-import { endpointMechanicalSignature, canonicalMechanicalJson } from '../intelligence/fingerprint.js'
+import { canonicalMechanicalJson } from '../intelligence/fingerprint.js'
+
+function round(value, digits = 5) {
+  if (!Number.isFinite(Number(value))) return null
+  const factor = 10 ** digits
+  return Math.round(Number(value) * factor) / factor
+}
+
+function rawGeometrySignature(endpoint) {
+  const frame = endpoint?.frame || {}
+  const profile = endpoint?.profile || {}
+  const sections = Array.isArray(profile.sections)
+    ? profile.sections.map(section => ({
+        shape:section?.shape ?? null,
+        radiusLdu:round(section?.radiusLdu),
+        lengthLdu:round(section?.lengthLdu),
+        elastic:section?.elastic === true,
+      }))
+    : null
+
+  return {
+    family:endpoint?.family || 'unknown',
+    gender:endpoint?.gender ?? null,
+    group:endpoint?.metadata?.group ?? null,
+    positionLdu:Array.isArray(frame.positionLdu) ? frame.positionLdu.map(value => round(value)) : null,
+    orientation:Array.isArray(frame.orientation) ? frame.orientation.map(value => round(value)) : null,
+    profile:{
+      caps:profile.caps ?? null,
+      centered:profile.centered === true,
+      radiusLdu:round(profile.radiusLdu),
+      lengthLdu:round(profile.lengthLdu),
+      sections,
+      sequenceLdu:Array.isArray(profile.sequenceLdu) ? profile.sequenceLdu.map(value => round(value)) : null,
+      bounding:profile.bounding ?? null,
+    },
+  }
+}
 
 function normalizedEndpoint(endpoint) {
   const enriched = enrichEndpointSemantics(endpoint)
@@ -11,7 +47,7 @@ function normalizedEndpoint(endpoint) {
     family:enriched.family,
     gender:enriched.gender ?? null,
     group:enriched.metadata?.group ?? null,
-    signature:endpointMechanicalSignature(enriched),
+    signature:rawGeometrySignature(enriched),
   })
 }
 
