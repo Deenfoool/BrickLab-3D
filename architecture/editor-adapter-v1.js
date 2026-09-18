@@ -226,6 +226,14 @@ if (globalThis.BrickLabSubsystems) boundEditorAdapter=bindLegacyEditorAdapter()
 
 if(boundEditorAdapter&&globalThis.BrickLabMechanicsNext){
   try{
+    const pending=globalThis.__bricklabPendingMechanicsNextProject
+    if(pending){
+      globalThis.BrickLabMechanicsNext.syncScene()
+      const restored=globalThis.BrickLabMechanicsNext.restoreProjectState(pending,{replace:true})
+      if(restored?.rejected===0)delete globalThis.__bricklabPendingMechanicsNextProject
+      else console.warn('[BrickLab Mechanics Next] Deferred native project restore still has rejected connections.',restored)
+    }
+
     const prepared=await globalThis.BrickLabMechanicsNext.prepareMigration()
     if(prepared?.pass){
       const adopted=globalThis.BrickLabMechanicsNext.adoptNativeProjectOwnership()
