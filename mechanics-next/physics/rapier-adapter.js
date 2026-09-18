@@ -266,7 +266,7 @@ export function materializeRapierMechanicsPlan(session,plan,{
         session.world.removeImpulseJoint?.(handle,true)
         throw error
       }
-      created.push(Object.freeze({
+      created.push({
         item,
         handle,
         memberA,
@@ -274,7 +274,10 @@ export function materializeRapierMechanicsPlan(session,plan,{
         localAxisA:frames.axisA.clone(),
         localAxisB:frames.axisB.clone(),
         released:false,
-      }))
+        invalidFrames:0,
+        releaseReason:null,
+        lastResistanceImpulse:0,
+      })
     }
   }catch(error){
     for(const monitor of created){
