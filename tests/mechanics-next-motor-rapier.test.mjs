@@ -31,3 +31,22 @@ test('native motor stays at live RPM on lightweight real Rapier rotors without r
     }
   }finally{world.free()}
 })
+import {createMechanicsCouplingRuntime} from '../mechanics-next/physics/coupling-runtime.js'
+
+test('lightweight real Rapier shafts receive F/N/R coupling impulses in the same world',()=>{
+  const world=new RAPIER.World({x:0,y:0,z:0});world.timestep=1/120
+  const make=(x)=>{const b=world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x,0,0).setCanSleep(false));world.createCollider(RAPIER.ColliderDesc.cuboid(.0015,.0015,.012).setMass(.0005),b);return b}
+  const a=make(-.1),b=make(.1),members=new Map([['a',a],['b',b]])
+  const mode={value:'forward'}
+  const runtime=createMechanicsCouplingRuntime({pass:true,couplers:[{id:'fnr',kind:'angular',terms:[{coordinate:'angular',bodyId:'a',coefficient:-1,axisWorld:[0,0,1]},{coordinate:'angular',bodyId:'b',coefficient:1,axisWorld:[0,0,1]}],controlledTransmission:{controlId:'box',modeRatios:{forward:1,neutral:0,reverse:-1},defaultMode:'forward',bodyA:'a',bodyB:'b'}}]},{resolveMember:id=>({body:members.get(id),component:{bodyWorldRotation:new THREE.Quaternion()}}),controlState:()=>({mode:mode.value})})
+  try{
+    for(const value of ['forward','neutral','reverse']){
+      mode.value=value;a.setAngvel({x:0,y:0,z:4},true);b.setAngvel({x:0,y:0,z:0},true)
+      runtime.step(1/120);world.step()
+      const av=a.angvel().z,bv=b.angvel().z
+      if(value==='neutral'){assert.equal(bv,0);assert.ok(Math.abs(av-4)<1e-5)}
+      else{assert.ok(Math.abs(bv-(value==='forward'?av:-av))<1e-5);assert.ok(Math.abs(bv)>1)}
+    }
+  }finally{world.free()}
+})
+

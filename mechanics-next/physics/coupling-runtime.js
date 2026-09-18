@@ -196,7 +196,7 @@ function residualAndEffectiveMass(bodies){
 }
 
 function applyAngularImpulse(body,impulse,dt){
-  if(!dynamic(body)||impulse.lengthSq()<=EPS)return
+  if(!dynamic(body)||impulse.lengthSq()<=EPS*EPS)return
   if(typeof body.applyTorqueImpulse==='function'){
     body.applyTorqueImpulse(vec(impulse),true)
     return
@@ -209,7 +209,7 @@ function applyAngularImpulse(body,impulse,dt){
 }
 
 function applyLinearImpulse(body,impulse,dt){
-  if(!dynamic(body)||impulse.lengthSq()<=EPS)return
+  if(!dynamic(body)||impulse.lengthSq()<=EPS*EPS)return
   if(typeof body.applyImpulse==='function'){
     body.applyImpulse(vec(impulse),true)
     return
