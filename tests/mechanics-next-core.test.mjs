@@ -19,6 +19,7 @@ import { createAssemblyGraph } from '../mechanics-next/topology/assembly-graph.j
 import { solveConstraintBundle } from '../mechanics-next/constraints/bundle-solver.js'
 import {
   differentialEquation,
+  driverEquation,
   gearMeshEquation,
   rigidRotationEquation,
 } from '../mechanics-next/transmission/equations.js'
@@ -47,6 +48,10 @@ import { commitPlacementTransaction } from '../mechanics-next/connectors/placeme
 import { discoverMechanicalTransmissions } from '../mechanics-next/transmission/discovery.js'
 import { createTransmissionCompiler } from '../mechanics-next/transmission/compiler.js'
 import { evaluateBevelGearPair, evaluateSpurGearPair } from '../mechanics-next/transmission/gear-geometry.js'
+import { createUniversalJointRelation, universalJointOutputDelta, universalJointInputDelta, universalJointVelocityRatio } from '../mechanics-next/compounds/universal-joint.js'
+import { solveLinearWithNonlinearRelations } from '../mechanics-next/solver/nonlinear-relations.js'
+import { discoverCompoundMechanisms } from '../mechanics-next/compounds/discovery.js'
+import { createCompoundStateRegistry } from '../mechanics-next/compounds/state.js'
 import { screenDragAngle, solveRotationalDrag } from '../mechanics-next/interaction/drag-driver.js'
 import { buildMotionPlan } from '../mechanics-next/interaction/motion-plan.js'
 import { applyMotionPlanToBaseline, captureMotionBaseline, restoreMotionBaseline } from '../mechanics-next/interaction/scene-motion-adapter.js'
@@ -1377,4 +1382,314 @@ test('scene motion application is baseline-stable and does not accumulate per-fr
 
   restoreMotionBaseline(baseline)
   assert.ok(object.quaternion.angleTo(new THREE.Quaternion())<1e-12)
+})
+
+
+test('universal joint degenerates exactly to 1:1 at zero bend', () => {
+  for(const theta of [-4,-1.2,0,.3,2.4,7]){
+    assert.ok(Math.abs(universalJointOutputDelta(theta,{
+      bendAngleRad:0,
+      inputPhaseRad:.41,
+      directionSign:1,
+    })-theta)<1e-9)
+  }
+  assert.ok(Math.abs(universalJointVelocityRatio(1.17,{
+    bendAngleRad:0,
+    directionSign:1,
+  })-1)<1e-12)
+})
+
+test('universal joint finite displacement is nonlinear and exactly invertible', () => {
+  const options={
+    bendAngleRad:Math.PI/6,
+    inputPhaseRad:.37,
+    directionSign:-1,
+  }
+  const input=.83
+  const output=universalJointOutputDelta(input,options)
+  const recovered=universalJointInputDelta(output,options)
+  assert.ok(Math.abs(recovered-input)<1e-9)
+
+  const ratioA=universalJointVelocityRatio(options.inputPhaseRad,{
+    bendAngleRad:options.bendAngleRad,
+    directionSign:options.directionSign,
+  })
+  const ratioB=universalJointVelocityRatio(options.inputPhaseRad+Math.PI/2,{
+    bendAngleRad:options.bendAngleRad,
+    directionSign:options.directionSign,
+  })
+  assert.ok(Math.abs(ratioA-ratioB)>.05)
+})
+
+test('nonlinear relation solver propagates a Cardan joint in both directions', () => {
+  const relation=createUniversalJointRelation({
+    id:'u',
+    inputBody:'in',
+    outputBody:'out',
+    bendAngleRad:Math.PI/5,
+    inputPhaseRad:.21,
+    directionSign:1,
+  })
+
+  const forward=solveLinearWithNonlinearRelations({
+    equations:[driverEquation({
+      id:'drive-in',
+      bodyId:'in',
+      value:.9,
+      channel:'theta',
+    })],
+    relations:[relation],
+  })
+  assert.equal(forward.status,'solved')
+  assert.ok(Math.abs(
+    forward.values[mechanicalVariable('out','theta')]-relation.forward(.9)
+  )<1e-9)
+
+  const wantedOut=.64
+  const reverse=solveLinearWithNonlinearRelations({
+    equations:[driverEquation({
+      id:'drive-out',
+      bodyId:'out',
+      value:wantedOut,
+      channel:'theta',
+    })],
+    relations:[relation],
+  })
+  assert.equal(reverse.status,'solved')
+  assert.ok(Math.abs(
+    reverse.values[mechanicalVariable('in','theta')]-relation.inverse(wantedOut)
+  )<1e-9)
+})
+
+function compoundEndpoint({id,bodyId,semantic,orientationBrickLab=[1,0,0,0,1,0,0,0,1]}){
+  return createEndpointDescriptor({
+    id,
+    bodyId,
+    family:'generic',
+    gender:null,
+    frame:{
+      positionStud:[0,0,0],
+      orientationBrickLab,
+    },
+    profile:{bounding:{kind:'point'}},
+    metadata:{
+      semantics:{
+        semanticKind:semantic,
+      },
+    },
+  })
+}
+
+function compoundRecord({
+  bodyId,
+  role,
+  endpoints=[],
+  properties={},
+  position=[0,0,0],
+}){
+  return {
+    instance:{
+      body:{id:bodyId,instanceId:bodyId},
+      endpoints,
+      descriptor:{
+        classification:{
+          role,
+          properties,
+          capabilities:{
+            rotary:['universal-joint','cv-joint','driving-ring','clutch-gear'].includes(role),
+          },
+        },
+      },
+      transmissions:[],
+    },
+    pose:{position,quaternion:[0,0,0,1]},
+    visualOffsetStud:[0,0,0],
+  }
+}
+
+test('compound discovery resolves two uniJnt ports into one nonlinear universal joint', () => {
+  const jointBody='joint'
+  const portA=compoundEndpoint({
+    id:'port-a',
+    bodyId:jointBody,
+    semantic:'universal-joint-port',
+  })
+  const portB=compoundEndpoint({
+    id:'port-b',
+    bodyId:jointBody,
+    semantic:'universal-joint-port',
+    orientationBrickLab:[1,0,0,0,-1,0,0,0,-1],
+  })
+  const joint=compoundRecord({
+    bodyId:jointBody,
+    role:'universal-joint',
+    endpoints:[portA,portB],
+  })
+  const left=compoundRecord({bodyId:'left-shaft',role:'axle'})
+  const right=compoundRecord({bodyId:'right-shaft',role:'axle'})
+  const graph=createAssemblyGraph()
+  for(const id of [jointBody,'left-shaft','right-shaft'])graph.addBody(createBodyDescriptor({id}))
+
+  const discovery=discoverCompoundMechanisms({
+    records:[joint,left,right],
+    graph,
+    relations:[
+      {id:'ua',kind:'universal-joint-port',bodyA:jointBody,bodyB:'left-shaft',endpointA:'port-a',endpointB:'external-a'},
+      {id:'ub',kind:'universal-joint-port',bodyA:jointBody,bodyB:'right-shaft',endpointA:'port-b',endpointB:'external-b'},
+    ],
+  })
+
+  assert.equal(discovery.nonlinearRelations.length,1)
+  assert.equal(discovery.transmissions[0].kind,'universal-joint')
+  assert.equal(discovery.descriptors[0].status,'resolved')
+  assert.ok(discovery.descriptors[0].bendAngleRad<1e-9)
+})
+
+test('CV compound uses constant-velocity linear coupling instead of Cardan nonlinearity', () => {
+  const jointBody='cv'
+  const portA=compoundEndpoint({id:'cv-a',bodyId:jointBody,semantic:'universal-joint-port'})
+  const portB=compoundEndpoint({
+    id:'cv-b',
+    bodyId:jointBody,
+    semantic:'universal-joint-port',
+    orientationBrickLab:[1,0,0,0,-1,0,0,0,-1],
+  })
+  const cv=compoundRecord({bodyId:jointBody,role:'cv-joint',endpoints:[portA,portB]})
+  const a=compoundRecord({bodyId:'a',role:'axle'})
+  const b=compoundRecord({bodyId:'b',role:'axle'})
+  const graph=createAssemblyGraph()
+  for(const id of [jointBody,'a','b'])graph.addBody(createBodyDescriptor({id}))
+
+  const discovery=discoverCompoundMechanisms({
+    records:[cv,a,b],
+    graph,
+    relations:[
+      {id:'ca',kind:'universal-joint-port',bodyA:jointBody,bodyB:'a',endpointA:'cv-a',endpointB:'x'},
+      {id:'cb',kind:'universal-joint-port',bodyA:jointBody,bodyB:'b',endpointA:'cv-b',endpointB:'y'},
+    ],
+  })
+
+  assert.equal(discovery.nonlinearRelations.length,0)
+  assert.equal(discovery.equations.length,1)
+  assert.equal(discovery.transmissions[0].kind,'cv-joint')
+  assert.equal(discovery.transmissions[0].parameters.constantVelocity,true)
+})
+
+test('linear actuator refuses screw motion when lead is not verified', () => {
+  const graph=createAssemblyGraph()
+  for(const id of ['act','rod','input'])graph.addBody(createBodyDescriptor({id}))
+  graph.addConstraint(createConstraint({
+    id:'guide',
+    bodyA:'act',
+    bodyB:'rod',
+    kind:'prismatic',
+    metadata:{
+      semanticA:'linear-actuator-guide',
+      semanticB:'linear-actuator-guide',
+      interfacePair:['linear-actuator-guide','linear-actuator-guide'],
+    },
+    referenceFrame:{position:[0,0,0],axis:[0,1,0]},
+  }))
+  graph.addConstraint(createConstraint({
+    id:'input-key',
+    bodyA:'act',
+    bodyB:'input',
+    kind:'prismatic',
+    metadata:{
+      interfacePair:['axle','axle-hole'],
+      topology:{keyedRotation:true},
+    },
+    referenceFrame:{position:[0,0,0],axis:[0,1,0]},
+  }))
+  const discovery=discoverCompoundMechanisms({
+    records:[
+      compoundRecord({bodyId:'act',role:'linear-actuator',properties:{}}),
+      compoundRecord({bodyId:'rod',role:'connector'}),
+      compoundRecord({bodyId:'input',role:'axle'}),
+    ],
+    graph,
+  })
+  assert.equal(discovery.equations.length,0)
+  assert.equal(discovery.descriptors.find(item=>item.bodyId==='act').status,'lead-unverified')
+  assert.ok(discovery.diagnostics.some(item=>item.status==='lead-unverified'))
+})
+
+test('linear actuator emits screw relation only with verified lead metadata', () => {
+  const graph=createAssemblyGraph()
+  for(const id of ['act','rod','input'])graph.addBody(createBodyDescriptor({id}))
+  graph.addConstraint(createConstraint({
+    id:'guide',
+    bodyA:'act',
+    bodyB:'rod',
+    kind:'prismatic',
+    metadata:{
+      semanticA:'linear-actuator-guide',
+      semanticB:'linear-actuator-guide',
+      interfacePair:['linear-actuator-guide','linear-actuator-guide'],
+    },
+    referenceFrame:{position:[0,0,0],axis:[0,1,0]},
+  }))
+  graph.addConstraint(createConstraint({
+    id:'input-key',
+    bodyA:'act',
+    bodyB:'input',
+    kind:'prismatic',
+    metadata:{
+      interfacePair:['axle','axle-hole'],
+      topology:{keyedRotation:true},
+    },
+    referenceFrame:{position:[0,0,0],axis:[0,1,0]},
+  }))
+  const discovery=discoverCompoundMechanisms({
+    records:[
+      compoundRecord({
+        bodyId:'act',
+        role:'linear-actuator',
+        properties:{screwLeadStudPerTurn:.25,travelStud:3},
+      }),
+      compoundRecord({bodyId:'rod',role:'connector'}),
+      compoundRecord({bodyId:'input',role:'axle'}),
+    ],
+    graph,
+  })
+  assert.equal(discovery.equations.length,1)
+  assert.equal(discovery.transmissions[0].kind,'linear-actuator')
+  assert.equal(discovery.linearMotions[0].bodyId,'rod')
+})
+
+test('shock absorber is exported to dynamics without invented spring constants', () => {
+  const graph=createAssemblyGraph()
+  graph.addBody(createBodyDescriptor({id:'shock'}))
+  const discovery=discoverCompoundMechanisms({
+    records:[compoundRecord({bodyId:'shock',role:'shock-absorber',properties:{}})],
+    graph,
+  })
+  assert.equal(discovery.dynamics.length,1)
+  assert.equal(discovery.dynamics[0].kind,'spring-damper')
+  assert.equal(discovery.dynamics[0].springStiffness,null)
+  assert.equal(discovery.dynamics[0].damping,null)
+  assert.equal(discovery.dynamics[0].status,'awaiting-compound-decomposition')
+})
+
+test('driving ring never transmits torque without explicit engagement state', () => {
+  const graph=createAssemblyGraph()
+  for(const id of ['ring','gear'])graph.addBody(createBodyDescriptor({id}))
+  const records=[
+    compoundRecord({bodyId:'ring',role:'driving-ring'}),
+    compoundRecord({bodyId:'gear',role:'clutch-gear'}),
+  ]
+  const state=createCompoundStateRegistry()
+
+  let discovery=discoverCompoundMechanisms({records,graph,stateRegistry:state})
+  assert.equal(discovery.equations.length,0)
+  assert.equal(discovery.descriptors.find(item=>item.ringBody==='ring').status,'engagement-unresolved')
+
+  state.set('clutch:ring',{mode:'engaged',targetBodyId:'gear'})
+  discovery=discoverCompoundMechanisms({records,graph,stateRegistry:state})
+  assert.equal(discovery.equations.length,1)
+  assert.equal(discovery.transmissions[0].kind,'engaged-clutch')
+
+  state.set('clutch:ring',{mode:'disengaged'})
+  discovery=discoverCompoundMechanisms({records,graph,stateRegistry:state})
+  assert.equal(discovery.equations.length,0)
 })
