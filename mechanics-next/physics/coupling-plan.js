@@ -91,7 +91,7 @@ function linearTerm(bodyId,coefficient,motions,studMeters){
   })}
 }
 
-function convertEquation(equation,{records,graph,islands,motions,studMeters}){
+function convertEquation(equation,{records,graph,islands,motions,studMeters,nonlinearRelations}){
   if(Math.abs(Number(equation?.constant)||0)>EPS){
     return{blocker:Object.freeze({
       code:'nonzero-velocity-constraint-unsupported',
@@ -141,12 +141,20 @@ function convertEquation(equation,{records,graph,islands,motions,studMeters}){
     terms.push(term)
   }
 
+  const nonlinearRelation=equation?.metadata?.kind==='universal-joint-instantaneous'
+    ?(nonlinearRelations||[]).find(relation=>
+        relation?.kind==='universal-joint' &&
+        relation.inputBody===equation.metadata.bodyA &&
+        relation.outputBody===equation.metadata.bodyB)??null
+    :null
+
   return{coupler:Object.freeze({
     id:`physics-coupler:${equation.id}`,
     equationId:equation.id,
     kind:hasLinear?'mixed-linear-angular':'angular',
     terms:Object.freeze(terms),
     metadata:equation.metadata??null,
+    nonlinearRelation,
     sourceEquation:equation,
   })}
 }
@@ -179,6 +187,7 @@ export function buildMechanicsCouplingPlan({
       islands,
       motions,
       studMeters,
+      nonlinearRelations:discovery?.nonlinearRelations||[],
     })
     if(result.coupler)couplers.push(result.coupler)
     else if(result.blocker)blockers.push(result.blocker)
