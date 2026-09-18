@@ -274,6 +274,22 @@ export function createMechanicsNextRuntime({
       const endpointA=instanceA?.endpoints?.find(item=>item.id===metadata.endpointAId)
       const endpointB=instanceB?.endpoints?.find(item=>item.id===metadata.endpointBId)
       if(!endpointA||!endpointB)continue
+      const savedPlan=metadata.occupancy
+      if(savedPlan?.connectionId&&Array.isArray(savedPlan.exclusiveChannels)&&Array.isArray(savedPlan.axialReservations)){
+        try{
+          occupancy.reserve(Object.freeze({
+            connectionId:String(savedPlan.connectionId),
+            exclusiveChannels:Object.freeze([...savedPlan.exclusiveChannels]),
+            axialReservations:Object.freeze(savedPlan.axialReservations.map(item=>Object.freeze({
+              ...item,
+              channel:String(item.channel),
+              interval:Object.freeze([...(item.interval||[])]),
+            }))),
+          }))
+          continue
+        }catch{}
+      }
+
       const exclusive=[]
       if(endpointA.family==='cylinder'&&endpointB.family==='cylinder'){
         if(endpointA.gender==='female')exclusive.push(endpointChannel(edge.bodyA,endpointA.id))
