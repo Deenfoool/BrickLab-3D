@@ -47,6 +47,14 @@ export function evaluateMechanicsMigrationGate({
     decomposition??{reason:'decomposition-registry-unavailable'},
   ))
 
+  const compoundOwnership=runtimeStatus?.compoundEndpointOwnership
+    ??runtimeStatus?.lastSceneSync?.compoundEndpointOwnership
+  checks.push(check(
+    'compound-endpoint-ownership',
+    Boolean(compoundOwnership)&&Number(compoundOwnership.unresolvedCount||0)===0,
+    compoundOwnership??{reason:'compound-endpoint-ownership-unavailable'},
+  ))
+
   const transmissionDiagnostics=runtimeStatus?.lastSceneSync?.transmissions?.diagnostics
     ??runtimeStatus?.transmissionCompiler?.diagnostics
     ??{}
