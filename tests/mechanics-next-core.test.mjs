@@ -4230,6 +4230,8 @@ test('physics isolation audit requires every final legacy writer to declare nati
     'createJoint',
     'applyMotorTorques',
     'applyGearCouplingTorques',
+    'initializeSuspensionJointsV1',
+    'initializeParts4LinearMechanisms',
     'updateSuspensionV2',
     'updateVehicleControlsV1',
   ]){
