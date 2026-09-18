@@ -603,7 +603,6 @@ export function createMechanicsNextRuntime({
       nativeRestoredRelations=result.relations??Object.freeze([])
       restoreCompoundStateSnapshot(result.compoundState)
       nativeProjectAuthoritative=result.rejected===0
-      if(nativeProjectAuthoritative)publishBuildOwnership('native-project-restore')
       lastPersistenceReport=persistenceCompatibilityReport({
         exportedState:state,
         restoredResult:result,
@@ -664,13 +663,17 @@ export function createMechanicsNextRuntime({
       return result
     },
     adoptNativeProjectOwnership() {
-      if(nativeProjectAuthoritative)return Object.freeze({
-        accepted:true,
-        alreadyOwned:true,
-        state:api.exportProjectState(),
-      })
       const gate=api.migrationGate()
       if(!gate.pass)return Object.freeze({accepted:false,reason:'migration-gate-blocked',gate})
+      if(nativeProjectAuthoritative){
+        publishBuildOwnership('validated-native-project')
+        return Object.freeze({
+          accepted:true,
+          alreadyOwned:true,
+          gate,
+          state:api.exportProjectState(),
+        })
+      }
       const state=api.exportProjectState()
       connectionInterpreter?.sync?.([])
       nativeRestoredRelations=Object.freeze([...(state.relations||[])])
