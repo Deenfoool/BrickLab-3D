@@ -1,4 +1,5 @@
 import { createConstraint } from '../constraints/dof.js'
+import { deterministicId } from '../core/model.js'
 import { rigidPoseFromMatrix4 } from '../math/rigid.js'
 import { worldConnectorFrame } from '../connectors/world-frame.js'
 import { endpointSemanticKind } from '../intelligence/endpoint-semantics.js'
@@ -36,8 +37,17 @@ export function exportMechanicsProjectState({
     const a=endpointRecord(edge,'a')
     const b=endpointRecord(edge,'b')
     if(!a.instanceId||!b.instanceId||!a.endpointId||!b.endpointId)continue
+    const observedConnectionId=edge.metadata?.observedConnectionId ??
+      deterministicId(
+        'observed-link',
+        ...[
+          `${a.instanceId}::${a.observedEndpointId??a.endpointId}`,
+          `${b.instanceId}::${b.observedEndpointId??b.endpointId}`,
+        ].sort(),
+      )
     connections.push(Object.freeze({
       id:edge.id,
+      observedConnectionId,
       kind:edge.constraintKind??edge.kind,
       a,b,
       dof:clone(edge.dof),
@@ -158,6 +168,7 @@ export function restoreMechanicsProjectState(state,{
 
   let restored=0
   const failures=[]
+  const createdIds=[]
   for(const record of state.connections){
     const left=instanceEndpoint(sceneObserver,record.a.instanceId,record.a.endpointId)
     const right=instanceEndpoint(sceneObserver,record.b.instanceId,record.b.endpointId)
@@ -239,6 +250,7 @@ export function restoreMechanicsProjectState(state,{
         },
         evidence:clone(current.evidence??record.evidence),
       }))
+      createdIds.push(record.id)
       restored+=1
     }catch(error){
       failures.push(Object.freeze({
@@ -249,9 +261,18 @@ export function restoreMechanicsProjectState(state,{
     }
   }
 
+  let rolledBack=0
+  if(failures.length){
+    for(const id of createdIds){
+      if(graph.removeEdge(id))rolledBack+=1
+    }
+    restored=0
+  }
+
   return Object.freeze({
     restored,
     rejected:failures.length,
+    rolledBack,
     failures:Object.freeze(failures),
     relations:Object.freeze(clone(state.relations||[])),
     compoundState:clone(state.compoundState??null),
