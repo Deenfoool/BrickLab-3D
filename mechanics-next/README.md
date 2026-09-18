@@ -100,3 +100,11 @@ M0 establishes a safe parallel foundation:
 - observe-only browser runtime.
 
 No production ownership is transferred in M0.
+
+
+## Research baseline
+
+Mechanical semantics are grounded in an evidence hierarchy rather than part-ID guesses.
+See [research/lego-mechanical-semantics.md](./research/lego-mechanical-semantics.md).
+
+The implementation rule is: geometry defines topology, friction defines resistance, retention defines disengagement, and multiple contacts compose before rigidity is decided.
