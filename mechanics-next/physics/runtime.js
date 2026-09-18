@@ -17,6 +17,7 @@ import { buildMechanicsMotorPlan, createMechanicsMotorRuntime } from './motor-ru
 import { buildMechanicsVehiclePlan } from './vehicle-plan.js'
 import { buildMechanicsSteeringPlan, materializeMechanicsSteeringBindings } from './steering-bridge.js'
 import { createMechanicsSuspensionRuntime } from './suspension-runtime.js'
+import { createLiveJointValidator } from './live-joint-validator.js'
 import {
   applyMechanicsJointResistance,
   validateAndReleaseMechanicsJoints,
@@ -31,6 +32,7 @@ export function createMechanicsPhysicsRuntime({
   records=[],
   worldUnitsPerStud=.008,
   controlState=null,
+  onJointRelease=null,
 }={}){
   const compoundMemberPlan=buildCompoundMemberPhysicsPlan({records,discovery})
   const compoundGraphExpansion=expandCompoundPhysicsGraph({
@@ -156,6 +158,7 @@ export function createMechanicsPhysicsRuntime({
       let motors=null
       let steering=null
       let suspension=null
+      let liveValidator=null
 
       try{
         if(compoundMemberPlan.replacements.length){
@@ -218,6 +221,10 @@ export function createMechanicsPhysicsRuntime({
           error.failures=suspension.failures
           throw error
         }
+        liveValidator=createLiveJointValidator({
+          graph:structuralGraph,
+          records,
+        })
       }catch(error){
         if(joints)disposeRapierMechanicsPlan(session,joints)
         if(compoundMembers)disposeCompoundMemberPhysics(session,compoundMembers)
@@ -233,6 +240,7 @@ export function createMechanicsPhysicsRuntime({
         motors,
         steering,
         suspension,
+        liveValidator,
         disposed:false,
         lastCouplingStep:null,
         lastResistanceStep:null,
@@ -275,12 +283,25 @@ export function createMechanicsPhysicsRuntime({
       confirmReleaseFrames=2,
     }={}){
       if(!installed||installed.disposed)return Object.freeze({installed:false})
+      const validator=typeof validateJoint==='function'
+        ?validateJoint
+        :installed.liveValidator?.validateJoint
       const release=validateAndReleaseMechanicsJoints(
         installed.session,
         installed.joints,
-        {validateJoint,confirmFrames:confirmReleaseFrames},
+        {validateJoint:validator,confirmFrames:confirmReleaseFrames},
       )
-      if(release.events.length)installed.releaseEvents.push(...release.events)
+      if(release.events.length){
+        installed.releaseEvents.push(...release.events)
+        if(typeof onJointRelease==='function'){
+          for(const event of release.events){
+            try{onJointRelease(event)}
+            catch(error){
+              console.warn('[BrickLab Mechanics Next] Joint release callback failed.',error)
+            }
+          }
+        }
+      }
       return Object.freeze({
         installed:true,
         release,
@@ -326,6 +347,10 @@ export function createMechanicsPhysicsRuntime({
         }),
         lastCouplingStep:installed?.lastCouplingStep??null,
         lastResistanceStep:installed?.lastResistanceStep??null,
+        releaseValidation:Object.freeze({
+          prepared:installed?.liveValidator?.prepared?.length??0,
+          enabled:Boolean(installed?.liveValidator),
+        }),
         releaseEvents:Object.freeze([...(installed?.releaseEvents||[])]),
       })
     },
