@@ -4,11 +4,13 @@ import { createAssemblyGraph } from './topology/assembly-graph.js'
 import { createKinematicSolver } from './solver/kinematic-solver.js'
 import {
   assertLegacyReadOnly,
-  createLegacyConnectivityObservationProvider,
+  snapshotLegacyPartConnectivity,
   snapshotLegacyV4,
 } from './adapters/legacy-v4-readonly.js'
 import { createCatalogObservationProvider } from './adapters/catalog-readonly.js'
 import { createPartIntelligenceRegistry } from './intelligence/registry.js'
+import { createNativeConnectivityProvider } from './ldraw/native-connectivity-provider.js'
+import { compareNativeToLegacyConnectivity, ConnectivityParityLedger } from './diagnostics/native-v4-parity.js'
 import { createSceneMechanicalObserver } from './intelligence/scene-observer.js'
 import { createShadowConnectionInterpreter } from './intelligence/connection-interpreter.js'
 import { rigidPoseFromMatrix4 } from './math/rigid.js'
@@ -44,9 +46,32 @@ export function createMechanicsNextRuntime({
   const catalog = subsystems?.parts
     ? createCatalogObservationProvider(subsystems)
     : null
-  const connectivity = createLegacyConnectivityObservationProvider(legacyProvider)
+  const parityLedger=new ConnectivityParityLedger()
+  let connectivity=null
+  connectivity=catalog&&globals.BrickLabLDraw?.readText
+    ?createNativeConnectivityProvider({
+        parts:subsystems.parts,
+        ldraw:globals.BrickLabLDraw,
+        onUpdate(partId,value){
+          intelligence?.invalidate?.(partId)
+          sceneObserver?.invalidatePart?.(partId)
+          if(value?.status==='ready'){
+            const legacy=snapshotLegacyPartConnectivity(legacyProvider,partId)
+            if(legacy.status==='ready'){
+              parityLedger.record(compareNativeToLegacyConnectivity({
+                partId,
+                nativeConnectors:value.connectors,
+                legacyConnectors:legacy.connectors,
+              }))
+              parityEvidence=parityLedger.summary()
+            }
+          }
+          scheduleSceneSync()
+        },
+      })
+    :null
 
-  const intelligence = catalog
+  const intelligence = catalog&&connectivity
     ? createPartIntelligenceRegistry({ catalog, connectivity })
     : null
 
@@ -103,7 +128,10 @@ export function createMechanicsNextRuntime({
         const elements = object.matrixWorld?.elements
         if (!elements) continue
         const pose = rigidPoseFromMatrix4(Array.from(elements))
-        const connectivitySnapshot = connectivity.get(instance.body.partId)
+        const visual=object.children?.find?.(child=>child?.userData?.ldrawVisual)
+        const visualOffsetStud=visual?.position
+          ?[visual.position.x,visual.position.y,visual.position.z]
+          :[0,0,0]
         const compoundDecomposition=compoundDecompositions?.cached(instanceId) ?? null
         const compoundSceneMap=compoundDecomposition
           ?mapDecompositionToScene(object,compoundDecomposition)
@@ -111,11 +139,7 @@ export function createMechanicsNextRuntime({
         const baseRecord={
           instance,
           pose,
-          visualOffsetStud:Object.freeze(
-            Array.isArray(connectivitySnapshot?.visualOffsetStud)
-              ? [...connectivitySnapshot.visualOffsetStud]
-              : [0,0,0],
-          ),
+          visualOffsetStud:Object.freeze([...visualOffsetStud]),
           compoundDecomposition,
           compoundSceneMap,
           object,
@@ -151,6 +175,7 @@ export function createMechanicsNextRuntime({
     }
     refreshLegacySnapshot()
     const scene = sceneObserver.sync()
+    void connectivity?.prefetch?.(sceneObserver.instances().map(instance=>instance.body.partId))
     void compoundDecompositions?.prefetch?.(sceneObserver.instances())
     const connections = connectionInterpreter?.sync(legacySnapshot.connections) ?? null
     const records = mechanicalRecords()
@@ -397,6 +422,8 @@ export function createMechanicsNextRuntime({
         legacySystemVersion:legacySnapshot.systemVersion,
         legacyConnections:legacySnapshot.connections.length,
         partIntelligence:intelligence?.stats?.() ?? null,
+        nativeConnectivity:connectivity?.stats?.() ?? null,
+        nativeParity:parityLedger.summary(),
         scene:sceneObserver?.stats?.() ?? null,
         interpretedConnections:connectionInterpreter?.stats?.() ?? null,
         transmissionCompiler:transmissionCompiler.snapshot(),
