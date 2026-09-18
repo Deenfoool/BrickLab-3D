@@ -91,6 +91,30 @@ test('BUILD and SIMULATE authority remain delegated to Connector V4 and its fail
   assert.deepEqual(calls, [['remove','a']])
 })
 
+test('Architecture authority reports Mechanics Next after native BUILD and physics handoff', () => {
+  const globals = {
+    BrickLabConnectorV4:{
+      objects:() => [],
+      projectConnections:() => [],
+    },
+    BrickLabConnectorV4PhysicsGuard:{
+      active:true,
+      createOwner:'guard-v4',
+    },
+    BrickLabMechanicsNextBuildOwner:{
+      active:true,
+      authoritative:() => true,
+    },
+    BrickLabMechanicsNextPhysicsOwner:{
+      active:true,
+      createOwner:'mechanics-next-physics-owner-0.1.0',
+    },
+  }
+  const api=createBrickLabSubsystemApi({globals})
+  assert.equal(api.connectivity.authority.build,'mechanics-next-build-owner')
+  assert.equal(api.connectivity.authority.simulate,'mechanics-next-physics-owner')
+})
+
 test('Editor-facing contract is bindable incrementally and supplies identity/group/history access through one boundary', () => {
   const objects = [{ userData:{ instanceId:'a', partId:'fixture', groupId:'g' } }]
   const selection = [objects[0]]
