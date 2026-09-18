@@ -504,7 +504,8 @@ export function createMechanicsNextRuntime({
       graph,
       discovery,
       records,
-      worldUnitsPerStud:1,
+      worldUnitsPerStud:.008,
+      controlState:instanceId=>globals.BrickLabControls?.getRuntime?.(instanceId)??null,
     })
     lastSceneSync = Object.freeze({
       scene,
