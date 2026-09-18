@@ -232,6 +232,66 @@ function shockPrismaticSemantics({
   })
 }
 
+function suspensionArmRevoluteSemantics({
+  endpointA,
+  endpointB,
+  classificationA,
+  classificationB,
+  worldFrameA,
+  worldFrameB,
+}={}){
+  const propsA=classificationA?.properties||{}
+  const propsB=classificationB?.properties||{}
+  const armSide=propsA.suspensionArm?'a':propsB.suspensionArm?'b':null
+  if(!armSide)return null
+  const armProps=armSide==='a'?propsA.suspensionArm:propsB.suspensionArm
+  const armEndpoint=armSide==='a'?endpointA:endpointB
+  if(endpointSourceId(armEndpoint)!==String(armProps.pivotConnectorId??'pivot'))return null
+
+  const referenceAxis=worldFrameA?.axis
+  const armAxis=(armSide==='a'?worldFrameA:worldFrameB)?.axis
+  if(!referenceAxis||!armAxis)return null
+  const dot=
+    referenceAxis[0]*armAxis[0]+
+    referenceAxis[1]*armAxis[1]+
+    referenceAxis[2]*armAxis[2]
+  const alignment=dot>=0?1:-1
+  const coordinateSign=(armSide==='a'?-1:1)*alignment
+
+  const maxAngleRaw=Number(armProps.maxAngle)
+  const maxAngle=Number.isFinite(maxAngleRaw)&&maxAngleRaw>0
+    ?maxAngleRaw:Math.PI*55/180
+  const minAngleRaw=Number(armProps.minAngle)
+  const physicalMin=Number.isFinite(minAngleRaw)?minAngleRaw:-maxAngle
+  const physicalMax=maxAngle
+  const first=physicalMin*coordinateSign
+  const second=physicalMax*coordinateSign
+
+  return Object.freeze({
+    kind:'suspension-arm-revolute',
+    armSide,
+    coordinateSign,
+    limits:Object.freeze([Math.min(first,second),Math.max(first,second)]),
+    physicalMinAngle:physicalMin,
+    physicalMaxAngle:physicalMax,
+    restAngle:(Number(armProps.restAngle)||0)*coordinateSign,
+    preload:(Number(armProps.preload)||0)*coordinateSign,
+    stiffness:Number.isFinite(Number(armProps.stiffness))
+      ?Math.max(0,Number(armProps.stiffness)):.12,
+    damping:Number.isFinite(Number(armProps.damping))
+      ?Math.max(0,Number(armProps.damping)):.01,
+    springRate:Number.isFinite(Number(armProps.springRate))
+      ?Math.max(0,Number(armProps.springRate)):null,
+    compressionDamping:Number.isFinite(Number(armProps.compressionDamping))
+      ?Math.max(0,Number(armProps.compressionDamping)):null,
+    reboundDamping:Number.isFinite(Number(armProps.reboundDamping))
+      ?Math.max(0,Number(armProps.reboundDamping)):null,
+    bumpStop:Number.isFinite(Number(armProps.bumpStop))
+      ?Math.min(.999,Math.max(0,Number(armProps.bumpStop))):.88,
+    armEndpointId:armEndpoint.id,
+  })
+}
+
 function steeringRackPrismaticSemantics({
   endpointA,
   endpointB,
@@ -453,6 +513,16 @@ export function interpretObservedConnection(record, {
     worldFrameA.axis[1]*worldFrameB.axis[1]+
     worldFrameA.axis[2]*worldFrameB.axis[2]
   const axisPolarity=axisDot>=0?1:-1
+  const suspension=resolved.rule.kind==='revolute'
+    ?suspensionArmRevoluteSemantics({
+        endpointA,
+        endpointB,
+        classificationA:instanceA.descriptor.classification,
+        classificationB:instanceB.descriptor.classification,
+        worldFrameA,
+        worldFrameB,
+      })
+    :null
   const shock=resolved.rule.kind==='prismatic'
     ?shockPrismaticSemantics({
         endpointA,
@@ -474,17 +544,43 @@ export function interpretObservedConnection(record, {
       })
     :null
   const limitedTravel=shock??steeringRack
-  const constraintDofValue=limitedTravel
+  const constraintDofValue=suspension
     ?Object.freeze({
         ...resolved.rule.topology.dof,
-        ty:dofEntry('limited',{
-          limits:[...limitedTravel.limits],
-          source:shock?'mechanics-next:shock-travel':'mechanics-next:steering-rack-travel',
+        ry:dofEntry('limited',{
+          limits:[...suspension.limits],
+          source:'mechanics-next:suspension-arm-travel',
         }),
       })
-    :resolved.rule.topology.dof
-  const constraintDynamics=shock
+    :limitedTravel
+      ?Object.freeze({
+          ...resolved.rule.topology.dof,
+          ty:dofEntry('limited',{
+            limits:[...limitedTravel.limits],
+            source:shock?'mechanics-next:shock-travel':'mechanics-next:steering-rack-travel',
+          }),
+        })
+      :resolved.rule.topology.dof
+  const constraintDynamics=suspension
     ?Object.freeze({
+        ...resolved.rule.dynamics,
+        suspensionMotor:Object.freeze({
+          coordinateSign:suspension.coordinateSign,
+          restAngle:suspension.restAngle,
+          preload:suspension.preload,
+          stiffness:suspension.stiffness,
+          damping:suspension.damping,
+          springRate:suspension.springRate,
+          compressionDamping:suspension.compressionDamping,
+          reboundDamping:suspension.reboundDamping,
+          bumpStop:suspension.bumpStop,
+          physicalMinAngle:suspension.physicalMinAngle,
+          physicalMaxAngle:suspension.physicalMaxAngle,
+          source:'bricklab-explicit-suspension-arm-metadata',
+        }),
+      })
+    :shock
+      ?Object.freeze({
         ...resolved.rule.dynamics,
         axialResistance:'spring-damper',
         springMotor:Object.freeze({
@@ -507,15 +603,22 @@ export function interpretObservedConnection(record, {
           }),
         })
       :resolved.rule.dynamics
-  const constraintTopology=limitedTravel
+  const constraintTopology=suspension
     ?Object.freeze({
         ...resolved.rule.topology,
         dof:constraintDofValue,
-        shock:Boolean(shock),
-        steeringRack:Boolean(steeringRack),
-        travelLimitsStud:limitedTravel.limits,
+        suspensionArm:true,
+        angularLimits:suspension.limits,
       })
-    :resolved.rule.topology
+    :limitedTravel
+      ?Object.freeze({
+          ...resolved.rule.topology,
+          dof:constraintDofValue,
+          shock:Boolean(shock),
+          steeringRack:Boolean(steeringRack),
+          travelLimitsStud:limitedTravel.limits,
+        })
+      :resolved.rule.topology
   const tier = resolved.rule.evidence?.tier || 'D'
   const constraint = createConstraint({
     id:deterministicId('constraint', record.id, instanceA.body.id, instanceB.body.id),
@@ -539,6 +642,7 @@ export function interpretObservedConnection(record, {
       semanticB:resolved.kindB,
       dynamics:constraintDynamics,
       topology:constraintTopology,
+      suspension,
       shock,
       steeringRack,
       legacyMatchFamily:record?.match?.family ?? null,
