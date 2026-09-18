@@ -79,6 +79,67 @@ export function createMechanicsNextRuntime({
     return result
   }
 
+  const migrationParitySummary=partIds=>{
+    const ids=[...new Set((partIds||[]).map(String).filter(Boolean))]
+    let semanticPass=0,geometryPass=0,semanticFail=0,geometryFail=0
+    let nativeOnly=0,compared=0,nativeUnavailable=0,referenceUnavailable=0
+    const failures=[]
+
+    for(const partId of ids){
+      const native=connectivity?.get?.(partId)
+      if(native?.status!=='ready'){
+        nativeUnavailable+=1
+        semanticFail+=1
+        geometryFail+=1
+        failures.push(Object.freeze({partId,reason:'native-connectivity-not-ready',status:native?.status??null}))
+        continue
+      }
+
+      const def=subsystems?.parts?.get?.(partId)
+      if(!def?.ldraw?.file){
+        nativeOnly+=1
+        semanticPass+=1
+        geometryPass+=1
+        continue
+      }
+
+      const legacy=snapshotLegacyPartConnectivity(legacyProvider,partId)
+      if(legacy.status!=='ready'){
+        referenceUnavailable+=1
+        semanticFail+=1
+        geometryFail+=1
+        failures.push(Object.freeze({partId,reason:'v4-reference-not-ready',status:legacy.status}))
+        continue
+      }
+
+      const parity=parityLedger.get(partId)??refreshParityForPart(partId)
+      compared+=1
+      if(parity?.semanticParity)semanticPass+=1
+      else{
+        semanticFail+=1
+        failures.push(Object.freeze({partId,reason:'semantic-parity-failed'}))
+      }
+      if(parity?.geometryParity)geometryPass+=1
+      else{
+        geometryFail+=1
+        failures.push(Object.freeze({partId,reason:'geometry-parity-failed'}))
+      }
+    }
+
+    return Object.freeze({
+      parts:ids.length,
+      compared,
+      nativeOnly,
+      nativeUnavailable,
+      referenceUnavailable,
+      semanticPass,
+      geometryPass,
+      semanticFail,
+      geometryFail,
+      failures:Object.freeze(failures),
+    })
+  }
+
   const sceneObserver = intelligence
     ? createSceneMechanicalObserver({
         registry:intelligence,
@@ -311,6 +372,7 @@ export function createMechanicsNextRuntime({
       sceneObserver.sync(objects)
       await compoundDecompositions?.prefetch?.(sceneObserver.instances())
       for(const instance of sceneObserver.instances())refreshParityForPart(instance.body.partId)
+      parityEvidence=migrationParitySummary(sceneObserver.instances().map(instance=>instance.body.partId))
       const refreshed=syncScene()
       return Object.freeze({
         ...api.migrationGate(),
