@@ -52,6 +52,7 @@ export function buildMechanicsSteeringPlan({
 
   const entries=[]
   const diagnostics=[]
+  const blockers=[]
   for(const record of records){
     const steering=record?.instance?.descriptor?.classification?.properties?.steeringKnuckle
     if(!steering)continue
@@ -65,7 +66,7 @@ export function buildMechanicsSteeringPlan({
     const physicsJoint=pivotEdge?jointsByConstraint.get(String(pivotEdge.id)):null
 
     if(!pivotEndpoint||!bearingEndpoint||!pivotEdge||!bearingEdge||!wheelRecord||!physicsJoint){
-      diagnostics.push(Object.freeze({
+      const detail=Object.freeze({
         knuckleBodyId,
         knuckleInstanceId:record.instance.body.instanceId,
         status:'incomplete',
@@ -75,17 +76,26 @@ export function buildMechanicsSteeringPlan({
         bearingConstraintId:bearingEdge?.id??null,
         wheelBodyId,
         physicsJointId:physicsJoint?.id??null,
-      }))
+      })
+      diagnostics.push(detail)
+      if(pivotEdge&&bearingEdge&&!physicsJoint){
+        blockers.push(Object.freeze({
+          code:'steering-physical-joint-unavailable',
+          ...detail,
+        }))
+      }
       continue
     }
     if(physicsJoint.kind!=='revolute'){
-      diagnostics.push(Object.freeze({
+      const detail=Object.freeze({
         knuckleBodyId,
         status:'pivot-not-revolute',
         pivotConstraintId:pivotEdge.id,
         physicsJointId:physicsJoint.id,
         jointKind:physicsJoint.kind,
-      }))
+      })
+      diagnostics.push(detail)
+      blockers.push(Object.freeze({code:'steering-pivot-not-revolute',...detail}))
       continue
     }
     if(!wheelRecord.instance.descriptor.classification.properties?.wheel){
@@ -120,12 +130,15 @@ export function buildMechanicsSteeringPlan({
 
   return Object.freeze({
     version:MECHANICS_STEERING_BRIDGE_VERSION,
+    pass:blockers.length===0,
     entries:Object.freeze(entries),
+    blockers:Object.freeze(blockers),
     diagnostics:Object.freeze(diagnostics),
     stats:Object.freeze({
       candidates:diagnostics.length,
       resolved:entries.length,
       incomplete:diagnostics.filter(item=>item.status!=='resolved').length,
+      blockers:blockers.length,
     }),
   })
 }
