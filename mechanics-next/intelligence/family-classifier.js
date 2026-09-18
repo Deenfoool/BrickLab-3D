@@ -177,6 +177,7 @@ export function classifyPartFamily(observation, endpoints = []) {
     (Number(observation?.legacyMechanicalIntelligence?.properties?.lengthL) || null)
 
   const legacyGear=observation?.legacyMechanics?.gear
+  const legacyWheel=observation?.legacyMechanics?.wheel
   const legacyMotor=observation?.legacyMechanics?.motor
   const legacyTransmission=observation?.legacyMechanics?.transmission
   const legacyDifferential=observation?.legacyMechanics?.differential
@@ -296,6 +297,16 @@ export function classifyPartFamily(observation, endpoints = []) {
     ...(Number.isFinite(teeth) && teeth > 0 ? { toothCount:teeth } : {}),
     ...(Number.isFinite(lengthL) && lengthL > 0 ? { lengthL } : {}),
     ...(gearGeometry ? { gearGeometry } : {}),
+    ...(legacyWheel&&typeof legacyWheel==='object'&&Number.isFinite(Number(legacyWheel.radius))
+      ?{wheel:Object.freeze({
+          radiusStud:Number(legacyWheel.radius),
+          widthStud:Number.isFinite(Number(legacyWheel.width))?Number(legacyWheel.width):null,
+          tire:legacyWheel.tire&&typeof legacyWheel.tire==='object'
+            ?Object.freeze({...legacyWheel.tire})
+            :null,
+          source:'bricklab-explicit-wheel-metadata',
+        })}
+      :{}),
     ...(packagedTransmission ? { packagedTransmission } : {}),
     ...(packagedDifferential ? { packagedDifferential } : {}),
     ...(rackGeometry ? { rackGeometry } : {}),
