@@ -169,6 +169,7 @@ export function differentialEquation({
 export function differentialSpiderEquation({
   id,
   spider,
+  carrier = null,
   left,
   right,
   spiderRatio = 1,
@@ -193,7 +194,7 @@ export function differentialSpiderEquation({
     0,
     {
       kind:'differential-spider-spin',
-      spider,left,right,
+      spider,carrier,left,right,
       spiderRatio,sideRatio,directionSign:sign,channel,
       frame:'carrier-relative',
     },
