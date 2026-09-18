@@ -4530,6 +4530,7 @@ test('native connectivity retains every verified differential assembly seat with
   const housing=await provider.hydrate('ldraw-62821')
   const gear=await provider.hydrate('ldraw-6589')
   assert.equal(housing.connectors.length,3)
+  assert.equal(new Set(housing.connectors.map(c=>c.id)).size,3)
   assert.equal(gear.connectors.length,1)
   for(const [index,connector] of housing.connectors.entries()){
     const endpoint=enrichEndpointSemantics(provider.toEndpoint(connector,{bodyId:'carrier',index}))

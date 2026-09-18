@@ -19,6 +19,12 @@ function freezeRule(rule) {
 }
 
 export const INTERFACE_RULES = Object.freeze({
+  'differential-internal-interface:differential-internal-interface':freezeRule({
+    kind:'revolute',
+    topology:{ dof:constraintDof('revolute'), axis:'y', retained:true },
+    dynamics:{ rotationalResistance:'low' },
+    evidence:{ tier:'B', source:'Verified LDraw differential assembly seat geometry' },
+  }),
   'stud:anti-stud':freezeRule({
     kind:'revolute',
     topology:{ dof:constraintDof('revolute'), axis:'y', bundleCanBecomeRigid:true, retained:true },

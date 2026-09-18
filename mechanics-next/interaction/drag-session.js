@@ -87,7 +87,9 @@ export class MechanicsDragSession{
       displacementResult:solved.solution,
     })
 
-    const application=apply&&solved.solution.valid
+    // A valid linear system can still have free variables. Its arbitrary zero
+    // particular solution is diagnostic data, not an authorized scene motion.
+    const application=apply&&solved.solution.valid&&solved.solution.status==='solved'
       ?applyMotionPlanToBaseline(plan,this.#baseline)
       :Object.freeze({applied:0,missing:Object.freeze([]),invalid:Object.freeze([])})
 

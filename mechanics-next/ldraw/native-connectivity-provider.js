@@ -237,7 +237,10 @@ export function createNativeConnectivityProvider({
       const fixtures=discoverDifferentialFixturesV4(file)
       const finalized=finalizeNativeConnectors(result.file||file,[
         ...(result.connectors||[]),
-        ...fixtures.connectors,
+        ...fixtures.connectors.map((connector,index)=>({
+          ...connector,
+          id:`verified:${connector.discovery.role}:${index}`,
+        })),
       ])
       const value=Object.freeze({
         status:'ready',

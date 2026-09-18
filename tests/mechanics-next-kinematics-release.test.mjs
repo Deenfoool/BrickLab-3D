@@ -14,6 +14,8 @@ import {
   rigidRotationEquation,
 } from '../mechanics-next/transmission/equations.js'
 import { solveRotationalDrag } from '../mechanics-next/interaction/drag-driver.js'
+import { createMechanicsDragSession } from '../mechanics-next/interaction/drag-session.js'
+import * as THREE from 'three'
 
 function directEndpoint({id,bodyId,axis='y'}={}){
   const orientation=axis==='x'
@@ -266,4 +268,18 @@ test('real discovery links external 20T bevel to the 28T carrier and drag propag
   assert.ok(
     Math.abs(result.values[mechanicalVariable('real-right12','theta')]-carrierTheta)<1e-9,
   )
+})
+
+test('a side-port mouse drag does not apply an arbitrary differential particular solution',()=>{
+  const records=['carrier28','left12','right12'].map(bodyId=>{
+    const record=bevelRecord({bodyId,teeth:12})
+    record.object=new THREE.Group()
+    return record
+  })
+  const session=createMechanicsDragSession({records,discovery:openDifferentialDiscovery(),instanceId:'left12-instance',start:[20,0],pivot:[0,0],balancedDifferentials:'auto'})
+  const before=records.map(r=>({p:r.object.position.toArray(),q:r.object.quaternion.toArray()}))
+  const result=session.update([0,20],{apply:true})
+  assert.equal(result.solution.status,'underdetermined')
+  assert.equal(result.application.applied,0)
+  assert.deepEqual(records.map(r=>({p:r.object.position.toArray(),q:r.object.quaternion.toArray()})),before)
 })
