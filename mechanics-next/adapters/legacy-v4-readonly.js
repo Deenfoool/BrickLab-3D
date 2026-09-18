@@ -118,3 +118,61 @@ export function assertLegacyReadOnly(snapshot) {
   }
   return true
 }
+
+
+export function snapshotLegacyPartConnectivity(provider, partId) {
+  if (!provider || typeof provider.get !== 'function' || !partId) {
+    return Object.freeze({
+      available:false,
+      status:'unavailable',
+      partId:partId ?? null,
+      connectors:Object.freeze([]),
+    })
+  }
+
+  try {
+    const value = provider.get(partId)
+    if (!value) {
+      return Object.freeze({
+        available:true,
+        status:'missing',
+        partId:String(partId),
+        connectors:Object.freeze([]),
+      })
+    }
+    const frozen = readonlyClone(value)
+    return Object.freeze({
+      available:true,
+      partId:String(partId),
+      status:frozen.status ?? 'unknown',
+      schemaVersion:frozen.schemaVersion ?? null,
+      systemVersion:frozen.systemVersion ?? null,
+      connectors:Object.freeze(Array.isArray(frozen.connectors) ? frozen.connectors : []),
+      warnings:Object.freeze(Array.isArray(frozen.warnings) ? frozen.warnings : []),
+      stats:frozen.stats ?? null,
+      health:frozen.health ?? null,
+    })
+  } catch (error) {
+    return Object.freeze({
+      available:false,
+      status:'error',
+      partId:String(partId),
+      connectors:Object.freeze([]),
+      error:String(error?.message || error),
+    })
+  }
+}
+
+export function createLegacyConnectivityObservationProvider(provider) {
+  return Object.freeze({
+    get(partId) {
+      return snapshotLegacyPartConnectivity(provider, partId)
+    },
+    toEndpoint(connector, options) {
+      return legacyV4ConnectorToEndpoint(connector, options)
+    },
+    available() {
+      return Boolean(provider && typeof provider.get === 'function')
+    },
+  })
+}
