@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { access, readFile } from 'node:fs/promises'
 
 const root = new URL('../', import.meta.url)
-const ENTRY_TAG = 'parts-6-20260910-audio-v1'
+const ENTRY_TAG = 'runtime-27-mechanics-next-stage11-20260918-v1'
 const TAG = 'parts-6-20260909-realism-v1'
 const FINAL_MODULES = [
   'realism-refinement-v1',
@@ -138,7 +138,7 @@ test('PARTS-6 build metadata and root cache tag agree', async () => {
   const html = await readFile(new URL('index.html', root), 'utf8')
   const bootstrap = await readFile(new URL('bootstrap.js', root), 'utf8')
   assert.match(badge, /const BUILD_ID = 'PARTS-6'/)
-  assert.match(badge, new RegExp(`const BUILD_TAG = '${ENTRY_TAG}'`))
+  assert.match(badge, /const BUILD_TAG = new URL\(import\.meta\.url\)\.searchParams\.get\('v'\) \|\| 'unversioned-runtime'/)
   assert.match(versioner, new RegExp(`process\\.argv\\[2\\] \\?\\? '${ENTRY_TAG}'`))
   assert.match(html, new RegExp(`bootstrap\\.js\\?v=${ENTRY_TAG}`))
   assert.match(html, new RegExp(`runtime-extensions\\.js\\?v=${ENTRY_TAG}`))
