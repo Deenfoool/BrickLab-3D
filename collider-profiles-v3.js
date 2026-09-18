@@ -1,3 +1,4 @@
+import { explicitPinHoleClearanceProfile } from './collider-hole-clearance.js'
 import * as THREE from 'three'
 import { classifyTechnicPinInterfaceV4 } from './connectors-v4/pin-semantics-v4.js?v=connector-pin-gender-20260912-v1'
 
@@ -195,7 +196,7 @@ function finiteVector3(value) {
 }
 
 function explicitColliderProfile(definition) {
-  const source = definition?.physics?.colliderProfile
+  const source = explicitPinHoleClearanceProfile(definition)
   if (!source || !Array.isArray(source.specs) || !source.specs.length) return null
   const specs = []
 

@@ -131,6 +131,7 @@ function addPinHoleFinish(group, x, y, depth, color) {
   )
   for (const side of [-1, 1]) {
     const ring = visualOnly(new THREE.Mesh(counterbore, shade(color, 0.78)))
+    ring.scale.z = 0.7
     ring.position.set(x, y, side * (depth / 2 + 0.004))
     group.add(ring)
   }

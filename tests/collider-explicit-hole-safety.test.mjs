@@ -12,7 +12,8 @@ await import('../basic-parts-pack.js')
 await import('../technic-parts-pack-v2.js')
 await import('../parts5/detail-refinement-v3.js')
 await import('../parts6/interface-fit-refinement-v2.js')
-const safety = await import('../parts6/interface-physics-safety-v1.js')
+await import('../parts6/interface-physics-safety-v1.js')
+const safety = await import('../collider-hole-clearance.js')
 const { findPart } = await import('../parts.js')
 
 function pointInsideBox(point, spec, eps = 1e-9) {
@@ -51,11 +52,14 @@ test('both built-in bent liftarms keep every pin-hole corridor physically empty'
   for (const id of ['beam-l-3x3', 'beam-angle-4x2']) {
     const part = findPart(id)
     assert.ok(part, `${id} exists`)
-    assert.equal(part.physics?.colliderProfile?.version, 'parts-6-explicit-hole-clearance-v1')
-    assert.equal(part.physics?.colliderProfile?.sourceVersion, 'parts-5-explicit-v1')
-    assert.equal(part.physics?.colliderProfile?.holeClearanceStud, .3125)
+    const before=JSON.stringify(part.physics)
+    const profile=safety.explicitPinHoleClearanceProfile(part)
+    assert.equal(profile.version, 'parts-6-explicit-hole-clearance-v1')
+    assert.equal(profile.sourceVersion, 'parts-5-explicit-v1')
+    assert.equal(profile.holeClearanceStud, .3125)
+    assert.equal(JSON.stringify(part.physics),before,'physical profile derivation must not mutate catalog metadata')
 
-    const specs = part.physics.colliderProfile.specs
+    const specs = profile.specs
     const holes = part.connectors.filter(connector => connector.type === 'pin-hole')
     assert.ok(holes.length >= 5, `${id} exposes its real pin-hole set`)
 
@@ -71,11 +75,13 @@ test('both built-in bent liftarms keep every pin-hole corridor physically empty'
   }
 })
 
-test('safety pass reports the special collider families it hardened', () => {
+test('visual safety remains read-only while the collider layer supplies clearance', () => {
   const diagnostics = globalThis.BrickLabParts6InterfacePhysicsSafety
   assert.equal(diagnostics?.version, 'parts-6-interface-physics-safety-v3')
-  assert.ok(diagnostics?.hardenedColliderParts.includes('beam-l-3x3'))
-  assert.ok(diagnostics?.hardenedColliderParts.includes('beam-angle-4x2'))
+  assert.equal(diagnostics?.hardenedColliderParts,undefined)
+  for(const id of ['beam-l-3x3','beam-angle-4x2']){
+    assert.equal(findPart(id).physics.colliderProfile.version,'parts-5-explicit-v1')
+  }
   assert.equal(diagnostics?.technicHoleClearanceStud, .3125)
 })
 

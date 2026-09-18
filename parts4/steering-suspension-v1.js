@@ -1,3 +1,4 @@
+import { GEAR_MODULE_STUD, GEAR_PRESSURE_ANGLE_DEG } from '../parts5/part-geometry-metrics-v1.js'
 import * as THREE from 'three'
 import { PARTS } from '../parts.js'
 import { installPart } from '../parts3/part-schema-v1.js'
@@ -150,6 +151,15 @@ installPart(PARTS, {
   },
   visual: { defaultColor: 0xadb5bd, family: 'steering-rack' },
   mechanics: {
+    rackGear: {
+      moduleStud:GEAR_MODULE_STUD,
+      pressureAngleDeg:GEAR_PRESSURE_ANGLE_DEG,
+      linearPitchStud:Math.PI*GEAR_MODULE_STUD,
+      pitchLinePoint:[0,0.785,0],
+      travelAxis:[1,0,0],toothNormal:[0,1,0],widthAxis:[0,0,1],
+      phaseOriginStud:-7*Math.PI*GEAR_MODULE_STUD,toothCount:15,maxTravelStud:1,
+      source:'parts-4-steering-rack-catalog',
+    },
     steeringRack: {
       sliderConnectorId: 'slider',
       leftConnectorId: 'tie-left',

@@ -247,22 +247,6 @@ if (rackPart) {
       dedendumStud: DEDENDUM,
       pitchLineOffsetStud: PITCH_LINE_FROM_ROOT,
     },
-    mechanics: {
-      ...(rackPart.mechanics ?? {}),
-      rackGear: {
-        moduleStud:GEAR_MODULE_STUD,
-        pressureAngleDeg:GEAR_PRESSURE_ANGLE_DEG,
-        linearPitchStud:LINEAR_PITCH,
-        pitchLinePoint:[0,pitchLineY,0],
-        travelAxis:[1,0,0],
-        toothNormal:[0,1,0],
-        widthAxis:[0,0,1],
-        phaseOriginStud,
-        toothCount,
-        maxTravelStud:rackPart.mechanics?.steeringRack?.maxTravelStud ?? null,
-        source:'parts-6-module-matched-steering-rack-v4',
-      },
-    },
   })
   freezeLegacyBoundsCollider(rackPart, LEGACY_RACK_COLLIDER, 'parts-6-preserve-steering-rack-bounds-v1')
   upgraded.push(rackPart.id)
