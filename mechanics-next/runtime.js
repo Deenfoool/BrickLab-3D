@@ -13,10 +13,15 @@ import { createNativeConnectivityProvider } from './ldraw/native-connectivity-pr
 import { compareNativeToLegacyConnectivity, ConnectivityParityLedger } from './diagnostics/native-v4-parity.js'
 import { createSceneMechanicalObserver } from './intelligence/scene-observer.js'
 import { createShadowConnectionInterpreter } from './intelligence/connection-interpreter.js'
+import { endpointSemanticKind } from './intelligence/endpoint-semantics.js'
 import { rigidPoseFromMatrix4 } from './math/rigid.js'
 import { discoverMechanicalTransmissions } from './transmission/discovery.js'
 import { createTransmissionCompiler } from './transmission/compiler.js'
 import { findBestMechanicalCandidate } from './connectors/candidate-search.js'
+import { OccupancyLedger, endpointChannel } from './connectors/occupancy.js'
+import { commitPlacementTransaction } from './connectors/placement-transaction.js'
+import { solveMechanicalPlacement } from './connectors/placement-solver.js'
+import { worldConnectorFrame } from './connectors/world-frame.js'
 import { createMechanicsDragSession } from './interaction/drag-session.js'
 import { rotaryFrameForRecord } from './interaction/motion-plan.js'
 import { rotationalDragProjection } from './interaction/view-projection.js'
@@ -41,6 +46,9 @@ export function createMechanicsNextRuntime({
   const solver = createKinematicSolver()
   const transmissionCompiler = createTransmissionCompiler({ solver, graph })
   const compoundState = createCompoundStateRegistry()
+  const occupancy = new OccupancyLedger()
+  const nativeObservedRecords = new Map()
+  let nativeProjectAuthoritative = false
   let legacySnapshot = snapshotLegacyV4(legacyProvider)
   let decompositionRefreshQueued = false
 
@@ -248,10 +256,111 @@ export function createMechanicsNextRuntime({
         }),
       }))
     }
-    for(const record of legacySnapshot.connections||[])add(record)
-    const project=subsystems?.editor?.projectState?.()
-    for(const record of project?.connections||[])add(record)
+    for(const record of nativeObservedRecords.values())add(record)
+    if(!nativeProjectAuthoritative){
+      for(const record of legacySnapshot.connections||[])add(record)
+      const project=subsystems?.editor?.projectState?.()
+      for(const record of project?.connections||[])add(record)
+    }
     return Object.freeze(result)
+  }
+
+  const rebuildNativeOccupancy=()=>{
+    occupancy.clear()
+    for(const edge of graph.edges('constraint')){
+      const metadata=edge.metadata||{}
+      const instanceA=sceneObserver?.instance?.(metadata.instanceAId)
+      const instanceB=sceneObserver?.instance?.(metadata.instanceBId)
+      const endpointA=instanceA?.endpoints?.find(item=>item.id===metadata.endpointAId)
+      const endpointB=instanceB?.endpoints?.find(item=>item.id===metadata.endpointBId)
+      if(!endpointA||!endpointB)continue
+      const exclusive=[]
+      if(endpointA.family==='cylinder'&&endpointB.family==='cylinder'){
+        if(endpointA.gender==='female')exclusive.push(endpointChannel(edge.bodyA,endpointA.id))
+        if(endpointB.gender==='female')exclusive.push(endpointChannel(edge.bodyB,endpointB.id))
+      }else{
+        exclusive.push(endpointChannel(edge.bodyA,endpointA.id))
+        exclusive.push(endpointChannel(edge.bodyB,endpointB.id))
+      }
+      try{
+        occupancy.reserve({
+          connectionId:edge.id,
+          exclusiveChannels:Object.freeze(exclusive),
+          axialReservations:Object.freeze([]),
+        })
+      }catch{}
+    }
+    return occupancy.snapshot()
+  }
+
+  const endpointObservedId=endpoint=>
+    endpoint?.metadata?.compatibilityEndpointId ??
+    endpoint?.metadata?.sourceEndpointId ??
+    endpoint?.metadata?.builtinConnectorId ??
+    endpoint?.id
+
+  const recordFromCandidate=candidate=>Object.freeze({
+    id:String(candidate.key),
+    kind:candidate.match?.interfaceRule?.kind??'generic',
+    a:Object.freeze({
+      instanceId:String(candidate.moving.instance.body.instanceId),
+      partId:String(candidate.moving.instance.body.partId),
+      endpointId:String(endpointObservedId(candidate.source)),
+      connectorId:String(endpointObservedId(candidate.source)),
+    }),
+    b:Object.freeze({
+      instanceId:String(candidate.targetRecord.instance.body.instanceId),
+      partId:String(candidate.targetRecord.instance.body.partId),
+      endpointId:String(endpointObservedId(candidate.target)),
+      connectorId:String(endpointObservedId(candidate.target)),
+    }),
+    match:Object.freeze({
+      family:candidate.match?.family??null,
+      keyed:candidate.match?.keyed===true,
+      freeTwist:candidate.match?.freeTwist===true,
+    }),
+    occupancy:candidate.occupancyPlan??null,
+    metadata:Object.freeze({
+      mechanicsNextNative:true,
+      candidateKey:candidate.key,
+      supportCount:candidate.supportCount??1,
+    }),
+  })
+
+  const currentPoseForRecord=record=>{
+    const object=record?.object
+    object?.updateWorldMatrix?.(true,false)
+    const elements=object?.matrixWorld?.elements
+    if(!elements)return record?.pose??null
+    return rigidPoseFromMatrix4(Array.from(elements))
+  }
+
+  const validateCommittedCandidate=candidate=>{
+    const moving={...candidate.moving,pose:currentPoseForRecord(candidate.moving)}
+    const sourceFrame=worldConnectorFrame(moving.pose,candidate.source,{
+      visualOffsetStud:moving.visualOffsetStud||[0,0,0],
+    })
+    const targetPose=currentPoseForRecord(candidate.targetRecord)
+    const targetFrame=worldConnectorFrame(targetPose,candidate.target,{
+      visualOffsetStud:candidate.targetRecord.visualOffsetStud||[0,0,0],
+    })
+    const solution=solveMechanicalPlacement({
+      source:candidate.source,
+      target:candidate.target,
+      sourceFrame,
+      targetFrame,
+      objectPose:moving.pose,
+      match:candidate.match,
+      requestedOffsetLdu:candidate.solution?.axial?.offsetLdu,
+      axisPolarity:candidate.axisPolarity,
+    })
+    const translation=solution?.diagnostics?.translationStud??Infinity
+    const rotation=solution?.diagnostics?.rotationRad??Infinity
+    return Object.freeze({
+      valid:solution?.valid===true&&translation<=1e-4&&rotation<=1e-4,
+      reason:solution?.valid?(`residual:${translation}:${rotation}`):(solution?.reason??'invalid'),
+      solution,
+    })
   }
 
   const refreshLegacySnapshot = () => {
@@ -410,6 +519,7 @@ export function createMechanicsNextRuntime({
         replace,
       })
       nativeRestoredRelations=result.relations??Object.freeze([])
+      nativeProjectAuthoritative=result.rejected===0
       lastPersistenceReport=persistenceCompatibilityReport({
         exportedState:state,
         restoredResult:result,
@@ -433,6 +543,9 @@ export function createMechanicsNextRuntime({
         paritySummary:parityEvidence,
         regression:regressionEvidence,
         persistence:lastPersistenceReport,
+        nativeProjectAuthoritative,
+        nativeObservedConnections:nativeObservedRecords.size,
+        occupancy:occupancy.snapshot(),
       })
     },
     refreshLegacySnapshot,
@@ -466,6 +579,125 @@ export function createMechanicsNextRuntime({
       if (result) scheduleSceneSync()
       return result
     },
+    adoptNativeProjectOwnership() {
+      if(nativeProjectAuthoritative)return Object.freeze({
+        accepted:true,
+        alreadyOwned:true,
+        state:api.exportProjectState(),
+      })
+      const gate=api.migrationGate()
+      if(!gate.pass)return Object.freeze({accepted:false,reason:'migration-gate-blocked',gate})
+      const state=api.exportProjectState()
+      connectionInterpreter?.sync?.([])
+      nativeRestoredRelations=Object.freeze([...(state.relations||[])])
+      const restored=restoreMechanicsProjectState(state,{
+        graph,
+        sceneObserver,
+        objectByInstanceId:instanceId=>subsystems?.editor?.objectById?.(instanceId)??null,
+        visualOffsetForPart:(partId,instanceId)=>{
+          const object=subsystems?.editor?.objectById?.(instanceId)
+          const visual=object?.children?.find?.(child=>child?.userData?.ldrawVisual)
+          return visual?.position
+            ?[visual.position.x,visual.position.y,visual.position.z]
+            :[0,0,0]
+        },
+        replace:false,
+      })
+      lastPersistenceReport=persistenceCompatibilityReport({
+        exportedState:state,
+        restoredResult:restored,
+      })
+      if(!lastPersistenceReport.pass){
+        return Object.freeze({
+          accepted:false,
+          reason:'native-handoff-restore-failed',
+          compatibility:lastPersistenceReport,
+        })
+      }
+      nativeProjectAuthoritative=true
+      rebuildNativeOccupancy()
+      const refreshed=syncScene()
+      return Object.freeze({
+        accepted:true,
+        alreadyOwned:false,
+        compatibility:lastPersistenceReport,
+        refreshed,
+      })
+    },
+    async commitCandidate(candidate) {
+      if(!nativeProjectAuthoritative)return Object.freeze({
+        accepted:false,
+        reason:'native-project-not-authoritative',
+      })
+      if(!candidate?.moving?.object)return Object.freeze({accepted:false,reason:'candidate-object-missing'})
+      rebuildNativeOccupancy()
+      const object=candidate.moving.object
+      const adapter={
+        async snapshot(){
+          return Object.freeze({
+            position:Object.freeze(object.position.toArray()),
+            quaternion:Object.freeze(object.quaternion.toArray()),
+          })
+        },
+        async setWorldPose(record,pose){
+          object.position.fromArray(pose.position)
+          object.quaternion.fromArray(pose.quaternion).normalize()
+          object.updateMatrixWorld?.(true)
+        },
+        async restore(record,snapshot){
+          object.position.fromArray(snapshot.position)
+          object.quaternion.fromArray(snapshot.quaternion).normalize()
+          object.updateMatrixWorld?.(true)
+        },
+      }
+      let committedRecord=null
+      const result=await commitPlacementTransaction(candidate,{
+        adapter,
+        occupancy,
+        validate:()=>validateCommittedCandidate(candidate),
+        commitConnection:async()=>{
+          const record=recordFromCandidate(candidate)
+          nativeObservedRecords.set(record.id,record)
+          const refreshed=syncScene()
+          const unresolved=connectionInterpreter?.unresolved?.().find(item=>item.recordId===record.id)
+          if(unresolved){
+            nativeObservedRecords.delete(record.id)
+            syncScene()
+            return Object.freeze({accepted:false,reason:unresolved.reason,unresolved})
+          }
+          committedRecord=record
+          return Object.freeze({accepted:true,record,refreshed})
+        },
+      })
+      if(!result.accepted&&committedRecord){
+        nativeObservedRecords.delete(committedRecord.id)
+        syncScene()
+      }
+      return Object.freeze({
+        ...result,
+        record:committedRecord,
+      })
+    },
+    removePartConnections(instanceId) {
+      const id=String(instanceId||'')
+      let removed=0
+      for(const[recordId,record]of[...nativeObservedRecords]){
+        if(record.a?.instanceId!==id&&record.b?.instanceId!==id)continue
+        nativeObservedRecords.delete(recordId)
+        occupancy.release(recordId)
+        removed+=1
+      }
+      for(const edge of [...graph.edges('constraint')]){
+        const metadata=edge.metadata||{}
+        if(metadata.instanceAId!==id&&metadata.instanceBId!==id)continue
+        graph.removeEdge(edge.id)
+        occupancy.release(edge.id)
+        removed+=1
+      }
+      if(removed)syncScene()
+      return removed
+    },
+    nativeProjectAuthoritative:()=>nativeProjectAuthoritative,
     findCandidate(instanceId, targetInstanceIds = null, options = {}) {
       const records = mechanicalRecords()
       const moving = records.find(record => record.instance.body.instanceId === String(instanceId))
@@ -473,9 +705,11 @@ export function createMechanicsNextRuntime({
       const wanted = Array.isArray(targetInstanceIds) ? new Set(targetInstanceIds.map(String)) : null
       const targets = records.filter(record =>
         record !== moving && (!wanted || wanted.has(String(record.instance.body.instanceId))))
+      rebuildNativeOccupancy()
       return findBestMechanicalCandidate({
         moving,
         targets,
+        occupancy,
         includeSemanticUnknown:options.includeSemanticUnknown === true,
         captureDistanceStud:options.captureDistanceStud,
         minAxisAlignment:options.minAxisAlignment,
