@@ -50,3 +50,13 @@ test('lightweight real Rapier shafts receive F/N/R coupling impulses in the same
   }finally{world.free()}
 })
 
+import {runPhysicsMicrostep} from '../physics-pipeline-v1.js'
+
+test('native fixed-step projection preserves the transmission after Rapier integrates external torque',()=>{
+  const world=new RAPIER.World({x:0,y:0,z:0});world.timestep=1/120
+  const make=x=>{const b=world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x,0,0).setCanSleep(false));world.createCollider(RAPIER.ColliderDesc.cuboid(.0015,.0015,.012).setMass(.0005),b);return b}
+  const a=make(-.1),b=make(.1)
+  const coupling=createMechanicsCouplingRuntime({pass:true,couplers:[{id:'drive',kind:'angular',terms:[{coordinate:'angular',bodyId:'a',coefficient:-1,axisWorld:[0,0,1]},{coordinate:'angular',bodyId:'b',coefficient:1,axisWorld:[0,0,1]}]}]},{resolveMember:id=>({body:id==='a'?a:b,component:{bodyWorldRotation:new THREE.Quaternion()}})})
+  const session={world,components:[],resetCustomTorques(){a.resetTorques(true);b.resetTorques(true)},mechanicsNextPhysics:{beforeStep(dt){coupling.step(dt)},afterStep(dt){coupling.step(dt,{advancePhase:false})}},applyScenarioForcesV2(){a.addTorque({x:0,y:0,z:1e-7},true)}}
+  try{for(let step=0;step<12;step++){runPhysicsMicrostep(session,1/120);assert.ok(Math.abs(a.angvel().z-b.angvel().z)<1e-4)}assert.ok(b.angvel().z>1)}finally{world.free()}
+})

@@ -12,6 +12,7 @@ export const PHYSICS_PHASES = Object.freeze([
   'tires',
   'scenario',
   'rapier-step',
+  'mechanics-next-projection',
   'validation',
   'metrics',
   'vehicle-performance',
@@ -50,6 +51,7 @@ export function runPhysicsMicrostep(session, dt, { advanceTestPhase } = {}) {
   call(session, 'applyScenarioForcesV2', dt)
 
   session.world.step()
+  session.mechanicsNextPhysics?.afterStep?.(dt)
   emitAudioEvent('physics-step', { session, dt })
   call(session, 'validatePhysicsState')
   call(session, 'updateVehicleMetrics', dt)

@@ -278,6 +278,15 @@ export function createMechanicsPhysicsRuntime({
         couplings:installed.lastCouplingStep,
       })
     },
+    afterStep(dt){
+      if(!installed||installed.disposed)return Object.freeze({installed:false})
+      // Rapier integrates forces and joint resistance after beforeStep. Restore
+      // transmission velocity constraints before exposing the fixed-step state.
+      for(let iteration=0;iteration<4;iteration++){
+        installed.lastCouplingStep=installed.couplings.step(dt,{advancePhase:false})
+      }
+      return Object.freeze({installed:true,couplings:installed.lastCouplingStep})
+    },
     afterSync({
       validateJoint=null,
       confirmReleaseFrames=2,

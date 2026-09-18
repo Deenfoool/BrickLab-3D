@@ -196,7 +196,7 @@ function residualAndEffectiveMass(bodies){
 }
 
 function applyAngularImpulse(body,impulse,dt){
-  if(!dynamic(body)||impulse.lengthSq()<=EPS*EPS)return
+  if(!dynamic(body)||impulse.lengthSq()===0)return
   if(typeof body.applyTorqueImpulse==='function'){
     body.applyTorqueImpulse(vec(impulse),true)
     return
@@ -209,7 +209,7 @@ function applyAngularImpulse(body,impulse,dt){
 }
 
 function applyLinearImpulse(body,impulse,dt){
-  if(!dynamic(body)||impulse.lengthSq()<=EPS*EPS)return
+  if(!dynamic(body)||impulse.lengthSq()===0)return
   if(typeof body.applyImpulse==='function'){
     body.applyImpulse(vec(impulse),true)
     return
@@ -263,7 +263,7 @@ export function createMechanicsCouplingRuntime(couplingPlan,{
   return Object.freeze({
     version:MECHANICS_COUPLING_RUNTIME_VERSION,
     couplers:Object.freeze(couplers),
-    step(dt){
+    step(dt,{advancePhase=true}={}){
       if(!(Number.isFinite(dt)&&dt>0))return Object.freeze({applied:0,skipped:couplers.length})
       let applied=0,skipped=0
       for(const coupler of couplers){
@@ -274,7 +274,7 @@ export function createMechanicsCouplingRuntime(couplingPlan,{
           skipped+=1
           continue
         }
-        if(coupler.nonlinearRelation){
+        if(coupler.nonlinearRelation&&advancePhase){
           coupler.phaseDeltaRad+=primaryInputVelocity(coupler)*dt
         }
 
