@@ -267,6 +267,44 @@ export function createMechanicsNextRuntime({
     return Object.freeze(records)
   }
 
+  const adoptPersistedConnectionsAsObserved = state => {
+    nativeObservedRecords.clear()
+    for(const record of state?.connections||[]){
+      const endpointA=record?.a?.observedEndpointId??record?.a?.endpointId
+      const endpointB=record?.b?.observedEndpointId??record?.b?.endpointId
+      if(!record?.a?.instanceId||!record?.b?.instanceId||!endpointA||!endpointB)continue
+      const stableObservedId=String(
+        record.observedConnectionId ??
+        deterministicId(
+          'observed-link',
+          ...[
+            `${record.a.instanceId}::${endpointA}`,
+            `${record.b.instanceId}::${endpointB}`,
+          ].sort(),
+        )
+      )
+      nativeObservedRecords.set(stableObservedId,Object.freeze({
+        id:stableObservedId,
+        a:Object.freeze({
+          instanceId:String(record.a.instanceId),
+          endpointId:String(endpointA),
+        }),
+        b:Object.freeze({
+          instanceId:String(record.b.instanceId),
+          endpointId:String(endpointB),
+        }),
+        occupancy:record.occupancy??null,
+        metadata:Object.freeze({
+          mechanicsNextNative:true,
+          restoredFromProject:true,
+          persistedConstraintId:record.id,
+        }),
+      }))
+      graph.removeEdge(record.id)
+    }
+    return nativeObservedRecords.size
+  }
+
   const normalizedObservedConnections = () => {
     const result=[]
     const seen=new Set()
@@ -626,7 +664,11 @@ export function createMechanicsNextRuntime({
         restoredResult:result,
       })
       nativeProjectAuthoritative=lastPersistenceReport.pass
+      if(nativeProjectAuthoritative){
+        adoptPersistedConnectionsAsObserved(state)
+      }
       const refreshed=syncScene()
+      if(nativeProjectAuthoritative)rebuildNativeOccupancy()
       return Object.freeze({
         ...result,
         compatibility:lastPersistenceReport,
@@ -725,13 +767,14 @@ export function createMechanicsNextRuntime({
         })
       }
       nativeProjectAuthoritative=true
+      adoptPersistedConnectionsAsObserved(state)
       api.handoffDomains(
         ['connector-hydration','snapping','connection-graph','persistence'],
         'validated BUILD migration handoff',
       )
       publishBuildOwnership('migration-handoff')
-      rebuildNativeOccupancy()
       const refreshed=syncScene()
+      rebuildNativeOccupancy()
       return Object.freeze({
         accepted:true,
         alreadyOwned:false,
