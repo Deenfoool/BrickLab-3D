@@ -456,6 +456,24 @@ function connectionGeometry(frameA,frameB){
   })
 }
 
+function persistedConnectionGeometry(value,fallback){
+  if(!value||typeof value!=='object')return fallback
+  const relative=Array.isArray(value.relativeOrientation)&&value.relativeOrientation.length===9
+    ?Object.freeze(value.relativeOrientation.map(Number))
+    :fallback?.relativeOrientation??null
+  return Object.freeze({
+    anchorDistanceStud:Number.isFinite(Number(value.anchorDistanceStud))
+      ?Number(value.anchorDistanceStud):fallback?.anchorDistanceStud??0,
+    axialSeparationStud:Number.isFinite(Number(value.axialSeparationStud))
+      ?Number(value.axialSeparationStud):fallback?.axialSeparationStud??0,
+    lateralDistanceStud:Number.isFinite(Number(value.lateralDistanceStud))
+      ?Number(value.lateralDistanceStud):fallback?.lateralDistanceStud??0,
+    axisDot:Number.isFinite(Number(value.axisDot))
+      ?Number(value.axisDot):fallback?.axisDot??1,
+    relativeOrientation:relative,
+  })
+}
+
 function worldFrame(object,endpoint){
   object?.updateWorldMatrix?.(true,false)
   const elements=object?.matrixWorld?.elements
@@ -692,7 +710,10 @@ export function interpretObservedConnection(record, {
         a:Object.freeze([...worldFrameA.axis]),
         b:Object.freeze([...worldFrameB.axis]),
       }),
-      connectionGeometry:connectionGeometry(worldFrameA,worldFrameB),
+      connectionGeometry:persistedConnectionGeometry(
+        record?.metadata?.connectionGeometry,
+        connectionGeometry(worldFrameA,worldFrameB),
+      ),
       motorDrive:resolved.motorSide?Object.freeze({
         motorSide:resolved.motorSide,
         motorBodyId:resolved.motorSide==='a'?instanceA.body.id:instanceB.body.id,
