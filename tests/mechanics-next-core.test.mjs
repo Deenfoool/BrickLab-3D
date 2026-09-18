@@ -1964,7 +1964,7 @@ function minimalPhysicsPlan(joint){
   }
 }
 
-test('Rapier preflight accepts GenericJoint only when local axes agree', () => {
+test('Rapier preflight accepts axial joints only when local axes agree', () => {
   const joint={
     id:'slide',
     kind:'prismatic',
@@ -1983,7 +1983,7 @@ test('Rapier preflight accepts GenericJoint only when local axes agree', () => {
   assert.equal(result.pass,true)
 })
 
-test('Rapier preflight blocks GenericJoint when the same world axis maps to different local axes', () => {
+test('Rapier preflight blocks axial joints when the same world axis maps to different local axes', () => {
   const joint={
     id:'slide-mismatch',
     kind:'cylindrical',
@@ -2401,6 +2401,7 @@ test('compound materializer creates child bodies, internal prismatic joint and s
       },
     },
     JointData:{
+      prismatic(a,b,axis){return{type:'prismatic',a,b,axis}},
       generic(a,b,axis,mask){return{type:'generic',a,b,axis,mask}},
       spring(rest,stiffness,damping,a,b){
         return{type:'spring',rest,stiffness,damping,a,b}
@@ -2482,7 +2483,7 @@ test('compound materializer creates child bodies, internal prismatic joint and s
   assert.equal(bodies[1].desc.state.translation[1],.008)
   assert.equal(colliders[0].desc.half[0],.004)
   assert.equal(joints[1].data.rest,.008)
-  assert.equal(joints[0].data.type,'generic')
+  assert.equal(joints[0].data.type,'prismatic')
   assert.equal(joints[1].data.type,'spring')
   assert.equal(state.replacements.get('shock-root').resolveEndpoint('bottom').memberId,'rod')
 })
@@ -4088,4 +4089,135 @@ test('native steering bridge blocks a connected pivot that is not revolute in ph
   })
   assert.equal(plan.pass,false)
   assert.ok(plan.blockers.some(item=>item.code==='steering-pivot-not-revolute'))
+})
+
+
+test('built-in shock rail pair becomes a limited prismatic spring constraint', () => {
+  const body=createBodyDescriptor({id:'shock-body-id',instanceId:'shock-body-i',partId:'shock-body-5'})
+  const rod=createBodyDescriptor({id:'shock-rod-id',instanceId:'shock-rod-i',partId:'shock-rod-5'})
+  const endpoint=(id,bodyId,builtinType,builtinConnectorId,axis=[0,1,0])=>createEndpointDescriptor({
+    id,
+    bodyId,
+    family:'generic',
+    gender:null,
+    frame:{
+      positionStud:[0,0,0],
+      orientationBrickLab:[1,0,0,0,1,0,0,0,1],
+    },
+    profile:{kind:'linear-guide',type:builtinType},
+    capabilities:['slide'],
+    metadata:{
+      builtinType,
+      builtinConnectorId,
+      sourceEndpointId:builtinConnectorId,
+      semantics:{semanticKind:'linear-guide'},
+      testAxis:axis,
+    },
+  })
+  const rail=endpoint('shock-rail-native',body.id,'slider-rail','rail')
+  const slider=endpoint('shock-slider-native',rod.id,'slider','slider')
+  const bodyClassification={
+    role:'shock-absorber',
+    properties:{
+      shockBody:{
+        railConnectorId:'rail',
+        minTravelStud:-1.25,
+        maxTravelStud:.25,
+        springStiffness:3.2,
+        damping:.38,
+        restTravelStud:0,
+      },
+    },
+  }
+  const rodClassification={
+    role:'unknown',
+    properties:{shockRod:{sliderConnectorId:'slider'}},
+  }
+  const instances=new Map([
+    ['shock-body-i',{body,descriptor:{classification:bodyClassification},endpoints:[rail]}],
+    ['shock-rod-i',{body:rod,descriptor:{classification:rodClassification},endpoints:[slider]}],
+  ])
+  const objects=new Map()
+  for(const id of instances.keys()){
+    const object=new THREE.Object3D()
+    object.userData.instanceId=id
+    object.updateMatrixWorld(true)
+    objects.set(id,object)
+  }
+  const interpretation=interpretObservedConnection({
+    id:'shock-native-link',
+    a:{instanceId:'shock-body-i',endpointId:'rail'},
+    b:{instanceId:'shock-rod-i',endpointId:'slider'},
+  },{
+    sceneObserver:{instance:id=>instances.get(id)},
+    objectById:id=>objects.get(id),
+  })
+  assert.equal(interpretation.valid,true)
+  assert.equal(interpretation.type,'constraint')
+  const constraint=interpretation.constraint
+  assert.equal(constraint.kind,'prismatic')
+  assert.equal(constraint.dof.ty.state,'limited')
+  assert.deepEqual(constraint.dof.ty.limits,[-1.25,.25])
+  assert.equal(constraint.metadata.shock.kind,'shock-prismatic')
+  assert.equal(constraint.metadata.dynamics.springMotor.targetStud,0)
+  assert.equal(constraint.metadata.dynamics.springMotor.stiffness,3.2)
+  assert.equal(constraint.metadata.dynamics.springMotor.damping,.38)
+})
+
+test('Rapier native prismatic applies metre limits and shock motor target', () => {
+  const joint={
+    id:'shock-prismatic-physics',
+    kind:'prismatic',
+    bodyA:'a',
+    bodyB:'b',
+    frame:{positionStud:[0,0,0],axisWorld:[0,1,0]},
+    limits:{min:-1.25,max:.25},
+    dynamics:{
+      springMotor:{
+        targetStud:.125,
+        stiffness:3.2,
+        damping:.38,
+      },
+    },
+  }
+  const members=new Map([
+    ['a',mockPhysicsMember({handle:101})],
+    ['b',mockPhysicsMember({handle:102})],
+  ])
+  let prismaticArgs=null
+  let limits=null
+  let motor=null
+  let model=null
+  const handle={
+    setContactsEnabled(){},
+    setLimits(min,max){limits=[min,max]},
+    configureMotorModel(value){model=value},
+    configureMotorPosition(target,stiffness,damping){motor=[target,stiffness,damping]},
+    isValid(){return true},
+  }
+  const session={
+    RAPIER:{
+      MotorModel:{ForceBased:77},
+      JointData:{
+        prismatic(...args){
+          prismaticArgs=args
+          return{type:'prismatic'}
+        },
+      },
+    },
+    world:{
+      createImpulseJoint(){return handle},
+      removeImpulseJoint(){},
+    },
+  }
+  const result=materializeRapierMechanicsPlan(
+    session,
+    minimalPhysicsPlan(joint),
+    {resolveMember:id=>members.get(id),worldUnitsPerStud:.008},
+  )
+  assert.equal(result.active,1)
+  assert.equal(prismaticArgs.length,3)
+  assert.deepEqual(limits,[-.01,.002])
+  assert.deepEqual(motor,[.001,3.2,.38])
+  assert.equal(model,77)
 })
