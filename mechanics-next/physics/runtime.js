@@ -88,7 +88,7 @@ export function createMechanicsPhysicsRuntime({
 
       const joints=materializeRapierMechanicsPlan(session,structuralPlan,{
         resolveMember:bridge.resolveMember,
-        studMeters,
+        worldUnitsPerStud,
         contactsEnabled,
       })
       let couplings
