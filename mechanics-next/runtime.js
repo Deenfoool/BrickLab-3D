@@ -619,11 +619,11 @@ export function createMechanicsNextRuntime({
       })
       nativeRestoredRelations=result.relations??Object.freeze([])
       restoreCompoundStateSnapshot(result.compoundState)
-      nativeProjectAuthoritative=result.rejected===0
       lastPersistenceReport=persistenceCompatibilityReport({
         exportedState:state,
         restoredResult:result,
       })
+      nativeProjectAuthoritative=lastPersistenceReport.pass
       const refreshed=syncScene()
       return Object.freeze({
         ...result,
