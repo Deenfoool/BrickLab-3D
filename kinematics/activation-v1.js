@@ -119,7 +119,7 @@ async function activate(event) {
     // Stage 11 migration: Mechanics Next may take KINEMATICS ownership only after
     // its native connectivity/parity/persistence/physics regression gate passes.
     try {
-      const module=await import('../mechanics-next/production/kinematics-owner.js?v=mechanics-next-stage11-20260918-v2')
+      const module=await import('../mechanics-next/production/kinematics-owner.js')
       const next=module.default ?? globalThis.BrickLabMechanicsNextKinematics
       if(next?.enter){
         nextAttempt=await next.enter()
