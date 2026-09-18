@@ -70,6 +70,7 @@ import { buildMechanicsPhysicsPlan } from '../mechanics-next/physics/plan.js'
 import { buildMechanicsCouplingPlan } from '../mechanics-next/physics/coupling-plan.js'
 import { createMechanicsCouplingRuntime } from '../mechanics-next/physics/coupling-runtime.js'
 import { buildMechanicsMotorPlan, createMechanicsMotorRuntime } from '../mechanics-next/physics/motor-runtime.js'
+import { createMechanicsSuspensionRuntime } from '../mechanics-next/physics/suspension-runtime.js'
 import { buildMechanicsVehiclePlan } from '../mechanics-next/physics/vehicle-plan.js'
 import { buildMechanicsSteeringPlan, materializeMechanicsSteeringBindings } from '../mechanics-next/physics/steering-bridge.js'
 import { expandCompoundPhysicsGraph } from '../mechanics-next/physics/compound-graph-expansion.js'
@@ -4269,4 +4270,142 @@ test('physics isolation audit requires every final legacy writer to declare nati
   assert.equal(fail.pass,false)
   assert.ok(fail.failures.some(item=>item.id==='writer:applyMotorTorques'))
   assert.ok(fail.failures.some(item=>item.id==='compatibility-connections-only'))
+})
+
+
+test('native suspension runtime preserves bump stop damping and anti-roll behavior', () => {
+  const makeBody=(x=0)=>({
+    _rotation:new THREE.Quaternion(),
+    rotation(){return{x:this._rotation.x,y:this._rotation.y,z:this._rotation.z,w:this._rotation.w}},
+    translation:()=>({x,y:0,z:0}),
+  })
+  const makeMonitor=(id,x)=>{
+    const chassis=makeBody(0)
+    const arm=makeBody(x)
+    const calls=[]
+    const handle={
+      configureMotorModel(value){this.model=value},
+      configureMotorPosition(target,stiffness,damping){
+        calls.push({target,stiffness,damping})
+      },
+    }
+    return{
+      arm,
+      calls,
+      monitor:{
+        item:{
+          id,
+          kind:'revolute',
+          bodyA:`${id}-base`,
+          bodyB:`${id}-arm`,
+          dynamics:{
+            suspensionMotor:{
+              armBodyId:`${id}-arm`,
+              armInstanceId:`${id}-instance`,
+              coordinateSign:1,
+              restAngle:0,
+              preload:0,
+              stiffness:.12,
+              damping:.01,
+              springRate:.12,
+              compressionDamping:.02,
+              reboundDamping:.008,
+              bumpStop:.5,
+              physicalMinAngle:-1,
+              physicalMaxAngle:1,
+            },
+          },
+        },
+        handle,
+        memberA:{body:chassis},
+        memberB:{body:arm},
+        localAxisA:new THREE.Vector3(0,0,1),
+        localAxisB:new THREE.Vector3(0,0,1),
+        released:false,
+      },
+    }
+  }
+  const left=makeMonitor('left',-1)
+  const right=makeMonitor('right',1)
+  const runtime=createMechanicsSuspensionRuntime({
+    monitors:[left.monitor,right.monitor],
+  },{
+    session:{RAPIER:{MotorModel:{ForceBased:9}}},
+  })
+  assert.equal(runtime.pass,true)
+  left.arm._rotation.setFromAxisAngle(new THREE.Vector3(0,0,1),.8)
+  right.arm._rotation.setFromAxisAngle(new THREE.Vector3(0,0,1),.2)
+  const stepped=runtime.step(1/60)
+  assert.equal(stepped.applied,2)
+  const snapshot=runtime.snapshot()
+  const leftState=snapshot.find(item=>item.jointId==='left')
+  const rightState=snapshot.find(item=>item.jointId==='right')
+  assert.equal(leftState.compression,true)
+  assert.equal(rightState.compression,true)
+  assert.ok(leftState.effectiveStiffness>.12)
+  assert.equal(leftState.effectiveDamping,.02)
+  assert.ok(leftState.antiRoll>0)
+  assert.ok(rightState.antiRoll<0)
+  assert.ok(left.calls.at(-1).target>0)
+  assert.ok(right.calls.at(-1).target<0)
+
+  left.arm._rotation.setFromAxisAngle(new THREE.Vector3(0,0,1),.4)
+  runtime.step(1/60)
+  const rebound=runtime.snapshot().find(item=>item.jointId==='left')
+  assert.equal(rebound.compression,false)
+  assert.equal(rebound.effectiveDamping,.008)
+})
+
+test('native motor runtime reports power and applies dyno brake to driven shaft', () => {
+  const makeBody=omega=>({
+    _omega:omega,
+    rotation:()=>({x:0,y:0,z:0,w:1}),
+    angvel(){return{x:this._omega,y:0,z:0}},
+    isDynamic:()=>true,
+    addTorque(value){this.lastTorque=value},
+  })
+  const motorBody=makeBody(0)
+  const drivenBody=makeBody(10)
+  const member=body=>({
+    body,
+    component:{bodyWorldRotation:new THREE.Quaternion()},
+  })
+  const runtime=createMechanicsMotorRuntime({
+    pass:true,
+    drives:[{
+      id:'dyno-drive',
+      controlId:'dyno-motor',
+      motorBodyId:'motor-body',
+      drivenBodyId:'driven-body',
+      axisWorld:[1,0,0],
+      defaultRpm:120,
+      defaultDirection:1,
+      targetRpm:120,
+      stallTorque:.5,
+      damping:1,
+      freeCurrent:.15,
+      stallCurrent:2.2,
+      voltage:9,
+      nominalEfficiency:.72,
+    }],
+  },{
+    resolveMember:id=>id==='motor-body'?member(motorBody):member(drivenBody),
+    controlState:()=>({type:'motor',rpm:120,direction:1}),
+  })
+  runtime.step(1/60)
+  const before=runtime.snapshot()[0]
+  assert.ok(before.actualRpm>90)
+  assert.ok(before.powerW>0)
+  assert.ok(before.inputPowerW>0)
+  assert.ok(before.efficiency>=0&&before.efficiency<=1)
+
+  drivenBody.lastTorque=null
+  const brake=runtime.applyExternalBrake({maxTorqueNm:.4,gain:.1})
+  assert.equal(brake.applied,true)
+  assert.equal(brake.torqueNm,.4)
+  assert.ok(brake.powerW>0)
+  assert.ok(drivenBody.lastTorque.x<0)
+  const after=runtime.snapshot()[0]
+  assert.equal(after.externalBrakeTorqueNm,.4)
+  assert.ok(after.externalBrakePowerW>0)
 })
