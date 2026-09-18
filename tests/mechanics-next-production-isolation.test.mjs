@@ -131,3 +131,17 @@ test('production Mechanics Next entry modules are cache-versioned', () => {
   assert.match(activation,/mechanics-next\/production\/kinematics-owner\.js\?v=mechanics-next-stage11-20260918-v2/)
   assert.match(index,/bootstrap\.js\?v=runtime-27-mechanics-next-stage11-20260918-v1/)
 })
+
+
+test('project clear honors explicit BUILD authority retention policy', () => {
+  const runtime=source('mechanics-next/runtime.js')
+  assert.match(runtime,/const retainAuthority=keepAuthority===true&&nativeProjectAuthoritative===true/)
+  assert.match(runtime,/nativeProjectAuthoritative=retainAuthority/)
+  assert.match(runtime,/if\(!retainAuthority\)\{/)
+  assert.match(runtime,/keepAuthority:retainAuthority/)
+  assert.doesNotMatch(
+    runtime,
+    /clearProjectState\(\{keepAuthority=true\}=\{\}\)[\s\S]{0,900}nativeProjectAuthoritative=false/,
+    'clearProjectState must not unconditionally revoke validated BUILD ownership',
+  )
+})
