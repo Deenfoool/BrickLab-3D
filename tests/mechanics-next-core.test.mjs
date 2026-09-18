@@ -361,7 +361,8 @@ test('part intelligence recognizes the differential and keeps it as a rigid atom
   assert.equal(descriptor.classification.role, 'differential')
   assert.equal(descriptor.classification.properties.toothCount, 28)
   assert.equal(descriptor.bodyPolicy, 'rigid-atomic')
-  assert.equal(descriptor.transmissionHints[0].equationFamily, 'three-port-differential')
+  assert.ok(descriptor.transmissionHints.some(hint => hint.equationFamily === 'gear-mesh' && hint.toothCount === 28))
+  assert.ok(descriptor.transmissionHints.some(hint => hint.equationFamily === 'three-port-differential'))
 })
 
 test('20 tooth double bevel gear gets gear transmission semantics without a part-ID rule', () => {
@@ -400,4 +401,32 @@ test('part instance IDs and endpoint IDs remain deterministic across reload', ()
   assert.equal(first.body.id, second.body.id)
   assert.equal(first.endpoints[0].id, second.endpoints[0].id)
   assert.equal(first.endpoints[0].metadata.semantics.semanticKind, 'technic-axle-hole')
+})
+
+
+test('diffhouse context does not turn an internal bevel gear into a differential body', () => {
+  const endpoint = legacyV4ConnectorToEndpoint({
+    endpointId:'diff-seat',
+    family:'generic',
+    gender:'male',
+    group:'diffhouse',
+    frame:{ positionLdu:[0,0,0], orientation:[1,0,0,0,1,0,0,0,1] },
+    geometry:{},
+    snap:{ match:'group', placement:'aligned' },
+  }, { bodyId:'template', partId:'gear12' })
+
+  const descriptor = createPartMechanicalDescriptor({
+    observation:{
+      id:'gear12',
+      name:'Technic Gear 12 Tooth Bevel',
+      description:'Technic Gear 12 Tooth Bevel',
+      category:'Technic',
+      tags:[],
+    },
+    endpoints:[endpoint],
+  })
+
+  assert.equal(descriptor.classification.role, 'bevel-gear')
+  assert.equal(descriptor.classification.properties.toothCount, 12)
+  assert.ok(descriptor.classification.contexts.includes('differential'))
 })
