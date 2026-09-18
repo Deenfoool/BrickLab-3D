@@ -198,6 +198,7 @@ PhysicsSession.prototype.updateVehicleControlsV1 = function updateVehicleControl
   return result
 }
 PhysicsSession.prototype.updateVehicleControlsV1.__bricklabOwner = STEERING_SUSPENSION_PHYSICS_VERSION
+PhysicsSession.prototype.updateVehicleControlsV1.__mechanicsNextBypass = true
 
 globalThis.BrickLabParts4LinearMechanisms = Object.freeze({
   version: STEERING_SUSPENSION_PHYSICS_VERSION,
