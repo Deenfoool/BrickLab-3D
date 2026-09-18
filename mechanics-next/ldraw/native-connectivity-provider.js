@@ -59,6 +59,14 @@ function builtinProfile(type){
       return{family:'cylinder',gender:'male',profile:{centered:false,caps:'one',sections:[section('R',6,4)]},capabilities:[]}
     case'tube':
       return{family:'cylinder',gender:'female',profile:{centered:false,caps:'one',sections:[section('R',6,4)]},capabilities:[]}
+    case'slider':
+    case'slider-rail':
+      return{
+        family:'generic',
+        gender:null,
+        profile:{kind:'linear-guide',type:String(type)},
+        capabilities:['slide'],
+      }
     default:return null
   }
 }
