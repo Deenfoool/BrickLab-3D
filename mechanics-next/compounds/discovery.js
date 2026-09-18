@@ -506,30 +506,44 @@ function discoverLinearActuators(records,graph){
     if(role(record)!=='linear-actuator')continue
     const bodyId=record.instance.body.id
     if(consumed.has(bodyId))continue
+    const decomposition=record.compoundDecomposition??null
+    const topology=decomposition?.topology??null
+    const decomposed=topology?.kind==='linear-actuator'&&topology?.status==='resolved'
+    const status=decomposed?'decomposed-awaiting-materialization':'awaiting-compound-decomposition'
     descriptors.push(Object.freeze({
-      id:deterministicId('linear-actuator',bodyId,'undecomposed'),
+      id:deterministicId('linear-actuator',bodyId,decomposed?'decomposed':'undecomposed'),
       kind:'linear-actuator',
       bodyId,
       sliderBody:null,
       inputBody:null,
-      status:'awaiting-compound-decomposition',
-      internalTopology:Object.freeze({
-        rootBodyId:bodyId,
-        rootIsCompoundContainer:true,
-        members:Object.freeze([
-          Object.freeze({id:`${bodyId}::housing`,role:'housing'}),
-          Object.freeze({id:`${bodyId}::rod`,role:'rod'}),
-        ]),
-        joints:Object.freeze([
-          Object.freeze({a:'housing',b:'rod',kind:'prismatic'}),
-        ]),
-        transmission:null,
-      }),
+      status,
+      decomposition:decomposition?Object.freeze({
+        version:decomposition.version,
+        memberCount:decomposition.members?.length||0,
+        housingMemberId:topology?.housingMemberId??null,
+        rodMemberId:topology?.rodMemberId??null,
+        screwMemberId:topology?.screwMemberId??null,
+      }):null,
+      internalTopology:decomposed
+        ?topology
+        :Object.freeze({
+            rootBodyId:bodyId,
+            rootIsCompoundContainer:true,
+            members:Object.freeze([
+              Object.freeze({id:`${bodyId}::housing`,role:'housing'}),
+              Object.freeze({id:`${bodyId}::rod`,role:'rod'}),
+            ]),
+            joints:Object.freeze([
+              Object.freeze({a:'housing',b:'rod',kind:'prismatic'}),
+            ]),
+            transmission:null,
+          }),
     }))
     diagnostics.push(Object.freeze({
       kind:'linear-actuator',
       bodyId,
-      status:'awaiting-compound-decomposition',
+      status,
+      memberCount:decomposition?.members?.length||0,
     }))
   }
 
@@ -552,6 +566,9 @@ function discoverSprings(records){
       springStiffness:Number.isFinite(Number(props.springStiffness))?Number(props.springStiffness):null,
       damping:Number.isFinite(Number(props.damping))?Number(props.damping):null,
     })
+    const decomposition=record.compoundDecomposition??null
+    const decomposedTopology=decomposition?.topology??null
+    const decomposed=decomposedTopology?.kind==='shock-absorber'&&decomposedTopology?.status==='resolved'
     const data=Object.freeze({
       id:deterministicId('spring-damper',bodyId),
       kind:'spring-damper',
@@ -563,21 +580,29 @@ function discoverSprings(records){
       damping:trusted?supplied.damping:null,
       suppliedParameters:supplied,
       parameterEvidence:props.compoundParameterEvidence??null,
-      status:'awaiting-compound-decomposition',
-      internalTopology:Object.freeze({
-        rootBodyId:bodyId,
-        rootIsCompoundContainer:true,
-        members:Object.freeze([
-          Object.freeze({id:`${bodyId}::housing`,role:'housing'}),
-          Object.freeze({id:`${bodyId}::rod`,role:'rod'}),
-          Object.freeze({id:`${bodyId}::spring`,role:'spring',nonRigid:true}),
-        ]),
-        joints:Object.freeze([
-          Object.freeze({a:'housing',b:'rod',kind:'prismatic'}),
-        ]),
-        transmission:null,
-        dynamics:'spring-damper',
+      status:decomposed?'decomposed-awaiting-materialization':'awaiting-compound-decomposition',
+      materialization:Object.freeze({
+        housingMemberId:decomposedTopology?.housingMemberId??null,
+        rodMemberId:decomposedTopology?.rodMemberId??null,
+        springMemberId:decomposedTopology?.springMemberId??null,
+        memberCount:decomposition?.members?.length||0,
       }),
+      internalTopology:decomposed
+        ?decomposedTopology
+        :Object.freeze({
+            rootBodyId:bodyId,
+            rootIsCompoundContainer:true,
+            members:Object.freeze([
+              Object.freeze({id:`${bodyId}::housing`,role:'housing'}),
+              Object.freeze({id:`${bodyId}::rod`,role:'rod'}),
+              Object.freeze({id:`${bodyId}::spring`,role:'spring',nonRigid:true}),
+            ]),
+            joints:Object.freeze([
+              Object.freeze({a:'housing',b:'rod',kind:'prismatic'}),
+            ]),
+            transmission:null,
+            dynamics:'spring-damper',
+          }),
     })
     descriptors.push(data)
     dynamics.push(data)
