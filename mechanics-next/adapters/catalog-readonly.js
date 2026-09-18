@@ -24,6 +24,12 @@ export function observePartDefinition(definition) {
     category:definition.category ?? null,
     tags:safeArray(definition.tags).map(String),
     defaultColor:definition.defaultColor ?? null,
+    builtinConnectors:safeArray(definition.connectors).map(connector=>({
+      id:connector.id??null,
+      type:connector.type??null,
+      position:Array.isArray(connector.position)?connector.position.slice(0,3).map(Number):null,
+      axis:Array.isArray(connector.axis)?connector.axis.slice(0,3).map(Number):null,
+    })),
     ldraw:definition.ldraw ? {
       code:definition.ldraw.code ?? null,
       file:definition.ldraw.file ?? null,
@@ -43,6 +49,7 @@ export function observePartDefinition(definition) {
       gear:definition.mechanics.gear ?? null,
       shaft:definition.mechanics.shaft === true,
       wheel:definition.mechanics.wheel ?? null,
+      motor:definition.mechanics.motor ?? null,
       differential:definition.mechanics.differential ?? null,
       transmission:definition.mechanics.transmission ?? null,
       classification:definition.mechanics.classification ?? null,
