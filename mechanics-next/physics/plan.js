@@ -108,10 +108,14 @@ function limitsFor(constraints,kind){
 function dynamicsFor(constraints){
   const values=constraints.map(item=>item?.metadata?.dynamics).filter(Boolean)
   if(!values.length)return null
+  const springMotors=values.map(value=>value.springMotor).filter(Boolean)
+  const springMotor=springMotors.length===1?springMotors[0]:null
   return Object.freeze({
     rotationalResistance:values.map(value=>value.rotationalResistance).find(Boolean)??null,
     axialResistance:values.map(value=>value.axialResistance).find(Boolean)??null,
     retention:constraints.map(item=>item?.metadata?.topology?.retained).some(Boolean),
+    springMotor,
+    springMotorConflict:springMotors.length>1,
     raw:Object.freeze(values),
   })
 }
