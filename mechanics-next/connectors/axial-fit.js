@@ -35,17 +35,40 @@ export function evaluateAxialOffset(male,female,offsetLdu,{
       const overlap=overlapLength(ms,me,f.start,f.end)
       if(overlap<=collisionEpsilonLdu)continue
       const fit=sectionProfileFit(m.section,f.section)
-      const record={maleIndex:m.index,femaleIndex:f.index,overlapLdu:overlap,fit}
+      const femaleStart=Math.max(ms,f.start)
+      const femaleEnd=Math.min(me,f.end)
+      const record={
+        maleIndex:m.index,
+        femaleIndex:f.index,
+        overlapLdu:overlap,
+        overlapIntervalFemaleLdu:[femaleStart,femaleEnd],
+        overlapIntervalMaleLdu:[femaleStart-offsetLdu,femaleEnd-offsetLdu],
+        fit,
+      }
       if(fit.compatible){
         engagement+=overlap
         contacts.push(record)
       }else collisions.push(record)
     }
   }
+  const occupiedMaleInterval=contacts.length
+    ?[
+        Math.min(...contacts.map(contact=>contact.overlapIntervalMaleLdu[0])),
+        Math.max(...contacts.map(contact=>contact.overlapIntervalMaleLdu[1])),
+      ]
+    :null
+  const occupiedFemaleInterval=contacts.length
+    ?[
+        Math.min(...contacts.map(contact=>contact.overlapIntervalFemaleLdu[0])),
+        Math.max(...contacts.map(contact=>contact.overlapIntervalFemaleLdu[1])),
+      ]
+    :null
   return Object.freeze({
     valid:collisions.length===0&&engagement+EPS>=minimumEngagementLdu,
     offsetLdu:Number(offsetLdu),
     engagementLdu:engagement,
+    occupiedMaleInterval:Object.freeze(occupiedMaleInterval),
+    occupiedFemaleInterval:Object.freeze(occupiedFemaleInterval),
     contacts:Object.freeze(contacts),
     collisions:Object.freeze(collisions),
     reason:collisions.length?'profile-collision':engagement+EPS<minimumEngagementLdu?'insufficient-engagement':'ok',
