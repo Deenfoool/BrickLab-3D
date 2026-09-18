@@ -202,18 +202,61 @@ function discoverPackagedTransmissions(records,graph,{controlState=null}={}){
 
     const ratio=rawRatio*input.polarity*output.polarity
     const id=deterministicId('packaged-transmission',bodyId,input.bodyId,output.bodyId)
+    const kind=classification.role==='worm'?'worm-drive':'packaged-transmission'
+    const effectiveModes=Object.freeze(Object.fromEntries(
+      Object.entries(modes)
+        .filter(([,value])=>Number.isFinite(Number(value)))
+        .map(([key,value])=>[
+          String(key),
+          Number(value)*input.polarity*output.polarity,
+        ]),
+    ))
     const equation=Math.abs(ratio)>1e-12
-      ?rotationCouplingEquation({
-          id,
-          bodyA:input.bodyId,
-          bodyB:output.bodyId,
-          ratioAB:ratio,
-          kind:classification.role==='worm'?'worm-drive':'packaged-transmission',
+      ?Object.freeze({
+          ...rotationCouplingEquation({
+            id,
+            bodyA:input.bodyId,
+            bodyB:output.bodyId,
+            ratioAB:ratio,
+            kind,
+          }),
+          metadata:Object.freeze({
+            ...rotationCouplingEquation({
+              id,
+              bodyA:input.bodyId,
+              bodyB:output.bodyId,
+              ratioAB:ratio,
+              kind,
+            }).metadata,
+            physicsExclude:true,
+            controlId:instanceId,
+          }),
         })
       :null
     if(equation)equations.push(equation)
 
-    const kind=classification.role==='worm'?'worm-drive':'packaged-transmission'
+    const physicalRatio=Number(effectiveModes.forward)||
+      Object.values(effectiveModes).find(value=>Math.abs(Number(value))>1e-12)||
+      1
+    const physicalBase=rotationCouplingEquation({
+      id:`${id}:physics-control`,
+      bodyA:input.bodyId,
+      bodyB:output.bodyId,
+      ratioAB:physicalRatio,
+      kind:`${kind}-physics-control`,
+    })
+    const physicsEquation=Object.freeze({
+      ...physicalBase,
+      metadata:Object.freeze({
+        ...physicalBase.metadata,
+        controlledTransmission:true,
+        controlId:instanceId,
+        modeRatios:effectiveModes,
+        defaultMode:mode,
+        packageKind:kind,
+      }),
+    })
+
     transmissions.push(createTransmission({
       id,
       kind,
@@ -221,7 +264,9 @@ function discoverPackagedTransmissions(records,graph,{controlState=null}={}){
       parameters:{
         housingBodyId:bodyId,
         housingInstanceId:instanceId,
+        controlId:instanceId,
         mode,
+        modeRatios:effectiveModes,
         ratioAB:ratio,
         rawRatio,
         inputPolarity:input.polarity,
@@ -230,10 +275,11 @@ function discoverPackagedTransmissions(records,graph,{controlState=null}={}){
         backdriveEfficiency:packageData.wormDrive?.backdriveEfficiency??null,
         neutral:Math.abs(rawRatio)<=1e-12,
       },
-      equations:equation?[equation]:[],
+      equations:[physicsEquation],
       metadata:{
         inputConstraintId:input.edge.id,
         outputConstraintId:output.edge.id,
+        controlledPhysics:true,
       },
       evidence:evidence({
         source:'mechanics-next:explicit-package-ports',
