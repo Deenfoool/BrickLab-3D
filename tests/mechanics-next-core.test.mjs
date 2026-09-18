@@ -77,6 +77,7 @@ import { materializeRapierMechanicsPlan, preflightRapierMechanicsPlan } from '..
 import { materializeCompoundMemberPhysics, preflightCompoundMemberMaterialization } from '../mechanics-next/physics/compound-member-materializer.js'
 import { exportMechanicsProjectState, persistenceCompatibilityReport, probeMechanicsProjectState, restoreMechanicsProjectState, validateMechanicsProjectState } from '../mechanics-next/migration/project-state.js'
 import { evaluateMechanicsMigrationGate } from '../mechanics-next/migration/gate.js'
+import { auditMechanicsNextPhysicsIsolation } from '../mechanics-next/diagnostics/physics-isolation-audit.js'
 import * as THREE from 'three'
 
 test('deterministic mechanical IDs are stable and namespace-sensitive', () => {
@@ -4220,4 +4221,50 @@ test('Rapier native prismatic applies metre limits and shock motor target', () =
   assert.deepEqual(limits,[-.01,.002])
   assert.deepEqual(motor,[.001,3.2,.38])
   assert.equal(model,77)
+})
+
+
+test('physics isolation audit requires every final legacy writer to declare native bypass', () => {
+  class FakePhysicsSession {}
+  for(const name of [
+    'createJoint',
+    'applyMotorTorques',
+    'applyGearCouplingTorques',
+    'updateSuspensionV2',
+    'updateVehicleControlsV1',
+  ]){
+    const fn=function(){}
+    fn.__mechanicsNextBypass=true
+    FakePhysicsSession.prototype[name]=fn
+  }
+  const session={
+    mechanicsNextBootstrap:true,
+    creationOptions:{mechanicsNextOwned:true},
+    connections:[{
+      id:'compat',
+      kind:'fixed',
+      mechanicsNextCompatibility:true,
+    }],
+    autoWeldStats:{mechanicsNextBypass:true,inferredFixedLinks:0},
+    mechanicalRecoveryStats:{mechanicsNextBypass:true,recoveredAxleLinks:0},
+    motorDrives:[],
+    gearCouplers:[],
+    suspensionJoints:[],
+  }
+  const pass=auditMechanicsNextPhysicsIsolation({
+    PhysicsSession:FakePhysicsSession,
+    session,
+  })
+  assert.equal(pass.pass,true)
+  assert.equal(pass.failures.length,0)
+
+  FakePhysicsSession.prototype.applyMotorTorques.__mechanicsNextBypass=false
+  session.connections.push({id:'foreign',kind:'bearing'})
+  const fail=auditMechanicsNextPhysicsIsolation({
+    PhysicsSession:FakePhysicsSession,
+    session,
+  })
+  assert.equal(fail.pass,false)
+  assert.ok(fail.failures.some(item=>item.id==='writer:applyMotorTorques'))
+  assert.ok(fail.failures.some(item=>item.id==='compatibility-connections-only'))
 })
