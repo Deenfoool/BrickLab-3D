@@ -63,6 +63,15 @@ export function screenDragAngle(start,current,pivot,{
   })
 }
 
+function shouldBalanceDifferentials(discovery,bodyId,policy){
+  if(policy===true)return true
+  if(policy===false)return false
+  if(policy!=='auto')return false
+  return (discovery?.transmissions||[]).some(transmission=>
+    transmission?.kind==='open-differential' &&
+    transmission?.bodies?.[0]===String(bodyId))
+}
+
 function displacementEquations(discovery,{balancedDifferentials=false}={}){
   const base=remapEquationSetChannel(
     discovery?.equations||[],
@@ -84,15 +93,16 @@ export function solveRotationalDrag({
   bodyId,
   angleRad,
   discovery,
-  balancedDifferentials=true,
+  balancedDifferentials='auto',
   defaults={},
   tolerance,
 }={}){
   if(!bodyId)throw new TypeError('rotational drag requires bodyId')
   if(!Number.isFinite(Number(angleRad)))throw new TypeError('rotational drag requires finite angleRad')
 
+  const balanceResolved=shouldBalanceDifferentials(discovery,bodyId,balancedDifferentials)
   const equations=[
-    ...displacementEquations(discovery,{balancedDifferentials}),
+    ...displacementEquations(discovery,{balancedDifferentials:balanceResolved}),
     driverEquation({
       id:`drag-theta:${bodyId}`,
       bodyId,
@@ -108,7 +118,8 @@ export function solveRotationalDrag({
     version:DRAG_DRIVER_VERSION,
     bodyId:String(bodyId),
     requestedAngleRad:Number(angleRad),
-    balancedDifferentials:Boolean(balancedDifferentials),
+    balancedDifferentials:balanceResolved,
+    balancedDifferentialPolicy:balancedDifferentials,
     status:!result.valid
       ?'conflict'
       :result.freeVariables.length
@@ -125,7 +136,7 @@ export function solveScreenRotationalDrag({
   current,
   pivot,
   discovery,
-  balancedDifferentials=true,
+  balancedDifferentials='auto',
   axisScreenSign=1,
   defaults={},
   tolerance,
