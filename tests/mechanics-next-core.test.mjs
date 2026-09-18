@@ -43,6 +43,9 @@ import { worldConnectorFrame } from '../mechanics-next/connectors/world-frame.js
 import { OccupancyLedger, occupancyPlanForPlacement } from '../mechanics-next/connectors/occupancy.js'
 import { findMechanicalCandidates } from '../mechanics-next/connectors/candidate-search.js'
 import { commitPlacementTransaction } from '../mechanics-next/connectors/placement-transaction.js'
+import { discoverMechanicalTransmissions } from '../mechanics-next/transmission/discovery.js'
+import { createTransmissionCompiler } from '../mechanics-next/transmission/compiler.js'
+import { evaluateBevelGearPair, evaluateSpurGearPair } from '../mechanics-next/transmission/gear-geometry.js'
 
 test('deterministic mechanical IDs are stable and namespace-sensitive', () => {
   assert.equal(deterministicId('body', 'a', 1), deterministicId('body', 'a', 1))
@@ -1006,4 +1009,185 @@ test('placement transaction rolls back pose when post-placement validation fails
   assert.equal(result.accepted,false)
   assert.equal(result.reason,'post-placement:collision')
   assert.deepEqual(state.position,[5,0,0])
+})
+
+
+function directEndpoint({ id, bodyId, axis='y' } = {}) {
+  const orientation = axis === 'x'
+    ? [0,-1,0, 1,0,0, 0,0,1]
+    : axis === 'z'
+      ? [1,0,0, 0,0,-1, 0,1,0]
+      : [1,0,0, 0,1,0, 0,0,1]
+  return createEndpointDescriptor({
+    id,
+    bodyId,
+    family:'cylinder',
+    gender:'female',
+    frame:{
+      positionStud:[0,0,0],
+      orientationBrickLab:orientation,
+    },
+    profile:{
+      centered:true,
+      caps:'none',
+      sections:[{shape:'A',radiusLdu:6,lengthLdu:20}],
+    },
+    capabilities:['slide'],
+    metadata:{
+      semantics:{
+        semanticKind:'technic-axle-hole',
+      },
+    },
+  })
+}
+
+function transmissionRecord({
+  bodyId,
+  instanceId=bodyId,
+  role='spur-gear',
+  teeth=20,
+  kind=role==='bevel-gear'?'bevel-gear':'spur-gear',
+  position=[0,0,0],
+  axis='y',
+} = {}) {
+  const endpoint=directEndpoint({id:`${bodyId}-port`,bodyId,axis})
+  return {
+    instance:{
+      body:{id:bodyId,instanceId},
+      endpoints:[endpoint],
+      descriptor:{classification:{role}},
+      transmissions:[{
+        kind,
+        toothCount:teeth,
+        pitchRadius:teeth/16,
+        equationFamily:'gear-mesh',
+      }],
+    },
+    pose:{position,quaternion:[0,0,0,1]},
+    visualOffsetStud:[0,0,0],
+  }
+}
+
+test('spur geometry discovery builds a bidirectional ratio equation', () => {
+  const a=transmissionRecord({bodyId:'g20',teeth:20,position:[0,0,0]})
+  const b=transmissionRecord({bodyId:'g12',teeth:12,position:[20/16+12/16+.018,0,0]})
+  const graph=createAssemblyGraph()
+  graph.addBody(createBodyDescriptor({id:'g20'}))
+  graph.addBody(createBodyDescriptor({id:'g12'}))
+
+  const discovery=discoverMechanicalTransmissions({records:[a,b],graph})
+  assert.equal(discovery.transmissions.filter(item=>item.kind==='spur-gear-mesh').length,1)
+
+  const compiler=createTransmissionCompiler({solver:createKinematicSolver(),graph})
+  compiler.sync(discovery)
+  compiler.solve()
+  compiler.clear()
+})
+
+test('spur gear local-axis sign flips when endpoint axes are opposite', () => {
+  const a={kind:'spur',pitchRadius:1,center:[0,0,0],axis:[0,1,0]}
+  const b={kind:'spur',pitchRadius:1,center:[2.018,0,0],axis:[0,-1,0]}
+  const geometry=evaluateSpurGearPair(a,b)
+  assert.equal(geometry.valid,true)
+  assert.equal(geometry.directionSign,1)
+})
+
+test('bevel geometry recognizes a 20T to 28T perpendicular mesh by common apex', () => {
+  const gear20={
+    kind:'bevel',
+    teeth:20,
+    pitchRadius:20/16,
+    center:[0,0,0],
+    axis:[0,1,0],
+    bevelApexSigns:[1],
+  }
+  const diff28={
+    kind:'bevel',
+    teeth:28,
+    pitchRadius:28/16,
+    center:[-(20/16+.1),28/16+.1,0],
+    axis:[1,0,0],
+    bevelApexSigns:[1],
+  }
+  const geometry=evaluateBevelGearPair(gear20,diff28)
+  assert.equal(geometry.valid,true)
+  assert.ok(geometry.apexError < 1e-9)
+  assert.equal(geometry.directionSign,-1)
+})
+
+test('differential discovery resolves two side gears and leaves spider as compound diagnostic', () => {
+  const carrier=transmissionRecord({
+    bodyId:'carrier',
+    role:'differential',
+    teeth:28,
+    kind:'bevel-gear',
+    axis:'y',
+  })
+  carrier.instance.transmissions=[
+    {
+      kind:'bevel-gear',
+      toothCount:28,
+      pitchRadius:28/16,
+      equationFamily:'gear-mesh',
+      mechanicalRole:'carrier-input-gear',
+    },
+    {
+      kind:'differential',
+      equationFamily:'three-port-differential',
+      mechanicalRole:'carrier',
+    },
+  ]
+  const left=transmissionRecord({bodyId:'left',role:'bevel-gear',teeth:12,axis:'y'})
+  const right=transmissionRecord({bodyId:'right',role:'bevel-gear',teeth:12,axis:'y'})
+  const spider=transmissionRecord({bodyId:'spider',role:'bevel-gear',teeth:12,axis:'x'})
+  const graph=createAssemblyGraph()
+  for(const id of ['carrier','left','right','spider'])graph.addBody(createBodyDescriptor({id}))
+
+  const relations=[
+    {kind:'differential-port',bodyA:'carrier',bodyB:'left'},
+    {kind:'differential-port',bodyA:'carrier',bodyB:'right'},
+    {kind:'differential-port',bodyA:'carrier',bodyB:'spider'},
+  ]
+  const discovery=discoverMechanicalTransmissions({
+    records:[carrier,left,right,spider],
+    graph,
+    relations,
+  })
+  const diff=discovery.transmissions.find(item=>item.kind==='open-differential')
+  assert.ok(diff)
+  assert.deepEqual(new Set(diff.parameters.sideBodies),new Set(['left','right']))
+  assert.deepEqual(diff.parameters.spiderBodies,['spider'])
+  assert.equal(discovery.balancedDifferentialClosures.length,1)
+})
+
+test('differential core stays underdetermined but balanced preview gives symmetric outputs', () => {
+  const carrier=transmissionRecord({bodyId:'carrier',role:'differential',teeth:28,axis:'y'})
+  carrier.instance.transmissions=[
+    {kind:'bevel-gear',toothCount:28,pitchRadius:28/16,equationFamily:'gear-mesh'},
+    {kind:'differential',equationFamily:'three-port-differential'},
+  ]
+  const left=transmissionRecord({bodyId:'left',role:'bevel-gear',teeth:12,axis:'y'})
+  const right=transmissionRecord({bodyId:'right',role:'bevel-gear',teeth:12,axis:'y'})
+  const graph=createAssemblyGraph()
+  for(const id of ['carrier','left','right'])graph.addBody(createBodyDescriptor({id}))
+  const discovery=discoverMechanicalTransmissions({
+    records:[carrier,left,right],
+    graph,
+    relations:[
+      {kind:'differential-port',bodyA:'carrier',bodyB:'left'},
+      {kind:'differential-port',bodyA:'carrier',bodyB:'right'},
+    ],
+  })
+  const solver=createKinematicSolver()
+  const compiler=createTransmissionCompiler({solver,graph})
+  compiler.sync(discovery)
+  solver.setDriver({id:'drag-carrier',bodyId:'carrier',value:10})
+
+  const core=compiler.solve()
+  assert.equal(core.status,'underdetermined')
+
+  const preview=compiler.solve({balancedDifferentials:true})
+  assert.equal(preview.status,'solved')
+  assert.ok(Math.abs(preview.values[mechanicalVariable('left','omega')]-10)<1e-9)
+  assert.ok(Math.abs(preview.values[mechanicalVariable('right','omega')]-10)<1e-9)
 })
