@@ -155,7 +155,18 @@ export function createBrickLabSubsystemApi({
   })
 
   const connectivity = Object.freeze({
-    authority:Object.freeze({ build:'connector-v4-with-legacy-bridge', simulate:'connector-v4-physics-guard' }),
+    authority:Object.freeze({
+      get build(){
+        return globals?.BrickLabMechanicsNextBuildOwner?.active
+          ?'mechanics-next-build-owner'
+          :'connector-v4-with-legacy-bridge'
+      },
+      get simulate(){
+        return globals?.BrickLabMechanicsNextPhysicsOwner?.active
+          ?'mechanics-next-physics-owner'
+          :'connector-v4-physics-guard'
+      },
+    }),
     build:Object.freeze({
       ready() { return Boolean(connectorRuntime()) },
       records() { return snapshot(connectorRuntime()?.projectConnections?.() ?? []) },
