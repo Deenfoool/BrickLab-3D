@@ -7,7 +7,7 @@ const ROTARY = new Set([
 ])
 const TRANSMISSION = new Set([
   'spur-gear','bevel-gear','crown-gear','clutch-gear','worm','rack','pulley','sprocket',
-  'differential','driving-ring','universal-joint','cv-joint','linear-actuator',
+  'differential','packaged-differential','gearbox','driving-ring','universal-joint','cv-joint','linear-actuator',
 ])
 const STRUCTURAL = new Set(['beam','technic-brick','technic-frame','connector','brick','plate'])
 
@@ -44,6 +44,7 @@ function roleFromText(raw) {
   if (/\b(?:universal\s+joint|cardan\s+joint)\b/.test(value)) return 'universal-joint'
   if (/\b(?:cv\s+joint|constant\s+velocity)\b/.test(value)) return 'cv-joint'
   if (/\b(?:flex(?:ible)?\s+axle|axle\s+flexible)\b/.test(value)) return 'flex-axle'
+  if (/\b(?:gearbox|transmission)\b/.test(value)) return 'gearbox'
   if (/\bdifferential\b/.test(value)) return 'differential'
   if (/\blinear\s+actuator\b/.test(value)) return 'linear-actuator'
   if (/\b(?:shock\s+absorber|spring\s+damper)\b/.test(value)) return 'shock-absorber'
@@ -106,6 +107,7 @@ function existingEvidence(observation) {
     'universal-joint':'universal-joint',
     'shock-absorber':'shock-absorber',
     'differential-like':'differential',
+    'gearbox-like':'gearbox',
     'power-unit':'motor',
     'flex-axle':'flex-axle',
     'ball-joint':'ball-joint',
@@ -140,7 +142,12 @@ export function classifyPartFamily(observation, endpoints = []) {
   let source = 'none'
   let reason = null
 
-  if (textRole !== 'unknown') {
+  if (observation?.legacyMechanics?.differential) {
+    role = 'packaged-differential'
+    confidence = 'strong'
+    source = 'bricklab-explicit-differential-metadata'
+    reason = 'explicit differential port metadata'
+  } else if (textRole !== 'unknown') {
     role = textRole
     confidence = endpointRole === textRole ? 'strong' : 'inferred'
     source = endpointRole === textRole
@@ -171,9 +178,17 @@ export function classifyPartFamily(observation, endpoints = []) {
 
   const legacyGear=observation?.legacyMechanics?.gear
   const legacyMotor=observation?.legacyMechanics?.motor
+  const legacyTransmission=observation?.legacyMechanics?.transmission
+  const legacyDifferential=observation?.legacyMechanics?.differential
+  const legacyWormDrive=observation?.legacyMechanics?.wormDrive
+  const legacyRackGear=observation?.legacyMechanics?.rackGear
+  const legacySteeringRack=observation?.legacyMechanics?.steeringRack
+  const legacyArticulatedCoupler=observation?.legacyMechanics?.articulatedCoupler
   const gearGeometry=legacyGear && typeof legacyGear==='object'
     ?Object.freeze({
         pitchRadius:Number.isFinite(Number(legacyGear.pitchRadius))?Number(legacyGear.pitchRadius):null,
+        moduleStud:Number.isFinite(Number(legacyGear.moduleStud))?Number(legacyGear.moduleStud):null,
+        kind:legacyGear.kind??null,
         meshAnchorLdu:Array.isArray(legacyGear.meshAnchorLdu)?legacyGear.meshAnchorLdu.slice(0,3).map(Number):null,
         meshAxisLdu:Array.isArray(legacyGear.meshAxisLdu)?legacyGear.meshAxisLdu.slice(0,3).map(Number):null,
         bevelApexSigns:Array.isArray(legacyGear.bevelApexSigns)?legacyGear.bevelApexSigns.map(Number).filter(value=>value===-1||value===1):null,
@@ -200,10 +215,90 @@ export function classifyPartFamily(observation, endpoints = []) {
   const damping=finiteProp('damping','springDamping')
   const maxBendAngleRad=finiteProp('maxBendAngleRad')
 
+  const packagedTransmission=legacyTransmission&&
+    legacyTransmission.inputConnectorId&&legacyTransmission.outputConnectorId
+    ?Object.freeze({
+        inputConnectorId:String(legacyTransmission.inputConnectorId),
+        outputConnectorId:String(legacyTransmission.outputConnectorId),
+        rigidConnectorId:legacyTransmission.rigidConnectorId==null?null:String(legacyTransmission.rigidConnectorId),
+        modes:Object.freeze(Object.fromEntries(
+          Object.entries(legacyTransmission.modes||{})
+            .filter(([,value])=>Number.isFinite(Number(value)))
+            .map(([key,value])=>[String(key),Number(value)]),
+        )),
+        efficiency:Number.isFinite(Number(legacyTransmission.efficiency))
+          ?Number(legacyTransmission.efficiency):null,
+        wormDrive:legacyWormDrive?Object.freeze({
+          reduction:Number.isFinite(Number(legacyWormDrive.reduction))?Number(legacyWormDrive.reduction):null,
+          backdriveEfficiency:Number.isFinite(Number(legacyWormDrive.backdriveEfficiency))
+            ?Number(legacyWormDrive.backdriveEfficiency):null,
+        }):null,
+        articulated:legacyArticulatedCoupler?Object.freeze({...legacyArticulatedCoupler}):null,
+      })
+    :null
+
+  const packagedDifferential=legacyDifferential&&
+    legacyDifferential.inputConnectorId&&
+    legacyDifferential.leftConnectorId&&
+    legacyDifferential.rightConnectorId
+    ?Object.freeze({
+        inputConnectorId:String(legacyDifferential.inputConnectorId),
+        leftConnectorId:String(legacyDifferential.leftConnectorId),
+        rightConnectorId:String(legacyDifferential.rightConnectorId),
+        ratio:Number.isFinite(Number(legacyDifferential.ratio))?Number(legacyDifferential.ratio):1,
+        efficiency:Number.isFinite(Number(legacyDifferential.efficiency))
+          ?Number(legacyDifferential.efficiency):null,
+        torqueSplit:Number.isFinite(Number(legacyDifferential.torqueSplit))
+          ?Number(legacyDifferential.torqueSplit):null,
+      })
+    :null
+
+  const rackMetrics=observation?.rackVisualMetrics
+  const rackGeometry=legacyRackGear
+    ?Object.freeze({
+        moduleStud:Number(legacyRackGear.moduleStud),
+        pressureAngleDeg:Number(legacyRackGear.pressureAngleDeg),
+        linearPitchStud:Number(legacyRackGear.linearPitchStud),
+        pitchLinePoint:Array.isArray(legacyRackGear.pitchLinePoint)
+          ?legacyRackGear.pitchLinePoint.slice(0,3).map(Number):null,
+        travelAxis:Array.isArray(legacyRackGear.travelAxis)
+          ?legacyRackGear.travelAxis.slice(0,3).map(Number):null,
+        toothNormal:Array.isArray(legacyRackGear.toothNormal)
+          ?legacyRackGear.toothNormal.slice(0,3).map(Number):null,
+        widthAxis:Array.isArray(legacyRackGear.widthAxis)
+          ?legacyRackGear.widthAxis.slice(0,3).map(Number):null,
+        phaseOriginStud:Number.isFinite(Number(legacyRackGear.phaseOriginStud))
+          ?Number(legacyRackGear.phaseOriginStud):null,
+        toothCount:Number.isFinite(Number(legacyRackGear.toothCount))
+          ?Number(legacyRackGear.toothCount):null,
+        maxTravelStud:Number.isFinite(Number(legacyRackGear.maxTravelStud))
+          ?Number(legacyRackGear.maxTravelStud):null,
+        source:legacyRackGear.source??'catalog-rack-gear',
+      })
+    :rackMetrics&&legacySteeringRack
+      ?Object.freeze({
+          moduleStud:Number(rackMetrics.moduleStud),
+          pressureAngleDeg:Number(rackMetrics.pressureAngleDeg),
+          linearPitchStud:Number(rackMetrics.linearPitchStud),
+          pitchLinePoint:null,
+          travelAxis:Object.freeze([1,0,0]),
+          toothNormal:Object.freeze([0,1,0]),
+          widthAxis:Object.freeze([0,0,1]),
+          phaseOriginStud:null,
+          toothCount:null,
+          maxTravelStud:Number.isFinite(Number(legacySteeringRack.maxTravelStud))
+            ?Number(legacySteeringRack.maxTravelStud):null,
+          source:'catalog-rack-visual-metrics',
+        })
+      :null
+
   const properties = {
     ...(Number.isFinite(teeth) && teeth > 0 ? { toothCount:teeth } : {}),
     ...(Number.isFinite(lengthL) && lengthL > 0 ? { lengthL } : {}),
     ...(gearGeometry ? { gearGeometry } : {}),
+    ...(packagedTransmission ? { packagedTransmission } : {}),
+    ...(packagedDifferential ? { packagedDifferential } : {}),
+    ...(rackGeometry ? { rackGeometry } : {}),
     ...(role==='motor'&&legacyMotor&&typeof legacyMotor==='object'?{
       motor:Object.freeze({
         connectorId:legacyMotor.connectorId??null,
@@ -238,8 +333,8 @@ export function classifyPartFamily(observation, endpoints = []) {
     bodyPolicy:bodyPolicy(role, observation),
     contexts:Object.freeze(endpointRole && endpointRole !== role ? [endpointRole] : []),
     capabilities:Object.freeze({
-      rotary:ROTARY.has(role),
-      transmission:TRANSMISSION.has(role),
+      rotary:ROTARY.has(role)&&!packagedTransmission&&!packagedDifferential,
+      transmission:TRANSMISSION.has(role)||Boolean(packagedTransmission)||Boolean(packagedDifferential),
       structural:STRUCTURAL.has(role),
       flexible:['flex-axle','flex-system'].includes(role),
       retainer:role === 'bush',
