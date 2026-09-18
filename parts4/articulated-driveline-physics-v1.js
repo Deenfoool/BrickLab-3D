@@ -77,6 +77,7 @@ PhysicsSession.prototype.buildGearCouplers.__bricklabOwner = ARTICULATED_DRIVELI
 
 const originalApplyGearCouplingTorques = PhysicsSession.prototype.applyGearCouplingTorques
 PhysicsSession.prototype.applyGearCouplingTorques = function applyArticulatedDrivelineTorques(dt = 1 / (this.quality?.hz ?? 120)) {
+  if (this.mechanicsNextBootstrap) return
   for (const coupling of this.gearCouplers ?? []) {
     if (coupling.kind !== 'articulated' || !coupling.partId) continue
     const definition = findPart(coupling.partId)
@@ -108,6 +109,7 @@ PhysicsSession.prototype.applyGearCouplingTorques = function applyArticulatedDri
   return originalApplyGearCouplingTorques.call(this, dt)
 }
 PhysicsSession.prototype.applyGearCouplingTorques.__bricklabOwner = ARTICULATED_DRIVELINE_PHYSICS_VERSION
+PhysicsSession.prototype.applyGearCouplingTorques.__mechanicsNextBypass = true
 
 globalThis.BrickLabArticulatedDriveline = Object.freeze({
   version: ARTICULATED_DRIVELINE_PHYSICS_VERSION,
