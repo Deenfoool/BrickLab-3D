@@ -36,6 +36,7 @@ import { runMechanicsMigrationRegressionSuite } from './migration/regression-sui
 
 export const MECHANICS_NEXT_RUNTIME_MODE = 'migration-pilot'
 export const MECHANICS_NEXT_BUILD_OWNER_VERSION = 'mechanics-next-build-owner-0.1.0'
+export const MECHANICS_NEXT_OWNER_ID = 'mechanics-next'
 
 export function createMechanicsNextRuntime({
   globals = globalThis,
@@ -509,6 +510,24 @@ export function createMechanicsNextRuntime({
     version:MECHANICS_NEXT_VERSION,
     mode:MECHANICS_NEXT_RUNTIME_MODE,
     ownership,
+    handoffDomains(domains, reason='validated-production-migration') {
+      const wanted=[...new Set((domains||[]).map(String).filter(Boolean))]
+      const handed=[]
+      for(const domain of wanted){
+        const current=ownership.owner(domain)
+        if(current===MECHANICS_NEXT_OWNER_ID)continue
+        handed.push(ownership.handoff(domain,current,MECHANICS_NEXT_OWNER_ID,{
+          reason,
+          checks:{
+            tests:regressionEvidence?.status==='passed',
+            migration:true,
+            diagnostics:true,
+            rollback:true,
+          },
+        }))
+      }
+      return Object.freeze(handed)
+    },
     graph,
     solver,
     intelligence,
@@ -664,6 +683,10 @@ export function createMechanicsNextRuntime({
       const gate=api.migrationGate()
       if(!gate.pass)return Object.freeze({accepted:false,reason:'migration-gate-blocked',gate})
       if(nativeProjectAuthoritative){
+        api.handoffDomains(
+          ['connector-hydration','snapping','connection-graph','persistence'],
+          'validated native BUILD project',
+        )
         publishBuildOwnership('validated-native-project')
         return Object.freeze({
           accepted:true,
@@ -700,6 +723,10 @@ export function createMechanicsNextRuntime({
         })
       }
       nativeProjectAuthoritative=true
+      api.handoffDomains(
+        ['connector-hydration','snapping','connection-graph','persistence'],
+        'validated BUILD migration handoff',
+      )
       publishBuildOwnership('migration-handoff')
       rebuildNativeOccupancy()
       const refreshed=syncScene()
@@ -910,7 +937,14 @@ export function createMechanicsNextRuntime({
       return Object.freeze({
         version:MECHANICS_NEXT_VERSION,
         mode:MECHANICS_NEXT_RUNTIME_MODE,
-        ownsProductionDomains:false,
+        ownsProductionDomains:Object.values(ownership.snapshot().owners)
+          .every(owner=>owner===MECHANICS_NEXT_OWNER_ID),
+        productionOwnership:Object.freeze({
+          build:globals.BrickLabMechanicsNextBuildOwner?.active===true &&
+            globals.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true,
+          kinematics:globals.BrickLabMechanicsNextKinematics?.active?.()===true,
+          physicsCreateOwner:globals.BrickLabMechanicsNextPhysicsOwner?.createOwner??null,
+        }),
         graphRevision:graph.revision,
         graphBodies:graph.size,
         solverRevision:solver.revision,
