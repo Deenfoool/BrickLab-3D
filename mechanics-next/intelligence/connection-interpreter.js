@@ -87,6 +87,93 @@ function specialRelation(kindA, kindB) {
   return null
 }
 
+function endpointSourceId(endpoint){
+  return String(
+    endpoint?.metadata?.builtinConnectorId ??
+    endpoint?.metadata?.sourceEndpointId ??
+    endpoint?.metadata?.compatibilityEndpointId ??
+    endpoint?.metadata?.templateKey ??
+    endpoint?.id ??
+    ''
+  )
+}
+
+function packagedPort(classification,endpoint){
+  const properties=classification?.properties||{}
+  const endpointId=endpointSourceId(endpoint)
+  const differential=properties.packagedDifferential
+  if(differential){
+    const ports=[
+      ['input',differential.inputConnectorId],
+      ['left',differential.leftConnectorId],
+      ['right',differential.rightConnectorId],
+    ]
+    const found=ports.find(([,id])=>String(id||'')===endpointId)
+    if(found)return Object.freeze({
+      packageKind:'packaged-differential',
+      portRole:found[0],
+      portId:endpointId,
+      parameters:differential,
+    })
+  }
+
+  const transmission=properties.packagedTransmission
+  if(transmission){
+    const ports=[
+      ['input',transmission.inputConnectorId],
+      ['output',transmission.outputConnectorId],
+    ]
+    const found=ports.find(([,id])=>String(id||'')===endpointId)
+    if(found)return Object.freeze({
+      packageKind:classification?.role==='worm'?'worm-drive':'packaged-transmission',
+      portRole:found[0],
+      portId:endpointId,
+      parameters:transmission,
+    })
+  }
+  return null
+}
+
+function packagedTransmissionPortRule(endpointA,endpointB,classificationA,classificationB){
+  const portA=packagedPort(classificationA,endpointA)
+  const portB=packagedPort(classificationB,endpointB)
+  if(Boolean(portA)===Boolean(portB))return null
+
+  const packageSide=portA?'a':'b'
+  const port=portA??portB
+  const externalKind=packageSide==='a'
+    ?endpointSemanticKind(endpointB)
+    :endpointSemanticKind(endpointA)
+  const rotaryReceiver=new Set([
+    'technic-axle','technic-axle-hole','technic-round-hole','wheel-axle-interface',
+  ])
+  if(!rotaryReceiver.has(externalKind))return null
+
+  return Object.freeze({
+    packageSide,
+    port,
+    rule:Object.freeze({
+      kind:'revolute',
+      topology:Object.freeze({
+        dof:constraintDof('revolute'),
+        axis:'y',
+        keyedRotation:false,
+        retained:true,
+        transmissionPort:true,
+      }),
+      dynamics:Object.freeze({
+        rotationalResistance:'low',
+        transmissionPort:true,
+      }),
+      evidence:Object.freeze({
+        tier:'A',
+        source:'BrickLab explicit packaged transmission port metadata',
+      }),
+    }),
+    interfacePair:Object.freeze(['transmission-port','rotary-shaft']),
+  })
+}
+
 function motorOutputRule(kindA,kindB,partRoleA,partRoleB){
   const motorSide=partRoleA==='motor'?'a':partRoleB==='motor'?'b':null
   if(!motorSide)return null
@@ -122,9 +209,21 @@ function resolveRule(endpointA, endpointB, {
   match = null,
   partRoleA = null,
   partRoleB = null,
+  classificationA = null,
+  classificationB = null,
 } = {}) {
   const kindA = endpointSemanticKind(endpointA)
   const kindB = endpointSemanticKind(endpointB)
+  const packaged=packagedTransmissionPortRule(
+    endpointA,endpointB,classificationA,classificationB)
+  if(packaged)return{
+    kindA,
+    kindB,
+    rule:packaged.rule,
+    interfacePair:packaged.interfacePair,
+    special:null,
+    transmissionPort:packaged,
+  }
   const motor=motorOutputRule(kindA,kindB,partRoleA,partRoleB)
   if(motor)return{
     kindA,
@@ -212,6 +311,8 @@ export function interpretObservedConnection(record, {
     match:record.match,
     partRoleA:instanceA.descriptor.classification.role,
     partRoleB:instanceB.descriptor.classification.role,
+    classificationA:instanceA.descriptor.classification,
+    classificationB:instanceB.descriptor.classification,
   })
 
   if (resolved.special) {
@@ -280,6 +381,17 @@ export function interpretObservedConnection(record, {
         drivenInstanceId:resolved.motorSide==='a'?instanceB.body.instanceId:instanceA.body.instanceId,
         motorEndpointId:resolved.motorSide==='a'?endpointA.id:endpointB.id,
         drivenEndpointId:resolved.motorSide==='a'?endpointB.id:endpointA.id,
+      }):null,
+      transmissionPort:resolved.transmissionPort?Object.freeze({
+        packageKind:resolved.transmissionPort.port.packageKind,
+        packageSide:resolved.transmissionPort.packageSide,
+        packageBodyId:resolved.transmissionPort.packageSide==='a'?instanceA.body.id:instanceB.body.id,
+        packageInstanceId:resolved.transmissionPort.packageSide==='a'?instanceA.body.instanceId:instanceB.body.instanceId,
+        externalBodyId:resolved.transmissionPort.packageSide==='a'?instanceB.body.id:instanceA.body.id,
+        externalInstanceId:resolved.transmissionPort.packageSide==='a'?instanceB.body.instanceId:instanceA.body.instanceId,
+        portRole:resolved.transmissionPort.port.portRole,
+        portId:resolved.transmissionPort.port.portId,
+        parameters:resolved.transmissionPort.port.parameters,
       }):null,
     },
     evidence:evidence({
