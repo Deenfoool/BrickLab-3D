@@ -26,7 +26,8 @@ export function createMechanicsPhysicsRuntime({
   graph,
   discovery,
   records=[],
-  worldUnitsPerStud=1,
+  worldUnitsPerStud=.008,
+  controlState=null,
 }={}){
   const compoundMemberPlan=buildCompoundMemberPhysicsPlan({records,discovery})
   const compoundGraphExpansion=expandCompoundPhysicsGraph({
@@ -132,7 +133,9 @@ export function createMechanicsPhysicsRuntime({
 
       try{
         if(compoundMemberPlan.replacements.length){
-          compoundMembers=materializeCompoundMemberPhysics(session,compoundMemberPlan)
+          compoundMembers=materializeCompoundMemberPhysics(session,compoundMemberPlan,{
+            worldUnitsPerStud,
+          })
         }
 
         bridge=buildPhysicsSessionBridge({
@@ -170,9 +173,12 @@ export function createMechanicsPhysicsRuntime({
         couplings=createMechanicsCouplingRuntime(couplingPlan,{
           resolveMember:resolveRuntimeMember,
           stabilization,
+          controlState,
         })
         motors=createMechanicsMotorRuntime(motorPlan,{
           resolveMember:resolveRuntimeMember,
+          controlState,
+          isDriveEnabled:()=>!session.scenarioData||session.scenarioData.phase==='RUN',
         })
       }catch(error){
         if(joints)disposeRapierMechanicsPlan(session,joints)
