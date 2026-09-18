@@ -1,4 +1,5 @@
 import { PhysicsSession } from '../../physics.js'
+import { auditMechanicsNextPhysicsIsolation } from '../diagnostics/physics-isolation-audit.js'
 
 export const MECHANICS_NEXT_PHYSICS_OWNER_VERSION='mechanics-next-physics-owner-0.1.0'
 
@@ -129,6 +130,7 @@ if(!PhysicsSession[marker]){
     const compatibility=fixedCompatibilityConnections(physics.structuralPlan,baseIds)
     let session=null
     let physicsInstalled=false
+    let isolation=null
     try{
       const requestedOptions=
         rest.length===1&&rest[0]&&typeof rest[0]==='object'&&!Array.isArray(rest[0])
@@ -152,6 +154,12 @@ if(!PhysicsSession[marker]){
       }
 
       disableLegacyDrivetrainOwners(session)
+      isolation=auditMechanicsNextPhysicsIsolation({PhysicsSession,session})
+      if(!isolation.pass){
+        const error=new Error('Mechanics Next physics isolation audit failed')
+        error.failures=isolation.failures
+        throw error
+      }
       physics.install(session,{
         stabilization:1,
         contactsEnabled:false,
@@ -187,6 +195,7 @@ if(!PhysicsSession[marker]){
         excludedCompoundRoots:excludedRoots.size,
         steeringBindings:steeringBridge.bindings?.length??0,
         steeringRacks:steeringBridge.rackBindings?.length??0,
+        isolation:isolation.summary,
         gate:gate.summary??null,
       })
       installDisposeBridge(session,physics)
@@ -195,6 +204,7 @@ if(!PhysicsSession[marker]){
         owner:'mechanics-next',
         gate:gate.summary??null,
         physics:physics.status(),
+        isolation,
       })
       globalThis.dispatchEvent?.(new CustomEvent('bricklab:mechanicsnextphysicsowner',{
         detail:{
