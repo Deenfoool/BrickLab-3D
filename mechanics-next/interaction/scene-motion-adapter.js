@@ -95,6 +95,12 @@ function compoundMotionMatrix(motion){
   return spin.multiply(orbit)
 }
 
+function hierarchyDepth(object){
+  let depth=0,node=object?.parent
+  while(node){depth+=1;node=node.parent}
+  return depth
+}
+
 export function applyMotionPlanToBaseline(plan,baseline,{
   updateParents=true,
 }={}){
@@ -110,9 +116,15 @@ export function applyMotionPlanToBaseline(plan,baseline,{
     for(const parent of parents)parent.updateWorldMatrix?.(true,false)
   }
 
-  for(const motion of plan.motions){
-    const entry=baseline.byInstance.get(String(motion.instanceId))
-      ??baseline.byBody.get(String(motion.bodyId))
+  const ordered=plan.motions
+    .map(motion=>({
+      motion,
+      entry:baseline.byInstance.get(String(motion.instanceId))
+        ??baseline.byBody.get(String(motion.bodyId)),
+    }))
+    .sort((a,b)=>hierarchyDepth(a.entry?.object)-hierarchyDepth(b.entry?.object))
+
+  for(const {motion,entry} of ordered){
     if(!entry){
       missing.push(Object.freeze({bodyId:motion.bodyId,instanceId:motion.instanceId}))
       continue
@@ -146,7 +158,9 @@ export function applyMotionPlanToBaseline(plan,baseline,{
 export function restoreMotionBaseline(baseline){
   if(!baseline?.byInstance)return 0
   let restored=0
-  for(const entry of baseline.byInstance.values()){
+  const entries=[...baseline.byInstance.values()]
+    .sort((a,b)=>hierarchyDepth(a.object)-hierarchyDepth(b.object))
+  for(const entry of entries){
     applyWorldMatrix(entry.object,entry.worldMatrix)
     restored+=1
   }
