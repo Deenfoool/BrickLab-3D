@@ -65,6 +65,47 @@ test('Architecture Consolidation v1 has an executable completion contract', () =
   assert.equal(assertArchitectureContract(subsystems), report)
 })
 
+test('completion contract accepts converged Mechanics Next BUILD and SIMULATE ownership', () => {
+  const subsystems=completeSubsystemFixture()
+  subsystems.connectivity.authority={
+    build:'mechanics-next-build-owner',
+    simulate:'mechanics-next-physics-owner',
+  }
+  globalThis.BrickLabMechanicsNextPhysicsOwner={
+    createOwner:'mechanics-next-physics-owner-0.1.0',
+  }
+  try{
+    const report=architectureContractReport(subsystems)
+    assert.equal(report.pass,true)
+    assert.equal(report.authority.build,'mechanics-next-build-owner')
+    assert.equal(report.authority.simulate,'mechanics-next-physics-owner')
+  }finally{
+    delete globalThis.BrickLabMechanicsNextPhysicsOwner
+  }
+})
+
+test('completion contract rejects split native BUILD and legacy SIMULATE ownership', () => {
+  const subsystems=completeSubsystemFixture()
+  subsystems.connectivity.authority={
+    build:'mechanics-next-build-owner',
+    simulate:'connector-v4-physics-guard',
+  }
+  const report=architectureContractReport(subsystems)
+  assert.equal(report.pass,false)
+  assert.ok(report.issues.some(issue=>/Mechanics Next BUILD authority requires/.test(issue)))
+})
+
+test('completion contract rejects native SIMULATE without native BUILD authority', () => {
+  const subsystems=completeSubsystemFixture()
+  subsystems.connectivity.authority={
+    build:'connector-v4-with-legacy-bridge',
+    simulate:'mechanics-next-physics-owner',
+  }
+  const report=architectureContractReport(subsystems)
+  assert.equal(report.pass,false)
+  assert.ok(report.issues.some(issue=>/Mechanics Next SIMULATE ownership requires/.test(issue)))
+})
+
 test('completion contract fails closed when BUILD or SIMULATE authority is bypassed', () => {
   const buildBypass = completeSubsystemFixture()
   buildBypass.connectivity.authority.build = 'direct-global-mutation'
