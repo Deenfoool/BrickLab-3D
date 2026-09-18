@@ -19,6 +19,11 @@ function suspensionInfo(session, connection) {
 }
 
 PhysicsSession.prototype.initializeSuspensionJointsV1 = function initializeSuspensionJointsV1() {
+  if (this.mechanicsNextBootstrap) {
+    this.__bricklabSuspensionRegistryReady = true
+    this.suspensionJoints = []
+    return this.suspensionJoints
+  }
   if (this.__bricklabSuspensionRegistryReady) return this.suspensionJoints ?? []
   this.__bricklabSuspensionRegistryReady = true
   this.suspensionJoints = []
