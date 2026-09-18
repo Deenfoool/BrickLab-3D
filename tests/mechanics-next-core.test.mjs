@@ -15,18 +15,22 @@ import {
   freeDof,
 } from '../mechanics-next/constraints/dof.js'
 import { createAssemblyGraph } from '../mechanics-next/topology/assembly-graph.js'
+import { solveConstraintBundle } from '../mechanics-next/constraints/bundle-solver.js'
 import {
   differentialEquation,
   gearMeshEquation,
   rigidRotationEquation,
 } from '../mechanics-next/transmission/equations.js'
 import { createKinematicSolver } from '../mechanics-next/solver/kinematic-solver.js'
-import { snapshotLegacyV4 } from '../mechanics-next/adapters/legacy-v4-readonly.js'
+import { legacyV4ConnectorToEndpoint, snapshotLegacyV4 } from '../mechanics-next/adapters/legacy-v4-readonly.js'
 import {
   frictionPinDynamics,
   mechanicalInterfaceRule,
   TRANSMISSION_SEMANTICS,
 } from '../mechanics-next/intelligence/interface-rules.js'
+import { classifyEndpointSemantics, enrichEndpointSemantics } from '../mechanics-next/intelligence/endpoint-semantics.js'
+import { buildMechanicalFingerprint } from '../mechanics-next/intelligence/fingerprint.js'
+import { createPartMechanicalDescriptor, instantiatePartMechanicalDescriptor } from '../mechanics-next/intelligence/part-descriptor.js'
 
 test('deterministic mechanical IDs are stable and namespace-sensitive', () => {
   assert.equal(deterministicId('body', 'a', 1), deterministicId('body', 'a', 1))
@@ -210,4 +214,190 @@ test('friction pin changes resistance, not joint topology', () => {
 test('official worm semantics default to non-backdrivable transmission', () => {
   assert.equal(TRANSMISSION_SEMANTICS.worm.defaultBackdrive, false)
   assert.equal(TRANSMISSION_SEMANTICS.worm.evidence.tier, 'A')
+})
+
+
+test('two separated revolute contacts between the same bodies become rigid geometrically', () => {
+  const a = createConstraint({
+    id:'pin-a',
+    bodyA:'beam-a',
+    bodyB:'beam-b',
+    kind:'revolute',
+    referenceFrame:{ position:[0,0,0], axis:[0,1,0] },
+  })
+  const b = createConstraint({
+    id:'pin-b',
+    bodyA:'beam-a',
+    bodyB:'beam-b',
+    kind:'revolute',
+    referenceFrame:{ position:[1,0,0], axis:[0,1,0] },
+  })
+
+  const bundle = solveConstraintBundle([a, b])
+  assert.equal(bundle.rigid, true)
+  assert.equal(bundle.remainingDof, 0)
+})
+
+test('two coaxial revolute contacts preserve one rotational DOF', () => {
+  const a = createConstraint({
+    id:'hinge-a',
+    bodyA:'a',
+    bodyB:'b',
+    kind:'revolute',
+    referenceFrame:{ position:[0,0,0], axis:[0,1,0] },
+  })
+  const b = createConstraint({
+    id:'hinge-b',
+    bodyA:'a',
+    bodyB:'b',
+    kind:'revolute',
+    referenceFrame:{ position:[0,2,0], axis:[0,1,0] },
+  })
+
+  const bundle = solveConstraintBundle([a, b])
+  assert.equal(bundle.rigid, false)
+  assert.equal(bundle.remainingDof, 1)
+  assert.equal(bundle.kind, 'revolute')
+})
+
+test('two separated spherical joints reduce to a revolute axis instead of fixed', () => {
+  const a = createConstraint({
+    id:'ball-a',
+    bodyA:'a',
+    bodyB:'b',
+    kind:'spherical',
+    referenceFrame:{ position:[0,0,0] },
+  })
+  const b = createConstraint({
+    id:'ball-b',
+    bodyA:'a',
+    bodyB:'b',
+    kind:'spherical',
+    referenceFrame:{ position:[0,2,0] },
+  })
+
+  const bundle = solveConstraintBundle([a, b])
+  assert.equal(bundle.remainingDof, 1)
+  assert.equal(bundle.kind, 'revolute')
+})
+
+test('assembly graph uses contact bundles when deciding rigid islands', () => {
+  const graph = createAssemblyGraph()
+  graph.addBody(createBodyDescriptor({ id:'beam-a' }))
+  graph.addBody(createBodyDescriptor({ id:'beam-b' }))
+  graph.addConstraint(createConstraint({
+    id:'pin-a',
+    bodyA:'beam-a',
+    bodyB:'beam-b',
+    kind:'revolute',
+    referenceFrame:{ position:[0,0,0], axis:[0,1,0] },
+  }))
+  graph.addConstraint(createConstraint({
+    id:'pin-b',
+    bodyA:'beam-a',
+    bodyB:'beam-b',
+    kind:'revolute',
+    referenceFrame:{ position:[1,0,0], axis:[0,1,0] },
+  }))
+  assert.deepEqual(graph.rigidIslands(), [['beam-a','beam-b']])
+})
+
+test('normalized A6 connector is independently recognized as Technic axle', () => {
+  const raw = {
+    endpointId:'axle-main',
+    family:'cylinder',
+    gender:'male',
+    frame:{ positionLdu:[0,0,0], orientation:[1,0,0,0,1,0,0,0,1] },
+    geometry:{
+      centered:true,
+      caps:'none',
+      sections:[{ shape:'A', radiusLdu:6, lengthLdu:40, elastic:false }],
+    },
+    snap:{ slide:true },
+  }
+  const endpoint = enrichEndpointSemantics(legacyV4ConnectorToEndpoint(raw, {
+    bodyId:'template',
+    partId:'ldraw-test',
+  }))
+  assert.equal(classifyEndpointSemantics(endpoint).semanticKind, 'technic-axle')
+})
+
+test('mechanical fingerprint is stable regardless of endpoint input order', () => {
+  const endpoints = [
+    enrichEndpointSemantics(legacyV4ConnectorToEndpoint({
+      endpointId:'a', family:'sphere', gender:'male',
+      frame:{ positionLdu:[0,0,0], orientation:[1,0,0,0,1,0,0,0,1] },
+      geometry:{ radiusLdu:10 }, snap:{},
+    }, { bodyId:'t', partId:'p' })),
+    enrichEndpointSemantics(legacyV4ConnectorToEndpoint({
+      endpointId:'b', family:'sphere', gender:'female',
+      frame:{ positionLdu:[0,20,0], orientation:[1,0,0,0,1,0,0,0,1] },
+      geometry:{ radiusLdu:10 }, snap:{},
+    }, { bodyId:'t', partId:'p' })),
+  ]
+  const classification = {
+    role:'ball-joint',
+    bodyPolicy:'rigid-atomic',
+    properties:{},
+  }
+  assert.equal(
+    buildMechanicalFingerprint({ classification, endpoints }).id,
+    buildMechanicalFingerprint({ classification, endpoints:[...endpoints].reverse() }).id,
+  )
+})
+
+test('part intelligence recognizes the differential and keeps it as a rigid atomic housing part', () => {
+  const descriptor = createPartMechanicalDescriptor({
+    observation:{
+      id:'ldraw-diff',
+      name:'Technic Differential with One Gear 28 Tooth Bevel',
+      description:'Technic Differential with One Gear 28 Tooth Bevel',
+      category:'Technic',
+      tags:[],
+      ldraw:{ code:'diff-test', file:'diff-test.dat' },
+    },
+    endpoints:[],
+  })
+  assert.equal(descriptor.classification.role, 'differential')
+  assert.equal(descriptor.classification.properties.toothCount, 28)
+  assert.equal(descriptor.bodyPolicy, 'rigid-atomic')
+  assert.equal(descriptor.transmissionHints[0].equationFamily, 'three-port-differential')
+})
+
+test('20 tooth double bevel gear gets gear transmission semantics without a part-ID rule', () => {
+  const descriptor = createPartMechanicalDescriptor({
+    observation:{
+      id:'ldraw-gear20',
+      name:'Technic Gear 20 Tooth Double Bevel Reinforced',
+      description:'Technic Gear 20 Tooth Double Bevel Reinforced',
+      category:'Technic',
+      tags:[],
+      ldraw:{ code:'unknown-revision', file:'unknown-revision.dat' },
+    },
+    endpoints:[],
+  })
+  assert.equal(descriptor.classification.role, 'bevel-gear')
+  assert.equal(descriptor.classification.properties.toothCount, 20)
+  assert.equal(descriptor.transmissionHints[0].kind, 'bevel-gear')
+})
+
+test('part instance IDs and endpoint IDs remain deterministic across reload', () => {
+  const raw = {
+    endpointId:'axle-hole',
+    family:'cylinder',
+    gender:'female',
+    frame:{ positionLdu:[0,0,0], orientation:[1,0,0,0,1,0,0,0,1] },
+    geometry:{ centered:true, caps:'none', sections:[{ shape:'A', radiusLdu:6, lengthLdu:20 }] },
+    snap:{ slide:true },
+  }
+  const templateEndpoint = legacyV4ConnectorToEndpoint(raw, { bodyId:'template', partId:'gear' })
+  const descriptor = createPartMechanicalDescriptor({
+    observation:{ id:'gear', name:'Technic Gear 12 Tooth Bevel', category:'Technic', tags:[] },
+    endpoints:[templateEndpoint],
+  })
+  const first = instantiatePartMechanicalDescriptor(descriptor, { instanceId:'instance-123' })
+  const second = instantiatePartMechanicalDescriptor(descriptor, { instanceId:'instance-123' })
+  assert.equal(first.body.id, second.body.id)
+  assert.equal(first.endpoints[0].id, second.endpoints[0].id)
+  assert.equal(first.endpoints[0].metadata.semantics.semanticKind, 'technic-axle-hole')
 })
