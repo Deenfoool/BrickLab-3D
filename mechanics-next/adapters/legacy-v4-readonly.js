@@ -149,6 +149,7 @@ export function snapshotLegacyPartConnectivity(provider, partId) {
       systemVersion:frozen.systemVersion ?? null,
       connectors:Object.freeze(Array.isArray(frozen.connectors) ? frozen.connectors : []),
       warnings:Object.freeze(Array.isArray(frozen.warnings) ? frozen.warnings : []),
+      visualOffsetStud:Object.freeze(Array.isArray(frozen.visualOffsetStud) ? [...frozen.visualOffsetStud] : [0,0,0]),
       stats:frozen.stats ?? null,
       health:frozen.health ?? null,
     })
