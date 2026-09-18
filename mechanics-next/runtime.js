@@ -647,6 +647,7 @@ export function createMechanicsNextRuntime({
       })
     },
     clearProjectState({keepAuthority=true}={}) {
+      const retainAuthority=keepAuthority===true&&nativeProjectAuthoritative===true
       if(activeDragSession?.active){
         activeDragSession.cancel()
         activeDragSession=null
@@ -664,14 +665,16 @@ export function createMechanicsNextRuntime({
       lastPersistenceReport=null
       lastTransmissionSync=null
       physicsPreview=null
-      nativeProjectAuthoritative=false
-      buildOwnershipPublished=false
-      if(globals.BrickLabMechanicsNextBuildOwner?.version===MECHANICS_NEXT_BUILD_OWNER_VERSION){
-        delete globals.BrickLabMechanicsNextBuildOwner
+      nativeProjectAuthoritative=retainAuthority
+      if(!retainAuthority){
+        buildOwnershipPublished=false
+        if(globals.BrickLabMechanicsNextBuildOwner?.version===MECHANICS_NEXT_BUILD_OWNER_VERSION){
+          delete globals.BrickLabMechanicsNextBuildOwner
+        }
       }
       return Object.freeze({
         cleared:true,
-        keepAuthority:false,
+        keepAuthority:retainAuthority,
         graphRevision:graph.revision,
       })
     },
