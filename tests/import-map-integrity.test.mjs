@@ -106,3 +106,30 @@ test('all LDraw JavaScript modules share canonical runtime caches while catalog 
   assert.equal(imports['./ldraw/runtime-v3.js?v=ldraw-catalog-20260910-v3'],imports[wrapperSpecifier],'catalog metadata path uses persistent wrapper')
   assert.equal(imports['./ldraw/runtime-v3.js?v=ldraw-20260910-v3'],imports['./ldraw/runtime-v3.js'],'bootstrap/runtime historical path still shares runtime-v3 caches')
 })
+
+
+async function recursiveJs(dir){
+  const result=[]
+  for(const entry of await readdir(new URL(dir+'/',root),{withFileTypes:true})){
+    const relative=`${dir}/${entry.name}`
+    if(entry.isDirectory())result.push(...await recursiveJs(relative))
+    else if(entry.isFile()&&entry.name.endsWith('.js'))result.push(relative)
+  }
+  return result
+}
+
+test('every Mechanics Next module shares the canonical runtime generation',async()=>{
+  const {imports}=await productionImports()
+  const canonical=imports['./app.js']?.match(/\?v=(.+)$/)?.[1]
+  assert.ok(canonical,'canonical runtime tag exists')
+  const files=await recursiveJs('mechanics-next')
+  assert.ok(files.length>=70,'Mechanics Next production tree is present')
+  for(const file of files){
+    const specifier=`./${file}`
+    assert.equal(
+      imports[specifier],
+      `${specifier}?v=${canonical}`,
+      `${file} uses canonical runtime generation`,
+    )
+  }
+})
