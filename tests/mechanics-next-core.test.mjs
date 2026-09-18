@@ -54,6 +54,7 @@ import { createUniversalJointRelation, universalJointOutputDelta, universalJoint
 import { solveLinearWithNonlinearRelations } from '../mechanics-next/solver/nonlinear-relations.js'
 import { discoverCompoundMechanisms } from '../mechanics-next/compounds/discovery.js'
 import { createCompoundStateRegistry } from '../mechanics-next/compounds/state.js'
+import { decomposeShortcutInstance, inferCompoundTopology, ldrawReferenceTransformToBrickLab } from '../mechanics-next/compounds/shortcut-decomposer.js'
 import { screenDragAngle, solveRotationalDrag } from '../mechanics-next/interaction/drag-driver.js'
 import { buildMotionPlan } from '../mechanics-next/interaction/motion-plan.js'
 import { applyMotionPlanToBaseline, captureMotionBaseline, restoreMotionBaseline } from '../mechanics-next/interaction/scene-motion-adapter.js'
@@ -2042,4 +2043,103 @@ test('Rapier revolute materialization uses independent-axis constructor and no f
   assert.equal(constructorArgs.length,4)
   assert.ok(!('setLocalFrame1' in handle))
   assert.ok(!('setLocalFrame2' in handle))
+})
+
+
+test('shortcut decomposer creates stable internal physical members and converts transforms', async () => {
+  const inheritanceResolver={
+    async resolve(){
+      return {
+        header:{type:'shortcut',description:'Shock Absorber Complete'},
+        warnings:[],
+        compoundReferences:[
+          {
+            from:'parts/shockc01.dat',
+            path:'parts/shock-housing.dat',
+            ref:'shock-housing.dat',
+            type:'part',
+            description:'Shock Absorber Housing',
+            reason:'physical-part-boundary',
+            transform:{
+              linear:[1,0,0,0,1,0,0,0,1],
+              translation:[0,20,40],
+            },
+          },
+          {
+            from:'parts/shockc01.dat',
+            path:'parts/shock-rod.dat',
+            ref:'shock-rod.dat',
+            type:'part',
+            description:'Shock Absorber Piston Rod',
+            reason:'physical-part-boundary',
+            transform:{
+              linear:[1,0,0,0,1,0,0,0,1],
+              translation:[0,-20,0],
+            },
+          },
+        ],
+      }
+    },
+  }
+  const descriptors=new Map([
+    ['parts/shock-housing.dat',{name:'Shock Absorber Housing',classification:{role:'connector'}}],
+    ['parts/shock-rod.dat',{name:'Shock Absorber Piston Rod',classification:{role:'connector'}}],
+  ])
+  const first=await decomposeShortcutInstance({
+    instanceId:'shock-1',
+    partId:'shock-c01',
+    file:'parts/shockc01.dat',
+    inheritanceResolver,
+    describePath:async path=>descriptors.get(path),
+  })
+  const second=await decomposeShortcutInstance({
+    instanceId:'shock-1',
+    partId:'shock-c01',
+    file:'parts/shockc01.dat',
+    inheritanceResolver,
+    describePath:async path=>descriptors.get(path),
+  })
+
+  assert.equal(first.status,'resolved')
+  assert.equal(first.members.length,2)
+  assert.equal(first.members[0].id,second.members[0].id)
+  assert.deepEqual(first.members[0].transform.translationStud,[0,-1,-2])
+  assert.equal(first.members[0].internalRole,'housing')
+  assert.equal(first.members[1].internalRole,'rod')
+
+  const topology=inferCompoundTopology(first,'shock-absorber')
+  assert.equal(topology.status,'resolved')
+  assert.equal(topology.joints[0].kind,'prismatic')
+  assert.equal(topology.housingMemberId,first.members[0].id)
+  assert.equal(topology.rodMemberId,first.members[1].id)
+})
+
+test('shortcut transform converts LDraw Y/Z handedness into BrickLab convention', () => {
+  const transformed=ldrawReferenceTransformToBrickLab({
+    transform:{
+      linear:[0,1,0,1,0,0,0,0,1],
+      translation:[20,40,-60],
+    },
+  })
+  assert.deepEqual(transformed.translationStud,[1,-2,3])
+  assert.equal(transformed.linear.length,9)
+})
+
+test('non-shortcut decomposition refuses to invent physical child bodies', async () => {
+  const result=await decomposeShortcutInstance({
+    instanceId:'part-1',
+    file:'parts/plain.dat',
+    inheritanceResolver:{
+      async resolve(){
+        return{
+          header:{type:'part'},
+          compoundReferences:[],
+          warnings:[],
+        }
+      },
+    },
+    describePath:async()=>null,
+  })
+  assert.equal(result.status,'not-shortcut')
+  assert.equal(result.members.length,0)
 })
