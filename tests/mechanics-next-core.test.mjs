@@ -1645,7 +1645,11 @@ test('linear actuator emits screw relation only with verified lead metadata', ()
       compoundRecord({
         bodyId:'act',
         role:'linear-actuator',
-        properties:{screwLeadStudPerTurn:.25,travelStud:3},
+        properties:{
+          screwLeadStudPerTurn:.25,
+          travelStud:3,
+          compoundParameterEvidence:{confidence:'verified',source:'test-fixture'},
+        },
       }),
       compoundRecord({bodyId:'rod',role:'connector'}),
       compoundRecord({bodyId:'input',role:'axle'}),
