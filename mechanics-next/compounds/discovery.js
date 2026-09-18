@@ -130,6 +130,7 @@ function jointGroups(records,relations){
 
 function discoverAngularJoints(records,relations){
   const equations=[]
+  const velocityEquations=[]
   const transmissions=[]
   const nonlinearRelations=[]
   const descriptors=[]
@@ -253,7 +254,16 @@ function discoverAngularJoints(records,relations){
         portRelationIds:[first.relation.id,second.relation.id],
       },
     })
+    const instantaneousRatio=nonlinear.velocityRatio(0)
+    const velocityEquation=rotationCouplingEquation({
+      id:`${id}:instantaneous-omega`,
+      bodyA:first.externalBody,
+      bodyB:second.externalBody,
+      ratioAB:instantaneousRatio,
+      kind:'universal-joint-instantaneous',
+    })
     nonlinearRelations.push(nonlinear)
+    velocityEquations.push(velocityEquation)
     transmissions.push(createTransmission({
       id,
       kind:'universal-joint',
@@ -263,8 +273,9 @@ function discoverAngularJoints(records,relations){
         inputPhaseRad:phase,
         directionSign,
         nonlinear:true,
+        instantaneousVelocityRatio:instantaneousRatio,
       },
-      equations:[],
+      equations:[velocityEquation],
       metadata:{jointBody,relationId:nonlinear.id},
       evidence:evidence({
         source:'mechanics-next:compound-universal-joint',
@@ -281,7 +292,7 @@ function discoverAngularJoints(records,relations){
     }))
   }
 
-  return{equations,transmissions,nonlinearRelations,descriptors,diagnostics}
+  return{equations,velocityEquations,transmissions,nonlinearRelations,descriptors,diagnostics}
 }
 
 function constraintPair(constraint){
@@ -629,6 +640,7 @@ export function discoverCompoundMechanisms({
       ...actuators.equations,
       ...clutches.equations,
     ]),
+    velocityEquations:Object.freeze(angular.velocityEquations),
     transmissions:Object.freeze([
       ...angular.transmissions,
       ...actuators.transmissions,
