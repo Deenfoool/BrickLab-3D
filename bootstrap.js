@@ -156,8 +156,9 @@ await import('./architecture/runtime-v1.js?v=technic-family-20260915-v2')
 // but owns no snapping, graph mutation, persistence, kinematics or physics domain yet.
 try {
   await import('./mechanics-next/runtime.js')
+  await import('./mechanics-next/production/physics-owner.js')
 } catch (error) {
-  console.warn('[BrickLab Mechanics Next] Observe-only runtime unavailable; legacy engine remains authoritative.', error)
+  console.warn('[BrickLab Mechanics Next] Migration runtime unavailable; legacy engine remains authoritative.', error)
 }
 
 // app.js keeps selection state lexical. The editor-group layer installs a short-lived
