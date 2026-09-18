@@ -706,10 +706,23 @@ export function discoverMechanicalTransmissions({
   const packaged=discoverPackagedTransmissions(records,graph,{controlState})
   const packagedDifferentials=discoverPackagedDifferentials(records,graph)
   const differentials=discoverDifferentials(records,relations)
+  const angularPackageBodies=new Set(records.filter(record=>
+    ['universal-joint','cv-joint'].includes(bodyRole(record))
+  ).map(record=>record.instance.body.id))
+  const angularPorts=(graph?.edges?.('constraint')||[]).filter(edge=>
+    angularPackageBodies.has(edge.metadata?.transmissionPort?.packageBodyId)
+  ).map(edge=>({
+    id:`${edge.metadata.transmissionPort.packageBodyId}:${edge.metadata.transmissionPort.portRole}`,
+    kind:'universal-joint-port',
+    bodyA:edge.bodyA,
+    bodyB:edge.bodyB,
+    endpointA:edge.metadata.endpointAId,
+    endpointB:edge.metadata.endpointBId,
+  }))
   const compounds=discoverCompoundMechanisms({
     records,
     graph,
-    relations,
+    relations:[...relations,...angularPorts],
     stateRegistry:compoundState,
   })
 

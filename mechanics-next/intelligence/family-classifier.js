@@ -120,6 +120,9 @@ function existingEvidence(observation) {
 
 function bodyPolicy(role, observation) {
   if (['flex-axle','flex-system'].includes(role)) return 'deformable'
+  if(!observation?.ldraw?.file&&observation?.legacyMechanics?.articulatedCoupler){
+    return 'rigid-atomic'
+  }
   if (['wheel-assembly','universal-joint','cv-joint','shock-absorber','linear-actuator'].includes(role)) {
     return 'compound-candidate'
   }
@@ -131,6 +134,19 @@ function bodyPolicy(role, observation) {
   return 'rigid-atomic'
 }
 
+function explicitRole(observation){
+  const mechanics=observation?.legacyMechanics
+  if(!mechanics)return null
+  if(mechanics.differential)return 'packaged-differential'
+  if(mechanics.motor)return 'motor'
+  if(mechanics.articulatedCoupler)return mechanics.articulatedCoupler.constantVelocity?'cv-joint':'universal-joint'
+  if(mechanics.wormDrive)return 'worm'
+  if(mechanics.transmission)return 'gearbox'
+  if(mechanics.rackGear||mechanics.steeringRack)return 'rack'
+  if(mechanics.shaft===true)return 'axle'
+  return null
+}
+
 export function classifyPartFamily(observation, endpoints = []) {
   if (!observation?.id) throw new TypeError('Part classification requires an observation with id')
 
@@ -138,17 +154,18 @@ export function classifyPartFamily(observation, endpoints = []) {
   const endpointRole = roleFromEndpointEvidence(endpoints)
   const textRole = roleFromText(raw)
   const oldRole = existingEvidence(observation)
+  const metadataRole = explicitRole(observation)
 
   let role = 'unknown'
   let confidence = 'unknown'
   let source = 'none'
   let reason = null
 
-  if (observation?.legacyMechanics?.differential) {
-    role = 'packaged-differential'
+  if (metadataRole) {
+    role = metadataRole
     confidence = 'strong'
-    source = 'bricklab-explicit-differential-metadata'
-    reason = 'explicit differential port metadata'
+    source = 'bricklab-explicit-mechanical-metadata'
+    reason = 'explicit mechanical capabilities and port metadata'
   } else if (textRole !== 'unknown') {
     role = textRole
     confidence = endpointRole === textRole ? 'strong' : 'inferred'
@@ -221,7 +238,9 @@ export function classifyPartFamily(observation, endpoints = []) {
   const restLengthStud=finiteProp('restLengthStud')
   const springStiffness=finiteProp('springStiffness')
   const damping=finiteProp('damping','springDamping')
-  const maxBendAngleRad=finiteProp('maxBendAngleRad')
+  const maxBendAngleRad=finiteProp('maxBendAngleRad') ??
+    (legacyArticulatedCoupler?.maxAngleDeg != null && Number.isFinite(Number(legacyArticulatedCoupler.maxAngleDeg))
+      ?Number(legacyArticulatedCoupler.maxAngleDeg)*Math.PI/180:null)
 
   const packagedTransmission=legacyTransmission&&
     legacyTransmission.inputConnectorId&&legacyTransmission.outputConnectorId

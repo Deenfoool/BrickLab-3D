@@ -4541,3 +4541,45 @@ test('native connectivity retains every verified differential assembly seat with
   const pivot=enrichEndpointSemantics(provider.toEndpoint(gear.connectors[0],{bodyId:'side'}))
   assert.equal(pivot.metadata.semantics.semanticKind,'differential-internal-interface')
 })
+
+test('mechanical family and controls do not depend on translated catalog labels',async()=>{
+  const {observePartDefinition}=await import('../mechanics-next/adapters/catalog-readonly.js')
+  const examples=[
+    [{id:'opaque-power',name:'Мотор',mechanics:{motor:{rpm:120,stallTorque:.045,connectorId:'output'}}},'motor'],
+    [{id:'opaque-shaft',name:'Ось',mechanics:{shaft:true}},'axle'],
+    [{id:'opaque-box',name:'Редуктор',mechanics:{transmission:{inputConnectorId:'input',outputConnectorId:'output',modes:{forward:1,neutral:0,reverse:-1}}}},'gearbox'],
+    [{id:'opaque-cardan',name:'Кардан',mechanics:{articulatedCoupler:{joint:'spherical'}}},'universal-joint'],
+    [{id:'opaque-cv',name:'ШРУС',mechanics:{articulatedCoupler:{joint:'spherical',constantVelocity:true}}},'cv-joint'],
+    [{id:'opaque-axle',name:'Ось 3L',description:'Ось',__i18nEnglishName:'Axle 3L',__i18nEnglishDescription:'Keyed Technic axle'},'axle'],
+  ]
+  for(const [definition,role]of examples){
+    const observation=observePartDefinition(definition)
+    const descriptor=createPartMechanicalDescriptor({observation,endpoints:[]})
+    assert.equal(descriptor.classification.role,role)
+    if(role==='motor')assert.equal(descriptor.classification.properties.motor.rpm,120)
+    if(role==='gearbox')assert.equal(descriptor.classification.properties.packagedTransmission.modes.reverse,-1)
+  }
+})
+
+test('builtin articulated packages use their native port model instead of requiring a nonexistent LDraw decomposition',()=>{
+  const descriptor=createPartMechanicalDescriptor({observation:{id:'opaque-joint',name:'Localized joint',legacyMechanics:{articulatedCoupler:{joint:'spherical'},transmission:{inputConnectorId:'input',outputConnectorId:'output',modes:{forward:1}}}},endpoints:[]})
+  assert.equal(descriptor.classification.role,'universal-joint')
+  assert.equal(descriptor.bodyPolicy,'rigid-atomic')
+})
+
+test('builtin Cardan and CV shaft bindings discover their angled native model from graph ports',()=>{
+  for(const role of ['universal-joint','cv-joint']){
+    const input=compoundEndpoint({id:'input',bodyId:'joint',semantic:'technic-axle-hole'})
+    const output=compoundEndpoint({id:'output',bodyId:'joint',semantic:'technic-axle-hole',orientationBrickLab:[1,0,0,0,Math.cos(Math.PI/6),-Math.sin(Math.PI/6),0,Math.sin(Math.PI/6),Math.cos(Math.PI/6)]})
+    const records=[compoundRecord({bodyId:'joint',role,endpoints:[input,output]}),compoundRecord({bodyId:'shaft-in',role:'axle'}),compoundRecord({bodyId:'shaft-out',role:'axle'})]
+    const graph=createAssemblyGraph()
+    for(const record of records)graph.addBody(createBodyDescriptor({id:record.instance.body.id}))
+    for(const [port,shaft]of [['input','shaft-in'],['output','shaft-out']])graph.addConstraint(createConstraint({id:`native-${port}`,bodyA:'joint',bodyB:shaft,kind:'revolute',metadata:{endpointAId:port,endpointBId:`${shaft}-endpoint`,transmissionPort:{packageBodyId:'joint',portRole:port}}}))
+    const discovery=discoverMechanicalTransmissions({records,graph})
+    const descriptor=discovery.compoundDescriptors.find(d=>d.kind===role)
+    assert.equal(descriptor.status,'resolved')
+    assert.ok(Math.abs(descriptor.bendAngleRad-Math.PI/6)<1e-9)
+    assert.deepEqual(descriptor.externalBodies,['shaft-in','shaft-out'])
+    assert.equal(discovery.nonlinearRelations.length,role==='universal-joint'?1:0)
+  }
+})

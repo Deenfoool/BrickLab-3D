@@ -19,8 +19,8 @@ export function observePartDefinition(definition) {
   if (!definition?.id) return null
   return snapshot({
     id:String(definition.id),
-    name:definition.name ?? null,
-    description:definition.description ?? null,
+    name:definition.__i18nEnglishName ?? definition.name ?? null,
+    description:definition.__i18nEnglishDescription ?? definition.description ?? null,
     category:definition.category ?? null,
     tags:safeArray(definition.tags).map(String),
     defaultColor:definition.defaultColor ?? null,
