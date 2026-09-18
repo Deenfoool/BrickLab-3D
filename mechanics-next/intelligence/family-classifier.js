@@ -116,7 +116,7 @@ function existingEvidence(observation) {
 
 function bodyPolicy(role, observation) {
   if (['flex-axle','flex-system'].includes(role)) return 'deformable'
-  if (['wheel-assembly','universal-joint','shock-absorber','linear-actuator'].includes(role)) {
+  if (['wheel-assembly','universal-joint','cv-joint','shock-absorber','linear-actuator'].includes(role)) {
     return 'compound-candidate'
   }
 
@@ -182,10 +182,31 @@ export function classifyPartFamily(observation, endpoints = []) {
       })
     :null
 
+  const legacyProps=observation?.legacyMechanicalIntelligence?.properties || {}
+  const finiteProp=(...names)=>{
+    for(const name of names){
+      const value=Number(legacyProps?.[name])
+      if(Number.isFinite(value))return value
+    }
+    return null
+  }
+  const screwLeadStudPerTurn=finiteProp('screwLeadStudPerTurn','leadStudPerTurn')
+  const travelStud=finiteProp('travelStud','strokeStud')
+  const restLengthStud=finiteProp('restLengthStud')
+  const springStiffness=finiteProp('springStiffness')
+  const damping=finiteProp('damping','springDamping')
+  const maxBendAngleRad=finiteProp('maxBendAngleRad')
+
   const properties = {
     ...(Number.isFinite(teeth) && teeth > 0 ? { toothCount:teeth } : {}),
     ...(Number.isFinite(lengthL) && lengthL > 0 ? { lengthL } : {}),
     ...(gearGeometry ? { gearGeometry } : {}),
+    ...(Number.isFinite(screwLeadStudPerTurn) && screwLeadStudPerTurn !== 0 ? { screwLeadStudPerTurn } : {}),
+    ...(Number.isFinite(travelStud) && travelStud > 0 ? { travelStud } : {}),
+    ...(Number.isFinite(restLengthStud) && restLengthStud > 0 ? { restLengthStud } : {}),
+    ...(Number.isFinite(springStiffness) && springStiffness >= 0 ? { springStiffness } : {}),
+    ...(Number.isFinite(damping) && damping >= 0 ? { damping } : {}),
+    ...(Number.isFinite(maxBendAngleRad) && maxBendAngleRad > 0 ? { maxBendAngleRad } : {}),
     ...(role === 'axle' ? { keyed:true } : {}),
     ...(role === 'bush' ? { retainer:true } : {}),
   }
