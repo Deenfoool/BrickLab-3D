@@ -97,7 +97,7 @@ function type1References(text) {
   return result
 }
 
-async function attachShortcutMemberProxies(model, normalized, text) {
+async function attachShortcutMemberProxies(loader, model, normalized, text) {
   const header=parseHeader(text,normalized)
   if(!/shortcut/i.test(String(header.type||'')))return Object.freeze([])
   const refs=type1References(text)
@@ -127,6 +127,21 @@ async function attachShortcutMemberProxies(model, normalized, text) {
     proxy.userData.mechanicalMemberOccurrence=occurrence
     proxy.userData.mechanicalMemberDescription=childHeader.description||null
     proxy.userData.mechanicalMemberType=childHeader.type||null
+    try{
+      const boundsModel=await parseCompleteLDraw(loader,childText)
+      boundsModel.updateMatrixWorld?.(true)
+      const bounds=new THREE.Box3().setFromObject(boundsModel)
+      if(!bounds.isEmpty()){
+        const center=bounds.getCenter(new THREE.Vector3())
+        const size=bounds.getSize(new THREE.Vector3())
+        proxy.userData.mechanicalMemberBoundsLdu={
+          center:center.toArray(),
+          size:size.toArray(),
+        }
+      }
+    }catch(error){
+      console.debug?.(`[BrickLab LDraw] Shortcut member bounds unavailable for ${key}`,error)
+    }
     model.add(proxy)
     proxies.push(proxy)
   }
@@ -411,7 +426,7 @@ async function loadPrototype(file) {
       const descriptor=ldrawMechanismDescriptor(normalized)
       const parsed=await loadArticulatedModel(loader,normalized,text,descriptor) || await parseCompleteLDraw(loader,text)
       if(!descriptor?.components?.length){
-        try{await attachShortcutMemberProxies(parsed,normalized,text)}
+        try{await attachShortcutMemberProxies(loader,parsed,normalized,text)}
         catch(error){console.debug?.(`[BrickLab LDraw] Shortcut member proxies unavailable for ${normalized}`,error)}
       }
       return parsed
