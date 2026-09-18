@@ -214,6 +214,7 @@ function discoverAngularJoints(records,relations){
     const bendAngleRad=Math.acos(clamp(Math.abs(rawDot),0,1))
     const directionSign=rawDot>=0?1:-1
     const maxBend=Number(properties(jointRecord).maxBendAngleRad)
+    const singular=jointRole==='universal-joint'&&Math.abs(rawDot)<=EPS
     const beyondVerifiedLimit=Number.isFinite(maxBend)&&bendAngleRad>maxBend+1e-6
     const phase=portPhase(frameA,frameB)
     const structural=closestAxisPivot(frameA,frameB)
@@ -235,10 +236,20 @@ function discoverAngularJoints(records,relations){
       virtualStructuralJoint:'spherical+torsion-coupling',
       maxBendAngleRad:Number.isFinite(maxBend)?maxBend:null,
       beyondVerifiedLimit,
-      status:beyondVerifiedLimit?'limit-exceeded':'resolved',
+      status:singular?'singular':beyondVerifiedLimit?'limit-exceeded':'resolved',
       internalTopology:angularInternalTopology(jointRole,jointBody),
     })
     descriptors.push(descriptor)
+
+    if(singular){
+      diagnostics.push(Object.freeze({
+        kind:jointRole,
+        bodyId:jointBody,
+        status:'singular-bend',
+        bendAngleRad,
+      }))
+      continue
+    }
 
     if(beyondVerifiedLimit){
       diagnostics.push(Object.freeze({

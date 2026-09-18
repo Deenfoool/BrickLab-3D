@@ -522,10 +522,10 @@ export function interpretObservedConnection(record, {
 
   const resolved = resolveRule(endpointA, endpointB, {
     match:record.match,
-    partRoleA:instanceA.descriptor.classification.role,
-    partRoleB:instanceB.descriptor.classification.role,
-    classificationA:instanceA.descriptor.classification,
-    classificationB:instanceB.descriptor.classification,
+    partRoleA:instanceA.descriptor?.classification?.role,
+    partRoleB:instanceB.descriptor?.classification?.role,
+    classificationA:instanceA.descriptor?.classification,
+    classificationB:instanceB.descriptor?.classification,
   })
 
   if (resolved.special) {
@@ -573,8 +573,8 @@ export function interpretObservedConnection(record, {
     ?suspensionArmRevoluteSemantics({
         endpointA,
         endpointB,
-        classificationA:instanceA.descriptor.classification,
-        classificationB:instanceB.descriptor.classification,
+        classificationA:instanceA.descriptor?.classification,
+        classificationB:instanceB.descriptor?.classification,
         worldFrameA,
         worldFrameB,
       })
@@ -583,8 +583,8 @@ export function interpretObservedConnection(record, {
     ?shockPrismaticSemantics({
         endpointA,
         endpointB,
-        classificationA:instanceA.descriptor.classification,
-        classificationB:instanceB.descriptor.classification,
+        classificationA:instanceA.descriptor?.classification,
+        classificationB:instanceB.descriptor?.classification,
         worldFrameA,
         worldFrameB,
       })
@@ -593,8 +593,8 @@ export function interpretObservedConnection(record, {
     ?steeringRackPrismaticSemantics({
         endpointA,
         endpointB,
-        classificationA:instanceA.descriptor.classification,
-        classificationB:instanceB.descriptor.classification,
+        classificationA:instanceA.descriptor?.classification,
+        classificationB:instanceB.descriptor?.classification,
         worldFrameA,
         worldFrameB,
       })

@@ -1813,7 +1813,7 @@ test('U-joint compound becomes spherical structural physics joint plus torsion r
     id:'uj-pb',
     bodyId:jointBody,
     semantic:'universal-joint-port',
-    orientationBrickLab:[1,0,0,0,0,-1,0,1,0],
+    orientationBrickLab:[1,0,0,0,Math.SQRT1_2,-Math.SQRT1_2,0,Math.SQRT1_2,Math.SQRT1_2],
   })
   const joint=compoundRecord({bodyId:jointBody,role:'universal-joint',endpoints:[portA,portB]})
   const a=compoundRecord({bodyId:'uj-a',role:'axle'})
@@ -1831,7 +1831,7 @@ test('U-joint compound becomes spherical structural physics joint plus torsion r
   })
   const descriptor=compounds.descriptors.find(item=>item.kind==='universal-joint')
   assert.ok(descriptor)
-  assert.equal(descriptor.virtualStructuralJoint,'spherical+tortion-coupling')
+  assert.equal(descriptor.virtualStructuralJoint,'spherical+torsion-coupling')
   assert.equal(descriptor.externalBodies.length,2)
   assert.equal(descriptor.pivotWorldStud.length,3)
 
@@ -1847,6 +1847,29 @@ test('U-joint compound becomes spherical structural physics joint plus torsion r
   assert.ok(virtual)
   assert.equal(virtual.kind,'spherical')
   assert.deepEqual(new Set([virtual.bodyA,virtual.bodyB]),new Set(['uj-a','uj-b']))
+})
+
+test('singular U-joint blocks physics without throwing or inventing a torsion ratio', () => {
+  const jointBody='singular-uj'
+  const joint=compoundRecord({bodyId:jointBody,role:'universal-joint',endpoints:[
+    compoundEndpoint({id:'singular-pa',bodyId:jointBody,semantic:'universal-joint-port'}),
+    compoundEndpoint({id:'singular-pb',bodyId:jointBody,semantic:'universal-joint-port',
+      orientationBrickLab:[1,0,0,0,0,-1,0,1,0]}),
+  ]})
+  const graph=createAssemblyGraph()
+  for(const id of [jointBody,'singular-a','singular-b'])graph.addBody(createBodyDescriptor({id}))
+  const compounds=discoverCompoundMechanisms({graph,
+    records:[joint,compoundRecord({bodyId:'singular-a',role:'axle'}),compoundRecord({bodyId:'singular-b',role:'axle'})],
+    relations:[
+      {id:'singular-ra',kind:'universal-joint-port',bodyA:jointBody,bodyB:'singular-a',endpointA:'singular-pa',endpointB:'a'},
+      {id:'singular-rb',kind:'universal-joint-port',bodyA:jointBody,bodyB:'singular-b',endpointA:'singular-pb',endpointB:'b'},
+    ],
+  })
+  assert.equal(compounds.descriptors[0].status,'singular')
+  assert.equal(compounds.transmissions.length,0)
+  const plan=buildMechanicsPhysicsPlan({graph,discovery:{compoundDescriptors:compounds.descriptors}})
+  assert.equal(plan.pass,false)
+  assert.ok(plan.blockers.some(item=>item.code==='compound-angular-unresolved'&&item.status==='singular'))
 })
 
 test('differential spider physics coupling measures spider spin relative to carrier', () => {

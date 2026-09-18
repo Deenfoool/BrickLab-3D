@@ -211,7 +211,7 @@ export function createLiveJointValidator({
       constraintId:entry.id,
     })
 
-    const kind=String(entry.constraint?.kind||'fixed')
+    const kind=String(entry.constraint?.constraintKind??entry.constraint?.kind??'fixed')
     const delta=sub3(frameA.position,frameB.position)
     const distance=len3(delta)
     const lateralTolerance=genericToleranceStud(entry.endpointA,entry.endpointB)

@@ -156,6 +156,7 @@ export function createConstraint({
   return Object.freeze({
     id:String(id),
     kind,
+    constraintKind:kind,
     bodyA:String(bodyA),
     bodyB:String(bodyB),
     dof:Object.freeze(normalized),

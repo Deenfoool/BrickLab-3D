@@ -75,7 +75,7 @@ export class AssemblyGraph {
   }
 
   addConstraint(constraint) {
-    return this.addEdge({ ...constraint, kind:'constraint', constraintKind:constraint.kind })
+    return this.addEdge({ ...constraint, kind:'constraint', constraintKind:constraint.constraintKind??constraint.kind })
   }
 
   addTransmission(transmission) {
