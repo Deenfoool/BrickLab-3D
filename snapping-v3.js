@@ -122,13 +122,54 @@ function candidateKey(selected, source, targetObject, target) {
   return `${selected.userData.instanceId}:${source.id}>${targetObject.userData.instanceId}:${target.id}`
 }
 
+function numericTriple(value) {
+  if (!Array.isArray(value) || value.length < 3) return null
+  const result = value.slice(0, 3).map(Number)
+  return result.every(Number.isFinite) ? result : null
+}
+
+function explicitLDrawGearFrame(object, gear) {
+  const anchor = numericTriple(gear?.meshAnchorLdu)
+  const sourceAxis = numericTriple(gear?.meshAxisLdu)
+  if (!object || !anchor || !sourceAxis) return null
+
+  const visual = object.children?.find?.(child => child?.userData?.ldrawVisual) ?? null
+  if (!visual) return null
+
+  visual.updateMatrix?.()
+  object.updateWorldMatrix?.(true, false)
+
+  const localPosition = new THREE.Vector3(...anchor).applyMatrix4(visual.matrix)
+  const localAxis = new THREE.Vector3(...sourceAxis)
+    .applyMatrix3(new THREE.Matrix3().setFromMatrix4(visual.matrix))
+  if (localAxis.lengthSq() < 1e-10) return null
+  localAxis.normalize()
+
+  const center = localPosition.clone().applyMatrix4(object.matrixWorld)
+  const axis = localAxis.clone().transformDirection(object.matrixWorld)
+  if (axis.lengthSq() < 1e-10) return null
+
+  return {
+    center,
+    axis:axis.normalize(),
+    localPosition,
+    localAxis,
+    source:'ldraw-mesh-anchor',
+  }
+}
+
 function gearDescriptor(object) {
   const definition = findPart(object?.userData?.partId)
   const gear = definition?.mechanics?.gear
   if (!gear) return null
   const connector = definition.connectors?.find(item => item.type === 'axle-hole')
   if (!connector) return null
-  const axis = connectorWorldAxis(object, connector)
+
+  const frame = explicitLDrawGearFrame(object, gear)
+  const axis = frame?.axis ?? connectorWorldAxis(object, connector)
+  const center = frame?.center ?? connectorWorldPosition(object, connector)
+  const tolerance = Number(gear.meshApexToleranceStud)
+
   return {
     object,
     definition,
@@ -136,9 +177,14 @@ function gearDescriptor(object) {
     kind: gear.kind ?? 'spur',
     teeth: Number(gear.teeth) || 0,
     pitchRadius: Number(gear.pitchRadius) || (Number(gear.teeth) || 0) / 16,
-    center: connectorWorldPosition(object, connector),
+    center,
     axis,
     reference: gearWorldReference(object, axis),
+    gearFrameSource: frame?.source ?? 'axle-hole',
+    meshLocalPosition: frame?.localPosition?.toArray?.() ?? [...connector.position],
+    meshLocalAxis: frame?.localAxis?.toArray?.() ?? [...connector.axis],
+    bevelApexSigns: Array.isArray(gear.bevelApexSigns) ? [...gear.bevelApexSigns] : null,
+    meshApexToleranceStud: Number.isFinite(tolerance) && tolerance > 0 ? tolerance : null,
   }
 }
 
