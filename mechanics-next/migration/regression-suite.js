@@ -2,8 +2,10 @@ import { mechanicalVariable } from '../core/model.js'
 import {
   differentialEquation,
   driverEquation,
+  gearMeshEquation,
   packagedDifferentialEquation,
   rackPinionEquation,
+  rigidRotationEquation,
   rotationCouplingEquation,
   screwLinearEquation,
 } from '../transmission/equations.js'
@@ -12,6 +14,7 @@ import {
   createUniversalJointRelation,
 } from '../compounds/universal-joint.js'
 import { solveLinearWithNonlinearRelations } from '../solver/nonlinear-relations.js'
+import { solveRotationalDrag } from '../interaction/drag-driver.js'
 import { validateMechanicsProjectState } from './project-state.js'
 
 export const MIGRATION_REGRESSION_VERSION='mechanics-migration-regression-0.2.0'
@@ -64,6 +67,54 @@ export function runMechanicsMigrationRegressionSuite(){
     assert(solved.status==='solved','reverse differential solve failed')
     assert(Math.abs(solved.values[mechanicalVariable('carrier','omega')]-8)<EPS,'reverse carrier solve wrong')
     return{right:16,carrier:8}
+  }))
+
+  checks.push(result('kinematics-upstream-differential-drag',()=>{
+    const discovery={
+      equations:[
+        gearMeshEquation({
+          id:'regression-20t-to-carrier28',
+          bodyA:'gear20',
+          bodyB:'carrier28',
+          teethA:20,
+          teethB:28,
+          directionSign:-1,
+        }),
+        differentialEquation({
+          id:'regression-diff-drag',
+          carrier:'carrier28',
+          left:'left12',
+          right:'right12',
+        }),
+      ],
+      transmissions:[{
+        kind:'open-differential',
+        bodies:['carrier28','left12','right12'],
+      }],
+      balancedDifferentialClosures:[
+        rigidRotationEquation({
+          id:'regression-diff-balanced-preview',
+          bodyA:'left12',
+          bodyB:'right12',
+        }),
+      ],
+      nonlinearRelations:[],
+    }
+    const solved=solveRotationalDrag({
+      bodyId:'gear20',
+      angleRad:1,
+      discovery,
+      balancedDifferentials:'auto',
+    })
+    assert(solved.status==='solved','upstream differential drag did not solve')
+    assert(solved.balancedDifferentials===true,'upstream carrier drive did not enable balanced differential preview')
+    const carrier=solved.values[mechanicalVariable('carrier28','theta')]
+    const left=solved.values[mechanicalVariable('left12','theta')]
+    const right=solved.values[mechanicalVariable('right12','theta')]
+    assert(Math.abs(carrier+20/28)<EPS,`20T→28T carrier ratio wrong: ${carrier}`)
+    assert(Math.abs(left-carrier)<EPS,'left side gear did not follow free carrier preview')
+    assert(Math.abs(right-carrier)<EPS,'right side gear did not follow free carrier preview')
+    return{carrier,left,right}
   }))
 
   checks.push(result('universal-joint-exact-inverse',()=>{
