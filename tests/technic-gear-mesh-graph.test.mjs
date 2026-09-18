@@ -78,3 +78,20 @@ test('saved mesh and differential seat propagate Kinematics from either 20T or c
     assert.ok(Number.isFinite(solved.ratios[blueShaft]))
   }
 })
+
+test('saved bevel mesh outside live tolerance preserves orientation-derived rotation direction',()=>{
+  const housing=objectFor(diff,'direction-carrier')
+  const pinion=objectFor(red,'direction-pinion')
+  // Mirror the 20T to the opposite side. The nearest valid bevel apex uses
+  // opposite apex signs, so this pair must rotate with a positive signed ratio.
+  pinion.position.set(-2.2,0,.3)
+  pinion.rotation.y=Math.PI/2
+  housing.updateMatrixWorld(true);pinion.updateMatrixWorld(true)
+  const drivetrain=analyzeTechnicAwareDrivetrain([housing,pinion],[
+    {id:'saved-direction-mesh',kind:'gear-mesh',a:{instanceId:'direction-pinion'},b:{instanceId:'direction-carrier'}},
+  ])
+  const mesh=drivetrain.physicalGearMeshes.find(item=>item.authoritativeGraphLink)
+  assert.ok(mesh)
+  assert.ok(mesh.ratioAB>0)
+  assert.ok(mesh.ratioBA>0)
+})

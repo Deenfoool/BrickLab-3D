@@ -14,7 +14,7 @@ import { classifyTechnicEndpointV1 } from './interface-semantics-v1.js'
 import { technicMechanicalHintsV1 } from './mechanical-hints-v1.js?v=technic-differential-bevel-20260917-v1'
 import { technicPartProfileV1 } from './part-profile-v1.js'
 
-export const TECHNIC_DRIVETRAIN_VERSION = 'technic-drivetrain-v1.2.0'
+export const TECHNIC_DRIVETRAIN_VERSION = 'technic-drivetrain-v1.2.1'
 
 const DEFAULT_STALL_TORQUE = 5.5
 const DEFAULT_GEAR_EFFICIENCY = 0.92
@@ -225,7 +225,19 @@ function linkedGearMesh(a,b,connection,options={}){
   if(!a?.shaft||!b?.shaft||a.shaft.id===b.shaft.id||a.kind!==b.kind)return null
   const geometric=a.kind==='bevel'?bevelMesh(a,b,options):spurMesh(a,b,options)
   if(geometric)return{...geometric,id:`linked:${connection.id}`,authoritativeGraphLink:true}
-  const directionSign=-1
+  // A saved gear-mesh is authoritative even when the live geometry has drifted
+  // just outside the strict capture tolerance. Preserve the physically correct
+  // rotation direction from the nearest bevel apex pairing instead of guessing -1.
+  let directionSign=-1
+  if(a.kind==='bevel'){
+    const nearest=evaluateBevelMesh(a,b,{
+      maxAxisDot:options.bevelAxisDotTolerance ?? 0.12,
+      apexTolerance:Number.POSITIVE_INFINITY,
+    })
+    if(Number.isFinite(nearest?.signA)&&Number.isFinite(nearest?.signB))directionSign=-(nearest.signA*nearest.signB)
+  }else{
+    directionSign=a.shaft.axisWorld.dot(b.shaft.axisWorld)>=0?-1:1
+  }
   return{
     id:`linked:${connection.id}`,kind:a.kind==='bevel'?'bevel':'gear',a,b,
     shaftA:a.shaft.id,shaftB:b.shaft.id,
