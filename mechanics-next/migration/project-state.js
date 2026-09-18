@@ -251,12 +251,13 @@ export function persistenceCompatibilityReport({
   const expected=exportedState?.connections?.length||0
   const restored=Number(restoredResult?.restored||0)
   const rejected=Number(restoredResult?.rejected||0)
+  const failures=Object.freeze([...(restoredResult?.failures||[])])
   return Object.freeze({
-    pass:expected===restored&&rejected===0,
+    pass:expected===restored&&rejected===0&&failures.length===0,
     expected,
     restored,
     rejected,
-    failures:Object.freeze([...(restoredResult?.failures||[])]),
+    failures,
   })
 }
 
