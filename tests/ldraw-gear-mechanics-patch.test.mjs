@@ -15,6 +15,7 @@ assert.deepEqual(differential?.meshAnchorLdu,[0,0,27])
 assert.deepEqual(differential?.meshAxisLdu,[0,0,1])
 assert.deepEqual(differential?.bevelApexSigns,[-1])
 assert.equal(differential?.meshApexToleranceStud,.16)
+assert.equal(differential?.meshCaptureDistanceStud,1.15)
 
 const reinforced=technicMechanicalHintsV1({
   id:'ldraw-d4c9cb61',
@@ -30,5 +31,6 @@ assert.equal(reinforced?.authoritative,true)
 assert.deepEqual(reinforced?.meshAnchorLdu,[0,0,0])
 assert.deepEqual(reinforced?.meshAxisLdu,[0,0,1])
 assert.deepEqual(reinforced?.bevelApexSigns,[-1,1])
+assert.equal(reinforced?.meshCaptureDistanceStud,1.15)
 
 console.log('LDraw differential/bevel gear mechanics regression: ok')

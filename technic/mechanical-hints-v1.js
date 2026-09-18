@@ -11,6 +11,7 @@ const EXACT_LDRAW_GEARS = new Map([
     meshAxisLdu:Object.freeze([0,0,1]),
     bevelApexSigns:Object.freeze([-1]),
     meshApexToleranceStud:.16,
+    meshCaptureDistanceStud:1.15,
     authoritative:true,
   })],
   ['18575', Object.freeze({
@@ -19,6 +20,7 @@ const EXACT_LDRAW_GEARS = new Map([
     meshAnchorLdu:Object.freeze([0,0,0]),
     meshAxisLdu:Object.freeze([0,0,1]),
     bevelApexSigns:Object.freeze([-1,1]),
+    meshCaptureDistanceStud:1.15,
     authoritative:true,
   })],
 ])
@@ -92,7 +94,7 @@ export function technicMechanicalHintsV1(definition = {}) {
 
 function sameGear(a,b) {
   if (!a || !b) return false
-  const scalarKeys=['kind','teeth','pitchRadius','efficiency','differentialHousing','doubleBevel','reinforced','meshApexToleranceStud','source']
+  const scalarKeys=['kind','teeth','pitchRadius','efficiency','differentialHousing','doubleBevel','reinforced','meshApexToleranceStud','meshCaptureDistanceStud','source']
   if (scalarKeys.some(key => a[key] !== b[key])) return false
   for (const key of ['meshAnchorLdu','meshAxisLdu','bevelApexSigns']) {
     const aa=Array.isArray(a[key]) ? a[key] : []

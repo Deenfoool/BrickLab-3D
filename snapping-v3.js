@@ -176,6 +176,7 @@ function gearDescriptor(object) {
   const axis = frame?.axis ?? connectorWorldAxis(object, connector)
   const center = frame?.center ?? connectorWorldPosition(object, connector)
   const tolerance = Number(gear.meshApexToleranceStud)
+  const captureDistance = Number(gear.meshCaptureDistanceStud)
 
   return {
     object,
@@ -193,6 +194,7 @@ function gearDescriptor(object) {
     meshLocalAxis: frame?.localAxis?.toArray?.() ?? [...connector.axis],
     bevelApexSigns: Array.isArray(gear.bevelApexSigns) ? [...gear.bevelApexSigns] : null,
     meshApexToleranceStud: Number.isFinite(tolerance) && tolerance > 0 ? tolerance : null,
+    meshCaptureDistanceStud: Number.isFinite(captureDistance) && captureDistance > 0 ? captureDistance : null,
   }
 }
 
@@ -207,8 +209,12 @@ function findGearSnapCandidate(selected, objects) {
     const fixed = gearDescriptor(targetObject)
     if (!fixed || fixed.kind !== moving.kind || !moving.teeth || !fixed.teeth) continue
 
+    const verifiedCaptureDistance = Math.max(
+      moving.meshCaptureDistanceStud ?? 0,
+      fixed.meshCaptureDistanceStud ?? 0,
+    ) || undefined
     const solution = moving.kind === 'bevel'
-      ? solveBevelSnap(moving, fixed)
+      ? solveBevelSnap(moving, fixed, { captureDistance:verifiedCaptureDistance })
       : solveSpurSnap(moving, fixed)
     if (!solution) continue
 

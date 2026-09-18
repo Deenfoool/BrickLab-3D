@@ -11,6 +11,10 @@ globalThis.requestAnimationFrame = callback => { callback(0); return 0 }
 
 const { PARTS } = await import('../parts.js')
 const { findSnapCandidate } = await import('../snapping-v3.js')
+const {
+  findSnapCandidate:findBridgeSnapCandidate,
+  applySnap:applyBridgeSnap,
+} = await import('../connectors-v4/snapping-bridge-v4.js')
 
 function definition({ id, teeth, pitchRadius, anchor, axis, signs }) {
   return {
@@ -27,6 +31,7 @@ function definition({ id, teeth, pitchRadius, anchor, axis, signs }) {
         meshAxisLdu:axis,
         bevelApexSigns:signs,
         meshApexToleranceStud:.16,
+        meshCaptureDistanceStud:1.15,
       },
     },
   }
@@ -82,6 +87,25 @@ test('BUILD bevel snap uses the 62821 ring plane rather than its axle-hole origi
   assert.deepEqual(candidate.fixedGear.meshLocalPosition,[0,0,27/20])
   assert.deepEqual(candidate.fixedGear.bevelApexSigns,[-1])
   assert.ok(candidate.distance<1e-9)
+})
+
+test('the editor bridge catches the real 62821 ↔ 18575 mesh without pixel-perfect placement', () => {
+  const fixed=objectFor(differential,'diff-wide-capture')
+  const moving=objectFor(pinion,'pinion-wide-capture')
+  moving.position.set(2.78,.18,.20)
+  moving.rotation.y=Math.PI/2
+  fixed.updateMatrixWorld(true)
+  moving.updateMatrixWorld(true)
+
+  const candidate=findBridgeSnapCandidate(moving,[fixed,moving],{isAvailable:()=>true})
+  assert.ok(candidate,'the visible near-mesh from the editor must enter the bevel capture zone')
+  assert.equal(candidate.kind,'gear-mesh')
+  assert.equal(candidate.fixedGear.teeth,28)
+  assert.equal(candidate.movingGear.teeth,20)
+  assert.ok(candidate.distance>.72,'capture must be wider than the generic connector radius')
+  assert.ok(candidate.distance<1.15)
+  applyBridgeSnap(moving,candidate)
+  assert.ok(moving.position.distanceTo(new THREE.Vector3(1.85,0,0))<1e-9)
 })
 
 await dom.happyDOM.close()
