@@ -22,7 +22,10 @@ import {
   differentialSpiderEquation,
   driverEquation,
   gearMeshEquation,
+  packagedDifferentialEquation,
+  rackPinionEquation,
   rigidRotationEquation,
+  rotationCouplingEquation,
   screwLinearEquation,
 } from '../mechanics-next/transmission/equations.js'
 import { createKinematicSolver } from '../mechanics-next/solver/kinematic-solver.js'
@@ -51,6 +54,7 @@ import { commitPlacementTransaction } from '../mechanics-next/connectors/placeme
 import { discoverMechanicalTransmissions } from '../mechanics-next/transmission/discovery.js'
 import { createTransmissionCompiler } from '../mechanics-next/transmission/compiler.js'
 import { evaluateBevelGearPair, evaluateSpurGearPair } from '../mechanics-next/transmission/gear-geometry.js'
+import { evaluateRackPinionPair, rackFrameForRecord } from '../mechanics-next/transmission/rack-geometry.js'
 import { createUniversalJointRelation, universalJointOutputDelta, universalJointInputDelta, universalJointVelocityRatio } from '../mechanics-next/compounds/universal-joint.js'
 import { solveLinearWithNonlinearRelations } from '../mechanics-next/solver/nonlinear-relations.js'
 import { discoverCompoundMechanisms } from '../mechanics-next/compounds/discovery.js'
@@ -3097,4 +3101,263 @@ test('physics plan keeps compound member separate and emits fixed joint for rigi
   assert.equal(plan.joints.length,1)
   assert.equal(plan.joints[0].kind,'fixed')
   assert.deepEqual(plan.joints[0].frame.orientationWorld,[1,0,0,0,1,0,0,0,1])
+})
+
+
+test('shaft coupling honors opposite connector-axis polarity', () => {
+  const graph=createAssemblyGraph()
+  const a=createBodyDescriptor({id:'shaft-a',instanceId:'ia',partId:'axle-a'})
+  const b=createBodyDescriptor({id:'shaft-b',instanceId:'ib',partId:'axle-b'})
+  graph.addBody(a);graph.addBody(b)
+  graph.addConstraint(createConstraint({
+    id:'keyed-opposite',
+    bodyA:a.id,
+    bodyB:b.id,
+    kind:'prismatic',
+    dof:constraintDof('prismatic'),
+    referenceFrame:{position:[0,0,0],axis:[1,0,0]},
+    metadata:{
+      topology:{keyedRotation:true},
+      interfacePair:['axle','axle-hole'],
+      axisPolarity:-1,
+    },
+  }))
+  const records=[
+    {instance:{body:a,descriptor:{classification:{role:'axle',capabilities:{transmission:false},properties:{}}},endpoints:[],transmissions:[]}},
+    {instance:{body:b,descriptor:{classification:{role:'axle',capabilities:{transmission:false},properties:{}}},endpoints:[],transmissions:[]}},
+  ]
+  const discovery=discoverMechanicalTransmissions({records,graph,relations:[]})
+  const equation=discovery.equations.find(item=>item.metadata?.kind==='shaft-coupling')
+  assert.ok(equation)
+  const solver=createKinematicSolver()
+  solver.addEquation(equation)
+  solver.setDriver({id:'drive-a',bodyId:a.id,value:3})
+  const solved=solver.solve()
+  assert.equal(solved.status,'solved')
+  assert.equal(solved.values[mechanicalVariable(b.id,'omega')],-3)
+})
+
+test('packaged transmission ports are bearings and F/N/R mode changes native equations', () => {
+  const packageBody=createBodyDescriptor({id:'gearbox-body',instanceId:'gearbox-i',partId:'gearbox-fnr'})
+  const inputBody=createBodyDescriptor({id:'input-shaft',instanceId:'input-i',partId:'axle'})
+  const outputBody=createBodyDescriptor({id:'output-shaft',instanceId:'output-i',partId:'axle'})
+  const graph=createAssemblyGraph()
+  for(const body of [packageBody,inputBody,outputBody])graph.addBody(body)
+
+  const packagedTransmission={
+    inputConnectorId:'input',
+    outputConnectorId:'output',
+    rigidConnectorId:null,
+    modes:{forward:1,neutral:0,reverse:-1},
+    efficiency:.9,
+    wormDrive:null,
+    articulated:null,
+  }
+  const packageClassification={
+    role:'gearbox',
+    capabilities:{transmission:true,rotary:false},
+    properties:{packagedTransmission},
+  }
+  const packageRecord={
+    instance:{
+      body:packageBody,
+      descriptor:{classification:packageClassification},
+      endpoints:[],
+      transmissions:[{kind:'packaged-transmission',equationFamily:'port-ratio',...packagedTransmission}],
+    },
+  }
+  const axleClassification={role:'axle',capabilities:{transmission:false,rotary:true},properties:{}}
+  const records=[
+    packageRecord,
+    {instance:{body:inputBody,descriptor:{classification:axleClassification},endpoints:[],transmissions:[]}},
+    {instance:{body:outputBody,descriptor:{classification:axleClassification},endpoints:[],transmissions:[]}},
+  ]
+  for(const [id,external,role,polarity] of [
+    ['in-bearing',inputBody,'input',1],
+    ['out-bearing',outputBody,'output',-1],
+  ]){
+    graph.addConstraint(createConstraint({
+      id,
+      bodyA:packageBody.id,
+      bodyB:external.id,
+      kind:'revolute',
+      dof:constraintDof('revolute'),
+      referenceFrame:{position:[0,0,0],axis:[1,0,0]},
+      metadata:{
+        topology:{keyedRotation:false,transmissionPort:true},
+        transmissionPort:{
+          packageKind:'packaged-transmission',
+          packageBodyId:packageBody.id,
+          packageInstanceId:packageBody.instanceId,
+          externalBodyId:external.id,
+          externalInstanceId:external.instanceId,
+          portRole:role,
+          portId:role,
+          axisPolarity:polarity,
+          parameters:packagedTransmission,
+        },
+      },
+    }))
+  }
+
+  const run=mode=>discoverMechanicalTransmissions({
+    records,graph,relations:[],controlState:()=>({type:'transmission',mode}),
+  })
+  const forward=run('forward')
+  assert.equal(forward.transmissions.find(item=>item.kind==='packaged-transmission').parameters.ratioAB,-1)
+  assert.equal(forward.equations.length,1)
+
+  const neutral=run('neutral')
+  assert.equal(neutral.equations.length,0)
+  assert.equal(neutral.transmissions[0].parameters.neutral,true)
+
+  const reverse=run('reverse')
+  assert.equal(reverse.transmissions[0].parameters.ratioAB,1)
+})
+
+test('packaged differential solves true three-port relation with port polarity', () => {
+  const solver=createKinematicSolver()
+  solver.addEquation(packagedDifferentialEquation({
+    id:'package-diff',
+    input:'input',
+    left:'left',
+    right:'right',
+    ratio:1,
+    inputSign:1,
+    leftSign:1,
+    rightSign:-1,
+  }))
+  solver.setDriver({id:'input-driver',bodyId:'input',value:10})
+  solver.setDriver({id:'left-load',bodyId:'left',value:4})
+  const solved=solver.solve()
+  assert.equal(solved.status,'solved')
+  assert.equal(solved.values[mechanicalVariable('right','omega')],-16)
+})
+
+test('native rack geometry compiles rack-pinion equation and linear motion', () => {
+  const graph=createAssemblyGraph()
+  const gearBody=createBodyDescriptor({id:'pinion-body',instanceId:'pinion-i',partId:'gear-12'})
+  const rackBody=createBodyDescriptor({id:'rack-body',instanceId:'rack-i',partId:'steering-rack-7'})
+  const guideBody=createBodyDescriptor({id:'guide-body',instanceId:'guide-i',partId:'steering-rack-guide'})
+  for(const body of [gearBody,rackBody,guideBody])graph.addBody(body)
+  graph.addConstraint(createConstraint({
+    id:'rack-guide',
+    bodyA:rackBody.id,
+    bodyB:guideBody.id,
+    kind:'prismatic',
+    dof:constraintDof('prismatic'),
+    referenceFrame:{position:[0,0,0],axis:[1,0,0]},
+    metadata:{interfacePair:['linear-guide','linear-guide']},
+  }))
+
+  const identity=[0,0,0,1]
+  const gearRecord={
+    instance:{
+      body:gearBody,
+      descriptor:{classification:{role:'spur-gear',capabilities:{transmission:true,rotary:true},properties:{}}},
+      endpoints:[],
+      transmissions:[{
+        kind:'spur-gear',
+        equationFamily:'gear-mesh',
+        toothCount:12,
+        pitchRadius:.75,
+        gearGeometry:{moduleStud:.125,meshAnchorLdu:[0,0,0],meshAxisLdu:[0,0,-1]},
+      }],
+    },
+    pose:{position:[0,.75,0],quaternion:identity},
+    visualOffsetStud:[0,0,0],
+  }
+  const rackGeometry={
+    moduleStud:.125,
+    pressureAngleDeg:20,
+    linearPitchStud:Math.PI*.125,
+    pitchLinePoint:[0,0,0],
+    travelAxis:[1,0,0],
+    toothNormal:[0,1,0],
+    widthAxis:[0,0,1],
+    phaseOriginStud:-2,
+    toothCount:12,
+    maxTravelStud:1,
+    source:'test',
+  }
+  const rackRecord={
+    instance:{
+      body:rackBody,
+      descriptor:{classification:{role:'rack',capabilities:{transmission:true,rotary:false},properties:{rackGeometry}}},
+      endpoints:[],
+      transmissions:[{kind:'rack',equationFamily:'rack-pinion',rackGeometry}],
+    },
+    pose:{position:[0,0,0],quaternion:identity},
+    visualOffsetStud:[0,0,0],
+  }
+  const guideRecord={
+    instance:{
+      body:guideBody,
+      descriptor:{classification:{role:'connector',capabilities:{transmission:false},properties:{}}},
+      endpoints:[],
+      transmissions:[],
+    },
+    pose:{position:[0,0,0],quaternion:identity},
+    visualOffsetStud:[0,0,0],
+  }
+
+  const rackFrame=rackFrameForRecord(rackRecord)
+  assert.ok(rackFrame)
+  const geometry=evaluateRackPinionPair({
+    bodyId:gearBody.id,
+    kind:'spur',
+    pitchRadius:.75,
+    center:[0,.75,0],
+    axis:[0,0,1],
+    hint:{gearGeometry:{moduleStud:.125}},
+  },rackFrame)
+  assert.equal(geometry.valid,true)
+
+  const discovery=discoverMechanicalTransmissions({
+    records:[gearRecord,rackRecord,guideRecord],
+    graph,
+    relations:[],
+  })
+  assert.equal(discovery.transmissions.some(item=>item.kind==='rack-pinion'),true)
+  assert.equal(discovery.linearMotions.some(item=>item.bodyId===rackBody.id),true)
+  const equation=discovery.equations.find(item=>item.metadata?.kind==='rack-pinion')
+  assert.ok(equation)
+
+  const solver=createKinematicSolver()
+  solver.addEquation(equation)
+  solver.setDriver({id:'pinion-drive',bodyId:gearBody.id,value:2})
+  const solved=solver.solve()
+  assert.equal(solved.status,'solved')
+  assert.ok(Number.isFinite(solved.values[mechanicalVariable(rackBody.id,'slide')]))
+})
+
+test('migration gate blocks a transmission family with no executable model', () => {
+  const gate=evaluateMechanicsMigrationGate({
+    runtimeStatus:{
+      version:'test',
+      scene:{instances:1,roles:{pulley:1}},
+      interpretedConnections:{unresolved:0},
+      compoundDecompositions:{pending:0,failures:0},
+      transmissionCompiler:{
+        diagnostics:{
+          coverage:[{
+            bodyId:'pulley-body',
+            instanceId:'pulley-i',
+            partId:'pulley',
+            role:'pulley',
+            supported:false,
+            model:'explicit-belt-or-chain-required',
+          }],
+          packaged:[],
+          differentials:[],
+        },
+      },
+    },
+    physicsStatus:{pass:true,blockers:[]},
+    paritySummary:{parts:1,semanticFail:0,geometryFail:0},
+    persistence:{pass:true},
+    regression:{status:'passed'},
+  })
+  assert.equal(gate.pass,false)
+  assert.ok(gate.blockers.some(item=>item.id==='transmission-family-coverage'))
 })
