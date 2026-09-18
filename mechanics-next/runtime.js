@@ -349,12 +349,14 @@ export function createMechanicsNextRuntime({
       partId:String(candidate.moving.instance.body.partId),
       endpointId:String(endpointObservedId(candidate.source)),
       connectorId:String(endpointObservedId(candidate.source)),
+      connectorType:endpointSemanticKind(candidate.source),
     }),
     b:Object.freeze({
       instanceId:String(candidate.targetRecord.instance.body.instanceId),
       partId:String(candidate.targetRecord.instance.body.partId),
       endpointId:String(endpointObservedId(candidate.target)),
       connectorId:String(endpointObservedId(candidate.target)),
+      connectorType:endpointSemanticKind(candidate.target),
     }),
     match:Object.freeze({
       family:candidate.match?.family??null,
@@ -724,22 +726,53 @@ export function createMechanicsNextRuntime({
     },
     removePartConnections(instanceId) {
       const id=String(instanceId||'')
-      let removed=0
+      if(!id)return 0
+      const removedIds=new Set()
+
       for(const[recordId,record]of[...nativeObservedRecords]){
         if(record.a?.instanceId!==id&&record.b?.instanceId!==id)continue
         nativeObservedRecords.delete(recordId)
         occupancy.release(recordId)
-        removed+=1
+        removedIds.add(recordId)
       }
+
+      // First let the interpreter remove edges owned by deleted live records.
+      if(removedIds.size)syncScene()
+
+      // Project-restored native constraints are not interpreter-owned. Remove those
+      // explicitly by their persisted instance metadata.
       for(const edge of [...graph.edges('constraint')]){
         const metadata=edge.metadata||{}
         if(metadata.instanceAId!==id&&metadata.instanceBId!==id)continue
         graph.removeEdge(edge.id)
-        occupancy.release(edge.id)
-        removed+=1
+        occupancy.release(metadata.occupancy?.connectionId??edge.id)
+        removedIds.add(edge.id)
       }
-      if(removed)syncScene()
-      return removed
+
+      if(removedIds.size){
+        rebuildNativeOccupancy()
+        syncScene()
+      }
+      return removedIds.size
+    },
+    projectConnections() {
+      return Object.freeze(api.exportProjectState().connections.map(record=>Object.freeze({
+        id:record.id,
+        kind:record.kind,
+        a:Object.freeze({
+          instanceId:record.a.instanceId,
+          endpointId:record.a.endpointId,
+          connectorId:record.a.observedEndpointId??record.a.endpointId,
+          connectorType:record.a.semantic??'native-endpoint',
+        }),
+        b:Object.freeze({
+          instanceId:record.b.instanceId,
+          endpointId:record.b.endpointId,
+          connectorId:record.b.observedEndpointId??record.b.endpointId,
+          connectorType:record.b.semantic??'native-endpoint',
+        }),
+        metadata:Object.freeze({mechanicsNextNative:true}),
+      })))
     },
     nativeProjectAuthoritative:()=>nativeProjectAuthoritative,
     findCandidate(instanceId, targetInstanceIds = null, options = {}) {
