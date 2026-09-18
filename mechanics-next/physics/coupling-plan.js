@@ -172,6 +172,16 @@ function convertEquation(equation,{records,graph,islands,motions,nonlinearRelati
     terms:Object.freeze(terms),
     metadata:equation.metadata??null,
     nonlinearRelation,
+    controlledTransmission:equation?.metadata?.controlledTransmission===true
+      ?Object.freeze({
+          controlId:String(equation.metadata.controlId||''),
+          modeRatios:Object.freeze({...equation.metadata.modeRatios}),
+          defaultMode:String(equation.metadata.defaultMode||'forward'),
+          bodyA:String(equation.metadata.bodyA||parsed[0]?.bodyId||''),
+          bodyB:String(equation.metadata.bodyB||parsed[1]?.bodyId||''),
+          packageKind:equation.metadata.packageKind??null,
+        })
+      :null,
     sourceEquation:equation,
   })}
 }
@@ -190,9 +200,13 @@ export function buildMechanicsCouplingPlan({
   const blockers=[]
   const skipped=[]
 
+  const controlledPhysicalEquations=(discovery?.transmissions||[])
+    .flatMap(item=>item?.equations||[])
+    .filter(equation=>equation?.metadata?.controlledTransmission===true)
   const equations=[
-    ...(discovery?.equations||[]),
-    ...(discovery?.velocityEquations||[]),
+    ...(discovery?.equations||[]).filter(equation=>equation?.metadata?.physicsExclude!==true),
+    ...(discovery?.velocityEquations||[]).filter(equation=>equation?.metadata?.physicsExclude!==true),
+    ...controlledPhysicalEquations,
   ]
 
   for(const equation of equations){
