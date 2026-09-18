@@ -13,8 +13,9 @@ import { gearPitchRadius } from '../parts5/part-geometry-metrics-v1.js'
 import { classifyTechnicEndpointV1 } from './interface-semantics-v1.js'
 import { technicMechanicalHintsV1 } from './mechanical-hints-v1.js?v=technic-differential-bevel-20260917-v1'
 import { technicPartProfileV1 } from './part-profile-v1.js'
+import { DIFFERENTIAL_62821_SEATS_V4 } from '../connector-discovery/differential-fixtures-v4.js'
 
-export const TECHNIC_DRIVETRAIN_VERSION = 'technic-drivetrain-v1.2.1'
+export const TECHNIC_DRIVETRAIN_VERSION = 'technic-drivetrain-v1.3.0'
 
 const DEFAULT_STALL_TORQUE = 5.5
 const DEFAULT_GEAR_EFFICIENCY = 0.92
@@ -78,6 +79,24 @@ function v4TechnicRotary(object) {
   return profileFor(object).rotary && v4Ports(definition).length > 0
 }
 function hintedGear(definition) { return technicMechanicalHintsV1(definition || {}).mechanics?.gear ?? null }
+
+function ldrawCode(definition) {
+  return String(definition?.ldraw?.code || definition?.ldraw?.file || definition?.id || '')
+    .replace(/^ldraw-/i,'')
+    .replace(/^parts[\\/]/i,'')
+    .replace(/\\/g,'/')
+    .split('/').pop()
+    ?.replace(/\.dat$/i,'')
+    .trim().toLowerCase() || ''
+}
+
+function ldrawPointWorld(object, pointLdu) {
+  const visual=object?.children?.find?.(child=>child?.userData?.ldrawVisual) ?? null
+  if(!visual||!Array.isArray(pointLdu)||pointLdu.length<3)return null
+  visual.updateMatrix?.()
+  object.updateWorldMatrix?.(true,false)
+  return new THREE.Vector3(...pointLdu).applyMatrix4(visual.matrix).applyMatrix4(object.matrixWorld)
+}
 function needsEnhancedAnalysis(objects) {
   return (objects ?? []).some(object => {
     const definition=definitionFor(object)
@@ -272,8 +291,26 @@ function detectUnifiedGearMeshes(objects, shaftByPart, connections=[], options =
 }
 
 function differentialSeatState(objects,connections,shaftByPart){
-  const byId=new Map((objects??[]).map(object=>[object.userData?.instanceId,object]))
+  const list=objects??[]
+  const byId=new Map(list.map(object=>[object.userData?.instanceId,object]))
   const seats=[]
+  const seen=new Set()
+  const pushSeat=(connectionId,housing,gear,{inferred=false,source='graph'}={})=>{
+    if(!housing||!gear)return
+    const housingShaft=shaftByPart.get(housing.userData.instanceId)
+    const gearShaft=shaftByPart.get(gear.userData.instanceId)
+    if(!housingShaft||!gearShaft||housingShaft.id===gearShaft.id)return
+    const key=`${housing.userData.instanceId}<>${gear.userData.instanceId}`
+    if(seen.has(key))return
+    seen.add(key)
+    const alignment=Math.abs(housingShaft.axisWorld.dot(gearShaft.axisWorld))
+    seats.push({
+      id:connectionId,housingId:housing.userData.instanceId,gearId:gear.userData.instanceId,
+      housingShaftId:housingShaft.id,gearShaftId:gearShaft.id,axisAlignment:alignment,
+      gearMemberIds:[...gearShaft.memberIds],inferred,source,
+    })
+  }
+
   for(const connection of connections??[]){
     if(connection?.kind!=='differential-seat')continue
     const objectA=byId.get(connection.a?.instanceId),objectB=byId.get(connection.b?.instanceId)
@@ -283,16 +320,36 @@ function differentialSeatState(objects,connections,shaftByPart){
     const gearB={...(definitionB?.mechanics?.gear??{}),...(hintedGear(definitionB)??{})}
     const housing=gearA.differentialHousing?objectA:gearB.differentialHousing?objectB:null
     const gear=housing===objectA?objectB:housing===objectB?objectA:null
-    if(!housing||!gear)continue
-    const housingShaft=shaftByPart.get(housing.userData.instanceId)
-    const gearShaft=shaftByPart.get(gear.userData.instanceId)
-    if(!housingShaft||!gearShaft||housingShaft.id===gearShaft.id)continue
-    const alignment=Math.abs(housingShaft.axisWorld.dot(gearShaft.axisWorld))
-    seats.push({
-      id:connection.id,housingId:housing.userData.instanceId,gearId:gear.userData.instanceId,
-      housingShaftId:housingShaft.id,gearShaftId:gearShaft.id,axisAlignment:alignment,
-      gearMemberIds:[...gearShaft.memberIds],
-    })
+    pushSeat(connection.id,housing,gear,{source:'connection-graph'})
+  }
+
+  // Scene-level recovery for existing projects and discovery timing races.
+  // 62821's verified internal 6589 seats are known in LDraw coordinates. Detect an
+  // actually seated 6589 by its real visual origin, so Kinematics does not depend on
+  // whether Connector Discovery finished first or whether an older project persisted
+  // a V4 seat record.
+  const housings=list.filter(object=>{
+    const definition=definitionFor(object)
+    return ['62821','62821b'].includes(ldrawCode(definition)) && hintedGear(definition)?.differentialHousing
+  })
+  const innerGears=list.filter(object=>ldrawCode(definitionFor(object))==='6589')
+  const MAX_SEAT_ERROR_STUD=.12
+  for(const housing of housings){
+    const targets=DIFFERENTIAL_62821_SEATS_V4
+      .map(seat=>ldrawPointWorld(housing,seat.positionLdu))
+      .filter(Boolean)
+    if(!targets.length)continue
+    for(const gear of innerGears){
+      const pivot=ldrawPointWorld(gear,[0,0,0])
+      if(!pivot)continue
+      let nearest=Infinity
+      for(const target of targets)nearest=Math.min(nearest,pivot.distanceTo(target))
+      if(nearest<=MAX_SEAT_ERROR_STUD){
+        pushSeat(`inferred-differential-seat:${housing.userData.instanceId}:${gear.userData.instanceId}`,housing,gear,{
+          inferred:true,source:'verified-ldraw-seat-geometry',
+        })
+      }
+    }
   }
   return seats
 }
@@ -483,6 +540,8 @@ export function analyzeTechnicAwareDrivetrain(objects, connections) {
       drivenShafts:shaftResults.filter(shaft => shaft.rpm != null).length,
       motors:motors.length,
       gearMeshes:physicalGearMeshes.length,
+      differentialSeats:differentialSeats.length,
+      inferredDifferentialSeats:differentialSeats.filter(seat=>seat.inferred).length,
       transmissions:transmissions.length,
       differentials:differentials.length,
       conflicts:propagated.conflicts.length,

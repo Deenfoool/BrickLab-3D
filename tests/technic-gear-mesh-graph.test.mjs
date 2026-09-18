@@ -95,3 +95,16 @@ test('saved bevel mesh outside live tolerance preserves orientation-derived rota
   assert.ok(mesh.ratioAB>0)
   assert.ok(mesh.ratioBA>0)
 })
+
+test('62821 and seated 6589 are recovered from scene geometry without a persisted V4 seat record',()=>{
+  const housing=objectFor(diff,'geometry-carrier')
+  const inner=objectFor(blue,'geometry-inner-12t')
+  // First verified 62821 seat is [0,0,-17] LDU. The fixture-aware fallback uses
+  // the actual LDraw visual transform, so this remains valid under recentering.
+  inner.position.set(0,0,-17/20)
+  housing.updateMatrixWorld(true);inner.updateMatrixWorld(true)
+  const drivetrain=analyzeTechnicAwareDrivetrain([housing,inner],[])
+  assert.equal(drivetrain.differentialSeats.length,1)
+  assert.equal(drivetrain.differentialSeats[0].inferred,true)
+  assert.equal(drivetrain.differentialSeats[0].source,'verified-ldraw-seat-geometry')
+})
