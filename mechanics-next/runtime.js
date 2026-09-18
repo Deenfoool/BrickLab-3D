@@ -301,6 +301,7 @@ export function createMechanicsNextRuntime({
           mechanicsNextNative:true,
           restoredFromProject:true,
           persistedConstraintId:record.id,
+          connectionGeometry:record.geometry??null,
         }),
       }))
       graph.removeEdge(record.id)
@@ -497,9 +498,23 @@ export function createMechanicsNextRuntime({
     void connectivity?.prefetch?.(sceneObserver.instances().map(instance=>instance.body.partId))
     void compoundDecompositions?.prefetch?.(sceneObserver.instances())
     const records = mechanicalRecords()
-    const revalidation=revalidateExistingConnections(records)
+    const preRevalidation=revalidateExistingConnections(records)
     const observedConnections=normalizedObservedConnections()
-    const connections = connectionInterpreter?.sync(observedConnections) ?? null
+    let connections = connectionInterpreter?.sync(observedConnections) ?? null
+    const postRevalidation=revalidateExistingConnections(records)
+    if(postRevalidation.released>0){
+      connections=connectionInterpreter?.sync(normalizedObservedConnections())??connections
+    }
+    const revalidation=Object.freeze({
+      checked:preRevalidation.checked+postRevalidation.checked,
+      released:preRevalidation.released+postRevalidation.released,
+      failures:Object.freeze([
+        ...preRevalidation.failures,
+        ...postRevalidation.failures,
+      ]),
+      pre:preRevalidation,
+      post:postRevalidation,
+    })
     const discovery = discoverMechanicalTransmissions({
       records,
       graph,
@@ -701,6 +716,70 @@ export function createMechanicsNextRuntime({
         adoptPersistedConnectionsAsObserved(state)
       }
       const refreshed=syncScene()
+      const restoredObservedIds=new Set(
+        (state?.connections||[]).map(record=>String(
+          record.observedConnectionId ??
+          deterministicId(
+            'observed-link',
+            ...[
+              `${record.a?.instanceId}::${record.a?.observedEndpointId??record.a?.endpointId}`,
+              `${record.b?.instanceId}::${record.b?.observedEndpointId??record.b?.endpointId}`,
+            ].sort(),
+          )
+        )),
+      )
+      const geometryFailures=(refreshed?.revalidation?.failures||[]).filter(item=>
+        restoredObservedIds.has(String(item?.observedConnectionId||''))
+      )
+      if(nativeProjectAuthoritative&&geometryFailures.length){
+        let geometryRolledBack=0
+        for(const edge of [...graph.edges('constraint')]){
+          const observedId=String(edge?.metadata?.observedConnectionId||'')
+          if(!restoredObservedIds.has(observedId))continue
+          if(graph.removeEdge(edge.id))geometryRolledBack+=1
+          occupancy.release(observedId)
+        }
+        for(const observedId of restoredObservedIds){
+          nativeObservedRecords.delete(observedId)
+          releasedObservedConnectionIds.release(observedId)
+          occupancy.release(observedId)
+        }
+        connectionInterpreter?.sync?.(normalizedObservedConnections())
+        nativeRestoredRelations=Object.freeze([])
+        compoundState.clear()
+        nativeProjectAuthoritative=false
+        buildOwnershipPublished=false
+        if(globals.BrickLabMechanicsNextBuildOwner?.version===MECHANICS_NEXT_BUILD_OWNER_VERSION){
+          delete globals.BrickLabMechanicsNextBuildOwner
+        }
+        const failures=Object.freeze([
+          ...(result.failures||[]),
+          ...geometryFailures.map(item=>Object.freeze({
+            code:'connection-geometry-invalid',
+            connectionId:item.constraintId??null,
+            observedConnectionId:item.observedConnectionId??null,
+            reason:item.reason??'scene-connection-invalid',
+          })),
+        ])
+        lastPersistenceReport=Object.freeze({
+          ...lastPersistenceReport,
+          pass:false,
+          restored:0,
+          rejected:failures.length,
+          failures,
+          geometryRolledBack,
+        })
+        return Object.freeze({
+          ...result,
+          restored:0,
+          rejected:failures.length,
+          rolledBack:Number(result.rolledBack||0)+geometryRolledBack,
+          failures,
+          relations:Object.freeze([]),
+          compatibility:lastPersistenceReport,
+          refreshed,
+        })
+      }
       if(nativeProjectAuthoritative)rebuildNativeOccupancy()
       return Object.freeze({
         ...result,
