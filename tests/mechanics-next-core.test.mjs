@@ -34,6 +34,7 @@ import { createPartMechanicalDescriptor, instantiatePartMechanicalDescriptor } f
 import { createShadowConnectionInterpreter, interpretObservedConnection } from '../mechanics-next/intelligence/connection-interpreter.js'
 import { expandGrid, parseCylinderSections, parseLdcadShadowText } from '../mechanics-next/ldraw/ldcad-parser.js'
 import { ldcadConnectorToEndpoint } from '../mechanics-next/ldraw/connector-adapter.js'
+import { createNativeShadowResolver } from '../mechanics-next/ldraw/shadow-resolver.js'
 
 test('deterministic mechanical IDs are stable and namespace-sensitive', () => {
   assert.equal(deterministicId('body', 'a', 1), deterministicId('body', 'a', 1))
@@ -608,4 +609,78 @@ test('native parser quarantines malformed metadata instead of inventing a connec
   assert.equal(parsed.operations.length, 0)
   assert.equal(parsed.warnings.length, 1)
   assert.equal(parsed.warnings[0].code, 'invalid-snap-meta')
+})
+
+
+test('native Shadow resolver applies nested include transforms and axial scale', async () => {
+  const files = new Map([
+    ['parts/root.dat', [
+      '0 !LDCAD SNAP_CYL [id=local] [gender=M] [secs=R 6 4] [caps=one] [pos=0 0 0]',
+      '0 !LDCAD SNAP_INCL [id=shaftBundle] [ref=shared.dat] [pos=20 0 0] [scale=1 2 1]',
+    ].join('\n')],
+    ['parts/shared.dat',
+      '0 !LDCAD SNAP_CYL [id=shaft] [gender=M] [caps=none] [secs=A 6 10] [center=true] [slide=true] [pos=0 5 0]'],
+  ])
+  const resolver = createNativeShadowResolver({
+    fetchShadowText:async path => files.get(path) ?? null,
+  })
+  const result = await resolver.resolve('parts/root.dat')
+  assert.equal(result.warnings.length, 0)
+  assert.equal(result.connectors.length, 2)
+
+  const included = result.connectors.find(connector => connector.id === 'shaft')
+  assert.ok(included)
+  assert.deepEqual(included.frame.positionLdu, [20,10,0])
+  assert.equal(included.geometry.sections[0].lengthLdu, 20)
+  assert.ok(included.clearIds.includes('shaftBundle'))
+})
+
+test('native Shadow resolver executes SNAP_CLEAR after include', async () => {
+  const files = new Map([
+    ['parts/root.dat', [
+      '0 !LDCAD SNAP_CYL [id=local] [gender=M] [secs=R 6 4] [caps=one]',
+      '0 !LDCAD SNAP_INCL [id=temporary] [ref=shared.dat]',
+      '0 !LDCAD SNAP_CLEAR [id=temporary]',
+    ].join('\n')],
+    ['parts/shared.dat',
+      '0 !LDCAD SNAP_CYL [id=included] [gender=M] [secs=A 6 20] [slide=true]'],
+  ])
+  const resolver = createNativeShadowResolver({
+    fetchShadowText:async path => files.get(path) ?? null,
+  })
+  const result = await resolver.resolve('parts/root.dat')
+  assert.deepEqual(result.connectors.map(connector => connector.id), ['local'])
+})
+
+test('native Shadow resolver detects include cycles without recursion overflow', async () => {
+  const files = new Map([
+    ['parts/a.dat', '0 !LDCAD SNAP_INCL [ref=b.dat]'],
+    ['parts/b.dat', '0 !LDCAD SNAP_INCL [ref=a.dat]'],
+  ])
+  const resolver = createNativeShadowResolver({
+    fetchShadowText:async path => files.get(path) ?? null,
+  })
+  const result = await resolver.resolve('parts/a.dat')
+  assert.equal(result.connectors.length, 0)
+  assert.ok(result.warnings.some(warning => warning.code === 'include-cycle'))
+})
+
+test('native Shadow resolver rejects nonuniform sphere scaling instead of distorting semantics', async () => {
+  const files = new Map([
+    ['parts/root.dat', '0 !LDCAD SNAP_INCL [ref=sphere.dat] [scale=1 2 1]'],
+    ['parts/sphere.dat', '0 !LDCAD SNAP_SPH [id=ball] [gender=M] [radius=10]'],
+  ])
+  const resolver = createNativeShadowResolver({
+    fetchShadowText:async path => files.get(path) ?? null,
+  })
+  const result = await resolver.resolve('parts/root.dat')
+  assert.equal(result.connectors.length, 0)
+  assert.ok(result.warnings.some(warning => warning.code === 'geometry-scale-rejected'))
+})
+
+test('native Shadow resolver keeps explicit capability boundary for official inheritance', () => {
+  const resolver = createNativeShadowResolver({ fetchShadowText:async () => null })
+  assert.equal(resolver.capabilities.directShadow, true)
+  assert.equal(resolver.capabilities.includes, true)
+  assert.equal(resolver.capabilities.officialInheritance, false)
 })
