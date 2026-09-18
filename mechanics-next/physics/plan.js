@@ -375,6 +375,14 @@ export function buildMechanicsPhysicsPlan({
         bodyId:descriptor.bodyId,
       }))
     }
+    if(descriptor.status==='decomposed-awaiting-materialization'){
+      compoundBlockers.push(Object.freeze({
+        code:'compound-members-not-materialized',
+        kind:descriptor.kind,
+        bodyId:descriptor.bodyId,
+        decomposition:descriptor.decomposition??descriptor.materialization??null,
+      }))
+    }
   }
   blockers.push(...compoundBlockers)
 
