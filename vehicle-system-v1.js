@@ -41,9 +41,11 @@ function vec(v) { return { x: v.x, y: v.y, z: v.z } }
 
 function wheelCenter(wheel) {
   if (!wheel?.member) return null
-  return new THREE.Vector3(0, 1.15, 0)
-    .applyMatrix4(wheel.member.relativeMatrix)
-    .multiplyScalar(STUD)
+  const local=wheel.centerLocalMeters?.clone?.()
+    ?? new THREE.Vector3(0,1.15,0)
+      .applyMatrix4(wheel.member.relativeMatrix)
+      .multiplyScalar(STUD)
+  return local
     .applyQuaternion(bodyRotation(wheel.body))
     .add(bodyPosition(wheel.body))
 }
