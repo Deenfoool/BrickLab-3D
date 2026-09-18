@@ -634,6 +634,18 @@ function scheduleGearMeshBackfill(){
 window.addEventListener('bricklab:ldrawloaded',scheduleGearMeshBackfill)
 window.addEventListener('bricklab:projectlibrarychange',scheduleGearMeshBackfill)
 
+for (const eventName of [
+  'bricklab:ldrawloaded',
+  'bricklab:connectorv4',
+  'bricklab:partcatalogchange',
+  'bricklab:mechanicalintelligencechange',
+]) {
+  window.addEventListener(eventName, () => {
+    if (mode !== 'build' || mechanicsNextBuildActive()) return
+    queueMicrotask(() => { void scheduleMechanicsNextBuildHandoff(eventName) })
+  })
+}
+
 function projectState() {
   if (mode === 'build' && !mechanicsNextBuildActive()) {
     globalThis.BrickLabConnectorV4?.reconcileGraph(buildRoot.children, {persist:false})
