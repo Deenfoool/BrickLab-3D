@@ -79,7 +79,7 @@ export class AssemblyGraph {
   }
 
   addTransmission(transmission) {
-    return this.addEdge({ ...transmission, kind:'transmission' })
+    return this.addEdge({ ...transmission, kind:'transmission', transmissionKind:transmission.kind })
   }
 
   addContact(contact) {
