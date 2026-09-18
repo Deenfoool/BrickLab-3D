@@ -170,6 +170,7 @@ export function classifyPartFamily(observation, endpoints = []) {
     (Number(observation?.legacyMechanicalIntelligence?.properties?.lengthL) || null)
 
   const legacyGear=observation?.legacyMechanics?.gear
+  const legacyMotor=observation?.legacyMechanics?.motor
   const gearGeometry=legacyGear && typeof legacyGear==='object'
     ?Object.freeze({
         pitchRadius:Number.isFinite(Number(legacyGear.pitchRadius))?Number(legacyGear.pitchRadius):null,
@@ -203,6 +204,17 @@ export function classifyPartFamily(observation, endpoints = []) {
     ...(Number.isFinite(teeth) && teeth > 0 ? { toothCount:teeth } : {}),
     ...(Number.isFinite(lengthL) && lengthL > 0 ? { lengthL } : {}),
     ...(gearGeometry ? { gearGeometry } : {}),
+    ...(role==='motor'&&legacyMotor&&typeof legacyMotor==='object'?{
+      motor:Object.freeze({
+        connectorId:legacyMotor.connectorId??null,
+        rpm:Number.isFinite(Number(legacyMotor.rpm))?Number(legacyMotor.rpm):120,
+        direction:Number(legacyMotor.direction)<0?-1:1,
+        damping:Number.isFinite(Number(legacyMotor.damping))?Number(legacyMotor.damping):1,
+        stallTorque:Number.isFinite(Number(legacyMotor.stallTorque))?Number(legacyMotor.stallTorque):5.5,
+        freeCurrent:Number.isFinite(Number(legacyMotor.freeCurrent))?Number(legacyMotor.freeCurrent):.15,
+        stallCurrent:Number.isFinite(Number(legacyMotor.stallCurrent))?Number(legacyMotor.stallCurrent):2.2,
+      })
+    }:{}),
     ...(Number.isFinite(screwLeadStudPerTurn) && screwLeadStudPerTurn !== 0 ? { screwLeadStudPerTurn } : {}),
     ...(Number.isFinite(travelStud) && travelStud > 0 ? { travelStud } : {}),
     ...(Number.isFinite(restLengthStud) && restLengthStud > 0 ? { restLengthStud } : {}),
