@@ -109,11 +109,11 @@ function linearTerm(bodyId,coefficient,motions){
     referenceBodyId:motion.parentBodyId??null,
     coefficient:Number(coefficient),
     axisWorld:Object.freeze([...(motion.axis||[0,1,0])]),
-    sourceUnits:'scene-stud-per-second',
+    sourceUnits:'physics-world-units-per-second',
   })}
 }
 
-function convertEquation(equation,{records,graph,islands,motions,nonlinearRelations}){
+function convertEquation(equation,{records,graph,islands,motions,nonlinearRelations,worldUnitsPerStud}){
   if(Math.abs(Number(equation?.constant)||0)>EPS){
     return{blocker:Object.freeze({
       code:'nonzero-velocity-constraint-unsupported',
@@ -150,10 +150,15 @@ function convertEquation(equation,{records,graph,islands,motions,nonlinearRelati
     })}
     let term=result.term
     if(hasLinear){
-      // BrickLab's production Rapier session uses scene units directly: one scene unit
-      // is one stud. Screw/rack coefficients are already expressed in stud/rad and
-      // linear velocity is stud/s, so no hidden metre conversion is valid here.
-      term=Object.freeze({...term,coefficient:Number(term.coefficient)})
+      // Mechanics equations use stud/s for linear channels while Physics V2 stores
+      // body linear velocity in metres/s. Convert only the angular coefficient
+      // carrying stud/radian dimensions; the linear Jacobian remains unitless.
+      term=Object.freeze({
+        ...term,
+        coefficient:item.channel==='omega'
+          ?Number(term.coefficient)*worldUnitsPerStud
+          :Number(term.coefficient),
+      })
     }
     terms.push(term)
   }
@@ -190,6 +195,7 @@ export function buildMechanicsCouplingPlan({
   graph,
   discovery,
   records=[],
+  worldUnitsPerStud=.008,
 }={}){
   if(!graph?.neighbors||!graph?.rigidIslands)throw new TypeError('AssemblyGraph is required')
 
@@ -216,6 +222,7 @@ export function buildMechanicsCouplingPlan({
       islands,
       motions,
       nonlinearRelations:discovery?.nonlinearRelations||[],
+      worldUnitsPerStud,
     })
     if(result.coupler)couplers.push(result.coupler)
     else if(result.blocker)blockers.push(result.blocker)
