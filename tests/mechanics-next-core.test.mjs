@@ -32,6 +32,8 @@ import { classifyEndpointSemantics, enrichEndpointSemantics } from '../mechanics
 import { buildMechanicalFingerprint } from '../mechanics-next/intelligence/fingerprint.js'
 import { createPartMechanicalDescriptor, instantiatePartMechanicalDescriptor } from '../mechanics-next/intelligence/part-descriptor.js'
 import { createShadowConnectionInterpreter, interpretObservedConnection } from '../mechanics-next/intelligence/connection-interpreter.js'
+import { expandGrid, parseCylinderSections, parseLdcadShadowText } from '../mechanics-next/ldraw/ldcad-parser.js'
+import { ldcadConnectorToEndpoint } from '../mechanics-next/ldraw/connector-adapter.js'
 
 test('deterministic mechanical IDs are stable and namespace-sensitive', () => {
   assert.equal(deterministicId('body', 'a', 1), deterministicId('body', 'a', 1))
@@ -543,4 +545,67 @@ test('two observed stud contacts become a rigid island through geometric bundle 
 
   assert.equal(result.constraints, 2)
   assert.deepEqual(graph.rigidIslands(), [[top.body.id, bottom.body.id].sort()])
+})
+
+
+test('native LDCad parser preserves multi-step keyed profiles and motion flags', () => {
+  const parsed = parseLdcadShadowText(
+    '0 !LDCAD SNAP_CYL [id=axleHole] [gender=F] [caps=none] [secs=R 8 4 A 6 20 R 8 4] [center=true] [slide=true] [group=test] [pos=1 2 3]',
+    { file:'parts/test.dat' },
+  )
+  assert.equal(parsed.warnings.length, 0)
+  assert.equal(parsed.operations.length, 1)
+  const connector = parsed.operations[0].connector
+  assert.equal(connector.family, 'cylinder')
+  assert.equal(connector.gender, 'female')
+  assert.equal(connector.geometry.sections.length, 3)
+  assert.deepEqual(connector.geometry.sections.map(section => section.shape), ['R','A','R'])
+  assert.equal(connector.geometry.centered, true)
+  assert.equal(connector.snap.slide, true)
+  assert.deepEqual(connector.frame.positionLdu, [1,2,3])
+})
+
+test('native LDCad parser emits include and clear as operations instead of hiding inheritance semantics', () => {
+  const parsed = parseLdcadShadowText([
+    '0 !LDCAD SNAP_INCL [id=bundle] [ref=s/shared.dat] [pos=0 10 0] [scale=1 2 1]',
+    '0 !LDCAD SNAP_CLEAR [id=bundle]',
+  ].join('\n'), { file:'parts/root.dat' })
+  assert.equal(parsed.warnings.length, 0)
+  assert.deepEqual(parsed.operations.map(operation => operation.type), ['include','clear'])
+  assert.equal(parsed.operations[0].ref, 's/shared.dat')
+  assert.deepEqual(parsed.operations[0].scale, [1,2,1])
+  assert.equal(parsed.operations[1].id, 'bundle')
+})
+
+test('native LDCad grid expansion supports centered connector arrays', () => {
+  const parsed = parseLdcadShadowText(
+    '0 !LDCAD SNAP_CYL [gender=M] [secs=R 6 4] [grid=C 3 C 2 20 20]',
+  )
+  assert.equal(parsed.warnings.length, 0)
+  const points = expandGrid(parsed.operations[0].grid)
+  assert.equal(points.length, 6)
+  assert.deepEqual(points[0], [-20,0,-10])
+  assert.deepEqual(points.at(-1), [20,0,10])
+})
+
+test('native LDCad connector adapter feeds the same semantic intelligence without V4', () => {
+  const parsed = parseLdcadShadowText(
+    '0 !LDCAD SNAP_CYL [id=ax] [gender=M] [caps=none] [secs=A 6 40] [center=true] [slide=true]',
+    { file:'parts/native.dat' },
+  )
+  const endpoint = enrichEndpointSemantics(ldcadConnectorToEndpoint(parsed.operations[0].connector, {
+    bodyId:'native-template',
+    partId:'native-part',
+  }))
+  assert.equal(endpoint.metadata.parser, 'mechanics-next')
+  assert.equal(endpoint.metadata.semantics.semanticKind, 'technic-axle')
+})
+
+test('native parser quarantines malformed metadata instead of inventing a connector', () => {
+  const parsed = parseLdcadShadowText(
+    '0 !LDCAD SNAP_CYL [gender=M] [secs=A 6 nope] [slide=true]',
+  )
+  assert.equal(parsed.operations.length, 0)
+  assert.equal(parsed.warnings.length, 1)
+  assert.equal(parsed.warnings[0].code, 'invalid-snap-meta')
 })
