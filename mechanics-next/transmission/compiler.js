@@ -60,6 +60,10 @@ export class TransmissionCompiler{
       equations:Object.freeze([...this.#equationIds]),
       transmissions:Object.freeze([...this.#edgeIds]),
       balancedDifferentialClosures:this.#discovery?.balancedDifferentialClosures?.length||0,
+      nonlinearRelations:this.#discovery?.nonlinearRelations?.length||0,
+      compoundDescriptors:this.#discovery?.compoundDescriptors?.length||0,
+      linearMotions:this.#discovery?.linearMotions?.length||0,
+      dynamics:this.#discovery?.dynamics?.length||0,
       diagnostics:this.#discovery?.diagnostics??null,
     })
   }
