@@ -41,6 +41,7 @@ function bodySpec(mapped){
     memberId:mapped.memberId,
     path:mapped.path,
     role:mapped.internalRole,
+    sceneProxy:proxy,
     position:Object.freeze(pose.position.toArray()),
     quaternion:Object.freeze(pose.quaternion.toArray()),
     collider:Object.freeze({
