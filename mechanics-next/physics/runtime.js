@@ -240,6 +240,13 @@ export function createMechanicsPhysicsRuntime({
       }
       return api.status()
     },
+    motorTelemetry(){
+      return installed?.motors?.snapshot?.()??Object.freeze([])
+    },
+    applyDynoBrake(options={}){
+      if(!installed||installed.disposed)return Object.freeze({applied:false,reason:'physics-runtime-not-installed'})
+      return installed.motors.applyExternalBrake(options)
+    },
     vehicleSteeringBindings(){
       return Object.freeze([...(installed?.steering?.bindings||[])])
     },
