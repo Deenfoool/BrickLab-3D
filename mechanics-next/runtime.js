@@ -563,16 +563,14 @@ export function createMechanicsNextRuntime({
       lastPersistenceReport=null
       lastTransmissionSync=null
       physicsPreview=null
-      if(!keepAuthority){
-        nativeProjectAuthoritative=false
-        buildOwnershipPublished=false
-        if(globals.BrickLabMechanicsNextBuildOwner?.version===MECHANICS_NEXT_BUILD_OWNER_VERSION){
-          delete globals.BrickLabMechanicsNextBuildOwner
-        }
+      nativeProjectAuthoritative=false
+      buildOwnershipPublished=false
+      if(globals.BrickLabMechanicsNextBuildOwner?.version===MECHANICS_NEXT_BUILD_OWNER_VERSION){
+        delete globals.BrickLabMechanicsNextBuildOwner
       }
       return Object.freeze({
         cleared:true,
-        keepAuthority:Boolean(keepAuthority),
+        keepAuthority:false,
         graphRevision:graph.revision,
       })
     },
