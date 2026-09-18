@@ -16,6 +16,7 @@ import { createMechanicsCouplingRuntime } from './coupling-runtime.js'
 import { buildMechanicsMotorPlan, createMechanicsMotorRuntime } from './motor-runtime.js'
 import { buildMechanicsVehiclePlan } from './vehicle-plan.js'
 import { buildMechanicsSteeringPlan, materializeMechanicsSteeringBindings } from './steering-bridge.js'
+import { createMechanicsSuspensionRuntime } from './suspension-runtime.js'
 import {
   applyMechanicsJointResistance,
   validateAndReleaseMechanicsJoints,
@@ -154,6 +155,7 @@ export function createMechanicsPhysicsRuntime({
       let couplings=null
       let motors=null
       let steering=null
+      let suspension=null
 
       try{
         if(compoundMemberPlan.replacements.length){
@@ -210,6 +212,12 @@ export function createMechanicsPhysicsRuntime({
           error.failures=steering.failures
           throw error
         }
+        suspension=createMechanicsSuspensionRuntime(joints,{session})
+        if(!suspension.pass){
+          const error=new Error('Mechanics Next suspension runtime materialization failed')
+          error.failures=suspension.failures
+          throw error
+        }
       }catch(error){
         if(joints)disposeRapierMechanicsPlan(session,joints)
         if(compoundMembers)disposeCompoundMemberPhysics(session,compoundMembers)
@@ -224,6 +232,7 @@ export function createMechanicsPhysicsRuntime({
         couplings,
         motors,
         steering,
+        suspension,
         disposed:false,
         lastCouplingStep:null,
         lastResistanceStep:null,
@@ -243,11 +252,13 @@ export function createMechanicsPhysicsRuntime({
     beforeStep(dt){
       if(!installed||installed.disposed)return Object.freeze({installed:false})
       const motors=installed.motors.step(dt)
+      const suspension=installed.suspension.step(dt)
       installed.lastResistanceStep=applyMechanicsJointResistance(installed.joints,dt)
       installed.lastCouplingStep=installed.couplings.step(dt)
       return Object.freeze({
         installed:true,
         motors,
+        suspension,
         resistance:installed.lastResistanceStep,
         couplings:installed.lastCouplingStep,
       })
@@ -302,6 +313,10 @@ export function createMechanicsPhysicsRuntime({
         motorState:installed?.motors?.snapshot?.()??Object.freeze([]),
         steeringBindings:installed?.steering?.bindings?.length??0,
         steeringRacks:installed?.steering?.rackBindings?.length??0,
+        suspension:Object.freeze({
+          count:installed?.suspension?.entries?.length??0,
+          state:installed?.suspension?.snapshot?.()??Object.freeze([]),
+        }),
         lastCouplingStep:installed?.lastCouplingStep??null,
         lastResistanceStep:installed?.lastResistanceStep??null,
         releaseEvents:Object.freeze([...(installed?.releaseEvents||[])]),
