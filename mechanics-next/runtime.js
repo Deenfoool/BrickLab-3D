@@ -400,7 +400,13 @@ export function createMechanicsNextRuntime({
         graph,
         sceneObserver,
         objectByInstanceId:instanceId=>subsystems?.editor?.objectById?.(instanceId)??null,
-        visualOffsetForPart:partId=>connectivity.get(partId)?.visualOffsetStud??[0,0,0],
+        visualOffsetForPart:(partId,instanceId)=>{
+          const object=subsystems?.editor?.objectById?.(instanceId)
+          const visual=object?.children?.find?.(child=>child?.userData?.ldrawVisual)
+          return visual?.position
+            ?[visual.position.x,visual.position.y,visual.position.z]
+            :[0,0,0]
+        },
         replace,
       })
       nativeRestoredRelations=result.relations??Object.freeze([])
