@@ -212,6 +212,90 @@ function physicsJointForBundle(pair,constraints,componentsByBody){
   }
 }
 
+function compoundStructuralJoints(discovery,componentsByBody){
+  const joints=[]
+  const blockers=[]
+  for(const descriptor of discovery?.compoundDescriptors||[]){
+    if(!['universal-joint','cv-joint'].includes(descriptor?.kind))continue
+    if(descriptor.status!=='resolved'){
+      blockers.push(Object.freeze({
+        code:'compound-angular-unresolved',
+        kind:descriptor.kind,
+        bodyId:descriptor.bodyId,
+        status:descriptor.status,
+      }))
+      continue
+    }
+    const bodies=descriptor.externalBodies||[]
+    if(bodies.length!==2){
+      blockers.push(Object.freeze({
+        code:'compound-angular-port-count',
+        kind:descriptor.kind,
+        bodyId:descriptor.bodyId,
+        externalBodies:Object.freeze([...(bodies||[])]),
+      }))
+      continue
+    }
+    const componentA=componentsByBody.get(String(bodies[0]))
+    const componentB=componentsByBody.get(String(bodies[1]))
+    if(!componentA||!componentB){
+      blockers.push(Object.freeze({
+        code:'compound-angular-component-missing',
+        kind:descriptor.kind,
+        bodyId:descriptor.bodyId,
+        externalBodies:Object.freeze([...bodies]),
+      }))
+      continue
+    }
+    if(componentA===componentB)continue
+    if(!Array.isArray(descriptor.pivotWorldStud)||descriptor.pivotWorldStud.length!==3||
+       !Array.isArray(descriptor.inputAxisWorld)||descriptor.inputAxisWorld.length!==3){
+      blockers.push(Object.freeze({
+        code:'compound-angular-frame-missing',
+        kind:descriptor.kind,
+        bodyId:descriptor.bodyId,
+      }))
+      continue
+    }
+    joints.push(Object.freeze({
+      id:deterministicId('physics-compound-joint',descriptor.id,...bodies),
+      kind:'spherical',
+      componentA,
+      componentB,
+      bodyA:String(bodies[0]),
+      bodyB:String(bodies[1]),
+      sourceConstraintIds:Object.freeze([]),
+      frame:Object.freeze({
+        positionStud:Object.freeze([...descriptor.pivotWorldStud]),
+        axisWorld:Object.freeze([...descriptor.inputAxisWorld]),
+        degraded:false,
+      }),
+      limits:null,
+      dynamics:null,
+      release:Object.freeze({
+        mode:'persistent',
+        sourceConstraintIds:Object.freeze([]),
+      }),
+      contacts:'disabled-for-connected-pair',
+      compound:Object.freeze({
+        descriptorId:descriptor.id,
+        kind:descriptor.kind,
+        torsionCoupling:true,
+        bendAngleRad:descriptor.bendAngleRad,
+        maxBendAngleRad:descriptor.maxBendAngleRad??null,
+        axisIntersectionErrorStud:descriptor.axisIntersectionErrorStud??null,
+      }),
+      solution:Object.freeze({
+        valid:true,
+        remainingDof:3,
+        kind:'spherical',
+        virtualCompound:true,
+      }),
+    }))
+  }
+  return{joints,blockers}
+}
+
 function transmissionPlan(discovery){
   const items=[]
   for(const transmission of discovery?.transmissions||[]){
@@ -234,7 +318,7 @@ function dynamicsPlan(discovery){
   return Object.freeze((discovery?.dynamics||[]).map(item=>Object.freeze({
     ...item,
     ready:item.kind!=='spring-damper'||
-      (Number.isFinite(item.springStiffness)&&Number.isFinite(item.damping)),
+      (item.status==='resolved'&&Number.isFinite(item.springStiffness)&&Number.isFinite(item.damping)),
   })))
 }
 
@@ -264,6 +348,10 @@ export function buildMechanicsPhysicsPlan({
       solution:result.solution,
     }))
   }
+
+  const compoundStructure=compoundStructuralJoints(discovery,byBody)
+  joints.push(...compoundStructure.joints)
+  blockers.push(...compoundStructure.blockers)
 
   const transmissions=transmissionPlan(discovery)
   const dynamics=dynamicsPlan(discovery)
