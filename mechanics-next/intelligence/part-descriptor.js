@@ -19,6 +19,8 @@ function transmissionHints(classification) {
     hints.push(Object.freeze({
       kind:role === 'bevel-gear' ? 'bevel-gear' : role,
       toothCount:properties.toothCount ?? null,
+      pitchRadius:properties.gearGeometry?.pitchRadius ?? (properties.toothCount ? properties.toothCount/16 : null),
+      gearGeometry:properties.gearGeometry ?? null,
       equationFamily:'gear-mesh',
     }))
   } else if (role === 'worm') {
@@ -30,6 +32,8 @@ function transmissionHints(classification) {
       hints.push(Object.freeze({
         kind:'bevel-gear',
         toothCount:properties.toothCount,
+        pitchRadius:properties.gearGeometry?.pitchRadius ?? properties.toothCount/16,
+        gearGeometry:properties.gearGeometry ?? null,
         equationFamily:'gear-mesh',
         mechanicalRole:'carrier-input-gear',
       }))
