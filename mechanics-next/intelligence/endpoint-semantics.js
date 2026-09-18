@@ -177,6 +177,21 @@ function classifyCylinder(endpoint) {
     })
   }
 
+  const allR4 = p.sections.length > 0 &&
+    p.sections.every(section => rigidShape(section) === 'R' && approx(section.radiusLdu, 4))
+  if (allR4 && endpoint.gender === 'male') {
+    return result(endpoint, 'bar', {
+      reason:'round-R4-male-profile',
+      properties:{ intervalOccupancy:true, slide:p.slide },
+    })
+  }
+  if (allR4 && endpoint.gender === 'female') {
+    return result(endpoint, 'bar-hole', {
+      reason:'round-R4-female-profile',
+      properties:{ intervalOccupancy:true, slide:p.slide },
+    })
+  }
+
   if (endpoint.gender === 'male' && !p.slide && p.sections.length === 1 &&
       p.shapes[0] === 'R' && approx(p.sections[0].radiusLdu, 6) &&
       approx(p.sections[0].lengthLdu, 4, .3) && p.caps === 'one') {
