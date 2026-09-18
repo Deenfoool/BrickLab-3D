@@ -319,6 +319,7 @@ if (!PhysicsSession.prototype[marker]) {
     }
   }
   PhysicsSession.prototype.createJoint.__bricklabOwner = JOINT_STABILITY_VERSION
+  PhysicsSession.prototype.createJoint.__mechanicsNextBypass = true
 
   Object.defineProperty(PhysicsSession.prototype, marker, {
     value: true,
