@@ -28,3 +28,15 @@ test('real 62821 ↔ 6589 activation reaches drivetrain as a differential seat',
   assert.equal(links[0].kind,'differential-seat')
   assert.equal(new Set([links[0].a.instanceId,links[0].b.instanceId]).size,2)
 })
+
+test('stale pre-v4.7.1 bar-round-hole record migrates to a differential seat',()=>{
+  const links=drivetrainSemanticLinksV4([{
+    id:'stale-seat',
+    a:{instanceId:'inner-gear',endpointId:'old-pivot'},
+    b:{instanceId:'carrier',endpointId:'old-seat'},
+    activation:{family:'bar-round-hole'},
+    provenance:{a:{file:'6589.dat'},b:{file:'62821.dat'}},
+  }])
+  assert.equal(links.length,1)
+  assert.equal(links[0].kind,'differential-seat')
+})

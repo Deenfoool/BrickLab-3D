@@ -1,7 +1,7 @@
 import { approveConstraintV4, proposeConstraintV4 } from './constraints-v4.js'
 import { validateConnectedGeometryV4 } from './validity-v4.js'
 
-export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.4.0'
+export const PHYSICS_POLICY_VERSION_V4 = 'connector-physics-policy-v4.4.1'
 
 const MIN_DISTINCT_STUD_DISTANCE = 0.45
 const PARALLEL_STUD_AXIS_DOT = 0.9995
@@ -297,7 +297,12 @@ export function drivetrainSemanticLinksV4(connections = [], releasedConnectionId
   for (const connection of connections) {
     if (!connection?.id || released.has(connection.id)) continue
     const codes=new Set([sourceCode(connection.provenance?.a),sourceCode(connection.provenance?.b)])
-    if(familyOf(connection)==='round-revolute-interface'&&codes.has('6589')&&(codes.has('62821')||codes.has('62821b'))){
+    const family=familyOf(connection)
+    const differentialPair=codes.has('6589')&&(codes.has('62821')||codes.has('62821b'))
+    // Accept the old generic R4 classification as a migration path for projects
+    // saved before connector-activation-v4.7.1. New reconciled records use
+    // round-revolute-interface, but users must not rebuild existing differentials.
+    if(differentialPair&&(family==='round-revolute-interface'||family==='bar-round-hole')){
       differentialSeats.push({
         id:`v4differential-seat:${connection.id}`,
         kind:'differential-seat',
@@ -307,8 +312,7 @@ export function drivetrainSemanticLinksV4(connections = [], releasedConnectionId
       })
       continue
     }
-    if (!ROTATION_TRANSMITTING_FAMILIES.has(familyOf(connection))) continue
-    const family=familyOf(connection)
+    if (!ROTATION_TRANSMITTING_FAMILIES.has(family)) continue
     const key=`${family}|${pairKey(connection.a.instanceId,connection.b.instanceId)}`
     if (!groups.has(key)) groups.set(key,[])
     groups.get(key).push(connection)
