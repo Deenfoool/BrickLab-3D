@@ -23,8 +23,47 @@ const sceneFor=s=>s.objects[0]?.parent?.parent??null,mat=(color=0x505860)=>new T
 function addBox(s,root,x){const r=new THREE.Quaternion().setFromEuler(new THREE.Euler(x.rx??0,x.ry??0,x.rz??0));const d=s.RAPIER.ColliderDesc.cuboid(x.w*STUD/2,x.h*STUD/2,x.d*STUD/2).setTranslation((x.x??0)*STUD,x.y*STUD,x.z*STUD).setRotation(quat(r)).setFriction(.02).setRestitution(0).setCollisionGroups(pack(GROUP.WORLD,ALL));s.world.createCollider(d);if(root){const m=new THREE.Mesh(new THREE.BoxGeometry(x.w,x.h,x.d),mat(x.color));m.position.set(x.x??0,x.y,x.z);m.quaternion.copy(r);m.castShadow=m.receiveShadow=true;root.add(m)}}
 function buildScenario(s){const cfg=TEST_SCENARIOS_V2[s.scenario]??TEST_SCENARIOS_V2.flat;s.scenarioData=s.scenario==='flat'?null:{...cfg,phase:'SETTLE',countdown:3,elapsed:0,warmupSeconds:.5,countdownSeconds:3,currentForceN:0,peakPowerW:0};const scene=sceneFor(s),root=scene?new THREE.Group():null;if(root){root.name=`BrickLab ${cfg.name}`;scene.add(root);s.scenarioVisualRoot=root}if(s.scenario==='hill-climb'){const a=THREE.MathUtils.degToRad(22),l=18,w=8,t=.5,z0=3,cz=z0+Math.cos(a)*l/2,cy=t/2+Math.sin(a)*l/2;addBox(s,root,{w,h:t,d:l,y:cy,z:cz,rx:-a,color:0x3c4349});s.scenarioData.finishZStud=z0+Math.cos(a)*l*.9;s.scenarioData.heightStud=Math.sin(a)*l}else if(s.scenario==='obstacle-course'){addBox(s,root,{w:6.5,h:.34,d:.8,y:.17,z:4.2,color:0x59636c});addBox(s,root,{w:2.3,h:.65,d:2.1,x:-1.8,y:.325,z:7.3,color:0x4c555d});addBox(s,root,{w:2.3,h:.65,d:2.1,x:1.8,y:.325,z:9.5,color:0x4c555d});addBox(s,root,{w:6.8,h:.72,d:.72,y:.36,z:12.3,color:0x646e77});const a=THREE.MathUtils.degToRad(12);addBox(s,root,{w:6.2,h:.28,d:2.8,y:.42,z:15.1,rx:-a,color:0x515b64});addBox(s,root,{w:6.2,h:.28,d:2.8,y:.42,z:17.3,rx:a,color:0x515b64});s.scenarioData.finishZStud=20}else if(s.scenario==='torque-pull'){Object.assign(s.scenarioData,{startForceN:.1,maxForceN:3.5,rampRateN:.32})}else if(s.scenario==='dyno-bench'){Object.assign(s.scenarioData,{maxDuration:12,brakeGain:.012,maxBrakeTorqueNm:.10})}}
 const massFor=o=>Math.max(.00005,findPart(o.userData.partId)?.physics?.massKg??physicalDefinition(o.userData.partId).massKg??.002)
+function installMechanicsNextVehicleTopology(session){
+  if(!session?.mechanicsNextBootstrap)return false
+  const plan=session?.creationOptions?.mechanicsNextVehiclePlan
+  if(!plan||!Array.isArray(plan.wheels))return false
+
+  const shafts=[]
+  const shaftByPart=new Map()
+  for(const wheel of plan.wheels){
+    if(!wheel?.instanceId||!Array.isArray(wheel.axisWorld)||wheel.axisWorld.length!==3)continue
+    const axisWorld=new THREE.Vector3(...wheel.axisWorld)
+    if(axisWorld.lengthSq()<1e-10)continue
+    axisWorld.normalize()
+    const shaft={
+      id:`mechanics-next-wheel-shaft:${wheel.bodyId}`,
+      memberIds:[String(wheel.instanceId)],
+      sourceMotorId:wheel.sourceMotorId??null,
+      sourceMotorIds:[...(wheel.sourceMotors||[])].map(item=>String(item.controlId)),
+      ratioFromMotor:Number.isFinite(Number(wheel.ratioFromMotor))?Number(wheel.ratioFromMotor):null,
+      axisWorld,
+      rpm:null,
+      torqueCapacity:4,
+      efficiency:1,
+      mechanicsNextVehicleTopology:true,
+    }
+    shafts.push(shaft)
+    shaftByPart.set(String(wheel.instanceId),shaft)
+  }
+
+  session.drivetrain={
+    ...(session.drivetrain||{}),
+    shafts,
+    shaftByPart,
+    gearMeshes:[],
+    mechanicsNextVehicleTopology:true,
+    mechanicsNextVehiclePlan:plan,
+  }
+  return true
+}
+
 const oldWheelMonitors=PhysicsSession.prototype.buildWheelMonitors,oldMount=PhysicsSession.prototype.mountTelemetry,oldTelemetry=PhysicsSession.prototype.updateTelemetryReadings,oldDispose=PhysicsSession.prototype.dispose
-PhysicsSession.prototype.build=function(){this.physicsV2=true;this.physicsSettings=readSettings();this.quality=PHYSICS_QUALITY[this.physicsSettings.quality];this.world=new this.RAPIER.World({x:0,y:-G,z:0});this.world.timestep=1/this.quality.hz;if('numSolverIterations'in this.world)this.world.numSolverIterations=this.quality.solverIterations;if('maxCcdSubsteps'in this.world)this.world.maxCcdSubsteps=this.quality.ccd?2:1;this.world.createCollider(this.RAPIER.ColliderDesc.cuboid(40*STUD,.12*STUD,40*STUD).setTranslation(0,-.12*STUD,0).setFriction(.02).setRestitution(0).setCollisionGroups(pack(GROUP.WORLD,ALL)));buildScenario(this);for(const objects of rigidGroups(this.objects,this.connections))this.createCompoundBody(objects);for(const c of this.connections){if(c.kind==='fixed'||isRigidAxleConnection(c,this.objects))continue;this.createJoint(c)}this.drivetrain=analyzeDrivetrain(this.objects,this.connections);if(this.mechanicsNextBootstrap){this.gearCouplers=[];this.shaftMonitors=[];this.motorDrives=[]}else{this.buildGearCouplers();this.buildShaftMonitors()}this.buildWheelMonitors();this.buildChassisMonitor();resetPhysicsClock(this);this.lastVehicleSpeed=0;this.stallTimer=0;this.testStatus='RUNNING';this.debugRoot=null;this.debugContacts=[];this.mountTelemetry()}
+PhysicsSession.prototype.build=function(){this.physicsV2=true;this.physicsSettings=readSettings();this.quality=PHYSICS_QUALITY[this.physicsSettings.quality];this.world=new this.RAPIER.World({x:0,y:-G,z:0});this.world.timestep=1/this.quality.hz;if('numSolverIterations'in this.world)this.world.numSolverIterations=this.quality.solverIterations;if('maxCcdSubsteps'in this.world)this.world.maxCcdSubsteps=this.quality.ccd?2:1;this.world.createCollider(this.RAPIER.ColliderDesc.cuboid(40*STUD,.12*STUD,40*STUD).setTranslation(0,-.12*STUD,0).setFriction(.02).setRestitution(0).setCollisionGroups(pack(GROUP.WORLD,ALL)));buildScenario(this);for(const objects of rigidGroups(this.objects,this.connections))this.createCompoundBody(objects);for(const c of this.connections){if(c.kind==='fixed'||isRigidAxleConnection(c,this.objects))continue;this.createJoint(c)}this.drivetrain=analyzeDrivetrain(this.objects,this.connections);if(this.mechanicsNextBootstrap){installMechanicsNextVehicleTopology(this);this.gearCouplers=[];this.shaftMonitors=[];this.motorDrives=[]}else{this.buildGearCouplers();this.buildShaftMonitors()}this.buildWheelMonitors();this.buildChassisMonitor();resetPhysicsClock(this);this.lastVehicleSpeed=0;this.stallTimer=0;this.testStatus='RUNNING';this.debugRoot=null;this.debugContacts=[];this.mountTelemetry()}
 PhysicsSession.prototype.createCompoundBody=function(objects){const root=objects[0];if(!root)return;for(const o of objects)o.updateWorldMatrix(true,false);root.updateWorldMatrix(true,false);const wm=root.matrixWorld.clone(),inv=wm.clone().invert(),p=pose(wm),desc=this.RAPIER.RigidBodyDesc.dynamic().setTranslation(p.position.x*STUD,p.position.y*STUD,p.position.z*STUD).setRotation(quat(p.rotation)).setCanSleep(false);desc.setCcdEnabled?.(this.quality.ccd);desc.setAdditionalSolverIterations?.(Math.max(0,this.quality.solverIterations-4));const body=this.world.createRigidBody(desc);body.enableCcd?.(this.quality.ccd);const component={id:root.userData.instanceId,body,bodyWorldMatrix:wm,bodyWorldInverse:inv,bodyWorldRotation:p.rotation.clone(),members:[],massKg:0};for(const o of objects){const rel=inv.clone().multiply(o.matrixWorld),rp=pose(rel),b=bounds(o),def=findPart(o.userData.partId),wheel=def?.mechanics?.wheel,gear=def?.mechanics?.gear;let cd;if(wheel){cd=this.RAPIER.ColliderDesc.cylinder(.34*STUD,wheel.radius*STUD);const rr=rp.rotation.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0,0,Math.PI/2)));cd.setRotation(quat(rr)).setTranslation(rp.position.x*STUD,(rp.position.y+1.15)*STUD,rp.position.z*STUD)}else if(gear){cd=this.RAPIER.ColliderDesc.cylinder(.18*STUD,(gear.pitchRadius??gear.teeth/16)*.68*STUD).setRotation(quat(rp.rotation)).setTranslation(rp.position.x*STUD,(rp.position.y+.4)*STUD,rp.position.z*STUD)}else{cd=this.RAPIER.ColliderDesc.cuboid(b.size.x*STUD/2,b.size.y*STUD/2,b.size.z*STUD/2);const c=b.center.clone().applyMatrix4(rel).multiplyScalar(STUD);cd.setRotation(quat(rp.rotation)).setTranslation(c.x,c.y,c.z)}const mass=massFor(o);cd.setMass(mass).setRestitution(.01).setFriction(wheel?.02:.45).setCollisionGroups(collisionMask(def,this.physicsSettings.selfCollision));const collider=this.world.createCollider(cd,body),member={object:o,body,collider,component,relativeMatrix:rel,massKg:mass};component.massKg+=mass;component.members.push(member);this.members.set(o.userData.instanceId,member)}this.components.push(component)}
 PhysicsSession.prototype.bodyLocalPoint=function(member,connector){return new THREE.Vector3(...connector.position).applyMatrix4(member.object.matrixWorld).applyMatrix4(member.component.bodyWorldInverse).multiplyScalar(STUD)}
 PhysicsSession.prototype.syncObjects=function(){for(const c of this.components){const t=c.body.translation(),r=c.body.rotation(),wm=new THREE.Matrix4().compose(new THREE.Vector3(t.x/STUD,t.y/STUD,t.z/STUD),new THREE.Quaternion(r.x,r.y,r.z,r.w),new THREE.Vector3(1,1,1));for(const m of c.members){const world=wm.clone().multiply(m.relativeMatrix),parent=m.object.parent,local=parent?parent.matrixWorld.clone().invert().multiply(world):world,p=pose(local);m.object.position.copy(p.position);m.object.quaternion.copy(p.rotation);m.object.scale.copy(p.scale)}}}
