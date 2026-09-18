@@ -4,7 +4,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { posix as path } from 'node:path'
 
 const root = new URL('../', import.meta.url)
-const tag = process.argv[2] ?? 'parts-6-20260911-editor-groups-v2'
+const tag = process.argv[2] ?? 'runtime-27-mechanics-next-stage11-20260918-v1'
 if (!/^(?:(?:runtime|connect|connector|physics|parts)-\d+|connector-v4-physics)-[a-z0-9-]+$/.test(tag)) throw new Error('Invalid runtime tag')
 const id = tag.match(/^(?:(?:runtime|connect|connector|physics|parts)-\d+|connector-v4-physics)/)[0].toUpperCase()
 const files = (await readdir(root)).filter(name => name.endsWith('.js')).sort()
@@ -30,7 +30,18 @@ for (const dir of [
 ]) {
   for (const name of await readdir(new URL(dir + '/', root))) if (name.endsWith('.js')) files.push(`${dir}/${name}`)
 }
-const versioned = Object.fromEntries(files.map(name => [`./${name}`, `./${name}?v=${tag}`]))
+
+async function appendRecursiveJs(dir){
+  const entries=await readdir(new URL(dir+'/',root),{withFileTypes:true})
+  for(const entry of entries){
+    const relative=`${dir}/${entry.name}`
+    if(entry.isDirectory())await appendRecursiveJs(relative)
+    else if(entry.isFile()&&entry.name.endsWith('.js'))files.push(relative)
+  }
+}
+await appendRecursiveJs('mechanics-next')
+
+const versioned = Object.fromEntries([...new Set(files)].sort().map(name => [`./${name}`, `./${name}?v=${tag}`]))
 
 // Some historical modules used explicit query strings in relative imports. Discover
 // only URLs that resolve to a file owned by this canonical runtime graph and redirect
