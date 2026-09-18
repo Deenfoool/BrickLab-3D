@@ -77,6 +77,7 @@ function motorVoltage(session, drive) {
 
 // Final motor controller: runtime RPM is a real command/setpoint.
 PhysicsSession.prototype.applyMotorTorques = function applyCommandRpmMotorTorques(dt) {
+  if (this.mechanicsNextBootstrap) return
   const testBlocked = this.scenarioData && this.scenarioData.phase !== 'RUN'
 
   for (const drive of this.motorDrives ?? []) {
