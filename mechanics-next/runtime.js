@@ -657,13 +657,18 @@ export function createMechanicsNextRuntime({
         },
         replace,
       })
-      nativeRestoredRelations=result.relations??Object.freeze([])
-      restoreCompoundStateSnapshot(result.compoundState)
       lastPersistenceReport=persistenceCompatibilityReport({
         exportedState:state,
         restoredResult:result,
       })
       nativeProjectAuthoritative=lastPersistenceReport.pass
+      if(nativeProjectAuthoritative){
+        nativeRestoredRelations=result.relations??Object.freeze([])
+        restoreCompoundStateSnapshot(result.compoundState)
+      }else{
+        nativeRestoredRelations=Object.freeze([])
+        compoundState.clear()
+      }
       if(nativeProjectAuthoritative){
         adoptPersistedConnectionsAsObserved(state)
       }
