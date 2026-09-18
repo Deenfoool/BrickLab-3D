@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { quatFromRotationMatrix } from '../math/rigid.js'
 
 export const MECHANICS_RAPIER_ADAPTER_VERSION='mechanics-rapier-adapter-0.1.0'
-export const DEFAULT_WORLD_UNITS_PER_STUD=1
+export const DEFAULT_WORLD_UNITS_PER_STUD=.008
 
 // Rapier GenericJoint axesMask describes LOCKED axes. The joint-frame X axis
 // is aligned to the Mechanics Next joint axis.
