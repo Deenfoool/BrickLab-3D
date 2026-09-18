@@ -31,7 +31,7 @@ export class TransmissionCompiler{
     if(!discovery?.equations||!discovery?.transmissions)throw new TypeError('Transmission discovery result required')
     this.clear()
 
-    for(const equation of discovery.equations){
+    for(const equation of [...discovery.equations,...(discovery.velocityEquations||[])]){
       this.#solver.addEquation(equation)
       this.#equationIds.add(equation.id)
     }
@@ -60,6 +60,7 @@ export class TransmissionCompiler{
       equations:Object.freeze([...this.#equationIds]),
       transmissions:Object.freeze([...this.#edgeIds]),
       balancedDifferentialClosures:this.#discovery?.balancedDifferentialClosures?.length||0,
+      velocityEquations:this.#discovery?.velocityEquations?.length||0,
       nonlinearRelations:this.#discovery?.nonlinearRelations?.length||0,
       compoundDescriptors:this.#discovery?.compoundDescriptors?.length||0,
       linearMotions:this.#discovery?.linearMotions?.length||0,
