@@ -94,3 +94,28 @@ test('production module order leaves bypass-marked final writers authoritative',
   assert.ok(suspensionV2>suspensionPatch,'suspension V2 writer must load after registry patch')
   assert.ok(parts4Linear>suspensionV2,'Parts4 steering/suspension bridge must load after suspension V2')
 })
+
+
+test('production KINEMATICS and SIMULATE require native BUILD ownership first', () => {
+  const kinematics=source('mechanics-next/production/kinematics-owner.js')
+  const physics=source('mechanics-next/production/physics-owner.js')
+  const activation=source('kinematics/activation-v1.js')
+
+  for(const [name,text] of [['KINEMATICS',kinematics],['SIMULATE',physics]]){
+    assert.match(text,/nativeProjectAuthoritative\?\.\(\)!==true/, `${name} must verify native project authority`)
+    assert.match(text,/adoptNativeProjectOwnership\?\.\(\)/, `${name} must finish BUILD handoff when needed`)
+    assert.match(text,/BrickLabMechanicsNextBuildOwner/, `${name} must require the published BUILD owner`)
+    assert.match(text,/native-build-owner-not-published/, `${name} must fail closed if BUILD owner is missing`)
+  }
+
+  assert.match(
+    activation,
+    /\.\.\/mechanics-next\/production\/kinematics-owner\.js/,
+    'activation must try Mechanics Next KINEMATICS before legacy runtime',
+  )
+  assert.match(
+    activation,
+    /stale legacy Kinematics fallback is forbidden/,
+    'legacy KINEMATICS fallback must be blocked once Mechanics Next owns BUILD',
+  )
+})
