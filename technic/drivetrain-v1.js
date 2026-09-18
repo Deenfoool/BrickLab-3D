@@ -15,7 +15,7 @@ import { technicMechanicalHintsV1 } from './mechanical-hints-v1.js?v=technic-dif
 import { technicPartProfileV1 } from './part-profile-v1.js'
 import { DIFFERENTIAL_62821_SEATS_V4 } from '../connector-discovery/differential-fixtures-v4.js'
 
-export const TECHNIC_DRIVETRAIN_VERSION = 'technic-drivetrain-v1.4.0'
+export const TECHNIC_DRIVETRAIN_VERSION = 'technic-drivetrain-v1.4.1'
 
 const DEFAULT_STALL_TORQUE = 5.5
 const DEFAULT_GEAR_EFFICIENCY = 0.92
@@ -256,10 +256,11 @@ function recoverVerifiedDifferentialRingMesh(a,b,options={}){
   // This is intentionally much tighter than the 1.15-stud editor capture range:
   // recovery should accept an already assembled old project, not magnetically join
   // arbitrary nearby gears.
-  const recoveryTolerance=Math.min(.55,Math.max(.24,
-    Number(a.meshApexToleranceStud)||0,
-    Number(b.meshApexToleranceStud)||0,
-  ))
+  const verifiedCapture=Math.max(
+    Number(a.meshCaptureDistanceStud)||0,
+    Number(b.meshCaptureDistanceStud)||0,
+  )
+  const recoveryTolerance=Math.min(.55,Math.max(.24,verifiedCapture*.48))
   if(!geometry?.compatibleAxes||!Number.isFinite(geometry.apexError)||geometry.apexError>recoveryTolerance)return null
   const directionSign=-(geometry.signA*geometry.signB)
   return{
