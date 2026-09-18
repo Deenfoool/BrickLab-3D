@@ -8,8 +8,8 @@ const text = path => readFile(new URL(path, root), 'utf8')
 
 test('physics microstep has one explicit subsystem order', () => {
   assert.deepEqual(PHYSICS_PHASES, [
-    'clear-accumulators', 'vehicle-controls', 'vehicle-drive', 'motor', 'suspension', 'drivetrain',
-    'tires', 'scenario', 'rapier-step', 'validation', 'metrics', 'vehicle-performance',
+    'clear-accumulators', 'vehicle-controls', 'vehicle-drive', 'motor', 'suspension', 'mechanics-next',
+    'drivetrain', 'tires', 'scenario', 'rapier-step', 'validation', 'metrics', 'vehicle-performance',
   ])
 
   const calls = []
@@ -21,6 +21,7 @@ test('physics microstep has one explicit subsystem order', () => {
     resetCustomTorques() { calls.push('torque-reset') },
     applyMotorTorques() { calls.push('motor') },
     updateSuspensionV2() { calls.push('suspension') },
+    mechanicsNextPhysics:{ beforeStep() { calls.push('mechanics-next') } },
     updateVehicleControlsV1() { calls.push('vehicle') },
     updateVehicleDriveV2() { calls.push('drive') },
     applyGearCouplingTorques() { calls.push('drivetrain') },
@@ -37,7 +38,7 @@ test('physics microstep has one explicit subsystem order', () => {
   assert.equal(session.physicsPipelineMetrics.version, PHYSICS_PIPELINE_VERSION)
   assert.deepEqual(calls, [
     'phase', 'torque-reset', 'force:false', 'vehicle', 'drive', 'motor', 'suspension',
-    'drivetrain', 'tires', 'scenario', 'world', 'validate', 'metrics', 'performance',
+    'mechanics-next', 'drivetrain', 'tires', 'scenario', 'world', 'validate', 'metrics', 'performance',
   ])
 })
 
