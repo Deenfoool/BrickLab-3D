@@ -33,6 +33,11 @@ function properties(record){
   return record?.instance?.descriptor?.classification?.properties||{}
 }
 
+function trustedCompoundParameterEvidence(props){
+  const confidence=String(props?.compoundParameterEvidence?.confidence||'unknown').toLowerCase()
+  return confidence==='verified'||confidence==='strong'
+}
+
 function endpointById(record,endpointId){
   return record?.instance?.endpoints?.find(endpoint=>String(endpoint?.id)===String(endpointId))??null
 }
@@ -343,7 +348,9 @@ function discoverLinearActuators(records,graph){
     if(consumed.has(actuatorBody))continue
     consumed.add(actuatorBody)
     const sliderBody=opposite(edge,actuatorBody)
-    const lead=Number(properties(actuator).screwLeadStudPerTurn)
+    const actuatorProps=properties(actuator)
+    const lead=Number(actuatorProps.screwLeadStudPerTurn)
+    const leadTrusted=trustedCompoundParameterEvidence(actuatorProps)
     const inputConstraints=connectedConstraints(graph,actuatorBody)
       .filter(item=>item.id!==edge.id&&isKeyedRotationConstraint(item))
     const inputBodies=[...new Set(inputConstraints.map(item=>opposite(item,actuatorBody)))]
@@ -363,11 +370,12 @@ function discoverLinearActuators(records,graph){
       inputConstraintIds:Object.freeze(inputConstraints.map(item=>item.id)),
       axis,
       screwLeadStudPerTurn:Number.isFinite(lead)&&lead!==0?lead:null,
-      travelStud:Number.isFinite(Number(properties(actuator).travelStud))
-        ?Number(properties(actuator).travelStud):null,
+      travelStud:Number.isFinite(Number(actuatorProps.travelStud))
+        ?Number(actuatorProps.travelStud):null,
+      leadEvidence:actuatorProps.compoundParameterEvidence??null,
       status:!inputBody
         ?'input-unresolved'
-        :!(Number.isFinite(lead)&&lead!==0)
+        :!(Number.isFinite(lead)&&lead!==0&&leadTrusted)
           ?'lead-unverified'
           :'resolved',
       internalTopology:Object.freeze({
@@ -405,13 +413,15 @@ function discoverLinearActuators(records,graph){
       }))
       continue
     }
-    if(!(Number.isFinite(lead)&&lead!==0)){
+    if(!(Number.isFinite(lead)&&lead!==0&&leadTrusted)){
       diagnostics.push(Object.freeze({
         kind:'linear-actuator',
         bodyId:actuatorBody,
         status:'lead-unverified',
         inputBody,
         sliderBody,
+        suppliedLeadStudPerTurn:Number.isFinite(lead)?lead:null,
+        leadEvidence:actuatorProps.compoundParameterEvidence??null,
       }))
       continue
     }
@@ -440,7 +450,7 @@ function discoverLinearActuators(records,graph){
       evidence:evidence({
         source:'mechanics-next:linear-actuator',
         confidence:'strong',
-        reason:'verified screw lead + LDCad linear actuator guide',
+        reason:'trusted screw lead + LDCad linear actuator guide',
       }),
     }))
     diagnostics.push(Object.freeze({
