@@ -11,7 +11,6 @@ export const RAPIER_LOCK_MASKS=Object.freeze({
 })
 
 const vec=v=>({x:v.x,y:v.y,z:v.z})
-const quat=q=>({x:q.x,y:q.y,z:q.z,w:q.w})
 
 function finiteVector(value,label){
   const values=Array.isArray(value)?value.map(Number):null
@@ -46,28 +45,6 @@ function axesCompatible(a,b,tolerance=1e-5){
   const aa=a.clone().normalize()
   const bb=b.clone().normalize()
   return aa.distanceToSquared(bb)<=tolerance*tolerance
-}
-
-function worldJointQuaternion(axisWorld){
-  const x=axisWorld.clone().normalize()
-  const seed=Math.abs(x.y)<.85
-    ?new THREE.Vector3(0,1,0)
-    :new THREE.Vector3(0,0,1)
-  let y=seed.clone().projectOnPlane(x)
-  if(y.lengthSq()<1e-10)y=new THREE.Vector3(1,0,0).projectOnPlane(x)
-  y.normalize()
-  const z=x.clone().cross(y).normalize()
-  y=z.clone().cross(x).normalize()
-  return new THREE.Quaternion().setFromRotationMatrix(
-    new THREE.Matrix4().makeBasis(x,y,z),
-  ).normalize()
-}
-
-function localFrameQuaternion(member,worldQuaternion){
-  return member.component.bodyWorldRotation.clone()
-    .invert()
-    .multiply(worldQuaternion)
-    .normalize()
 }
 
 function resolveMembers(joint,resolveMember){
@@ -116,10 +93,6 @@ function createJointData(RAPIER,item,memberA,memberB,{
   const anchorB=localPoint(memberB,pointWorld,worldUnitsPerStud)
   const axisA=localDirection(memberA,axisWorld)
   const axisB=localDirection(memberB,axisWorld)
-  const worldFrame=worldJointQuaternion(axisWorld)
-  const frameA=localFrameQuaternion(memberA,worldFrame)
-  const frameB=localFrameQuaternion(memberB,worldFrame)
-
   let data=null
   if(item.kind==='spherical'){
     if(typeof RAPIER.JointData.spherical!=='function')throw new Error('Rapier spherical joint unavailable')
@@ -155,8 +128,6 @@ function createJointData(RAPIER,item,memberA,memberB,{
     anchorB,
     axisA,
     axisB,
-    frameA,
-    frameB,
     axisWorld,
     pointWorld,
   }
