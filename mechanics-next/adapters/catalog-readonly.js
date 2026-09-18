@@ -38,6 +38,7 @@ export function observePartDefinition(definition) {
       mechanicalConfidence:definition.ldraw.mechanicalConfidence ?? null,
       mechanicalSource:definition.ldraw.mechanicalSource ?? null,
     } : null,
+    rackVisualMetrics:definition.rackVisualMetrics ?? null,
     legacyMechanicalIntelligence:definition.mechanicalIntelligence ? {
       class:definition.mechanicalIntelligence.class ?? null,
       confidence:definition.mechanicalIntelligence.confidence ?? null,
@@ -52,6 +53,10 @@ export function observePartDefinition(definition) {
       motor:definition.mechanics.motor ?? null,
       differential:definition.mechanics.differential ?? null,
       transmission:definition.mechanics.transmission ?? null,
+      wormDrive:definition.mechanics.wormDrive ?? null,
+      rackGear:definition.mechanics.rackGear ?? null,
+      steeringRack:definition.mechanics.steeringRack ?? null,
+      articulatedCoupler:definition.mechanics.articulatedCoupler ?? null,
       classification:definition.mechanics.classification ?? null,
     } : null,
   })
