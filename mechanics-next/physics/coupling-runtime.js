@@ -21,7 +21,10 @@ function bodyLinear(body){
 }
 
 function dynamic(body){
-  return Boolean(body)&&(!body.isDynamic||body.isDynamic())
+  if(!body)return false
+  if(typeof body.isDynamic==='function')return body.isDynamic()
+  if(typeof body.isDynamic==='boolean')return body.isDynamic
+  return true
 }
 
 function inverseMass(body){
