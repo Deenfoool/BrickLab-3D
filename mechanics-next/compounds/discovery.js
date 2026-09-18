@@ -232,7 +232,7 @@ function discoverAngularJoints(records,relations){
       inputAxisWorld:structural.axisA,
       outputAxisWorld:structural.axisB,
       axisIntersectionErrorStud:structural.lineErrorStud,
-      virtualStructuralJoint:'spherical+tortion-coupling',
+      virtualStructuralJoint:'spherical+torsion-coupling',
       maxBendAngleRad:Number.isFinite(maxBend)?maxBend:null,
       beyondVerifiedLimit,
       status:beyondVerifiedLimit?'limit-exceeded':'resolved',
