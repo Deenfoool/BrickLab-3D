@@ -92,7 +92,10 @@ export function createLegacyEditorAdapter({
       parts:liveObjects.map(serializePart),
       connections:Array.isArray(stored.connections) ? stored.connections : [],
       connectorSystemV4:{version:4},
-      connectionsV4:subsystems.connectivity.build.records(),
+      connectionsV4:globalThis.BrickLabMechanicsNextBuildOwner?.active===true &&
+        globalThis.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true
+        ? []
+        : subsystems.connectivity.build.records(),
       mechanicsNext:globalThis.BrickLabMechanicsNext?.exportProjectState?.() ?? stored.mechanicsNext ?? undefined,
     }
   }
