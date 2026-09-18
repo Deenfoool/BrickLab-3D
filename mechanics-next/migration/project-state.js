@@ -54,6 +54,7 @@ export function exportMechanicsProjectState({
       interfacePair:Object.freeze([...(edge.metadata?.interfacePair||[])]),
       topology:clone(edge.metadata?.topology??null),
       dynamics:clone(edge.metadata?.dynamics??null),
+      geometry:clone(edge.metadata?.connectionGeometry??null),
       occupancy:clone(edge.metadata?.occupancy??null),
       evidence:clone(edge.evidence??null),
     }))
@@ -222,7 +223,10 @@ export function restoreMechanicsProjectState(state,{
           endpointId:record.b.observedEndpointId??record.b.endpointId,
         },
         occupancy:clone(record.occupancy),
-        metadata:{restoredFromSchema:MECHANICS_PROJECT_SCHEMA_VERSION},
+        metadata:{
+          restoredFromSchema:MECHANICS_PROJECT_SCHEMA_VERSION,
+          connectionGeometry:clone(record.geometry??null),
+        },
       }
       const interpretation=interpretObservedConnection(observedRecord,{
         sceneObserver,
@@ -248,6 +252,9 @@ export function restoreMechanicsProjectState(state,{
         referenceFrame:current.referenceFrame,
         metadata:{
           ...(clone(current.metadata)||{}),
+          connectionGeometry:clone(
+            record.geometry??current.metadata?.connectionGeometry??null,
+          ),
           occupancy:clone(record.occupancy),
           restoredFromSchema:MECHANICS_PROJECT_SCHEMA_VERSION,
           persistedConstraintKind:record.kind,
@@ -410,6 +417,7 @@ export function probeMechanicsProjectState(state,{
           endpointId:record.b.observedEndpointId??record.b.endpointId,
         },
         occupancy:clone(record.occupancy),
+        metadata:{connectionGeometry:clone(record.geometry??null)},
       },{
         sceneObserver,
         objectById:objectByInstanceId,
