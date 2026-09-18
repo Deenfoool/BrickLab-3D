@@ -46,7 +46,8 @@ export function getPhysicsOwnershipSnapshot() {
     create: {
       installed: typeof PhysicsSession.create === 'function',
       owner: PhysicsSession.create?.__bricklabOwner ?? PhysicsSession.create?.name ?? null,
-      expected: globalThis.BrickLabConnectorV4PhysicsGuard?.version ?? null,
+      expected: globalThis.BrickLabMechanicsNextPhysicsOwner?.version ??
+        globalThis.BrickLabConnectorV4PhysicsGuard?.version ?? null,
     },
     methods: METHODS.map(methodInfo),
   }
@@ -54,7 +55,8 @@ export function getPhysicsOwnershipSnapshot() {
 
 export function assertPhysicsRuntimeContract() {
   const failures = []
-  const expectedCreateOwner = globalThis.BrickLabConnectorV4PhysicsGuard?.version ?? null
+  const expectedCreateOwner = globalThis.BrickLabMechanicsNextPhysicsOwner?.version ??
+    globalThis.BrickLabConnectorV4PhysicsGuard?.version ?? null
   if (expectedCreateOwner && PhysicsSession.create?.__bricklabOwner !== expectedCreateOwner) {
     failures.push(`create owner: expected ${expectedCreateOwner}, got ${PhysicsSession.create?.__bricklabOwner ?? PhysicsSession.create?.name ?? 'unknown'}`)
   }
