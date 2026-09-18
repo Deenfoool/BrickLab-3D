@@ -38,6 +38,11 @@ import { createNativeShadowResolver } from '../mechanics-next/ldraw/shadow-resol
 import { compareNativeToLegacyConnectivity, ConnectivityParityLedger } from '../mechanics-next/diagnostics/native-v4-parity.js'
 import { inheritancePolicyForChild, parseLDrawHeader, parseType1References } from '../mechanics-next/ldraw/official-parser.js'
 import { createNativeLDrawInheritanceResolver } from '../mechanics-next/ldraw/official-inheritance.js'
+import { solveMechanicalPlacement } from '../mechanics-next/connectors/placement-solver.js'
+import { worldConnectorFrame } from '../mechanics-next/connectors/world-frame.js'
+import { OccupancyLedger, occupancyPlanForPlacement } from '../mechanics-next/connectors/occupancy.js'
+import { findMechanicalCandidates } from '../mechanics-next/connectors/candidate-search.js'
+import { commitPlacementTransaction } from '../mechanics-next/connectors/placement-transaction.js'
 
 test('deterministic mechanical IDs are stable and namespace-sensitive', () => {
   assert.equal(deterministicId('body', 'a', 1), deterministicId('body', 'a', 1))
@@ -855,4 +860,150 @@ test('parent SNAP_CLEAR can remove inherited connector groups after geometric in
   })
   const result=await inheritance.resolve('parts/root.dat')
   assert.equal(result.connectors.length,0)
+})
+
+
+function endpointFromNative(raw, { bodyId='body', partId='part', index=0 } = {}) {
+  return enrichEndpointSemantics(ldcadConnectorToEndpoint(raw, { bodyId, partId, index }))
+}
+
+function axleEndpoint({ id='axle', gender='male', lengthLdu=40, positionLdu=[0,0,0] } = {}) {
+  return endpointFromNative({
+    id,
+    family:'cylinder',
+    gender,
+    group:null,
+    frame:{ positionLdu, orientation:[1,0,0,0,1,0,0,0,1] },
+    geometry:{ centered:true, caps:'none', sections:[{ shape:'A', radiusLdu:6, lengthLdu, elastic:false }] },
+    snap:{ slide:true },
+  }, { bodyId:`body-${id}`, partId:id })
+}
+
+test('renderer-independent placement aligns keyed axle and preserves axial sliding DOF', () => {
+  const source=axleEndpoint({ id:'male', gender:'male', positionLdu:[0,0,0] })
+  const target=axleEndpoint({ id:'female', gender:'female', positionLdu:[0,0,0] })
+  const sourcePose={ position:[1,0,0], quaternion:[0,0,0,1] }
+  const targetPose={ position:[0,0,0], quaternion:[0,0,0,1] }
+  const sourceFrame=worldConnectorFrame(sourcePose,source)
+  const targetFrame=worldConnectorFrame(targetPose,target)
+
+  const result=solveMechanicalPlacement({
+    source,target,sourceFrame,targetFrame,objectPose:sourcePose,
+  })
+  assert.equal(result.valid,true)
+  assert.equal(result.match.interfaceRule.kind,'prismatic')
+  assert.equal(result.match.keyed,true)
+  assert.ok(result.solution === undefined)
+  assert.ok(result.diagnostics.translationStud >= 0)
+  assert.ok(result.axial.engagementLdu >= 1)
+})
+
+test('placement uses opposite axial sign when the moving endpoint is female', () => {
+  const male=axleEndpoint({ id:'stationary-male', gender:'male', lengthLdu:60 })
+  const female=axleEndpoint({ id:'moving-female', gender:'female', lengthLdu:20 })
+  const movingPose={ position:[0,1,0], quaternion:[0,0,0,1] }
+  const targetPose={ position:[0,0,0], quaternion:[0,0,0,1] }
+  const sourceFrame=worldConnectorFrame(movingPose,female)
+  const targetFrame=worldConnectorFrame(targetPose,male)
+
+  const result=solveMechanicalPlacement({
+    source:female,target:male,sourceFrame,targetFrame,objectPose:movingPose,
+  })
+  assert.equal(result.valid,true)
+  assert.ok(result.axial.offsetLdu < 0)
+  assert.ok(Math.abs(result.worldPosition[1]-1) < 1e-8)
+})
+
+test('interval occupancy lets one long axle serve separated receivers but blocks overlap', () => {
+  const ledger=new OccupancyLedger()
+  const first={
+    connectionId:'c1',
+    exclusiveChannels:['female-a'],
+    axialReservations:[{ channel:'axle', interval:[0,20], occupantBodyId:'a' }],
+  }
+  const second={
+    connectionId:'c2',
+    exclusiveChannels:['female-b'],
+    axialReservations:[{ channel:'axle', interval:[20,40], occupantBodyId:'b' }],
+  }
+  const overlap={
+    connectionId:'c3',
+    exclusiveChannels:['female-c'],
+    axialReservations:[{ channel:'axle', interval:[10,30], occupantBodyId:'c' }],
+  }
+  assert.equal(ledger.reserve(first).accepted,true)
+  assert.equal(ledger.reserve(second).accepted,true)
+  const blocked=ledger.canReserve(overlap)
+  assert.equal(blocked.accepted,false)
+  assert.equal(blocked.conflicts[0].type,'axial-overlap')
+})
+
+test('female bore remains exclusive even when axial interval is otherwise free', () => {
+  const ledger=new OccupancyLedger()
+  assert.equal(ledger.reserve({
+    connectionId:'one',
+    exclusiveChannels:['beam::hole'],
+    axialReservations:[],
+  }).accepted,true)
+  const second=ledger.canReserve({
+    connectionId:'two',
+    exclusiveChannels:['beam::hole'],
+    axialReservations:[],
+  })
+  assert.equal(second.accepted,false)
+  assert.equal(second.conflicts[0].type,'exclusive-endpoint')
+})
+
+test('candidate search rejects occupied receiver and ranks an available compatible target', () => {
+  const male=axleEndpoint({ id:'source-male', gender:'male', lengthLdu:60 })
+  const femaleA=axleEndpoint({ id:'female-a', gender:'female', lengthLdu:20 })
+  const femaleB=axleEndpoint({ id:'female-b', gender:'female', lengthLdu:20 })
+  const moving={
+    instance:{ body:{id:'moving-body'}, endpoints:[male] },
+    pose:{ position:[0,0,0], quaternion:[0,0,0,1] },
+  }
+  const targetA={
+    instance:{ body:{id:'target-a'}, endpoints:[femaleA] },
+    pose:{ position:[0,.1,0], quaternion:[0,0,0,1] },
+  }
+  const targetB={
+    instance:{ body:{id:'target-b'}, endpoints:[femaleB] },
+    pose:{ position:[0,.25,0], quaternion:[0,0,0,1] },
+  }
+  const ledger=new OccupancyLedger()
+  ledger.reserve({
+    connectionId:'existing',
+    exclusiveChannels:[`target-a::${femaleA.id}`],
+    axialReservations:[],
+  })
+  const candidates=findMechanicalCandidates({
+    moving,
+    targets:[targetA,targetB],
+    occupancy:ledger,
+    maxResults:8,
+  })
+  assert.ok(candidates.length >= 1)
+  assert.equal(candidates[0].targetBodyId,'target-b')
+})
+
+test('placement transaction rolls back pose when post-placement validation fails', async () => {
+  const state={ position:[5,0,0], quaternion:[0,0,0,1] }
+  const candidate={
+    key:'candidate',
+    moving:{ id:'moving' },
+    solution:{ valid:true, worldPosition:[0,0,0], worldQuaternion:[0,0,0,1] },
+    occupancyPlan:null,
+  }
+  const adapter={
+    async snapshot(){return{position:[...state.position],quaternion:[...state.quaternion]}},
+    async setWorldPose(_moving,pose){state.position=[...pose.position];state.quaternion=[...pose.quaternion]},
+    async restore(_moving,snapshot){state.position=[...snapshot.position];state.quaternion=[...snapshot.quaternion]},
+  }
+  const result=await commitPlacementTransaction(candidate,{
+    adapter,
+    validate:async()=>({valid:false,reason:'collision'}),
+  })
+  assert.equal(result.accepted,false)
+  assert.equal(result.reason,'post-placement:collision')
+  assert.deepEqual(state.position,[5,0,0])
 })
