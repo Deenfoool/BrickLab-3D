@@ -3,6 +3,7 @@ export const MECHANICS_SCHEMA_VERSION = 1
 
 export const DOF_KEYS = Object.freeze(['tx', 'ty', 'tz', 'rx', 'ry', 'rz'])
 export const DOF_STATES = Object.freeze(['locked', 'free', 'limited', 'driven'])
+export const MOTION_CHANNELS = Object.freeze(['omega','theta','slide','displacement'])
 export const CONSTRAINT_KINDS = Object.freeze([
   'fixed', 'revolute', 'prismatic', 'cylindrical', 'spherical', 'planar', 'custom',
 ])
@@ -129,7 +130,7 @@ export function createTransmission({
 
 export function mechanicalVariable(bodyId, channel = 'rz') {
   if (!bodyId) throw new TypeError('bodyId is required')
-  if (!DOF_KEYS.includes(channel) && !['omega', 'slide'].includes(channel)) {
+  if (!DOF_KEYS.includes(channel) && !MOTION_CHANNELS.includes(channel)) {
     throw new TypeError(`Unsupported mechanical channel: ${channel}`)
   }
   return `${String(bodyId)}::${channel}`
