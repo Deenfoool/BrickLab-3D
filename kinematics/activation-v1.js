@@ -133,6 +133,15 @@ async function activate(event) {
     }
 
     if(!api){
+      const nextBuildAuthoritative=
+        globalThis.BrickLabMechanicsNextBuildOwner?.active===true &&
+        globalThis.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true
+      if(nextBuildAuthoritative){
+        const error=new Error('Mechanics Next owns BUILD; stale legacy Kinematics fallback is forbidden')
+        error.code='BRICKLAB_MECHANICS_NEXT_AUTHORITATIVE_KINEMATICS_BLOCKED'
+        error.gate=nextAttempt?.gate??null
+        throw error
+      }
       if(nextAttempt?.gate?.blockers?.length){
         console.info('[BrickLab Mechanics Next] Kinematics migration gate blocked; temporary legacy fallback remains active.',nextAttempt.gate)
       }
