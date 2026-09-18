@@ -129,7 +129,12 @@ if(!PhysicsSession[marker]){
     const compatibility=fixedCompatibilityConnections(physics.structuralPlan,baseIds)
     let session=null
     try{
-      session=await legacyGuard.createBaseSession(baseObjects,compatibility,...rest)
+      session=await legacyGuard.createBaseSession(
+        baseObjects,
+        compatibility,
+        ...rest,
+        {mechanicsNextOwned:true,mechanicsNextOwnerVersion:MECHANICS_NEXT_PHYSICS_OWNER_VERSION},
+      )
       const preflight=physics.preflightSession(session)
       if(!preflight.pass){
         const error=new Error('Mechanics Next production session preflight failed')
