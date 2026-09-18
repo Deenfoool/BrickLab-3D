@@ -2,6 +2,8 @@ import { deterministicId, evidence } from '../core/model.js'
 import { constraintDof, createConstraint } from '../constraints/dof.js'
 import { endpointSemanticKind } from './endpoint-semantics.js'
 import { mechanicalInterfaceRule } from './interface-rules.js'
+import { rigidPoseFromMatrix4 } from '../math/rigid.js'
+import { worldConnectorFrame } from '../connectors/world-frame.js'
 
 function evidenceConfidence(tier) {
   if (tier === 'A') return 'verified'
@@ -152,56 +154,27 @@ function resolveRule(endpointA, endpointB, {
   return { kindA, kindB, rule:null, interfacePair:null, special:null }
 }
 
-function localPosition(endpoint) {
-  const frame = endpoint?.frame || {}
-  if (Array.isArray(frame.positionStud) && frame.positionStud.length === 3) {
-    return frame.positionStud.map(Number)
-  }
-  if (Array.isArray(frame.positionLdu) && frame.positionLdu.length === 3) {
-    return frame.positionLdu.map(value => Number(value) / 20)
-  }
-  return [0,0,0]
+function visualOffsetForObject(object){
+  const visual=object?.children?.find?.(child=>child?.userData?.ldrawVisual)
+  return visual?.position
+    ?[Number(visual.position.x)||0,Number(visual.position.y)||0,Number(visual.position.z)||0]
+    :[0,0,0]
 }
 
-function localAxis(endpoint) {
-  const frame = endpoint?.frame || {}
-  const orientation = frame.orientationBrickLab ?? frame.orientation
-  if (!Array.isArray(orientation) || orientation.length !== 9) return [0,1,0]
-  const axis = [-Number(orientation[1]), -Number(orientation[4]), -Number(orientation[7])]
-  const length = Math.hypot(...axis)
-  return length > 1e-9 ? axis.map(value => value / length) : [0,1,0]
-}
-
-function worldFrame(object, endpoint) {
-  const position = localPosition(endpoint)
-  const axis = localAxis(endpoint)
-  object?.updateMatrixWorld?.(true)
-  const m = object?.matrixWorld?.elements
-  if (!m || m.length !== 16) {
-    const offset = object?.position
-      ? [Number(object.position.x) || 0, Number(object.position.y) || 0, Number(object.position.z) || 0]
-      : [0,0,0]
-    return {
-      position:position.map((value, index) => value + offset[index]),
-      axis,
-      degraded:true,
-    }
+function worldFrame(object,endpoint){
+  object?.updateWorldMatrix?.(true,false)
+  const elements=object?.matrixWorld?.elements
+  if(!elements||elements.length!==16){
+    throw new Error('connection object lacks matrixWorld')
   }
-
-  const p = [
-    m[0]*position[0] + m[4]*position[1] + m[8]*position[2] + m[12],
-    m[1]*position[0] + m[5]*position[1] + m[9]*position[2] + m[13],
-    m[2]*position[0] + m[6]*position[1] + m[10]*position[2] + m[14],
-  ]
-  const transformedAxis = [
-    m[0]*axis[0] + m[4]*axis[1] + m[8]*axis[2],
-    m[1]*axis[0] + m[5]*axis[1] + m[9]*axis[2],
-    m[2]*axis[0] + m[6]*axis[1] + m[10]*axis[2],
-  ]
-  const length = Math.hypot(...transformedAxis)
-  return {
-    position:p,
-    axis:length > 1e-9 ? transformedAxis.map(value => value / length) : axis,
+  const pose=rigidPoseFromMatrix4(Array.from(elements))
+  const frame=worldConnectorFrame(pose,endpoint,{
+    visualOffsetStud:visualOffsetForObject(object),
+  })
+  return{
+    position:[...frame.position],
+    axis:[...frame.axis],
+    orientation:[...frame.orientation],
     degraded:false,
   }
 }
