@@ -91,6 +91,7 @@ export function createLegacyEditorAdapter({
       connections:Array.isArray(stored.connections) ? stored.connections : [],
       connectorSystemV4:{version:4},
       connectionsV4:subsystems.connectivity.build.records(),
+      mechanicsNext:globalThis.BrickLabMechanicsNext?.exportProjectState?.() ?? stored.mechanicsNext ?? undefined,
     }
   }
 
