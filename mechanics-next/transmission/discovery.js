@@ -47,7 +47,7 @@ function shaftCouplings(graph){
   return{equations,transmissions}
 }
 
-function gearMeshes(records,graph,options={}){
+function gearMeshes(records,graph,options={},protectedClusters=[]){
   const islands=rigidIslandIndex(graph)
   const gears=records.map(record=>({record,gear:gearFrameForRecord(record)})).filter(item=>item.gear)
   const equations=[]
@@ -58,6 +58,7 @@ function gearMeshes(records,graph,options={}){
     for(let j=i+1;j<gears.length;j+=1){
       const a=gears[i],b=gears[j]
       if(islands.get(a.gear.bodyId)&&islands.get(a.gear.bodyId)===islands.get(b.gear.bodyId))continue
+      if(protectedClusters.some(cluster=>cluster.has(a.gear.bodyId)&&cluster.has(b.gear.bodyId)))continue
       const geometry=evaluateGearPair(a.gear,b.gear,options)
       diagnostics.push(Object.freeze({
         bodyA:a.gear.bodyId,
@@ -216,8 +217,11 @@ export function discoverMechanicalTransmissions({
   relations=[],
   gearOptions={},
 }={}){
+  const groups=differentialGroups(records,relations)
+  const protectedClusters=[...groups.entries()].map(([carrier,inners])=>
+    new Set([carrier,...inners.map(record=>record.instance.body.id)]))
   const shaft=shaftCouplings(graph)
-  const gears=gearMeshes(records,graph,gearOptions)
+  const gears=gearMeshes(records,graph,gearOptions,protectedClusters)
   const differentials=discoverDifferentials(records,relations)
 
   return Object.freeze({
