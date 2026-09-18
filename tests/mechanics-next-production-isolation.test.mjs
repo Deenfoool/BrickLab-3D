@@ -111,12 +111,12 @@ test('production KINEMATICS and SIMULATE require native BUILD ownership first', 
   assert.match(
     activation,
     /\.\.\/mechanics-next\/production\/kinematics-owner\.js/,
-    'activation must try Mechanics Next KINEMATICS before legacy runtime',
+    'activation must load Mechanics Next KINEMATICS',
   )
-  assert.match(
+  assert.doesNotMatch(
     activation,
-    /stale legacy Kinematics fallback is forbidden/,
-    'legacy KINEMATICS fallback must be blocked once Mechanics Next owns BUILD',
+    /runtime-v1\.js|lifecycle-guard|rack-pinion-runtime|legacy fallback/,
+    'legacy KINEMATICS runtime paths must be absent',
   )
 })
 
@@ -129,7 +129,7 @@ test('production Mechanics Next entry modules share the canonical import-map gen
   assert.ok(match,'production import map is present')
   const imports=JSON.parse(match[1]).imports
   const canonical=imports['./app.js']?.match(/\?v=(.+)$/)?.[1]
-  assert.equal(canonical,'runtime-27-mechanics-next-stage11-20260918-v1')
+  assert.match(canonical,/^runtime-\d+-mechanics-next-/)
 
   assert.match(bootstrap,/import\('\.\/mechanics-next\/runtime\.js'\)/)
   assert.match(bootstrap,/import\('\.\/mechanics-next\/production\/physics-owner\.js'\)/)

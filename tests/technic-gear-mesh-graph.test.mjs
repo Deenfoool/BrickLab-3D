@@ -6,7 +6,8 @@ import { PARTS } from '../parts.js'
 import { createConnection } from '../connections-v3.js'
 import { findExactGearMeshPairs } from '../snapping-v3.js'
 import { analyzeTechnicAwareDrivetrain } from '../technic/drivetrain-v1.js'
-import { solveShaftRatios } from '../kinematics/solver-v1.js'
+import { solveRotationalDrag } from '../mechanics-next/interaction/drag-driver.js'
+import { rotationCouplingEquation } from '../mechanics-next/transmission/equations.js'
 
 function gearDefinition(id,{teeth,radius,anchor=[0,0,0],signs=[-1,1]}={}){
   return {
@@ -71,11 +72,11 @@ test('saved mesh and differential seat propagate Kinematics from either 20T or c
   assert.ok(drivetrain.physicalGearMeshes.some(mesh=>mesh.authoritativeGraphLink))
   assert.equal(drivetrain.differentialSeats.length,1)
   for(const driver of [redShaft,carrierShaft]){
-    const solved=solveShaftRatios(driver,drivetrain.gearMeshes)
-    assert.equal(solved.conflicts.length,0)
-    assert.ok(Number.isFinite(solved.ratios[redShaft]))
-    assert.ok(Number.isFinite(solved.ratios[carrierShaft]))
-    assert.ok(Number.isFinite(solved.ratios[blueShaft]))
+    const solved=solveRotationalDrag({bodyId:driver,angleRad:1,discovery:{equations:drivetrain.gearMeshes.map(m=>rotationCouplingEquation({id:m.id,bodyA:m.shaftA,bodyB:m.shaftB,ratioAB:m.ratioAB}))}})
+    assert.equal(solved.status,'solved')
+    assert.ok(Number.isFinite(solved.values[redShaft+'::theta']))
+    assert.ok(Number.isFinite(solved.values[carrierShaft+'::theta']))
+    assert.ok(Number.isFinite(solved.values[blueShaft+'::theta']))
   }
 })
 

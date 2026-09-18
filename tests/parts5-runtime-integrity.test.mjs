@@ -161,5 +161,5 @@ test('retained PARTS-5 package tag does not pin a newer production build', async
   const versioner = await readFile(new URL('scripts/version-runtime.mjs', root), 'utf8')
   assert.match(badge, /const BUILD_ID = 'PARTS-\d+'/)
   assert.match(badge, /const BUILD_TAG = new URL\(import\.meta\.url\)\.searchParams\.get\('v'\) \|\| 'unversioned-runtime'/)
-  assert.match(versioner, /process\.argv\[2\] \?\? 'runtime-27-mechanics-next-stage11-20260918-v1'/)
+  assert.match(versioner, /process\.argv\[2\] \?\? 'runtime-\d+-mechanics-next-[a-z0-9-]+'/)
 })

@@ -54,16 +54,9 @@ test('rack-pinion BUILD snap remains placement-only and never fabricates a conne
   assert.doesNotMatch(rack, /createConnection|commitActiveCandidate|connectionGraph/)
 })
 
-test('rack-pinion Kinematics extension is additive and does not become a SIMULATE owner', async () => {
-  const [rackRuntime, guard, ownership] = await Promise.all([
-    text('kinematics/rack-pinion-runtime-v1.js'),
-    text('connectors-v4/physics-guard-v4.js'),
-    text('physics-ownership-v1.js'),
-  ])
-  assert.match(rackRuntime, /bricklab:kinematicsenter/)
-  assert.match(rackRuntime, /bricklab:kinematicsexit/)
-  assert.doesNotMatch(rackRuntime, /PhysicsSession|installConnectorPhysicsV4|Rapier/)
-  assert.match(guard, /installConnectorPhysicsV4/)
-  assert.doesNotMatch(guard, /rack-pinion-runtime-v1/)
-  assert.match(ownership, /PhysicsSession/)
+test('native rack-pinion motion compiles independently of the Rapier owner', async () => {
+  const discovery=await text('mechanics-next/transmission/discovery.js')
+  assert.match(discovery,/rack-pinion/)
+  assert.match(discovery,/linearMotions/)
+  assert.doesNotMatch(discovery,/PhysicsSession/)
 })

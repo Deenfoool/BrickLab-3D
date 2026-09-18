@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { access, readFile } from 'node:fs/promises'
 
 const root = new URL('../', import.meta.url)
-const ENTRY_TAG = 'runtime-27-mechanics-next-stage11-20260918-v1'
+const ENTRY_TAG = JSON.parse((await readFile(new URL('index.html',root),'utf8')).match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]).imports['./app.js'].split('?v=')[1]
 const TAG = 'parts-6-20260909-realism-v1'
 const FINAL_MODULES = [
   'realism-refinement-v1',

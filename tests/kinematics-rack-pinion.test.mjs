@@ -1,48 +1,21 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  rackTravelFromRadiansV1,
-  rackTravelFromRotationV1,
-  solveRackPinionFollowersV1,
-} from '../kinematics/rack-pinion-follow-v1.js'
+import {rackPinionEquation,rotationCouplingEquation} from '../mechanics-next/transmission/equations.js'
+import {solveRotationalDrag} from '../mechanics-next/interaction/drag-driver.js'
 
-test('rack travel follows pinion pitch radius and signed shaft ratio', () => {
-  assert.ok(Math.abs(rackTravelFromRotationV1(360, 1, 1, 1) - Math.PI * 2) < 1e-12)
-  assert.ok(Math.abs(rackTravelFromRotationV1(180, -2, 0.5, 1) + Math.PI) < 1e-12)
-  assert.ok(Math.abs(rackTravelFromRotationV1(90, 1, 1, -1) + Math.PI / 2) < 1e-12)
-  assert.ok(Math.abs(rackTravelFromRadiansV1(Math.PI, 2, 0.5, -1) + Math.PI) < 1e-12)
+test('native rack travel follows pitch radius and signed pinion rotation',()=>{
+  for(const direction of [1,-1]){
+    const result=solveRotationalDrag({bodyId:'pinion',angleRad:Math.PI,discovery:{equations:[rackPinionEquation({id:'mesh',gearBody:'pinion',rackBody:'rack',pitchRadius:.5,direction})]}})
+    assert.equal(result.status,'solved');assert.ok(Math.abs(result.values['rack::slide']-direction*Math.PI*.5)<1e-9)
+  }
 })
-
-test('rack follower uses propagated shaft ratio, not only the directly dragged pinion', () => {
-  const result = solveRackPinionFollowersV1({
-    driverAngleDeg:90,
-    shaftRatios:{ input:1, output:-2 },
-    shaftIdByPart:new Map([['pinion','output']]),
-    meshes:[{
-      id:'rack-pinion:pinion:rack',
-      pinionInstanceId:'pinion',
-      rackInstanceId:'rack',
-      pitchRadius:0.5,
-      travelSign:1,
-      travelAxisWorld:{ x:1, y:0, z:0 },
-    }],
-  })
-  assert.equal(result.conflicts.length, 0)
-  assert.equal(result.targets.length, 1)
-  assert.ok(Math.abs(result.targets[0].travelStud + Math.PI / 2) < 1e-12)
+test('native rack follower propagates through an upstream gear relation',()=>{
+  const equations=[rotationCouplingEquation({id:'gears',bodyA:'input',bodyB:'pinion',ratioAB:-2}),rackPinionEquation({id:'rack',gearBody:'pinion',rackBody:'rack',pitchRadius:.5,direction:1})]
+  const result=solveRotationalDrag({bodyId:'input',angleRad:Math.PI/2,discovery:{equations}})
+  assert.equal(result.status,'solved');assert.ok(Math.abs(result.values['rack::slide']+Math.PI/2)<1e-9)
 })
-
-test('two incompatible pinions driving one rack fail closed', () => {
-  const result = solveRackPinionFollowersV1({
-    driverAngleDeg:90,
-    shaftRatios:{ a:1, b:1 },
-    shaftIdByPart:new Map([['pa','a'],['pb','b']]),
-    meshes:[
-      { id:'m1', pinionInstanceId:'pa', rackInstanceId:'rack', pitchRadius:1, travelSign:1 },
-      { id:'m2', pinionInstanceId:'pb', rackInstanceId:'rack', pitchRadius:1, travelSign:-1 },
-    ],
-  })
-  assert.equal(result.targets.length, 1)
-  assert.equal(result.conflicts.length, 1)
-  assert.equal(result.conflicts[0].type, 'rack-pinion-conflict')
+test('native incompatible pinions fail closed instead of applying a rack target',()=>{
+  const equations=[rotationCouplingEquation({id:'drive',bodyA:'a',bodyB:'b',ratioAB:1}),rackPinionEquation({id:'one',gearBody:'a',rackBody:'rack',pitchRadius:1,direction:1}),rackPinionEquation({id:'two',gearBody:'b',rackBody:'rack',pitchRadius:1,direction:-1})]
+  const result=solveRotationalDrag({bodyId:'a',angleRad:1,discovery:{equations}})
+  assert.equal(result.status,'conflict')
 })
