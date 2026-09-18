@@ -56,6 +56,7 @@ import { discoverCompoundMechanisms } from '../mechanics-next/compounds/discover
 import { createCompoundStateRegistry } from '../mechanics-next/compounds/state.js'
 import { decomposeShortcutInstance, inferCompoundTopology, ldrawReferenceTransformToBrickLab } from '../mechanics-next/compounds/shortcut-decomposer.js'
 import { mapDecompositionToScene } from '../mechanics-next/compounds/scene-member-map.js'
+import { assignCompoundEndpointOwnership } from '../mechanics-next/compounds/endpoint-ownership.js'
 import { createCompoundDecompositionRegistry } from '../mechanics-next/compounds/decomposition-registry.js'
 import { screenDragAngle, solveRotationalDrag } from '../mechanics-next/interaction/drag-driver.js'
 import { buildMotionPlan } from '../mechanics-next/interaction/motion-plan.js'
@@ -2233,4 +2234,68 @@ test('compound decomposition registry is lazy and stable for repeated resolve', 
   assert.equal(first.topology.status,'resolved')
   assert.equal(first.topology.kind,'linear-actuator')
   assert.equal(registry.status().resolved,1)
+})
+
+
+test('compound endpoint ownership assigns opposite external connectors to different physical members', () => {
+  const root=new THREE.Group()
+  const housing=new THREE.Group()
+  housing.userData.mechanicalMemberProxy=true
+  housing.userData.mechanicalMemberPath='parts/housing.dat'
+  housing.userData.mechanicalMemberOccurrence=0
+  housing.userData.mechanicalMemberBoundsLdu={center:[0,0,0],size:[20,20,20]}
+  housing.position.set(0,0,0)
+
+  const rod=new THREE.Group()
+  rod.userData.mechanicalMemberProxy=true
+  rod.userData.mechanicalMemberPath='parts/rod.dat'
+  rod.userData.mechanicalMemberOccurrence=0
+  rod.userData.mechanicalMemberBoundsLdu={center:[0,0,0],size:[20,20,20]}
+  rod.position.set(0,2,0)
+
+  root.add(housing,rod)
+  root.updateMatrixWorld(true)
+
+  const decomposition={
+    members:[
+      {id:'housing-member',path:'parts/housing.dat',occurrence:0,internalRole:'housing'},
+      {id:'rod-member',path:'parts/rod.dat',occurrence:0,internalRole:'rod'},
+    ],
+  }
+  const sceneMap=mapDecompositionToScene(root,decomposition)
+
+  const endpointAt=(id,y)=>createEndpointDescriptor({
+    id,
+    bodyId:'shock-root',
+    family:'generic',
+    frame:{
+      positionStud:[0,y,0],
+      orientationBrickLab:[1,0,0,0,1,0,0,0,1],
+    },
+    profile:{bounding:{kind:'point'}},
+    metadata:{semantics:{semanticKind:'generic-interface'}},
+  })
+
+  const record={
+    instance:{
+      body:{id:'shock-root',instanceId:'shock-1'},
+      endpoints:[
+        endpointAt('top-eye',0),
+        endpointAt('bottom-eye',2),
+      ],
+    },
+    pose:{position:[0,0,0],quaternion:[0,0,0,1]},
+    visualOffsetStud:[0,0,0],
+    compoundSceneMap:sceneMap,
+  }
+  const ownership=assignCompoundEndpointOwnership(record,{nearToleranceLdu:2})
+  assert.equal(ownership.complete,true)
+  assert.equal(
+    ownership.assignments.find(item=>item.endpointId==='top-eye').memberId,
+    'housing-member',
+  )
+  assert.equal(
+    ownership.assignments.find(item=>item.endpointId==='bottom-eye').memberId,
+    'rod-member',
+  )
 })
