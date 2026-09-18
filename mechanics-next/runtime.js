@@ -11,6 +11,10 @@ import { createCatalogObservationProvider } from './adapters/catalog-readonly.js
 import { createPartIntelligenceRegistry } from './intelligence/registry.js'
 import { createSceneMechanicalObserver } from './intelligence/scene-observer.js'
 import { createShadowConnectionInterpreter } from './intelligence/connection-interpreter.js'
+import { rigidPoseFromMatrix4 } from './math/rigid.js'
+import { discoverMechanicalTransmissions } from './transmission/discovery.js'
+import { createTransmissionCompiler } from './transmission/compiler.js'
+import { findBestMechanicalCandidate } from './connectors/candidate-search.js'
 
 export const MECHANICS_NEXT_RUNTIME_MODE = 'observe-only'
 
@@ -22,6 +26,7 @@ export function createMechanicsNextRuntime({
   const ownership = createOwnershipLedger()
   const graph = createAssemblyGraph()
   const solver = createKinematicSolver()
+  const transmissionCompiler = createTransmissionCompiler({ solver, graph })
   let legacySnapshot = snapshotLegacyV4(legacyProvider)
 
   const catalog = subsystems?.parts
@@ -51,6 +56,37 @@ export function createMechanicsNextRuntime({
 
   let syncQueued = false
   let lastSceneSync = null
+  let lastTransmissionSync = null
+
+  const mechanicalRecords = () => {
+    if (!sceneObserver || !subsystems?.editor?.ready?.()) return Object.freeze([])
+    const records = []
+    for (const instance of sceneObserver.instances()) {
+      const instanceId = instance?.body?.instanceId
+      const object = subsystems.editor.objectById?.(instanceId)
+      if (!object) continue
+      try {
+        object.updateWorldMatrix?.(true, false)
+        const elements = object.matrixWorld?.elements
+        if (!elements) continue
+        const pose = rigidPoseFromMatrix4(Array.from(elements))
+        const connectivitySnapshot = connectivity.get(instance.body.partId)
+        records.push(Object.freeze({
+          instance,
+          pose,
+          visualOffsetStud:Object.freeze(
+            Array.isArray(connectivitySnapshot?.visualOffsetStud)
+              ? [...connectivitySnapshot.visualOffsetStud]
+              : [0,0,0],
+          ),
+          object,
+        }))
+      } catch (error) {
+        console.warn('[BrickLab Mechanics Next] Could not observe rigid pose.', instanceId, error)
+      }
+    }
+    return Object.freeze(records)
+  }
 
   const refreshLegacySnapshot = () => {
     legacySnapshot = snapshotLegacyV4(legacyProvider || globals.BrickLabConnectorV4)
@@ -65,7 +101,19 @@ export function createMechanicsNextRuntime({
     refreshLegacySnapshot()
     const scene = sceneObserver.sync()
     const connections = connectionInterpreter?.sync(legacySnapshot.connections) ?? null
-    lastSceneSync = Object.freeze({ scene, connections })
+    const records = mechanicalRecords()
+    const discovery = discoverMechanicalTransmissions({
+      records,
+      graph,
+      relations:connectionInterpreter?.relations?.() ?? [],
+    })
+    lastTransmissionSync = transmissionCompiler.sync(discovery)
+    lastSceneSync = Object.freeze({
+      scene,
+      connections,
+      transmissions:lastTransmissionSync,
+      observedRecords:records.length,
+    })
     return lastSceneSync
   }
 
@@ -101,6 +149,7 @@ export function createMechanicsNextRuntime({
     intelligence,
     sceneObserver,
     connectionInterpreter,
+    transmissionCompiler,
     refreshLegacySnapshot,
     legacySnapshot:() => legacySnapshot,
     describePart(partId, options) {
@@ -108,6 +157,32 @@ export function createMechanicsNextRuntime({
     },
     mechanicalInstance(instanceId) {
       return sceneObserver?.instance(instanceId) ?? null
+    },
+    records:mechanicalRecords,
+    solveKinematics(options = {}) {
+      return transmissionCompiler.solve(options)
+    },
+    setDriver(options = {}) {
+      return solver.setDriver(options)
+    },
+    clearDriver(id) {
+      return solver.clearDriver(id)
+    },
+    findCandidate(instanceId, targetInstanceIds = null, options = {}) {
+      const records = mechanicalRecords()
+      const moving = records.find(record => record.instance.body.instanceId === String(instanceId))
+      if (!moving) return null
+      const wanted = Array.isArray(targetInstanceIds) ? new Set(targetInstanceIds.map(String)) : null
+      const targets = records.filter(record =>
+        record !== moving && (!wanted || wanted.has(String(record.instance.body.instanceId))))
+      return findBestMechanicalCandidate({
+        moving,
+        targets,
+        includeSemanticUnknown:options.includeSemanticUnknown === true,
+        captureDistanceStud:options.captureDistanceStud,
+        minAxisAlignment:options.minAxisAlignment,
+        collisionProbe:options.collisionProbe,
+      })
     },
     syncScene,
     invalidatePart,
@@ -125,6 +200,9 @@ export function createMechanicsNextRuntime({
         partIntelligence:intelligence?.stats?.() ?? null,
         scene:sceneObserver?.stats?.() ?? null,
         interpretedConnections:connectionInterpreter?.stats?.() ?? null,
+        transmissionCompiler:transmissionCompiler.snapshot(),
+        transmissionSolve:transmissionCompiler.solve(),
+        lastTransmissionSync,
         lastSceneSync,
         ownership:ownership.snapshot(),
       })
