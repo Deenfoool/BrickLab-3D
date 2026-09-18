@@ -53,6 +53,7 @@ export function createMechanicsPhysicsRuntime({
     records,
     graph:structuralGraph,
     structuralPlan,
+    discovery,
   })
   const motorPlan=buildMechanicsMotorPlan({graph,records})
   const vehiclePlan=buildMechanicsVehiclePlan({
@@ -233,6 +234,12 @@ export function createMechanicsPhysicsRuntime({
     vehicleSteeringBindings(){
       return Object.freeze([...(installed?.steering?.bindings||[])])
     },
+    vehicleSteeringBridge(){
+      return Object.freeze({
+        bindings:Object.freeze([...(installed?.steering?.bindings||[])]),
+        rackBindings:Object.freeze([...(installed?.steering?.rackBindings||[])]),
+      })
+    },
     beforeStep(dt){
       if(!installed||installed.disposed)return Object.freeze({installed:false})
       const motors=installed.motors.step(dt)
@@ -294,6 +301,7 @@ export function createMechanicsPhysicsRuntime({
         couplingState:installed?.couplings?.snapshot?.()??Object.freeze([]),
         motorState:installed?.motors?.snapshot?.()??Object.freeze([]),
         steeringBindings:installed?.steering?.bindings?.length??0,
+        steeringRacks:installed?.steering?.rackBindings?.length??0,
         lastCouplingStep:installed?.lastCouplingStep??null,
         lastResistanceStep:installed?.lastResistanceStep??null,
         releaseEvents:Object.freeze([...(installed?.releaseEvents||[])]),
