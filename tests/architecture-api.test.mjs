@@ -91,6 +91,20 @@ test('BUILD and SIMULATE authority remain delegated to Connector V4 and its fail
   assert.deepEqual(calls, [['remove','a']])
 })
 
+test('Architecture does not claim native SIMULATE before BUILD authority is published', () => {
+  const globals = {
+    BrickLabConnectorV4:{objects:()=>[],projectConnections:()=>[]},
+    BrickLabConnectorV4PhysicsGuard:{active:true,createOwner:'guard-v4'},
+    BrickLabMechanicsNextPhysicsOwner:{
+      active:true,
+      createOwner:'mechanics-next-physics-owner-0.1.0',
+    },
+  }
+  const api=createBrickLabSubsystemApi({globals})
+  assert.equal(api.connectivity.authority.build,'connector-v4-with-legacy-bridge')
+  assert.equal(api.connectivity.authority.simulate,'connector-v4-physics-guard')
+})
+
 test('Architecture authority reports Mechanics Next after native BUILD and physics handoff', () => {
   const globals = {
     BrickLabConnectorV4:{
