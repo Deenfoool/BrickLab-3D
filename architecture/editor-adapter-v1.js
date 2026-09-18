@@ -80,7 +80,9 @@ export function createLegacyEditorAdapter({
 
   function projectState() {
     const liveObjects = objects()
-    subsystems.connectivity.build.reconcile(liveObjects, { persist:false })
+    if(globalThis.BrickLabMechanicsNextBuildOwner?.active!==true){
+      subsystems.connectivity.build.reconcile(liveObjects, { persist:false })
+    }
     const stored = storedProject(storage) ?? {}
     const name = element('projectName')?.textContent?.trim() || stored.name || 'Untitled Build'
     return {
@@ -219,7 +221,24 @@ export function bindLegacyEditorAdapter(options = {}) {
   return adapter
 }
 
-if (globalThis.BrickLabSubsystems) bindLegacyEditorAdapter()
+let boundEditorAdapter=null
+if (globalThis.BrickLabSubsystems) boundEditorAdapter=bindLegacyEditorAdapter()
+
+if(boundEditorAdapter&&globalThis.BrickLabMechanicsNext){
+  try{
+    const prepared=await globalThis.BrickLabMechanicsNext.prepareMigration()
+    if(prepared?.pass){
+      const adopted=globalThis.BrickLabMechanicsNext.adoptNativeProjectOwnership()
+      if(!adopted?.accepted){
+        console.warn('[BrickLab Mechanics Next] BUILD handoff rejected after preparation.',adopted)
+      }
+    }else{
+      console.info('[BrickLab Mechanics Next] BUILD migration gate remains blocked; Connector V4 stays temporary owner.',prepared)
+    }
+  }catch(error){
+    console.warn('[BrickLab Mechanics Next] BUILD ownership preparation failed; Connector V4 stays temporary owner.',error)
+  }
+}
 
 try {
   await import('../editor/mechanical-rotation-pivot-v1.js?v=mechanical-rotation-pivot-20260917-v2')
