@@ -299,6 +299,26 @@ export function preparePhysicsConnections(objects, sourceConnections) {
 }
 
 PhysicsSession.prototype.build = function buildWithConnectorIntegrityV3() {
+  if (this.mechanicsNextBootstrap) {
+    const stats = {
+      originalConnections:Array.isArray(this.connections)?this.connections.length:0,
+      explicitConnections:Array.isArray(this.connections)?this.connections.length:0,
+      explicitFixed:(this.connections??[]).filter(connection=>connection?.kind==='fixed').length,
+      hydratedContacts:0,
+      inferredFixedLinks:0,
+      inferredFixedContacts:0,
+      droppedInvalid:0,
+      endpointConflicts:0,
+      geometryRejected:0,
+      normalizedKinds:0,
+      physicsConnections:Array.isArray(this.connections)?this.connections.length:0,
+      connectorRuleVersion:CONNECTOR_RULE_VERSION,
+      mechanicsNextBypass:true,
+    }
+    this.autoWeldStats = stats
+    globalThis.__bricklabLastAutoWeldStats = { ...stats }
+    return originalBuild.call(this)
+  }
   const prepared = preparePhysicsConnections(this.objects, this.connections)
   this.connections = prepared.connections
   this.autoWeldStats = prepared.stats
