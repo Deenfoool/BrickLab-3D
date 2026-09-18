@@ -245,6 +245,12 @@ export function interpretObservedConnection(record, {
     referenceFrame,
     metadata:{
       observedConnectionId:record.id ?? null,
+      instanceAId:String(record.a.instanceId),
+      instanceBId:String(record.b.instanceId),
+      endpointAId:endpointA.id,
+      endpointBId:endpointB.id,
+      observedEndpointAId:record.a.endpointId??null,
+      observedEndpointBId:record.b.endpointId??null,
       interfacePair:resolved.interfacePair,
       semanticA:resolved.kindA,
       semanticB:resolved.kindB,
