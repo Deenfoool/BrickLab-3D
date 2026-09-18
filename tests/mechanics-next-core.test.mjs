@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   createBodyDescriptor,
+  createEndpointDescriptor,
   deterministicId,
   mechanicalVariable,
 } from '../mechanics-next/core/model.js'
@@ -46,6 +47,10 @@ import { commitPlacementTransaction } from '../mechanics-next/connectors/placeme
 import { discoverMechanicalTransmissions } from '../mechanics-next/transmission/discovery.js'
 import { createTransmissionCompiler } from '../mechanics-next/transmission/compiler.js'
 import { evaluateBevelGearPair, evaluateSpurGearPair } from '../mechanics-next/transmission/gear-geometry.js'
+import { screenDragAngle, solveRotationalDrag } from '../mechanics-next/interaction/drag-driver.js'
+import { buildMotionPlan } from '../mechanics-next/interaction/motion-plan.js'
+import { applyMotionPlanToBaseline, captureMotionBaseline, restoreMotionBaseline } from '../mechanics-next/interaction/scene-motion-adapter.js'
+import * as THREE from 'three'
 
 test('deterministic mechanical IDs are stable and namespace-sensitive', () => {
   assert.equal(deterministicId('body', 'a', 1), deterministicId('body', 'a', 1))
@@ -1190,4 +1195,186 @@ test('differential core stays underdetermined but balanced preview gives symmetr
   assert.equal(preview.status,'solved')
   assert.ok(Math.abs(preview.values[mechanicalVariable('left','omega')]-10)<1e-9)
   assert.ok(Math.abs(preview.values[mechanicalVariable('right','omega')]-10)<1e-9)
+})
+
+
+test('screen drag produces signed angular displacement around projected pivot', () => {
+  const drag=screenDragAngle(
+    {x:10,y:0},
+    {x:0,y:10},
+    {x:0,y:0},
+    {axisScreenSign:1},
+  )
+  assert.equal(drag.mode,'angular')
+  assert.ok(Math.abs(drag.angleRad-Math.PI/2)<1e-9)
+
+  const reversed=screenDragAngle(
+    {x:10,y:0},
+    {x:0,y:10},
+    {x:0,y:0},
+    {axisScreenSign:-1},
+  )
+  assert.ok(Math.abs(reversed.angleRad+Math.PI/2)<1e-9)
+})
+
+test('rotational drag solves an external 20T to 12T pair in displacement domain', () => {
+  const discovery={
+    equations:[gearMeshEquation({
+      id:'mesh',
+      bodyA:'g20',
+      bodyB:'g12',
+      teethA:20,
+      teethB:12,
+      directionSign:-1,
+    })],
+    transmissions:[],
+    balancedDifferentialClosures:[],
+  }
+  const result=solveRotationalDrag({
+    bodyId:'g20',
+    angleRad:1,
+    discovery,
+    balancedDifferentials:false,
+  })
+  assert.equal(result.status,'solved')
+  assert.ok(Math.abs(result.values[mechanicalVariable('g12','theta')]+20/12)<1e-9)
+})
+
+test('carrier drag auto-balances a free differential for deterministic preview', () => {
+  const equation=differentialEquation({
+    id:'diff',
+    carrier:'carrier',
+    left:'left',
+    right:'right',
+  })
+  const closure=rigidRotationEquation({
+    id:'diff:balance',
+    bodyA:'left',
+    bodyB:'right',
+  })
+  const discovery={
+    equations:[equation],
+    transmissions:[{
+      kind:'open-differential',
+      bodies:['carrier','left','right'],
+    }],
+    balancedDifferentialClosures:[closure],
+  }
+  const result=solveRotationalDrag({
+    bodyId:'carrier',
+    angleRad:.5,
+    discovery,
+    balancedDifferentials:'auto',
+  })
+  assert.equal(result.status,'solved')
+  assert.equal(result.balancedDifferentials,true)
+  assert.ok(Math.abs(result.values[mechanicalVariable('left','theta')]-.5)<1e-9)
+  assert.ok(Math.abs(result.values[mechanicalVariable('right','theta')]-.5)<1e-9)
+})
+
+test('side gear drag does not invent a balanced differential closure', () => {
+  const equation=differentialEquation({
+    id:'diff',
+    carrier:'carrier',
+    left:'left',
+    right:'right',
+  })
+  const closure=rigidRotationEquation({
+    id:'diff:balance',
+    bodyA:'left',
+    bodyB:'right',
+  })
+  const discovery={
+    equations:[equation],
+    transmissions:[{
+      kind:'open-differential',
+      bodies:['carrier','left','right'],
+    }],
+    balancedDifferentialClosures:[closure],
+  }
+  const result=solveRotationalDrag({
+    bodyId:'left',
+    angleRad:.5,
+    discovery,
+    balancedDifferentials:'auto',
+  })
+  assert.equal(result.status,'underdetermined')
+  assert.equal(result.balancedDifferentials,false)
+})
+
+test('motion plan orbits a differential spider even when its local spin is zero', () => {
+  const records=[
+    transmissionRecord({bodyId:'carrier',role:'differential',teeth:28,axis:'y'}),
+    transmissionRecord({bodyId:'spider',role:'bevel-gear',teeth:12,axis:'x',position:[1,0,0]}),
+  ]
+  const result={
+    status:'solved',
+    values:{
+      [mechanicalVariable('carrier','theta')]:1,
+      [mechanicalVariable('spider','theta')]:0,
+    },
+    freeVariables:[],
+    conflicts:[],
+  }
+  const plan=buildMotionPlan({
+    records,
+    discovery:{
+      compoundMotions:[{
+        kind:'differential-spider',
+        bodyId:'spider',
+        parentBodyId:'carrier',
+        orbitBodyId:'carrier',
+        spinBodyId:'spider',
+        spinFrame:'carrier-relative',
+        localAxis:[1,0,0],
+        directionSign:1,
+      }],
+    },
+    displacementResult:result,
+  })
+  const spider=plan.motions.find(item=>item.bodyId==='spider')
+  assert.ok(spider)
+  assert.equal(spider.kind,'compound-rotation')
+  assert.equal(spider.orbit.thetaRad,1)
+  assert.equal(spider.spin.thetaRad,0)
+})
+
+test('scene motion application is baseline-stable and does not accumulate per-frame drift', () => {
+  const root=new THREE.Group()
+  const object=new THREE.Object3D()
+  object.userData.instanceId='instance'
+  root.add(object)
+  root.updateMatrixWorld(true)
+
+  const records=[{
+    object,
+    instance:{
+      body:{id:'body',instanceId:'instance'},
+    },
+  }]
+  const baseline=captureMotionBaseline(records)
+  const plan={
+    motions:[{
+      kind:'rotation',
+      bodyId:'body',
+      instanceId:'instance',
+      pivot:[0,0,0],
+      axis:[0,1,0],
+      thetaRad:Math.PI/2,
+    }],
+  }
+
+  applyMotionPlanToBaseline(plan,baseline)
+  const first=object.quaternion.clone()
+  applyMotionPlanToBaseline(plan,baseline)
+  const second=object.quaternion.clone()
+
+  assert.ok(first.angleTo(second)<1e-12)
+  assert.ok(Math.abs(first.angleTo(new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(0,1,0),
+    Math.PI/2,
+  )))<1e-9)
+
+  restoreMotionBaseline(baseline)
+  assert.ok(object.quaternion.angleTo(new THREE.Quaternion())<1e-12)
 })
