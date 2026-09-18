@@ -199,6 +199,7 @@ function solveOpenDifferential(group, dt) {
 }
 
 PhysicsSession.prototype.applyGearCouplingTorques = function applyInertiaAwareCouplingV3(dt = 1 / (this.quality?.hz ?? 120)) {
+  if (this.mechanicsNextBootstrap) return
   const groups = new Map()
   for (const coupling of this.gearCouplers ?? []) {
     const key = diffKey(coupling)
