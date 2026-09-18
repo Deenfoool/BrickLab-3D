@@ -79,6 +79,39 @@ function portPhase(frameA,frameB){
   return signedAngleAround(zero,frameA.reference,axisA)
 }
 
+function closestAxisPivot(frameA,frameB){
+  const p1=frameA.position,p2=frameB.position
+  const d1=norm3(frameA.axis),d2=norm3(frameB.axis)
+  const r=[p1[0]-p2[0],p1[1]-p2[1],p1[2]-p2[2]]
+  const a=dot3(d1,d1)
+  const e=dot3(d2,d2)
+  const b=dot3(d1,d2)
+  const c=dot3(d1,r)
+  const f=dot3(d2,r)
+  const denom=a*e-b*b
+  let s=0,t=0
+  if(Math.abs(denom)>EPS){
+    s=(b*f-c*e)/denom
+    t=(a*f-b*c)/denom
+  }else{
+    s=0
+    t=e>EPS?f/e:0
+  }
+  const q1=[p1[0]+d1[0]*s,p1[1]+d1[1]*s,p1[2]+d1[2]*s]
+  const q2=[p2[0]+d2[0]*t,p2[1]+d2[1]*t,p2[2]+d2[2]*t]
+  const pivot=[
+    (q1[0]+q2[0])/2,
+    (q1[1]+q2[1])/2,
+    (q1[2]+q2[2])/2,
+  ]
+  return Object.freeze({
+    pivot:Object.freeze(pivot),
+    axisA:Object.freeze([...d1]),
+    axisB:Object.freeze([...d2]),
+    lineErrorStud:Math.hypot(q1[0]-q2[0],q1[1]-q2[1],q1[2]-q2[2]),
+  })
+}
+
 function angularInternalTopology(kind,jointBody){
   if(kind==='universal-joint'){
     return Object.freeze({
@@ -183,6 +216,7 @@ function discoverAngularJoints(records,relations){
     const maxBend=Number(properties(jointRecord).maxBendAngleRad)
     const beyondVerifiedLimit=Number.isFinite(maxBend)&&bendAngleRad>maxBend+1e-6
     const phase=portPhase(frameA,frameB)
+    const structural=closestAxisPivot(frameA,frameB)
     const id=deterministicId(jointRole,jointBody,first.externalBody,second.externalBody)
 
     const descriptor=Object.freeze({
@@ -194,6 +228,11 @@ function discoverAngularJoints(records,relations){
       bendAngleRad,
       inputPhaseRad:phase,
       directionSign,
+      pivotWorldStud:structural.pivot,
+      inputAxisWorld:structural.axisA,
+      outputAxisWorld:structural.axisB,
+      axisIntersectionErrorStud:structural.lineErrorStud,
+      virtualStructuralJoint:'spherical+tortion-coupling',
       maxBendAngleRad:Number.isFinite(maxBend)?maxBend:null,
       beyondVerifiedLimit,
       status:beyondVerifiedLimit?'limit-exceeded':'resolved',
