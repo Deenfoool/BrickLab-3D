@@ -46,11 +46,41 @@ function transmissionHints(classification) {
   } else if (role === 'pulley') {
     hints.push(Object.freeze({ kind:'pulley', equationFamily:'belt', slipPossible:true }))
   } else if (role === 'universal-joint') {
-    hints.push(Object.freeze({ kind:'universal-joint', equationFamily:'angular-coupling' }))
+    hints.push(Object.freeze({
+      kind:'universal-joint',
+      equationFamily:'angular-coupling',
+      nonlinear:true,
+      maxBendAngleRad:properties.maxBendAngleRad ?? null,
+    }))
   } else if (role === 'cv-joint') {
-    hints.push(Object.freeze({ kind:'cv-joint', equationFamily:'constant-velocity-coupling' }))
+    hints.push(Object.freeze({
+      kind:'cv-joint',
+      equationFamily:'constant-velocity-coupling',
+      ratio:1,
+      maxBendAngleRad:properties.maxBendAngleRad ?? null,
+    }))
   } else if (role === 'linear-actuator') {
-    hints.push(Object.freeze({ kind:'linear-actuator', equationFamily:'screw-linear' }))
+    hints.push(Object.freeze({
+      kind:'linear-actuator',
+      equationFamily:'screw-linear',
+      screwLeadStudPerTurn:properties.screwLeadStudPerTurn ?? null,
+      travelStud:properties.travelStud ?? null,
+    }))
+  } else if (role === 'shock-absorber') {
+    hints.push(Object.freeze({
+      kind:'spring-damper',
+      equationFamily:'spring-prismatic',
+      travelStud:properties.travelStud ?? null,
+      restLengthStud:properties.restLengthStud ?? null,
+      springStiffness:properties.springStiffness ?? null,
+      damping:properties.damping ?? null,
+    }))
+  } else if (role === 'driving-ring') {
+    hints.push(Object.freeze({
+      kind:'conditional-clutch',
+      equationFamily:'conditional-rotation-lock',
+      stateRequired:true,
+    }))
   }
 
   return Object.freeze(hints)
