@@ -19,7 +19,7 @@ export function createMechanicsPhysicsRuntime({
   graph,
   discovery,
   records=[],
-  studMeters=.008,
+  worldUnitsPerStud=1,
 }={}){
   const structuralPlan=buildMechanicsPhysicsPlan({graph,discovery})
   const compoundMemberPlan=buildCompoundMemberPhysicsPlan({records,discovery})
@@ -27,7 +27,7 @@ export function createMechanicsPhysicsRuntime({
     graph,
     discovery,
     records,
-    studMeters,
+    worldUnitsPerStud,
   })
   const blockers=Object.freeze([
     ...(structuralPlan.blockers||[]),
@@ -56,7 +56,7 @@ export function createMechanicsPhysicsRuntime({
       }
       const rapier=preflightRapierMechanicsPlan(structuralPlan,{
         resolveMember:bridge.resolveMember,
-        studMeters,
+        worldUnitsPerStud,
       })
       return Object.freeze({
         pass:rapier.pass,
