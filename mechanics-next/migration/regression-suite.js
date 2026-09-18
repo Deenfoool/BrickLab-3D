@@ -2,6 +2,9 @@ import { mechanicalVariable } from '../core/model.js'
 import {
   differentialEquation,
   driverEquation,
+  packagedDifferentialEquation,
+  rackPinionEquation,
+  rotationCouplingEquation,
   screwLinearEquation,
 } from '../transmission/equations.js'
 import { createKinematicSolver } from '../solver/kinematic-solver.js'
@@ -11,7 +14,7 @@ import {
 import { solveLinearWithNonlinearRelations } from '../solver/nonlinear-relations.js'
 import { validateMechanicsProjectState } from './project-state.js'
 
-export const MIGRATION_REGRESSION_VERSION='mechanics-migration-regression-0.1.0'
+export const MIGRATION_REGRESSION_VERSION='mechanics-migration-regression-0.2.0'
 const EPS=1e-8
 
 function result(id,fn){
@@ -113,6 +116,60 @@ export function runMechanicsMigrationRegressionSuite(){
     const slide=solved.values[mechanicalVariable('rod','slide')]
     assert(Math.abs(slide-.25)<EPS,`screw unit mismatch: ${slide}`)
     return{slideStud:slide}
+  }))
+
+  checks.push(result('shaft-axis-polarity',()=>{
+    const solver=createKinematicSolver()
+    solver.addEquation(rotationCouplingEquation({
+      id:'regression-shaft-polarity',
+      bodyA:'shaft-a',
+      bodyB:'shaft-b',
+      ratioAB:-1,
+      kind:'shaft-coupling',
+    }))
+    solver.setDriver({id:'shaft-a-driver',bodyId:'shaft-a',value:5})
+    const solved=solver.solve()
+    assert(solved.status==='solved','opposite-axis shaft solve failed')
+    assert(Math.abs(solved.values[mechanicalVariable('shaft-b','omega')]+5)<EPS,'shaft polarity sign wrong')
+    return{shaftB:solved.values[mechanicalVariable('shaft-b','omega')]}
+  }))
+
+  checks.push(result('rack-pinion-units-and-direction',()=>{
+    const solver=createKinematicSolver()
+    solver.addEquation(rackPinionEquation({
+      id:'regression-rack',
+      gearBody:'pinion',
+      rackBody:'rack',
+      pitchRadius:.75,
+      direction:-1,
+    }))
+    solver.setDriver({id:'pinion-driver',bodyId:'pinion',value:2})
+    const solved=solver.solve()
+    assert(solved.status==='solved','rack/pinion solve failed')
+    const slide=solved.values[mechanicalVariable('rack','slide')]
+    assert(Math.abs(slide+1.5)<EPS,`rack/pinion unit or sign mismatch: ${slide}`)
+    return{slideStudPerSecond:slide}
+  }))
+
+  checks.push(result('packaged-differential-port-polarity',()=>{
+    const solver=createKinematicSolver()
+    solver.addEquation(packagedDifferentialEquation({
+      id:'regression-packaged-diff',
+      input:'input',
+      left:'left',
+      right:'right',
+      ratio:1,
+      inputSign:1,
+      leftSign:1,
+      rightSign:-1,
+    }))
+    solver.setDriver({id:'input-drive',bodyId:'input',value:10})
+    solver.setDriver({id:'left-load',bodyId:'left',value:4})
+    const solved=solver.solve()
+    assert(solved.status==='solved','packaged differential solve failed')
+    const right=solved.values[mechanicalVariable('right','omega')]
+    assert(Math.abs(right+16)<EPS,`packaged differential polarity wrong: ${right}`)
+    return{right}
   }))
 
   checks.push(result('native-project-schema',()=>{
