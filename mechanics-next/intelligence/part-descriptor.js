@@ -26,7 +26,19 @@ function transmissionHints(classification) {
   } else if (role === 'rack') {
     hints.push(Object.freeze({ kind:'rack', equationFamily:'rack-pinion' }))
   } else if (role === 'differential') {
-    hints.push(Object.freeze({ kind:'differential', equationFamily:'three-port-differential' }))
+    if (Number.isFinite(properties.toothCount) && properties.toothCount > 0) {
+      hints.push(Object.freeze({
+        kind:'bevel-gear',
+        toothCount:properties.toothCount,
+        equationFamily:'gear-mesh',
+        mechanicalRole:'carrier-input-gear',
+      }))
+    }
+    hints.push(Object.freeze({
+      kind:'differential',
+      equationFamily:'three-port-differential',
+      mechanicalRole:'carrier',
+    }))
   } else if (role === 'pulley') {
     hints.push(Object.freeze({ kind:'pulley', equationFamily:'belt', slipPossible:true }))
   } else if (role === 'universal-joint') {
