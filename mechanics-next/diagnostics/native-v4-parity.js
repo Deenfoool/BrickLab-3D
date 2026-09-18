@@ -3,6 +3,7 @@ import { legacyV4ConnectorToEndpoint } from '../adapters/legacy-v4-readonly.js'
 import { ldcadConnectorToEndpoint } from '../ldraw/connector-adapter.js'
 import { enrichEndpointSemantics, endpointSemanticKind } from '../intelligence/endpoint-semantics.js'
 import { canonicalMechanicalJson } from '../intelligence/fingerprint.js'
+import { endpointFrameInBrickLab } from '../connectors/world-frame.js'
 
 function round(value, digits = 5) {
   if (!Number.isFinite(Number(value))) return null
@@ -10,8 +11,19 @@ function round(value, digits = 5) {
   return Math.round(Number(value) * factor) / factor
 }
 
-function rawGeometrySignature(endpoint) {
-  const frame = endpoint?.frame || {}
+function canonicalFrame(endpoint) {
+  try {
+    const frame=endpointFrameInBrickLab(endpoint)
+    return {
+      position:frame.position.map(value=>round(value)),
+      orientation:frame.orientation.map(value=>round(value)),
+    }
+  } catch {
+    return {position:null,orientation:null}
+  }
+}
+
+function rawGeometrySignature(endpoint,relativePosition=null) {
   const profile = endpoint?.profile || {}
   const sections = Array.isArray(profile.sections)
     ? profile.sections.map(section => ({
@@ -21,13 +33,14 @@ function rawGeometrySignature(endpoint) {
         elastic:section?.elastic === true,
       }))
     : null
+  const frame=canonicalFrame(endpoint)
 
   return {
     family:endpoint?.family || 'unknown',
     gender:endpoint?.gender ?? null,
     group:endpoint?.metadata?.group ?? null,
-    positionLdu:Array.isArray(frame.positionLdu) ? frame.positionLdu.map(value => round(value)) : null,
-    orientation:Array.isArray(frame.orientation) ? frame.orientation.map(value => round(value)) : null,
+    positionStud:relativePosition??frame.position,
+    orientation:frame.orientation,
     profile:{
       caps:profile.caps ?? null,
       centered:profile.centered === true,
@@ -47,7 +60,8 @@ function normalizedEndpoint(endpoint) {
     family:enriched.family,
     gender:enriched.gender ?? null,
     group:enriched.metadata?.group ?? null,
-    signature:rawGeometrySignature(enriched),
+    frame:canonicalFrame(enriched),
+    endpoint:enriched,
   })
 }
 
@@ -106,10 +120,26 @@ export function compareNativeToLegacyConnectivity({
   const semanticMissingFromNative = difference(legacySemantic, nativeSemantic)
   const semanticExtraInNative = difference(nativeSemantic, legacySemantic)
 
-  // Geometry parity is intentionally stricter and can fail when sources differ only
-  // in stable IDs. It is a migration gate, not a production requirement.
-  const nativeGeometry = sortedMultiset(native.map(item => item.signature))
-  const legacyGeometry = sortedMultiset(legacy.map(item => item.signature))
+  // V4 stores LDraw visual-centering directly in its BrickLab endpoint positions,
+  // while the native source remains in part-local LDraw coordinates. Remove only the
+  // common translation of each endpoint set; relative geometry/orientation/profile
+  // must still match exactly.
+  const centroid = items => {
+    const positions=items.map(item=>item.frame?.position).filter(value=>Array.isArray(value)&&value.length===3)
+    if(!positions.length)return[0,0,0]
+    return [0,1,2].map(axis=>positions.reduce((sum,p)=>sum+Number(p[axis]||0),0)/positions.length)
+  }
+  const relativeSignature=(item,center)=>{
+    const p=item.frame?.position
+    const relative=Array.isArray(p)
+      ?p.map((value,index)=>round(Number(value)-center[index]))
+      :null
+    return rawGeometrySignature(item.endpoint,relative)
+  }
+  const nativeCenter=centroid(native)
+  const legacyCenter=centroid(legacy)
+  const nativeGeometry = sortedMultiset(native.map(item => relativeSignature(item,nativeCenter)))
+  const legacyGeometry = sortedMultiset(legacy.map(item => relativeSignature(item,legacyCenter)))
   const geometryMissingFromNative = difference(legacyGeometry, nativeGeometry)
   const geometryExtraInNative = difference(nativeGeometry, legacyGeometry)
 
