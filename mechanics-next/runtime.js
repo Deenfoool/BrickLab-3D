@@ -1,4 +1,4 @@
-import { MECHANICS_NEXT_VERSION } from './core/model.js'
+import { deterministicId, MECHANICS_NEXT_VERSION } from './core/model.js'
 import { createOwnershipLedger } from './core/ownership.js'
 import { createAssemblyGraph } from './topology/assembly-graph.js'
 import { createKinematicSolver } from './solver/kinematic-solver.js'
@@ -29,7 +29,7 @@ import { exportMechanicsProjectState, persistenceCompatibilityReport, probeMecha
 import { evaluateMechanicsMigrationGate } from './migration/gate.js'
 import { runMechanicsMigrationRegressionSuite } from './migration/regression-suite.js'
 
-export const MECHANICS_NEXT_RUNTIME_MODE = 'observe-only'
+export const MECHANICS_NEXT_RUNTIME_MODE = 'migration-pilot'
 
 export function createMechanicsNextRuntime({
   globals = globalThis,
