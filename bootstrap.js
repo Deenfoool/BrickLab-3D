@@ -155,8 +155,8 @@ await import('./architecture/runtime-v1.js?v=technic-family-20260915-v2')
 // observe-only: it may snapshot Connector V4 through its isolated read-only adapter,
 // but owns no snapping, graph mutation, persistence, kinematics or physics domain yet.
 try {
-  await import('./mechanics-next/runtime.js')
-  await import('./mechanics-next/production/physics-owner.js')
+  await import('./mechanics-next/runtime.js?v=mechanics-next-stage11-20260918-v2')
+  await import('./mechanics-next/production/physics-owner.js?v=mechanics-next-stage11-20260918-v2')
 } catch (error) {
   console.warn('[BrickLab Mechanics Next] Migration runtime unavailable; legacy engine remains authoritative.', error)
 }
