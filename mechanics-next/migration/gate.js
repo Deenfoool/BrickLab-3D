@@ -1,0 +1,113 @@
+export const MECHANICS_MIGRATION_GATE_VERSION='mechanics-migration-gate-0.1.0'
+
+function check(id,pass,detail=null,severity='blocker'){
+  return Object.freeze({
+    id,
+    pass:Boolean(pass),
+    severity,
+    detail,
+  })
+}
+
+export function evaluateMechanicsMigrationGate({
+  runtimeStatus=null,
+  physicsStatus=null,
+  paritySummary=null,
+  regression=null,
+  persistence=null,
+}={}){
+  const checks=[]
+
+  checks.push(check(
+    'runtime-present',
+    Boolean(runtimeStatus?.version),
+    runtimeStatus?.version??null,
+  ))
+
+  const sceneUnknown=Number(runtimeStatus?.scene?.roles?.unknown||0)
+  checks.push(check(
+    'scene-part-intelligence',
+    sceneUnknown===0,
+    {unknownParts:sceneUnknown,scene:runtimeStatus?.scene??null},
+  ))
+
+  const unresolvedConnections=Number(runtimeStatus?.interpretedConnections?.unresolved||0)
+  checks.push(check(
+    'live-connections-resolved',
+    unresolvedConnections===0,
+    {unresolved:unresolvedConnections},
+  ))
+
+  const decomposition=runtimeStatus?.compoundDecompositions
+  checks.push(check(
+    'compound-decomposition-stable',
+    Boolean(decomposition)&&
+      Number(decomposition.pending||0)===0&&
+      Number(decomposition.failures||0)===0,
+    decomposition??{reason:'decomposition-registry-unavailable'},
+  ))
+
+  const diffDiagnostics=runtimeStatus?.lastSceneSync?.transmissions?.diagnostics?.differentials
+    ??runtimeStatus?.transmissionCompiler?.diagnostics?.differentials
+    ??[]
+  const unresolvedDiffs=Array.isArray(diffDiagnostics)
+    ?diffDiagnostics.filter(item=>item?.status&&item.status!=='resolved')
+    :[]
+  checks.push(check(
+    'compound-differentials-resolved',
+    unresolvedDiffs.length===0,
+    {unresolved:Object.freeze(unresolvedDiffs)},
+  ))
+
+  const physicsBlockers=physicsStatus?.blockers??[]
+  checks.push(check(
+    'physics-preflight',
+    physicsStatus?.pass===true&&physicsBlockers.length===0,
+    {
+      pass:physicsStatus?.pass===true,
+      blockers:Object.freeze([...(physicsBlockers||[])]),
+    },
+  ))
+
+  checks.push(check(
+    'native-connectivity-parity',
+    Boolean(paritySummary)&&
+      Number(paritySummary.semanticFail||0)===0&&
+      Number(paritySummary.geometryFail||0)===0&&
+      Number(paritySummary.parts||0)>0,
+    paritySummary??{reason:'native-parity-not-confirmed'},
+  ))
+
+  checks.push(check(
+    'project-persistence-compatibility',
+    persistence?.pass===true,
+    persistence??{reason:'persistence-migration-not-confirmed'},
+  ))
+
+  checks.push(check(
+    'regression-suite',
+    regression?.status==='passed',
+    regression??{reason:'regression-suite-not-confirmed'},
+  ))
+
+  const blockers=checks.filter(item=>!item.pass&&item.severity==='blocker')
+  return Object.freeze({
+    version:MECHANICS_MIGRATION_GATE_VERSION,
+    pass:blockers.length===0,
+    checks:Object.freeze(checks),
+    blockers:Object.freeze(blockers),
+    summary:Object.freeze({
+      total:checks.length,
+      passed:checks.filter(item=>item.pass).length,
+      failed:checks.filter(item=>!item.pass).length,
+      blockers:blockers.length,
+    }),
+  })
+}
+
+export function migrationGateReasons(result){
+  return Object.freeze((result?.blockers||[]).map(item=>Object.freeze({
+    id:item.id,
+    detail:item.detail,
+  })))
+}
