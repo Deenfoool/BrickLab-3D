@@ -93,6 +93,54 @@ function builtinConnectorToEndpoint(connector,{bodyId,partId,index=0}={}){
   })
 }
 
+function rounded(value,digits=6){
+  if(!Number.isFinite(value))return value
+  const scale=10**digits
+  return Math.round(value*scale)/scale
+}
+function stableConnectorValue(value){
+  if(Array.isArray(value))return value.map(stableConnectorValue)
+  if(!value||typeof value!=='object')return typeof value==='number'?rounded(value):value
+  return Object.fromEntries(
+    Object.keys(value).sort()
+      .filter(key=>!['source','provenance','key','endpointId','clearIds','compatibilityEndpointId'].includes(key))
+      .map(key=>[key,stableConnectorValue(value[key])])
+  )
+}
+function nativeConnectorSignature(connector){
+  return JSON.stringify(stableConnectorValue({
+    family:connector?.family,
+    gender:connector?.gender,
+    group:connector?.group||null,
+    frame:connector?.frame,
+    geometry:connector?.geometry,
+    snap:connector?.snap,
+    inheritance:connector?.inheritance,
+  }))
+}
+function fnv1a(text){
+  let hash=0x811c9dc5
+  for(let i=0;i<text.length;i+=1){
+    hash^=text.charCodeAt(i)
+    hash=Math.imul(hash,0x01000193)
+  }
+  return(hash>>>0).toString(16).padStart(8,'0')
+}
+function finalizeNativeConnectors(file,connectors=[]){
+  const seen=new Set()
+  const result=[]
+  for(const connector of connectors){
+    const signature=nativeConnectorSignature(connector)
+    if(seen.has(signature))continue
+    seen.add(signature)
+    result.push(Object.freeze({
+      ...connector,
+      compatibilityEndpointId:`v4:${normalize(file)}:${fnv1a(signature)}`,
+    }))
+  }
+  return Object.freeze(result)
+}
+
 async function fetchTextOrNull(url){
   const response=await fetch(url,{mode:'cors',cache:'force-cache'})
   if(response.status===404)return null
@@ -175,11 +223,12 @@ export function createNativeConnectivityProvider({
     }
     cache.set(id,Object.freeze({status:'loading',partId:id,file,connectors:Object.freeze([]),warnings:Object.freeze([])}))
     const promise=resolver.resolve(file).then(result=>{
+      const finalized=finalizeNativeConnectors(result.file||file,result.connectors||[])
       const value=Object.freeze({
         status:'ready',
         partId:id,
         file,
-        connectors:Object.freeze([...(result.connectors||[])]),
+        connectors:finalized,
         warnings:Object.freeze([...(result.warnings||[])]),
         compoundReferences:Object.freeze([...(result.compoundReferences||[])]),
         stats:result.stats??null,
