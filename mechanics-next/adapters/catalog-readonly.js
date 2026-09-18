@@ -60,6 +60,7 @@ export function observePartDefinition(definition) {
       steeringBase:definition.mechanics.steeringBase ?? null,
       shockBody:definition.mechanics.shockBody ?? null,
       shockRod:definition.mechanics.shockRod ?? null,
+      suspensionArm:definition.mechanics.suspensionArm ?? null,
       articulatedCoupler:definition.mechanics.articulatedCoupler ?? null,
       classification:definition.mechanics.classification ?? null,
     } : null,
