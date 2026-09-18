@@ -169,9 +169,23 @@ export function classifyPartFamily(observation, endpoints = []) {
   const lengthL = axleLength(raw) ??
     (Number(observation?.legacyMechanicalIntelligence?.properties?.lengthL) || null)
 
+  const legacyGear=observation?.legacyMechanics?.gear
+  const gearGeometry=legacyGear && typeof legacyGear==='object'
+    ?Object.freeze({
+        pitchRadius:Number.isFinite(Number(legacyGear.pitchRadius))?Number(legacyGear.pitchRadius):null,
+        meshAnchorLdu:Array.isArray(legacyGear.meshAnchorLdu)?legacyGear.meshAnchorLdu.slice(0,3).map(Number):null,
+        meshAxisLdu:Array.isArray(legacyGear.meshAxisLdu)?legacyGear.meshAxisLdu.slice(0,3).map(Number):null,
+        bevelApexSigns:Array.isArray(legacyGear.bevelApexSigns)?legacyGear.bevelApexSigns.map(Number).filter(value=>value===-1||value===1):null,
+        meshApexToleranceStud:Number.isFinite(Number(legacyGear.meshApexToleranceStud))?Number(legacyGear.meshApexToleranceStud):null,
+        meshCaptureDistanceStud:Number.isFinite(Number(legacyGear.meshCaptureDistanceStud))?Number(legacyGear.meshCaptureDistanceStud):null,
+        source:legacyGear.source??'legacy-migration-evidence',
+      })
+    :null
+
   const properties = {
     ...(Number.isFinite(teeth) && teeth > 0 ? { toothCount:teeth } : {}),
     ...(Number.isFinite(lengthL) && lengthL > 0 ? { lengthL } : {}),
+    ...(gearGeometry ? { gearGeometry } : {}),
     ...(role === 'axle' ? { keyed:true } : {}),
     ...(role === 'bush' ? { retainer:true } : {}),
   }
