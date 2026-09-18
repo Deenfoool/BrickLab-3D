@@ -61,7 +61,10 @@ import { discoverCompoundMechanisms } from '../mechanics-next/compounds/discover
 import { createCompoundStateRegistry } from '../mechanics-next/compounds/state.js'
 import { decomposeShortcutInstance, inferCompoundTopology, ldrawReferenceTransformToBrickLab } from '../mechanics-next/compounds/shortcut-decomposer.js'
 import { mapDecompositionToScene } from '../mechanics-next/compounds/scene-member-map.js'
-import { assignCompoundEndpointOwnership } from '../mechanics-next/compounds/endpoint-ownership.js'
+import {
+  assignCompoundEndpointOwnership,
+  summarizeCompoundEndpointOwnership,
+} from '../mechanics-next/compounds/endpoint-ownership.js'
 import { createCompoundDecompositionRegistry } from '../mechanics-next/compounds/decomposition-registry.js'
 import { screenDragAngle, solveRotationalDrag } from '../mechanics-next/interaction/drag-driver.js'
 import { buildMotionPlan } from '../mechanics-next/interaction/motion-plan.js'
@@ -2316,6 +2319,43 @@ test('compound endpoint ownership assigns opposite external connectors to differ
 })
 
 
+
+test('compound endpoint ownership summary exposes unresolved members for the migration gate', () => {
+  const unresolvedRecord={
+    instance:{body:{instanceId:'compound-i',partId:'compound-part'}},
+    compoundDecomposition:{id:'compound'},
+    compoundEndpointOwnership:{
+      complete:false,
+      assignments:[],
+      unresolved:[{endpointId:'port-a',reason:'member-ownership-ambiguous'}],
+    },
+  }
+  const summary=summarizeCompoundEndpointOwnership([unresolvedRecord])
+  assert.equal(summary.compounds,1)
+  assert.equal(summary.complete,0)
+  assert.equal(summary.unresolvedCount,1)
+  assert.equal(summary.unresolved[0].instanceId,'compound-i')
+  assert.equal(summary.unresolved[0].endpointId,'port-a')
+
+  const gate=evaluateMechanicsMigrationGate({
+    runtimeStatus:{
+      version:'test',
+      scene:{instances:1,roles:{unknown:0}},
+      interpretedConnections:{unresolved:0},
+      compoundDecompositions:{pending:0,failures:0},
+      compoundEndpointOwnership:summary,
+      transmissionCompiler:{diagnostics:{coverage:[],packaged:[],differentials:[]}},
+    },
+    physicsStatus:{pass:true,blockers:[]},
+    paritySummary:{parts:1,semanticFail:0,geometryFail:0},
+    persistence:{pass:true},
+    regression:{status:'passed'},
+  })
+  assert.equal(gate.pass,false)
+  assert.ok(gate.blockers.some(item=>item.id==='compound-endpoint-ownership'))
+})
+
+
 test('Rapier mechanics adapter converts joint anchors from studs to Physics V2 metres', () => {
   const joint={
     id:'unit-anchor',
@@ -2628,6 +2668,7 @@ test('production migration gate remains closed without parity persistence and re
       scene:{roles:{unknown:0}},
       interpretedConnections:{unresolved:0},
       compoundDecompositions:{pending:0,failures:0},
+      compoundEndpointOwnership:{compounds:0,complete:0,assignments:0,unresolvedCount:0,unresolved:[]},
     },
     physicsStatus:{pass:true,blockers:[]},
   })
@@ -2788,6 +2829,7 @@ test('production migration gate accepts a fully proven empty project', () => {
       scene:{instances:0,roles:{unknown:0}},
       interpretedConnections:{unresolved:0},
       compoundDecompositions:{pending:0,failures:0},
+      compoundEndpointOwnership:{compounds:0,complete:0,assignments:0,unresolvedCount:0,unresolved:[]},
       transmissionCompiler:{diagnostics:{differentials:[]}},
     },
     physicsStatus:{pass:true,blockers:[]},
@@ -3347,6 +3389,7 @@ test('migration gate blocks a transmission family with no executable model', () 
       scene:{instances:1,roles:{pulley:1}},
       interpretedConnections:{unresolved:0},
       compoundDecompositions:{pending:0,failures:0},
+      compoundEndpointOwnership:{compounds:0,complete:0,assignments:0,unresolvedCount:0,unresolved:[]},
       transmissionCompiler:{
         diagnostics:{
           coverage:[{
