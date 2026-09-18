@@ -72,7 +72,7 @@ import { buildMechanicsMotorPlan, createMechanicsMotorRuntime } from '../mechani
 import { expandCompoundPhysicsGraph } from '../mechanics-next/physics/compound-graph-expansion.js'
 import { materializeRapierMechanicsPlan, preflightRapierMechanicsPlan } from '../mechanics-next/physics/rapier-adapter.js'
 import { materializeCompoundMemberPhysics, preflightCompoundMemberMaterialization } from '../mechanics-next/physics/compound-member-materializer.js'
-import { exportMechanicsProjectState, persistenceCompatibilityReport, restoreMechanicsProjectState, validateMechanicsProjectState } from '../mechanics-next/migration/project-state.js'
+import { exportMechanicsProjectState, persistenceCompatibilityReport, probeMechanicsProjectState, restoreMechanicsProjectState, validateMechanicsProjectState } from '../mechanics-next/migration/project-state.js'
 import { evaluateMechanicsMigrationGate } from '../mechanics-next/migration/gate.js'
 import * as THREE from 'three'
 
@@ -3360,4 +3360,211 @@ test('migration gate blocks a transmission family with no executable model', () 
   })
   assert.equal(gate.pass,false)
   assert.ok(gate.blockers.some(item=>item.id==='transmission-family-coverage'))
+})
+
+
+test('persisted legacy gearbox axle lock is reinterpreted as a transmission bearing', () => {
+  const packageBody=createBodyDescriptor({
+    id:'gearbox-body',
+    instanceId:'gearbox-instance',
+    partId:'gearbox-fnr',
+  })
+  const shaftBody=createBodyDescriptor({
+    id:'shaft-body',
+    instanceId:'shaft-instance',
+    partId:'axle',
+  })
+
+  const packageEndpoint=createEndpointDescriptor({
+    id:'gearbox-input-endpoint',
+    bodyId:packageBody.id,
+    family:'cylinder',
+    gender:'female',
+    frame:{
+      positionStud:[0,0,0],
+      orientationBrickLab:[1,0,0,0,1,0,0,0,1],
+    },
+    profile:{centered:true,caps:'none',sections:[{shape:'A',radiusLdu:6,lengthLdu:20}]},
+    capabilities:['slide'],
+    metadata:{
+      builtinConnectorId:'input',
+      sourceEndpointId:'input',
+      semantics:{semanticKind:'technic-axle-hole'},
+    },
+  })
+  const shaftEndpoint=createEndpointDescriptor({
+    id:'shaft-endpoint',
+    bodyId:shaftBody.id,
+    family:'cylinder',
+    gender:'male',
+    frame:{
+      positionStud:[0,0,0],
+      orientationBrickLab:[1,0,0,0,1,0,0,0,1],
+    },
+    profile:{centered:true,caps:'none',sections:[{shape:'A',radiusLdu:6,lengthLdu:20}]},
+    capabilities:['slide'],
+    metadata:{
+      builtinConnectorId:'axle',
+      sourceEndpointId:'axle',
+      semantics:{semanticKind:'technic-axle'},
+    },
+  })
+  const packageClassification={
+    role:'gearbox',
+    capabilities:{transmission:true,rotary:false},
+    properties:{
+      packagedTransmission:{
+        inputConnectorId:'input',
+        outputConnectorId:'output',
+        modes:{forward:1,neutral:0,reverse:-1},
+        efficiency:.9,
+      },
+    },
+  }
+  const shaftClassification={
+    role:'axle',
+    capabilities:{transmission:false,rotary:true},
+    properties:{},
+  }
+  const instances=new Map([
+    ['gearbox-instance',{
+      body:packageBody,
+      descriptor:{classification:packageClassification},
+      endpoints:[packageEndpoint],
+    }],
+    ['shaft-instance',{
+      body:shaftBody,
+      descriptor:{classification:shaftClassification},
+      endpoints:[shaftEndpoint],
+    }],
+  ])
+  const objects=new Map()
+  for(const id of instances.keys()){
+    const object=new THREE.Object3D()
+    object.userData.instanceId=id
+    object.updateMatrixWorld(true)
+    objects.set(id,object)
+  }
+
+  const state={
+    schemaVersion:1,
+    engine:'mechanics-next',
+    connections:[{
+      id:'persisted-old-gearbox-link',
+      kind:'prismatic',
+      a:{
+        instanceId:'gearbox-instance',
+        endpointId:'gearbox-input-endpoint',
+        observedEndpointId:'input',
+        semantic:'technic-axle-hole',
+      },
+      b:{
+        instanceId:'shaft-instance',
+        endpointId:'shaft-endpoint',
+        observedEndpointId:'axle',
+        semantic:'technic-axle',
+      },
+      dof:constraintDof('prismatic'),
+      interfacePair:['axle-hole','axle'],
+      topology:{keyedRotation:true},
+      occupancy:null,
+    }],
+    relations:[],
+    compoundState:null,
+  }
+  const graph=createAssemblyGraph()
+  graph.addBody(packageBody)
+  graph.addBody(shaftBody)
+  const sceneObserver={
+    instance:id=>instances.get(id),
+    instances:()=>[...instances.values()],
+  }
+
+  const probe=probeMechanicsProjectState(state,{
+    sceneObserver,
+    objectByInstanceId:id=>objects.get(id),
+  })
+  assert.equal(probe.pass,true)
+
+  const restored=restoreMechanicsProjectState(state,{
+    graph,
+    sceneObserver,
+    objectByInstanceId:id=>objects.get(id),
+  })
+  assert.equal(restored.rejected,0)
+  const edge=graph.edge('persisted-old-gearbox-link')
+  assert.ok(edge)
+  assert.equal(edge.constraintKind??edge.kind,'revolute')
+  assert.equal(edge.metadata.topology.transmissionPort,true)
+  assert.equal(edge.metadata.transmissionPort.portRole,'input')
+  assert.equal(edge.metadata.persistedConstraintKind,'prismatic')
+})
+
+test('failed project restore rolls back already-created constraints', () => {
+  const bodyA=createBodyDescriptor({id:'rollback-a',instanceId:'rollback-ia',partId:'a'})
+  const bodyB=createBodyDescriptor({id:'rollback-b',instanceId:'rollback-ib',partId:'b'})
+  const bodyC=createBodyDescriptor({id:'rollback-c',instanceId:'rollback-ic',partId:'c'})
+  const endpoint=(id,bodyId,instanceSemantic)=>createEndpointDescriptor({
+    id,
+    bodyId,
+    family:'cylinder',
+    gender:instanceSemantic==='stud'?'male':'female',
+    frame:{positionStud:[0,0,0],orientationBrickLab:[1,0,0,0,1,0,0,0,1]},
+    profile:instanceSemantic==='stud'
+      ?{centered:false,caps:'one',sections:[{shape:'R',radiusLdu:6,lengthLdu:4}]}
+      :{centered:false,caps:'one',sections:[{shape:'R',radiusLdu:6,lengthLdu:4}]},
+    metadata:{semantics:{semanticKind:instanceSemantic}},
+  })
+  const ea=endpoint('rollback-ea',bodyA.id,'stud')
+  const eb=endpoint('rollback-eb',bodyB.id,'anti-stud')
+  const ec=endpoint('rollback-ec',bodyC.id,'anti-stud')
+  const instances=new Map([
+    ['rollback-ia',{body:bodyA,descriptor:{classification:{role:'brick',properties:{},capabilities:{}}},endpoints:[ea]}],
+    ['rollback-ib',{body:bodyB,descriptor:{classification:{role:'brick',properties:{},capabilities:{}}},endpoints:[eb]}],
+    ['rollback-ic',{body:bodyC,descriptor:{classification:{role:'brick',properties:{},capabilities:{}}},endpoints:[ec]}],
+  ])
+  const objects=new Map()
+  for(const id of instances.keys()){
+    const object=new THREE.Object3D()
+    object.userData.instanceId=id
+    object.updateMatrixWorld(true)
+    objects.set(id,object)
+  }
+  const state={
+    schemaVersion:1,
+    engine:'mechanics-next',
+    connections:[
+      {
+        id:'rollback-good',
+        kind:'revolute',
+        a:{instanceId:'rollback-ia',endpointId:'rollback-ea',semantic:'stud'},
+        b:{instanceId:'rollback-ib',endpointId:'rollback-eb',semantic:'anti-stud'},
+        dof:constraintDof('revolute'),
+        interfacePair:['stud','anti-stud'],
+      },
+      {
+        id:'rollback-bad',
+        kind:'revolute',
+        a:{instanceId:'rollback-ia',endpointId:'rollback-ea',semantic:'stud'},
+        b:{instanceId:'rollback-ic',endpointId:'missing-endpoint',semantic:'anti-stud'},
+        dof:constraintDof('revolute'),
+        interfacePair:['stud','anti-stud'],
+      },
+    ],
+    relations:[],
+  }
+  const graph=createAssemblyGraph()
+  for(const body of [bodyA,bodyB,bodyC])graph.addBody(body)
+  const result=restoreMechanicsProjectState(state,{
+    graph,
+    sceneObserver:{
+      instance:id=>instances.get(id),
+      instances:()=>[...instances.values()],
+    },
+    objectByInstanceId:id=>objects.get(id),
+  })
+  assert.equal(result.restored,0)
+  assert.ok(result.rejected>0)
+  assert.equal(result.rolledBack,1)
+  assert.equal(graph.edge('rollback-good'),null)
 })
