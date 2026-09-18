@@ -158,13 +158,12 @@ export function classifyPartFamily(observation, endpoints = []) {
   }
 
   const teeth = toothCount(raw) ??
-    Number(observation?.legacyMechanicalIntelligence?.properties?.toothCount) ||
-    Number(observation?.legacyMechanics?.gear?.teeth) ||
-    null
+    (Number(observation?.legacyMechanicalIntelligence?.properties?.toothCount) ||
+      Number(observation?.legacyMechanics?.gear?.teeth) ||
+      null)
 
   const lengthL = axleLength(raw) ??
-    Number(observation?.legacyMechanicalIntelligence?.properties?.lengthL) ||
-    null
+    (Number(observation?.legacyMechanicalIntelligence?.properties?.lengthL) || null)
 
   const properties = {
     ...(Number.isFinite(teeth) && teeth > 0 ? { toothCount:teeth } : {}),
