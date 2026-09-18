@@ -1,5 +1,5 @@
 import { EDGE_KINDS, cloneMechanical } from '../core/model.js'
-import { isRigidConstraint } from '../constraints/dof.js'
+import { solveBodyPairConstraintBundles } from '../constraints/bundle-solver.js'
 
 class DisjointSet {
   constructor(values) {
@@ -135,9 +135,14 @@ export class AssemblyGraph {
   rigidIslands() {
     const bodyIds = [...this.#bodies.keys()]
     const sets = new DisjointSet(bodyIds)
-    for (const edge of this.#edges.values()) {
-      if (edge.kind !== 'constraint' || !isRigidConstraint(edge)) continue
-      sets.union(edge.bodyA, edge.bodyB)
+    const constraints = [...this.#edges.values()].filter(edge => edge.kind === 'constraint')
+
+    // Rigidity is solved from the whole contact bundle between two bodies. Two
+    // individually revolute pins/studs on distinct axes can therefore eliminate all
+    // relative motion without either contact being mislabeled as "fixed".
+    for (const bundle of solveBodyPairConstraintBundles(constraints)) {
+      if (!bundle.solution.rigid) continue
+      sets.union(bundle.bodyIds[0], bundle.bodyIds[1])
     }
 
     const grouped = new Map()
