@@ -14,10 +14,13 @@ let lastAttempt=null
 let nextSessions=0
 let fallbackSessions=0
 
-function fixedCompatibilityConnections(plan){
+function fixedCompatibilityConnections(plan,availableInstanceIds=null){
+  const allowed=availableInstanceIds instanceof Set?availableInstanceIds:null
   const result=[]
   for(const component of plan?.components||[]){
-    const ids=[...(component.instanceIds||[])].filter(Boolean)
+    const ids=[...(component.instanceIds||[])]
+      .filter(Boolean)
+      .filter(id=>!allowed||allowed.has(String(id)))
     if(ids.length<2)continue
     const root=ids[0]
     for(let index=1;index<ids.length;index+=1){
@@ -43,12 +46,6 @@ function migrationBlockers(gate,physics){
   }
   if(!physics?.pass){
     blockers.push(...(physics?.blockers||[]))
-  }
-  if((physics?.compoundMemberPlan?.replacements?.length||0)>0){
-    blockers.push(Object.freeze({
-      code:'compound-visual-sync-migration-pending',
-      replacements:physics.compoundMemberPlan.replacements.length,
-    }))
   }
   return Object.freeze(blockers)
 }
@@ -123,10 +120,16 @@ if(!PhysicsSession[marker]){
       return legacyFallback(legacyCreate,objects,connections,rest,lastAttempt)
     }
 
-    const compatibility=fixedCompatibilityConnections(physics.structuralPlan)
+    const excludedRoots=new Set(
+      (physics.compoundGraphExpansion?.materializedRootInstanceIds||[]).map(String),
+    )
+    const baseObjects=(objects||[]).filter(object=>
+      !excludedRoots.has(String(object?.userData?.instanceId||'')))
+    const baseIds=new Set(baseObjects.map(object=>String(object?.userData?.instanceId||'')).filter(Boolean))
+    const compatibility=fixedCompatibilityConnections(physics.structuralPlan,baseIds)
     let session=null
     try{
-      session=await legacyGuard.createBaseSession(objects,compatibility,...rest)
+      session=await legacyGuard.createBaseSession(baseObjects,compatibility,...rest)
       const preflight=physics.preflightSession(session)
       if(!preflight.pass){
         const error=new Error('Mechanics Next production session preflight failed')
@@ -145,6 +148,7 @@ if(!PhysicsSession[marker]){
         owner:'mechanics-next',
         version:MECHANICS_NEXT_PHYSICS_OWNER_VERSION,
         compatibilityConnections:compatibility.length,
+        excludedCompoundRoots:excludedRoots.size,
         gate:gate.summary??null,
       })
       installDisposeBridge(session,physics)
