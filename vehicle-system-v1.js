@@ -200,6 +200,7 @@ function initializePhysicalSteering(session) {
 
 function applyPhysicalSteeringTargets(session) {
   for (const steering of session.steeringJointsV1 ?? []) {
+    if(['rack-linkage','rack-pinion'].includes(steering.driveMode))continue
     const requested = steering.wheel?.axleRole === 'front' ? (steering.wheel.steerAngle ?? 0) : 0
     const limited = clampVehicle(requested, -steering.maxSteerRadians, steering.maxSteerRadians)
     steering.targetAngle = limited
@@ -207,6 +208,20 @@ function applyPhysicalSteeringTargets(session) {
       limited * steering.axisSign,
       steering.stiffness,
       steering.damping,
+    )
+  }
+}
+
+function applyMechanicsNextRackTargets(session) {
+  const input=Number(session.vehicleControlV1?.steeringInput)||0
+  for(const rack of session.steeringRacksV1??[]){
+    if(rack.driveMode==='rack-pinion')continue
+    const targetStud=clampVehicle(input,-1,1)*rack.maxTravelStud
+    rack.targetTravelStud=targetStud
+    rack.joint.configureMotorPosition?.(
+      targetStud*STUD*rack.coordinateSign,
+      rack.stiffness,
+      rack.damping,
     )
   }
 }
@@ -322,6 +337,7 @@ PhysicsSession.prototype.updateVehicleControlsV1 = function updateVehicleControl
       : 0
   }
   applyPhysicalSteeringTargets(this)
+  applyMechanicsNextRackTargets(this)
 }
 
 PhysicsSession.prototype.updateVehicleVisualsV1 = function updateVehicleVisualsV1() {
@@ -387,10 +403,14 @@ function resetVisuals() {
   session?.resetVehicleVisualsV1?.()
 }
 
-function installMechanicsNextSteering(session,bindings=[]){
-  if(!session)return Object.freeze({installed:0,skipped:bindings.length})
+function installMechanicsNextSteering(session,bridge={}) {
+  const directBindings=Array.isArray(bridge)?bridge:(bridge?.bindings??[])
+  const rackBindings=Array.isArray(bridge)?[]:(bridge?.rackBindings??[])
+  const totalRequested=directBindings.length+rackBindings.length
+  if(!session)return Object.freeze({installed:0,racks:0,skipped:totalRequested})
   const chassis=session.chassisMonitor?.body
-  if(!chassis)return Object.freeze({installed:0,skipped:bindings.length})
+  if(!chassis)return Object.freeze({installed:0,racks:0,skipped:totalRequested})
+
   const chassisUp=new THREE.Vector3(0,1,0).applyQuaternion(bodyRotation(chassis)).normalize()
   const wheelByInstance=new Map(
     (session.wheelMonitors??[])
@@ -399,15 +419,20 @@ function installMechanicsNextSteering(session,bindings=[]){
   )
 
   session.steeringJointsV1=[]
+  session.steeringRacksV1=[]
   for(const wheel of session.wheelMonitors??[])wheel.physicalSteeringV1=null
   let skipped=0
-  for(const binding of bindings??[]){
+
+  for(const binding of directBindings){
     const wheel=wheelByInstance.get(String(binding.wheelInstanceId))
     if(!wheel||!binding?.joint||!binding?.member?.body||!binding?.localAxis?.clone){
       skipped+=1
       continue
     }
-    const maxSteerRadians=Math.max(0,Number(binding.maxSteerRadians)||THREE.MathUtils.degToRad(DEFAULT_MAX_STEER_DEG))
+    const maxSteerRadians=Math.max(
+      0,
+      Number(binding.maxSteerRadians)||THREE.MathUtils.degToRad(DEFAULT_MAX_STEER_DEG),
+    )
     const stiffness=Math.max(0,Number(binding.stiffness)||DEFAULT_STEER_STIFFNESS)
     const damping=Math.max(0,Number(binding.damping)||DEFAULT_STEER_DAMPING)
     const axisWorld=binding.localAxis.clone()
@@ -430,6 +455,7 @@ function installMechanicsNextSteering(session,bindings=[]){
       damping,
       axisSign,
       targetAngle:0,
+      driveMode:'direct',
       mechanicsNext:true,
       physicsJointId:binding.physicsJointId,
     }
@@ -437,16 +463,80 @@ function installMechanicsNextSteering(session,bindings=[]){
     session.steeringJointsV1.push(steeringJoint)
   }
 
+  const directByKnuckle=new Map(
+    session.steeringJointsV1.map(item=>[String(item.id),item]),
+  )
+  for(const binding of rackBindings){
+    if(!binding?.joint){
+      skipped+=1
+      continue
+    }
+    const linkedIds=new Set((binding.linkedKnuckleInstanceIds??[]).map(String))
+    const linkedSteering=[...linkedIds].map(id=>directByKnuckle.get(id)).filter(Boolean)
+    const frontCount=Math.max(1,session.vehicleControlV1?.frontWheelCount||0)
+    const required=Math.min(2,frontCount)
+    const fullyLinked=linkedSteering.length>=required
+    const driveMode=binding.rackPinionDriven
+      ?'rack-pinion'
+      :fullyLinked?'rack-servo':'rack-mixed'
+
+    binding.joint.configureMotorModel?.(session.RAPIER.MotorModel?.ForceBased??1)
+    const limit=Math.max(.001,Number(binding.maxTravelStud)||1)*STUD
+    binding.joint.setLimits?.(-limit,limit)
+    if(binding.rackPinionDriven){
+      binding.joint.configureMotorPosition?.(0,0,0)
+    }else{
+      binding.joint.configureMotorPosition?.(
+        0,
+        Math.max(0,Number(binding.stiffness)||4),
+        Math.max(0,Number(binding.damping)||.42),
+      )
+    }
+
+    for(const steering of linkedSteering){
+      steering.driveMode=binding.rackPinionDriven?'rack-pinion':'rack-linkage'
+      steering.joint.configureMotorPosition?.(0,0,0)
+    }
+
+    session.steeringRacksV1.push({
+      id:String(binding.rackInstanceId),
+      joint:binding.joint,
+      member:binding.member??null,
+      physicsJointId:binding.physicsJointId,
+      maxTravelStud:Math.max(.001,Number(binding.maxTravelStud)||1),
+      stiffness:Math.max(0,Number(binding.stiffness)||4),
+      damping:Math.max(0,Number(binding.damping)||.42),
+      coordinateSign:Number(binding.coordinateSign)<0?-1:1,
+      linkedKnuckleIds:linkedIds,
+      fullyLinked,
+      rackPinionDriven:Boolean(binding.rackPinionDriven),
+      driveMode,
+      targetTravelStud:0,
+      mechanicsNext:true,
+    })
+  }
+
   if(session.vehicleControlV1){
     const physicalFront=session.steeringJointsV1.filter(item=>item.wheel?.axleRole==='front')
-    const frontCount=Math.max(1,session.vehicleControlV1.frontWheelCount||0)
-    session.vehicleControlV1.steeringMode=
-      physicalFront.length>=frontCount?'physical':
-      physicalFront.length?'mixed':'virtual'
+    const racks=session.steeringRacksV1
+    if(racks.some(item=>item.driveMode==='rack-pinion')){
+      session.vehicleControlV1.steeringMode=
+        racks.some(item=>item.fullyLinked)?'rack-pinion':'rack-pinion-mixed'
+    }else if(racks.some(item=>item.fullyLinked)){
+      session.vehicleControlV1.steeringMode='rack'
+    }else if(racks.length){
+      session.vehicleControlV1.steeringMode='rack-mixed'
+    }else{
+      const frontCount=Math.max(1,session.vehicleControlV1.frontWheelCount||0)
+      session.vehicleControlV1.steeringMode=
+        physicalFront.length>=frontCount?'physical':
+        physicalFront.length?'mixed':'virtual'
+    }
   }
 
   return Object.freeze({
     installed:session.steeringJointsV1.length,
+    racks:session.steeringRacksV1.length,
     skipped,
   })
 }
