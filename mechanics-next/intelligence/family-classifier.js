@@ -380,6 +380,9 @@ export function classifyPartFamily(observation, endpoints = []) {
         stallTorque:Number.isFinite(Number(legacyMotor.stallTorque))?Number(legacyMotor.stallTorque):5.5,
         freeCurrent:Number.isFinite(Number(legacyMotor.freeCurrent))?Number(legacyMotor.freeCurrent):.15,
         stallCurrent:Number.isFinite(Number(legacyMotor.stallCurrent))?Number(legacyMotor.stallCurrent):2.2,
+        voltage:Number.isFinite(Number(legacyMotor.voltage))?Math.max(0,Number(legacyMotor.voltage)):9,
+        nominalEfficiency:Number.isFinite(Number(legacyMotor.efficiency))
+          ?Math.min(1,Math.max(0,Number(legacyMotor.efficiency))):null,
       })
     }:{}),
     ...(Number.isFinite(screwLeadStudPerTurn) && screwLeadStudPerTurn !== 0 ? { screwLeadStudPerTurn } : {}),
