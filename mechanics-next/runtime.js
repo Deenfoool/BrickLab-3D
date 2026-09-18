@@ -84,6 +84,10 @@ export function createMechanicsNextRuntime({
   let lastSceneSync = null
   let lastTransmissionSync = null
   let physicsPreview = null
+  let nativeRestoredRelations = Object.freeze([])
+  let lastPersistenceReport = null
+  let regressionEvidence = null
+  let parityEvidence = null
   let activeDragSession = null
   let activeDragApply = false
 
@@ -164,7 +168,7 @@ export function createMechanicsNextRuntime({
       graph,
       discovery,
       records,
-      studMeters:.008,
+      worldUnitsPerStud:1,
     })
     lastSceneSync = Object.freeze({
       scene,
@@ -240,11 +244,11 @@ export function createMechanicsNextRuntime({
         exportedState:state,
         restoredResult:result,
       })
-      const transmission=refreshTransmissions()
-      physicsPreview=transmission.physics
+      const refreshed=syncScene()
       return Object.freeze({
         ...result,
         compatibility:lastPersistenceReport,
+        refreshed,
       })
     },
     setMigrationEvidence({ parity = null, regression = null } = {}) {
