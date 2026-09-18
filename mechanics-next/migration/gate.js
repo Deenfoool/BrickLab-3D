@@ -47,11 +47,34 @@ export function evaluateMechanicsMigrationGate({
     decomposition??{reason:'decomposition-registry-unavailable'},
   ))
 
-  const diffDiagnostics=runtimeStatus?.lastSceneSync?.transmissions?.diagnostics?.differentials
-    ??runtimeStatus?.transmissionCompiler?.diagnostics?.differentials
-    ??[]
+  const transmissionDiagnostics=runtimeStatus?.lastSceneSync?.transmissions?.diagnostics
+    ??runtimeStatus?.transmissionCompiler?.diagnostics
+    ??{}
+  const coverage=Array.isArray(transmissionDiagnostics?.coverage)
+    ?transmissionDiagnostics.coverage
+    :[]
+  const unsupportedTransmissions=coverage.filter(item=>item?.supported===false)
+  checks.push(check(
+    'transmission-family-coverage',
+    unsupportedTransmissions.length===0,
+    {unsupported:Object.freeze(unsupportedTransmissions)},
+  ))
+
+  const ambiguousPackages=[
+    ...(transmissionDiagnostics?.packaged||[]),
+    ...(transmissionDiagnostics?.differentials||[]),
+  ].filter(item=>item?.status==='ambiguous-port-binding')
+  checks.push(check(
+    'transmission-port-bindings',
+    ambiguousPackages.length===0,
+    {ambiguous:Object.freeze(ambiguousPackages)},
+  ))
+
+  const diffDiagnostics=transmissionDiagnostics?.differentials??[]
   const unresolvedDiffs=Array.isArray(diffDiagnostics)
-    ?diffDiagnostics.filter(item=>item?.status&&item.status!=='resolved')
+    ?diffDiagnostics.filter(item=>
+        item?.status&&
+        !['resolved','awaiting-ports'].includes(item.status))
     :[]
   checks.push(check(
     'compound-differentials-resolved',
