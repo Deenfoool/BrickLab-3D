@@ -163,7 +163,7 @@ PhysicsSession.prototype.initializeParts4LinearMechanisms = function initializeP
 const previousBuildChassisMonitor = PhysicsSession.prototype.buildChassisMonitor
 PhysicsSession.prototype.buildChassisMonitor = function buildChassisWithParts4LinearMechanisms(...args) {
   const result = previousBuildChassisMonitor.apply(this, args)
-  this.initializeParts4LinearMechanisms()
+  if (!this.mechanicsNextBootstrap) this.initializeParts4LinearMechanisms()
   return result
 }
 PhysicsSession.prototype.buildChassisMonitor.__bricklabOwner = STEERING_SUSPENSION_PHYSICS_VERSION
@@ -171,6 +171,7 @@ PhysicsSession.prototype.buildChassisMonitor.__bricklabOwner = STEERING_SUSPENSI
 const previousUpdateVehicleControls = PhysicsSession.prototype.updateVehicleControlsV1
 PhysicsSession.prototype.updateVehicleControlsV1 = function updateVehicleControlsWithRack(dt) {
   const result = previousUpdateVehicleControls.apply(this, [dt])
+  if (this.mechanicsNextBootstrap) return result
   const input = Number(this.vehicleControlV1?.steeringInput) || 0
 
   for (const rack of this.steeringRacksV1 ?? []) {
