@@ -41,6 +41,14 @@ export class KinematicSolver {
     return removed
   }
 
+  clearDrivers() {
+    const removed = this.#drivers.size
+    if (!removed) return 0
+    this.#drivers.clear()
+    this.#changed()
+    return removed
+  }
+
   clearDriversBySource(source) {
     let removed = 0
     for (const [id, equation] of this.#drivers) {
