@@ -28,7 +28,10 @@ import { rotationalDragProjection } from './interaction/view-projection.js'
 import { createCompoundStateRegistry } from './compounds/state.js'
 import { createCompoundDecompositionRegistry } from './compounds/decomposition-registry.js'
 import { mapDecompositionToScene } from './compounds/scene-member-map.js'
-import { assignCompoundEndpointOwnership } from './compounds/endpoint-ownership.js'
+import {
+  assignCompoundEndpointOwnership,
+  summarizeCompoundEndpointOwnership,
+} from './compounds/endpoint-ownership.js'
 import { createMechanicsPhysicsRuntime } from './physics/runtime.js'
 import { revalidateSceneConnections } from './physics/scene-connection-revalidator.js'
 import { applyPhysicsJointRelease, createReleasedConnectionState } from './physics/release-state.js'
@@ -256,7 +259,7 @@ export function createMechanicsNextRuntime({
           compoundSceneMap,
           object,
         }
-        const compoundEndpointOwnership=compoundSceneMap?.complete
+        const compoundEndpointOwnership=compoundDecomposition
           ?assignCompoundEndpointOwnership(baseRecord)
           :null
         records.push(Object.freeze({
@@ -498,6 +501,7 @@ export function createMechanicsNextRuntime({
     void connectivity?.prefetch?.(sceneObserver.instances().map(instance=>instance.body.partId))
     void compoundDecompositions?.prefetch?.(sceneObserver.instances())
     const records = mechanicalRecords()
+    const compoundEndpointOwnership=summarizeCompoundEndpointOwnership(records)
     const preRevalidation=revalidateExistingConnections(records)
     const observedConnections=normalizedObservedConnections()
     let connections = connectionInterpreter?.sync(observedConnections) ?? null
@@ -548,6 +552,7 @@ export function createMechanicsNextRuntime({
     })
     lastSceneSync = Object.freeze({
       scene,
+      compoundEndpointOwnership,
       revalidation,
       connections,
       transmissions:lastTransmissionSync,
@@ -1121,6 +1126,7 @@ export function createMechanicsNextRuntime({
         transmissionSolve:transmissionCompiler.solve(),
         compoundState:compoundState.snapshot(),
         compoundDecompositions:compoundDecompositions?.status?.() ?? null,
+        compoundEndpointOwnership:lastSceneSync?.compoundEndpointOwnership??null,
         physicsPreview:physicsPreview?.status?.() ?? null,
         persistence:lastPersistenceReport,
         migrationEvidence:Object.freeze({
