@@ -142,6 +142,8 @@ PhysicsSession.prototype.applyMotorTorques = function applyCommandRpmMotorTorque
   }
 }
 
+PhysicsSession.prototype.applyMotorTorques.__mechanicsNextBypass = true
+
 window.__bricklabTimeDebug = () => getTimeDiagnostics(currentSession(), PhysicsSession.prototype.step)
 
 function lang() {
