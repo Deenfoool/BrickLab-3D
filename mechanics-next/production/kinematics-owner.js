@@ -221,6 +221,7 @@ export async function enter(){
       })
     }
     entryBaseline=captureBaseline()
+    mechanics.handoffDomains?.(['kinematics'],'validated Mechanics Next KINEMATICS entry')
     active=true
     setModeVisual()
     globalThis.dispatchEvent?.(new CustomEvent('bricklab:kinematicsenter',{
