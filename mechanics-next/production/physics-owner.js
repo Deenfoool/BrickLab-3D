@@ -139,6 +139,7 @@ if(!PhysicsSession[marker]){
         stabilization:1,
         contactsEnabled:false,
       })
+      mechanics.handoffDomains?.(['physics-constraints'],'validated Mechanics Next SIMULATE session')
       session.mechanicsNextPhysics=physics
       session.mechanicsNextOwnership=Object.freeze({
         owner:'mechanics-next',
