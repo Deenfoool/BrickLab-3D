@@ -99,6 +99,52 @@ function alignment(frameA,frameB){
   return Math.abs(dot3(frameA.axis,frameB.axis))
 }
 
+function relativeOrientationSignature(frameA,frameB){
+  const a=frameA?.orientation
+  const b=frameB?.orientation
+  if(!Array.isArray(a)||!Array.isArray(b)||a.length!==9||b.length!==9)return null
+  const value=[]
+  for(let row=0;row<3;row++){
+    for(let col=0;col<3;col++){
+      value.push(
+        a[row]*b[col]+
+        a[3+row]*b[3+col]+
+        a[6+row]*b[6+col]
+      )
+    }
+  }
+  return value
+}
+
+function orientationDrift(saved,frameA,frameB){
+  if(!Array.isArray(saved)||saved.length!==9)return 0
+  const current=relativeOrientationSignature(frameA,frameB)
+  if(!current)return Infinity
+  return Math.max(...current.map((value,index)=>Math.abs(value-Number(saved[index]))))
+}
+
+function anchorDistanceDelta(distance,savedDistance){
+  const initial=Number(savedDistance)
+  return Number.isFinite(initial)?Math.abs(distance-initial):distance
+}
+
+function prismaticTravel(constraint,frameA,frameB,savedGeometry){
+  const delta=sub3(frameA.position,frameB.position)
+  const axial=dot3(delta,frameB.axis)
+  const initial=Number(savedGeometry?.axialSeparationStud)
+  const travel=Number.isFinite(initial)?axial-initial:0
+  const dof=constraint?.dof?.ty
+  const limits=Array.isArray(dof?.limits)&&dof.limits.length===2
+    ?dof.limits.map(Number):null
+  const limited=dof?.state==='limited'&&limits?.every(Number.isFinite)
+  return Object.freeze({
+    axialSeparationStud:axial,
+    travelStud:travel,
+    limits:limited?Object.freeze(limits):null,
+    withinLimits:!limited||(travel>=Math.min(...limits)-1e-5&&travel<=Math.max(...limits)+1e-5),
+  })
+}
+
 function genericToleranceStud(endpointA,endpointB){
   const radius=Math.max(endpointRadiusStud(endpointA),endpointRadiusStud(endpointB))
   return Math.max(.02,Math.min(.12,radius*.45||.04))
@@ -136,6 +182,7 @@ function prepareConstraint(constraint,recordsByBody){
     endpointB,
     match,
     calibration,
+    savedGeometry:constraint?.metadata?.connectionGeometry??null,
     valid:true,
   })
 }
@@ -163,6 +210,28 @@ export function createLiveJointValidator({
       reason:'live-frame-unavailable',
       constraintId:entry.id,
     })
+
+    const kind=String(entry.constraint?.kind||'fixed')
+    const delta=sub3(frameA.position,frameB.position)
+    const distance=len3(delta)
+    const lateralTolerance=genericToleranceStud(entry.endpointA,entry.endpointB)
+    const distanceTolerance=Math.max(lateralTolerance,.08)
+    const savedGeometry=entry.savedGeometry||{}
+    const anchorDelta=anchorDistanceDelta(distance,savedGeometry.anchorDistanceStud)
+
+    // Spherical joints retain only a coincident ball/socket centre. Their
+    // relative orientation is intentionally free and must never trigger release.
+    if(kind==='spherical'){
+      return Object.freeze({
+        valid:anchorDelta<=distanceTolerance,
+        reason:anchorDelta<=distanceTolerance?'ok':'anchor-disengaged',
+        constraintId:entry.id,
+        anchorDistanceStud:distance,
+        anchorDistanceDeltaStud:anchorDelta,
+        distanceToleranceStud:distanceTolerance,
+      })
+    }
+
     const axisDot=alignment(frameA,frameB)
     if(axisDot<minimumAxisAlignment)return Object.freeze({
       valid:false,
@@ -172,14 +241,22 @@ export function createLiveJointValidator({
     })
 
     const lateral=lateralDistance(frameA,frameB,frameB.axis)
-    const lateralTolerance=genericToleranceStud(entry.endpointA,entry.endpointB)
     if(lateral>lateralTolerance)return Object.freeze({
       valid:false,
       reason:'lateral-disengaged',
       constraintId:entry.id,
+      axisAlignment:axisDot,
       lateralDistanceStud:lateral,
       lateralToleranceStud:lateralTolerance,
     })
+
+    const orientationTolerance=.035
+    const drift=orientationDrift(
+      savedGeometry.relativeOrientation,
+      frameA,
+      frameB,
+    )
+    const orientationLocked=kind==='fixed'||kind==='prismatic'
 
     if(entry.match?.compatible&&entry.match.family==='cylinder'){
       const sign=entry.calibration?.offsetSign??1
@@ -192,11 +269,9 @@ export function createLiveJointValidator({
         offset,
         {minimumEngagementLdu:1},
       )
-      return Object.freeze({
-        valid:fit.valid,
-        reason:fit.valid?'ok':fit.reason==='insufficient-engagement'
-          ?'axial-disengaged'
-          :fit.reason,
+      if(!fit.valid)return Object.freeze({
+        valid:false,
+        reason:fit.reason==='insufficient-engagement'?'axial-disengaged':fit.reason,
         constraintId:entry.id,
         axisAlignment:axisDot,
         lateralDistanceStud:lateral,
@@ -204,27 +279,82 @@ export function createLiveJointValidator({
         engagementLdu:fit.engagementLdu,
         fit,
       })
+      if(orientationLocked&&drift>orientationTolerance)return Object.freeze({
+        valid:false,
+        reason:'orientation-disengaged',
+        constraintId:entry.id,
+        axisAlignment:axisDot,
+        orientationDrift:drift,
+        orientationTolerance,
+        offsetLdu:offset,
+        engagementLdu:fit.engagementLdu,
+        fit,
+      })
+      return Object.freeze({
+        valid:true,
+        reason:'ok',
+        constraintId:entry.id,
+        axisAlignment:axisDot,
+        lateralDistanceStud:lateral,
+        orientationDrift:drift,
+        offsetLdu:offset,
+        engagementLdu:fit.engagementLdu,
+        fit,
+      })
     }
 
-    // Non-axial retained interfaces are considered connected while their anchors
-    // remain close and their required axes remain aligned. Ball/socket free
-    // orientation is handled by its spherical joint and never reaches this branch
-    // unless explicit occupancy requested live release.
-    const distance=len3(sub3(frameA.position,frameB.position))
-    const distanceTolerance=Math.max(lateralTolerance,.08)
+    if(kind==='prismatic'){
+      const travel=prismaticTravel(entry.constraint,frameA,frameB,savedGeometry)
+      if(drift>orientationTolerance)return Object.freeze({
+        valid:false,
+        reason:'orientation-disengaged',
+        constraintId:entry.id,
+        axisAlignment:axisDot,
+        lateralDistanceStud:lateral,
+        orientationDrift:drift,
+        orientationTolerance,
+        travel,
+      })
+      return Object.freeze({
+        valid:travel.withinLimits,
+        reason:travel.withinLimits?'ok':'travel-limit-exceeded',
+        constraintId:entry.id,
+        axisAlignment:axisDot,
+        lateralDistanceStud:lateral,
+        orientationDrift:drift,
+        travel,
+      })
+    }
+
+    if(kind==='fixed'&&drift>orientationTolerance)return Object.freeze({
+      valid:false,
+      reason:'orientation-disengaged',
+      constraintId:entry.id,
+      axisAlignment:axisDot,
+      orientationDrift:drift,
+      orientationTolerance,
+      anchorDistanceStud:distance,
+      anchorDistanceDeltaStud:anchorDelta,
+    })
+
+    // Revolute retains the anchor and axis but permits twist. Fixed retains the
+    // same anchor geometry and has already passed the orientation check above.
     return Object.freeze({
-      valid:distance<=distanceTolerance,
-      reason:distance<=distanceTolerance?'ok':'anchor-disengaged',
+      valid:anchorDelta<=distanceTolerance,
+      reason:anchorDelta<=distanceTolerance?'ok':'anchor-disengaged',
       constraintId:entry.id,
       axisAlignment:axisDot,
       anchorDistanceStud:distance,
+      anchorDistanceDeltaStud:anchorDelta,
       distanceToleranceStud:distanceTolerance,
+      orientationDrift:drift,
     })
   }
 
   return Object.freeze({
     version:LIVE_JOINT_VALIDATOR_VERSION,
     prepared:Object.freeze([...prepared.keys()]),
+    validateConstraint,
     validateJoint(item){
       const ids=item?.sourceConstraintIds||[]
       if(!ids.length)return Object.freeze({valid:true,reason:'no-source-constraint'})
