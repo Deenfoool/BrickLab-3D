@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-export const PARTS5_GEAR_MESH_UI_VERSION = 'parts-5-gear-mesh-ui-v3'
+export const PARTS5_GEAR_MESH_UI_VERSION = 'parts-5-gear-mesh-ui-v3.1'
 
 function isRussian() {
   return document.documentElement.lang === 'ru' || localStorage.getItem('bricklab.ui.language.v1') === 'ru'
@@ -53,12 +53,15 @@ function clearGuides() {
 function addPitchCircle(descriptor, material) {
   const object=descriptor?.object,connector=descriptor?.connector,radius=Number(descriptor?.pitchRadius)
   if(!object||!connector||!(radius>0))return null
+  const localPosition=Array.isArray(descriptor?.meshLocalPosition)?descriptor.meshLocalPosition:connector.position
+  const localAxis=Array.isArray(descriptor?.meshLocalAxis)?descriptor.meshLocalAxis:connector.axis
+  if(!Array.isArray(localPosition)||!Array.isArray(localAxis))return null
   const points=[]
   for(let i=0;i<72;i+=1){const angle=i/72*Math.PI*2;points.push(new THREE.Vector3(Math.cos(angle)*radius,0,Math.sin(angle)*radius))}
   const geometry=new THREE.BufferGeometry().setFromPoints(points)
   const line=new THREE.LineLoop(geometry,material)
-  line.position.fromArray(connector.position)
-  line.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(...connector.axis).normalize())
+  line.position.fromArray(localPosition)
+  line.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(...localAxis).normalize())
   line.renderOrder=30;line.frustumCulled=false;line.userData.parts5GearMeshGuide=true
   object.add(line);guides.push(line);return line
 }
