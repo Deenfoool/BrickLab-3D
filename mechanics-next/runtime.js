@@ -10,6 +10,7 @@ import {
 import { createCatalogObservationProvider } from './adapters/catalog-readonly.js'
 import { createPartIntelligenceRegistry } from './intelligence/registry.js'
 import { createSceneMechanicalObserver } from './intelligence/scene-observer.js'
+import { createShadowConnectionInterpreter } from './intelligence/connection-interpreter.js'
 
 export const MECHANICS_NEXT_RUNTIME_MODE = 'observe-only'
 
@@ -40,6 +41,14 @@ export function createMechanicsNextRuntime({
       })
     : null
 
+  const connectionInterpreter = sceneObserver
+    ? createShadowConnectionInterpreter({
+        graph,
+        sceneObserver,
+        objectById:instanceId => subsystems?.editor?.objectById?.(instanceId) ?? null,
+      })
+    : null
+
   let syncQueued = false
   let lastSceneSync = null
 
@@ -53,7 +62,10 @@ export function createMechanicsNextRuntime({
     if (!sceneObserver || !subsystems?.editor?.ready?.()) {
       return Object.freeze({ unavailable:true, reason:'editor-contract-not-ready' })
     }
-    lastSceneSync = sceneObserver.sync()
+    refreshLegacySnapshot()
+    const scene = sceneObserver.sync()
+    const connections = connectionInterpreter?.sync(legacySnapshot.connections) ?? null
+    lastSceneSync = Object.freeze({ scene, connections })
     return lastSceneSync
   }
 
@@ -88,6 +100,7 @@ export function createMechanicsNextRuntime({
     solver,
     intelligence,
     sceneObserver,
+    connectionInterpreter,
     refreshLegacySnapshot,
     legacySnapshot:() => legacySnapshot,
     describePart(partId, options) {
@@ -111,6 +124,7 @@ export function createMechanicsNextRuntime({
         legacyConnections:legacySnapshot.connections.length,
         partIntelligence:intelligence?.stats?.() ?? null,
         scene:sceneObserver?.stats?.() ?? null,
+        interpretedConnections:connectionInterpreter?.stats?.() ?? null,
         lastSceneSync,
         ownership:ownership.snapshot(),
       })
