@@ -30,6 +30,7 @@ export function ldcadConnectorToEndpoint(connector, {
     ].filter(Boolean),
     metadata:{
       sourceEndpointId:connector.id || key,
+      compatibilityEndpointId:connector.compatibilityEndpointId ?? null,
       group:connector.group ?? null,
       snap:connector.snap ?? null,
       inheritance:connector.inheritance ?? null,
