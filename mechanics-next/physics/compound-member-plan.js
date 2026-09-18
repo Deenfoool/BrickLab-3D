@@ -152,6 +152,16 @@ export function buildCompoundMemberPhysicsPlan({
       continue
     }
 
+    const ownership=record.compoundEndpointOwnership
+    if((record?.instance?.endpoints?.length||0)>0&&!ownership?.complete){
+      blockers.push(Object.freeze({
+        code:'compound-endpoint-ownership-incomplete',
+        bodyId:rootBodyId,
+        unresolved:ownership?.unresolved??Object.freeze([]),
+      }))
+      continue
+    }
+
     const planned=[]
     const bodyByMember=new Map()
     for(const mapped of sceneMap.mapped){
@@ -185,6 +195,9 @@ export function buildCompoundMemberPhysicsPlan({
         topology?.inputMemberId ??
         planned[0]?.memberId ??
         null,
+      endpointOwners:Object.freeze(Object.fromEntries(
+        (ownership?.assignments||[]).map(item=>[item.endpointId,item.memberId]),
+      )),
     }))
 
     const dynamic=dynamicByRoot.get(rootBodyId)
