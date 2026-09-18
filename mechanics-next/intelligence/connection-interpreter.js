@@ -565,6 +565,8 @@ export function interpretObservedConnection(record, {
     ?Object.freeze({
         ...resolved.rule.dynamics,
         suspensionMotor:Object.freeze({
+          armBodyId:suspension.armSide==='a'?instanceA.body.id:instanceB.body.id,
+          armInstanceId:suspension.armSide==='a'?instanceA.body.instanceId:instanceB.body.instanceId,
           coordinateSign:suspension.coordinateSign,
           restAngle:suspension.restAngle,
           preload:suspension.preload,
