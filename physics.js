@@ -190,11 +190,13 @@ function structuralScore(component) {
 }
 
 export class PhysicsSession {
-  static async create(objects, connections) {
+  static async create(objects, connections, options = {}) {
     const RAPIER = await loadRapier()
     const scenario = window.__bricklabNextScenario || 'flat'
     window.__bricklabNextScenario = null
     const session = new PhysicsSession(RAPIER, objects, connections, scenario)
+    session.creationOptions = options && typeof options === 'object' ? { ...options } : {}
+    session.mechanicsNextBootstrap = session.creationOptions.mechanicsNextOwned === true
     session.build()
     return session
   }
