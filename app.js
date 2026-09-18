@@ -325,6 +325,40 @@ function connectorAvailable(object, connector) {
   return !isEndpointOccupied(connections, object.userData.instanceId, connector.id)
 }
 
+function mechanicsNextBuildActive() {
+  return globalThis.BrickLabMechanicsNextBuildOwner?.active === true &&
+    globalThis.BrickLabMechanicsNext?.nativeProjectAuthoritative?.() === true
+}
+
+function uiConnections() {
+  if (mechanicsNextBuildActive()) {
+    return globalThis.BrickLabMechanicsNext?.projectConnections?.() ?? []
+  }
+  return connections
+}
+
+function nativeSnapView(candidate) {
+  if (!candidate) return null
+  const target = candidate.solution?.desiredConnectorPosition
+    ?? candidate.targetRecord?.pose?.position
+    ?? [0,0,0]
+  const sourceType = candidate.source?.metadata?.semantics?.semanticKind
+    ?? candidate.source?.family
+    ?? 'native'
+  const targetType = candidate.target?.metadata?.semantics?.semanticKind
+    ?? candidate.target?.family
+    ?? 'native'
+  return {
+    owner:'mechanics-next',
+    native:candidate,
+    targetWorld:new THREE.Vector3().fromArray(target),
+    source:{ type:sourceType },
+    target:{ type:targetType },
+    targetObject:candidate.targetRecord?.object ?? null,
+    placementOnly:false,
+  }
+}
+
 function makePart(partId, color) {
   const def = findPart(partId)
   if (!def) return null
@@ -364,9 +398,10 @@ function rebuildSelectionBoxes() {
 
 function updateProjectStats() {
   const selectedCount = selectedObjects.size
-  $('#projectStats').textContent = `${buildRoot.children.length} parts · ${connections.length} links${selectedCount > 1 ? ` · ${selectedCount} selected` : ''}`
+  const linkCount = uiConnections().length
+  $('#projectStats').textContent = `${buildRoot.children.length} parts · ${linkCount} links${selectedCount > 1 ? ` · ${selectedCount} selected` : ''}`
   if (mode === 'build') {
-    $('#statusText').textContent = `BUILD MODE · ${buildRoot.children.length} parts · ${connections.length} connections`
+    $('#statusText').textContent = `BUILD MODE · ${buildRoot.children.length} parts · ${linkCount} connections${mechanicsNextBuildActive() ? ' · Mechanics Next' : ''}`
   }
 }
 
@@ -374,7 +409,7 @@ function updateConnectionVisuals() {
   connectionRoot.clear()
   if (mode !== 'build' || !connectionVisualsVisible) return
 
-  for (const connection of connections) {
+  for (const connection of uiConnections()) {
     const object = objectByInstanceId(connection.a.instanceId)
     const connector = connectorById(object, connection.a.connectorId)
     if (!object || !connector) continue
@@ -403,9 +438,25 @@ function connectorGuides() {
 }
 
 function refreshSnap() {
-  snapCandidate = selected && mode === 'build' && connectorSnapEnabled
-    ? findSnapCandidate(selected, buildRoot.children, { isAvailable: connectorAvailable })
-    : null
+  if (!selected || mode !== 'build' || !connectorSnapEnabled) {
+    snapCandidate = null
+  } else if (mechanicsNextBuildActive()) {
+    try {
+      snapCandidate = nativeSnapView(
+        globalThis.BrickLabMechanicsNext?.findCandidate?.(
+          selected.userData.instanceId,
+          buildRoot.children
+            .filter(object => object !== selected)
+            .map(object => object.userData.instanceId),
+        ),
+      )
+    } catch (error) {
+      console.warn('[BrickLab Mechanics Next] Native snap preview failed.', error)
+      snapCandidate = null
+    }
+  } else {
+    snapCandidate = findSnapCandidate(selected, buildRoot.children, { isAvailable: connectorAvailable })
+  }
   snapMarker.visible = Boolean(snapCandidate)
   if (snapCandidate) snapMarker.position.copy(snapCandidate.targetWorld)
 }
@@ -468,10 +519,21 @@ function snapGrid() {
 
 function detachPartConnections(object, silent = false, preserveV4 = true) {
   if (!object) return 0
-  const before = connections.length
-  const v4Before = globalThis.BrickLabConnectorV4?.projectConnections().length ?? 0
-  connections = removeConnectionsForPart(connections, object.userData.instanceId, {preserveV4})
-  const removed = before - connections.length + v4Before - (globalThis.BrickLabConnectorV4?.projectConnections().length ?? 0)
+  let removed = 0
+
+  if (mechanicsNextBuildActive()) {
+    const instanceId = object.userData.instanceId
+    removed = globalThis.BrickLabMechanicsNext?.removePartConnections?.(instanceId) ?? 0
+    // Keep the legacy UI/history bridge free of stale records. The native graph is
+    // authoritative after handoff; Connector V4 is intentionally left untouched.
+    connections = connections.filter(connection =>
+      connection?.a?.instanceId !== instanceId && connection?.b?.instanceId !== instanceId)
+  } else {
+    const before = connections.length
+    const v4Before = globalThis.BrickLabConnectorV4?.projectConnections().length ?? 0
+    connections = removeConnectionsForPart(connections, object.userData.instanceId, {preserveV4})
+    removed = before - connections.length + v4Before - (globalThis.BrickLabConnectorV4?.projectConnections().length ?? 0)
+  }
 
   if (removed) {
     updateConnectionVisuals()
@@ -505,7 +567,7 @@ function sameConnectionPair(connection,aId,bId){
 }
 
 function backfillExactGearMeshes(){
-  if(mode!=='build')return 0
+  if(mode!=='build'||mechanicsNextBuildActive())return 0
   let changed=0
   for(const candidate of findExactGearMeshPairs(buildRoot.children)){
     const aId=candidate.movingGear.object.userData.instanceId
@@ -537,7 +599,9 @@ window.addEventListener('bricklab:ldrawloaded',scheduleGearMeshBackfill)
 window.addEventListener('bricklab:projectlibrarychange',scheduleGearMeshBackfill)
 
 function projectState() {
-  if (mode === 'build') globalThis.BrickLabConnectorV4?.reconcileGraph(buildRoot.children, {persist:false})
+  if (mode === 'build' && !mechanicsNextBuildActive()) {
+    globalThis.BrickLabConnectorV4?.reconcileGraph(buildRoot.children, {persist:false})
+  }
   return {
     version: 2,
     name: projectName,
@@ -603,6 +667,7 @@ function connectionIsValid(connection, usedEndpoints) {
   if (!connection?.a?.instanceId || !connection?.a?.connectorId || !connection?.b?.instanceId || !connection?.b?.connectorId) return false
   const objectA = objectByInstanceId(connection.a.instanceId)
   const objectB = objectByInstanceId(connection.b.instanceId)
+  if (connection?.metadata?.mechanicsNextNative === true) return Boolean(objectA && objectB)
   // Gear meshes use virtual pitch-circle endpoints rather than physical connector
   // definitions. They are persistent mechanical edges and must survive project load,
   // but they do not reserve either gear's axle connector.
@@ -623,6 +688,7 @@ function applyProject(data, { reset = false, persist = true } = {}) {
   if (!data || !Array.isArray(data.parts)) throw new Error('Invalid BrickLab project')
 
   select(null)
+  globalThis.BrickLabMechanicsNext?.clearProjectState?.({keepAuthority:true})
   globalThis.BrickLabConnectorV4?.clearGraph()
   buildRoot.clear()
   connections = []
@@ -703,17 +769,37 @@ transform.addEventListener('objectChange', () => {
   refreshSnap()
 })
 
-transform.addEventListener('mouseUp', () => {
+transform.addEventListener('mouseUp', async () => {
   snapGrid()
   refreshSnap()
 
   if (selected && snapCandidate && connectorSnapEnabled) {
-    orientForSnap(selected, snapCandidate)
-    applySnap(selected, snapCandidate)
-    const connection = attachSnapConnection(snapCandidate)
-    if (!connection && !snapCandidate.placementOnly) emitAudioEvent('incompatible', { cooldown: 400 })
-    if (connection) emitAudioEvent('connector', { source: snapCandidate.source.type, target: snapCandidate.target.type, sourcePart: selected.userData.partId, targetPart: snapCandidate.targetObject?.userData?.partId })
-    if (connection) toast(`Connected ${connection.kind}: ${snapCandidate.source.type} → ${snapCandidate.target.type}`)
+    if (snapCandidate.owner === 'mechanics-next') {
+      const result = await globalThis.BrickLabMechanicsNext?.commitCandidate?.(snapCandidate.native)
+      const connection = result?.accepted ? result.record : null
+      if (connection && !connections.some(item => item.id === connection.id)) {
+        connections.push(cloneState(connection))
+      }
+      if (!connection) {
+        emitAudioEvent('incompatible', { cooldown: 400 })
+        if (result?.reason) console.info('[BrickLab Mechanics Next] Native snap rejected.', result)
+      } else {
+        emitAudioEvent('connector', {
+          source:snapCandidate.source.type,
+          target:snapCandidate.target.type,
+          sourcePart:selected.userData.partId,
+          targetPart:snapCandidate.targetObject?.userData?.partId,
+        })
+        toast(`Connected ${connection.kind}: ${snapCandidate.source.type} → ${snapCandidate.target.type}`)
+      }
+    } else {
+      orientForSnap(selected, snapCandidate)
+      applySnap(selected, snapCandidate)
+      const connection = attachSnapConnection(snapCandidate)
+      if (!connection && !snapCandidate.placementOnly) emitAudioEvent('incompatible', { cooldown: 400 })
+      if (connection) emitAudioEvent('connector', { source: snapCandidate.source.type, target: snapCandidate.target.type, sourcePart: selected.userData.partId, targetPart: snapCandidate.targetObject?.userData?.partId })
+      if (connection) toast(`Connected ${connection.kind}: ${snapCandidate.source.type} → ${snapCandidate.target.type}`)
+    }
   }
 
   if (!snapCandidate && !globalThis.__bricklabGearMeshCandidate) emitAudioEvent(transform.getMode() === 'rotate' ? 'rotate' : 'move')
@@ -962,7 +1048,7 @@ function renderCatalog() {
 
 function connectionsForSelection() {
   const ids = new Set(activeSelection().map(object => object.userData.instanceId))
-  return connections.filter(connection => ids.has(connection.a.instanceId) || ids.has(connection.b.instanceId))
+  return uiConnections().filter(connection => ids.has(connection.a.instanceId) || ids.has(connection.b.instanceId))
 }
 
 function updateInspector() {
@@ -971,7 +1057,7 @@ function updateInspector() {
   if (!selected) return
 
   const def = findPart(selected.userData.partId)
-  const partConnections = connectionsForPart(connections, selected.userData.instanceId)
+  const partConnections = connectionsForPart(uiConnections(), selected.userData.instanceId)
   const usedConnectors = (def?.connectors ?? []).filter(connector => !connectorAvailable(selected, connector)).length
   const selectedExtra = Math.max(0, selectedObjects.size - 1)
 
@@ -1074,7 +1160,7 @@ async function startSimulation({ preserveStartState = false } = {}) {
   $('#simPlayPause').disabled = true
   $('#simReset').disabled = true
   $('#simState').textContent = 'Loading Rapier…'
-  $('#statusText').textContent = `SIMULATE · loading physics · ${connections.length} graph links`
+  $('#statusText').textContent = `SIMULATE · loading physics · ${uiConnections().length} graph links`
 
   try {
     const session = await PhysicsSession.create([...buildRoot.children], cloneState(connections))
@@ -1534,7 +1620,10 @@ new ResizeObserver(resize).observe(viewport)
 function animate() {
   if (mode === 'simulate' && physicsSession) physicsSession.step()
   const mechanicsNextKinematicsActive=globalThis.BrickLabMechanicsNextKinematics?.active?.()===true
-  if (mode === 'build' && !isDragging && !mechanicsNextKinematicsActive) globalThis.BrickLabConnectorV4?.updateEditor(performance.now())
+  const mechanicsNextBuildOwnerActive=mechanicsNextBuildActive()
+  if (mode === 'build' && !isDragging && !mechanicsNextKinematicsActive && !mechanicsNextBuildOwnerActive) {
+    globalThis.BrickLabConnectorV4?.updateEditor(performance.now())
+  }
   orbit.update()
   emitAudioEvent('frame', { session: physicsSession, mode, camera })
   for (const box of selectionBoxes.values()) box.update()
