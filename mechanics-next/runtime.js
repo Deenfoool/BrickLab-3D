@@ -21,6 +21,7 @@ import { rotationalDragProjection } from './interaction/view-projection.js'
 import { createCompoundStateRegistry } from './compounds/state.js'
 import { createCompoundDecompositionRegistry } from './compounds/decomposition-registry.js'
 import { mapDecompositionToScene } from './compounds/scene-member-map.js'
+import { assignCompoundEndpointOwnership } from './compounds/endpoint-ownership.js'
 import { createMechanicsPhysicsRuntime } from './physics/runtime.js'
 
 export const MECHANICS_NEXT_RUNTIME_MODE = 'observe-only'
@@ -101,7 +102,7 @@ export function createMechanicsNextRuntime({
         const compoundSceneMap=compoundDecomposition
           ?mapDecompositionToScene(object,compoundDecomposition)
           :null
-        records.push(Object.freeze({
+        const baseRecord={
           instance,
           pose,
           visualOffsetStud:Object.freeze(
@@ -112,6 +113,13 @@ export function createMechanicsNextRuntime({
           compoundDecomposition,
           compoundSceneMap,
           object,
+        }
+        const compoundEndpointOwnership=compoundSceneMap?.complete
+          ?assignCompoundEndpointOwnership(baseRecord)
+          :null
+        records.push(Object.freeze({
+          ...baseRecord,
+          compoundEndpointOwnership,
         }))
       } catch (error) {
         console.warn('[BrickLab Mechanics Next] Could not observe rigid pose.', instanceId, error)
