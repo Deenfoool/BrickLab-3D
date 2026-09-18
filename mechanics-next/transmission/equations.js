@@ -166,6 +166,41 @@ export function differentialEquation({
   )
 }
 
+export function packagedDifferentialEquation({
+  id,
+  input,
+  left,
+  right,
+  ratio=1,
+  inputSign=1,
+  leftSign=1,
+  rightSign=1,
+  channel='omega',
+}={}){
+  if(!(Number.isFinite(Number(ratio))&&Math.abs(Number(ratio))>1e-12)){
+    throw new TypeError('Packaged differential requires finite non-zero ratio')
+  }
+  const r=Number(ratio)
+  const si=Number(inputSign)<0?-1:1
+  const sl=Number(leftSign)<0?-1:1
+  const sr=Number(rightSign)<0?-1:1
+  return linearEquation(
+    id||`packaged-differential:${input}:${left}:${right}`,
+    {
+      [mechanicalVariable(input,channel)]:2*r*si,
+      [mechanicalVariable(left,channel)]:-sl,
+      [mechanicalVariable(right,channel)]:-sr,
+    },
+    0,
+    {
+      kind:'packaged-differential',
+      input,left,right,ratio:r,
+      inputSign:si,leftSign:sl,rightSign:sr,channel,
+      relation:'2*ratio*input-left-right=0 in package-port coordinates',
+    },
+  )
+}
+
 export function differentialSpiderEquation({
   id,
   spider,
