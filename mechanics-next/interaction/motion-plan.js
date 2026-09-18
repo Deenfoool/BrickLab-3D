@@ -63,14 +63,15 @@ export function buildMotionPlan({
   for(const record of records){
     const bodyId=record.instance.body.id
     const theta=thetaOf(displacementResult,bodyId)
-    if(theta==null||Math.abs(theta)<1e-12)continue
-
     const compound=compoundByBody.get(bodyId)
+
     if(compound?.kind==='differential-spider'){
       const parent=byBody.get(compound.parentBodyId)
       const orbitFrame=parent?rotaryFrame(parent):null
       const spinFrame=rotaryFrame(record)
       const orbitTheta=thetaOf(displacementResult,compound.orbitBodyId)??0
+      const spinTheta=theta??0
+      if(Math.abs(orbitTheta)<1e-12&&Math.abs(spinTheta)<1e-12)continue
       if(!orbitFrame||!spinFrame){
         unresolved.push(Object.freeze({
           bodyId,reason:'compound-frame-missing',compound,
@@ -92,13 +93,14 @@ export function buildMotionPlan({
           frame:'carrier-relative',
           pivot:spinFrame.pivot,
           axis:Object.freeze([...compound.localAxis]),
-          thetaRad:theta,
+          thetaRad:spinTheta,
           directionSign:compound.directionSign,
         }),
       }))
       continue
     }
 
+    if(theta==null||Math.abs(theta)<1e-12)continue
     const frame=rotaryFrame(record)
     if(!frame){
       unresolved.push(Object.freeze({bodyId,reason:'rotary-frame-missing'}))
