@@ -119,9 +119,12 @@ export function solveMechanicalPlacement({
   const delta=sub3(sourceFrame.position,targetFrame.position)
   const initialAxial=dot3(delta,targetFrame.axis)
   const lateral=sub3(delta,scale3(targetFrame.axis,initialAxial))
+  const inferredRequested=resolvedMatch?.male&&resolvedMatch?.female
+    ?(source===resolvedMatch.male?initialAxial*20:source===resolvedMatch.female?-initialAxial*20:initialAxial*20)
+    :initialAxial*20
   const requested=Number.isFinite(requestedOffsetLdu)
     ?Number(requestedOffsetLdu)
-    :initialAxial*20
+    :inferredRequested
 
   const axial=axialSolution(source,target,resolvedMatch,requested)
   if(!axial.valid)return Object.freeze({
