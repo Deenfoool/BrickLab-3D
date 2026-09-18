@@ -17,7 +17,7 @@ function definition({ id, teeth, pitchRadius, anchor, axis, signs }) {
     id,
     name:id,
     defaultColor:0x999999,
-    connectors:[{ id:'axle-hole', type:'axle-hole', position:[0,0,0], axis:[0,0,1] }],
+    connectors:[],
     mechanics:{
       gear:{
         kind:'bevel',
@@ -76,7 +76,9 @@ test('BUILD bevel snap uses the 62821 ring plane rather than its axle-hole origi
   assert.equal(candidate.fixedGear.teeth,28)
   assert.equal(candidate.movingGear.teeth,20)
   assert.equal(candidate.fixedGear.gearFrameSource,'ldraw-mesh-anchor')
+  assert.equal(candidate.fixedGear.virtualConnector,true)
   assert.equal(candidate.movingGear.gearFrameSource,'ldraw-mesh-anchor')
+  assert.equal(candidate.movingGear.virtualConnector,true)
   assert.deepEqual(candidate.fixedGear.meshLocalPosition,[0,0,27/20])
   assert.deepEqual(candidate.fixedGear.bevelApexSigns,[-1])
   assert.ok(candidate.distance<1e-9)
