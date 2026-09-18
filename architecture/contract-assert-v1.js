@@ -26,12 +26,13 @@ export function architectureContractReport(subsystems = globalThis.BrickLabSubsy
   if (authority?.build !== 'connector-v4-with-legacy-bridge') {
     issues.push('BUILD authority is not Connector V4 with the compatibility bridge')
   }
-  if (authority?.simulate !== 'connector-v4-physics-guard') {
-    issues.push('SIMULATE authority is not the Connector V4 physics guard')
+  if (!['connector-v4-physics-guard','mechanics-next-physics-owner'].includes(authority?.simulate)) {
+    issues.push('SIMULATE authority is not a certified physics owner')
   }
 
-  if (!guard?.active) issues.push('Connector V4 physics guard is not active')
-  if (!guard?.createOwner) issues.push('PhysicsSession.create has no certified guard owner')
+  if (!guard?.active) issues.push('Connector V4 fallback physics guard is not active')
+  const createOwner=globalThis.BrickLabMechanicsNextPhysicsOwner?.createOwner ?? guard?.createOwner
+  if (!createOwner) issues.push('PhysicsSession.create has no certified owner')
 
   issues.push(...methodIssues(subsystems?.parts, REQUIRED_PART_METHODS, 'parts'))
   issues.push(...methodIssues(subsystems?.editor, REQUIRED_EDITOR_METHODS, 'editor'))
