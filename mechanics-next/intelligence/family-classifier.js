@@ -9,7 +9,7 @@ const TRANSMISSION = new Set([
   'spur-gear','bevel-gear','crown-gear','clutch-gear','worm','rack','pulley','sprocket',
   'differential','packaged-differential','gearbox','driving-ring','universal-joint','cv-joint','linear-actuator',
 ])
-const STRUCTURAL = new Set(['beam','technic-brick','technic-frame','connector','brick','plate','steering-link'])
+const STRUCTURAL = new Set(['beam','technic-brick','technic-frame','connector','brick','plate','steering-link','suspension-arm'])
 
 function textOf(observation) {
   return [
@@ -67,6 +67,7 @@ function roleFromText(raw) {
   if (/\btechnic\s+brick\b/.test(value)) return 'technic-brick'
   if (/\b(?:ball\s+joint|ball\s+socket)\b/.test(value)) return 'ball-joint'
   if (/\bhinge\b/.test(value)) return 'hinge'
+  if (/\bsuspension\s+arm\b/.test(value)) return 'suspension-arm'
   if (/\b(?:steering\s+tie\s*rod|tie\s*rod)\b/.test(value)) return 'steering-link'
   if (/\b(?:wheel\s+hub|hub\s+carrier|steering\s+hub|steering\s+knuckle)\b/.test(value)) return 'wheel-hub'
   if (/\b(?:tyre|tire)\b/.test(value)) return 'tire'
@@ -189,6 +190,7 @@ export function classifyPartFamily(observation, endpoints = []) {
   const legacySteeringBase=observation?.legacyMechanics?.steeringBase
   const legacyShockBody=observation?.legacyMechanics?.shockBody
   const legacyShockRod=observation?.legacyMechanics?.shockRod
+  const legacySuspensionArm=observation?.legacyMechanics?.suspensionArm
   const legacyArticulatedCoupler=observation?.legacyMechanics?.articulatedCoupler
   const gearGeometry=legacyGear && typeof legacyGear==='object'
     ?Object.freeze({
@@ -342,6 +344,31 @@ export function classifyPartFamily(observation, endpoints = []) {
     ...(legacyShockRod&&typeof legacyShockRod==='object'
       ?{shockRod:Object.freeze({
           sliderConnectorId:legacyShockRod.sliderConnectorId??'slider',
+        })}
+      :{}),
+    ...(legacySuspensionArm&&typeof legacySuspensionArm==='object'
+      ?{suspensionArm:Object.freeze({
+          pivotConnectorId:legacySuspensionArm.pivotConnectorId??'pivot',
+          restAngle:Number.isFinite(Number(legacySuspensionArm.restAngle))
+            ?Number(legacySuspensionArm.restAngle):0,
+          stiffness:Number.isFinite(Number(legacySuspensionArm.stiffness))
+            ?Math.max(0,Number(legacySuspensionArm.stiffness)):.12,
+          damping:Number.isFinite(Number(legacySuspensionArm.damping))
+            ?Math.max(0,Number(legacySuspensionArm.damping)):.01,
+          springRate:Number.isFinite(Number(legacySuspensionArm.springRate))
+            ?Math.max(0,Number(legacySuspensionArm.springRate)):null,
+          compressionDamping:Number.isFinite(Number(legacySuspensionArm.compressionDamping))
+            ?Math.max(0,Number(legacySuspensionArm.compressionDamping)):null,
+          reboundDamping:Number.isFinite(Number(legacySuspensionArm.reboundDamping))
+            ?Math.max(0,Number(legacySuspensionArm.reboundDamping)):null,
+          preload:Number.isFinite(Number(legacySuspensionArm.preload))
+            ?Number(legacySuspensionArm.preload):0,
+          bumpStop:Number.isFinite(Number(legacySuspensionArm.bumpStop))
+            ?Math.min(.999,Math.max(0,Number(legacySuspensionArm.bumpStop))):.88,
+          minAngle:Number.isFinite(Number(legacySuspensionArm.minAngle))
+            ?Number(legacySuspensionArm.minAngle):null,
+          maxAngle:Number.isFinite(Number(legacySuspensionArm.maxAngle))
+            ?Number(legacySuspensionArm.maxAngle):Math.PI*55/180,
         })}
       :{}),
     ...(role==='motor'&&legacyMotor&&typeof legacyMotor==='object'?{
