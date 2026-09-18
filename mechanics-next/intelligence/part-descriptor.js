@@ -23,10 +23,26 @@ function transmissionHints(classification) {
       gearGeometry:properties.gearGeometry ?? null,
       equationFamily:'gear-mesh',
     }))
+  } else if (properties.packagedTransmission) {
+    hints.push(Object.freeze({
+      kind:role==='worm'?'worm-drive':'packaged-transmission',
+      equationFamily:'port-ratio',
+      ...properties.packagedTransmission,
+    }))
   } else if (role === 'worm') {
     hints.push(Object.freeze({ kind:'worm', equationFamily:'worm', defaultBackdrive:false }))
   } else if (role === 'rack') {
-    hints.push(Object.freeze({ kind:'rack', equationFamily:'rack-pinion' }))
+    hints.push(Object.freeze({
+      kind:'rack',
+      equationFamily:'rack-pinion',
+      rackGeometry:properties.rackGeometry??null,
+    }))
+  } else if (role === 'packaged-differential') {
+    hints.push(Object.freeze({
+      kind:'packaged-differential',
+      equationFamily:'three-port-differential',
+      ...properties.packagedDifferential,
+    }))
   } else if (role === 'differential') {
     if (Number.isFinite(properties.toothCount) && properties.toothCount > 0) {
       hints.push(Object.freeze({
