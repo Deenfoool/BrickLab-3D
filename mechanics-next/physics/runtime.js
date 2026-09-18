@@ -14,6 +14,7 @@ import {
 } from './rapier-adapter.js'
 import { createMechanicsCouplingRuntime } from './coupling-runtime.js'
 import { buildMechanicsMotorPlan, createMechanicsMotorRuntime } from './motor-runtime.js'
+import { buildMechanicsVehiclePlan } from './vehicle-plan.js'
 import {
   applyMechanicsJointResistance,
   validateAndReleaseMechanicsJoints,
@@ -48,12 +49,18 @@ export function createMechanicsPhysicsRuntime({
     worldUnitsPerStud,
   })
   const motorPlan=buildMechanicsMotorPlan({graph,records})
+  const vehiclePlan=buildMechanicsVehiclePlan({
+    records,
+    discovery,
+    motorPlan,
+  })
   const blockers=Object.freeze([
     ...(structuralPlan.blockers||[]),
     ...(compoundMemberPlan.blockers||[]),
     ...(compoundGraphExpansion.blockers||[]),
     ...(couplingPlan.blockers||[]),
     ...(motorPlan.blockers||[]),
+    ...(vehiclePlan.blockers||[]),
   ])
 
   let installed=null
@@ -66,12 +73,14 @@ export function createMechanicsPhysicsRuntime({
     compoundGraphExpansion,
     couplingPlan,
     motorPlan,
+    vehiclePlan,
     blockers,
     pass:blockers.length===0&&
       structuralPlan.pass&&
       compoundMemberPlan.pass&&
       couplingPlan.pass&&
-      motorPlan.pass,
+      motorPlan.pass&&
+      vehiclePlan.pass,
     preflightSession(session){
       if(compoundMemberPlan.replacements.length){
         const compound=preflightCompoundMemberMaterialization(session,compoundMemberPlan)
@@ -251,6 +260,12 @@ export function createMechanicsPhysicsRuntime({
         compoundGraph:compoundGraphExpansion.stats,
         couplings:couplingPlan.stats,
         motors:motorPlan.stats,
+        vehicle:Object.freeze({
+          wheels:vehiclePlan.wheels.length,
+          motors:vehiclePlan.motors.length,
+          drivenWheels:vehiclePlan.diagnostics.drivenWheelCount,
+          ambiguousDrivenWheels:vehiclePlan.diagnostics.ambiguousDrivenWheels.length,
+        }),
         blockers,
         bridge:installed?.bridge?.stats??null,
         compoundMaterialized:installed?.compoundMembers?.members?.length??0,
