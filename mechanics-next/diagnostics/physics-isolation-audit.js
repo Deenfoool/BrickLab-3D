@@ -77,6 +77,8 @@ export function auditMechanicsNextPhysicsIsolation({
     'createJoint',
     'applyMotorTorques',
     'applyGearCouplingTorques',
+    'initializeSuspensionJointsV1',
+    'initializeParts4LinearMechanisms',
     'updateSuspensionV2',
     'updateVehicleControlsV1',
   ])checks.push(writerCheck(PhysicsSession,name))
