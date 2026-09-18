@@ -55,6 +55,8 @@ import { solveLinearWithNonlinearRelations } from '../mechanics-next/solver/nonl
 import { discoverCompoundMechanisms } from '../mechanics-next/compounds/discovery.js'
 import { createCompoundStateRegistry } from '../mechanics-next/compounds/state.js'
 import { decomposeShortcutInstance, inferCompoundTopology, ldrawReferenceTransformToBrickLab } from '../mechanics-next/compounds/shortcut-decomposer.js'
+import { mapDecompositionToScene } from '../mechanics-next/compounds/scene-member-map.js'
+import { createCompoundDecompositionRegistry } from '../mechanics-next/compounds/decomposition-registry.js'
 import { screenDragAngle, solveRotationalDrag } from '../mechanics-next/interaction/drag-driver.js'
 import { buildMotionPlan } from '../mechanics-next/interaction/motion-plan.js'
 import { applyMotionPlanToBaseline, captureMotionBaseline, restoreMotionBaseline } from '../mechanics-next/interaction/scene-motion-adapter.js'
@@ -2142,4 +2144,93 @@ test('non-shortcut decomposition refuses to invent physical child bodies', async
   })
   assert.equal(result.status,'not-shortcut')
   assert.equal(result.members.length,0)
+})
+
+
+test('compound scene mapping distinguishes repeated child files by occurrence', () => {
+  const root=new THREE.Group()
+  for(const [occurrence,x] of [[0,1],[1,2]]){
+    const proxy=new THREE.Group()
+    proxy.userData.mechanicalMemberProxy=true
+    proxy.userData.mechanicalMemberPath='parts/yoke.dat'
+    proxy.userData.mechanicalMemberOccurrence=occurrence
+    proxy.position.x=x
+    root.add(proxy)
+  }
+  root.updateMatrixWorld(true)
+
+  const decomposition={
+    members:[
+      {id:'member-a',path:'parts/yoke.dat',occurrence:0,internalRole:'yoke'},
+      {id:'member-b',path:'parts/yoke.dat',occurrence:1,internalRole:'yoke'},
+    ],
+  }
+  const mapped=mapDecompositionToScene(root,decomposition)
+  assert.equal(mapped.complete,true)
+  assert.equal(mapped.mapped.length,2)
+  assert.equal(mapped.mapped[0].proxy.position.x,1)
+  assert.equal(mapped.mapped[1].proxy.position.x,2)
+})
+
+test('compound decomposition registry is lazy and stable for repeated resolve', async () => {
+  let resolves=0
+  const inheritanceResolver={
+    async resolve(){
+      resolves+=1
+      return{
+        header:{type:'shortcut',description:'Linear Actuator Complete'},
+        warnings:[],
+        compoundReferences:[
+          {
+            from:'parts/actc01.dat',
+            path:'parts/act-housing.dat',
+            ref:'act-housing.dat',
+            type:'part',
+            description:'Linear Actuator Housing',
+            reason:'physical-part-boundary',
+            transform:{linear:[1,0,0,0,1,0,0,0,1],translation:[0,0,0]},
+          },
+          {
+            from:'parts/actc01.dat',
+            path:'parts/act-rod.dat',
+            ref:'act-rod.dat',
+            type:'part',
+            description:'Linear Actuator Piston Rod',
+            reason:'physical-part-boundary',
+            transform:{linear:[1,0,0,0,1,0,0,0,1],translation:[0,20,0]},
+          },
+        ],
+      }
+    },
+    clearCache(){},
+  }
+  const ldraw={
+    async readText(){return'0 child'},
+    async getMetadata(path){
+      return{
+        file:path.replace(/^parts\//,''),
+        code:path.split('/').pop().replace(/\.dat$/,''),
+        description:path.includes('housing')?'Linear Actuator Housing':'Linear Actuator Piston Rod',
+      }
+    },
+  }
+  const registry=createCompoundDecompositionRegistry({
+    ldraw,
+    inheritanceResolver,
+  })
+  const instance={
+    body:{instanceId:'act-1',partId:'act'},
+    descriptor:{
+      bodyPolicy:'compound-candidate',
+      file:'parts/actc01.dat',
+      classification:{role:'linear-actuator'},
+    },
+  }
+  const first=await registry.resolve(instance)
+  const second=await registry.resolve(instance)
+  assert.equal(resolves,1)
+  assert.equal(first,second)
+  assert.equal(first.topology.status,'resolved')
+  assert.equal(first.topology.kind,'linear-actuator')
+  assert.equal(registry.status().resolved,1)
 })
