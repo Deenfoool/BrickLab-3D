@@ -229,6 +229,13 @@ function createRackGuide(part, color) {
 const upgraded = []
 const rackPart = PARTS.find(item => item.id === 'steering-rack-7')
 if (rackPart) {
+  const railCenterY=0.50
+  const railHeight=0.30
+  const rootLineY=railCenterY+railHeight/2
+  const pitchLineY=rootLineY+PITCH_LINE_FROM_ROOT
+  const usableLength=5.72
+  const toothCount=Math.max(3,Math.floor(usableLength/LINEAR_PITCH)+1)
+  const phaseOriginStud=-((toothCount-1)*LINEAR_PITCH)/2
   patchPart(PARTS, rackPart.id, {
     create: color => createRack(rackPart, color),
     visualQuality: 'parts-6-module-matched-steering-rack-v4',
@@ -239,6 +246,22 @@ if (rackPart) {
       addendumStud: ADDENDUM,
       dedendumStud: DEDENDUM,
       pitchLineOffsetStud: PITCH_LINE_FROM_ROOT,
+    },
+    mechanics: {
+      ...(rackPart.mechanics ?? {}),
+      rackGear: {
+        moduleStud:GEAR_MODULE_STUD,
+        pressureAngleDeg:GEAR_PRESSURE_ANGLE_DEG,
+        linearPitchStud:LINEAR_PITCH,
+        pitchLinePoint:[0,pitchLineY,0],
+        travelAxis:[1,0,0],
+        toothNormal:[0,1,0],
+        widthAxis:[0,0,1],
+        phaseOriginStud,
+        toothCount,
+        maxTravelStud:rackPart.mechanics?.steeringRack?.maxTravelStud ?? null,
+        source:'parts-6-module-matched-steering-rack-v4',
+      },
     },
   })
   freezeLegacyBoundsCollider(rackPart, LEGACY_RACK_COLLIDER, 'parts-6-preserve-steering-rack-bounds-v1')
