@@ -1,6 +1,7 @@
 import { createNativeShadowResolver } from './shadow-resolver.js'
 import { createNativeLDrawInheritanceResolver } from './official-inheritance.js'
 import { ldcadConnectorToEndpoint } from './connector-adapter.js'
+import { createEndpointDescriptor, deterministicId, evidence } from '../core/model.js'
 
 export const NATIVE_CONNECTIVITY_PROVIDER_VERSION='mechanics-native-connectivity-provider-0.1.0'
 export const NATIVE_SHADOW_SOURCE=Object.freeze({
@@ -17,6 +18,80 @@ const rootPath=value=>{
   return `parts/${path}`
 }
 const encoded=value=>normalize(value).split('/').map(encodeURIComponent).join('/')
+
+function builtinOrientation(axis=[0,1,0]){
+  const d=axis.map(Number)
+  const n=Math.hypot(...d)||1
+  const y=d.map(value=>-value/n)
+  const seed=Math.abs(y[1])<.9?[0,1,0]:[1,0,0]
+  const dot=seed[0]*y[0]+seed[1]*y[1]+seed[2]*y[2]
+  let x=[
+    seed[0]-dot*y[0],
+    seed[1]-dot*y[1],
+    seed[2]-dot*y[2],
+  ]
+  const xn=Math.hypot(...x)||1
+  x=x.map(value=>value/xn)
+  const z=[
+    x[1]*y[2]-x[2]*y[1],
+    x[2]*y[0]-x[0]*y[2],
+    x[0]*y[1]-x[1]*y[0],
+  ]
+  return[
+    x[0],y[0],z[0],
+    x[1],y[1],z[1],
+    x[2],y[2],z[2],
+  ]
+}
+
+function builtinProfile(type){
+  const section=(shape,radiusLdu,lengthLdu,elastic=false)=>({shape,radiusLdu,lengthLdu,elastic})
+  switch(String(type||'')){
+    case'axle':
+      return{family:'cylinder',gender:'male',profile:{centered:true,caps:'none',sections:[section('A',6,20)]},capabilities:['slide']}
+    case'axle-hole':
+      return{family:'cylinder',gender:'female',profile:{centered:true,caps:'none',sections:[section('A',6,20)]},capabilities:['slide']}
+    case'pin':
+      return{family:'cylinder',gender:'male',profile:{centered:true,caps:'none',sections:[section('_L',6,20,true)]},capabilities:['slide']}
+    case'pin-hole':
+      return{family:'cylinder',gender:'female',profile:{centered:true,caps:'none',sections:[section('R',8,4),section('R',6,12),section('R',8,4)]},capabilities:['slide']}
+    case'stud':
+      return{family:'cylinder',gender:'male',profile:{centered:false,caps:'one',sections:[section('R',6,4)]},capabilities:[]}
+    case'tube':
+      return{family:'cylinder',gender:'female',profile:{centered:false,caps:'one',sections:[section('R',6,4)]},capabilities:[]}
+    default:return null
+  }
+}
+
+function builtinConnectorToEndpoint(connector,{bodyId,partId,index=0}={}){
+  const shape=builtinProfile(connector?.type)
+  if(!shape||!bodyId)return null
+  const sourceId=String(connector?.id??`builtin-${index}`)
+  return createEndpointDescriptor({
+    id:deterministicId('endpoint',bodyId,'builtin',sourceId),
+    bodyId,
+    family:shape.family,
+    gender:shape.gender,
+    frame:{
+      positionStud:Array.isArray(connector?.position)?connector.position.slice(0,3).map(Number):[0,0,0],
+      orientationBrickLab:builtinOrientation(connector?.axis),
+    },
+    profile:shape.profile,
+    capabilities:shape.capabilities,
+    metadata:{
+      sourceEndpointId:sourceId,
+      builtinConnectorId:sourceId,
+      builtinType:connector?.type??null,
+      parser:'mechanics-next:builtin-catalog',
+    },
+    evidence:evidence({
+      source:'bricklab-builtin-connector',
+      confidence:'verified',
+      reason:`native builtin connector type: ${connector?.type??'unknown'}`,
+      detail:{partId},
+    }),
+  })
+}
 
 async function fetchTextOrNull(url){
   const response=await fetch(url,{mode:'cors',cache:'force-cache'})
@@ -60,11 +135,38 @@ export function createNativeConnectivityProvider({
     return file?rootPath(file):null
   }
 
+  const builtinForPart=partId=>{
+    const def=parts.get(partId)
+    if(def?.ldraw?.file)return null
+    const connectors=Array.isArray(def?.connectors)?def.connectors.filter(item=>builtinProfile(item?.type)):null
+    if(!connectors?.length)return null
+    return Object.freeze({
+      status:'ready',
+      partId:String(partId),
+      file:null,
+      builtin:true,
+      connectors:Object.freeze(connectors.map(item=>Object.freeze({
+        ...item,
+        position:Array.isArray(item.position)?Object.freeze([...item.position]):null,
+        axis:Array.isArray(item.axis)?Object.freeze([...item.axis]):null,
+      }))),
+      warnings:Object.freeze([]),
+      source:Object.freeze({kind:'bricklab-builtin-catalog'}),
+    })
+  }
+
   const hydrate=partId=>{
     const id=String(partId||'')
     if(!id)return Promise.resolve(null)
     if(cache.get(id)?.status==='ready')return Promise.resolve(cache.get(id))
     if(pending.has(id))return pending.get(id)
+    const builtin=builtinForPart(id)
+    if(builtin){
+      cache.set(id,builtin)
+      revision+=1
+      resolved+=1
+      return Promise.resolve(builtin)
+    }
     const file=fileForPart(id)
     if(!file){
       const value=Object.freeze({status:'missing',partId:id,file:null,connectors:Object.freeze([]),warnings:Object.freeze([])})
@@ -116,6 +218,13 @@ export function createNativeConnectivityProvider({
       if(!id)return null
       const current=cache.get(id)
       if(current)return current
+      const builtin=builtinForPart(id)
+      if(builtin){
+        cache.set(id,builtin)
+        revision+=1
+        resolved+=1
+        return builtin
+      }
       void hydrate(id)
       return Object.freeze({status:'loading',partId:id,file:fileForPart(id),connectors:Object.freeze([]),warnings:Object.freeze([])})
     },
@@ -123,7 +232,12 @@ export function createNativeConnectivityProvider({
     prefetch(partIds=[]){
       return Promise.allSettled([...new Set(partIds.map(String).filter(Boolean))].map(hydrate))
     },
-    toEndpoint:ldcadConnectorToEndpoint,
+    toEndpoint(connector,options={}){
+      if(connector?.type&&Array.isArray(connector?.position)){
+        return builtinConnectorToEndpoint(connector,options)
+      }
+      return ldcadConnectorToEndpoint(connector,options)
+    },
     invalidate(partId){
       const id=String(partId||'')
       const removed=cache.delete(id)
