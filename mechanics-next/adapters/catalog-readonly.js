@@ -56,6 +56,7 @@ export function observePartDefinition(definition) {
       wormDrive:definition.mechanics.wormDrive ?? null,
       rackGear:definition.mechanics.rackGear ?? null,
       steeringRack:definition.mechanics.steeringRack ?? null,
+      steeringRackGuide:definition.mechanics.steeringRackGuide ?? null,
       steeringKnuckle:definition.mechanics.steeringKnuckle ?? null,
       steeringBase:definition.mechanics.steeringBase ?? null,
       shockBody:definition.mechanics.shockBody ?? null,

@@ -143,7 +143,9 @@ function explicitRole(observation){
   if(mechanics.wormDrive)return 'worm'
   if(mechanics.transmission)return 'gearbox'
   if(mechanics.rackGear||mechanics.steeringRack)return 'rack'
-  if(mechanics.shaft===true)return 'axle'
+  if(mechanics.steeringRackGuide)return 'connector'
+  if(mechanics.wheel)return roleFromText(textOf(observation))==='wheel-assembly'?'wheel-assembly':'rim'
+  if(mechanics.shaft===true&&roleFromText(textOf(observation))==='unknown')return 'axle'
   return null
 }
 

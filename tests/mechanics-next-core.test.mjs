@@ -1,4 +1,6 @@
 import test from 'node:test'
+import { matchMechanicalEndpoints } from '../mechanics-next/connectors/profile-matcher.js'
+import { classifyPartFamily } from '../mechanics-next/intelligence/family-classifier.js'
 import assert from 'node:assert/strict'
 
 import {
@@ -4547,6 +4549,7 @@ test('mechanical family and controls do not depend on translated catalog labels'
   const examples=[
     [{id:'opaque-power',name:'Мотор',mechanics:{motor:{rpm:120,stallTorque:.045,connectorId:'output'}}},'motor'],
     [{id:'opaque-shaft',name:'Ось',mechanics:{shaft:true}},'axle'],
+    [{id:'opaque-wheel',name:'Колесо',mechanics:{shaft:true,wheel:{radius:1.4}}},'rim'],
     [{id:'opaque-box',name:'Редуктор',mechanics:{transmission:{inputConnectorId:'input',outputConnectorId:'output',modes:{forward:1,neutral:0,reverse:-1}}}},'gearbox'],
     [{id:'opaque-cardan',name:'Кардан',mechanics:{articulatedCoupler:{joint:'spherical'}}},'universal-joint'],
     [{id:'opaque-cv',name:'ШРУС',mechanics:{articulatedCoupler:{joint:'spherical',constantVelocity:true}}},'cv-joint'],
@@ -4582,4 +4585,15 @@ test('builtin Cardan and CV shaft bindings discover their angled native model fr
     assert.deepEqual(descriptor.externalBodies,['shaft-in','shaft-out'])
     assert.equal(discovery.nonlinearRelations.length,role==='universal-joint'?1:0)
   }
+})
+
+test('native builtin slider candidates accept complementary rails and reject same-side guides', () => {
+  const make=(id,type)=>createEndpointDescriptor({id,bodyId:id,family:'generic',gender:null,profile:{kind:'linear-guide',type},metadata:{builtinType:type,semantics:{semanticKind:'linear-guide'}}})
+  const slider=make('slider','slider'),rail=make('rail','slider-rail')
+  const pair=matchMechanicalEndpoints(slider,rail)
+  assert.equal(pair.compatible,true)
+  assert.equal(pair.interfaceRule.kind,'prismatic')
+  assert.equal(matchMechanicalEndpoints(slider,make('slider2','slider')).compatible,false)
+  assert.equal(matchMechanicalEndpoints(rail,make('rail2','slider-rail')).compatible,false)
+  assert.equal(classifyPartFamily({id:'opaque-guide',name:'Направляющая',legacyMechanics:{steeringRackGuide:{railConnectorId:'rail'}}}).role,'connector')
 })

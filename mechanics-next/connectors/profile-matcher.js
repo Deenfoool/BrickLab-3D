@@ -235,6 +235,16 @@ function genericMode(a,b){
 }
 function genericMatch(a,b){
   if(a?.family!=='generic'||b?.family!=='generic')return{compatible:false,reason:'generic-pair'}
+  if(a?.profile?.kind==='linear-guide'||b?.profile?.kind==='linear-guide'){
+    const types=new Set([a?.metadata?.builtinType,b?.metadata?.builtinType])
+    if(a?.profile?.kind!=='linear-guide'||b?.profile?.kind!=='linear-guide'||
+      !types.has('slider')||!types.has('slider-rail'))return{compatible:false,reason:'linear-guide-pair'}
+    const semantic=intendedInterfaceRule(a,b)
+    return{compatible:true,family:'generic',reason:'linear-guide',keyed:true,
+      rotationalSymmetry:1,freeOrientation:false,freeTwist:false,requiresAxialFit:false,
+      interfaceRule:semantic.rule,interfacePair:semantic.pair,
+      semanticA:semantic.semanticA,semanticB:semantic.semanticB}
+  }
   if(!maleFemale(a,b))return{compatible:false,reason:'generic-gender'}
   if(group(a)!==group(b))return{compatible:false,reason:'group'}
   const mode=genericMode(a,b)
