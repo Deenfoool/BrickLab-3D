@@ -157,14 +157,19 @@ if(!PhysicsSession[marker]){
         contactsEnabled:false,
       })
       physicsInstalled=true
-      const steeringBindings=physics.vehicleSteeringBindings?.()??[]
+      const steeringBridge=physics.vehicleSteeringBridge?.()??Object.freeze({
+        bindings:Object.freeze([]),
+        rackBindings:Object.freeze([]),
+      })
       const steeringInstaller=globalThis.BrickLabVehicle?.installMechanicsNextSteering
-      if(steeringBindings.length&&typeof steeringInstaller!=='function'){
+      const steeringCount=
+        (steeringBridge.bindings?.length??0)+(steeringBridge.rackBindings?.length??0)
+      if(steeringCount&&typeof steeringInstaller!=='function'){
         throw new Error('Mechanics Next steering bindings exist but Vehicle System bridge is unavailable')
       }
       const steeringIntegration=typeof steeringInstaller==='function'
-        ?steeringInstaller(session,steeringBindings)
-        :Object.freeze({installed:0,skipped:0})
+        ?steeringInstaller(session,steeringBridge)
+        :Object.freeze({installed:0,racks:0,skipped:0})
       if(steeringIntegration.skipped>0){
         const error=new Error('Mechanics Next vehicle steering integration skipped native bindings')
         error.failures=[Object.freeze({
@@ -180,7 +185,8 @@ if(!PhysicsSession[marker]){
         version:MECHANICS_NEXT_PHYSICS_OWNER_VERSION,
         compatibilityConnections:compatibility.length,
         excludedCompoundRoots:excludedRoots.size,
-        steeringBindings:physics.vehicleSteeringBindings?.().length??0,
+        steeringBindings:steeringBridge.bindings?.length??0,
+        steeringRacks:steeringBridge.rackBindings?.length??0,
         gate:gate.summary??null,
       })
       installDisposeBridge(session,physics)
