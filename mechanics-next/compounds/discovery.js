@@ -74,6 +74,39 @@ function portPhase(frameA,frameB){
   return signedAngleAround(zero,frameA.reference,axisA)
 }
 
+function angularInternalTopology(kind,jointBody){
+  if(kind==='universal-joint'){
+    return Object.freeze({
+      rootBodyId:jointBody,
+      rootIsCompoundContainer:true,
+      members:Object.freeze([
+        Object.freeze({id:`${jointBody}::input-yoke`,role:'input-yoke'}),
+        Object.freeze({id:`${jointBody}::cross`,role:'cross'}),
+        Object.freeze({id:`${jointBody}::output-yoke`,role:'output-yoke'}),
+      ]),
+      joints:Object.freeze([
+        Object.freeze({a:'input-yoke',b:'cross',kind:'revolute'}),
+        Object.freeze({a:'cross',b:'output-yoke',kind:'revolute',axisRelation:'orthogonal'}),
+      ]),
+      transmission:'cardan-phase',
+    })
+  }
+  return Object.freeze({
+    rootBodyId:jointBody,
+    rootIsCompoundContainer:true,
+    members:Object.freeze([
+      Object.freeze({id:`${jointBody}::input-member`,role:'input-member'}),
+      Object.freeze({id:`${jointBody}::coupling-core`,role:'constant-velocity-core'}),
+      Object.freeze({id:`${jointBody}::output-member`,role:'output-member'}),
+    ]),
+    joints:Object.freeze([
+      Object.freeze({a:'input-member',b:'coupling-core',kind:'articulated'}),
+      Object.freeze({a:'coupling-core',b:'output-member',kind:'articulated'}),
+    ]),
+    transmission:'constant-velocity',
+  })
+}
+
 function jointGroups(records,relations){
   const byBody=bodyRecordMap(records)
   const groups=new Map()
@@ -158,6 +191,7 @@ function discoverAngularJoints(records,relations){
       maxBendAngleRad:Number.isFinite(maxBend)?maxBend:null,
       beyondVerifiedLimit,
       status:beyondVerifiedLimit?'limit-exceeded':'resolved',
+      internalTopology:angularInternalTopology(jointRole,jointBody),
     })
     descriptors.push(descriptor)
 
@@ -325,6 +359,20 @@ function discoverLinearActuators(records,graph){
         :!(Number.isFinite(lead)&&lead!==0)
           ?'lead-unverified'
           :'resolved',
+      internalTopology:Object.freeze({
+        rootBodyId:actuatorBody,
+        rootIsCompoundContainer:true,
+        members:Object.freeze([
+          Object.freeze({id:`${actuatorBody}::housing`,role:'housing'}),
+          Object.freeze({id:`${actuatorBody}::screw`,role:'screw-input'}),
+          Object.freeze({id:`${actuatorBody}::rod`,role:'rod',mappedBodyId:sliderBody}),
+        ]),
+        joints:Object.freeze([
+          Object.freeze({a:'housing',b:'rod',kind:'prismatic',axis}),
+          Object.freeze({a:'housing',b:'screw-input',kind:'revolute'}),
+        ]),
+        transmission:'screw-linear',
+      }),
     })
     descriptors.push(descriptor)
 
@@ -405,6 +453,18 @@ function discoverLinearActuators(records,graph){
       sliderBody:null,
       inputBody:null,
       status:'awaiting-compound-decomposition',
+      internalTopology:Object.freeze({
+        rootBodyId:bodyId,
+        rootIsCompoundContainer:true,
+        members:Object.freeze([
+          Object.freeze({id:`${bodyId}::housing`,role:'housing'}),
+          Object.freeze({id:`${bodyId}::rod`,role:'rod'}),
+        ]),
+        joints:Object.freeze([
+          Object.freeze({a:'housing',b:'rod',kind:'prismatic'}),
+        ]),
+        transmission:null,
+      }),
     }))
     diagnostics.push(Object.freeze({
       kind:'linear-actuator',
@@ -435,6 +495,20 @@ function discoverSprings(records){
       springStiffness:Number.isFinite(Number(props.springStiffness))?Number(props.springStiffness):null,
       damping:Number.isFinite(Number(props.damping))?Number(props.damping):null,
       status:'awaiting-compound-decomposition',
+      internalTopology:Object.freeze({
+        rootBodyId:bodyId,
+        rootIsCompoundContainer:true,
+        members:Object.freeze([
+          Object.freeze({id:`${bodyId}::housing`,role:'housing'}),
+          Object.freeze({id:`${bodyId}::rod`,role:'rod'}),
+          Object.freeze({id:`${bodyId}::spring`,role:'spring',nonRigid:true}),
+        ]),
+        joints:Object.freeze([
+          Object.freeze({a:'housing',b:'rod',kind:'prismatic'}),
+        ]),
+        transmission:null,
+        dynamics:'spring-damper',
+      }),
     })
     descriptors.push(data)
     dynamics.push(data)
