@@ -19,6 +19,7 @@ import { createMechanicsDragSession } from './interaction/drag-session.js'
 import { rotaryFrameForRecord } from './interaction/motion-plan.js'
 import { rotationalDragProjection } from './interaction/view-projection.js'
 import { createCompoundStateRegistry } from './compounds/state.js'
+import { createMechanicsPhysicsRuntime } from './physics/runtime.js'
 
 export const MECHANICS_NEXT_RUNTIME_MODE = 'observe-only'
 
@@ -62,6 +63,7 @@ export function createMechanicsNextRuntime({
   let syncQueued = false
   let lastSceneSync = null
   let lastTransmissionSync = null
+  let physicsPreview = null
   let activeDragSession = null
   let activeDragApply = false
 
@@ -121,10 +123,22 @@ export function createMechanicsNextRuntime({
       compoundState,
     })
     lastTransmissionSync = transmissionCompiler.sync(discovery)
+    physicsPreview = createMechanicsPhysicsRuntime({
+      graph,
+      discovery,
+      records,
+      studMeters:.008,
+    })
     lastSceneSync = Object.freeze({
       scene,
       connections,
       transmissions:lastTransmissionSync,
+      physics:Object.freeze({
+        pass:physicsPreview.pass,
+        structural:physicsPreview.structuralPlan.stats,
+        couplings:physicsPreview.couplingPlan.stats,
+        blockerCount:physicsPreview.blockers.length,
+      }),
       observedRecords:records.length,
     })
     return lastSceneSync
@@ -164,6 +178,7 @@ export function createMechanicsNextRuntime({
     connectionInterpreter,
     transmissionCompiler,
     compoundState,
+    physicsPreview:() => physicsPreview,
     refreshLegacySnapshot,
     legacySnapshot:() => legacySnapshot,
     describePart(partId, options) {
@@ -301,6 +316,7 @@ export function createMechanicsNextRuntime({
         transmissionCompiler:transmissionCompiler.snapshot(),
         transmissionSolve:transmissionCompiler.solve(),
         compoundState:compoundState.snapshot(),
+        physicsPreview:physicsPreview?.status?.() ?? null,
         dragSession:Object.freeze({
           active:Boolean(activeDragSession?.active),
           apply:activeDragApply,
