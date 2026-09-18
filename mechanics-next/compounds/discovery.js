@@ -1,0 +1,579 @@
+import {
+  createTransmission,
+  deterministicId,
+  evidence,
+} from '../core/model.js'
+import {
+  clamp,
+  cross3,
+  dot3,
+  len3,
+  norm3,
+  signedAngleAround,
+} from '../math/rigid.js'
+import { worldConnectorFrame } from '../connectors/world-frame.js'
+import {
+  rotationCouplingEquation,
+  screwLinearEquation,
+} from '../transmission/equations.js'
+import { createUniversalJointRelation } from './universal-joint.js'
+
+export const COMPOUND_DISCOVERY_VERSION='mechanics-compound-discovery-0.1.0'
+const EPS=1e-7
+
+function bodyRecordMap(records=[]){
+  return new Map(records.map(record=>[String(record?.instance?.body?.id||''),record]).filter(([id])=>id))
+}
+
+function role(record){
+  return record?.instance?.descriptor?.classification?.role||'unknown'
+}
+
+function properties(record){
+  return record?.instance?.descriptor?.classification?.properties||{}
+}
+
+function endpointById(record,endpointId){
+  return record?.instance?.endpoints?.find(endpoint=>String(endpoint?.id)===String(endpointId))??null
+}
+
+function endpointIdForBody(relation,bodyId){
+  if(String(relation?.bodyA)===String(bodyId))return relation.endpointA
+  if(String(relation?.bodyB)===String(bodyId))return relation.endpointB
+  return null
+}
+
+function otherBody(relation,bodyId){
+  if(String(relation?.bodyA)===String(bodyId))return String(relation.bodyB)
+  if(String(relation?.bodyB)===String(bodyId))return String(relation.bodyA)
+  return null
+}
+
+function worldFrameForRelationPort(record,relation,bodyId){
+  const endpointId=endpointIdForBody(relation,bodyId)
+  const endpoint=endpointById(record,endpointId)
+  if(!endpoint)return null
+  try{
+    return worldConnectorFrame(
+      record.pose,
+      endpoint,
+      {visualOffsetStud:record.visualOffsetStud||[0,0,0]},
+    )
+  }catch{
+    return null
+  }
+}
+
+function portPhase(frameA,frameB){
+  const axisA=norm3(frameA.axis)
+  const axisB=norm3(frameB.axis)
+  const normal=cross3(axisA,axisB)
+  if(len3(normal)<=EPS)return 0
+  const n=norm3(normal)
+  const zero=norm3(cross3(n,axisA),frameA.reference)
+  return signedAngleAround(zero,frameA.reference,axisA)
+}
+
+function jointGroups(records,relations){
+  const byBody=bodyRecordMap(records)
+  const groups=new Map()
+
+  for(const relation of relations||[]){
+    if(relation?.kind!=='universal-joint-port')continue
+    const recordA=byBody.get(String(relation.bodyA))
+    const recordB=byBody.get(String(relation.bodyB))
+    const jointA=['universal-joint','cv-joint'].includes(role(recordA))
+    const jointB=['universal-joint','cv-joint'].includes(role(recordB))
+    if(jointA===jointB)continue
+    const joint=jointA?recordA:recordB
+    const jointBody=joint.instance.body.id
+    const externalBody=jointA?String(relation.bodyB):String(relation.bodyA)
+    const list=groups.get(jointBody)||[]
+    list.push({relation,joint,externalBody})
+    groups.set(jointBody,list)
+  }
+  return groups
+}
+
+function discoverAngularJoints(records,relations){
+  const equations=[]
+  const transmissions=[]
+  const nonlinearRelations=[]
+  const descriptors=[]
+  const diagnostics=[]
+
+  for(const[jointBody,ports]of jointGroups(records,relations)){
+    const jointRecord=ports[0]?.joint
+    const jointRole=role(jointRecord)
+
+    if(ports.length!==2){
+      diagnostics.push(Object.freeze({
+        kind:jointRole,
+        bodyId:jointBody,
+        status:'port-count-unresolved',
+        portCount:ports.length,
+      }))
+      descriptors.push(Object.freeze({
+        kind:jointRole,
+        bodyId:jointBody,
+        status:'incomplete',
+        externalBodies:Object.freeze(ports.map(port=>port.externalBody)),
+      }))
+      continue
+    }
+
+    const ordered=[...ports].sort((a,b)=>
+      String(a.relation.id).localeCompare(String(b.relation.id))||
+      a.externalBody.localeCompare(b.externalBody))
+    const first=ordered[0],second=ordered[1]
+    const frameA=worldFrameForRelationPort(jointRecord,first.relation,jointBody)
+    const frameB=worldFrameForRelationPort(jointRecord,second.relation,jointBody)
+
+    if(!frameA||!frameB){
+      diagnostics.push(Object.freeze({
+        kind:jointRole,
+        bodyId:jointBody,
+        status:'port-frame-unavailable',
+      }))
+      continue
+    }
+
+    const rawDot=clamp(dot3(norm3(frameA.axis),norm3(frameB.axis)),-1,1)
+    const bendAngleRad=Math.acos(clamp(Math.abs(rawDot),0,1))
+    const directionSign=rawDot>=0?1:-1
+    const maxBend=Number(properties(jointRecord).maxBendAngleRad)
+    const beyondVerifiedLimit=Number.isFinite(maxBend)&&bendAngleRad>maxBend+1e-6
+    const phase=portPhase(frameA,frameB)
+    const id=deterministicId(jointRole,jointBody,first.externalBody,second.externalBody)
+
+    const descriptor=Object.freeze({
+      id,
+      kind:jointRole,
+      bodyId:jointBody,
+      externalBodies:Object.freeze([first.externalBody,second.externalBody]),
+      portRelationIds:Object.freeze([first.relation.id,second.relation.id]),
+      bendAngleRad,
+      inputPhaseRad:phase,
+      directionSign,
+      maxBendAngleRad:Number.isFinite(maxBend)?maxBend:null,
+      beyondVerifiedLimit,
+      status:beyondVerifiedLimit?'limit-exceeded':'resolved',
+    })
+    descriptors.push(descriptor)
+
+    if(beyondVerifiedLimit){
+      diagnostics.push(Object.freeze({
+        kind:jointRole,
+        bodyId:jointBody,
+        status:'bend-limit-exceeded',
+        bendAngleRad,
+        maxBendAngleRad:maxBend,
+      }))
+      continue
+    }
+
+    if(jointRole==='cv-joint'){
+      const equation=rotationCouplingEquation({
+        id,
+        bodyA:first.externalBody,
+        bodyB:second.externalBody,
+        ratioAB:directionSign,
+        kind:'constant-velocity-joint',
+      })
+      equations.push(equation)
+      transmissions.push(createTransmission({
+        id,
+        kind:'cv-joint',
+        bodies:[first.externalBody,second.externalBody,jointBody],
+        parameters:{
+          bendAngleRad,
+          directionSign,
+          constantVelocity:true,
+        },
+        equations:[equation],
+        metadata:{jointBody,portRelationIds:[first.relation.id,second.relation.id]},
+        evidence:evidence({
+          source:'mechanics-next:compound-cv-joint',
+          confidence:'strong',
+          reason:'two universal-joint ports on CV-classified compound',
+        }),
+      }))
+      diagnostics.push(Object.freeze({
+        kind:'cv-joint',
+        bodyId:jointBody,
+        status:'resolved-linear',
+        bendAngleRad,
+      }))
+      continue
+    }
+
+    const nonlinear=createUniversalJointRelation({
+      id,
+      inputBody:first.externalBody,
+      outputBody:second.externalBody,
+      bendAngleRad,
+      inputPhaseRad:phase,
+      directionSign,
+      metadata:{
+        jointBody,
+        portRelationIds:[first.relation.id,second.relation.id],
+      },
+    })
+    nonlinearRelations.push(nonlinear)
+    transmissions.push(createTransmission({
+      id,
+      kind:'universal-joint',
+      bodies:[first.externalBody,second.externalBody,jointBody],
+      parameters:{
+        bendAngleRad,
+        inputPhaseRad:phase,
+        directionSign,
+        nonlinear:true,
+      },
+      equations:[],
+      metadata:{jointBody,relationId:nonlinear.id},
+      evidence:evidence({
+        source:'mechanics-next:compound-universal-joint',
+        confidence:'strong',
+        reason:'two LDCad uniJnt ports resolved into exact Cardan relation',
+      }),
+    }))
+    diagnostics.push(Object.freeze({
+      kind:'universal-joint',
+      bodyId:jointBody,
+      status:'resolved-nonlinear',
+      bendAngleRad,
+      directionSign,
+    }))
+  }
+
+  return{equations,transmissions,nonlinearRelations,descriptors,diagnostics}
+}
+
+function constraintPair(constraint){
+  return constraint?.metadata?.interfacePair||[]
+}
+
+function isKeyedRotationConstraint(constraint){
+  const pair=constraintPair(constraint)
+  return constraint?.metadata?.topology?.keyedRotation===true||
+    (pair.includes('axle')&&pair.includes('axle-hole'))
+}
+
+function guideConstraint(constraint){
+  const a=constraint?.metadata?.semanticA
+  const b=constraint?.metadata?.semanticB
+  return a==='linear-actuator-guide'||b==='linear-actuator-guide'||
+    constraintPair(constraint).includes('linear-actuator-guide')
+}
+
+function connectedConstraints(graph,bodyId){
+  return (graph?.edges?.('constraint')||[]).filter(edge=>
+    String(edge.bodyA)===String(bodyId)||String(edge.bodyB)===String(bodyId))
+}
+
+function opposite(edge,bodyId){
+  return String(edge.bodyA)===String(bodyId)?String(edge.bodyB):String(edge.bodyA)
+}
+
+function discoverLinearActuators(records,graph){
+  const byBody=bodyRecordMap(records)
+  const equations=[]
+  const transmissions=[]
+  const descriptors=[]
+  const linearMotions=[]
+  const diagnostics=[]
+  const consumed=new Set()
+
+  for(const edge of graph?.edges?.('constraint')||[]){
+    if(!guideConstraint(edge))continue
+    const recordA=byBody.get(String(edge.bodyA))
+    const recordB=byBody.get(String(edge.bodyB))
+    const actuatorA=role(recordA)==='linear-actuator'
+    const actuatorB=role(recordB)==='linear-actuator'
+    const actuator=actuatorA?recordA:actuatorB?recordB:null
+    if(!actuator)continue
+
+    const actuatorBody=actuator.instance.body.id
+    if(consumed.has(actuatorBody))continue
+    consumed.add(actuatorBody)
+    const sliderBody=opposite(edge,actuatorBody)
+    const lead=Number(properties(actuator).screwLeadStudPerTurn)
+    const inputConstraints=connectedConstraints(graph,actuatorBody)
+      .filter(item=>item.id!==edge.id&&isKeyedRotationConstraint(item))
+    const inputBodies=[...new Set(inputConstraints.map(item=>opposite(item,actuatorBody)))]
+    const inputBody=inputBodies.length===1?inputBodies[0]:null
+    const axis=Array.isArray(edge?.referenceFrame?.axis)
+      ?Object.freeze([...edge.referenceFrame.axis])
+      :Object.freeze([0,1,0])
+    const id=deterministicId('linear-actuator',actuatorBody,sliderBody,inputBody||'unknown')
+
+    const descriptor=Object.freeze({
+      id,
+      kind:'linear-actuator',
+      bodyId:actuatorBody,
+      sliderBody,
+      inputBody,
+      guideConstraintId:edge.id,
+      inputConstraintIds:Object.freeze(inputConstraints.map(item=>item.id)),
+      axis,
+      screwLeadStudPerTurn:Number.isFinite(lead)&&lead!==0?lead:null,
+      travelStud:Number.isFinite(Number(properties(actuator).travelStud))
+        ?Number(properties(actuator).travelStud):null,
+      status:!inputBody
+        ?'input-unresolved'
+        :!(Number.isFinite(lead)&&lead!==0)
+          ?'lead-unverified'
+          :'resolved',
+    })
+    descriptors.push(descriptor)
+
+    linearMotions.push(Object.freeze({
+      kind:'prismatic-output',
+      bodyId:sliderBody,
+      parentBodyId:actuatorBody,
+      axis,
+      channel:'slide',
+      source:'linear-actuator-guide',
+    }))
+
+    if(!inputBody){
+      diagnostics.push(Object.freeze({
+        kind:'linear-actuator',
+        bodyId:actuatorBody,
+        status:'input-unresolved',
+        inputCandidateCount:inputBodies.length,
+      }))
+      continue
+    }
+    if(!(Number.isFinite(lead)&&lead!==0)){
+      diagnostics.push(Object.freeze({
+        kind:'linear-actuator',
+        bodyId:actuatorBody,
+        status:'lead-unverified',
+        inputBody,
+        sliderBody,
+      }))
+      continue
+    }
+
+    const equation=screwLinearEquation({
+      id,
+      rotaryBody:inputBody,
+      sliderBody,
+      leadStudPerTurn:lead,
+    })
+    equations.push(equation)
+    transmissions.push(createTransmission({
+      id,
+      kind:'linear-actuator',
+      bodies:[inputBody,actuatorBody,sliderBody],
+      parameters:{
+        screwLeadStudPerTurn:lead,
+        travelStud:descriptor.travelStud,
+        axis,
+      },
+      equations:[equation],
+      metadata:{
+        guideConstraintId:edge.id,
+        inputConstraintIds:descriptor.inputConstraintIds,
+      },
+      evidence:evidence({
+        source:'mechanics-next:linear-actuator',
+        confidence:'strong',
+        reason:'verified screw lead + LDCad linear actuator guide',
+      }),
+    }))
+    diagnostics.push(Object.freeze({
+      kind:'linear-actuator',
+      bodyId:actuatorBody,
+      status:'resolved',
+      inputBody,
+      sliderBody,
+      screwLeadStudPerTurn:lead,
+    }))
+  }
+
+  for(const record of records){
+    if(role(record)!=='linear-actuator')continue
+    const bodyId=record.instance.body.id
+    if(consumed.has(bodyId))continue
+    descriptors.push(Object.freeze({
+      id:deterministicId('linear-actuator',bodyId,'undecomposed'),
+      kind:'linear-actuator',
+      bodyId,
+      sliderBody:null,
+      inputBody:null,
+      status:'awaiting-compound-decomposition',
+    }))
+    diagnostics.push(Object.freeze({
+      kind:'linear-actuator',
+      bodyId,
+      status:'awaiting-compound-decomposition',
+    }))
+  }
+
+  return{equations,transmissions,descriptors,linearMotions,diagnostics}
+}
+
+function discoverSprings(records){
+  const descriptors=[]
+  const dynamics=[]
+  const diagnostics=[]
+
+  for(const record of records){
+    if(role(record)!=='shock-absorber')continue
+    const bodyId=record.instance.body.id
+    const props=properties(record)
+    const data=Object.freeze({
+      id:deterministicId('spring-damper',bodyId),
+      kind:'spring-damper',
+      bodyId,
+      topology:'prismatic-internal',
+      restLengthStud:Number.isFinite(Number(props.restLengthStud))?Number(props.restLengthStud):null,
+      travelStud:Number.isFinite(Number(props.travelStud))?Number(props.travelStud):null,
+      springStiffness:Number.isFinite(Number(props.springStiffness))?Number(props.springStiffness):null,
+      damping:Number.isFinite(Number(props.damping))?Number(props.damping):null,
+      status:'awaiting-compound-decomposition',
+    })
+    descriptors.push(data)
+    dynamics.push(data)
+    diagnostics.push(Object.freeze({
+      kind:'spring-damper',
+      bodyId,
+      status:data.status,
+      parametersVerified:[
+        data.restLengthStud!=null?'restLengthStud':null,
+        data.travelStud!=null?'travelStud':null,
+        data.springStiffness!=null?'springStiffness':null,
+        data.damping!=null?'damping':null,
+      ].filter(Boolean),
+    }))
+  }
+
+  return{descriptors,dynamics,diagnostics}
+}
+
+function discoverClutches(records,graph,stateRegistry){
+  const byBody=bodyRecordMap(records)
+  const equations=[]
+  const transmissions=[]
+  const descriptors=[]
+  const diagnostics=[]
+
+  for(const record of records){
+    if(role(record)!=='driving-ring')continue
+    const ringBody=record.instance.body.id
+    const stateKey=`clutch:${ringBody}`
+    const state=stateRegistry?.get?.(stateKey)??null
+    const slideConstraint=connectedConstraints(graph,ringBody)
+      .find(edge=>constraintPair(edge).includes('driving-ring'))??null
+    const descriptor={
+      id:deterministicId('conditional-clutch',ringBody),
+      kind:'conditional-clutch',
+      ringBody,
+      stateKey,
+      slideConstraintId:slideConstraint?.id??null,
+      mode:state?.mode??'unknown',
+      targetBodyId:state?.targetBodyId??null,
+    }
+
+    if(state?.mode!=='engaged'){
+      descriptors.push(Object.freeze({...descriptor,status:state?.mode==='disengaged'?'disengaged':'engagement-unresolved'}))
+      diagnostics.push(Object.freeze({
+        kind:'conditional-clutch',
+        ringBody,
+        status:state?.mode==='disengaged'?'disengaged':'engagement-unresolved',
+        stateKey,
+      }))
+      continue
+    }
+
+    const targetBody=String(state.targetBodyId||'')
+    const target=byBody.get(targetBody)
+    if(!target||role(target)!=='clutch-gear'){
+      descriptors.push(Object.freeze({...descriptor,status:'invalid-engagement-target'}))
+      diagnostics.push(Object.freeze({
+        kind:'conditional-clutch',
+        ringBody,
+        status:'invalid-engagement-target',
+        targetBodyId:targetBody||null,
+      }))
+      continue
+    }
+
+    const directionSign=Number(state.directionSign)<0?-1:1
+    const id=deterministicId('clutch-engagement',ringBody,targetBody)
+    const equation=rotationCouplingEquation({
+      id,
+      bodyA:ringBody,
+      bodyB:targetBody,
+      ratioAB:directionSign,
+      kind:'engaged-clutch',
+    })
+    equations.push(equation)
+    transmissions.push(createTransmission({
+      id,
+      kind:'engaged-clutch',
+      bodies:[ringBody,targetBody],
+      parameters:{directionSign,stateKey},
+      equations:[equation],
+      metadata:{slideConstraintId:slideConstraint?.id??null},
+      evidence:evidence({
+        source:'mechanics-next:compound-state',
+        confidence:'strong',
+        reason:'explicit clutch engagement state',
+      }),
+    }))
+    descriptors.push(Object.freeze({...descriptor,status:'engaged',targetBodyId:targetBody}))
+    diagnostics.push(Object.freeze({
+      kind:'conditional-clutch',
+      ringBody,
+      status:'engaged',
+      targetBodyId:targetBody,
+    }))
+  }
+
+  return{equations,transmissions,descriptors,diagnostics}
+}
+
+export function discoverCompoundMechanisms({
+  records=[],
+  graph,
+  relations=[],
+  stateRegistry=null,
+}={}){
+  const angular=discoverAngularJoints(records,relations)
+  const actuators=discoverLinearActuators(records,graph)
+  const springs=discoverSprings(records)
+  const clutches=discoverClutches(records,graph,stateRegistry)
+
+  return Object.freeze({
+    version:COMPOUND_DISCOVERY_VERSION,
+    equations:Object.freeze([
+      ...angular.equations,
+      ...actuators.equations,
+      ...clutches.equations,
+    ]),
+    transmissions:Object.freeze([
+      ...angular.transmissions,
+      ...actuators.transmissions,
+      ...clutches.transmissions,
+    ]),
+    nonlinearRelations:Object.freeze(angular.nonlinearRelations),
+    descriptors:Object.freeze([
+      ...angular.descriptors,
+      ...actuators.descriptors,
+      ...springs.descriptors,
+      ...clutches.descriptors,
+    ]),
+    linearMotions:Object.freeze(actuators.linearMotions),
+    dynamics:Object.freeze(springs.dynamics),
+    diagnostics:Object.freeze([
+      ...angular.diagnostics,
+      ...actuators.diagnostics,
+      ...springs.diagnostics,
+      ...clutches.diagnostics,
+    ]),
+  })
+}
