@@ -15,6 +15,7 @@ import {
 import { createMechanicsCouplingRuntime } from './coupling-runtime.js'
 import { buildMechanicsMotorPlan, createMechanicsMotorRuntime } from './motor-runtime.js'
 import { buildMechanicsVehiclePlan } from './vehicle-plan.js'
+import { buildMechanicsSteeringPlan, materializeMechanicsSteeringBindings } from './steering-bridge.js'
 import {
   applyMechanicsJointResistance,
   validateAndReleaseMechanicsJoints,
@@ -48,6 +49,11 @@ export function createMechanicsPhysicsRuntime({
     records,
     worldUnitsPerStud,
   })
+  const steeringPlan=buildMechanicsSteeringPlan({
+    records,
+    graph:structuralGraph,
+    structuralPlan,
+  })
   const motorPlan=buildMechanicsMotorPlan({graph,records})
   const vehiclePlan=buildMechanicsVehiclePlan({
     records,
@@ -59,6 +65,7 @@ export function createMechanicsPhysicsRuntime({
     ...(compoundMemberPlan.blockers||[]),
     ...(compoundGraphExpansion.blockers||[]),
     ...(couplingPlan.blockers||[]),
+    ...(steeringPlan.blockers||[]),
     ...(motorPlan.blockers||[]),
     ...(vehiclePlan.blockers||[]),
   ])
@@ -72,6 +79,7 @@ export function createMechanicsPhysicsRuntime({
     compoundMemberPlan,
     compoundGraphExpansion,
     couplingPlan,
+    steeringPlan,
     motorPlan,
     vehiclePlan,
     blockers,
@@ -79,6 +87,7 @@ export function createMechanicsPhysicsRuntime({
       structuralPlan.pass&&
       compoundMemberPlan.pass&&
       couplingPlan.pass&&
+      steeringPlan.pass&&
       motorPlan.pass&&
       vehiclePlan.pass,
     preflightSession(session){
@@ -143,6 +152,7 @@ export function createMechanicsPhysicsRuntime({
       let bridge=null
       let couplings=null
       let motors=null
+      let steering=null
 
       try{
         if(compoundMemberPlan.replacements.length){
@@ -193,6 +203,12 @@ export function createMechanicsPhysicsRuntime({
           controlState,
           isDriveEnabled:()=>!session.scenarioData||session.scenarioData.phase==='RUN',
         })
+        steering=materializeMechanicsSteeringBindings(steeringPlan,joints)
+        if(!steering.pass){
+          const error=new Error('Mechanics Next steering bridge materialization failed')
+          error.failures=steering.failures
+          throw error
+        }
       }catch(error){
         if(joints)disposeRapierMechanicsPlan(session,joints)
         if(compoundMembers)disposeCompoundMemberPhysics(session,compoundMembers)
@@ -206,12 +222,16 @@ export function createMechanicsPhysicsRuntime({
         joints,
         couplings,
         motors,
+        steering,
         disposed:false,
         lastCouplingStep:null,
         lastResistanceStep:null,
         releaseEvents:[],
       }
       return api.status()
+    },
+    vehicleSteeringBindings(){
+      return Object.freeze([...(installed?.steering?.bindings||[])])
     },
     beforeStep(dt){
       if(!installed||installed.disposed)return Object.freeze({installed:false})
@@ -260,6 +280,7 @@ export function createMechanicsPhysicsRuntime({
         compoundGraph:compoundGraphExpansion.stats,
         couplings:couplingPlan.stats,
         motors:motorPlan.stats,
+        steering:steeringPlan.stats,
         vehicle:Object.freeze({
           wheels:vehiclePlan.wheels.length,
           motors:vehiclePlan.motors.length,
@@ -272,6 +293,7 @@ export function createMechanicsPhysicsRuntime({
         joints:installed?.joints?.active??0,
         couplingState:installed?.couplings?.snapshot?.()??Object.freeze([]),
         motorState:installed?.motors?.snapshot?.()??Object.freeze([]),
+        steeringBindings:installed?.steering?.bindings?.length??0,
         lastCouplingStep:installed?.lastCouplingStep??null,
         lastResistanceStep:installed?.lastResistanceStep??null,
         releaseEvents:Object.freeze([...(installed?.releaseEvents||[])]),
