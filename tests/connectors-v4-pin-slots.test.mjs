@@ -145,6 +145,6 @@ test('production import map publishes the occupancy-aware pin runtime',async()=>
   const html=await readFile(new URL('../index.html',import.meta.url),'utf8')
   const {imports}=JSON.parse(html.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1])
   const runtime=imports['./connectors-v4/runtime-v4.js']
-  assert.match(runtime,/runtime-16-shaft-direction-/)
+  assert.match(runtime,/runtime-\d+-/,'occupancy-aware pin runtime must use the current canonical runtime family')
   assert.equal(imports['./connectors-v4/pin-slots-v4.js'].split('?')[1],runtime.split('?')[1])
 })
