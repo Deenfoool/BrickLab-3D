@@ -56,6 +56,31 @@ export class KinematicSolver {
     return Object.freeze([...this.#equations.values(), ...this.#drivers.values()])
   }
 
+  solveWithTemporaryEquations(extraEquations = [], {
+    variables = null,
+    defaults = {},
+    tolerance,
+  } = {}) {
+    const linear = solveLinearSystem([...this.equations(), ...(extraEquations || [])], {
+      variables,
+      defaults,
+      tolerance,
+    })
+    return Object.freeze({
+      ...linear,
+      revision:this.#revision,
+      equationCount:this.#equations.size,
+      driverCount:this.#drivers.size,
+      temporaryEquationCount:(extraEquations || []).length,
+      underdetermined:linear.valid && linear.freeVariables.length > 0,
+      status:!linear.valid
+        ? 'conflict'
+        : linear.freeVariables.length
+          ? 'underdetermined'
+          : 'solved',
+    })
+  }
+
   solve({
     variables = null,
     defaults = {},
