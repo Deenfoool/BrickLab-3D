@@ -220,6 +220,29 @@ export async function enter(){
         gate:lastGate,
       })
     }
+
+    let buildOwnership=null
+    if(mechanics.nativeProjectAuthoritative?.()!==true){
+      buildOwnership=mechanics.adoptNativeProjectOwnership?.()??null
+      if(!buildOwnership?.accepted){
+        return Object.freeze({
+          accepted:false,
+          reason:'native-build-ownership-required',
+          gate:lastGate,
+          buildOwnership,
+        })
+      }
+    }
+    const buildOwner=globalThis.BrickLabMechanicsNextBuildOwner
+    if(buildOwner?.active!==true||buildOwner?.authoritative?.()!==true){
+      return Object.freeze({
+        accepted:false,
+        reason:'native-build-owner-not-published',
+        gate:lastGate,
+        buildOwnership,
+      })
+    }
+
     entryBaseline=captureBaseline()
     mechanics.handoffDomains?.(['kinematics'],'validated Mechanics Next KINEMATICS entry')
     active=true
