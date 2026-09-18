@@ -6,32 +6,32 @@ const SHOULDER_RADIUS_LDU = 8
 const MIN_PIN_CORE_LENGTH_LDU = 8
 
 const SPECIAL_GROUPS = Object.freeze({
-  diffhouse:'differential-internal-interface',
-  drivingring1:'driving-ring',
-  drivingring2:'driving-ring',
-  linact1:'linear-actuator-guide',
-  linact2:'linear-actuator-guide',
-  linearactbody:'linear-actuator-guide',
-  cylslide:'linear-guide',
-  pneucyl:'pneumatic-cylinder-guide',
-  steerhold1:'steering-pivot',
-  steerhub1:'steering-pivot',
-  techballjnt:'ball-socket',
-  nudge1:'ball-socket',
-  nudge2:'ball-socket',
-  unijnt:'universal-joint-port',
-  techgearrack:'rack-guide',
-  techtrntbl60:'turntable-bearing',
-  turntablepin:'turntable-bearing',
-  turntable5x5:'turntable-bearing',
-  z28turntable:'turntable-bearing',
-  z56turntablet1:'turntable-bearing',
-  wpaxhole:'wheel-axle-interface',
-  sglwhlaxle:'wheel-axle-interface',
-  techwhlcon1:'wheel-retainer',
-  clkrot:'click-hinge',
-  techengine:'engine-slider',
-  techflexend:'flex-system-end',
+  diffhouse:{kind:'differential-internal-interface',role:'differential-housing'},
+  drivingring1:{kind:'driving-ring',role:'axle-joiner-slider',variant:'1'},
+  drivingring2:{kind:'driving-ring',role:'axle-joiner-slider',variant:'2'},
+  linact1:{kind:'linear-actuator-guide',role:'slider',sizeClass:'small'},
+  linact2:{kind:'linear-actuator-guide',role:'slider',sizeClass:'big'},
+  linearactbody:{kind:'linear-actuator-guide',role:'cylinder-piston'},
+  cylslide:{kind:'linear-guide',role:'cylinder-tube-slide'},
+  pneucyl:{kind:'pneumatic-cylinder-guide',role:'pneumatic-extension-guide'},
+  steerhold1:{kind:'steering-pivot',role:'steering-holder'},
+  steerhub1:{kind:'steering-pivot',role:'steering-hub'},
+  techballjnt:{kind:'ball-socket',role:'technic-ball-joint'},
+  nudge1:{kind:'ball-socket',role:'nudged-ball-joint',variant:'1'},
+  nudge2:{kind:'ball-socket',role:'nudged-ball-joint',variant:'2'},
+  unijnt:{kind:'universal-joint-port',role:'universal-joint-connection'},
+  techgearrack:{kind:'rack-guide',role:'bendable-rack'},
+  techtrntbl60:{kind:'turntable-bearing',role:'turntable-60'},
+  turntablepin:{kind:'turntable-bearing',role:'turntable-pin'},
+  turntable5x5:{kind:'turntable-bearing',role:'turntable-5x5'},
+  z28turntable:{kind:'turntable-bearing',role:'turntable-z28'},
+  z56turntablet1:{kind:'turntable-bearing',role:'turntable-z56'},
+  wpaxhole:{kind:'wheel-axle-interface',role:'wheel-winged-axle-hole'},
+  sglwhlaxle:{kind:'wheel-axle-interface',role:'single-wheel-axle'},
+  techwhlcon1:{kind:'wheel-retainer',role:'click-wheel'},
+  clkrot:{kind:'click-hinge',role:'click-rotation'},
+  techengine:{kind:'engine-slider',role:'engine-cylinder'},
+  techflexend:{kind:'flex-system-end',role:'flex-system-end'},
 })
 
 const approx = (a, b, eps = EPS_RADIUS) =>
@@ -211,10 +211,11 @@ export function classifyEndpointSemantics(endpoint) {
 
   const group = normalizedGroup(endpoint)
   if (SPECIAL_GROUPS[group]) {
-    return result(endpoint, SPECIAL_GROUPS[group], {
+    const special=SPECIAL_GROUPS[group]
+    return result(endpoint, special.kind, {
       confidence:'strong',
       reason:`ldcad-special-group:${group}`,
-      properties:{ group },
+      properties:{ group, ...special },
     })
   }
   if (/^rim\d{2,}$/.test(group)) {
