@@ -59,6 +59,7 @@ import { buildMotionPlan } from '../mechanics-next/interaction/motion-plan.js'
 import { applyMotionPlanToBaseline, captureMotionBaseline, restoreMotionBaseline } from '../mechanics-next/interaction/scene-motion-adapter.js'
 import { buildMechanicsPhysicsPlan } from '../mechanics-next/physics/plan.js'
 import { buildMechanicsCouplingPlan } from '../mechanics-next/physics/coupling-plan.js'
+import { materializeRapierMechanicsPlan, preflightRapierMechanicsPlan } from '../mechanics-next/physics/rapier-adapter.js'
 import * as THREE from 'three'
 
 test('deterministic mechanical IDs are stable and namespace-sensitive', () => {
@@ -1915,4 +1916,130 @@ test('scene motion adapter applies actuator translation from immutable baseline'
   assert.ok(Math.abs(object.position.y-.75)<1e-9)
   restoreMotionBaseline(baseline)
   assert.ok(Math.abs(object.position.y)<1e-12)
+})
+
+
+function mockPhysicsMember({
+  handle,
+  rotation=new THREE.Quaternion(),
+  position=[0,0,0],
+}={}){
+  const world=new THREE.Matrix4().compose(
+    new THREE.Vector3(...position),
+    rotation,
+    new THREE.Vector3(1,1,1),
+  )
+  return {
+    body:{handle},
+    component:{
+      bodyWorldInverse:world.clone().invert(),
+      bodyWorldRotation:rotation.clone(),
+    },
+  }
+}
+
+function minimalPhysicsPlan(joint){
+  return {
+    blockers:[],
+    joints:[joint],
+    transmissions:[],
+    dynamics:[],
+  }
+}
+
+test('Rapier preflight accepts GenericJoint only when local axes agree', () => {
+  const joint={
+    id:'slide',
+    kind:'prismatic',
+    bodyA:'a',
+    bodyB:'b',
+    frame:{positionStud:[0,0,0],axisWorld:[1,0,0]},
+    limits:null,
+  }
+  const members=new Map([
+    ['a',mockPhysicsMember({handle:1})],
+    ['b',mockPhysicsMember({handle:2})],
+  ])
+  const result=preflightRapierMechanicsPlan(minimalPhysicsPlan(joint),{
+    resolveMember:id=>members.get(id),
+  })
+  assert.equal(result.pass,true)
+})
+
+test('Rapier preflight blocks GenericJoint when the same world axis maps to different local axes', () => {
+  const joint={
+    id:'slide-mismatch',
+    kind:'cylindrical',
+    bodyA:'a',
+    bodyB:'b',
+    frame:{positionStud:[0,0,0],axisWorld:[1,0,0]},
+    limits:null,
+  }
+  const quarterTurn=new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(0,0,1),
+    Math.PI/2,
+  )
+  const members=new Map([
+    ['a',mockPhysicsMember({handle:1})],
+    ['b',mockPhysicsMember({handle:2,rotation:quarterTurn})],
+  ])
+  const result=preflightRapierMechanicsPlan(minimalPhysicsPlan(joint),{
+    resolveMember:id=>members.get(id),
+  })
+  assert.equal(result.pass,false)
+  assert.ok(result.failures.some(item=>
+    item.code==='rapier-generic-local-axis-mismatch' &&
+    item.jointId==='slide-mismatch'))
+})
+
+test('Rapier revolute materialization uses independent-axis constructor and no frame setters', () => {
+  const joint={
+    id:'hinge',
+    kind:'revolute',
+    bodyA:'a',
+    bodyB:'b',
+    frame:{positionStud:[0,0,0],axisWorld:[0,1,0]},
+    limits:null,
+  }
+  const quarterTurn=new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(1,0,0),
+    Math.PI/2,
+  )
+  const members=new Map([
+    ['a',mockPhysicsMember({handle:1})],
+    ['b',mockPhysicsMember({handle:2,rotation:quarterTurn})],
+  ])
+  let constructorArgs=null
+  let createdData=null
+  const handle={
+    setContactsEnabled(){},
+    isValid(){return true},
+  }
+  const session={
+    RAPIER:{
+      JointData:{
+        revoluteWithAxes(...args){
+          constructorArgs=args
+          return {type:'revoluteWithAxes',args}
+        },
+      },
+    },
+    world:{
+      createImpulseJoint(data){
+        createdData=data
+        return handle
+      },
+      removeImpulseJoint(){},
+    },
+  }
+  const result=materializeRapierMechanicsPlan(
+    session,
+    minimalPhysicsPlan(joint),
+    {resolveMember:id=>members.get(id)},
+  )
+  assert.equal(result.active,1)
+  assert.equal(createdData.type,'revoluteWithAxes')
+  assert.equal(constructorArgs.length,4)
+  assert.ok(!('setLocalFrame1' in handle))
+  assert.ok(!('setLocalFrame2' in handle))
 })
