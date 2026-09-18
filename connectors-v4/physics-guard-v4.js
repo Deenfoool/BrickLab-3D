@@ -14,6 +14,7 @@ export const PHYSICS_GUARD_ERROR_CODE_V4 = 'BRICKLAB_CONNECTOR_V4_PHYSICS_NOT_CE
 const marker = Symbol.for('bricklab.connectorV4.physicsGuard.v4.6.2')
 let lastPlan = null
 let lastFailure = null
+let baseCreateForMigration = null
 
 function rawRuntime() { return globalThis.BrickLabConnectorV4 ?? null }
 function runtimeReady(v4) { return v4?.mode === 'hybrid-pilot' && v4?.selfTest?.pass === true }
@@ -74,6 +75,7 @@ function fail(reason, blockers = [], cause = null) {
 
 if (!PhysicsSession[marker]) {
   const originalCreate = PhysicsSession.create.bind(PhysicsSession)
+  baseCreateForMigration = originalCreate
 
   PhysicsSession.create = async function createWithCertifiedConnectorV4Physics(objects, connections, ...rest) {
     // Diagnostics must describe this invocation, not the previous project's plan.
@@ -151,6 +153,10 @@ globalThis.BrickLabConnectorV4PhysicsGuard = Object.freeze({
   errorCode:PHYSICS_GUARD_ERROR_CODE_V4,
   active:true,
   createOwner:PhysicsSession.create?.__bricklabOwner ?? null,
+  async createBaseSession(objects,connections,...rest){
+    if(typeof baseCreateForMigration!=='function')throw new Error('Connector V4 base PhysicsSession.create unavailable')
+    return baseCreateForMigration(objects,connections,...rest)
+  },
   lastPlan(){ return lastPlan },
   lastFailure(){ return lastFailure },
 })
