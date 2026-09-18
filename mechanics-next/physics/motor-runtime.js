@@ -63,6 +63,9 @@ export function buildMechanicsMotorPlan({graph,records=[]}={}){
       motorBodyId:String(drive.motorBodyId),
       drivenBodyId:String(drive.drivenBodyId),
       axisWorld:Object.freeze([...frame.axis]),
+      controlId:String(drive.motorInstanceId??motorRecord.instance.body.instanceId),
+      defaultRpm:Math.abs(Number(params.rpm)),
+      defaultDirection:Number(params.direction)<0?-1:1,
       targetRpm:Number(params.rpm)*(Number(params.direction)<0?-1:1),
       stallTorque:Math.max(0,Number(params.stallTorque)),
       damping:Number.isFinite(Number(params.damping))?Math.max(0,Number(params.damping)):1,
@@ -97,7 +100,11 @@ function dynamic(body){
   return body?.isDynamic!==false
 }
 
-export function createMechanicsMotorRuntime(plan,{resolveMember}={}){
+export function createMechanicsMotorRuntime(plan,{
+  resolveMember,
+  controlState=null,
+  isDriveEnabled=()=>true,
+}={}){
   if(!plan?.pass)throw new Error('Cannot create motor runtime from blocked plan')
   if(typeof resolveMember!=='function')throw new TypeError('resolveMember(bodyId) is required')
 
@@ -129,7 +136,19 @@ export function createMechanicsMotorRuntime(plan,{resolveMember}={}){
         const axis=drive.localAxisMotor.clone().applyQuaternion(bodyRotation(drive.motor.body)).normalize()
         const relative=angular(drive.driven.body).sub(angular(drive.motor.body)).dot(axis)
         const actualRpm=relative*60/TWO_PI
-        const targetOmega=drive.targetRpm*TWO_PI/60
+        const state=typeof controlState==='function'?controlState(drive.controlId):null
+        const liveRpm=state?.type==='motor'&&Number.isFinite(Number(state.rpm))
+          ?Math.max(0,Number(state.rpm))
+          :drive.defaultRpm
+        const liveDirection=state?.type==='motor'
+          ?(Number(state.direction)>0?1:Number(state.direction)<0?-1:0)
+          :drive.defaultDirection
+        const enabled=Boolean(isDriveEnabled(drive,state))
+        const targetRpm=enabled?liveRpm*liveDirection:0
+        drive.targetRpm=targetRpm
+        drive.controlDirection=liveDirection
+        drive.controlRunning=enabled&&liveDirection!==0
+        const targetOmega=targetRpm*TWO_PI/60
         const error=targetOmega-relative
         const denominator=Math.max(Math.abs(targetOmega),1)
         const normalized=clamp(Math.abs(error)/denominator,0,1)
@@ -146,7 +165,7 @@ export function createMechanicsMotorRuntime(plan,{resolveMember}={}){
         if(drive.freeCurrent!=null&&drive.stallCurrent!=null){
           drive.current=drive.freeCurrent+(drive.stallCurrent-drive.freeCurrent)*drive.load
         }
-        const lowSpeed=Math.abs(drive.targetRpm)>10&&Math.abs(actualRpm)<Math.abs(drive.targetRpm)*.12
+        const lowSpeed=Math.abs(targetRpm)>10&&Math.abs(actualRpm)<Math.abs(targetRpm)*.12
         drive.stallTime=lowSpeed&&drive.load>.82?drive.stallTime+dt:0
         drive.stalled=drive.stallTime>.65
         applied+=1
@@ -156,7 +175,10 @@ export function createMechanicsMotorRuntime(plan,{resolveMember}={}){
     snapshot(){
       return Object.freeze(drives.map(drive=>Object.freeze({
         id:drive.id,
+        controlId:drive.controlId,
         targetRpm:drive.targetRpm,
+        controlDirection:drive.controlDirection??drive.defaultDirection,
+        running:drive.controlRunning??true,
         actualRpm:drive.actualRpm,
         load:drive.load,
         torque:drive.torque,
