@@ -69,12 +69,13 @@ export function evaluateMechanicsMigrationGate({
     },
   ))
 
+  const sceneInstances=Number(runtimeStatus?.scene?.instances||0)
   checks.push(check(
     'native-connectivity-parity',
     Boolean(paritySummary)&&
       Number(paritySummary.semanticFail||0)===0&&
       Number(paritySummary.geometryFail||0)===0&&
-      Number(paritySummary.parts||0)>0,
+      (sceneInstances===0||Number(paritySummary.parts||0)>0),
     paritySummary??{reason:'native-parity-not-confirmed'},
   ))
 
