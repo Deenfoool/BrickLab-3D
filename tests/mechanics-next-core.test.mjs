@@ -2665,7 +2665,9 @@ test('production migration gate remains closed without parity persistence and re
   const gate=evaluateMechanicsMigrationGate({
     runtimeStatus:{
       version:'test',
-      scene:{roles:{unknown:0}},
+      scene:{instances:0,roles:{unknown:0}},
+      mechanicalRecordFailures:[],
+      lastSceneSync:{observedRecords:0},
       interpretedConnections:{unresolved:0},
       compoundDecompositions:{pending:0,failures:0},
       compoundEndpointOwnership:{compounds:0,complete:0,assignments:0,unresolvedCount:0,unresolved:[]},
@@ -2822,11 +2824,42 @@ test('motor output connection becomes revolute drive instead of keyed rigid shaf
 })
 
 
+test('production migration gate blocks incomplete Mechanics Next scene records', () => {
+  const gate=evaluateMechanicsMigrationGate({
+    runtimeStatus:{
+      version:'test',
+      scene:{instances:1,roles:{unknown:0}},
+      mechanicalRecordFailures:[{
+        instanceId:'missing-i',
+        partId:'gear',
+        reason:'scene-object-missing',
+      }],
+      lastSceneSync:{observedRecords:0},
+      interpretedConnections:{unresolved:0},
+      compoundDecompositions:{pending:0,failures:0},
+      compoundEndpointOwnership:{compounds:0,complete:0,assignments:0,unresolvedCount:0,unresolved:[]},
+      transmissionCompiler:{diagnostics:{coverage:[],packaged:[],differentials:[]}},
+    },
+    physicsStatus:{pass:true,blockers:[]},
+    paritySummary:{parts:1,semanticFail:0,geometryFail:0},
+    persistence:{pass:true},
+    regression:{status:'passed'},
+  })
+  assert.equal(gate.pass,false)
+  const blocker=gate.blockers.find(item=>item.id==='mechanical-record-coverage')
+  assert.ok(blocker)
+  assert.equal(blocker.detail.sceneInstances,1)
+  assert.equal(blocker.detail.observedRecords,0)
+  assert.equal(blocker.detail.failures[0].reason,'scene-object-missing')
+})
+
 test('production migration gate accepts a fully proven empty project', () => {
   const gate=evaluateMechanicsMigrationGate({
     runtimeStatus:{
       version:'test',
       scene:{instances:0,roles:{unknown:0}},
+      mechanicalRecordFailures:[],
+      lastSceneSync:{observedRecords:0},
       interpretedConnections:{unresolved:0},
       compoundDecompositions:{pending:0,failures:0},
       compoundEndpointOwnership:{compounds:0,complete:0,assignments:0,unresolvedCount:0,unresolved:[]},
@@ -3387,6 +3420,8 @@ test('migration gate blocks a transmission family with no executable model', () 
     runtimeStatus:{
       version:'test',
       scene:{instances:1,roles:{pulley:1}},
+      mechanicalRecordFailures:[],
+      lastSceneSync:{observedRecords:1},
       interpretedConnections:{unresolved:0},
       compoundDecompositions:{pending:0,failures:0},
       compoundEndpointOwnership:{compounds:0,complete:0,assignments:0,unresolvedCount:0,unresolved:[]},
