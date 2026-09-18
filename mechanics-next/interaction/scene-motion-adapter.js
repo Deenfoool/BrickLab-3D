@@ -78,6 +78,11 @@ function motionMatrix(motion){
   return rotationAroundWorldPivot(motion.axis,motion.pivot,motion.thetaRad)
 }
 
+function translationWorld(axis,distanceStud){
+  const a=new THREE.Vector3(...axis).normalize().multiplyScalar(Number(distanceStud)||0)
+  return new THREE.Matrix4().makeTranslation(a.x,a.y,a.z)
+}
+
 function compoundMotionMatrix(motion){
   const orbit=rotationAroundWorldPivot(
     motion.orbit.axis,
@@ -130,14 +135,19 @@ export function applyMotionPlanToBaseline(plan,baseline,{
       continue
     }
 
-    if(!Number.isFinite(Number(motion.thetaRad))&&motion.kind!=='compound-rotation'){
+    if(motion.kind==='rotation'&&!Number.isFinite(Number(motion.thetaRad))){
       invalid.push(Object.freeze({bodyId:motion.bodyId,reason:'theta-not-finite'}))
+      continue
+    }
+    if(motion.kind==='translation'&&!Number.isFinite(Number(motion.distanceStud))){
+      invalid.push(Object.freeze({bodyId:motion.bodyId,reason:'distance-not-finite'}))
       continue
     }
 
     let delta
     if(motion.kind==='rotation')delta=motionMatrix(motion)
     else if(motion.kind==='compound-rotation')delta=compoundMotionMatrix(motion)
+    else if(motion.kind==='translation')delta=translationWorld(motion.axis,motion.distanceStud)
     else{
       invalid.push(Object.freeze({bodyId:motion.bodyId,reason:`unsupported-motion:${motion.kind}`}))
       continue
