@@ -119,3 +119,15 @@ test('production KINEMATICS and SIMULATE require native BUILD ownership first', 
     'legacy KINEMATICS fallback must be blocked once Mechanics Next owns BUILD',
   )
 })
+
+
+test('production Mechanics Next entry modules are cache-versioned', () => {
+  const bootstrap=source('bootstrap.js')
+  const activation=source('kinematics/activation-v1.js')
+  const index=source('index.html')
+
+  assert.match(bootstrap,/mechanics-next\/runtime\.js\?v=mechanics-next-stage11-20260918-v2/)
+  assert.match(bootstrap,/mechanics-next\/production\/physics-owner\.js\?v=mechanics-next-stage11-20260918-v2/)
+  assert.match(activation,/mechanics-next\/production\/kinematics-owner\.js\?v=mechanics-next-stage11-20260918-v2/)
+  assert.match(index,/bootstrap\.js\?v=runtime-27-mechanics-next-stage11-20260918-v1/)
+})
