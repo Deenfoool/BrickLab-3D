@@ -56,22 +56,29 @@ export function gearMeshEquation({
   teethA,
   teethB,
   internal = false,
+  directionSign = null,
   channel = 'omega',
 } = {}) {
   if (!(Number.isFinite(teethA) && teethA > 0 && Number.isFinite(teethB) && teethB > 0)) {
     throw new TypeError('Gear mesh requires positive tooth counts')
   }
-  // External mesh: zA*wA + zB*wB = 0.
-  // Internal mesh: zA*wA - zB*wB = 0.
-  const signB = internal ? -1 : 1
+  // ratioAB is expressed in each body's own positive rotation axis.
+  // Parallel external gears normally use -1; opposite local axis conventions use +1.
+  // Internal gears normally use +1.
+  const ratioSign = directionSign == null ? (internal ? 1 : -1) : (Number(directionSign) < 0 ? -1 : 1)
   return linearEquation(
     id || `gear:${bodyA}:${bodyB}`,
     {
-      [mechanicalVariable(bodyA, channel)]:Number(teethA),
-      [mechanicalVariable(bodyB, channel)]:signB * Number(teethB),
+      [mechanicalVariable(bodyA, channel)]:-ratioSign * Number(teethA),
+      [mechanicalVariable(bodyB, channel)]:Number(teethB),
     },
     0,
-    { kind:internal ? 'internal-gear' : 'external-gear', bodyA, bodyB, teethA, teethB, channel },
+    {
+      kind:internal ? 'internal-gear' : 'external-gear',
+      bodyA, bodyB, teethA, teethB, channel,
+      directionSign:ratioSign,
+      ratioAB:ratioSign * Number(teethA) / Number(teethB),
+    },
   )
 }
 
