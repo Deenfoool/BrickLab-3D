@@ -1533,7 +1533,8 @@ new ResizeObserver(resize).observe(viewport)
 
 function animate() {
   if (mode === 'simulate' && physicsSession) physicsSession.step()
-  if (mode === 'build' && !isDragging) globalThis.BrickLabConnectorV4?.updateEditor(performance.now())
+  const mechanicsNextKinematicsActive=globalThis.BrickLabMechanicsNextKinematics?.active?.()===true
+  if (mode === 'build' && !isDragging && !mechanicsNextKinematicsActive) globalThis.BrickLabConnectorV4?.updateEditor(performance.now())
   orbit.update()
   emitAudioEvent('frame', { session: physicsSession, mode, camera })
   for (const box of selectionBoxes.values()) box.update()
