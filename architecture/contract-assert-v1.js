@@ -23,11 +23,27 @@ export function architectureContractReport(subsystems = globalThis.BrickLabSubsy
   if (!status?.connectorBuild) issues.push('BUILD connectivity owner unavailable')
   if (!status?.connectorSimulate) issues.push('SIMULATE connector guard unavailable')
 
-  if (authority?.build !== 'connector-v4-with-legacy-bridge') {
-    issues.push('BUILD authority is not Connector V4 with the compatibility bridge')
+  const certifiedBuildOwners=new Set([
+    'connector-v4-with-legacy-bridge',
+    'mechanics-next-build-owner',
+  ])
+  const certifiedSimulateOwners=new Set([
+    'connector-v4-physics-guard',
+    'mechanics-next-physics-owner',
+  ])
+  if (!certifiedBuildOwners.has(authority?.build)) {
+    issues.push('BUILD authority is not a certified mechanics owner')
   }
-  if (!['connector-v4-physics-guard','mechanics-next-physics-owner'].includes(authority?.simulate)) {
+  if (!certifiedSimulateOwners.has(authority?.simulate)) {
     issues.push('SIMULATE authority is not a certified physics owner')
+  }
+  if (authority?.build==='mechanics-next-build-owner' &&
+      authority?.simulate!=='mechanics-next-physics-owner') {
+    issues.push('Mechanics Next BUILD authority requires Mechanics Next SIMULATE ownership')
+  }
+  if (authority?.simulate==='mechanics-next-physics-owner' &&
+      authority?.build!=='mechanics-next-build-owner') {
+    issues.push('Mechanics Next SIMULATE ownership requires Mechanics Next BUILD authority')
   }
 
   if (!guard?.active) issues.push('Connector V4 fallback physics guard is not active')
