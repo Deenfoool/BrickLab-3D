@@ -73,9 +73,9 @@ export function gearFrameForRecord(record){
     axis:Object.freeze(axis),
     source,
     bevelApexSigns:Object.freeze(validSigns(geometry.bevelApexSigns)),
-    meshApexToleranceStud:Number.isFinite(Number(geometry.meshApexToleranceStud))
+    meshApexToleranceStud:geometry.meshApexToleranceStud != null && Number.isFinite(Number(geometry.meshApexToleranceStud))
       ?Number(geometry.meshApexToleranceStud):null,
-    meshCaptureDistanceStud:Number.isFinite(Number(geometry.meshCaptureDistanceStud))
+    meshCaptureDistanceStud:geometry.meshCaptureDistanceStud != null && Number.isFinite(Number(geometry.meshCaptureDistanceStud))
       ?Number(geometry.meshCaptureDistanceStud):null,
     hint,
   })
@@ -132,7 +132,7 @@ export function evaluateBevelGearPair(a,b,{
   }
 
   const specific=Math.max(Number(a.meshApexToleranceStud)||0,Number(b.meshApexToleranceStud)||0)
-  const tolerance=Number.isFinite(Number(apexTolerance))
+  const tolerance=apexTolerance != null && Number.isFinite(Number(apexTolerance))
     ?Number(apexTolerance)
     :(specific>0?specific:.08)
   const valid=axisOrthogonality<=maxAxisDot&&Boolean(best)&&best.apexError<=tolerance

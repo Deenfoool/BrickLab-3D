@@ -39,11 +39,12 @@ async function fetchOk(url, options = {}) {
 }
 
 export async function fetchLDrawText(file) {
-  const normalized = normalizeFile(file)
-  if (textCache.has(normalized)) return textCache.get(normalized)
-  const promise = textTransport.read(`parts/${normalized}`)
-  textCache.set(normalized, promise)
-  try { return await promise } catch (error) { textCache.delete(normalized); throw error }
+  const normalized = String(file || '').replace(/\\/g, '/').replace(/^\.\//, '').trim()
+  const libraryPath = /^(?:parts|p)\//i.test(normalized) ? normalized : `parts/${normalized}`
+  if (textCache.has(libraryPath)) return textCache.get(libraryPath)
+  const promise = textTransport.read(libraryPath)
+  textCache.set(libraryPath, promise)
+  try { return await promise } catch (error) { textCache.delete(libraryPath); throw error }
 }
 
 function parseHeader(text, file) {

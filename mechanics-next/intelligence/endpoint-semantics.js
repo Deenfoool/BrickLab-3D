@@ -7,6 +7,7 @@ const MIN_PIN_CORE_LENGTH_LDU = 8
 
 const SPECIAL_GROUPS = Object.freeze({
   diffhouse:{kind:'differential-internal-interface',role:'differential-housing'},
+  technicdifferential6589seat:{kind:'differential-internal-interface',role:'differential-bevel-seat'},
   drivingring1:{kind:'driving-ring',role:'axle-joiner-slider',variant:'1'},
   drivingring2:{kind:'driving-ring',role:'axle-joiner-slider',variant:'2'},
   linact1:{kind:'linear-actuator-guide',role:'slider',sizeClass:'small'},

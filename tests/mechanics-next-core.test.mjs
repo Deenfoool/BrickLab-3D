@@ -1152,6 +1152,19 @@ test('bevel geometry recognizes a 20T to 28T perpendicular mesh by common apex',
   assert.equal(geometry.directionSign,-1)
 })
 
+test('bevel mesh uses default and catalog tolerances when the caller omits an override', () => {
+  const a={kind:'bevel',pitchRadius:1.25,center:[0,0,0],axis:[0,1,0],bevelApexSigns:[1]}
+  const b={kind:'bevel',pitchRadius:1.75,center:[-1.35,1.85,.04],axis:[1,0,0],bevelApexSigns:[1]}
+  assert.equal(evaluateBevelGearPair(a,b).valid,true)
+  assert.equal(evaluateBevelGearPair(a,b).apexTolerance,.08)
+  assert.equal(evaluateBevelGearPair(a,b,{apexTolerance:0}).valid,false)
+  b.center[2]=.12
+  b.meshApexToleranceStud=.16
+  assert.equal(evaluateBevelGearPair(a,b).valid,true)
+  b.center[2]=.17
+  assert.equal(evaluateBevelGearPair(a,b).valid,false)
+})
+
 test('differential discovery resolves two side gears and leaves spider as compound diagnostic', () => {
   const carrier=transmissionRecord({
     bodyId:'carrier',
@@ -4509,4 +4522,21 @@ test('native motor runtime reports power and applies dyno brake to driven shaft'
   const after=runtime.snapshot()[0]
   assert.equal(after.externalBrakeTorqueNm,.4)
   assert.ok(after.externalBrakePowerW>0)
+})
+
+test('native connectivity retains every verified differential assembly seat without V4 hydration',async()=>{
+  const defs=new Map(['62821','6589'].map(code=>[`ldraw-${code}`,{ldraw:{file:`${code}.dat`}}]))
+  const provider=createNativeConnectivityProvider({parts:{get:id=>defs.get(id)},ldraw:{readText:async()=>null},fetchShadowText:async()=>null})
+  const housing=await provider.hydrate('ldraw-62821')
+  const gear=await provider.hydrate('ldraw-6589')
+  assert.equal(housing.connectors.length,3)
+  assert.equal(gear.connectors.length,1)
+  for(const [index,connector] of housing.connectors.entries()){
+    const endpoint=enrichEndpointSemantics(provider.toEndpoint(connector,{bodyId:'carrier',index}))
+    assert.equal(endpoint.metadata.semantics.semanticKind,'differential-internal-interface')
+    assert.deepEqual(endpoint.frame.positionLdu,[[0,0,-17],[0,0,17],[0,-17,0]][index])
+    assert.equal(endpoint.metadata.parser,'mechanics-next')
+  }
+  const pivot=enrichEndpointSemantics(provider.toEndpoint(gear.connectors[0],{bodyId:'side'}))
+  assert.equal(pivot.metadata.semantics.semanticKind,'differential-internal-interface')
 })

@@ -2,6 +2,7 @@ import { createNativeShadowResolver } from './shadow-resolver.js'
 import { createNativeLDrawInheritanceResolver } from './official-inheritance.js'
 import { ldcadConnectorToEndpoint } from './connector-adapter.js'
 import { createEndpointDescriptor, deterministicId, evidence } from '../core/model.js'
+import { discoverDifferentialFixturesV4 } from '../../connector-discovery/differential-fixtures-v4.js'
 
 export const NATIVE_CONNECTIVITY_PROVIDER_VERSION='mechanics-native-connectivity-provider-0.1.0'
 export const NATIVE_SHADOW_SOURCE=Object.freeze({
@@ -231,7 +232,13 @@ export function createNativeConnectivityProvider({
     }
     cache.set(id,Object.freeze({status:'loading',partId:id,file,connectors:Object.freeze([]),warnings:Object.freeze([])}))
     const promise=resolver.resolve(file).then(result=>{
-      const finalized=finalizeNativeConnectors(result.file||file,result.connectors||[])
+      // Verified assembly seat geometry is read-only catalog evidence, not a
+      // Connector V4 graph or hydration writer. Native endpoint IDs remain ours.
+      const fixtures=discoverDifferentialFixturesV4(file)
+      const finalized=finalizeNativeConnectors(result.file||file,[
+        ...(result.connectors||[]),
+        ...fixtures.connectors,
+      ])
       const value=Object.freeze({
         status:'ready',
         partId:id,
