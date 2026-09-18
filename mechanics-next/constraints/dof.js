@@ -146,6 +146,7 @@ export function createConstraint({
   dof = constraintDof(kind),
   frameA = null,
   frameB = null,
+  referenceFrame = null,
   metadata = null,
   evidence:constraintEvidence = evidence(),
 } = {}) {
@@ -160,6 +161,7 @@ export function createConstraint({
     dof:Object.freeze(normalized),
     frameA,
     frameB,
+    referenceFrame,
     metadata,
     evidence:constraintEvidence,
   })
