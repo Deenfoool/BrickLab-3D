@@ -26,7 +26,7 @@ test('browser QA pages delegate import-map ownership to production index',async(
     text('scripts/version-runtime.mjs'),
   ])
   const tag=canonicalTag(index)
-  assert.match(tag,/connector-v4-physics-/)
+  assert.match(tag,/^runtime-\d+-/,'production QA must follow the current canonical runtime tag instead of a historical subsystem tag')
 
   for(const [name,html,moduleName] of [
     ['time-scale',timeScale,'./tests/time-scale-browser.js'],
