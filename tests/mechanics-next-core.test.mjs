@@ -70,6 +70,7 @@ import { buildMechanicsPhysicsPlan } from '../mechanics-next/physics/plan.js'
 import { buildMechanicsCouplingPlan } from '../mechanics-next/physics/coupling-plan.js'
 import { createMechanicsCouplingRuntime } from '../mechanics-next/physics/coupling-runtime.js'
 import { buildMechanicsMotorPlan, createMechanicsMotorRuntime } from '../mechanics-next/physics/motor-runtime.js'
+import { buildMechanicsVehiclePlan } from '../mechanics-next/physics/vehicle-plan.js'
 import { expandCompoundPhysicsGraph } from '../mechanics-next/physics/compound-graph-expansion.js'
 import { materializeRapierMechanicsPlan, preflightRapierMechanicsPlan } from '../mechanics-next/physics/rapier-adapter.js'
 import { materializeCompoundMemberPhysics, preflightCompoundMemberMaterialization } from '../mechanics-next/physics/compound-member-materializer.js'
@@ -3773,4 +3774,141 @@ test('native motor runtime reads live RPM direction and stop state each step', (
   runtime.step(1/60)
   assert.equal(runtime.snapshot()[0].targetRpm,0)
   assert.equal(runtime.snapshot()[0].running,false)
+})
+
+
+test('native vehicle plan derives motor-to-wheel ratio from Next transmission equations', () => {
+  const motorBody=createBodyDescriptor({id:'motor-body',instanceId:'motor-i',partId:'motor'})
+  const shaftBody=createBodyDescriptor({id:'drive-shaft',instanceId:'shaft-i',partId:'axle'})
+  const wheelBody=createBodyDescriptor({id:'wheel-body',instanceId:'wheel-i',partId:'wheel'})
+  const wheelEndpoint=createEndpointDescriptor({
+    id:'wheel-axle-hole',
+    bodyId:wheelBody.id,
+    family:'cylinder',
+    gender:'female',
+    frame:{
+      positionStud:[0,1.15,0],
+      orientationBrickLab:[0,0,1,0,1,0,-1,0,0],
+    },
+    profile:{centered:true,caps:'none',sections:[{shape:'A',radiusLdu:6,lengthLdu:20}]},
+    metadata:{semantics:{semanticKind:'technic-axle-hole'}},
+  })
+  const records=[
+    {
+      instance:{
+        body:motorBody,
+        descriptor:{classification:{role:'motor',capabilities:{rotary:false},properties:{}}},
+        endpoints:[],
+        transmissions:[],
+      },
+      pose:{position:[0,0,0],quaternion:[0,0,0,1]},
+      visualOffsetStud:[0,0,0],
+    },
+    {
+      instance:{
+        body:shaftBody,
+        descriptor:{classification:{role:'axle',capabilities:{rotary:true},properties:{}}},
+        endpoints:[],
+        transmissions:[],
+      },
+      pose:{position:[0,0,0],quaternion:[0,0,0,1]},
+      visualOffsetStud:[0,0,0],
+    },
+    {
+      instance:{
+        body:wheelBody,
+        descriptor:{
+          classification:{
+            role:'rim',
+            capabilities:{rotary:true},
+            properties:{wheel:{radiusStud:1.4,widthStud:.76,tire:{rollingResistanceScale:1.2}}},
+          },
+        },
+        endpoints:[wheelEndpoint],
+        transmissions:[],
+      },
+      pose:{position:[0,0,0],quaternion:[0,0,0,1]},
+      visualOffsetStud:[0,0,0],
+    },
+  ]
+  const equation=rotationCouplingEquation({
+    id:'shaft-to-wheel',
+    bodyA:shaftBody.id,
+    bodyB:wheelBody.id,
+    ratioAB:-2,
+    kind:'test-reduction',
+  })
+  const discovery={
+    equations:[equation],
+    velocityEquations:[],
+    balancedDifferentialClosures:[],
+    transmissions:[{
+      id:'test-transmission',
+      kind:'test-reduction',
+      bodies:[shaftBody.id,wheelBody.id],
+      equations:[equation],
+    }],
+  }
+  const plan=buildMechanicsVehiclePlan({
+    records,
+    discovery,
+    motorPlan:{
+      drives:[{
+        controlId:'motor-i',
+        motorBodyId:motorBody.id,
+        drivenBodyId:shaftBody.id,
+      }],
+    },
+  })
+  assert.equal(plan.pass,true)
+  assert.equal(plan.wheels.length,1)
+  assert.equal(plan.wheels[0].sourceMotorId,'motor-i')
+  assert.ok(Math.abs(plan.wheels[0].ratioFromMotor+2)<1e-12)
+  assert.equal(plan.wheels[0].radiusStud,1.4)
+  assert.deepEqual(plan.wheels[0].centerWorldStud,[0,1.15,0])
+})
+
+test('native vehicle plan preserves multiple motors instead of choosing an arbitrary owner', () => {
+  const wheelBody=createBodyDescriptor({id:'shared-wheel-body',instanceId:'shared-wheel-i',partId:'wheel'})
+  const endpoint=createEndpointDescriptor({
+    id:'shared-wheel-axis',
+    bodyId:wheelBody.id,
+    family:'cylinder',
+    gender:'female',
+    frame:{positionStud:[0,0,0],orientationBrickLab:[1,0,0,0,1,0,0,0,1]},
+    profile:{centered:true,caps:'none',sections:[{shape:'A',radiusLdu:6,lengthLdu:20}]},
+    metadata:{semantics:{semanticKind:'technic-axle-hole'}},
+  })
+  const records=[{
+    instance:{
+      body:wheelBody,
+      descriptor:{classification:{
+        role:'rim',
+        capabilities:{rotary:true},
+        properties:{wheel:{radiusStud:1,widthStud:.5,tire:null}},
+      }},
+      endpoints:[endpoint],
+      transmissions:[],
+    },
+    pose:{position:[0,0,0],quaternion:[0,0,0,1]},
+    visualOffsetStud:[0,0,0],
+  }]
+  const equations=[
+    rotationCouplingEquation({id:'m1-wheel',bodyA:'shaft-1',bodyB:wheelBody.id,ratioAB:1}),
+    rotationCouplingEquation({id:'m2-wheel',bodyA:'shaft-2',bodyB:wheelBody.id,ratioAB:-1}),
+  ]
+  const plan=buildMechanicsVehiclePlan({
+    records,
+    discovery:{equations,velocityEquations:[],balancedDifferentialClosures:[],transmissions:[]},
+    motorPlan:{drives:[
+      {controlId:'motor-1',motorBodyId:'motor-body-1',drivenBodyId:'shaft-1'},
+      {controlId:'motor-2',motorBodyId:'motor-body-2',drivenBodyId:'shaft-2'},
+    ]},
+  })
+  assert.equal(plan.wheels[0].sourceMotors.length,2)
+  assert.equal(plan.wheels[0].sourceMotorId,null)
+  assert.deepEqual(
+    plan.wheels[0].sourceMotors.map(item=>item.controlId).sort(),
+    ['motor-1','motor-2'],
+  )
 })
