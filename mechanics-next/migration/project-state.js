@@ -309,7 +309,7 @@ export function restoreMechanicsProjectState(state,{
           }))
           break
         }
-        restoredRelations.push(interpretation.relation)
+        restoredRelations.push(Object.freeze({...interpretation.relation,id:relationRecord.id}))
       }catch(error){
         failures.push(Object.freeze({
           code:'relation-reinterpretation-error',

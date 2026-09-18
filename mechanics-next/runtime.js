@@ -662,6 +662,13 @@ export function createMechanicsNextRuntime({
       intelligence?.invalidateAll?.()
       sceneObserver.sync(objects)
       await compoundDecompositions?.prefetch?.(sceneObserver.instances())
+      const pendingProject=globals.__bricklabPendingMechanicsNextProject
+      if(pendingProject){
+        const restored=api.restoreProjectState(pendingProject,{replace:true})
+        if(restored.rejected===0&&restored.compatibility?.pass===true){
+          delete globals.__bricklabPendingMechanicsNextProject
+        }
+      }
       for(const instance of sceneObserver.instances())refreshParityForPart(instance.body.partId)
       parityEvidence=migrationParitySummary(sceneObserver.instances().map(instance=>instance.body.partId))
       const refreshed=syncScene()
@@ -833,7 +840,7 @@ export function createMechanicsNextRuntime({
       return api.migrationGate()
     },
     migrationGate() {
-      return evaluateMechanicsMigrationGate({
+      const gate=evaluateMechanicsMigrationGate({
         runtimeStatus:api.status(),
         physicsStatus:physicsPreview?.status?.()??null,
         paritySummary:parityEvidence,
@@ -842,6 +849,13 @@ export function createMechanicsNextRuntime({
         nativeProjectAuthoritative,
         nativeObservedConnections:nativeObservedRecords.size,
         occupancy:occupancy.snapshot(),
+      })
+      if(!globals.__bricklabPendingMechanicsNextProject)return gate
+      const pending=Object.freeze({id:'native-project-restore-pending',pass:false,severity:'blocker'})
+      return Object.freeze({...gate,pass:false,
+        checks:Object.freeze([...gate.checks,pending]),
+        blockers:Object.freeze([...gate.blockers,pending]),
+        summary:Object.freeze({...gate.summary,total:gate.summary.total+1,failed:gate.summary.failed+1,blockers:gate.summary.blockers+1}),
       })
     },
     refreshLegacySnapshot,

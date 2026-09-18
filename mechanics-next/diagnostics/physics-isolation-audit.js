@@ -46,13 +46,13 @@ export function auditMechanicsNextPhysicsIsolation({
 
   checks.push(check(
     'legacy-auto-weld-bypassed',
-    session?.autoWeldStats?.mechanicsNextBypass===true&&
+    (session?.mechanicsNextBaseInfrastructure===true||session?.autoWeldStats?.mechanicsNextBypass===true)&&
       Number(session?.autoWeldStats?.inferredFixedLinks||0)===0,
     session?.autoWeldStats??null,
   ))
   checks.push(check(
     'legacy-axle-recovery-bypassed',
-    session?.mechanicalRecoveryStats?.mechanicsNextBypass===true&&
+    (session?.mechanicsNextBaseInfrastructure===true||session?.mechanicalRecoveryStats?.mechanicsNextBypass===true)&&
       Number(session?.mechanicalRecoveryStats?.recoveredAxleLinks||0)===0,
     session?.mechanicalRecoveryStats??null,
   ))

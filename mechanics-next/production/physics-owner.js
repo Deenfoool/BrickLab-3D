@@ -1,14 +1,14 @@
 import { PhysicsSession } from '../../physics.js'
+import { createRapierBaseSession } from '../../rapier-loader-v2.js'
 import { auditMechanicsNextPhysicsIsolation } from '../diagnostics/physics-isolation-audit.js'
 
 export const MECHANICS_NEXT_PHYSICS_OWNER_VERSION='mechanics-next-physics-owner-0.1.0'
 
 const marker=Symbol.for('bricklab.mechanicsNext.physicsOwner.0.1.0')
 const mechanics=globalThis.BrickLabMechanicsNext
-const legacyGuard=globalThis.BrickLabConnectorV4PhysicsGuard
 
-if(!mechanics||typeof legacyGuard?.createBaseSession!=='function'){
-  throw new Error('Mechanics Next physics owner requires Mechanics Next and Connector V4 migration base-create capability')
+if(!mechanics){
+  throw new Error('Mechanics Next physics owner requires Mechanics Next runtime')
 }
 
 let lastAttempt=null
@@ -74,27 +74,14 @@ function installDisposeBridge(session,physics){
   }
 }
 
-async function legacyFallback(legacyCreate,objects,connections,rest,reason){
-  if(mechanics.nativeProjectAuthoritative?.()===true ||
-     (globalThis.BrickLabMechanicsNextBuildOwner?.active===true &&
-      globalThis.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true)){
-    const error=new Error('Mechanics Next owns BUILD; stale legacy physics fallback is forbidden')
-    error.code='BRICKLAB_MECHANICS_NEXT_AUTHORITATIVE_PHYSICS_BLOCKED'
-    error.mechanicsNext=reason
-    throw error
-  }
-  fallbackSessions+=1
-  const session=await legacyCreate(objects,connections,...rest)
-  session.mechanicsNextOwnership=Object.freeze({
-    owner:'legacy-fallback',
-    reason,
-    version:MECHANICS_NEXT_PHYSICS_OWNER_VERSION,
-  })
-  return session
+function rejectNativeSession(reason){
+  const error=new Error('Mechanics Next physics entry blocked: '+reason.reason)
+  error.code='BRICKLAB_MECHANICS_NEXT_PHYSICS_BLOCKED'
+  error.mechanicsNext=reason
+  throw error
 }
 
 if(!PhysicsSession[marker]){
-  const legacyCreate=PhysicsSession.create.bind(PhysicsSession)
 
   PhysicsSession.create=async function createWithMechanicsNextOwnership(objects,connections,...rest){
     let gate=null
@@ -104,22 +91,22 @@ if(!PhysicsSession[marker]){
       physics=mechanics.physicsPreview?.()
     }catch(error){
       lastAttempt=Object.freeze({
-        owner:'legacy-fallback',
+        owner:'blocked',
         reason:'migration-preparation-error',
         error:String(error?.message||error),
       })
-      return legacyFallback(legacyCreate,objects,connections,rest,lastAttempt)
+      return rejectNativeSession(lastAttempt)
     }
 
     const blockers=migrationBlockers(gate,physics)
     if(blockers.length){
       lastAttempt=Object.freeze({
-        owner:'legacy-fallback',
+        owner:'blocked',
         reason:'migration-gate-blocked',
         blockers,
         gate:gate?.summary??null,
       })
-      return legacyFallback(legacyCreate,objects,connections,rest,lastAttempt)
+      return rejectNativeSession(lastAttempt)
     }
 
     let buildOwnership=null
@@ -127,23 +114,23 @@ if(!PhysicsSession[marker]){
       buildOwnership=mechanics.adoptNativeProjectOwnership?.()??null
       if(!buildOwnership?.accepted){
         lastAttempt=Object.freeze({
-          owner:'legacy-fallback',
+          owner:'blocked',
           reason:'native-build-ownership-required',
           gate:gate?.summary??null,
           buildOwnership,
         })
-        return legacyFallback(legacyCreate,objects,connections,rest,lastAttempt)
+        return rejectNativeSession(lastAttempt)
       }
     }
     const buildOwner=globalThis.BrickLabMechanicsNextBuildOwner
     if(buildOwner?.active!==true||buildOwner?.authoritative?.()!==true){
       lastAttempt=Object.freeze({
-        owner:'legacy-fallback',
+        owner:'blocked',
         reason:'native-build-owner-not-published',
         gate:gate?.summary??null,
         buildOwnership,
       })
-      return legacyFallback(legacyCreate,objects,connections,rest,lastAttempt)
+      return rejectNativeSession(lastAttempt)
     }
 
     const excludedRoots=new Set(
@@ -161,7 +148,7 @@ if(!PhysicsSession[marker]){
         rest.length===1&&rest[0]&&typeof rest[0]==='object'&&!Array.isArray(rest[0])
           ?rest[0]
           :{}
-      session=await legacyGuard.createBaseSession(
+      session=await createRapierBaseSession(
         baseObjects,
         compatibility,
         {
@@ -247,13 +234,13 @@ if(!PhysicsSession[marker]){
       }
       try{session?.dispose?.()}catch{}
       lastAttempt=Object.freeze({
-        owner:'legacy-fallback',
+        owner:'blocked',
         reason:'next-session-install-error',
         error:String(error?.message||error),
         failures:Object.freeze([...(error?.failures||[])]),
       })
       console.warn('[BrickLab Mechanics Next] SIMULATE migration failed; native BUILD requires fail-closed recovery.',lastAttempt)
-      return legacyFallback(legacyCreate,objects,connections,rest,lastAttempt)
+      return rejectNativeSession(lastAttempt)
     }
   }
 

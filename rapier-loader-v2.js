@@ -69,7 +69,7 @@ async function loadRapierResilient() {
   return rapierPromise
 }
 
-PhysicsSession.create = async function createPhysicsSession(objects, connections, options = {}) {
+export async function createRapierBaseSession(objects, connections, options = {}) {
   let RAPIER
   window.__bricklabPhysicsStage = 'rapier-load'
   try {
@@ -88,6 +88,7 @@ PhysicsSession.create = async function createPhysicsSession(objects, connections
     session = new PhysicsSession(RAPIER, objects, connections, scenario)
     session.creationOptions = options && typeof options === 'object' ? { ...options } : {}
     session.mechanicsNextBootstrap = session.creationOptions.mechanicsNextOwned === true
+    session.mechanicsNextBaseInfrastructure = session.mechanicsNextBootstrap
     window.__bricklabPhysicsStage = 'build'
     session.build()
     window.__bricklabPhysicsStage = 'ready'
@@ -105,6 +106,8 @@ PhysicsSession.create = async function createPhysicsSession(objects, connections
     throw new Error(`Physics build failed [${failedStage}]: ${describeError(error)}`, { cause: error })
   }
 }
+
+PhysicsSession.create = createRapierBaseSession
 
 export function resetRapierLoader() {
   rapierPromise = null

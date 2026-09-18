@@ -772,7 +772,7 @@ function applyProject(data, { reset = false, persist = true } = {}) {
       mechanics?.syncScene?.()
       if(data.mechanicsNext){
         const restored=mechanics?.restoreProjectState?.(data.mechanicsNext,{replace:true})
-        if(restored?.rejected>0){
+        if(restored?.rejected>0||restored?.compatibility?.pass!==true){
           globalThis.__bricklabPendingMechanicsNextProject=cloneState(data.mechanicsNext)
         }else{
           delete globalThis.__bricklabPendingMechanicsNextProject
