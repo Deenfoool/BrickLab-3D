@@ -109,6 +109,40 @@ export function differentialEquation({
   )
 }
 
+export function differentialSpiderEquation({
+  id,
+  spider,
+  left,
+  right,
+  spiderRatio = 1,
+  sideRatio = 1,
+  directionSign = 1,
+  channel = 'omega',
+} = {}) {
+  if (!(Number.isFinite(spiderRatio) && spiderRatio > 0 &&
+        Number.isFinite(sideRatio) && sideRatio > 0)) {
+    throw new TypeError('Differential spider ratios must be positive')
+  }
+  const sign = Number(directionSign) < 0 ? -1 : 1
+  // Local spider spin in the carrier frame. For equal 12T gears:
+  // 2*S + L - R = 0  =>  S = (R-L)/2.
+  return linearEquation(
+    id || `differential-spider:${spider}:${left}:${right}`,
+    {
+      [mechanicalVariable(spider, channel)]:2 * Number(spiderRatio) * sign,
+      [mechanicalVariable(left, channel)]:Number(sideRatio),
+      [mechanicalVariable(right, channel)]:-Number(sideRatio),
+    },
+    0,
+    {
+      kind:'differential-spider-spin',
+      spider,left,right,
+      spiderRatio,sideRatio,directionSign:sign,channel,
+      frame:'carrier-relative',
+    },
+  )
+}
+
 export function rackPinionEquation({
   id,
   gearBody,
