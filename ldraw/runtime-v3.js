@@ -575,6 +575,7 @@ export const BrickLabLDraw = Object.freeze({
   lduToStud: LDU_TO_STUD,
   getIndex: getLDrawIndex,
   getMetadata: getLDrawMetadata,
+  readText: fetchLDrawText,
   register: registerLDrawPart,
   registerByFile: registerLDrawPartByFile,
   preload: preloadLDrawPrototype,
