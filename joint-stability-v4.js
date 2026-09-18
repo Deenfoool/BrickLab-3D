@@ -132,6 +132,12 @@ function sharedJointContext(session, connection, memberA, memberB, connectorA, c
 
 if (!PhysicsSession.prototype[marker]) {
   PhysicsSession.prototype.createJoint = function createStableJointV5(connection) {
+    if (this.mechanicsNextBootstrap) {
+      const error = new Error('Legacy PhysicsSession.createJoint is forbidden in a Mechanics Next session')
+      error.code = 'BRICKLAB_MECHANICS_NEXT_LEGACY_JOINT_BLOCKED'
+      error.connection = connection ?? null
+      throw error
+    }
     const memberA = this.members.get(connection?.a?.instanceId)
     const memberB = this.members.get(connection?.b?.instanceId)
     const articulated = memberA && memberB ? articulatedConnectionInfo(connection, memberA, memberB) : null
