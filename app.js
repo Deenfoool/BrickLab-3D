@@ -667,7 +667,9 @@ function projectState() {
     connectionsV4:mechanicsNextBuildActive()
       ? []
       : (globalThis.BrickLabConnectorV4?.projectConnections() ?? []),
-    mechanicsNext:globalThis.BrickLabMechanicsNext?.exportProjectState?.() ?? undefined,
+    mechanicsNext:globalThis.__bricklabPendingMechanicsNextProject
+      ? cloneState(globalThis.__bricklabPendingMechanicsNextProject)
+      : globalThis.BrickLabMechanicsNext?.exportProjectState?.() ?? undefined,
   }
 }
 
@@ -739,6 +741,7 @@ function applyProject(data, { reset = false, persist = true } = {}) {
 
   select(null)
   globalThis.BrickLabMechanicsNext?.clearProjectState?.({keepAuthority:false})
+  delete globalThis.__bricklabPendingMechanicsNextProject
   globalThis.BrickLabConnectorV4?.clearGraph()
   buildRoot.clear()
   connections = []

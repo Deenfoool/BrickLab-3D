@@ -233,7 +233,7 @@ test('restore keeps persisted geometry so a moved-open project cannot bless its 
 test('production Undo Redo and Open persist the Mechanics Next graph with geometry', () => {
   const app=source('app.js')
   assert.ok(
-    app.includes("mechanicsNext:globalThis.BrickLabMechanicsNext?.exportProjectState?.()"),
+    app.includes("globalThis.BrickLabMechanicsNext?.exportProjectState?.()"),
     'project snapshots must serialize Mechanics Next state',
   )
   assert.ok(
@@ -248,4 +248,18 @@ test('production Undo Redo and Open persist the Mechanics Next graph with geomet
     app.includes("globalThis.BrickLabMechanicsNext?.clearProjectState?.({keepAuthority:false})"),
     'project replacement must revoke stale native graph state first',
   )
+})
+
+test('initial history preserves deferred native connections before editor binding', () => {
+  const app=source('app.js')
+  const body=app.slice(app.indexOf('function projectState() {'),app.indexOf('\nfunction serializeProject()'))
+  const snapshot=new Function('globalThis','mode','mechanicsNextBuildActive','buildRoot','projectName','connections','cloneState',`${body};return projectState()`)
+  const pending={engine:'mechanics-next',connections:[{id:'pending-native'}],compoundState:{states:{box:{mode:'reverse'}}}}
+  const globals={__bricklabPendingMechanicsNextProject:pending,BrickLabMechanicsNext:{exportProjectState:()=>({connections:[]})}}
+  const state=snapshot(globals,'build',()=>true,{children:[]},'Saved',[],structuredClone)
+  assert.deepEqual(state.mechanicsNext,pending)
+  pending.connections.length=0
+  assert.equal(state.mechanicsNext.connections.length,1,'history must own an immutable copy')
+  delete globals.__bricklabPendingMechanicsNextProject
+  assert.deepEqual(snapshot(globals,'build',()=>true,{children:[]},'Saved',[],structuredClone).mechanicsNext,{connections:[]})
 })
