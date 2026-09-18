@@ -209,6 +209,15 @@ function classifyCylinder(endpoint) {
 export function classifyEndpointSemantics(endpoint) {
   if (!endpoint) return null
 
+  const builtinType=String(endpoint?.metadata?.builtinType||'').toLowerCase()
+  if(builtinType==='slider'||builtinType==='slider-rail'){
+    return result(endpoint,'linear-guide',{
+      confidence:'verified',
+      reason:`builtin-${builtinType}`,
+      properties:{builtinType},
+    })
+  }
+
   const group = normalizedGroup(endpoint)
   if (SPECIAL_GROUPS[group]) {
     const special=SPECIAL_GROUPS[group]
