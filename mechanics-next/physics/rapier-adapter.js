@@ -42,6 +42,12 @@ function localDirection(member,worldDirection){
     .normalize()
 }
 
+function axesCompatible(a,b,tolerance=1e-5){
+  const aa=a.clone().normalize()
+  const bb=b.clone().normalize()
+  return aa.distanceToSquared(bb)<=tolerance*tolerance
+}
+
 function worldJointQuaternion(axisWorld){
   const x=axisWorld.clone().normalize()
   const seed=Math.abs(x.y)<.85
@@ -119,11 +125,21 @@ function createJointData(RAPIER,item,memberA,memberB,{
     if(typeof RAPIER.JointData.spherical!=='function')throw new Error('Rapier spherical joint unavailable')
     data=RAPIER.JointData.spherical(vec(anchorA),vec(anchorB))
   }else if(item.kind==='revolute'){
-    if(typeof RAPIER.JointData.revoluteWithAxes!=='function')throw new Error('Rapier revoluteWithAxes unavailable')
-    data=RAPIER.JointData.revoluteWithAxes(
-      vec(anchorA),vec(anchorB),vec(axisA),vec(axisB),
-    )
+    if(typeof RAPIER.JointData.revoluteWithAxes==='function'){
+      data=RAPIER.JointData.revoluteWithAxes(
+        vec(anchorA),vec(anchorB),vec(axisA),vec(axisB),
+      )
+    }else{
+      if(!axesCompatible(axisA,axisB)){
+        throw new Error('Rapier revolute fallback cannot represent different local axes')
+      }
+      if(typeof RAPIER.JointData.revolute!=='function')throw new Error('Rapier revolute joint unavailable')
+      data=RAPIER.JointData.revolute(vec(anchorA),vec(anchorB),vec(axisA))
+    }
   }else if(item.kind==='prismatic'||item.kind==='cylindrical'){
+    if(!axesCompatible(axisA,axisB)){
+      throw new Error(`Rapier ${item.kind} GenericJoint cannot represent different local axes`)
+    }
     if(typeof RAPIER.JointData.generic!=='function')throw new Error('Rapier GenericJoint unavailable')
     const mask=item.kind==='prismatic'
       ?RAPIER_LOCK_MASKS.prismaticX
@@ -144,15 +160,6 @@ function createJointData(RAPIER,item,memberA,memberB,{
     axisWorld,
     pointWorld,
   }
-}
-
-function setIndependentFrames(handle,item,frames){
-  if(item.kind!=='prismatic'&&item.kind!=='cylindrical')return
-  if(typeof handle?.setLocalFrame1!=='function'||typeof handle?.setLocalFrame2!=='function'){
-    throw new Error('Rapier independent local-frame API unavailable')
-  }
-  handle.setLocalFrame1(vec(frames.anchorA),quat(frames.frameA))
-  handle.setLocalFrame2(vec(frames.anchorB),quat(frames.frameB))
 }
 
 function sameRapierBody(memberA,memberB){
@@ -209,8 +216,19 @@ export function preflightRapierMechanicsPlan(plan,{
     seenPairs.add(key)
 
     try{
-      finiteVector(item.frame?.axisWorld,'joint axis')
+      const axisWorld=finiteVector(item.frame?.axisWorld,'joint axis').normalize()
       finiteVector(item.frame?.positionStud,'joint anchor')
+      const axisA=localDirection(memberA,axisWorld)
+      const axisB=localDirection(memberB,axisWorld)
+      if(['prismatic','cylindrical'].includes(item.kind)&&!axesCompatible(axisA,axisB)){
+        failures.push(Object.freeze({
+          code:'rapier-generic-local-axis-mismatch',
+          jointId:item.id,
+          jointKind:item.kind,
+          localAxisA:Object.freeze(axisA.toArray()),
+          localAxisB:Object.freeze(axisB.toArray()),
+        }))
+      }
     }catch(error){
       failures.push(Object.freeze({
         code:'joint-frame-preflight',
@@ -259,7 +277,6 @@ export function materializeRapierMechanicsPlan(session,plan,{
       )
       if(!handle)throw new Error(`Rapier failed to create joint ${item.id}`)
       try{
-        setIndependentFrames(handle,item,frames)
         configureContacts(handle,contactsEnabled)
         configureLimits(handle,{...item,studMeters})
       }catch(error){
