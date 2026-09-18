@@ -19,6 +19,7 @@ import { createMechanicsDragSession } from './interaction/drag-session.js'
 import { rotaryFrameForRecord } from './interaction/motion-plan.js'
 import { rotationalDragProjection } from './interaction/view-projection.js'
 import { createCompoundStateRegistry } from './compounds/state.js'
+import { createCompoundDecompositionRegistry } from './compounds/decomposition-registry.js'
 import { createMechanicsPhysicsRuntime } from './physics/runtime.js'
 
 export const MECHANICS_NEXT_RUNTIME_MODE = 'observe-only'
@@ -34,6 +35,7 @@ export function createMechanicsNextRuntime({
   const transmissionCompiler = createTransmissionCompiler({ solver, graph })
   const compoundState = createCompoundStateRegistry()
   let legacySnapshot = snapshotLegacyV4(legacyProvider)
+  let decompositionRefreshQueued = false
 
   const catalog = subsystems?.parts
     ? createCatalogObservationProvider(subsystems)
@@ -57,6 +59,20 @@ export function createMechanicsNextRuntime({
         graph,
         sceneObserver,
         objectById:instanceId => subsystems?.editor?.objectById?.(instanceId) ?? null,
+      })
+    : null
+
+  const compoundDecompositions = globals.BrickLabLDraw?.readText
+    ? createCompoundDecompositionRegistry({
+        ldraw:globals.BrickLabLDraw,
+        onResolved() {
+          if (decompositionRefreshQueued) return
+          decompositionRefreshQueued = true
+          queueMicrotask(() => {
+            decompositionRefreshQueued = false
+            scheduleSceneSync()
+          })
+        },
       })
     : null
 
@@ -88,6 +104,7 @@ export function createMechanicsNextRuntime({
               ? [...connectivitySnapshot.visualOffsetStud]
               : [0,0,0],
           ),
+          compoundDecomposition:compoundDecompositions?.cached(instanceId) ?? null,
           object,
         }))
       } catch (error) {
@@ -114,6 +131,7 @@ export function createMechanicsNextRuntime({
     }
     refreshLegacySnapshot()
     const scene = sceneObserver.sync()
+    void compoundDecompositions?.prefetch?.(sceneObserver.instances())
     const connections = connectionInterpreter?.sync(legacySnapshot.connections) ?? null
     const records = mechanicalRecords()
     const discovery = discoverMechanicalTransmissions({
@@ -178,6 +196,7 @@ export function createMechanicsNextRuntime({
     connectionInterpreter,
     transmissionCompiler,
     compoundState,
+    compoundDecompositions,
     physicsPreview:() => physicsPreview,
     refreshLegacySnapshot,
     legacySnapshot:() => legacySnapshot,
@@ -316,6 +335,7 @@ export function createMechanicsNextRuntime({
         transmissionCompiler:transmissionCompiler.snapshot(),
         transmissionSolve:transmissionCompiler.solve(),
         compoundState:compoundState.snapshot(),
+        compoundDecompositions:compoundDecompositions?.status?.() ?? null,
         physicsPreview:physicsPreview?.status?.() ?? null,
         dragSession:Object.freeze({
           active:Boolean(activeDragSession?.active),
