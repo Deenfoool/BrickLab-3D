@@ -1,5 +1,5 @@
 import { mechanicalVariable } from '../core/model.js'
-import { solveLinearSystem } from '../solver/linear-system.js'
+import { solveLinearWithNonlinearRelations } from '../solver/nonlinear-relations.js'
 import { remapEquationSetChannel } from '../solver/equation-channels.js'
 import { driverEquation } from '../transmission/equations.js'
 
@@ -112,7 +112,12 @@ export function solveRotationalDrag({
     }),
   ]
 
-  const result=solveLinearSystem(equations,{defaults,tolerance})
+  const result=solveLinearWithNonlinearRelations({
+    equations,
+    relations:discovery?.nonlinearRelations||[],
+    defaults,
+    tolerance,
+  })
   return Object.freeze({
     ...result,
     version:DRAG_DRIVER_VERSION,
