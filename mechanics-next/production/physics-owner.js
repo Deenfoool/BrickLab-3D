@@ -128,6 +128,7 @@ if(!PhysicsSession[marker]){
     const baseIds=new Set(baseObjects.map(object=>String(object?.userData?.instanceId||'')).filter(Boolean))
     const compatibility=fixedCompatibilityConnections(physics.structuralPlan,baseIds)
     let session=null
+    let physicsInstalled=false
     try{
       const requestedOptions=
         rest.length===1&&rest[0]&&typeof rest[0]==='object'&&!Array.isArray(rest[0])
@@ -155,6 +156,23 @@ if(!PhysicsSession[marker]){
         stabilization:1,
         contactsEnabled:false,
       })
+      physicsInstalled=true
+      const steeringBindings=physics.vehicleSteeringBindings?.()??[]
+      const steeringInstaller=globalThis.BrickLabVehicle?.installMechanicsNextSteering
+      if(steeringBindings.length&&typeof steeringInstaller!=='function'){
+        throw new Error('Mechanics Next steering bindings exist but Vehicle System bridge is unavailable')
+      }
+      const steeringIntegration=typeof steeringInstaller==='function'
+        ?steeringInstaller(session,steeringBindings)
+        :Object.freeze({installed:0,skipped:0})
+      if(steeringIntegration.skipped>0){
+        const error=new Error('Mechanics Next vehicle steering integration skipped native bindings')
+        error.failures=[Object.freeze({
+          code:'vehicle-steering-binding-skipped',
+          ...steeringIntegration,
+        })]
+        throw error
+      }
       mechanics.handoffDomains?.(['physics-constraints'],'validated Mechanics Next SIMULATE session')
       session.mechanicsNextPhysics=physics
       session.mechanicsNextOwnership=Object.freeze({
@@ -162,6 +180,7 @@ if(!PhysicsSession[marker]){
         version:MECHANICS_NEXT_PHYSICS_OWNER_VERSION,
         compatibilityConnections:compatibility.length,
         excludedCompoundRoots:excludedRoots.size,
+        steeringBindings:physics.vehicleSteeringBindings?.().length??0,
         gate:gate.summary??null,
       })
       installDisposeBridge(session,physics)
@@ -180,6 +199,11 @@ if(!PhysicsSession[marker]){
       }))
       return session
     }catch(error){
+      if(physicsInstalled){
+        try{physics?.dispose?.()}catch(disposeError){
+          console.warn('[BrickLab Mechanics Next] Could not rollback failed native physics install.',disposeError)
+        }
+      }
       try{session?.dispose?.()}catch{}
       lastAttempt=Object.freeze({
         owner:'legacy-fallback',
