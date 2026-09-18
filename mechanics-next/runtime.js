@@ -35,6 +35,7 @@ import { evaluateMechanicsMigrationGate } from './migration/gate.js'
 import { runMechanicsMigrationRegressionSuite } from './migration/regression-suite.js'
 
 export const MECHANICS_NEXT_RUNTIME_MODE = 'migration-pilot'
+export const MECHANICS_NEXT_BUILD_OWNER_VERSION = 'mechanics-next-build-owner-0.1.0'
 
 export function createMechanicsNextRuntime({
   globals = globalThis,
@@ -188,6 +189,31 @@ export function createMechanicsNextRuntime({
   let parityEvidence = null
   let activeDragSession = null
   let activeDragApply = false
+  let buildOwnershipPublished = false
+
+  const publishBuildOwnership = reason => {
+    if(buildOwnershipPublished&&globals.BrickLabMechanicsNextBuildOwner?.active===true){
+      return globals.BrickLabMechanicsNextBuildOwner
+    }
+    buildOwnershipPublished=true
+    const owner=Object.freeze({
+      version:MECHANICS_NEXT_BUILD_OWNER_VERSION,
+      active:true,
+      engine:MECHANICS_NEXT_VERSION,
+      reason:String(reason||'native-handoff'),
+      authoritative:()=>nativeProjectAuthoritative,
+      status:()=>api?.status?.()??null,
+    })
+    globals.BrickLabMechanicsNextBuildOwner=owner
+    globals.dispatchEvent?.(new CustomEvent('bricklab:mechanicsnextbuildowner',{
+      detail:{
+        version:owner.version,
+        engine:owner.engine,
+        reason:owner.reason,
+      },
+    }))
+    return owner
+  }
 
   const mechanicalRecords = () => {
     if (!sceneObserver || !subsystems?.editor?.ready?.()) return Object.freeze([])
@@ -536,6 +562,7 @@ export function createMechanicsNextRuntime({
       })
       nativeRestoredRelations=result.relations??Object.freeze([])
       nativeProjectAuthoritative=result.rejected===0
+      if(nativeProjectAuthoritative)publishBuildOwnership('native-project-restore')
       lastPersistenceReport=persistenceCompatibilityReport({
         exportedState:state,
         restoredResult:result,
@@ -631,6 +658,7 @@ export function createMechanicsNextRuntime({
         })
       }
       nativeProjectAuthoritative=true
+      publishBuildOwnership('migration-handoff')
       rebuildNativeOccupancy()
       const refreshed=syncScene()
       return Object.freeze({
