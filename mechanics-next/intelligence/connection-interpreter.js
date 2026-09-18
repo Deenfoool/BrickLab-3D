@@ -15,6 +15,7 @@ function evidenceConfidence(tier) {
 function endpointByLegacyId(instance, endpointId) {
   return instance?.endpoints?.find(endpoint =>
     endpoint?.metadata?.legacyEndpointId === endpointId ||
+    endpoint?.metadata?.compatibilityEndpointId === endpointId ||
     endpoint?.metadata?.sourceEndpointId === endpointId ||
     endpoint?.metadata?.templateKey === endpointId
   ) ?? null
