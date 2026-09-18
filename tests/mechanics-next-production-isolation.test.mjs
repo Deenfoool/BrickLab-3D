@@ -121,15 +121,28 @@ test('production KINEMATICS and SIMULATE require native BUILD ownership first', 
 })
 
 
-test('production Mechanics Next entry modules are cache-versioned', () => {
+test('production Mechanics Next entry modules share the canonical import-map generation', () => {
   const bootstrap=source('bootstrap.js')
   const activation=source('kinematics/activation-v1.js')
   const index=source('index.html')
+  const match=index.match(/<script type="importmap">([\s\S]*?)<\/script>/)
+  assert.ok(match,'production import map is present')
+  const imports=JSON.parse(match[1]).imports
+  const canonical=imports['./app.js']?.match(/\?v=(.+)$/)?.[1]
+  assert.equal(canonical,'runtime-27-mechanics-next-stage11-20260918-v1')
 
-  assert.match(bootstrap,/mechanics-next\/runtime\.js\?v=mechanics-next-stage11-20260918-v2/)
-  assert.match(bootstrap,/mechanics-next\/production\/physics-owner\.js\?v=mechanics-next-stage11-20260918-v2/)
-  assert.match(activation,/mechanics-next\/production\/kinematics-owner\.js\?v=mechanics-next-stage11-20260918-v2/)
-  assert.match(index,/bootstrap\.js\?v=runtime-27-mechanics-next-stage11-20260918-v1/)
+  assert.match(bootstrap,/import\('\.\/mechanics-next\/runtime\.js'\)/)
+  assert.match(bootstrap,/import\('\.\/mechanics-next\/production\/physics-owner\.js'\)/)
+  assert.match(activation,/import\('\.\.\/mechanics-next\/production\/kinematics-owner\.js'\)/)
+
+  for(const specifier of [
+    './mechanics-next/runtime.js',
+    './mechanics-next/production/physics-owner.js',
+    './mechanics-next/production/kinematics-owner.js',
+  ]){
+    assert.equal(imports[specifier],`${specifier}?v=${canonical}`)
+  }
+  assert.match(index,new RegExp(`bootstrap\\.js\\?v=${canonical}`))
 })
 
 
