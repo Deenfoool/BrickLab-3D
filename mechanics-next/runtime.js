@@ -23,6 +23,8 @@ import { createCompoundDecompositionRegistry } from './compounds/decomposition-r
 import { mapDecompositionToScene } from './compounds/scene-member-map.js'
 import { assignCompoundEndpointOwnership } from './compounds/endpoint-ownership.js'
 import { createMechanicsPhysicsRuntime } from './physics/runtime.js'
+import { exportMechanicsProjectState, persistenceCompatibilityReport, restoreMechanicsProjectState } from './migration/project-state.js'
+import { evaluateMechanicsMigrationGate } from './migration/gate.js'
 
 export const MECHANICS_NEXT_RUNTIME_MODE = 'observe-only'
 
@@ -151,7 +153,10 @@ export function createMechanicsNextRuntime({
     const discovery = discoverMechanicalTransmissions({
       records,
       graph,
-      relations:connectionInterpreter?.relations?.() ?? [],
+      relations:Object.freeze([
+        ...(connectionInterpreter?.relations?.() ?? []),
+        ...nativeRestoredRelations,
+      ]),
       compoundState,
     })
     lastTransmissionSync = transmissionCompiler.sync(discovery)
@@ -212,6 +217,50 @@ export function createMechanicsNextRuntime({
     compoundState,
     compoundDecompositions,
     physicsPreview:() => physicsPreview,
+    exportProjectState() {
+      return exportMechanicsProjectState({
+        graph,
+        relations:[
+          ...(connectionInterpreter?.relations?.() ?? []),
+          ...nativeRestoredRelations,
+        ],
+        compoundState,
+      })
+    },
+    restoreProjectState(state, { replace = false } = {}) {
+      const result=restoreMechanicsProjectState(state,{
+        graph,
+        sceneObserver,
+        objectByInstanceId:instanceId=>subsystems?.editor?.objectById?.(instanceId)??null,
+        visualOffsetForPart:partId=>connectivity.get(partId)?.visualOffsetStud??[0,0,0],
+        replace,
+      })
+      nativeRestoredRelations=result.relations??Object.freeze([])
+      lastPersistenceReport=persistenceCompatibilityReport({
+        exportedState:state,
+        restoredResult:result,
+      })
+      const transmission=refreshTransmissions()
+      physicsPreview=transmission.physics
+      return Object.freeze({
+        ...result,
+        compatibility:lastPersistenceReport,
+      })
+    },
+    setMigrationEvidence({ parity = null, regression = null } = {}) {
+      if(parity)parityEvidence=Object.freeze({...parity})
+      if(regression)regressionEvidence=Object.freeze({...regression})
+      return api.migrationGate()
+    },
+    migrationGate() {
+      return evaluateMechanicsMigrationGate({
+        runtimeStatus:api.status(),
+        physicsStatus:physicsPreview?.status?.()??null,
+        paritySummary:parityEvidence,
+        regression:regressionEvidence,
+        persistence:lastPersistenceReport,
+      })
+    },
     refreshLegacySnapshot,
     legacySnapshot:() => legacySnapshot,
     describePart(partId, options) {
@@ -351,6 +400,11 @@ export function createMechanicsNextRuntime({
         compoundState:compoundState.snapshot(),
         compoundDecompositions:compoundDecompositions?.status?.() ?? null,
         physicsPreview:physicsPreview?.status?.() ?? null,
+        persistence:lastPersistenceReport,
+        migrationEvidence:Object.freeze({
+          parity:parityEvidence,
+          regression:regressionEvidence,
+        }),
         dragSession:Object.freeze({
           active:Boolean(activeDragSession?.active),
           apply:activeDragApply,
