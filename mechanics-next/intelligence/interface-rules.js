@@ -85,6 +85,48 @@ export const INTERFACE_RULES = Object.freeze({
     dynamics:{ deformation:'future-tyre-model' },
     evidence:{ tier:'B', source:'assembled wheel/tyre connectivity semantics' },
   }),
+  'steering-pivot:steering-pivot':freezeRule({
+    kind:'revolute',
+    topology:{ dof:constraintDof('revolute'), axis:'y', retained:true },
+    dynamics:{ rotationalResistance:'part-fit' },
+    evidence:{ tier:'B', source:'LDCad steering pivot group semantics' },
+  }),
+  'linear-guide:linear-guide':freezeRule({
+    kind:'prismatic',
+    topology:{ dof:constraintDof('prismatic'), axis:'y', retained:true },
+    dynamics:{ axialResistance:'part-fit' },
+    evidence:{ tier:'B', source:'LDCad linear guide group semantics' },
+  }),
+  'linear-actuator-guide:linear-actuator-guide':freezeRule({
+    kind:'prismatic',
+    topology:{ dof:constraintDof('prismatic'), axis:'y', retained:true },
+    dynamics:{ axialResistance:'actuator-guide' },
+    evidence:{ tier:'B', source:'LDCad linear actuator guide semantics' },
+  }),
+  'pneumatic-cylinder-guide:pneumatic-cylinder-guide':freezeRule({
+    kind:'prismatic',
+    topology:{ dof:constraintDof('prismatic'), axis:'y', retained:true },
+    dynamics:{ axialResistance:'seal-friction' },
+    evidence:{ tier:'B', source:'LDCad pneumatic cylinder guide semantics' },
+  }),
+  'engine-slider:engine-slider':freezeRule({
+    kind:'prismatic',
+    topology:{ dof:constraintDof('prismatic'), axis:'y', retained:true },
+    dynamics:{ axialResistance:'low' },
+    evidence:{ tier:'B', source:'LDCad Technic engine slider semantics' },
+  }),
+  'wheel-retainer:wheel-retainer':freezeRule({
+    kind:'revolute',
+    topology:{ dof:constraintDof('revolute'), axis:'y', retained:true },
+    dynamics:{ rotationalResistance:'part-fit' },
+    evidence:{ tier:'B', source:'LDCad wheel retainer group semantics' },
+  }),
+  'driving-ring:driving-ring':freezeRule({
+    kind:'prismatic',
+    topology:{ dof:constraintDof('prismatic'), axis:'y', retained:true, conditionalTorque:true },
+    dynamics:{ axialResistance:'detent-or-fit' },
+    evidence:{ tier:'B', source:'LDCad driving ring group semantics' },
+  }),
 })
 
 export const TRANSMISSION_SEMANTICS = Object.freeze({
