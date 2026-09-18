@@ -140,16 +140,20 @@ export function classifyPartFamily(observation, endpoints = []) {
   let source = 'none'
   let reason = null
 
-  if (endpointRole) {
+  if (textRole !== 'unknown') {
+    role = textRole
+    confidence = endpointRole === textRole ? 'strong' : 'inferred'
+    source = endpointRole === textRole
+      ? 'mechanics-next:catalog+endpoint-evidence'
+      : 'mechanics-next:catalog-metadata'
+    reason = endpointRole && endpointRole !== textRole
+      ? 'physical role from metadata; endpoint role retained as mechanism context'
+      : 'part name/category metadata'
+  } else if (endpointRole) {
     role = endpointRole
     confidence = 'strong'
     source = 'mechanics-next:endpoint-evidence'
     reason = 'special connector group/profile'
-  } else if (textRole !== 'unknown') {
-    role = textRole
-    confidence = 'inferred'
-    source = 'mechanics-next:catalog-metadata'
-    reason = 'part name/category metadata'
   } else if (oldRole) {
     role = oldRole
     confidence = observation.legacyMechanicalIntelligence?.confidence === 'verified' ? 'strong' : 'inferred'
@@ -177,6 +181,7 @@ export function classifyPartFamily(observation, endpoints = []) {
     family:role === 'unknown' ? 'unknown' : role,
     confidence,
     bodyPolicy:bodyPolicy(role, observation),
+    contexts:Object.freeze(endpointRole && endpointRole !== role ? [endpointRole] : []),
     capabilities:Object.freeze({
       rotary:ROTARY.has(role),
       transmission:TRANSMISSION.has(role),
