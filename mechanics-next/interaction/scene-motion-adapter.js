@@ -78,6 +78,17 @@ function motionMatrix(motion){
   return rotationAroundWorldPivot(motion.axis,motion.pivot,motion.thetaRad)
 }
 
+function translationMatrix(motion){
+  const axis=new THREE.Vector3(...(motion.axis||[0,1,0])).normalize()
+  const distance=Number(motion.distanceStud)
+  if(!Number.isFinite(distance))throw new TypeError('Translation motion requires finite distanceStud')
+  return new THREE.Matrix4().makeTranslation(
+    axis.x*distance,
+    axis.y*distance,
+    axis.z*distance,
+  )
+}
+
 function translationWorld(axis,distanceStud){
   const a=new THREE.Vector3(...axis).normalize().multiplyScalar(Number(distanceStud)||0)
   return new THREE.Matrix4().makeTranslation(a.x,a.y,a.z)
