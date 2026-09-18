@@ -347,7 +347,15 @@ export function interpretObservedConnection(record, {
   }
 
   const objectA = objectById(record.a.instanceId)
-  const referenceFrame = worldFrame(objectA, endpointA)
+  const objectB = objectById(record.b.instanceId)
+  const worldFrameA = worldFrame(objectA, endpointA)
+  const worldFrameB = worldFrame(objectB, endpointB)
+  const referenceFrame = worldFrameA
+  const axisDot=
+    worldFrameA.axis[0]*worldFrameB.axis[0]+
+    worldFrameA.axis[1]*worldFrameB.axis[1]+
+    worldFrameA.axis[2]*worldFrameB.axis[2]
+  const axisPolarity=axisDot>=0?1:-1
   const tier = resolved.rule.evidence?.tier || 'D'
   const constraint = createConstraint({
     id:deterministicId('constraint', record.id, instanceA.body.id, instanceB.body.id),
@@ -373,6 +381,11 @@ export function interpretObservedConnection(record, {
       topology:resolved.rule.topology,
       legacyMatchFamily:record?.match?.family ?? null,
       occupancy:record?.occupancy ?? null,
+      axisPolarity,
+      endpointWorldAxes:Object.freeze({
+        a:Object.freeze([...worldFrameA.axis]),
+        b:Object.freeze([...worldFrameB.axis]),
+      }),
       motorDrive:resolved.motorSide?Object.freeze({
         motorSide:resolved.motorSide,
         motorBodyId:resolved.motorSide==='a'?instanceA.body.id:instanceB.body.id,
@@ -392,6 +405,13 @@ export function interpretObservedConnection(record, {
         portRole:resolved.transmissionPort.port.portRole,
         portId:resolved.transmissionPort.port.portId,
         parameters:resolved.transmissionPort.port.parameters,
+        axisPolarity,
+        packageAxisWorld:Object.freeze([
+          ...(resolved.transmissionPort.packageSide==='a'?worldFrameA.axis:worldFrameB.axis),
+        ]),
+        externalAxisWorld:Object.freeze([
+          ...(resolved.transmissionPort.packageSide==='a'?worldFrameB.axis:worldFrameA.axis),
+        ]),
       }):null,
     },
     evidence:evidence({
