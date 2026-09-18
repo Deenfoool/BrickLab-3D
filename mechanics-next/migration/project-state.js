@@ -197,7 +197,7 @@ export function restoreMechanicsProjectState(state,{
       const referenceFrame=referenceFrameFor(
         objectA,
         left.endpoint,
-        visualOffsetForPart(left.instance.body.partId),
+        visualOffsetForPart(left.instance.body.partId,record.a.instanceId),
       )
       graph.addConstraint(createConstraint({
         id:record.id,
