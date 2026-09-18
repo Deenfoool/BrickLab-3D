@@ -316,6 +316,8 @@ PhysicsSession.prototype.build = function buildWithConnectorIntegrityV3() {
       mechanicsNextBypass:true,
     }
     this.autoWeldStats = stats
+    this.mechanicsNextLegacyBypass ??= {}
+    this.mechanicsNextLegacyBypass.autoWeld = true
     globalThis.__bricklabLastAutoWeldStats = { ...stats }
     return originalBuild.call(this)
   }
