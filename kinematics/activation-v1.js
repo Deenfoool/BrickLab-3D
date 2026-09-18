@@ -113,18 +113,42 @@ async function activate(event) {
   button.dataset.kinematicsState = 'loading'
   button.title = copy().loading
   try {
-    await import('./runtime-v1.js?v=kinematics-mechanical-pivots-20260917-v2')
-    const { guardKinematicsRuntime } = await import('./lifecycle-guard-v1.js?v=kinematics-connection-transaction-20260917-v1')
-    const core = globalThis.BrickLabKinematics
-    if (!core?.enter) throw new Error('Kinematics runtime loaded without an enter API')
-    const api = guardKinematicsRuntime(core)
-    globalThis.BrickLabKinematics = api
-    // Rack/pinion following is additive. It observes temporary shaft rotation and
-    // never owns project state, Connector V4 or Rapier constraints.
-    await import('./rack-pinion-runtime-v1.js?v=kinematics-rack-pinion-20260915-v2')
-    button.dataset.kinematicsState = 'entering'
-    button.title = copy().loading
-    await api.enter()
+    let api=null
+    let nextAttempt=null
+
+    // Stage 11 migration: Mechanics Next may take KINEMATICS ownership only after
+    // its native connectivity/parity/persistence/physics regression gate passes.
+    try {
+      const module=await import('../mechanics-next/production/kinematics-owner.js')
+      const next=module.default ?? globalThis.BrickLabMechanicsNextKinematics
+      if(next?.enter){
+        nextAttempt=await next.enter()
+        if(nextAttempt?.accepted){
+          api=next
+          globalThis.BrickLabKinematics=next
+        }
+      }
+    } catch (error) {
+      console.warn('[BrickLab Mechanics Next] Kinematics owner preparation failed.',error)
+    }
+
+    if(!api){
+      if(nextAttempt?.gate?.blockers?.length){
+        console.info('[BrickLab Mechanics Next] Kinematics migration gate blocked; temporary legacy fallback remains active.',nextAttempt.gate)
+      }
+      await import('./runtime-v1.js?v=kinematics-mechanical-pivots-20260917-v2')
+      const { guardKinematicsRuntime } = await import('./lifecycle-guard-v1.js?v=kinematics-connection-transaction-20260917-v1')
+      const core = globalThis.BrickLabKinematics
+      if (!core?.enter) throw new Error('Kinematics runtime loaded without an enter API')
+      api = guardKinematicsRuntime(core)
+      globalThis.BrickLabKinematics = api
+      // Legacy rack/pinion remains fallback-only during Stage 11.
+      await import('./rack-pinion-runtime-v1.js?v=kinematics-rack-pinion-20260915-v2')
+      button.dataset.kinematicsState = 'entering'
+      button.title = copy().loading
+      await api.enter()
+    }
+
     button.dataset.kinematicsState = api.active?.() ? 'active' : 'ready'
     localizeButton(button)
   } catch (error) {
