@@ -35,6 +35,7 @@ import { createShadowConnectionInterpreter, interpretObservedConnection } from '
 import { expandGrid, parseCylinderSections, parseLdcadShadowText } from '../mechanics-next/ldraw/ldcad-parser.js'
 import { ldcadConnectorToEndpoint } from '../mechanics-next/ldraw/connector-adapter.js'
 import { createNativeShadowResolver } from '../mechanics-next/ldraw/shadow-resolver.js'
+import { compareNativeToLegacyConnectivity, ConnectivityParityLedger } from '../mechanics-next/diagnostics/native-v4-parity.js'
 
 test('deterministic mechanical IDs are stable and namespace-sensitive', () => {
   assert.equal(deterministicId('body', 'a', 1), deterministicId('body', 'a', 1))
@@ -683,4 +684,71 @@ test('native Shadow resolver keeps explicit capability boundary for official inh
   assert.equal(resolver.capabilities.directShadow, true)
   assert.equal(resolver.capabilities.includes, true)
   assert.equal(resolver.capabilities.officialInheritance, false)
+})
+
+
+test('native/V4 parity accepts equivalent source connectors despite V4 BrickLab frame decoration', () => {
+  const base = {
+    id:'axle',
+    endpointId:'legacy-axle',
+    family:'cylinder',
+    gender:'male',
+    group:'drive',
+    frame:{
+      positionLdu:[10,20,30],
+      orientation:[1,0,0,0,1,0,0,0,1],
+      positionStud:[.5,-1,-1.5],
+      orientationBrickLab:[1,0,0,0,-1,0,0,0,-1],
+    },
+    geometry:{
+      centered:true,
+      caps:'none',
+      sections:[{shape:'A',radiusLdu:6,lengthLdu:40,elastic:false}],
+    },
+    snap:{slide:true},
+  }
+  const native = {
+    ...base,
+    endpointId:undefined,
+    frame:{
+      positionLdu:[10,20,30],
+      orientation:[1,0,0,0,1,0,0,0,1],
+    },
+  }
+  const result = compareNativeToLegacyConnectivity({
+    partId:'part',
+    nativeConnectors:[native],
+    legacyConnectors:[base],
+  })
+  assert.equal(result.semanticParity, true)
+  assert.equal(result.geometryParity, true)
+})
+
+test('native/V4 parity exposes missing semantics instead of hiding migration gaps', () => {
+  const legacy = {
+    endpointId:'stud',
+    family:'cylinder',
+    gender:'male',
+    group:null,
+    frame:{positionLdu:[0,0,0],orientation:[1,0,0,0,1,0,0,0,1]},
+    geometry:{centered:false,caps:'one',sections:[{shape:'R',radiusLdu:6,lengthLdu:4}]},
+    snap:{slide:false},
+  }
+  const result = compareNativeToLegacyConnectivity({
+    partId:'part',
+    nativeConnectors:[],
+    legacyConnectors:[legacy],
+  })
+  assert.equal(result.semanticParity, false)
+  assert.equal(result.semanticMissingFromNative.length, 1)
+
+  const ledger = new ConnectivityParityLedger()
+  ledger.record(result)
+  assert.deepEqual(ledger.summary(), {
+    parts:1,
+    semanticPass:0,
+    geometryPass:0,
+    semanticFail:1,
+    geometryFail:1,
+  })
 })
