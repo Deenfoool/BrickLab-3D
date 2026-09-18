@@ -163,7 +163,9 @@ export function createBrickLabSubsystemApi({
           :'connector-v4-with-legacy-bridge'
       },
       get simulate(){
-        return globals?.BrickLabMechanicsNextPhysicsOwner?.active
+        const buildNative=globals?.BrickLabMechanicsNextBuildOwner?.active===true &&
+          globals?.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true
+        return buildNative&&globals?.BrickLabMechanicsNextPhysicsOwner?.active===true
           ?'mechanics-next-physics-owner'
           :'connector-v4-physics-guard'
       },
