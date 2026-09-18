@@ -186,6 +186,8 @@ export function classifyPartFamily(observation, endpoints = []) {
   const legacySteeringRack=observation?.legacyMechanics?.steeringRack
   const legacySteeringKnuckle=observation?.legacyMechanics?.steeringKnuckle
   const legacySteeringBase=observation?.legacyMechanics?.steeringBase
+  const legacyShockBody=observation?.legacyMechanics?.shockBody
+  const legacyShockRod=observation?.legacyMechanics?.shockRod
   const legacyArticulatedCoupler=observation?.legacyMechanics?.articulatedCoupler
   const gearGeometry=legacyGear && typeof legacyGear==='object'
     ?Object.freeze({
@@ -317,6 +319,26 @@ export function classifyPartFamily(observation, endpoints = []) {
       :{}),
     ...(legacySteeringBase&&typeof legacySteeringBase==='object'
       ?{steeringBase:Object.freeze({...legacySteeringBase})}
+      :{}),
+    ...(legacyShockBody&&typeof legacyShockBody==='object'
+      ?{shockBody:Object.freeze({
+          railConnectorId:legacyShockBody.railConnectorId??'rail',
+          minTravelStud:Number.isFinite(Number(legacyShockBody.minTravelStud))
+            ?Number(legacyShockBody.minTravelStud):-1.25,
+          maxTravelStud:Number.isFinite(Number(legacyShockBody.maxTravelStud))
+            ?Number(legacyShockBody.maxTravelStud):.25,
+          springStiffness:Number.isFinite(Number(legacyShockBody.springStiffness))
+            ?Number(legacyShockBody.springStiffness):3.2,
+          damping:Number.isFinite(Number(legacyShockBody.damping))
+            ?Number(legacyShockBody.damping):.38,
+          restTravelStud:Number.isFinite(Number(legacyShockBody.restTravelStud))
+            ?Number(legacyShockBody.restTravelStud):0,
+        })}
+      :{}),
+    ...(legacyShockRod&&typeof legacyShockRod==='object'
+      ?{shockRod:Object.freeze({
+          sliderConnectorId:legacyShockRod.sliderConnectorId??'slider',
+        })}
       :{}),
     ...(role==='motor'&&legacyMotor&&typeof legacyMotor==='object'?{
       motor:Object.freeze({
