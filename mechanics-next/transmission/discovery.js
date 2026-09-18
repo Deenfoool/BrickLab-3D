@@ -6,6 +6,7 @@ import {
   rigidRotationEquation,
 } from './equations.js'
 import { gearFrameForRecord, evaluateGearPair } from './gear-geometry.js'
+import { discoverCompoundMechanisms } from '../compounds/discovery.js'
 
 export const TRANSMISSION_DISCOVERY_VERSION='mechanics-transmission-discovery-0.1.0'
 
@@ -249,6 +250,7 @@ export function discoverMechanicalTransmissions({
   graph,
   relations=[],
   gearOptions={},
+  compoundState=null,
 }={}){
   const groups=differentialGroups(records,relations)
   const protectedClusters=[...groups.entries()].map(([carrier,inners])=>
@@ -256,6 +258,12 @@ export function discoverMechanicalTransmissions({
   const shaft=shaftCouplings(graph)
   const gears=gearMeshes(records,graph,gearOptions,protectedClusters)
   const differentials=discoverDifferentials(records,relations)
+  const compounds=discoverCompoundMechanisms({
+    records,
+    graph,
+    relations,
+    stateRegistry:compoundState,
+  })
 
   return Object.freeze({
     version:TRANSMISSION_DISCOVERY_VERSION,
@@ -263,17 +271,24 @@ export function discoverMechanicalTransmissions({
       ...shaft.equations,
       ...gears.equations,
       ...differentials.equations,
+      ...compounds.equations,
     ]),
     transmissions:Object.freeze([
       ...shaft.transmissions,
       ...gears.transmissions,
       ...differentials.transmissions,
+      ...compounds.transmissions,
     ]),
     balancedDifferentialClosures:Object.freeze(differentials.balancedClosures),
     compoundMotions:Object.freeze(differentials.compoundMotions),
+    nonlinearRelations:Object.freeze(compounds.nonlinearRelations),
+    compoundDescriptors:Object.freeze(compounds.descriptors),
+    linearMotions:Object.freeze(compounds.linearMotions),
+    dynamics:Object.freeze(compounds.dynamics),
     diagnostics:Object.freeze({
       gearPairs:Object.freeze(gears.diagnostics),
       differentials:Object.freeze(differentials.diagnostics),
+      compounds:Object.freeze(compounds.diagnostics),
     }),
   })
 }
