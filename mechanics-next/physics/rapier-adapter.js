@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { quatFromRotationMatrix } from '../math/rigid.js'
 
 export const MECHANICS_RAPIER_ADAPTER_VERSION='mechanics-rapier-adapter-0.1.0'
 export const DEFAULT_WORLD_UNITS_PER_STUD=1
@@ -11,6 +12,7 @@ export const RAPIER_LOCK_MASKS=Object.freeze({
 })
 
 const vec=v=>({x:v.x,y:v.y,z:v.z})
+const rapierQuat=q=>({x:q.x,y:q.y,z:q.z,w:q.w})
 
 function finiteVector(value,label){
   const values=Array.isArray(value)?value.map(Number):null
@@ -38,6 +40,18 @@ function localDirection(member,worldDirection){
   const component=memberComponent(member,'member')
   return worldDirection.clone()
     .applyQuaternion(component.bodyWorldRotation.clone().invert())
+    .normalize()
+}
+
+function localFrameRotation(member,orientationWorld){
+  if(!Array.isArray(orientationWorld)||orientationWorld.length!==9||
+     !orientationWorld.every(Number.isFinite)){
+    throw new Error('fixed joint requires a finite world orientation frame')
+  }
+  const worldArray=quatFromRotationMatrix(orientationWorld)
+  const world=new THREE.Quaternion(...worldArray)
+  return memberComponent(member,'member').bodyWorldRotation.clone().invert()
+    .multiply(world)
     .normalize()
 }
 
@@ -94,7 +108,15 @@ function createJointData(RAPIER,item,memberA,memberB,{
   const axisA=localDirection(memberA,axisWorld)
   const axisB=localDirection(memberB,axisWorld)
   let data=null
-  if(item.kind==='spherical'){
+  if(item.kind==='fixed'){
+    if(typeof RAPIER.JointData.fixed!=='function')throw new Error('Rapier fixed joint unavailable')
+    const frameA=localFrameRotation(memberA,item.frame.orientationWorld)
+    const frameB=localFrameRotation(memberB,item.frame.orientationWorld)
+    data=RAPIER.JointData.fixed(
+      vec(anchorA),rapierQuat(frameA),
+      vec(anchorB),rapierQuat(frameB),
+    )
+  }else if(item.kind==='spherical'){
     if(typeof RAPIER.JointData.spherical!=='function')throw new Error('Rapier spherical joint unavailable')
     data=RAPIER.JointData.spherical(vec(anchorA),vec(anchorB))
   }else if(item.kind==='revolute'){
@@ -130,6 +152,7 @@ function createJointData(RAPIER,item,memberA,memberB,{
     axisB,
     axisWorld,
     pointWorld,
+    orientationWorld:item.frame.orientationWorld??null,
   }
 }
 
@@ -189,6 +212,10 @@ export function preflightRapierMechanicsPlan(plan,{
     try{
       const axisWorld=finiteVector(item.frame?.axisWorld,'joint axis').normalize()
       finiteVector(item.frame?.positionStud,'joint anchor')
+      if(item.kind==='fixed'){
+        localFrameRotation(memberA,item.frame?.orientationWorld)
+        localFrameRotation(memberB,item.frame?.orientationWorld)
+      }
       const axisA=localDirection(memberA,axisWorld)
       const axisB=localDirection(memberB,axisWorld)
       if(['prismatic','cylindrical'].includes(item.kind)&&!axesCompatible(axisA,axisB)){
