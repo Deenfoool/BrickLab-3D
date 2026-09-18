@@ -15,6 +15,9 @@ import { rigidPoseFromMatrix4 } from './math/rigid.js'
 import { discoverMechanicalTransmissions } from './transmission/discovery.js'
 import { createTransmissionCompiler } from './transmission/compiler.js'
 import { findBestMechanicalCandidate } from './connectors/candidate-search.js'
+import { createMechanicsDragSession } from './interaction/drag-session.js'
+import { rotaryFrameForRecord } from './interaction/motion-plan.js'
+import { rotationalDragProjection } from './interaction/view-projection.js'
 
 export const MECHANICS_NEXT_RUNTIME_MODE = 'observe-only'
 
@@ -57,6 +60,8 @@ export function createMechanicsNextRuntime({
   let syncQueued = false
   let lastSceneSync = null
   let lastTransmissionSync = null
+  let activeDragSession = null
+  let activeDragApply = false
 
   const mechanicalRecords = () => {
     if (!sceneObserver || !subsystems?.editor?.ready?.()) return Object.freeze([])
@@ -95,6 +100,11 @@ export function createMechanicsNextRuntime({
   }
 
   const syncScene = () => {
+    if (activeDragSession?.active) {
+      activeDragSession.cancel()
+      activeDragSession = null
+      activeDragApply = false
+    }
     if (!sceneObserver || !subsystems?.editor?.ready?.()) {
       return Object.freeze({ unavailable:true, reason:'editor-contract-not-ready' })
     }
@@ -184,6 +194,77 @@ export function createMechanicsNextRuntime({
         collisionProbe:options.collisionProbe,
       })
     },
+    beginDrag({
+      instanceId,
+      start,
+      camera = globals.BrickLabViewportV1?.camera?.(),
+      viewportRect = globals.document?.querySelector?.('#viewport')?.getBoundingClientRect?.(),
+      apply = false,
+      balancedDifferentials = 'auto',
+      tolerance,
+      tangentScale,
+      minimumRadiusPx,
+    } = {}) {
+      if (activeDragSession?.active) activeDragSession.cancel()
+      activeDragSession = null
+      activeDragApply = false
+
+      const records = mechanicalRecords()
+      const selected = records.find(record =>
+        String(record.instance.body.instanceId) === String(instanceId))
+      if (!selected) throw new Error(`Mechanical instance not found: ${instanceId}`)
+      const frame = rotaryFrameForRecord(selected)
+      if (!frame) throw new Error(`Mechanical instance has no rotary DOF: ${instanceId}`)
+      if (!camera?.isCamera) throw new Error('Active viewport camera is unavailable')
+      if (!viewportRect?.width || !viewportRect?.height) throw new Error('Viewport rectangle is unavailable')
+
+      const projection = rotationalDragProjection(
+        camera,
+        frame.pivot,
+        frame.axis,
+        viewportRect,
+      )
+      activeDragApply = apply === true
+      activeDragSession = createMechanicsDragSession({
+        records,
+        discovery:transmissionCompiler.discovery,
+        instanceId,
+        start,
+        pivot:projection.pivot,
+        axisScreenSign:projection.axisScreenSign,
+        fallbackDirection:projection.fallbackDirection,
+        balancedDifferentials,
+        tolerance,
+        tangentScale,
+        minimumRadiusPx,
+      })
+      return Object.freeze({
+        version:activeDragSession.constructor?.name ?? 'MechanicsDragSession',
+        instanceId:String(instanceId),
+        bodyId:selected.instance.body.id,
+        projection,
+        apply:activeDragApply,
+      })
+    },
+    updateDrag(current, options = {}) {
+      if (!activeDragSession?.active) return null
+      const apply = options.apply == null ? activeDragApply : options.apply === true
+      return activeDragSession.update(current, { apply })
+    },
+    endDrag({ restore = true } = {}) {
+      if (!activeDragSession) return null
+      const result = activeDragSession.close({ restore })
+      activeDragSession = null
+      activeDragApply = false
+      return result
+    },
+    cancelDrag() {
+      if (!activeDragSession) return false
+      const result = activeDragSession.cancel()
+      activeDragSession = null
+      activeDragApply = false
+      return result
+    },
     syncScene,
     invalidatePart,
     status() {
@@ -202,6 +283,12 @@ export function createMechanicsNextRuntime({
         interpretedConnections:connectionInterpreter?.stats?.() ?? null,
         transmissionCompiler:transmissionCompiler.snapshot(),
         transmissionSolve:transmissionCompiler.solve(),
+        dragSession:Object.freeze({
+          active:Boolean(activeDragSession?.active),
+          apply:activeDragApply,
+          selectedInstanceId:activeDragSession?.selected?.instance?.body?.instanceId ?? null,
+          lastStatus:activeDragSession?.last?.solution?.status ?? null,
+        }),
         lastTransmissionSync,
         lastSceneSync,
         ownership:ownership.snapshot(),
