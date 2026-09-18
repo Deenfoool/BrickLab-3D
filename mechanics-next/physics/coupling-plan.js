@@ -30,14 +30,35 @@ function componentIndex(graph){
 
 function angularReference(bodyId,graph,islands){
   const candidates=[]
-  for(const{bodyId:other,edge}of graph.neighbors(bodyId,{kind:'constraint'})){
-    const kind=constraintKind(edge)
-    if(!['revolute','cylindrical'].includes(kind)&&!allowsRelativeRotation(edge))continue
-    candidates.push({bodyId:other,componentId:islands.get(other)??other,edgeId:edge.id})
+  const componentId=islands.get(bodyId)??String(bodyId)
+  const componentBodies=[...islands.entries()]
+    .filter(([,id])=>id===componentId)
+    .map(([id])=>id)
+  if(!componentBodies.length)componentBodies.push(String(bodyId))
+
+  for(const memberBodyId of componentBodies){
+    for(const{bodyId:other,edge}of graph.neighbors(memberBodyId,{kind:'constraint'})){
+      const otherComponent=islands.get(other)??other
+      if(otherComponent===componentId)continue
+      const kind=constraintKind(edge)
+      if(!['revolute','cylindrical'].includes(kind)&&!allowsRelativeRotation(edge))continue
+      candidates.push({
+        bodyId:other,
+        componentId:otherComponent,
+        edgeId:edge.id,
+        viaBodyId:memberBodyId,
+      })
+    }
   }
+
   const unique=[...new Map(candidates.map(item=>[item.componentId,item])).values()]
   if(unique.length===0)return{referenceBodyId:null,status:'world-reference'}
-  if(unique.length===1)return{referenceBodyId:unique[0].bodyId,status:'resolved',edgeId:unique[0].edgeId}
+  if(unique.length===1)return{
+    referenceBodyId:unique[0].bodyId,
+    status:'resolved',
+    edgeId:unique[0].edgeId,
+    viaBodyId:unique[0].viaBodyId,
+  }
   return{
     referenceBodyId:null,
     status:'ambiguous',
