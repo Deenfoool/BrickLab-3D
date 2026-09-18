@@ -232,6 +232,45 @@ function shockPrismaticSemantics({
   })
 }
 
+function steeringRackPrismaticSemantics({
+  endpointA,
+  endpointB,
+  classificationA,
+  classificationB,
+  worldFrameA,
+  worldFrameB,
+}={}){
+  const propsA=classificationA?.properties||{}
+  const propsB=classificationB?.properties||{}
+  const rackSide=propsA.steeringRack?'a':propsB.steeringRack?'b':null
+  if(!rackSide)return null
+  const rackProps=rackSide==='a'?propsA.steeringRack:propsB.steeringRack
+  const rackEndpoint=rackSide==='a'?endpointA:endpointB
+  if(endpointSourceId(rackEndpoint)!==String(rackProps.sliderConnectorId??'slider'))return null
+
+  const maxTravel=Math.abs(Number(rackProps.maxTravelStud))
+  if(!(Number.isFinite(maxTravel)&&maxTravel>0))return null
+  const referenceAxis=worldFrameA?.axis
+  const rackAxis=(rackSide==='a'?worldFrameA:worldFrameB)?.axis
+  if(!referenceAxis||!rackAxis)return null
+  const dot=
+    referenceAxis[0]*rackAxis[0]+
+    referenceAxis[1]*rackAxis[1]+
+    referenceAxis[2]*rackAxis[2]
+  const alignment=dot>=0?1:-1
+  const coordinateSign=(rackSide==='a'?-1:1)*alignment
+  return Object.freeze({
+    kind:'steering-rack-prismatic',
+    rackSide,
+    coordinateSign,
+    limits:Object.freeze([-maxTravel,maxTravel]),
+    maxTravelStud:maxTravel,
+    stiffness:Number.isFinite(Number(rackProps.stiffness))?Math.max(0,Number(rackProps.stiffness)):4,
+    damping:Number.isFinite(Number(rackProps.damping))?Math.max(0,Number(rackProps.damping)):.42,
+    rackEndpointId:rackEndpoint.id,
+  })
+}
+
 function motorOutputRule(kindA,kindB,partRoleA,partRoleB){
   const motorSide=partRoleA==='motor'?'a':partRoleB==='motor'?'b':null
   if(!motorSide)return null
@@ -424,12 +463,23 @@ export function interpretObservedConnection(record, {
         worldFrameB,
       })
     :null
-  const constraintDofValue=shock
+  const steeringRack=!shock&&resolved.rule.kind==='prismatic'
+    ?steeringRackPrismaticSemantics({
+        endpointA,
+        endpointB,
+        classificationA:instanceA.descriptor.classification,
+        classificationB:instanceB.descriptor.classification,
+        worldFrameA,
+        worldFrameB,
+      })
+    :null
+  const limitedTravel=shock??steeringRack
+  const constraintDofValue=limitedTravel
     ?Object.freeze({
         ...resolved.rule.topology.dof,
         ty:dofEntry('limited',{
-          limits:[...shock.limits],
-          source:'mechanics-next:shock-travel',
+          limits:[...limitedTravel.limits],
+          source:shock?'mechanics-next:shock-travel':'mechanics-next:steering-rack-travel',
         }),
       })
     :resolved.rule.topology.dof
@@ -445,13 +495,25 @@ export function interpretObservedConnection(record, {
           source:'bricklab-explicit-shock-metadata',
         }),
       })
-    :resolved.rule.dynamics
-  const constraintTopology=shock
+    :steeringRack
+      ?Object.freeze({
+          ...resolved.rule.dynamics,
+          steeringActuator:Object.freeze({
+            maxTravelStud:steeringRack.maxTravelStud,
+            stiffness:steeringRack.stiffness,
+            damping:steeringRack.damping,
+            coordinateSign:steeringRack.coordinateSign,
+            source:'bricklab-explicit-steering-rack-metadata',
+          }),
+        })
+      :resolved.rule.dynamics
+  const constraintTopology=limitedTravel
     ?Object.freeze({
         ...resolved.rule.topology,
         dof:constraintDofValue,
-        shock:true,
-        travelLimitsStud:shock.limits,
+        shock:Boolean(shock),
+        steeringRack:Boolean(steeringRack),
+        travelLimitsStud:limitedTravel.limits,
       })
     :resolved.rule.topology
   const tier = resolved.rule.evidence?.tier || 'D'
@@ -478,6 +540,7 @@ export function interpretObservedConnection(record, {
       dynamics:constraintDynamics,
       topology:constraintTopology,
       shock,
+      steeringRack,
       legacyMatchFamily:record?.match?.family ?? null,
       occupancy:record?.occupancy ?? null,
       axisPolarity,
