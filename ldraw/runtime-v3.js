@@ -97,6 +97,42 @@ function type1References(text) {
   return result
 }
 
+async function attachShortcutMemberProxies(model, normalized, text) {
+  const header=parseHeader(text,normalized)
+  if(!/shortcut/i.test(String(header.type||'')))return Object.freeze([])
+  const refs=type1References(text)
+  if(!refs.length)return Object.freeze([])
+
+  const occurrences=new Map()
+  const proxies=[]
+  for(let index=0;index<refs.length;index+=1){
+    const ref=refs[index]
+    let childText
+    try{childText=await fetchLDrawText(ref.file)}
+    catch{continue}
+    const childHeader=parseHeader(childText,ref.file)
+    const childType=String(childHeader.type||'').toLowerCase()
+    if(!/(?:^|_)part|shortcut/.test(childType) || /subpart|primitive/.test(childType))continue
+
+    const key=normalizeFile(ref.file).toLowerCase()
+    const occurrence=occurrences.get(key)||0
+    occurrences.set(key,occurrence+1)
+
+    const proxy=new THREE.Group()
+    proxy.name=`bricklab-compound-member-${key.replace(/[^a-z0-9]+/gi,'-')}-${occurrence}`
+    proxy.applyMatrix4(ref.matrix)
+    proxy.userData.mechanicalMemberProxy=true
+    proxy.userData.mechanicalMemberPath=key
+    proxy.userData.mechanicalMemberIndex=index
+    proxy.userData.mechanicalMemberOccurrence=occurrence
+    proxy.userData.mechanicalMemberDescription=childHeader.description||null
+    proxy.userData.mechanicalMemberType=childHeader.type||null
+    model.add(proxy)
+    proxies.push(proxy)
+  }
+  return Object.freeze(proxies)
+}
+
 async function loadArticulatedModel(loader, normalized, text, descriptor) {
   if (!descriptor?.components?.length) return null
   const sourceFile=normalizeFile(descriptor.assemblyFile || normalized)
@@ -373,7 +409,12 @@ async function loadPrototype(file) {
     loader.addDefaultMaterials()
     const modelTask = textTask.then(async text=>{
       const descriptor=ldrawMechanismDescriptor(normalized)
-      return await loadArticulatedModel(loader,normalized,text,descriptor) || parseCompleteLDraw(loader,text)
+      const parsed=await loadArticulatedModel(loader,normalized,text,descriptor) || await parseCompleteLDraw(loader,text)
+      if(!descriptor?.components?.length){
+        try{await attachShortcutMemberProxies(parsed,normalized,text)}
+        catch(error){console.debug?.(`[BrickLab LDraw] Shortcut member proxies unavailable for ${normalized}`,error)}
+      }
+      return parsed
     })
     const [model, text] = await Promise.all([modelTask, textTask])
     model.rotation.x = Math.PI
