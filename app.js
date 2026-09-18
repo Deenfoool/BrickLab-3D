@@ -553,6 +553,7 @@ function projectState() {
     connections: cloneState(connections),
     connectorSystemV4:{version:4},
     connectionsV4:globalThis.BrickLabConnectorV4?.projectConnections() ?? [],
+    mechanicsNext:globalThis.BrickLabMechanicsNext?.exportProjectState?.() ?? undefined,
   }
 }
 
@@ -643,6 +644,13 @@ function applyProject(data, { reset = false, persist = true } = {}) {
   }
 
   globalThis.BrickLabConnectorV4?.restoreConnections(data.connectionsV4 ?? [])
+  try {
+    const mechanics=globalThis.BrickLabMechanicsNext
+    mechanics?.syncScene?.()
+    if(data.mechanicsNext) mechanics?.restoreProjectState?.(data.mechanicsNext,{replace:true})
+  } catch (error) {
+    console.warn('[BrickLab Mechanics Next] Native project restore deferred to migration bridge.', error)
+  }
   const usedEndpoints = new Set()
   for (const connection of Array.isArray(data.connections) ? data.connections : []) {
     if (connectionIsValid(connection, usedEndpoints)) connections.push(cloneState(connection))
