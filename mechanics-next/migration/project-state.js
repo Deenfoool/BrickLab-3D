@@ -92,6 +92,10 @@ function instanceEndpoint(sceneObserver,instanceId,endpointId){
   return{instance,endpoint}
 }
 
+function instanceByBodyId(sceneObserver,bodyId){
+  return sceneObserver?.instances?.().find(instance=>String(instance?.body?.id||'')===String(bodyId))??null
+}
+
 function referenceFrameFor(object,endpoint,visualOffsetStud=[0,0,0]){
   object?.updateWorldMatrix?.(true,false)
   const elements=object?.matrixWorld?.elements
@@ -261,12 +265,62 @@ export function restoreMechanicsProjectState(state,{
     }
   }
 
+  const restoredRelations=[]
+  if(!failures.length){
+    for(const relationRecord of state.relations||[]){
+      const instanceA=instanceByBodyId(sceneObserver,relationRecord.bodyA)
+      const instanceB=instanceByBodyId(sceneObserver,relationRecord.bodyB)
+      if(!instanceA||!instanceB){
+        failures.push(Object.freeze({
+          code:'relation-body-not-found',
+          relationId:relationRecord?.id??null,
+          bodyA:relationRecord?.bodyA??null,
+          bodyB:relationRecord?.bodyB??null,
+        }))
+        break
+      }
+      try{
+        const interpretation=interpretObservedConnection({
+          id:relationRecord.id,
+          a:{
+            instanceId:instanceA.body.instanceId,
+            endpointId:relationRecord.endpointA,
+          },
+          b:{
+            instanceId:instanceB.body.instanceId,
+            endpointId:relationRecord.endpointB,
+          },
+        },{
+          sceneObserver,
+          objectById:objectByInstanceId,
+        })
+        if(!interpretation.valid||interpretation.type!=='relation'){
+          failures.push(Object.freeze({
+            code:'relation-reinterpretation-failed',
+            relationId:relationRecord.id,
+            reason:interpretation?.reason??interpretation?.type??'unknown',
+          }))
+          break
+        }
+        restoredRelations.push(interpretation.relation)
+      }catch(error){
+        failures.push(Object.freeze({
+          code:'relation-reinterpretation-error',
+          relationId:relationRecord?.id??null,
+          detail:String(error?.message||error),
+        }))
+        break
+      }
+    }
+  }
+
   let rolledBack=0
   if(failures.length){
     for(const id of createdIds){
       if(graph.removeEdge(id))rolledBack+=1
     }
     restored=0
+    restoredRelations.length=0
   }
 
   return Object.freeze({
@@ -274,7 +328,7 @@ export function restoreMechanicsProjectState(state,{
     rejected:failures.length,
     rolledBack,
     failures:Object.freeze(failures),
-    relations:Object.freeze(clone(state.relations||[])),
+    relations:Object.freeze(restoredRelations),
     compoundState:clone(state.compoundState??null),
   })
 }
@@ -378,10 +432,54 @@ export function probeMechanicsProjectState(state,{
     }
     resolvable+=1
   }
+  let resolvableRelations=0
+  if(!failures.length){
+    for(const relationRecord of state.relations||[]){
+      const instanceA=instanceByBodyId(sceneObserver,relationRecord.bodyA)
+      const instanceB=instanceByBodyId(sceneObserver,relationRecord.bodyB)
+      if(!instanceA||!instanceB){
+        failures.push(Object.freeze({
+          code:'relation-body-not-found',
+          relationId:relationRecord?.id??null,
+        }))
+        continue
+      }
+      try{
+        const interpretation=interpretObservedConnection({
+          id:relationRecord.id,
+          a:{instanceId:instanceA.body.instanceId,endpointId:relationRecord.endpointA},
+          b:{instanceId:instanceB.body.instanceId,endpointId:relationRecord.endpointB},
+        },{
+          sceneObserver,
+          objectById:objectByInstanceId,
+        })
+        if(!interpretation.valid||interpretation.type!=='relation'){
+          failures.push(Object.freeze({
+            code:'relation-reinterpretation-failed',
+            relationId:relationRecord.id,
+            reason:interpretation?.reason??interpretation?.type??'unknown',
+          }))
+          continue
+        }
+        resolvableRelations+=1
+      }catch(error){
+        failures.push(Object.freeze({
+          code:'relation-reinterpretation-error',
+          relationId:relationRecord?.id??null,
+          detail:String(error?.message||error),
+        }))
+      }
+    }
+  }
+
   return Object.freeze({
-    pass:failures.length===0&&resolvable===(state.connections?.length||0),
+    pass:failures.length===0&&
+      resolvable===(state.connections?.length||0)&&
+      resolvableRelations===(state.relations?.length||0),
     expected:state.connections?.length||0,
     resolvable,
+    expectedRelations:state.relations?.length||0,
+    resolvableRelations,
     rejected:failures.length,
     failures:Object.freeze(failures),
     mode:'dry-run',
