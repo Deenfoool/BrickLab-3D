@@ -13,7 +13,7 @@ Do not renumber or redefine stages to make the counter look better.
 8. [x] Baseline-stable Motion Plan and scene application
 9. [x] Compound mechanisms: U-joint, CV, actuator, shock/spring, clutch, shortcut decomposition and endpoint ownership
 10. [x] Physics/Rapier core: structural joints, generalized couplings, compound member bodies, dynamics, release and rollback
-11. [ ] Production migration and full regression/migration gate
+11. [x] Production migration and full regression/migration gate
 12. [ ] Legacy engine purge and final architecture cleanup
 
 ## Definition of done
