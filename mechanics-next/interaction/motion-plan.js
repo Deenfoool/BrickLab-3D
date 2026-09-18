@@ -50,6 +50,11 @@ function thetaOf(result,bodyId){
   return Number.isFinite(Number(value))?Number(value):null
 }
 
+function slideOf(result,bodyId){
+  const value=result?.values?.[mechanicalVariable(bodyId,'slide')]
+  return Number.isFinite(Number(value))?Number(value):null
+}
+
 export function buildMotionPlan({
   records=[],
   discovery,
@@ -115,6 +120,29 @@ export function buildMotionPlan({
       thetaRad:theta,
       frameSource:frame.source,
       confidence:frame.confidence??'normal',
+    }))
+  }
+
+  for(const descriptor of discovery?.linearMotions||[]){
+    const distanceStud=slideOf(displacementResult,descriptor.bodyId)
+    if(distanceStud==null||Math.abs(distanceStud)<1e-12)continue
+    const record=byBody.get(descriptor.bodyId)
+    if(!record){
+      unresolved.push(Object.freeze({
+        bodyId:descriptor.bodyId,
+        reason:'linear-motion-record-missing',
+        descriptor,
+      }))
+      continue
+    }
+    motions.push(Object.freeze({
+      kind:'translation',
+      bodyId:descriptor.bodyId,
+      instanceId:record.instance.body.instanceId,
+      axis:Object.freeze([...(descriptor.axis||[0,1,0])]),
+      distanceStud,
+      parentBodyId:descriptor.parentBodyId??null,
+      frameSource:descriptor.source??'compound-linear',
     }))
   }
 
