@@ -194,7 +194,10 @@ function installTimeScaleUi() {
 function refreshMotorDeck() {
   const session = currentSession()
   if (!session) return
-  for (const drive of session.motorDrives ?? []) {
+  const drives=session.mechanicsNextBootstrap
+    ?(session.mechanicsNextPhysics?.motorTelemetry?.()??[])
+    :(session.motorDrives??[])
+  for (const drive of drives) {
     const id = drive.controlId ?? drive.id
     const row = document.querySelector(`[data-control-id="${CSS.escape(id)}"]`)
     const output = row?.querySelector('[data-runtime-rpm-label]')
