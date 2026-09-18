@@ -132,16 +132,21 @@ export class AssemblyGraph {
     return Object.freeze([...seen].sort())
   }
 
-  rigidIslands() {
+  rigidIslands({ excludeMergeBodyIds = [] } = {}) {
     const bodyIds = [...this.#bodies.keys()]
     const sets = new DisjointSet(bodyIds)
     const constraints = [...this.#edges.values()].filter(edge => edge.kind === 'constraint')
+    const excluded = new Set((excludeMergeBodyIds || []).map(String))
 
     // Rigidity is solved from the whole contact bundle between two bodies. Two
     // individually revolute pins/studs on distinct axes can therefore eliminate all
     // relative motion without either contact being mislabeled as "fixed".
+    // Physics may deliberately keep compound child bodies separate so a rigid
+    // external mount becomes an explicit fixed Rapier joint instead of an impossible
+    // pre-merged component.
     for (const bundle of solveBodyPairConstraintBundles(constraints)) {
       if (!bundle.solution.rigid) continue
+      if (bundle.bodyIds.some(bodyId => excluded.has(String(bodyId)))) continue
       sets.union(bundle.bodyIds[0], bundle.bodyIds[1])
     }
 
