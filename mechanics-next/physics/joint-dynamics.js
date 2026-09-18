@@ -40,7 +40,10 @@ function axisWorld(monitor){
 }
 
 function dynamic(body){
-  return Boolean(body)&&(!body.isDynamic||body.isDynamic())
+  if(!body)return false
+  if(typeof body.isDynamic==='function')return body.isDynamic()
+  if(typeof body.isDynamic==='boolean')return body.isDynamic
+  return true
 }
 
 function inverseMass(body){
@@ -77,7 +80,7 @@ function linearVelocity(body){
 }
 
 function applyTorqueImpulse(body,impulse,dt){
-  if(!dynamic(body)||Math.abs(impulse)<=EPS)return
+  if(!dynamic(body)||impulse.lengthSq()<=EPS)return
   if(typeof body.applyTorqueImpulse==='function'){
     body.applyTorqueImpulse(vec(impulse),true)
     return
