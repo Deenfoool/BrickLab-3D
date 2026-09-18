@@ -71,6 +71,7 @@ import { buildMechanicsCouplingPlan } from '../mechanics-next/physics/coupling-p
 import { createMechanicsCouplingRuntime } from '../mechanics-next/physics/coupling-runtime.js'
 import { buildMechanicsMotorPlan, createMechanicsMotorRuntime } from '../mechanics-next/physics/motor-runtime.js'
 import { buildMechanicsVehiclePlan } from '../mechanics-next/physics/vehicle-plan.js'
+import { buildMechanicsSteeringPlan, materializeMechanicsSteeringBindings } from '../mechanics-next/physics/steering-bridge.js'
 import { expandCompoundPhysicsGraph } from '../mechanics-next/physics/compound-graph-expansion.js'
 import { materializeRapierMechanicsPlan, preflightRapierMechanicsPlan } from '../mechanics-next/physics/rapier-adapter.js'
 import { materializeCompoundMemberPhysics, preflightCompoundMemberMaterialization } from '../mechanics-next/physics/compound-member-materializer.js'
@@ -3911,4 +3912,180 @@ test('native vehicle plan preserves multiple motors instead of choosing an arbit
     plan.wheels[0].sourceMotors.map(item=>item.controlId).sort(),
     ['motor-1','motor-2'],
   )
+})
+
+
+test('native steering bridge maps knuckle pivot to existing Next Rapier joint', () => {
+  const graph=createAssemblyGraph()
+  const knuckle=createBodyDescriptor({id:'knuckle-body',instanceId:'knuckle-i',partId:'steering-knuckle'})
+  const base=createBodyDescriptor({id:'base-body',instanceId:'base-i',partId:'steering-base'})
+  const wheel=createBodyDescriptor({id:'wheel-body-steer',instanceId:'wheel-i-steer',partId:'wheel'})
+  for(const body of [knuckle,base,wheel])graph.addBody(body)
+
+  const endpoint=(id,bodyId,builtinConnectorId)=>createEndpointDescriptor({
+    id,
+    bodyId,
+    family:'cylinder',
+    gender:null,
+    frame:{positionStud:[0,0,0],orientationBrickLab:[1,0,0,0,1,0,0,0,1]},
+    profile:{centered:true,caps:'none',sections:[{shape:'R',radiusLdu:6,lengthLdu:20}]},
+    metadata:{
+      builtinConnectorId,
+      semantics:{semanticKind:'technic-round-hole'},
+    },
+  })
+  const pivot=endpoint('knuckle-pivot-endpoint',knuckle.id,'pivot-pin')
+  const bearing=endpoint('knuckle-bearing-endpoint',knuckle.id,'wheel-bearing')
+  const wheelEndpoint=endpoint('wheel-bearing-target',wheel.id,'axle-hole')
+
+  const knuckleRecord={
+    instance:{
+      body:knuckle,
+      descriptor:{classification:{
+        role:'wheel-hub',
+        capabilities:{rotary:true},
+        properties:{steeringKnuckle:{
+          pivotConnectorId:'pivot-pin',
+          bearingConnectorId:'wheel-bearing',
+          maxSteerDeg:34,
+          stiffness:8.5,
+          damping:1.35,
+        }},
+      }},
+      endpoints:[pivot,bearing],
+      transmissions:[],
+    },
+  }
+  const baseRecord={
+    instance:{
+      body:base,
+      descriptor:{classification:{role:'connector',capabilities:{},properties:{}}},
+      endpoints:[],
+      transmissions:[],
+    },
+  }
+  const wheelRecord={
+    instance:{
+      body:wheel,
+      descriptor:{classification:{
+        role:'rim',
+        capabilities:{rotary:true},
+        properties:{wheel:{radiusStud:1.4,widthStud:.7,tire:null}},
+      }},
+      endpoints:[wheelEndpoint],
+      transmissions:[],
+    },
+  }
+
+  graph.addConstraint(createConstraint({
+    id:'steering-pivot-edge',
+    bodyA:knuckle.id,
+    bodyB:base.id,
+    kind:'revolute',
+    dof:constraintDof('revolute'),
+    referenceFrame:{position:[0,0,0],axis:[0,1,0]},
+    metadata:{
+      endpointAId:pivot.id,
+      endpointBId:'base-pivot-endpoint',
+    },
+  }))
+  graph.addConstraint(createConstraint({
+    id:'wheel-bearing-edge',
+    bodyA:knuckle.id,
+    bodyB:wheel.id,
+    kind:'revolute',
+    dof:constraintDof('revolute'),
+    referenceFrame:{position:[0,0,0],axis:[1,0,0]},
+    metadata:{
+      endpointAId:bearing.id,
+      endpointBId:wheelEndpoint.id,
+    },
+  }))
+
+  const plan=buildMechanicsSteeringPlan({
+    records:[knuckleRecord,baseRecord,wheelRecord],
+    graph,
+    structuralPlan:{
+      joints:[{
+        id:'physics-steering-pivot',
+        kind:'revolute',
+        bodyA:knuckle.id,
+        bodyB:base.id,
+        sourceConstraintIds:['steering-pivot-edge'],
+        frame:{axisWorld:[0,1,0],positionStud:[0,0,0]},
+      }],
+    },
+  })
+  assert.equal(plan.pass,true)
+  assert.equal(plan.entries.length,1)
+  assert.equal(plan.entries[0].wheelInstanceId,'wheel-i-steer')
+  assert.equal(plan.entries[0].physicsJointId,'physics-steering-pivot')
+
+  const handle={configureMotorPosition(){},setLimits(){}}
+  const memberA={body:{},object:{userData:{instanceId:'knuckle-i'}}}
+  const materialized=materializeMechanicsSteeringBindings(plan,{
+    monitors:[{
+      item:{
+        id:'physics-steering-pivot',
+        bodyA:knuckle.id,
+        bodyB:base.id,
+      },
+      handle,
+      memberA,
+      memberB:{body:{},object:{userData:{instanceId:'base-i'}}},
+      localAxisA:new THREE.Vector3(0,1,0),
+      localAxisB:new THREE.Vector3(0,1,0),
+      released:false,
+    }],
+  })
+  assert.equal(materialized.pass,true)
+  assert.equal(materialized.bindings.length,1)
+  assert.equal(materialized.bindings[0].joint,handle)
+  assert.equal(materialized.bindings[0].member,memberA)
+})
+
+test('native steering bridge blocks a connected pivot that is not revolute in physics', () => {
+  const graph=createAssemblyGraph()
+  const knuckle=createBodyDescriptor({id:'bad-knuckle',instanceId:'bad-knuckle-i',partId:'steering-knuckle'})
+  const base=createBodyDescriptor({id:'bad-base',instanceId:'bad-base-i',partId:'steering-base'})
+  const wheel=createBodyDescriptor({id:'bad-wheel',instanceId:'bad-wheel-i',partId:'wheel'})
+  for(const body of [knuckle,base,wheel])graph.addBody(body)
+  const ep=(id,bodyId,builtin)=>createEndpointDescriptor({
+    id,bodyId,family:'cylinder',gender:null,
+    frame:{positionStud:[0,0,0],orientationBrickLab:[1,0,0,0,1,0,0,0,1]},
+    profile:{centered:true,caps:'none',sections:[{shape:'R',radiusLdu:6,lengthLdu:20}]},
+    metadata:{builtinConnectorId:builtin,semantics:{semanticKind:'technic-round-hole'}},
+  })
+  const pivot=ep('bad-pivot',knuckle.id,'pivot-pin')
+  const bearing=ep('bad-bearing',knuckle.id,'wheel-bearing')
+  const wheelEp=ep('bad-wheel-ep',wheel.id,'axle-hole')
+  const records=[
+    {instance:{body:knuckle,descriptor:{classification:{properties:{steeringKnuckle:{pivotConnectorId:'pivot-pin',bearingConnectorId:'wheel-bearing'}}}},endpoints:[pivot,bearing]}},
+    {instance:{body:base,descriptor:{classification:{properties:{}}},endpoints:[]}},
+    {instance:{body:wheel,descriptor:{classification:{properties:{wheel:{radiusStud:1}}}},endpoints:[wheelEp]}},
+  ]
+  graph.addConstraint(createConstraint({
+    id:'bad-pivot-edge',bodyA:knuckle.id,bodyB:base.id,kind:'revolute',
+    dof:constraintDof('revolute'),referenceFrame:{position:[0,0,0],axis:[0,1,0]},
+    metadata:{endpointAId:pivot.id,endpointBId:'base-ep'},
+  }))
+  graph.addConstraint(createConstraint({
+    id:'bad-bearing-edge',bodyA:knuckle.id,bodyB:wheel.id,kind:'revolute',
+    dof:constraintDof('revolute'),referenceFrame:{position:[0,0,0],axis:[1,0,0]},
+    metadata:{endpointAId:bearing.id,endpointBId:wheelEp.id},
+  }))
+  const plan=buildMechanicsSteeringPlan({
+    records,
+    graph,
+    structuralPlan:{joints:[{
+      id:'bad-physics-pivot',
+      kind:'fixed',
+      bodyA:knuckle.id,
+      bodyB:base.id,
+      sourceConstraintIds:['bad-pivot-edge'],
+      frame:{axisWorld:[0,1,0],positionStud:[0,0,0]},
+    }]},
+  })
+  assert.equal(plan.pass,false)
+  assert.ok(plan.blockers.some(item=>item.code==='steering-pivot-not-revolute'))
 })
