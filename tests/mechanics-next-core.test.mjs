@@ -22,6 +22,7 @@ import {
   driverEquation,
   gearMeshEquation,
   rigidRotationEquation,
+  screwLinearEquation,
 } from '../mechanics-next/transmission/equations.js'
 import { createKinematicSolver } from '../mechanics-next/solver/kinematic-solver.js'
 import { legacyV4ConnectorToEndpoint, snapshotLegacyV4 } from '../mechanics-next/adapters/legacy-v4-readonly.js'
@@ -1696,4 +1697,84 @@ test('driving ring never transmits torque without explicit engagement state', ()
   state.set('clutch:ring',{mode:'disengaged'})
   discovery=discoverCompoundMechanisms({records,graph,stateRegistry:state})
   assert.equal(discovery.equations.length,0)
+})
+
+
+test('drag pipeline propagates through nonlinear universal joint relation', () => {
+  const relation=createUniversalJointRelation({
+    id:'drag-u',
+    inputBody:'shaft-in',
+    outputBody:'shaft-out',
+    bendAngleRad:Math.PI/6,
+    inputPhaseRad:.3,
+    directionSign:1,
+  })
+  const discovery={
+    equations:[],
+    nonlinearRelations:[relation],
+    transmissions:[{
+      kind:'universal-joint',
+      bodies:['shaft-in','shaft-out','joint'],
+    }],
+    balancedDifferentialClosures:[],
+  }
+  const result=solveRotationalDrag({
+    bodyId:'shaft-in',
+    angleRad:.72,
+    discovery,
+    balancedDifferentials:false,
+  })
+  assert.equal(result.status,'solved')
+  assert.ok(Math.abs(
+    result.values[mechanicalVariable('shaft-out','theta')]-relation.forward(.72)
+  )<1e-9)
+})
+
+test('actuator drag produces slide displacement and translation motion plan', () => {
+  const equation=screwLinearEquation({
+    id:'actuator',
+    rotaryBody:'input',
+    sliderBody:'rod',
+    leadStudPerTurn:.25,
+    angularChannel:'omega',
+    linearChannel:'slide',
+  })
+  const discovery={
+    equations:[equation],
+    nonlinearRelations:[],
+    transmissions:[],
+    balancedDifferentialClosures:[],
+    linearMotions:[{
+      kind:'prismatic-output',
+      bodyId:'rod',
+      parentBodyId:'housing',
+      axis:[0,1,0],
+      channel:'slide',
+      source:'linear-actuator-guide',
+    }],
+    compoundMotions:[],
+  }
+  const solved=solveRotationalDrag({
+    bodyId:'input',
+    angleRad:Math.PI*2,
+    discovery,
+    balancedDifferentials:false,
+  })
+  assert.equal(solved.status,'solved')
+  assert.ok(Math.abs(solved.values[mechanicalVariable('rod','slide')]-.25)<1e-9)
+
+  const records=[
+    compoundRecord({bodyId:'input',role:'axle'}),
+    compoundRecord({bodyId:'rod',role:'connector'}),
+    compoundRecord({bodyId:'housing',role:'linear-actuator'}),
+  ]
+  const plan=buildMotionPlan({
+    records,
+    discovery,
+    displacementResult:solved,
+  })
+  const translation=plan.motions.find(item=>item.bodyId==='rod')
+  assert.ok(translation)
+  assert.equal(translation.kind,'translation')
+  assert.ok(Math.abs(translation.distanceStud-.25)<1e-9)
 })
