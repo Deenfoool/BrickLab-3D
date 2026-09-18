@@ -77,6 +77,13 @@ function installDisposeBridge(session,physics){
 }
 
 async function legacyFallback(legacyCreate,objects,connections,rest,reason){
+  if(globalThis.BrickLabMechanicsNextBuildOwner?.active===true &&
+     globalThis.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true){
+    const error=new Error('Mechanics Next owns BUILD; stale legacy physics fallback is forbidden')
+    error.code='BRICKLAB_MECHANICS_NEXT_AUTHORITATIVE_PHYSICS_BLOCKED'
+    error.mechanicsNext=reason
+    throw error
+  }
   fallbackSessions+=1
   const session=await legacyCreate(objects,connections,...rest)
   session.mechanicsNextOwnership=Object.freeze({
