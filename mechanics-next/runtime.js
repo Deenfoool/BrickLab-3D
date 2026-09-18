@@ -18,6 +18,7 @@ import { findBestMechanicalCandidate } from './connectors/candidate-search.js'
 import { createMechanicsDragSession } from './interaction/drag-session.js'
 import { rotaryFrameForRecord } from './interaction/motion-plan.js'
 import { rotationalDragProjection } from './interaction/view-projection.js'
+import { createCompoundStateRegistry } from './compounds/state.js'
 
 export const MECHANICS_NEXT_RUNTIME_MODE = 'observe-only'
 
@@ -30,6 +31,7 @@ export function createMechanicsNextRuntime({
   const graph = createAssemblyGraph()
   const solver = createKinematicSolver()
   const transmissionCompiler = createTransmissionCompiler({ solver, graph })
+  const compoundState = createCompoundStateRegistry()
   let legacySnapshot = snapshotLegacyV4(legacyProvider)
 
   const catalog = subsystems?.parts
@@ -116,6 +118,7 @@ export function createMechanicsNextRuntime({
       records,
       graph,
       relations:connectionInterpreter?.relations?.() ?? [],
+      compoundState,
     })
     lastTransmissionSync = transmissionCompiler.sync(discovery)
     lastSceneSync = Object.freeze({
@@ -160,6 +163,7 @@ export function createMechanicsNextRuntime({
     sceneObserver,
     connectionInterpreter,
     transmissionCompiler,
+    compoundState,
     refreshLegacySnapshot,
     legacySnapshot:() => legacySnapshot,
     describePart(partId, options) {
@@ -177,6 +181,19 @@ export function createMechanicsNextRuntime({
     },
     clearDriver(id) {
       return solver.clearDriver(id)
+    },
+    getCompoundState(key) {
+      return compoundState.get(key)
+    },
+    setCompoundState(key, value) {
+      const result = compoundState.set(key, value)
+      scheduleSceneSync()
+      return result
+    },
+    clearCompoundState(key) {
+      const result = compoundState.delete(key)
+      if (result) scheduleSceneSync()
+      return result
     },
     findCandidate(instanceId, targetInstanceIds = null, options = {}) {
       const records = mechanicalRecords()
@@ -283,6 +300,7 @@ export function createMechanicsNextRuntime({
         interpretedConnections:connectionInterpreter?.stats?.() ?? null,
         transmissionCompiler:transmissionCompiler.snapshot(),
         transmissionSolve:transmissionCompiler.solve(),
+        compoundState:compoundState.snapshot(),
         dragSession:Object.freeze({
           active:Boolean(activeDragSession?.active),
           apply:activeDragApply,
