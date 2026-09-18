@@ -162,10 +162,17 @@ function gearDescriptor(object) {
   const definition = findPart(object?.userData?.partId)
   const gear = definition?.mechanics?.gear
   if (!gear) return null
-  const connector = definition.connectors?.find(item => item.type === 'axle-hole')
-  if (!connector) return null
 
   const frame = explicitLDrawGearFrame(object, gear)
+  const legacyConnector = definition.connectors?.find(item => item.type === 'axle-hole') ?? null
+  const connector = legacyConnector ?? (frame ? {
+    id:'gear-mesh-anchor',
+    type:'gear-mesh',
+    position:frame.localPosition.toArray(),
+    axis:frame.localAxis.toArray(),
+  } : null)
+  if (!connector) return null
+
   const axis = frame?.axis ?? connectorWorldAxis(object, connector)
   const center = frame?.center ?? connectorWorldPosition(object, connector)
   const tolerance = Number(gear.meshApexToleranceStud)
@@ -181,6 +188,7 @@ function gearDescriptor(object) {
     axis,
     reference: gearWorldReference(object, axis),
     gearFrameSource: frame?.source ?? 'axle-hole',
+    virtualConnector: !legacyConnector,
     meshLocalPosition: frame?.localPosition?.toArray?.() ?? [...connector.position],
     meshLocalAxis: frame?.localAxis?.toArray?.() ?? [...connector.axis],
     bevelApexSigns: Array.isArray(gear.bevelApexSigns) ? [...gear.bevelApexSigns] : null,
@@ -265,7 +273,13 @@ export function findSnapCandidate(selected, objects, options = {}) {
   const explicitMaxDistance = typeof options === 'number' ? options : options.maxDistance
   const explicitMinAlignment = typeof options === 'object' ? options.minAlignment : undefined
   const sourceDef = findPart(selected.userData.partId)
-  if (!sourceDef?.connectors?.length) return null
+  if (!sourceDef) return null
+  const earlyGearCandidate = findGearSnapCandidate(selected, objects)
+  if (!sourceDef.connectors?.length) {
+    stickyKey = earlyGearCandidate?.key ?? ''
+    publishGearCandidate(earlyGearCandidate)
+    return earlyGearCandidate
+  }
 
   let best = null
   let bestScore = Infinity
@@ -322,7 +336,7 @@ export function findSnapCandidate(selected, objects, options = {}) {
     }
   }
 
-  const gearCandidate = findGearSnapCandidate(selected, objects)
+  const gearCandidate = earlyGearCandidate
   if (gearCandidate && gearCandidate.score < bestScore) {
     best = gearCandidate
     bestScore = gearCandidate.score
@@ -443,7 +457,7 @@ export function applySnap(selected, candidate) {
         candidate.meshSolution.phaseCorrection ?? 0,
       )
     }
-    suppressNextConnectionForEndpoint(selected.userData.instanceId, candidate.source.id)
+    if (!candidate.movingGear?.virtualConnector) suppressNextConnectionForEndpoint(selected.userData.instanceId, candidate.source.id)
     window.dispatchEvent(new CustomEvent('bricklab:gearmeshsnap', {
       detail: {
         kind: candidate.gearKind,
