@@ -9,6 +9,13 @@ export const NATIVE_SHADOW_SOURCE=Object.freeze({
 })
 
 const normalize=value=>String(value||'').replace(/\\/g,'/').replace(/^\.\//,'').replace(/\/+/g,'/').toLowerCase().trim()
+const rootPath=value=>{
+  const path=normalize(value)
+  if(/^(?:parts|p)\//.test(path))return path
+  if(/^s\//.test(path))return `parts/${path}`
+  if(/^(?:48|8)\//.test(path))return `p/${path}`
+  return `parts/${path}`
+}
 const encoded=value=>normalize(value).split('/').map(encodeURIComponent).join('/')
 
 async function fetchTextOrNull(url){
@@ -50,7 +57,7 @@ export function createNativeConnectivityProvider({
   const fileForPart=partId=>{
     const def=parts.get(partId)
     const file=def?.ldraw?.file
-    return file?normalize(file):null
+    return file?rootPath(file):null
   }
 
   const hydrate=partId=>{
