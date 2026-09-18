@@ -2905,3 +2905,25 @@ test('native project state preserves long-shaft axial occupancy intervals', () =
     [10,30],
   )
 })
+
+
+test('persistence compatibility rejects invalid empty project schema', () => {
+  const invalid={
+    schemaVersion:999,
+    engine:'mechanics-next',
+    connections:[],
+    relations:[],
+  }
+  const restored=restoreMechanicsProjectState(invalid,{
+    graph:createAssemblyGraph(),
+    sceneObserver:{instance:()=>null},
+    objectByInstanceId:()=>null,
+  })
+  assert.equal(restored.restored,0)
+  assert.ok(restored.failures.length>0)
+  const compatibility=persistenceCompatibilityReport({
+    exportedState:invalid,
+    restoredResult:restored,
+  })
+  assert.equal(compatibility.pass,false)
+})
