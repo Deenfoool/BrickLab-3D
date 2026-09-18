@@ -578,6 +578,7 @@ export function createMechanicsNextRuntime({
       compoundState.clear()
       connectionInterpreter?.sync?.([])
       transmissionCompiler.clear()
+      solver.clearDrivers?.()
       for(const edge of [...graph.edges()])graph.removeEdge(edge.id)
       lastPersistenceReport=null
       lastTransmissionSync=null
