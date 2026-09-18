@@ -193,6 +193,7 @@ function discoverDifferentials(records,relations=[]){
       const spiderEquation=differentialSpiderEquation({
         id:`${id}:spider:${spiderBody}`,
         spider:spiderBody,
+        carrier:carrierBody,
         left,
         right,
         directionSign,
