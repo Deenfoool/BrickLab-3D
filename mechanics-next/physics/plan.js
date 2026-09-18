@@ -5,7 +5,7 @@ import {
 } from '../constraints/bundle-solver.js'
 
 export const MECHANICS_PHYSICS_PLAN_VERSION='mechanics-physics-plan-0.1.0'
-const SUPPORTED_JOINTS=new Set(['revolute','prismatic','cylindrical','spherical'])
+const SUPPORTED_JOINTS=new Set(['fixed','revolute','prismatic','cylindrical','spherical'])
 
 function normalizedAxis(frame){
   const raw=frame?.axis
@@ -21,15 +21,23 @@ function normalizedPosition(frame){
   return raw.map(Number)
 }
 
+function normalizedOrientation(frame){
+  const raw=frame?.orientationBrickLab??frame?.orientation
+  if(!Array.isArray(raw)||raw.length!==9||!raw.every(Number.isFinite))return null
+  return raw.map(Number)
+}
+
 function frameOf(constraint){
   const source=constraint?.referenceFrame??constraint?.metadata?.referenceFrame??null
   if(!source)return null
   const position=normalizedPosition(source)
   const axis=normalizedAxis(source)
   if(!position||!axis)return null
+  const orientation=normalizedOrientation(source)
   return Object.freeze({
     positionStud:Object.freeze(position),
     axisWorld:Object.freeze(axis),
+    orientationWorld:orientation?Object.freeze(orientation):null,
     degraded:source.degraded===true,
   })
 }
@@ -60,6 +68,9 @@ function sameLine(a,b,toleranceStud=1e-4){
 }
 
 function explicitKind(constraints,solution){
+  // If this bundle is rigid but physics intentionally kept the two bodies separate
+  // (compound member boundary), represent the composed rigidity as one fixed joint.
+  if(solution?.rigid)return'fixed'
   if(constraints.length===1){
     const kind=constraints[0]?.constraintKind??constraints[0]?.kind
     return SUPPORTED_JOINTS.has(kind)?kind:null
@@ -113,9 +124,9 @@ function releasePolicy(constraints){
   })
 }
 
-function rigidComponents(graph){
+function rigidComponents(graph,{excludeMergeBodyIds=[]}={}){
   const bodyById=new Map(graph.bodies().map(body=>[body.id,body]))
-  return graph.rigidIslands().map((bodyIds,index)=>{
+  return graph.rigidIslands({excludeMergeBodyIds}).map((bodyIds,index)=>{
     const bodies=bodyIds.map(id=>bodyById.get(id)).filter(Boolean)
     return Object.freeze({
       id:deterministicId('physics-component',...bodyIds),
@@ -325,12 +336,17 @@ function dynamicsPlan(discovery){
 export function buildMechanicsPhysicsPlan({
   graph,
   discovery=null,
+  materializedCompoundRootIds=[],
+  excludeRigidMergeBodyIds=[],
 }={}){
   if(!graph?.bodies||!graph?.edges||!graph?.rigidIslands){
     throw new TypeError('Mechanics physics plan requires AssemblyGraph')
   }
 
-  const components=Object.freeze(rigidComponents(graph))
+  const materializedRoots=new Set((materializedCompoundRootIds||[]).map(String))
+  const components=Object.freeze(rigidComponents(graph,{
+    excludeMergeBodyIds:excludeRigidMergeBodyIds,
+  }))
   const byBody=componentIndex(components)
   const blockers=[]
   const joints=[]
@@ -354,7 +370,15 @@ export function buildMechanicsPhysicsPlan({
   blockers.push(...compoundStructure.blockers)
 
   const transmissions=transmissionPlan(discovery)
-  const dynamics=dynamicsPlan(discovery)
+  const dynamics=Object.freeze((discovery?.dynamics||[]).map(item=>Object.freeze({
+    ...item,
+    ready:item.kind!=='spring-damper'||
+      (
+        Number.isFinite(item.springStiffness)&&
+        Number.isFinite(item.damping)&&
+        (item.status==='resolved'||materializedRoots.has(String(item.bodyId)))
+      ),
+  })))
   for(const item of dynamics){
     if(item.kind==='spring-damper'&&!item.ready){
       blockers.push(Object.freeze({
@@ -375,7 +399,8 @@ export function buildMechanicsPhysicsPlan({
         bodyId:descriptor.bodyId,
       }))
     }
-    if(descriptor.status==='decomposed-awaiting-materialization'){
+    if(descriptor.status==='decomposed-awaiting-materialization'&&
+       !materializedRoots.has(String(descriptor.bodyId))){
       compoundBlockers.push(Object.freeze({
         code:'compound-members-not-materialized',
         kind:descriptor.kind,
