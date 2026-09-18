@@ -418,6 +418,44 @@ function visualOffsetForObject(object){
     :[0,0,0]
 }
 
+function relativeOrientationSignature(frameA,frameB){
+  const a=frameA?.orientation
+  const b=frameB?.orientation
+  if(!Array.isArray(a)||!Array.isArray(b)||a.length!==9||b.length!==9)return null
+  const value=[]
+  for(let row=0;row<3;row++){
+    for(let col=0;col<3;col++){
+      value.push(
+        a[row]*b[col]+
+        a[3+row]*b[3+col]+
+        a[6+row]*b[6+col]
+      )
+    }
+  }
+  return Object.freeze(value)
+}
+
+function connectionGeometry(frameA,frameB){
+  const dx=frameA.position[0]-frameB.position[0]
+  const dy=frameA.position[1]-frameB.position[1]
+  const dz=frameA.position[2]-frameB.position[2]
+  const axis=frameB.axis
+  const axial=dx*axis[0]+dy*axis[1]+dz*axis[2]
+  const lx=dx-axis[0]*axial
+  const ly=dy-axis[1]*axial
+  const lz=dz-axis[2]*axial
+  return Object.freeze({
+    anchorDistanceStud:Math.hypot(dx,dy,dz),
+    axialSeparationStud:axial,
+    lateralDistanceStud:Math.hypot(lx,ly,lz),
+    axisDot:
+      frameA.axis[0]*frameB.axis[0]+
+      frameA.axis[1]*frameB.axis[1]+
+      frameA.axis[2]*frameB.axis[2],
+    relativeOrientation:relativeOrientationSignature(frameA,frameB),
+  })
+}
+
 function worldFrame(object,endpoint){
   object?.updateWorldMatrix?.(true,false)
   const elements=object?.matrixWorld?.elements
@@ -654,6 +692,7 @@ export function interpretObservedConnection(record, {
         a:Object.freeze([...worldFrameA.axis]),
         b:Object.freeze([...worldFrameB.axis]),
       }),
+      connectionGeometry:connectionGeometry(worldFrameA,worldFrameB),
       motorDrive:resolved.motorSide?Object.freeze({
         motorSide:resolved.motorSide,
         motorBodyId:resolved.motorSide==='a'?instanceA.body.id:instanceB.body.id,
