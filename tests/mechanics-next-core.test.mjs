@@ -65,6 +65,7 @@ import { applyMotionPlanToBaseline, captureMotionBaseline, restoreMotionBaseline
 import { buildMechanicsPhysicsPlan } from '../mechanics-next/physics/plan.js'
 import { buildMechanicsCouplingPlan } from '../mechanics-next/physics/coupling-plan.js'
 import { buildMechanicsMotorPlan, createMechanicsMotorRuntime } from '../mechanics-next/physics/motor-runtime.js'
+import { expandCompoundPhysicsGraph } from '../mechanics-next/physics/compound-graph-expansion.js'
 import { materializeRapierMechanicsPlan, preflightRapierMechanicsPlan } from '../mechanics-next/physics/rapier-adapter.js'
 import { materializeCompoundMemberPhysics, preflightCompoundMemberMaterialization } from '../mechanics-next/physics/compound-member-materializer.js'
 import { exportMechanicsProjectState, persistenceCompatibilityReport, restoreMechanicsProjectState, validateMechanicsProjectState } from '../mechanics-next/migration/project-state.js'
@@ -2926,4 +2927,174 @@ test('persistence compatibility rejects invalid empty project schema', () => {
     restoredResult:restored,
   })
   assert.equal(compatibility.pass,false)
+})
+
+
+test('compound physics expansion replaces opaque root and remaps external endpoint owner', () => {
+  const graph=createAssemblyGraph()
+  const root=createBodyDescriptor({
+    id:'shock-root-body',
+    instanceId:'shock-root-instance',
+    partId:'shock-part',
+    role:'shock-absorber',
+  })
+  const chassis=createBodyDescriptor({
+    id:'chassis-body',
+    instanceId:'chassis-instance',
+    partId:'beam',
+    role:'beam',
+  })
+  graph.addBody(root)
+  graph.addBody(chassis)
+  graph.addConstraint(createConstraint({
+    id:'shock-top-mount',
+    bodyA:'shock-root-body',
+    bodyB:'chassis-body',
+    kind:'revolute',
+    dof:constraintDof('revolute'),
+    referenceFrame:{
+      position:[0,2,0],
+      axis:[0,0,1],
+      orientation:[1,0,0,0,1,0,0,0,1],
+    },
+    metadata:{
+      endpointAId:'shock-top-endpoint',
+      endpointBId:'chassis-hole',
+      instanceAId:'shock-root-instance',
+      instanceBId:'chassis-instance',
+    },
+  }))
+
+  const plan={
+    replacements:[{
+      rootBodyId:'shock-root-body',
+      rootInstanceId:'shock-root-instance',
+      rootPartId:'shock-part',
+      memberIds:['shock-housing','shock-rod'],
+      endpointOwners:{
+        'shock-top-endpoint':'shock-housing',
+        'shock-bottom-endpoint':'shock-rod',
+      },
+      preferredRootMemberId:'shock-housing',
+    }],
+    bodies:[
+      {
+        memberId:'shock-housing',
+        path:'housing.dat',
+        role:'housing',
+        collider:{kind:'cuboid'},
+      },
+      {
+        memberId:'shock-rod',
+        path:'rod.dat',
+        role:'rod',
+        collider:{kind:'cuboid'},
+      },
+    ],
+  }
+
+  const expanded=expandCompoundPhysicsGraph({
+    graph,
+    compoundMemberPlan:plan,
+  })
+  assert.equal(expanded.expanded,true)
+  assert.equal(expanded.blockers.length,0)
+  assert.equal(expanded.graph.body('shock-root-body'),null)
+  assert.ok(expanded.graph.body('shock-housing'))
+  assert.ok(expanded.graph.body('shock-rod'))
+  const edge=expanded.graph.edge('shock-top-mount')
+  assert.equal(edge.bodyA,'shock-housing')
+  assert.equal(edge.bodyB,'chassis-body')
+  assert.equal(edge.metadata.physicsCompoundRemap.rootA,'shock-root-body')
+})
+
+test('compound physics expansion refuses ambiguous external endpoint ownership', () => {
+  const graph=createAssemblyGraph()
+  graph.addBody(createBodyDescriptor({
+    id:'compound-root',
+    instanceId:'compound-instance',
+    partId:'compound',
+  }))
+  graph.addBody(createBodyDescriptor({
+    id:'external',
+    instanceId:'external-instance',
+    partId:'beam',
+  }))
+  graph.addConstraint(createConstraint({
+    id:'ambiguous-mount',
+    bodyA:'compound-root',
+    bodyB:'external',
+    kind:'revolute',
+    dof:constraintDof('revolute'),
+    referenceFrame:{
+      position:[0,0,0],
+      axis:[0,1,0],
+      orientation:[1,0,0,0,1,0,0,0,1],
+    },
+    metadata:{
+      endpointAId:'unowned-endpoint',
+      endpointBId:'external-hole',
+    },
+  }))
+
+  const expanded=expandCompoundPhysicsGraph({
+    graph,
+    compoundMemberPlan:{
+      replacements:[{
+        rootBodyId:'compound-root',
+        rootInstanceId:'compound-instance',
+        rootPartId:'compound',
+        memberIds:['member-a','member-b'],
+        endpointOwners:{},
+        preferredRootMemberId:'member-a',
+      }],
+      bodies:[
+        {memberId:'member-a',role:'housing',collider:{kind:'cuboid'}},
+        {memberId:'member-b',role:'rod',collider:{kind:'cuboid'}},
+      ],
+    },
+  })
+  assert.equal(expanded.blockers.length,1)
+  assert.equal(expanded.blockers[0].code,'compound-external-endpoint-owner-unresolved')
+  assert.equal(expanded.graph.edge('ambiguous-mount'),null)
+})
+
+test('physics plan keeps compound member separate and emits fixed joint for rigid mount', () => {
+  const graph=createAssemblyGraph()
+  graph.addBody(createBodyDescriptor({
+    id:'compound-member',
+    instanceId:'compound-member',
+    partId:'compound',
+  }))
+  graph.addBody(createBodyDescriptor({
+    id:'frame',
+    instanceId:'frame-instance',
+    partId:'frame',
+  }))
+  graph.addConstraint(createConstraint({
+    id:'fixed-mount',
+    bodyA:'compound-member',
+    bodyB:'frame',
+    kind:'fixed',
+    dof:constraintDof('fixed'),
+    referenceFrame:{
+      position:[1,2,3],
+      axis:[0,1,0],
+      orientation:[1,0,0,0,1,0,0,0,1],
+    },
+  }))
+  const plan=buildMechanicsPhysicsPlan({
+    graph,
+    discovery:{
+      transmissions:[],
+      dynamics:[],
+      compoundDescriptors:[],
+    },
+    excludeRigidMergeBodyIds:['compound-member'],
+  })
+  assert.equal(plan.pass,true)
+  assert.equal(plan.components.length,2)
+  assert.equal(plan.joints.length,1)
+  assert.equal(plan.joints[0].kind,'fixed')
+  assert.deepEqual(plan.joints[0].frame.orientationWorld,[1,0,0,0,1,0,0,0,1])
 })
