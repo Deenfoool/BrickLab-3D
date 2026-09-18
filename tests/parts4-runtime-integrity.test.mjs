@@ -25,7 +25,7 @@ test('all retained PARTS-4 dynamic imports exist and use one package tag', async
 test('PARTS-4 package tag does not pin the newer production build id', async () => {
   const badge = await readFile(new URL('physics-error-ui.js', root), 'utf8')
   assert.match(badge, /const BUILD_ID = 'PARTS-\d+'/)
-  assert.match(badge, /const BUILD_TAG = 'parts-\d+-[a-z0-9-]+'/)
+  assert.match(badge, /const BUILD_TAG = new URL\(import\.meta\.url\)\.searchParams\.get\('v'\) \|\| 'unversioned-runtime'/)
 })
 
 test('PARTS-4 advances joint, coupling and steering ownership deliberately', async () => {
