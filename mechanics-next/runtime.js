@@ -162,6 +162,37 @@ export function createMechanicsNextRuntime({
     return Object.freeze(records)
   }
 
+  const normalizedObservedConnections = () => {
+    const result=[]
+    const seen=new Set()
+    const add=record=>{
+      const a=record?.a,b=record?.b
+      if(!a?.instanceId||!b?.instanceId)return
+      const endpointA=a.endpointId??a.connectorId
+      const endpointB=b.endpointId??b.connectorId
+      if(!endpointA||!endpointB)return
+      const left=`${a.instanceId}::${endpointA}`
+      const right=`${b.instanceId}::${endpointB}`
+      const key=[left,right].sort().join('<>')
+      if(seen.has(key))return
+      seen.add(key)
+      result.push(Object.freeze({
+        ...record,
+        id:String(record.id??deterministicId('observed-link',key)),
+        a:Object.freeze({...a,endpointId:String(endpointA)}),
+        b:Object.freeze({...b,endpointId:String(endpointB)}),
+        metadata:Object.freeze({
+          ...(record.metadata||{}),
+          observedSource:record?.a?.endpointId||record?.b?.endpointId?'connector-v4':'legacy-v3',
+        }),
+      }))
+    }
+    for(const record of legacySnapshot.connections||[])add(record)
+    const project=subsystems?.editor?.projectState?.()
+    for(const record of project?.connections||[])add(record)
+    return Object.freeze(result)
+  }
+
   const refreshLegacySnapshot = () => {
     legacySnapshot = snapshotLegacyV4(legacyProvider || globals.BrickLabConnectorV4)
     assertLegacyReadOnly(legacySnapshot)
@@ -181,7 +212,8 @@ export function createMechanicsNextRuntime({
     const scene = sceneObserver.sync()
     void connectivity?.prefetch?.(sceneObserver.instances().map(instance=>instance.body.partId))
     void compoundDecompositions?.prefetch?.(sceneObserver.instances())
-    const connections = connectionInterpreter?.sync(legacySnapshot.connections) ?? null
+    const observedConnections=normalizedObservedConnections()
+    const connections = connectionInterpreter?.sync(observedConnections) ?? null
     const records = mechanicalRecords()
     const discovery = discoverMechanicalTransmissions({
       records,
@@ -222,6 +254,7 @@ export function createMechanicsNextRuntime({
         blockerCount:physicsPreview.blockers.length,
       }),
       observedRecords:records.length,
+      observedConnections:observedConnections.length,
     })
     return lastSceneSync
   }
