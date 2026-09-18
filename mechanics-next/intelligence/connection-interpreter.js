@@ -1,5 +1,5 @@
 import { deterministicId, evidence } from '../core/model.js'
-import { constraintDof, createConstraint } from '../constraints/dof.js'
+import { constraintDof, createConstraint, dofEntry } from '../constraints/dof.js'
 import { endpointSemanticKind } from './endpoint-semantics.js'
 import { mechanicalInterfaceRule } from './interface-rules.js'
 import { rigidPoseFromMatrix4 } from '../math/rigid.js'
@@ -172,6 +172,63 @@ function packagedTransmissionPortRule(endpointA,endpointB,classificationA,classi
       }),
     }),
     interfacePair:Object.freeze(['transmission-port','rotary-shaft']),
+  })
+}
+
+function shockPrismaticSemantics({
+  endpointA,
+  endpointB,
+  classificationA,
+  classificationB,
+  worldFrameA,
+  worldFrameB,
+}={}){
+  const propsA=classificationA?.properties||{}
+  const propsB=classificationB?.properties||{}
+  const bodySide=propsA.shockBody?'a':propsB.shockBody?'b':null
+  const rodSide=propsA.shockRod?'a':propsB.shockRod?'b':null
+  if(!bodySide||!rodSide||bodySide===rodSide)return null
+
+  const bodyProps=bodySide==='a'?propsA.shockBody:propsB.shockBody
+  const rodProps=rodSide==='a'?propsA.shockRod:propsB.shockRod
+  const bodyEndpoint=bodySide==='a'?endpointA:endpointB
+  const rodEndpoint=rodSide==='a'?endpointA:endpointB
+  const bodySource=endpointSourceId(bodyEndpoint)
+  const rodSource=endpointSourceId(rodEndpoint)
+  if(bodySource!==String(bodyProps.railConnectorId??'rail'))return null
+  if(rodSource!==String(rodProps.sliderConnectorId??'slider'))return null
+
+  const referenceAxis=worldFrameA?.axis
+  const rodAxis=(rodSide==='a'?worldFrameA:worldFrameB)?.axis
+  if(!referenceAxis||!rodAxis)return null
+  const dot=
+    referenceAxis[0]*rodAxis[0]+
+    referenceAxis[1]*rodAxis[1]+
+    referenceAxis[2]*rodAxis[2]
+  const alignment=dot>=0?1:-1
+  const coordinateSign=(rodSide==='a'?-1:1)*alignment
+
+  const rawMin=Number(bodyProps.minTravelStud)
+  const rawMax=Number(bodyProps.maxTravelStud)
+  const rest=Number(bodyProps.restTravelStud)
+  const stiffness=Number(bodyProps.springStiffness)
+  const damping=Number(bodyProps.damping)
+  if(![rawMin,rawMax,rest,stiffness,damping].every(Number.isFinite))return null
+
+  const first=rawMin*coordinateSign
+  const second=rawMax*coordinateSign
+  const limits=Object.freeze([Math.min(first,second),Math.max(first,second)])
+  return Object.freeze({
+    kind:'shock-prismatic',
+    bodySide,
+    rodSide,
+    coordinateSign,
+    limits,
+    restTravelStud:rest*coordinateSign,
+    springStiffness:Math.max(0,stiffness),
+    damping:Math.max(0,damping),
+    bodyEndpointId:bodyEndpoint.id,
+    rodEndpointId:rodEndpoint.id,
   })
 }
 
@@ -357,13 +414,53 @@ export function interpretObservedConnection(record, {
     worldFrameA.axis[1]*worldFrameB.axis[1]+
     worldFrameA.axis[2]*worldFrameB.axis[2]
   const axisPolarity=axisDot>=0?1:-1
+  const shock=resolved.rule.kind==='prismatic'
+    ?shockPrismaticSemantics({
+        endpointA,
+        endpointB,
+        classificationA:instanceA.descriptor.classification,
+        classificationB:instanceB.descriptor.classification,
+        worldFrameA,
+        worldFrameB,
+      })
+    :null
+  const constraintDofValue=shock
+    ?Object.freeze({
+        ...resolved.rule.topology.dof,
+        ty:dofEntry('limited',{
+          limits:[...shock.limits],
+          source:'mechanics-next:shock-travel',
+        }),
+      })
+    :resolved.rule.topology.dof
+  const constraintDynamics=shock
+    ?Object.freeze({
+        ...resolved.rule.dynamics,
+        axialResistance:'spring-damper',
+        springMotor:Object.freeze({
+          targetStud:shock.restTravelStud,
+          stiffness:shock.springStiffness,
+          damping:shock.damping,
+          coordinateSign:shock.coordinateSign,
+          source:'bricklab-explicit-shock-metadata',
+        }),
+      })
+    :resolved.rule.dynamics
+  const constraintTopology=shock
+    ?Object.freeze({
+        ...resolved.rule.topology,
+        dof:constraintDofValue,
+        shock:true,
+        travelLimitsStud:shock.limits,
+      })
+    :resolved.rule.topology
   const tier = resolved.rule.evidence?.tier || 'D'
   const constraint = createConstraint({
     id:deterministicId('constraint', record.id, instanceA.body.id, instanceB.body.id),
     bodyA:instanceA.body.id,
     bodyB:instanceB.body.id,
     kind:resolved.rule.kind,
-    dof:resolved.rule.topology.dof,
+    dof:constraintDofValue,
     frameA:endpointA.frame,
     frameB:endpointB.frame,
     referenceFrame,
@@ -378,8 +475,9 @@ export function interpretObservedConnection(record, {
       interfacePair:resolved.interfacePair,
       semanticA:resolved.kindA,
       semanticB:resolved.kindB,
-      dynamics:resolved.rule.dynamics,
-      topology:resolved.rule.topology,
+      dynamics:constraintDynamics,
+      topology:constraintTopology,
+      shock,
       legacyMatchFamily:record?.match?.family ?? null,
       occupancy:record?.occupancy ?? null,
       axisPolarity,
