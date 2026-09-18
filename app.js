@@ -712,10 +712,23 @@ function applyProject(data, { reset = false, persist = true } = {}) {
   globalThis.BrickLabConnectorV4?.restoreConnections(data.connectionsV4 ?? [])
   try {
     const mechanics=globalThis.BrickLabMechanicsNext
-    mechanics?.syncScene?.()
-    if(data.mechanicsNext) mechanics?.restoreProjectState?.(data.mechanicsNext,{replace:true})
+    const editorReady=globalThis.BrickLabSubsystems?.editor?.ready?.()===true
+    if(data.mechanicsNext&&(!mechanics||!editorReady)){
+      globalThis.__bricklabPendingMechanicsNextProject=cloneState(data.mechanicsNext)
+    }else{
+      mechanics?.syncScene?.()
+      if(data.mechanicsNext){
+        const restored=mechanics?.restoreProjectState?.(data.mechanicsNext,{replace:true})
+        if(restored?.rejected>0){
+          globalThis.__bricklabPendingMechanicsNextProject=cloneState(data.mechanicsNext)
+        }else{
+          delete globalThis.__bricklabPendingMechanicsNextProject
+        }
+      }
+    }
   } catch (error) {
-    console.warn('[BrickLab Mechanics Next] Native project restore deferred to migration bridge.', error)
+    if(data.mechanicsNext)globalThis.__bricklabPendingMechanicsNextProject=cloneState(data.mechanicsNext)
+    console.warn('[BrickLab Mechanics Next] Native project restore deferred to editor binding.', error)
   }
   const usedEndpoints = new Set()
   for (const connection of Array.isArray(data.connections) ? data.connections : []) {
