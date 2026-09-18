@@ -6,6 +6,8 @@ const root = new URL('../', import.meta.url)
 const singleton = await readFile(new URL('editor/topbar-singleton-v1.js', root), 'utf8')
 const bootstrap = await readFile(new URL('bootstrap.js', root), 'utf8')
 const index = await readFile(new URL('index.html', root), 'utf8')
+const debugOverlay = await readFile(new URL('connectors-v4/debug-overlay-v4.js', root), 'utf8')
+const projectMenuCss = await readFile(new URL('menu/project-menu-v1.css', root), 'utf8')
 
 test('production editor owns a single visible topbar', () => {
   assert.match(singleton, /TOPBAR_SINGLETON_VERSION/)
@@ -41,5 +43,15 @@ test('singleton takes ownership immediately after app mounts and before UI contr
   assert.ok(app >= 0 && app < singletonImport)
   assert.ok(singletonImport < projectLibrary)
   assert.ok(projectLibrary < overlay)
-  assert.match(index, /bootstrap\.js\?v=editor-topbar-20260914-v3/)
+  const canonical = index.match(/\.\/app\.js\?v=([^\"]+)/)?.[1]
+  assert.ok(canonical)
+  assert.match(index, new RegExp(`bootstrap\\.js\\?v=${canonical}`))
+})
+
+test('production UI boot does not import the retired duplicate LDraw gear patch', () => {
+  assert.doesNotMatch(debugOverlay, /gear-mechanics-patch-v1/)
+})
+
+test('standalone legacy Audio control stays hidden because audio lives in the ESC settings menu', () => {
+  assert.match(projectMenuCss, /\.bricklab-audio-settings[^}]*display:none!important/)
 })
