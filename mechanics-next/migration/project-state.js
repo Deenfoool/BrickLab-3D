@@ -2,6 +2,7 @@ import { createConstraint } from '../constraints/dof.js'
 import { rigidPoseFromMatrix4 } from '../math/rigid.js'
 import { worldConnectorFrame } from '../connectors/world-frame.js'
 import { endpointSemanticKind } from '../intelligence/endpoint-semantics.js'
+import { interpretObservedConnection } from '../intelligence/connection-interpreter.js'
 
 export const MECHANICS_PROJECT_SCHEMA_VERSION=1
 
@@ -184,46 +185,59 @@ export function restoreMechanicsProjectState(state,{
     }
 
     const objectA=objectByInstanceId(record.a.instanceId)
-    if(!objectA){
+    const objectB=objectByInstanceId(record.b.instanceId)
+    if(!objectA||!objectB){
       failures.push(Object.freeze({
         code:'scene-object-not-found',
         connectionId:record.id,
-        instanceId:record.a.instanceId,
+        instanceId:!objectA?record.a.instanceId:record.b.instanceId,
       }))
       continue
     }
 
     try{
-      const referenceFrame=referenceFrameFor(
-        objectA,
-        left.endpoint,
-        visualOffsetForPart(left.instance.body.partId,record.a.instanceId),
-      )
+      const observedRecord={
+        id:record.id,
+        a:{
+          instanceId:record.a.instanceId,
+          endpointId:record.a.observedEndpointId??record.a.endpointId,
+        },
+        b:{
+          instanceId:record.b.instanceId,
+          endpointId:record.b.observedEndpointId??record.b.endpointId,
+        },
+        occupancy:clone(record.occupancy),
+        metadata:{restoredFromSchema:MECHANICS_PROJECT_SCHEMA_VERSION},
+      }
+      const interpretation=interpretObservedConnection(observedRecord,{
+        sceneObserver,
+        objectById:objectByInstanceId,
+      })
+      if(!interpretation.valid||interpretation.type!=='constraint'){
+        failures.push(Object.freeze({
+          code:'connection-reinterpretation-failed',
+          connectionId:record.id,
+          reason:interpretation?.reason??interpretation?.type??'unknown',
+        }))
+        continue
+      }
+      const current=interpretation.constraint
       graph.addConstraint(createConstraint({
         id:record.id,
-        bodyA:left.instance.body.id,
-        bodyB:right.instance.body.id,
-        kind:record.kind,
-        dof:clone(record.dof),
-        frameA:left.endpoint.frame,
-        frameB:right.endpoint.frame,
-        referenceFrame,
+        bodyA:current.bodyA,
+        bodyB:current.bodyB,
+        kind:current.constraintKind??current.kind,
+        dof:clone(current.dof),
+        frameA:current.frameA,
+        frameB:current.frameB,
+        referenceFrame:current.referenceFrame,
         metadata:{
-          instanceAId:record.a.instanceId,
-          instanceBId:record.b.instanceId,
-          endpointAId:record.a.endpointId,
-          endpointBId:record.b.endpointId,
-          observedEndpointAId:record.a.observedEndpointId??null,
-          observedEndpointBId:record.b.observedEndpointId??null,
-          semanticA,
-          semanticB,
-          interfacePair:[...(record.interfacePair||[])],
-          topology:clone(record.topology),
-          dynamics:clone(record.dynamics),
+          ...(clone(current.metadata)||{}),
           occupancy:clone(record.occupancy),
           restoredFromSchema:MECHANICS_PROJECT_SCHEMA_VERSION,
+          persistedConstraintKind:record.kind,
         },
-        evidence:clone(record.evidence),
+        evidence:clone(current.evidence??record.evidence),
       }))
       restored+=1
     }catch(error){
