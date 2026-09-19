@@ -206,7 +206,7 @@ export function findMechanicalCandidates({
 
       for(const target of targetRecord.instance.endpoints){
         const match=matchMechanicalEndpoints(source,target,{
-          classificationA:moved.instance.descriptor?.classification,
+          classificationA:moving.instance.descriptor?.classification,
           classificationB:targetRecord.instance.descriptor?.classification,
         })
         if(!match.compatible)continue
