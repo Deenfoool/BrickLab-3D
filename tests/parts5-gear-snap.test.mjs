@@ -17,7 +17,7 @@ await import('../parts4/mechanical-driveline-v1.js')
 await import('../parts5/visual-overhaul-v1.js')
 
 const { findPart } = await import('../parts.js')
-const { findSnapCandidate, applySnap, connectorWorldPosition } = await import('../snapping-v3.js')
+const { findGearSnapCandidate, findSnapCandidate, applySnap, connectorWorldPosition } = await import('../snapping-v3.js')
 const { isEndpointOccupied, createConnection } = await import('../connections-v3.js')
 const { evaluateSpurMesh } = await import('../parts5/gear-mesh-math-v1.js')
 
@@ -72,6 +72,57 @@ test('12T dragged near 20T gets exact placement snap and a persistent non-rigid 
   assert.equal(relation.a.connectorType,'gear-mesh')
   assert.equal(relation.b.connectorType,'gear-mesh')
   assert.equal(isEndpointOccupied([], moving.userData.instanceId, candidate.source.id), false)
+})
+
+test('native Mechanics Next gear records drive BUILD gear placement without legacy mechanics.gear metadata', () => {
+  const fixed=new THREE.Object3D()
+  fixed.userData={partId:'ldraw-native-20',instanceId:'native-fixed-20'}
+  fixed.position.set(0,0,0)
+  fixed.updateMatrixWorld(true)
+
+  const moving=new THREE.Object3D()
+  moving.userData={partId:'ldraw-native-12',instanceId:'native-moving-12'}
+  moving.position.set(2.2,0,0)
+  moving.updateMatrixWorld(true)
+
+  const endpoint=(bodyId)=>({
+    id:`${bodyId}:axle-hole`,
+    bodyId,
+    family:'cylinder',
+    gender:'female',
+    frame:{positionStud:[0,0,0],orientationBrickLab:[1,0,0,0,1,0,0,0,1]},
+    profile:{centered:true,caps:'none',sections:[{shape:'A',radiusLdu:6,lengthLdu:20}]},
+    capabilities:['slide'],
+    metadata:{semantics:{semanticKind:'technic-axle-hole'}},
+  })
+  const record=(object,teeth)=>({
+    instance:{
+      body:{id:`${object.userData.instanceId}:body`,instanceId:object.userData.instanceId,partId:object.userData.partId},
+      endpoints:[endpoint(`${object.userData.instanceId}:body`)],
+      transmissions:[{kind:'spur-gear',equationFamily:'gear-mesh',toothCount:teeth,pitchRadius:teeth/16}],
+    },
+    pose:{position:object.position.toArray(),quaternion:object.quaternion.toArray()},
+    visualOffsetStud:[0,0,0],
+    object,
+  })
+  const previous=globalThis.BrickLabMechanicsNext
+  globalThis.BrickLabMechanicsNext={
+    records:()=>[record(fixed,20),record(moving,12)],
+  }
+  try{
+    const candidate=findGearSnapCandidate(moving,[fixed,moving])
+    assert.ok(candidate)
+    assert.equal(candidate.kind,'gear-mesh')
+    assert.equal(candidate.movingGear.teeth,12)
+    assert.equal(candidate.fixedGear.teeth,20)
+    assert.equal(candidate.movingGear.gearFrameSource,'rotary-endpoint')
+    applySnap(moving,candidate)
+    moving.updateMatrixWorld(true)
+    assert.ok(Math.abs(moving.position.x-2.018)<1e-6)
+  }finally{
+    if(previous===undefined)delete globalThis.BrickLabMechanicsNext
+    else globalThis.BrickLabMechanicsNext=previous
+  }
 })
 
 await dom.happyDOM.close()
