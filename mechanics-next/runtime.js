@@ -12,7 +12,7 @@ import { rigidPoseFromMatrix4 } from './math/rigid.js'
 import { discoverMechanicalTransmissions } from './transmission/discovery.js'
 import { createTransmissionCompiler } from './transmission/compiler.js'
 import { findBestMechanicalCandidate } from './connectors/candidate-search.js'
-import { OccupancyLedger, endpointChannel } from './connectors/occupancy.js'
+import { OccupancyLedger, endpointChannel, occupancyStateForEndpoint } from './connectors/occupancy.js'
 import { commitPlacementTransaction } from './connectors/placement-transaction.js'
 import { solveMechanicalPlacement } from './connectors/placement-solver.js'
 import { worldConnectorFrame } from './connectors/world-frame.js'
@@ -880,44 +880,12 @@ export function createMechanicsNextRuntime({
     endpointOccupancy(instanceId, endpointId) {
       const instance=api.mechanicalInstance(instanceId)
       const endpoint=instance?.endpoints?.find(item=>String(item.id)===String(endpointId||''))
-      if(!instance||!endpoint)return Object.freeze({
-        known:false,
-        occupied:false,
-        available:true,
-        partiallyOccupied:false,
-        fullyOccupied:false,
-        exclusiveOwner:null,
-        axialReservations:Object.freeze([]),
-        freeAxialIntervals:Object.freeze([]),
-      })
-      const channel=endpointChannel(instance.body.id,endpoint.id)
-      const exclusiveOwner=occupancy.exclusiveOwner(channel)
-      const axialReservations=occupancy.axialReservations(channel)
-      const sections=Array.isArray(endpoint?.profile?.sections)?endpoint.profile.sections:[]
-      const totalLdu=sections.reduce((sum,section)=>sum+Math.max(0,Number(section?.lengthLdu)||0),0)
-      const bounds=totalLdu>0
-        ?(endpoint?.profile?.centered===true?[-totalLdu/2,totalLdu/2]:[0,totalLdu])
-        :null
-      const freeAxialIntervals=!exclusiveOwner&&axialReservations.length&&bounds
-        ?occupancy.freeIntervals(channel,bounds)
-        :Object.freeze([])
-      const usableFreeInterval=freeAxialIntervals.some(interval=>
-        Number(interval?.[1])-Number(interval?.[0])>=1
+      return occupancyStateForEndpoint(
+        occupancy,
+        instance?.body?.id??null,
+        endpoint??null,
+        {minimumFreeLdu:1},
       )
-      const partiallyOccupied=!exclusiveOwner&&axialReservations.length>0&&usableFreeInterval
-      const fullyOccupied=Boolean(exclusiveOwner)||
-        (axialReservations.length>0&&!usableFreeInterval)
-      const available=!fullyOccupied
-      return Object.freeze({
-        known:true,
-        occupied:fullyOccupied,
-        available,
-        partiallyOccupied,
-        fullyOccupied,
-        exclusiveOwner,
-        axialReservations,
-        freeAxialIntervals,
-      })
     },
     records:mechanicalRecords,
     solveKinematics(options = {}) {
