@@ -1,5 +1,6 @@
 import { endpointSemanticKind } from '../intelligence/endpoint-semantics.js'
 import { mechanicalInterfaceRule } from '../intelligence/interface-rules.js'
+import { semanticInterfaceVariants } from '../intelligence/interface-variants.js'
 
 export const PROFILE_MATCHER_VERSION = 'mechanics-profile-matcher-0.1.0'
 export const PROFILE_TOLERANCES = Object.freeze({
@@ -64,30 +65,26 @@ function cylinderProfile(endpoint) {
   return Array.isArray(endpoint?.profile?.sections) ? endpoint.profile.sections : []
 }
 
-function intendedInterfaceRule(a,b) {
+function intendedInterfaceRule(a,b,{classificationA=null,classificationB=null}={}) {
   const semanticA=endpointSemanticKind(a)
   const semanticB=endpointSemanticKind(b)
-  const map = kind => {
-    if (kind==='technic-axle') return ['axle']
-    if (kind==='technic-axle-hole') return ['axle-hole']
-    if (kind==='technic-round-hole') return ['round-hole']
-    if (kind==='technic-pin') return ['technic-pin']
-    if (kind==='technic-axle-pin') return ['technic-pin','axle']
-    if (kind==='technic-pin-hole') return ['technic-hole','round-hole']
-    if (kind==='bar') return ['bar']
-    if (kind==='bar-hole') return ['round-hole']
-    if (kind==='stud') return ['stud']
-    if (kind==='anti-stud') return ['anti-stud']
-    if (kind==='ball') return ['ball']
-    if (kind==='socket') return ['socket']
-    if (kind==='clip') return ['clip']
-    if (kind==='hinge-fingers') return ['hinge','fingers']
-    if (kind==='click-hinge') return ['click-hinge','fingers']
-    if (kind==='turntable-bearing') return ['turntable']
-    return [kind]
+
+  if(semanticA==='rim-tire-interface'&&semanticB==='rim-tire-interface'){
+    const roleA=classificationA?.role
+    const roleB=classificationB?.role
+    if(roleA==='tire'&&roleB==='rim'){
+      const rule=mechanicalInterfaceRule('tyre','rim')
+      return {rule,pair:rule?['tyre','rim']:null,semanticA,semanticB}
+    }
+    if(roleA==='rim'&&roleB==='tire'){
+      const rule=mechanicalInterfaceRule('rim','tyre')
+      return {rule,pair:rule?['rim','tyre']:null,semanticA,semanticB}
+    }
+    return {rule:null,pair:null,semanticA,semanticB}
   }
-  for (const left of map(semanticA)) {
-    for (const right of map(semanticB)) {
+
+  for (const left of semanticInterfaceVariants(semanticA,{endpoint:a})) {
+    for (const right of semanticInterfaceVariants(semanticB,{endpoint:b})) {
       const rule=mechanicalInterfaceRule(left,right)
       if (rule) return {rule,pair:[left,right],semanticA,semanticB}
     }
@@ -95,7 +92,7 @@ function intendedInterfaceRule(a,b) {
   return {rule:null,pair:null,semanticA,semanticB}
 }
 
-function cylinderMatch(a,b) {
+function cylinderMatch(a,b,context={}) {
   const pair=maleFemale(a,b)
   if (!pair) return {compatible:false,reason:'cylinder-gender'}
   const maleSections=cylinderProfile(pair.male)
@@ -120,7 +117,7 @@ function cylinderMatch(a,b) {
   })
   const best=compatiblePairs[0]
   const slide=Boolean(a?.capabilities?.includes?.('slide') || b?.capabilities?.includes?.('slide'))
-  const semantic=intendedInterfaceRule(a,b)
+  const semantic=intendedInterfaceRule(a,b,context)
 
   return {
     compatible:true,
@@ -143,7 +140,7 @@ function cylinderMatch(a,b) {
   }
 }
 
-function clipCylinderMatch(a,b) {
+function clipCylinderMatch(a,b,context={}) {
   const clip=a?.family==='clip'?a:b?.family==='clip'?b:null
   const cylinder=a?.family==='cylinder'?a:b?.family==='cylinder'?b:null
   if (!clip || !cylinder || cylinder.gender!=='male') return {compatible:false,reason:'clip-pair'}
@@ -154,7 +151,7 @@ function clipCylinderMatch(a,b) {
     .filter(candidate=>Number.isFinite(candidate.clearance) && Math.abs(candidate.clearance)<=PROFILE_TOLERANCES.radiusLdu)
     .sort((x,y)=>Math.abs(x.clearance)-Math.abs(y.clearance))
   if (!candidates.length) return {compatible:false,reason:'clip-radius'}
-  const semantic=intendedInterfaceRule(a,b)
+  const semantic=intendedInterfaceRule(a,b,context)
   return {
     compatible:true,
     family:'clip-cylinder',
@@ -185,7 +182,7 @@ function fingerSegments(endpoint) {
   })
 }
 
-function fingersMatch(a,b) {
+function fingersMatch(a,b,context={}) {
   if (a?.family!=='fingers' || b?.family!=='fingers') return {compatible:false,reason:'fingers-pair'}
   if (!groupCompatible(a,b)) return {compatible:false,reason:'group'}
   if (!approx(a?.profile?.radiusLdu,b?.profile?.radiusLdu)) return {compatible:false,reason:'finger-radius'}
@@ -197,7 +194,7 @@ function fingersMatch(a,b) {
     const sb=bb.find(x=>mid>x.start+1e-6&&mid<x.end-1e-6)
     if (sa&&sb&&sa.gender===sb.gender) return {compatible:false,reason:'finger-overlap'}
   }
-  const semantic=intendedInterfaceRule(a,b)
+  const semantic=intendedInterfaceRule(a,b,context)
   return {
     compatible:true,
     family:'fingers',
@@ -234,13 +231,13 @@ function genericMode(a,b){
   const mb=String(b?.metadata?.snap?.match||'shape').toLowerCase()
   return (rank[ma]??1)>=(rank[mb]??1)?ma:mb
 }
-function genericMatch(a,b){
+function genericMatch(a,b,context={}){
   if(a?.family!=='generic'||b?.family!=='generic')return{compatible:false,reason:'generic-pair'}
   if(a?.profile?.kind==='linear-guide'||b?.profile?.kind==='linear-guide'){
     const types=new Set([a?.metadata?.builtinType,b?.metadata?.builtinType])
     if(a?.profile?.kind!=='linear-guide'||b?.profile?.kind!=='linear-guide'||
       !types.has('slider')||!types.has('slider-rail'))return{compatible:false,reason:'linear-guide-pair'}
-    const semantic=intendedInterfaceRule(a,b)
+    const semantic=intendedInterfaceRule(a,b,context)
     return{compatible:true,family:'generic',reason:'linear-guide',keyed:true,
       rotationalSymmetry:1,freeOrientation:false,freeTwist:false,requiresAxialFit:false,
       interfaceRule:semantic.rule,interfacePair:semantic.pair,
@@ -261,12 +258,12 @@ function genericMatch(a,b){
     requiresAxialFit:false,
   }
 }
-function sphereMatch(a,b){
+function sphereMatch(a,b,context={}){
   if(a?.family!=='sphere'||b?.family!=='sphere')return{compatible:false,reason:'sphere-pair'}
   if(!maleFemale(a,b))return{compatible:false,reason:'sphere-gender'}
   if(!groupCompatible(a,b))return{compatible:false,reason:'group'}
   if(!approx(a?.profile?.radiusLdu,b?.profile?.radiusLdu))return{compatible:false,reason:'sphere-radius'}
-  const semantic=intendedInterfaceRule(a,b)
+  const semantic=intendedInterfaceRule(a,b,context)
   return{
     compatible:true,family:'sphere',reason:'ball-socket',keyed:false,
     rotationalSymmetry:Infinity,freeOrientation:true,freeTwist:true,requiresAxialFit:false,
@@ -275,15 +272,15 @@ function sphereMatch(a,b){
   }
 }
 
-export function matchMechanicalEndpoints(a,b){
+export function matchMechanicalEndpoints(a,b,context={}){
   if(!a||!b)return Object.freeze({compatible:false,reason:'missing'})
   if(!groupCompatible(a,b))return Object.freeze({compatible:false,reason:'group'})
   let result
-  if(a.family==='cylinder'&&b.family==='cylinder')result=cylinderMatch(a,b)
-  else if((a.family==='clip'&&b.family==='cylinder')||(b.family==='clip'&&a.family==='cylinder'))result=clipCylinderMatch(a,b)
-  else if(a.family==='fingers'&&b.family==='fingers')result=fingersMatch(a,b)
-  else if(a.family==='generic'&&b.family==='generic')result=genericMatch(a,b)
-  else if(a.family==='sphere'&&b.family==='sphere')result=sphereMatch(a,b)
+  if(a.family==='cylinder'&&b.family==='cylinder')result=cylinderMatch(a,b,context)
+  else if((a.family==='clip'&&b.family==='cylinder')||(b.family==='clip'&&a.family==='cylinder'))result=clipCylinderMatch(a,b,context)
+  else if(a.family==='fingers'&&b.family==='fingers')result=fingersMatch(a,b,context)
+  else if(a.family==='generic'&&b.family==='generic')result=genericMatch(a,b,context)
+  else if(a.family==='sphere'&&b.family==='sphere')result=sphereMatch(a,b,context)
   else result={compatible:false,reason:'family'}
   return Object.freeze(result)
 }
