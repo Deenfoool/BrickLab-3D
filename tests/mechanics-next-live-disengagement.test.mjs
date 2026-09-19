@@ -118,6 +118,74 @@ test('live joint validator calibrates axial direction from the committed occupan
   assert.equal(separated.results[0].engagementLdu,0)
 })
 
+test('keyed axle validation treats quarter turns as equivalent symmetry phases', () => {
+  const graph=createAssemblyGraph()
+  const maleBody=createBodyDescriptor({id:'symmetry-axle-body',instanceId:'symmetry-axle-i',partId:'axle'})
+  const femaleBody=createBodyDescriptor({id:'symmetry-hole-body',instanceId:'symmetry-hole-i',partId:'axle-hole'})
+  graph.addBody(maleBody)
+  graph.addBody(femaleBody)
+
+  const axleEndpoint=({id,bodyId,gender,semantic})=>createEndpointDescriptor({
+    id,bodyId,family:'cylinder',gender,
+    frame:{positionStud:[0,0,0],orientationBrickLab:[1,0,0,0,1,0,0,0,1]},
+    profile:{centered:true,caps:'none',sections:[{shape:'A',radiusLdu:6,lengthLdu:40}]},
+    capabilities:['slide'],
+    metadata:{semantics:{semanticKind:semantic}},
+  })
+  const male=axleEndpoint({
+    id:'symmetry-axle-end',bodyId:maleBody.id,gender:'male',semantic:'technic-axle',
+  })
+  const female=axleEndpoint({
+    id:'symmetry-hole-end',bodyId:femaleBody.id,gender:'female',semantic:'technic-axle-hole',
+  })
+  graph.addConstraint(createConstraint({
+    id:'symmetry-constraint',
+    bodyA:maleBody.id,
+    bodyB:femaleBody.id,
+    kind:'prismatic',
+    metadata:{
+      endpointAId:male.id,
+      endpointBId:female.id,
+      observedConnectionId:'symmetry-observed',
+      connectionGeometry:{
+        anchorDistanceStud:0,
+        axialSeparationStud:0,
+        lateralDistanceStud:0,
+        axisDot:1,
+        relativeOrientation:[1,0,0,0,1,0,0,0,1],
+        twistPhaseRad:0,
+      },
+      occupancy:{
+        connectionId:'symmetry-observed',
+        axialReservations:[{
+          channel:endpointChannel(maleBody.id,male.id),
+          interval:[-20,20],
+        }],
+      },
+    },
+  }))
+
+  const maleObject=new THREE.Object3D()
+  const femaleObject=new THREE.Object3D()
+  const records=[
+    recordFor(maleBody,male,maleObject),
+    recordFor(femaleBody,female,femaleObject),
+  ]
+
+  maleObject.rotation.y=Math.PI/2
+  maleObject.updateMatrixWorld(true)
+  const quarter=createLiveJointValidator({graph,records}).validateConstraint('symmetry-constraint')
+  assert.equal(quarter.valid,true)
+  assert.ok(quarter.orientationDrift<1e-8)
+
+  maleObject.rotation.y=Math.PI/4
+  maleObject.updateMatrixWorld(true)
+  const halfPhase=createLiveJointValidator({graph,records}).validateConstraint('symmetry-constraint')
+  assert.equal(halfPhase.valid,false)
+  assert.equal(halfPhase.reason,'orientation-disengaged')
+  assert.ok(halfPhase.orientationDrift>.7)
+})
+
 test('live disengagement requires confirmation frames before removing the Rapier joint', () => {
   const graph=createAssemblyGraph()
   const maleBody=createBodyDescriptor({id:'release-male-body',instanceId:'release-male-i',partId:'pin'})
