@@ -148,6 +148,22 @@ export function occupancyPlanForPlacement(candidate,{connectionId}={}){
   const exclusiveChannels=[]
   const axialReservations=[]
 
+  const studBundle=(candidate?.supportPairs||[]).filter(pair=>{
+    const values=new Set(pair?.match?.interfacePair||[])
+    return values.has('stud')&&values.has('anti-stud')
+  })
+  if(studBundle.length>=2){
+    for(const pair of studBundle){
+      if(sourceBody&&pair?.source?.id)exclusiveChannels.push(endpointChannel(sourceBody,pair.source.id))
+      if(targetBody&&pair?.target?.id)exclusiveChannels.push(endpointChannel(targetBody,pair.target.id))
+    }
+    return Object.freeze({
+      connectionId:id,
+      exclusiveChannels:Object.freeze([...new Set(exclusiveChannels)]),
+      axialReservations:Object.freeze([]),
+    })
+  }
+
   if(match?.family==='cylinder'&&match.male&&match.female){
     const male=match.male,female=match.female
     const maleBody=source===male?sourceBody:targetBody
