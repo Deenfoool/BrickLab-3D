@@ -333,16 +333,31 @@ function scheduleMechanicsNextBuildHandoff(reason = 'scene-change') {
   return mechanicsNextBuildHandoffTask
 }
 
-function syncMechanicsSceneMutation(reason = 'editor-structure-change') {
+function syncMechanicsSceneMutation(reason = 'editor-structure-change', partIds = []) {
+  const mechanics=globalThis.BrickLabMechanicsNext
   try {
-    globalThis.BrickLabMechanicsNext?.syncScene?.()
+    mechanics?.syncScene?.()
   } catch (error) {
     console.warn('[BrickLab Mechanics Next] Editor scene sync failed.', { reason, error })
   }
   window.dispatchEvent(new CustomEvent('bricklab:editorexternalmutation', {
     detail:{ reason },
   }))
-  void scheduleMechanicsNextBuildHandoff(reason)
+  const warmups=[...new Set((partIds||[]).map(String).filter(Boolean))]
+    .map(partId=>mechanics?.ensurePartConnectivity?.(partId))
+    .filter(Boolean)
+  if(warmups.length){
+    void Promise.allSettled(warmups).then(()=>{
+      if(mode==='build'){
+        connectorGuides()
+        refreshSnap()
+        updateInspector()
+      }
+      return scheduleMechanicsNextBuildHandoff(`${reason}:connectivity-ready`)
+    })
+  }else{
+    void scheduleMechanicsNextBuildHandoff(reason)
+  }
 }
 
 function toast(text) {
@@ -958,7 +973,7 @@ function addPart(partId) {
   const n = buildRoot.children.length
   object.position.set((n % 6 - 2.5) * 1.5, 0, Math.floor(n / 6) * 1.5)
   buildRoot.add(object)
-  syncMechanicsSceneMutation('part-added')
+  syncMechanicsSceneMutation('part-added',[partId])
   select(object)
   updateProjectStats()
   commitHistory()
@@ -992,7 +1007,7 @@ function duplicateSelected() {
     buildRoot.add(copy)
     copies.push(copy)
   }
-  syncMechanicsSceneMutation('parts-duplicated')
+  syncMechanicsSceneMutation('parts-duplicated',copies.map(object=>object.userData.partId))
   selectedObjects = new Set(copies)
   selected = copies.at(-1) ?? null
   transform.detach()
