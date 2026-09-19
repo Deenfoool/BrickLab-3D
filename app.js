@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { PARTS, findPart } from './parts.js'
-import { applySnap, connectorWorldPosition, findExactGearMeshPairs, findSnapCandidate, orientForSnap } from './snapping.js'
+import { applySnap, connectorWorldPosition, findExactGearMeshPairs, findGearSnapCandidate, findSnapCandidate, orientForSnap } from './snapping.js'
 import {
   connectionsForPart,
   createConnection,
@@ -413,6 +413,7 @@ function nativeSnapView(candidate) {
   return {
     owner:'mechanics-next',
     native:candidate,
+    score:Number.isFinite(Number(candidate.score)) ? Number(candidate.score) : Infinity,
     targetWorld:new THREE.Vector3().fromArray(target),
     source:{ type:sourceType },
     target:{ type:targetType },
@@ -533,7 +534,7 @@ function refreshSnap() {
     snapCandidate = null
   } else if (mechanicsNextBuildActive()) {
     try {
-      snapCandidate = nativeSnapView(
+      const nativeCandidate = nativeSnapView(
         globalThis.BrickLabMechanicsNext?.findCandidate?.(
           selected.userData.instanceId,
           buildRoot.children
@@ -541,6 +542,12 @@ function refreshSnap() {
             .map(object => object.userData.instanceId),
         ),
       )
+      const gearCandidate = findGearSnapCandidate(selected, buildRoot.children)
+      if (gearCandidate && gearCandidate.score < (nativeCandidate?.score ?? Infinity)) {
+        snapCandidate = { ...gearCandidate, owner:'mechanics-next-gear' }
+      } else {
+        snapCandidate = nativeCandidate
+      }
     } catch (error) {
       console.warn('[BrickLab Mechanics Next] Native snap preview failed.', error)
       snapCandidate = null
@@ -896,7 +903,17 @@ transform.addEventListener('mouseUp', async () => {
   }
 
   if (selected && snapCandidate && connectorSnapEnabled) {
-    if (snapCandidate.owner === 'mechanics-next') {
+    if (snapCandidate.owner === 'mechanics-next-gear') {
+      applySnap(selected, snapCandidate)
+      globalThis.BrickLabMechanicsNext?.syncScene?.()
+      emitAudioEvent('connector', {
+        source:'gear-mesh',
+        target:'gear-mesh',
+        sourcePart:selected.userData.partId,
+        targetPart:snapCandidate.targetObject?.userData?.partId,
+      })
+      toast(`Meshed gears ${snapCandidate.movingGear.teeth}T ↔ ${snapCandidate.fixedGear.teeth}T`)
+    } else if (snapCandidate.owner === 'mechanics-next') {
       const result = await globalThis.BrickLabMechanicsNext?.commitCandidate?.(snapCandidate.native)
       const connection = result?.accepted ? result.record : null
       if (connection && !connections.some(item => item.id === connection.id)) {
