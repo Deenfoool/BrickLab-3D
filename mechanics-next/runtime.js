@@ -886,7 +886,6 @@ export function createMechanicsNextRuntime({
         exclusiveOwner:null,
         axialReservations:Object.freeze([]),
       })
-      rebuildNativeOccupancy()
       const channel=endpointChannel(instance.body.id,endpoint.id)
       const exclusiveOwner=occupancy.exclusiveOwner(channel)
       const axialReservations=occupancy.axialReservations(channel)
