@@ -432,6 +432,22 @@ export function createMechanicsNextRuntime({
     }),
   })
 
+  const freezeCommittedConnectionGeometry=record=>{
+    if(!record?.id)return record
+    const edge=graph.edges('constraint').find(item=>
+      String(item?.metadata?.observedConnectionId||'')===String(record.id)
+    )
+    const geometry=edge?.metadata?.connectionGeometry
+    if(!geometry)return record
+    return Object.freeze({
+      ...record,
+      metadata:Object.freeze({
+        ...(record.metadata||{}),
+        connectionGeometry:Object.freeze(structuredClone(geometry)),
+      }),
+    })
+  }
+
   const currentPoseForRecord=record=>{
     const object=record?.object
     object?.updateWorldMatrix?.(true,false)
@@ -1028,8 +1044,9 @@ export function createMechanicsNextRuntime({
             syncScene()
             return Object.freeze({accepted:false,reason:unresolved.reason,unresolved})
           }
-          committedRecord=record
-          return Object.freeze({accepted:true,record,refreshed})
+          committedRecord=freezeCommittedConnectionGeometry(record)
+          nativeObservedRecords.set(committedRecord.id,committedRecord)
+          return Object.freeze({accepted:true,record:committedRecord,refreshed})
         },
       })
       if(!result.accepted&&committedRecord){
