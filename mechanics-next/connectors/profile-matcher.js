@@ -283,12 +283,22 @@ function genericMatch(a,b,context={}){
   const pb=String(b?.metadata?.snap?.placement||'aligned').toLowerCase()
   const free=pa==='free'||pb==='free'
   const retained=pa==='retain'||pb==='retain'
+  const aligned=!free&&!retained
+  const fallback=semantic.rule?null:profileFallbackAllowed(a,b)
+    ?profileDerivedInterfaceRule({
+        family:'generic',
+        freeOrientation:free,
+        aligned,
+      })
+    :null
+  const interfaceRule=semantic.rule??fallback
+  const interfacePair=semantic.pair??(fallback?['profile-generic','profile-generic']:null)
   return{
     compatible:true,family:'generic',reason:ballSocket?'generic-ball-socket':`generic-${mode}`,matchMode:mode,
     keyed:!(free||retained),rotationalSymmetry:free||retained?Infinity:1,
     freeOrientation:free,retainOrientation:retained,freeTwist:free||retained,
     requiresAxialFit:false,
-    interfaceRule:semantic.rule,interfacePair:semantic.pair,
+    interfaceRule,interfacePair,
     semanticA:semantic.semanticA,semanticB:semantic.semanticB,
   }
 }
