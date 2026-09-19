@@ -14,7 +14,7 @@ Do not renumber or redefine stages to make the counter look better.
 9. [x] Compound mechanisms: U-joint, CV, actuator, shock/spring, clutch, shortcut decomposition and endpoint ownership
 10. [x] Physics/Rapier core: structural joints, generalized couplings, compound member bodies, dynamics, release and rollback
 11. [x] Production migration and full regression/migration gate
-12. [x] Legacy engine purge and final architecture cleanup
+12. [ ] Legacy engine purge and final architecture cleanup
 
 ## Definition of done
 
@@ -31,3 +31,14 @@ Stage 11 must not pass merely because Mechanics Next loads. It requires:
 - regression test suite green in a real Node/browser-capable environment.
 
 Stage 12 may begin only after Stage 11 passes. Legacy code is then removed by ownership domain rather than hidden behind unused fallbacks.
+
+## Stage 12 reopened
+
+Stage 12 was reopened after a real BUILD interaction regression was reported on 2026-09-20. The previous completion gate did not cover the normal editor drag path for real Technic connectivity. Re-close Stage 12 only after real browser interaction verifies at minimum:
+
+- Technic pin → Technic pin hole;
+- Technic axle → axle/round Technic hole;
+- spur/bevel gear → gear mesh placement;
+- connection persistence through Save/Open;
+- SIMULATE consumes the resulting native topology;
+- no legacy mechanics owner or fallback is restored.
