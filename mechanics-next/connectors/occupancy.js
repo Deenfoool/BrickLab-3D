@@ -213,6 +213,21 @@ export function occupancyPlanForPlacement(candidate,{connectionId}={}){
       occupantBodyId:femaleBody,
       metadata:Object.freeze({family:'cylinder'}),
     }))
+  }else if(match?.family==='clip-cylinder'&&match.male){
+    const male=match.male
+    const clip=source?.family==='clip'?source:target?.family==='clip'?target:null
+    const maleBody=source===male?sourceBody:targetBody
+    const clipBody=source===clip?sourceBody:targetBody
+    if(clip&&clipBody)exclusiveChannels.push(endpointChannel(clipBody,clip.id))
+    const interval=candidate?.solution?.axial?.fit?.best?.occupiedMaleInterval
+      ??candidate?.solution?.axial?.fit?.requested?.occupiedMaleInterval
+      ??null
+    if(interval&&maleBody)axialReservations.push(Object.freeze({
+      channel:endpointChannel(maleBody,male.id),
+      interval:Object.freeze([...interval]),
+      occupantBodyId:clipBody,
+      metadata:Object.freeze({family:'clip-cylinder'}),
+    }))
   }else{
     if(sourceBody&&source?.id)exclusiveChannels.push(endpointChannel(sourceBody,source.id))
     if(targetBody&&target?.id)exclusiveChannels.push(endpointChannel(targetBody,target.id))
