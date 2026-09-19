@@ -49,7 +49,7 @@ import { inheritancePolicyForChild, parseLDrawHeader, parseType1References } fro
 import { createNativeLDrawInheritanceResolver } from '../mechanics-next/ldraw/official-inheritance.js'
 import { solveMechanicalPlacement } from '../mechanics-next/connectors/placement-solver.js'
 import { worldConnectorFrame } from '../mechanics-next/connectors/world-frame.js'
-import { OccupancyLedger, occupancyPlanForPlacement } from '../mechanics-next/connectors/occupancy.js'
+import { OccupancyLedger, occupancyPlanForPlacement, occupancyStateForEndpoint } from '../mechanics-next/connectors/occupancy.js'
 import { findMechanicalCandidates } from '../mechanics-next/connectors/candidate-search.js'
 import { commitPlacementTransaction } from '../mechanics-next/connectors/placement-transaction.js'
 import { discoverMechanicalTransmissions } from '../mechanics-next/transmission/discovery.js'
@@ -910,6 +910,39 @@ test('interval occupancy lets one long axle serve separated receivers but blocks
   const blocked=ledger.canReserve(overlap)
   assert.equal(blocked.accepted,false)
   assert.equal(blocked.conflicts[0].type,'axial-overlap')
+})
+
+test('partial axial occupancy remains available when a long endpoint has free engagement', () => {
+  const ledger=new OccupancyLedger()
+  const endpoint={
+    id:'long-axle',
+    family:'cylinder',
+    profile:{centered:true,sections:[{shape:'A',radiusLdu:6,lengthLdu:80}]},
+  }
+  const bodyId='axle-body'
+  const channel=`${bodyId}::${endpoint.id}`
+  assert.equal(ledger.reserve({
+    connectionId:'receiver-a',
+    exclusiveChannels:[],
+    axialReservations:[{channel,interval:[-40,-20],occupantBodyId:'beam-a'}],
+  }).accepted,true)
+
+  const partial=occupancyStateForEndpoint(ledger,bodyId,endpoint)
+  assert.equal(partial.known,true)
+  assert.equal(partial.partiallyOccupied,true)
+  assert.equal(partial.fullyOccupied,false)
+  assert.equal(partial.available,true)
+  assert.deepEqual(partial.freeAxialIntervals,[[-20,40]])
+
+  assert.equal(ledger.reserve({
+    connectionId:'receiver-b',
+    exclusiveChannels:[],
+    axialReservations:[{channel,interval:[-20,40],occupantBodyId:'beam-b'}],
+  }).accepted,true)
+  const full=occupancyStateForEndpoint(ledger,bodyId,endpoint)
+  assert.equal(full.partiallyOccupied,false)
+  assert.equal(full.fullyOccupied,true)
+  assert.equal(full.available,false)
 })
 
 test('female bore remains exclusive even when axial interval is otherwise free', () => {
