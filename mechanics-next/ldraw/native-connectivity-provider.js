@@ -176,12 +176,14 @@ export function createCachedShadowTextFetcher({
     const response=await fetchImpl(url,{mode:'cors',cache:'force-cache'})
     if(response.status===404)return null
     if(!response.ok)throw new Error(`HTTP ${response.status}: ${url}`)
+    let cacheCopy=null
+    if(cache?.put&&typeof response.clone==='function'){
+      try{cacheCopy=response.clone()}catch{}
+    }
     const text=await response.text()
 
-    if(cache?.put&&typeof response.clone==='function'){
-      try{
-        await cache.put(url,response.clone())
-      }catch{}
+    if(cacheCopy){
+      try{await cache.put(url,cacheCopy)}catch{}
     }
     return text
   }
