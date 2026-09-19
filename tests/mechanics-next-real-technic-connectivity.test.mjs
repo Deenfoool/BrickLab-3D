@@ -34,6 +34,9 @@ test('native Shadow resolver finds primitive p/ includes used by real Technic ho
   assert.equal(brick.connectors.length,3)
   assert.ok(requests.includes('p/connhole.dat'))
   assert.ok(brick.connectors.every(connector=>connector.family==='cylinder'&&connector.gender==='female'))
+  const endpoints=brick.connectors.map((connector,index)=>
+    endpoint(connector,`brick-body-${index}`))
+  assert.equal(new Set(endpoints.map(item=>item.id)).size,3)
 })
 
 test('real LDCad Technic pin profile matches inherited connhole receiver',async()=>{
@@ -64,4 +67,13 @@ test('real LDCad A6 axle profile matches inherited Technic round hole',async()=>
   const match=matchMechanicalEndpoints(male,female)
   assert.equal(match.compatible,true)
   assert.equal(match.interfaceRule?.kind,'cylindrical')
+})
+
+
+test('grid-expanded Technic holes keep unique endpoint IDs inside one part instance',async()=>{
+  const resolver=createNativeShadowResolver({fetchShadowText:async path=>files.get(path)??null})
+  const brick=await resolver.resolve('parts/3701.dat')
+  const endpoints=brick.connectors.map(connector=>endpoint(connector,'same-brick-body'))
+  assert.equal(endpoints.length,3)
+  assert.equal(new Set(endpoints.map(item=>item.id)).size,3)
 })
