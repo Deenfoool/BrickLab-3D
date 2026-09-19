@@ -150,7 +150,10 @@ function countMultiContactSupport(candidate,frameCache){
     let best=null
     for(const target of targetRecord.instance.endpoints){
       if(usedTargets.has(target.id))continue
-      const match=matchMechanicalEndpoints(source,target)
+      const match=matchMechanicalEndpoints(source,target,{
+        classificationA:moving.instance.descriptor?.classification,
+        classificationB:targetRecord.instance.descriptor?.classification,
+      })
       if(!match.compatible||!match.interfaceRule)continue
       let targetFrame
       try{targetFrame=endpointFrame(targetRecord,target,frameCache)}catch{continue}
@@ -202,7 +205,10 @@ export function findMechanicalCandidates({
       if(targetRecord.instance.body.id===moving.instance.body.id)continue
 
       for(const target of targetRecord.instance.endpoints){
-        const match=matchMechanicalEndpoints(source,target)
+        const match=matchMechanicalEndpoints(source,target,{
+          classificationA:moved.instance.descriptor?.classification,
+          classificationB:targetRecord.instance.descriptor?.classification,
+        })
         if(!match.compatible)continue
         if(!match.interfaceRule&&!includeSemanticUnknown)continue
 
