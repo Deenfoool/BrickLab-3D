@@ -206,7 +206,7 @@ function prepareConstraint(constraint,recordsByBody){
     reason:'live-frame-missing',
   })
   const match=matchMechanicalEndpoints(endpointA,endpointB)
-  const calibration=match?.compatible&&match.family==='cylinder'
+  const calibration=match?.compatible&&['cylinder','clip-cylinder'].includes(match.family)
     ?calibrationForCylinder(constraint,match,initialA,initialB,endpointA)
     :null
   return Object.freeze({
@@ -317,7 +317,7 @@ export function createLiveJointValidator({
     )
     const orientationLocked=kind==='fixed'||kind==='prismatic'
 
-    if(entry.match?.compatible&&entry.match.family==='cylinder'){
+    if(entry.match?.compatible&&['cylinder','clip-cylinder'].includes(entry.match.family)){
       const sign=entry.calibration?.offsetSign??1
       const offset=cylinderOffset(
         entry.match,frameA,frameB,entry.endpointA,sign,
