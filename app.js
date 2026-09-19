@@ -667,6 +667,51 @@ function detachSelectionConnections(silent = true, preserveV4 = true) {
   return count
 }
 
+let nativeConnectionRevalidationFrame = 0
+
+function revalidateNativeConnectionsNow(reason = 'editor-transform', { emitDetach = true } = {}) {
+  if (!mechanicsNextBuildActive()) return Object.freeze({ handled:false, released:0, reason })
+  const before = uiConnections().length
+  const result = globalThis.BrickLabMechanicsNext?.syncScene?.() ?? null
+  const after = uiConnections().length
+  const released = Math.max(0, before - after)
+  if (released && emitDetach) emitAudioEvent('detach')
+  return Object.freeze({ handled:true, released, reason, result })
+}
+
+function scheduleNativeConnectionRevalidation(reason = 'editor-transform') {
+  if (!mechanicsNextBuildActive()) return false
+  if (nativeConnectionRevalidationFrame) return true
+  nativeConnectionRevalidationFrame = requestAnimationFrame(() => {
+    nativeConnectionRevalidationFrame = 0
+    revalidateNativeConnectionsNow(reason)
+    updateConnectionVisuals()
+    updateProjectStats()
+    connectorGuides()
+    refreshSnap()
+  })
+  return true
+}
+
+function flushNativeConnectionRevalidation(reason = 'editor-transform-release') {
+  if (!mechanicsNextBuildActive()) return Object.freeze({ handled:false, released:0, reason })
+  if (nativeConnectionRevalidationFrame) {
+    cancelAnimationFrame(nativeConnectionRevalidationFrame)
+    nativeConnectionRevalidationFrame = 0
+  }
+  return revalidateNativeConnectionsNow(reason)
+}
+
+function detachPartConnectionsForEdit(object) {
+  if (mechanicsNextBuildActive()) return 0
+  return detachPartConnections(object, true)
+}
+
+function detachSelectionConnectionsForEdit() {
+  if (mechanicsNextBuildActive()) return 0
+  return detachSelectionConnections(true)
+}
+
 function attachSnapConnection(candidate) {
   if (!selected || !candidate || !connectorSnapEnabled) return null
   if (!connectorAvailable(selected, candidate.source) || !connectorAvailable(candidate.targetObject, candidate.target)) return null
@@ -903,9 +948,13 @@ transform.addEventListener('dragging-changed', event => {
 })
 
 transform.addEventListener('objectChange', () => {
-  if (isDragging && selected && !detachedDuringDrag) {
-    detachedDuringDrag = detachPartConnections(selected, true) > 0
-    if (detachedDuringDrag) emitAudioEvent('detach')
+  if (isDragging && selected) {
+    if (mechanicsNextBuildActive()) {
+      scheduleNativeConnectionRevalidation('transform-controls')
+    } else if (!detachedDuringDrag) {
+      detachedDuringDrag = detachPartConnections(selected, true) > 0
+      if (detachedDuringDrag) emitAudioEvent('detach')
+    }
   }
   for (const box of selectionBoxes.values()) box.update()
   updateInspector()
@@ -914,10 +963,21 @@ transform.addEventListener('objectChange', () => {
 })
 
 transform.addEventListener('mouseUp', async () => {
+  let retainedConnection = false
+  if (selected && mechanicsNextBuildActive()) {
+    flushNativeConnectionRevalidation('transform-release')
+    refreshSnap()
+    retainedConnection = connectionsForPart(
+      uiConnections(),
+      selected.userData.instanceId,
+    ).length > 0
+  }
+
   const release = releaseSnapPlan({
     candidate:snapCandidate,
     connectorSnapEnabled,
     gridSnapEnabled,
+    retainedConnection,
   })
   snapCandidate = release.candidate
   if (release.applyGrid) {
@@ -1109,8 +1169,9 @@ function toggleConnectionGraph() {
 
 function resetSelectedRotation() {
   if (!selectedObjects.size || mode !== 'build') return
-  detachSelectionConnections(true)
+  detachSelectionConnectionsForEdit()
   for (const object of selectedObjects) object.rotation.set(0, 0, 0)
+  revalidateNativeConnectionsNow('reset-rotation')
   rebuildSelectionBoxes()
   connectorGuides()
   refreshSnap()
@@ -1122,7 +1183,7 @@ function resetSelectedRotation() {
 
 function resetSelectedPosition() {
   if (!selectedObjects.size || mode !== 'build') return
-  detachSelectionConnections(true)
+  detachSelectionConnectionsForEdit()
   const targets = activeSelection()
   const primary = selected ?? targets[0]
   const primaryOffset = primary ? primary.position.clone() : new THREE.Vector3()
@@ -1131,6 +1192,7 @@ function resetSelectedPosition() {
     if (targets.length === 1) object.position.set(0, 0, 0)
     else object.position.sub(primaryOffset)
   }
+  revalidateNativeConnectionsNow('reset-position')
 
   rebuildSelectionBoxes()
   connectorGuides()
@@ -1143,10 +1205,11 @@ function resetSelectedPosition() {
 
 function rotateSelectedQuarter(direction) {
   if (!selected || mode !== 'build') return
-  detachPartConnections(selected, true)
+  detachPartConnectionsForEdit(selected)
   const axis = ['X', 'Y', 'Z'].includes(transform.axis) ? transform.axis.toLowerCase() : 'y'
   selected.rotation[axis] += direction * Math.PI / 2
   if (gridSnapEnabled) snapGrid()
+  revalidateNativeConnectionsNow('quarter-rotate')
   rebuildSelectionBoxes()
   connectorGuides()
   refreshSnap()
@@ -1254,10 +1317,11 @@ function updateInspector() {
   $$('[data-pos]').forEach(input => {
     input.onchange = () => {
       if (!selected) return
-      detachPartConnections(selected, true)
+      detachPartConnectionsForEdit(selected)
       const n = Number(input.value)
       if (Number.isFinite(n)) selected.position[input.dataset.pos] = n
       snapGrid()
+      revalidateNativeConnectionsNow('inspector-position')
       rebuildSelectionBoxes()
       connectorGuides()
       refreshSnap()
@@ -1274,6 +1338,7 @@ function updateInspector() {
       const n = Number(input.value.replace('°', ''))
       if (Number.isFinite(n)) selected.rotation[input.dataset.rot] = THREE.MathUtils.degToRad(n)
       snapGrid()
+      revalidateNativeConnectionsNow('inspector-rotation')
       rebuildSelectionBoxes()
       connectorGuides()
       refreshSnap()
