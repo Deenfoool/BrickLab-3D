@@ -150,11 +150,41 @@ function finalizeNativeConnectors(file,connectors=[]){
   return Object.freeze(result)
 }
 
-async function fetchTextOrNull(url){
-  const response=await fetch(url,{mode:'cors',cache:'force-cache'})
-  if(response.status===404)return null
-  if(!response.ok)throw new Error(`HTTP ${response.status}: ${url}`)
-  return response.text()
+export function createCachedShadowTextFetcher({
+  fetchImpl=globalThis.fetch,
+  cachesImpl=globalThis.caches,
+  cacheName=`bricklab-shadow-${NATIVE_SHADOW_SOURCE.commit}`,
+}={}){
+  if(typeof fetchImpl!=='function')throw new TypeError('Shadow text fetcher requires fetch')
+  let cachePromise=null
+  const cacheStore=async()=>{
+    if(!cachesImpl?.open)return null
+    if(!cachePromise){
+      cachePromise=Promise.resolve(cachesImpl.open(cacheName)).catch(()=>null)
+    }
+    return cachePromise
+  }
+  return async url=>{
+    const cache=await cacheStore()
+    if(cache?.match){
+      try{
+        const cached=await cache.match(url)
+        if(cached?.ok)return cached.text()
+      }catch{}
+    }
+
+    const response=await fetchImpl(url,{mode:'cors',cache:'force-cache'})
+    if(response.status===404)return null
+    if(!response.ok)throw new Error(`HTTP ${response.status}: ${url}`)
+    const text=await response.text()
+
+    if(cache?.put&&typeof response.clone==='function'){
+      try{
+        await cache.put(url,response.clone())
+      }catch{}
+    }
+    return text
+  }
 }
 
 export function createNativeConnectivityProvider({
@@ -167,7 +197,8 @@ export function createNativeConnectivityProvider({
   if(typeof ldraw?.readText!=='function')throw new TypeError('Native connectivity provider requires BrickLabLDraw.readText')
 
   const shadowRoot=`https://raw.githubusercontent.com/${NATIVE_SHADOW_SOURCE.repository}/${NATIVE_SHADOW_SOURCE.commit}/`
-  const readShadow=fetchShadowText??(path=>fetchTextOrNull(shadowRoot+encoded(path)))
+  const cachedShadowFetch=createCachedShadowTextFetcher()
+  const readShadow=fetchShadowText??(path=>cachedShadowFetch(shadowRoot+encoded(path)))
   const shadow=createNativeShadowResolver({fetchShadowText:readShadow})
   const resolver=createNativeLDrawInheritanceResolver({
     fetchOfficialText:async path=>{
