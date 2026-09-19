@@ -954,8 +954,25 @@ export function createMechanicsNextRuntime({
           })
         },
         async setWorldPose(record,pose){
-          object.position.fromArray(pose.position)
-          object.quaternion.fromArray(pose.quaternion).normalize()
+          const parent=object.parent
+          parent?.updateWorldMatrix?.(true,false)
+
+          if(parent?.worldToLocal&&object.position?.clone){
+            const localPosition=object.position.clone().fromArray(pose.position)
+            parent.worldToLocal(localPosition)
+            object.position.copy(localPosition)
+          }else{
+            object.position.fromArray(pose.position)
+          }
+
+          if(parent?.getWorldQuaternion&&object.quaternion?.clone){
+            const desiredWorld=object.quaternion.clone().fromArray(pose.quaternion).normalize()
+            const parentWorld=object.quaternion.clone()
+            parent.getWorldQuaternion(parentWorld)
+            object.quaternion.copy(parentWorld.invert().multiply(desiredWorld)).normalize()
+          }else{
+            object.quaternion.fromArray(pose.quaternion).normalize()
+          }
           object.updateMatrixWorld?.(true)
         },
         async restore(record,snapshot){
