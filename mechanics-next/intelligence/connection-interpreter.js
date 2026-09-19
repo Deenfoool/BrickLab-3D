@@ -524,6 +524,27 @@ export function interpretObservedConnection(record, {
     })
   }
 
+  const contactBundle=record?.metadata?.contactBundle??null
+  if(contactBundle?.kind==='stud-bundle'&&
+     Number(contactBundle?.contactCount)>=2&&
+     resolved.rule?.topology?.bundleCanBecomeRigid===true){
+    resolved.rule=Object.freeze({
+      ...resolved.rule,
+      kind:'fixed',
+      topology:Object.freeze({
+        ...resolved.rule.topology,
+        dof:constraintDof('fixed'),
+        retained:true,
+        bundleCanBecomeRigid:true,
+        contactBundleKind:'stud-bundle',
+      }),
+      dynamics:Object.freeze({
+        ...resolved.rule.dynamics,
+        multiContactRigid:true,
+      }),
+    })
+  }
+
   const objectA = objectById(record.a.instanceId)
   const objectB = objectById(record.b.instanceId)
   const worldFrameA = worldFrame(objectA, endpointA)
@@ -670,6 +691,7 @@ export function interpretObservedConnection(record, {
       steeringRack,
       legacyMatchFamily:record?.match?.family ?? null,
       occupancy:record?.occupancy ?? null,
+      contactBundle,
       axisPolarity,
       endpointWorldAxes:Object.freeze({
         a:Object.freeze([...worldFrameA.axis]),
