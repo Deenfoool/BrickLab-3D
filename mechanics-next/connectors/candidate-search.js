@@ -138,10 +138,10 @@ function solvedPose(candidate){
   })
 }
 
-function countMultiContactSupport(candidate,frameCache){
+function collectMultiContactSupport(candidate,frameCache){
   const moving=candidate.moving,targetRecord=candidate.targetRecord
   const moved={...moving,pose:solvedPose(candidate)}
-  let support=0
+  const supports=[]
   const usedTargets=new Set()
 
   for(const source of moving.instance.endpoints){
@@ -161,14 +161,24 @@ function countMultiContactSupport(candidate,frameCache){
       if(distance>SUPPORT_POSITION_EPS)continue
       const alignment=Math.abs(dot3(norm3(sourceFrame.axis),norm3(targetFrame.axis)))
       if(!match.freeOrientation&&alignment<SUPPORT_AXIS_DOT)continue
-      if(!best||distance<best.distance)best={target,distance}
+      if(!best||distance<best.distance)best={source,target,match,distance,alignment}
     }
     if(best){
       usedTargets.add(best.target.id)
-      support+=1
+      supports.push(Object.freeze(best))
     }
   }
-  return Math.max(1,support)
+
+  if(!supports.length){
+    supports.push(Object.freeze({
+      source:candidate.source,
+      target:candidate.target,
+      match:candidate.match,
+      distance:0,
+      alignment:Math.abs(candidate.alignment??1),
+    }))
+  }
+  return Object.freeze(supports)
 }
 
 export function findMechanicalCandidates({
@@ -229,13 +239,21 @@ export function findMechanicalCandidates({
   const analysis=Math.min(results.length,Math.max(0,Math.floor(supportAnalysisLimit)))
   for(let index=0;index<analysis;index+=1){
     const candidate=results[index]
-    candidate.supportCount=countMultiContactSupport(candidate,frameCache)
+    candidate.supportPairs=collectMultiContactSupport(candidate,frameCache)
+    candidate.supportCount=candidate.supportPairs.length
+    candidate.occupancyPlan=occupancyPlanForPlacement(candidate,{connectionId:candidate.key})
+    candidate.occupancy=options.occupancy?.canReserve
+      ?options.occupancy.canReserve(candidate.occupancyPlan)
+      :Object.freeze({accepted:true,conflicts:Object.freeze([])})
+    candidate.rejectedBySupportOccupancy=
+      candidate.occupancy.accepted===false&&!options.includeOccupied
     candidate.score=candidateScore(candidate,options)
   }
-  results.sort(compareCandidates)
+  const viable=results.filter(candidate=>candidate.rejectedBySupportOccupancy!==true)
+  viable.sort(compareCandidates)
 
-  const limit=Number.isFinite(maxResults)?Math.max(1,Math.floor(maxResults)):results.length
-  return Object.freeze(results.slice(0,limit).map(candidate=>Object.freeze(candidate)))
+  const limit=Number.isFinite(maxResults)?Math.max(1,Math.floor(maxResults)):viable.length
+  return Object.freeze(viable.slice(0,limit).map(candidate=>Object.freeze(candidate)))
 }
 
 export function findBestMechanicalCandidate(options={}){
