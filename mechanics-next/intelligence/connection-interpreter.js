@@ -6,6 +6,7 @@ import { semanticInterfaceVariants } from './interface-variants.js'
 import { rigidPoseFromMatrix4 } from '../math/rigid.js'
 import { worldConnectorFrame } from '../connectors/world-frame.js'
 import { validateStudContactBundle } from '../connectors/contact-bundle.js'
+import { matchMechanicalEndpoints } from '../connectors/profile-matcher.js'
 
 function evidenceConfidence(tier) {
   if (tier === 'A') return 'verified'
@@ -374,6 +375,22 @@ function resolveRule(endpointA, endpointB, {
       if (rule) return { kindA, kindB, rule, interfacePair:[a,b] }
     }
   }
+
+  const profileMatch=matchMechanicalEndpoints(endpointA,endpointB,{
+    classificationA,
+    classificationB,
+  })
+  if(profileMatch?.compatible&&profileMatch?.interfaceRule){
+    return {
+      kindA,
+      kindB,
+      rule:profileMatch.interfaceRule,
+      interfacePair:profileMatch.interfacePair??['profile','profile'],
+      special:null,
+      profileDerived:true,
+    }
+  }
+
   return { kindA, kindB, rule:null, interfacePair:null, special:null }
 }
 
