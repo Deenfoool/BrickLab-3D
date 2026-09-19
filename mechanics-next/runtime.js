@@ -825,6 +825,15 @@ export function createMechanicsNextRuntime({
     mechanicalInstance(instanceId) {
       return sceneObserver?.instance(instanceId) ?? null
     },
+    endpointWorldFrame(instanceId, endpointId) {
+      const record=mechanicalRecords().find(item=>
+        String(item.instance?.body?.instanceId||'')===String(instanceId||''))
+      const endpoint=record?.instance?.endpoints?.find(item=>String(item.id)===String(endpointId||''))
+      if(!record||!endpoint)return null
+      return worldConnectorFrame(record.pose,endpoint,{
+        visualOffsetStud:record.visualOffsetStud||[0,0,0],
+      })
+    },
     records:mechanicalRecords,
     solveKinematics(options = {}) {
       return transmissionCompiler.solve(options)

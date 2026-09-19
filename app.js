@@ -12,6 +12,7 @@ import {
   removeConnectionsForPart,
 } from './connections.js'
 import { PhysicsSession } from './physics.js'
+import { releaseSnapPlan } from './mechanics-next/interaction/release-snap.js'
 
 const $ = selector => document.querySelector(selector)
 const $$ = selector => [...document.querySelectorAll(selector)]
@@ -361,6 +362,19 @@ function connectorAvailable(object, connector) {
   return !isEndpointOccupied(connections, object.userData.instanceId, connector.id)
 }
 
+function nativeEndpointsForObject(object) {
+  if (!object || !mechanicsNextBuildActive()) return []
+  return globalThis.BrickLabMechanicsNext?.mechanicalInstance?.(
+    object.userData.instanceId,
+  )?.endpoints ?? []
+}
+
+function nativeEndpointAvailable(object, endpoint) {
+  return !uiConnections().some(connection =>
+    (connection.a.instanceId === object.userData.instanceId && connection.a.endpointId === endpoint.id) ||
+    (connection.b.instanceId === object.userData.instanceId && connection.b.endpointId === endpoint.id))
+}
+
 function mechanicsNextBuildActive() {
   return globalThis.BrickLabMechanicsNextBuildOwner?.active === true &&
     globalThis.BrickLabMechanicsNext?.nativeProjectAuthoritative?.() === true
@@ -447,11 +461,21 @@ function updateConnectionVisuals() {
 
   for (const connection of uiConnections()) {
     const object = objectByInstanceId(connection.a.instanceId)
-    const connector = connectorById(object, connection.a.connectorId)
-    if (!object || !connector) continue
+    if (!object) continue
+
+    const nativePosition = mechanicsNextBuildActive()
+      ? globalThis.BrickLabMechanicsNext?.endpointWorldFrame?.(
+          connection.a.instanceId,
+          connection.a.endpointId,
+        )?.position
+      : null
+    const connector = nativePosition ? null : connectorById(object, connection.a.connectorId)
+    if (!nativePosition && !connector) continue
 
     const marker = new THREE.Mesh(connectionMarkerGeometry, connectionMarkerMaterial)
-    marker.position.copy(connectorWorldPosition(object, connector))
+    marker.position.copy(nativePosition
+      ? new THREE.Vector3().fromArray(nativePosition)
+      : connectorWorldPosition(object, connector))
     marker.renderOrder = 11
     connectionRoot.add(marker)
   }
@@ -460,6 +484,25 @@ function updateConnectionVisuals() {
 function connectorGuides() {
   connectorRoot.clear()
   if (!selected || mode !== 'build' || !connectorGuidesVisible) return
+
+  const nativeEndpoints = nativeEndpointsForObject(selected)
+  if (nativeEndpoints.length) {
+    for (const endpoint of nativeEndpoints) {
+      const position = globalThis.BrickLabMechanicsNext?.endpointWorldFrame?.(
+        selected.userData.instanceId,
+        endpoint.id,
+      )?.position
+      if (!position) continue
+      const point = new THREE.Mesh(
+        connectorGeometry,
+        nativeEndpointAvailable(selected, endpoint) ? freeConnectorMaterial : occupiedConnectorMaterial,
+      )
+      point.position.fromArray(position)
+      point.renderOrder = 10
+      connectorRoot.add(point)
+    }
+    return
+  }
 
   const def = findPart(selected.userData.partId)
   for (const connector of def?.connectors ?? []) {
@@ -829,8 +872,16 @@ transform.addEventListener('objectChange', () => {
 })
 
 transform.addEventListener('mouseUp', async () => {
-  snapGrid()
-  refreshSnap()
+  const release = releaseSnapPlan({
+    candidate:snapCandidate,
+    connectorSnapEnabled,
+    gridSnapEnabled,
+  })
+  snapCandidate = release.candidate
+  if (release.applyGrid) {
+    snapGrid()
+    refreshSnap()
+  }
 
   if (selected && snapCandidate && connectorSnapEnabled) {
     if (snapCandidate.owner === 'mechanics-next') {
@@ -1117,13 +1168,17 @@ function updateInspector() {
 
   const def = findPart(selected.userData.partId)
   const partConnections = connectionsForPart(uiConnections(), selected.userData.instanceId)
-  const usedConnectors = (def?.connectors ?? []).filter(connector => !connectorAvailable(selected, connector)).length
+  const nativeEndpoints = nativeEndpointsForObject(selected)
+  const connectorCount = nativeEndpoints.length || def?.connectors?.length || 0
+  const usedConnectors = nativeEndpoints.length
+    ? nativeEndpoints.filter(endpoint => !nativeEndpointAvailable(selected, endpoint)).length
+    : (def?.connectors ?? []).filter(connector => !connectorAvailable(selected, connector)).length
   const selectedExtra = Math.max(0, selectedObjects.size - 1)
 
   $('#selectedName').textContent = def?.name ?? 'Unknown part'
   $('#selectedId').textContent = `${selected.userData.instanceId.slice(0, 8)}${selectedExtra ? ` · +${selectedExtra} selected` : ''}`
   $('#selectedIcon').textContent = def?.icon ?? '◇'
-  $('#connectorState').textContent = `${usedConnectors} / ${def?.connectors?.length ?? 0}`
+  $('#connectorState').textContent = `${usedConnectors} / ${connectorCount}`
   $('#connectionState').textContent = String(partConnections.length)
   $('#disconnectBtn').disabled = connectionsForSelection().length === 0
 
