@@ -179,8 +179,16 @@ function includeCandidates(ref, parentPath) {
   const value = normalizePath(ref)
   if (/^(?:parts|p)\//.test(value)) return [value]
   if (/^s\//.test(value)) return [`parts/${value}`, value]
+  if (/^(?:48|8)\//.test(value)) return [`p/${value}`, value]
   const directory = parentPath.includes('/') ? parentPath.slice(0, parentPath.lastIndexOf('/') + 1) : ''
-  return [...new Set([normalizePath(directory + value), value, `parts/${value}`])]
+  const libraryRoots = parentPath.startsWith('p/')
+    ? [`p/${value}`, `parts/${value}`]
+    : [`parts/${value}`, `p/${value}`]
+  return [...new Set([
+    normalizePath(directory + value),
+    ...libraryRoots.map(normalizePath),
+    value,
+  ])]
 }
 
 export function createNativeShadowResolver({
