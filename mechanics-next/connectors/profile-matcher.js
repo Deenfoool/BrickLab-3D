@@ -247,15 +247,25 @@ function genericMatch(a,b,context={}){
   if(group(a)!==group(b))return{compatible:false,reason:'group'}
   const mode=genericMode(a,b)
   if(!boundingCompatible(a?.profile?.bounding,b?.profile?.bounding,mode))return{compatible:false,reason:`generic-${mode}`}
+  const semantic=intendedInterfaceRule(a,b,context)
+  const ballSocket=semantic.pair?.includes?.('ball')&&semantic.pair?.includes?.('socket')
+  if(ballSocket){
+    const ba=a?.profile?.bounding,bb=b?.profile?.bounding
+    if(ba?.kind!=='sphere'||bb?.kind!=='sphere'||!approx(ba.radiusLdu,bb.radiusLdu)){
+      return{compatible:false,reason:'ball-socket-radius'}
+    }
+  }
   const pa=String(a?.metadata?.snap?.placement||'aligned').toLowerCase()
   const pb=String(b?.metadata?.snap?.placement||'aligned').toLowerCase()
   const free=pa==='free'||pb==='free'
   const retained=pa==='retain'||pb==='retain'
   return{
-    compatible:true,family:'generic',reason:`generic-${mode}`,matchMode:mode,
+    compatible:true,family:'generic',reason:ballSocket?'generic-ball-socket':`generic-${mode}`,matchMode:mode,
     keyed:!(free||retained),rotationalSymmetry:free||retained?Infinity:1,
     freeOrientation:free,retainOrientation:retained,freeTwist:free||retained,
     requiresAxialFit:false,
+    interfaceRule:semantic.rule,interfacePair:semantic.pair,
+    semanticA:semantic.semanticA,semanticB:semantic.semanticB,
   }
 }
 function sphereMatch(a,b,context={}){
