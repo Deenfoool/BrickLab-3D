@@ -628,6 +628,8 @@ test('shadow interpreter derives keyed prismatic axle coupling independently of 
   assert.equal(result.constraint.kind, 'prismatic')
   assert.equal(result.constraint.dof.ty.state, 'free')
   assert.equal(result.constraint.dof.ry.state, 'locked')
+  assert.ok(Number.isFinite(result.constraint.metadata.connectionGeometry.twistPhaseRad))
+  assert.ok(Math.abs(result.constraint.metadata.connectionGeometry.twistPhaseRad) < 1e-10)
 })
 
 test('two observed stud contacts become a rigid island through geometric bundle solving', () => {
