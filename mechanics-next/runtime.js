@@ -381,6 +381,24 @@ export function createMechanicsNextRuntime({
     endpoint?.metadata?.builtinConnectorId ??
     endpoint?.id
 
+  const contactBundleFromCandidate=candidate=>{
+    const contacts=(candidate?.supportPairs||[]).filter(pair=>{
+      const values=new Set(pair?.match?.interfacePair||[])
+      return values.has('stud')&&values.has('anti-stud')
+    })
+    if(contacts.length<2)return null
+    return Object.freeze({
+      kind:'stud-bundle',
+      contactCount:contacts.length,
+      contacts:Object.freeze(contacts.map(pair=>Object.freeze({
+        sourceEndpointId:String(endpointObservedId(pair.source)),
+        targetEndpointId:String(endpointObservedId(pair.target)),
+        sourceSemantic:endpointSemanticKind(pair.source),
+        targetSemantic:endpointSemanticKind(pair.target),
+      }))),
+    })
+  }
+
   const recordFromCandidate=candidate=>Object.freeze({
     id:String(candidate.key),
     kind:candidate.match?.interfaceRule?.kind??'generic',
@@ -408,6 +426,7 @@ export function createMechanicsNextRuntime({
       mechanicsNextNative:true,
       candidateKey:candidate.key,
       supportCount:candidate.supportCount??1,
+      contactBundle:contactBundleFromCandidate(candidate),
     }),
   })
 
