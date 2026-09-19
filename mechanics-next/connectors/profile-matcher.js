@@ -72,6 +72,7 @@ function intendedInterfaceRule(a,b) {
     if (kind==='technic-axle-hole') return ['axle-hole']
     if (kind==='technic-round-hole') return ['round-hole']
     if (kind==='technic-pin') return ['technic-pin']
+    if (kind==='technic-axle-pin') return ['technic-pin','axle']
     if (kind==='technic-pin-hole') return ['technic-hole','round-hole']
     if (kind==='bar') return ['bar']
     if (kind==='bar-hole') return ['round-hole']
