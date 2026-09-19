@@ -2,6 +2,7 @@ import { deterministicId, evidence } from '../core/model.js'
 import { constraintDof, createConstraint, dofEntry } from '../constraints/dof.js'
 import { endpointSemanticKind } from './endpoint-semantics.js'
 import { mechanicalInterfaceRule } from './interface-rules.js'
+import { semanticInterfaceVariants } from './interface-variants.js'
 import { rigidPoseFromMatrix4 } from '../math/rigid.js'
 import { worldConnectorFrame } from '../connectors/world-frame.js'
 
@@ -20,42 +21,6 @@ function endpointByLegacyId(instance, endpointId) {
     endpoint?.metadata?.sourceEndpointId === endpointId ||
     endpoint?.metadata?.templateKey === endpointId
   ) ?? null
-}
-
-function variants(kind, legacyMatch = null) {
-  if (kind === 'technic-axle') return ['axle']
-  if (kind === 'technic-axle-hole') return ['axle-hole']
-  if (kind === 'technic-round-hole') return ['round-hole']
-  if (kind === 'technic-pin') return ['technic-pin']
-  if (kind === 'technic-pin-hole') return ['technic-hole','round-hole']
-  if (kind === 'bar') return ['bar']
-  if (kind === 'bar-hole') return ['round-hole']
-  if (kind === 'stud') return ['stud']
-  if (kind === 'anti-stud') return ['anti-stud']
-  if (kind === 'ball') return ['ball']
-  if (kind === 'socket') return ['socket']
-  if (kind === 'ball-socket') return ['ball','socket']
-  if (kind === 'clip') return ['clip']
-  if (kind === 'hinge-fingers') return ['hinge','fingers']
-  if (kind === 'click-hinge') return ['click-hinge','fingers']
-  if (kind === 'turntable-bearing') return ['turntable']
-  if (kind === 'steering-pivot') return ['steering-pivot']
-  if (kind === 'linear-guide' || kind === 'rack-guide') return ['linear-guide']
-  if (kind === 'linear-actuator-guide') return ['linear-actuator-guide']
-  if (kind === 'pneumatic-cylinder-guide') return ['pneumatic-cylinder-guide']
-  if (kind === 'engine-slider') return ['engine-slider']
-  if (kind === 'wheel-retainer') return ['wheel-retainer']
-  if (kind === 'driving-ring') return ['driving-ring']
-  if (kind === 'wheel-axle-interface') return ['axle-hole']
-
-  if (kind === 'technic-axle-pin') {
-    const family = String(legacyMatch?.family || '')
-    if (/keyed|axle-keyed/.test(family)) return ['axle']
-    if (/pin-hole/.test(family)) return ['technic-pin']
-    if (/round-hole/.test(family)) return ['axle']
-    return ['axle','technic-pin']
-  }
-  return [kind]
 }
 
 function specialRelation(kindA, kindB) {
@@ -402,8 +367,8 @@ function resolveRule(endpointA, endpointB, {
     }
   }
 
-  for (const a of variants(kindA, match)) {
-    for (const b of variants(kindB, match)) {
+  for (const a of semanticInterfaceVariants(kindA,{endpoint:endpointA,match})) {
+    for (const b of semanticInterfaceVariants(kindB,{endpoint:endpointB,match})) {
       const rule = mechanicalInterfaceRule(a, b)
       if (rule) return { kindA, kindB, rule, interfacePair:[a,b] }
     }
