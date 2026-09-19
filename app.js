@@ -1334,7 +1334,7 @@ function updateInspector() {
   $$('[data-rot]').forEach(input => {
     input.onchange = () => {
       if (!selected) return
-      detachPartConnections(selected, true)
+      detachPartConnectionsForEdit(selected)
       const n = Number(input.value.replace('°', ''))
       if (Number.isFinite(n)) selected.rotation[input.dataset.rot] = THREE.MathUtils.degToRad(n)
       snapGrid()
