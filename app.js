@@ -735,7 +735,7 @@ function projectState() {
       rotation: [object.rotation.x, object.rotation.y, object.rotation.z],
       mechanismPose: object.userData.mechanismPose ? cloneState(object.userData.mechanismPose) : undefined,
     })),
-    connections: cloneState(connections),
+    connections: mechanicsNextBuildActive() ? [] : cloneState(connections),
     mechanicsNext:globalThis.__bricklabPendingMechanicsNextProject
       ? cloneState(globalThis.__bricklabPendingMechanicsNextProject)
       : globalThis.BrickLabMechanicsNext?.exportProjectState?.() ?? undefined,
@@ -853,7 +853,10 @@ function applyProject(data, { reset = false, persist = true } = {}) {
     console.warn('[BrickLab Mechanics Next] Native project restore deferred to editor binding.', error)
   }
   const usedEndpoints = new Set()
-  for (const connection of Array.isArray(data.connections) ? data.connections : []) {
+  const compatibilityConnections = data.mechanicsNext
+    ? []
+    : (Array.isArray(data.connections) ? data.connections : [])
+  for (const connection of compatibilityConnections) {
     if (connectionIsValid(connection, usedEndpoints)) connections.push(cloneState(connection))
   }
 
@@ -931,9 +934,6 @@ transform.addEventListener('mouseUp', async () => {
     } else if (snapCandidate.owner === 'mechanics-next') {
       const result = await globalThis.BrickLabMechanicsNext?.commitCandidate?.(snapCandidate.native)
       const connection = result?.accepted ? result.record : null
-      if (connection && !connections.some(item => item.id === connection.id)) {
-        connections.push(cloneState(connection))
-      }
       if (!connection) {
         emitAudioEvent('incompatible', { cooldown: 400 })
         if (result?.reason) console.info('[BrickLab Mechanics Next] Native snap rejected.', result)
