@@ -16,3 +16,18 @@ Stage 12 removes the remaining legacy runtime owners and leaves Mechanics Next a
 - Blank-project browser smoke: SIMULATE entered with 0 bodies/0 joints and returned to `BUILD MODE · 0 parts · 0 connections · Mechanics Next`; an empty graph keeps KINEMATICS fail-closed at its migration gate.
 
 Historical Connector V4 project records remain readable through a one-way import boundary. New saves omit `connectionsV4` and serialize canonical `mechanicsNext` state.
+
+
+## Post-completion editor snap fix
+
+After Stage 12 completion, the normal editor drag path exposed a gap that the direct browser fixture did not cover: structural editor edits could update the Three.js scene without synchronizing Mechanics Next scene membership immediately. A newly added or duplicated part could therefore be visible in BUILD while native candidate search still had no observer record for it.
+
+Fixed after the Stage 12 gate:
+
+- `app.js` now synchronizes Mechanics Next and schedules native BUILD handoff after add/remove/duplicate structural edits;
+- `mechanicalInstance()` self-heals missing observer membership;
+- `findCandidate()` self-heals the selected moving instance before native snap search;
+- `tests/mechanics-next-editor-scene-sync.test.mjs` locks the editor-to-native snap wiring;
+- the earlier release policy still gives connector snap priority over grid snap at mouse release.
+
+These changes are post-Stage-12 correctness fixes; the full browser/release gate recorded above refers to the Stage 12 completion SHA, not the later editor snap wiring commits.
