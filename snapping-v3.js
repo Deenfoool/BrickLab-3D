@@ -207,7 +207,7 @@ function gearDescriptor(object) {
   }
 }
 
-function findGearSnapCandidate(selected, objects) {
+export function findGearSnapCandidate(selected, objects) {
   const moving = gearDescriptor(selected)
   if (!moving) return null
 
