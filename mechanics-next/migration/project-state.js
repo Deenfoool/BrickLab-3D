@@ -56,6 +56,7 @@ export function exportMechanicsProjectState({
       dynamics:clone(edge.metadata?.dynamics??null),
       geometry:clone(edge.metadata?.connectionGeometry??null),
       occupancy:clone(edge.metadata?.occupancy??null),
+      contactBundle:clone(edge.metadata?.contactBundle??null),
       evidence:clone(edge.evidence??null),
     }))
   }
@@ -226,6 +227,7 @@ export function restoreMechanicsProjectState(state,{
         metadata:{
           restoredFromSchema:MECHANICS_PROJECT_SCHEMA_VERSION,
           connectionGeometry:clone(record.geometry??null),
+          contactBundle:clone(record.contactBundle??null),
         },
       }
       const interpretation=interpretObservedConnection(observedRecord,{
@@ -256,6 +258,7 @@ export function restoreMechanicsProjectState(state,{
             record.geometry??current.metadata?.connectionGeometry??null,
           ),
           occupancy:clone(record.occupancy),
+          contactBundle:clone(record.contactBundle??current.metadata?.contactBundle??null),
           restoredFromSchema:MECHANICS_PROJECT_SCHEMA_VERSION,
           persistedConstraintKind:record.kind,
         },
