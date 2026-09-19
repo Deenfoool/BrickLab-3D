@@ -34,14 +34,10 @@ function ldrawDef(code, { connectors=[], confidence='unknown', mechanicalClass='
 
 function makeApi({ parts, objects, legacyConnections=[], v4Records=[], drivetrain=null }={}) {
   const byId = new Map(parts.map(part => [part.id,part]))
-  const connectorRuntime = {
-    projectConnections:() => v4Records,
-    audit:() => null,
-    getConnector:() => null,
-    reconcileGraph:() => ({}),
-    objects:() => objects,
+  const globals = {
+    BrickLabMechanicsNextBuildOwner:{active:true,authoritative:()=>true},
+    BrickLabMechanicsNext:{projectConnections:() => v4Records,syncScene:() => ({})},
   }
-  const globals = { BrickLabConnectorV4:connectorRuntime }
   const api = createBrickLabSubsystemApi({
     listParts:() => parts,
     findPart:id => byId.get(id) ?? null,
@@ -171,9 +167,8 @@ test('production Design Doctor mounts lazily and defaults to quiet non-invasive 
   assert.doesNotMatch(runtime, /BoxHelper|scene\.add\(/, 'Doctor visuals must not enter the scene/collider object tree')
   assert.doesNotMatch(runtime, /setInterval/, 'Doctor must remain event-driven')
   assert.match(engine, /FrameBudgetScheduler/)
-  assert.match(engine, /buildPhysicsPlanV4/)
-  assert.match(engine, /hardenPhysicsPlanV4/)
-  assert.match(engine, /drivetrainSemanticLinksV4/)
+  assert.match(engine, /BrickLabMechanicsNext\?\.physicsPreview/)
+  assert.doesNotMatch(engine, /buildPhysicsPlanV4|hardenPhysicsPlanV4|drivetrainSemanticLinksV4/)
   assert.match(css, /top:58px/)
   assert.match(css, /width:16px;height:16px/)
 })

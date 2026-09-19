@@ -95,12 +95,12 @@ test('persistent JSON cache survives a new cache instance and expires stale reco
   assert.equal(await second.get('3001.dat'),null,'TTL prevents stale parsed metadata from surviving indefinitely')
 })
 
-test('production SNAP bridge asks Performance Engine for local targets before legacy candidate work',async()=>{
-  const source=await readFile(new URL('../connectors-v4/snapping-bridge-v4.js',import.meta.url),'utf8')
-  const spatial=source.indexOf('performanceTargets(selected,objects,options)')
-  const legacy=source.indexOf('V3.findSnapCandidate(selected, targets, options)')
-  assert.ok(spatial>=0 && legacy>spatial)
-  assert.match(source,/connectorTargets=spatial\?\.connectorObjects \?\? targets/)
+test('production BUILD routes authoritative snapping through Mechanics Next',async()=>{
+  const source=await readFile(new URL('../app.js',import.meta.url),'utf8')
+  assert.match(source,/mechanicsNextBuildActive\(\)/)
+  assert.match(source,/BrickLabMechanicsNext\?\.findCandidate/)
+  assert.match(source,/BrickLabMechanicsNext\?\.commitCandidate/)
+  assert.doesNotMatch(source,/commitActiveCandidate/)
 })
 
 test('production import map canonicalizes Performance Engine and routes catalog metadata through persistent cache',async()=>{

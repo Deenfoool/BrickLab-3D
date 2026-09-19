@@ -53,7 +53,7 @@ test('all local production imports resolve to one cache-busted URL', async () =>
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8')
   const {imports} = JSON.parse(html.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1])
   const entry = html.match(/src="\.\/bootstrap.js\?v=([^"]+)/)[1]
-  const aliases = {'connections.js':'connectors-v4/connections-bridge-v4.js','snapping.js':'connectors-v4/snapping-bridge-v4.js','connector-validation.js':'connector-validation-v3.js'}
+  const aliases = {'connections.js':'connections-v3.js','snapping.js':'snapping-v3.js','connector-validation.js':'connector-validation-v3.js'}
   for (const name of (await readdir(new URL('../', import.meta.url))).filter(n=>n.endsWith('.js'))) {
     assert.equal(imports[`./${name}`], `./${aliases[name] ?? name}?v=${entry}`, name)
     const code = await readFile(new URL(`../${name}`, import.meta.url), 'utf8')

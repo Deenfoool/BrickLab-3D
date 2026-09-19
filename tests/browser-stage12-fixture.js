@@ -57,7 +57,7 @@ export async function configurePackages(){
   editor.createNew()
   for(const o of [...editor.objects()])root.remove(o)
   m.clearProjectState({keepAuthority:false})
-  BrickLabConnectorV4.clearGraph()
+  globalThis.BrickLabConnectorV4?.clearGraph?.()
   m.compoundDecompositions.clear()
   m.syncScene()
   if(!m.adoptNativeProjectOwnership().accepted)throw Error('Empty native BUILD handoff failed')

@@ -39,7 +39,7 @@ Rigid Islands  Constraint Graph
 ## Non-negotiable invariants
 
 1. **One owner per subsystem.** Snapping, graph mutation, kinematics, persistence and physics each have exactly one active owner.
-2. **Legacy is read-only from Mechanics Next.** Only `adapters/legacy-v4-readonly.js` may inspect Connector V4 state. New core modules never import legacy modules.
+2. **Legacy is import-only.** Historical `connectionsV4` payloads enter through the Mechanics Next project migration boundary; the live engine has no Connector V4 dependency.
 3. **Mechanical state is not Three.js state.** Meshes are views of bodies; they are not the source of mechanical truth.
 4. **Six degrees of freedom are explicit.** Every constraint resolves Tx/Ty/Tz/Rx/Ry/Rz to locked, free, limited or driven.
 5. **Constraints compose.** Multiple joints are intersected. Impossible intersections become diagnostics instead of silent overrides.

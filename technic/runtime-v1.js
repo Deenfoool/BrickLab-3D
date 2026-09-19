@@ -45,21 +45,23 @@ function definitionOf(value) {
   return value
 }
 
-function v4() { return globalThis.BrickLabConnectorV4 ?? null }
-
 function profile(value) {
   const definition = definitionOf(value)
   return technicPartProfileV1(definition || (typeof value === 'string' ? { id:value } : value || {}))
 }
 
+function connector(partId, endpointId) {
+  return definitionOf(partId)?.connectivityV4?.connectors?.find(item => item.endpointId === endpointId) ?? null
+}
+
 function endpoint(partId, endpointId) {
-  const connector = v4()?.getConnector?.(partId, endpointId) ?? null
-  return connector ? classifyTechnicEndpointV1(connector) : null
+  const connectorRecord = connector(partId, endpointId)
+  return connectorRecord ? classifyTechnicEndpointV1(connectorRecord) : null
 }
 
 function connection(record) {
-  const connectorA = record?.a ? v4()?.getConnector?.(record.a.partId, record.a.endpointId) : null
-  const connectorB = record?.b ? v4()?.getConnector?.(record.b.partId, record.b.endpointId) : null
+  const connectorA = record?.a ? connector(record.a.partId, record.a.endpointId) : null
+  const connectorB = record?.b ? connector(record.b.partId, record.b.endpointId) : null
   if (!connectorA || !connectorB) return null
   return classifyTechnicConnectionV1(connectorA, connectorB, {
     activationFamily:record?.activation?.family || record?.metadata?.activation?.family || null,
@@ -67,20 +69,19 @@ function connection(record) {
 }
 
 function analyze({ objects = null, connections = null, drivetrain = null } = {}) {
-  const runtime = v4()
-  const sceneObjects = objects ?? runtime?.objects?.() ?? []
-  const records = connections ?? runtime?.projectConnections?.() ?? []
+  const sceneObjects = objects ?? globalThis.BrickLabSubsystems?.editor?.objects?.() ?? []
+  const records = connections ?? globalThis.BrickLabMechanicsNext?.projectConnections?.() ?? []
   return analyzeTechnicAssemblyV1({
     objects:sceneObjects,
     connections:records,
     getDefinition:findPart,
-    getConnector:(partId, endpointId) => runtime?.getConnector?.(partId, endpointId) ?? null,
+    getConnector:connector,
     drivetrain,
   })
 }
 
 function detectRackPinion(objects = null, options = {}) {
-  const sceneObjects = objects ?? v4()?.objects?.() ?? []
+  const sceneObjects = objects ?? globalThis.BrickLabSubsystems?.editor?.objects?.() ?? []
   return detectRackPinionMeshesV1(sceneObjects, options)
 }
 

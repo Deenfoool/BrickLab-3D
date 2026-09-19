@@ -3,7 +3,6 @@ export const PERFORMANCE_LDRAW_SYNC_VERSION = 'performance-ldraw-sync-v1.0.0'
 let timer=0
 function editorObjects(){
   return globalThis.BrickLabSubsystems?.editor?.objects?.()
-    ?? globalThis.BrickLabConnectorV4?.objects?.()
     ?? []
 }
 function scheduleRefresh(){

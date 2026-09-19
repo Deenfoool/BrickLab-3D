@@ -1,5 +1,5 @@
-import { cloneMechanical, createEndpointDescriptor, deterministicId, evidence } from '../core/model.js'
-import { createConstraint, dofEntry } from '../constraints/dof.js'
+import { cloneMechanical, createEndpointDescriptor, deterministicId, evidence } from '../mechanics-next/core/model.js'
+import { createConstraint, dofEntry } from '../mechanics-next/constraints/dof.js'
 
 const LEGACY_CONFIDENCE = Object.freeze({
   source:'legacy-connector-v4',

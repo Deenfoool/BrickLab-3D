@@ -63,7 +63,7 @@ function editorCameraFor(object) {
 
 export function createLegacyEditorAdapter({
   subsystems,
-  connectorRuntime = globalThis.BrickLabConnectorV4,
+  connectorRuntime = globalThis.BrickLabEditorRuntime,
   groups = globalThis.BrickLabEditorGroups,
   documentRef = globalThis.document,
   storage = globalThis.localStorage,
@@ -84,18 +84,14 @@ export function createLegacyEditorAdapter({
       subsystems.connectivity.build.reconcile(liveObjects, { persist:false })
     }
     const stored = storedProject(storage) ?? {}
+    const { connectionsV4:_legacyConnectionsV4, connectorSystemV4:_legacyConnectorSystemV4, ...canonicalStored } = stored
     const name = element('projectName')?.textContent?.trim() || stored.name || 'Untitled Build'
     return {
-      ...stored,
+      ...canonicalStored,
       version:2,
       name,
       parts:liveObjects.map(serializePart),
       connections:Array.isArray(stored.connections) ? stored.connections : [],
-      connectorSystemV4:{version:4},
-      connectionsV4:globalThis.BrickLabMechanicsNextBuildOwner?.active===true &&
-        globalThis.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true
-        ? []
-        : subsystems.connectivity.build.records(),
       mechanicsNext:globalThis.__bricklabPendingMechanicsNextProject
         ? JSON.parse(JSON.stringify(globalThis.__bricklabPendingMechanicsNextProject))
         : globalThis.BrickLabMechanicsNext?.exportProjectState?.() ?? stored.mechanicsNext ?? undefined,

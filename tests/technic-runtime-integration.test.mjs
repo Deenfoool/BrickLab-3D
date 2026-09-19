@@ -38,19 +38,6 @@ test('canonical runtime version generator includes the complete Technic director
   assert.match(generator, /legacyAliases/)
 })
 
-test('rack-pinion BUILD snap remains placement-only and never fabricates a connector graph edge', async () => {
-  const [bridge, rack] = await Promise.all([
-    text('connectors-v4/snapping-bridge-v4.js'),
-    text('technic/rack-pinion-v1.js'),
-  ])
-  assert.match(bridge, /findRackPinionSnapCandidateV1/)
-  assert.match(bridge, /applyRackPinionSnapV1/)
-  assert.match(bridge, /candidate\?\.kind === 'rack-pinion-mesh'/)
-  assert.match(rack, /kind:'rack-pinion-mesh'/)
-  assert.match(rack, /placementOnly:true/)
-  assert.doesNotMatch(rack, /createConnection|commitActiveCandidate|connectionGraph/)
-})
-
 test('native rack-pinion motion compiles independently of the Rapier owner', async () => {
   const discovery=await text('mechanics-next/transmission/discovery.js')
   assert.match(discovery,/rack-pinion/)

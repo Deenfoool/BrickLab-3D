@@ -1,5 +1,4 @@
 import * as THREE from 'three'
-import './auto-link-v4.js?v=connector-auto-link-20260917-v1'
 
 export const CONNECTOR_DEBUG_VERSION_V4='connector-debug-overlay-v4.3.2'
 const ROOT_NAME='__bricklabConnectorV4Debug'

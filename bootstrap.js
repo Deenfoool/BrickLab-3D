@@ -118,21 +118,6 @@ await import('./ldraw/cache-boost-v1.js')
 // text/prototype cache instance.
 await import('./ldraw/bootstrap-v1.js')
 
-// Connector V4.2 owns structural snapping for LDraw parts. These unversioned
-// specifiers are intentionally canonicalized by index.html's import map so every V4
-// dependency is loaded from one cache generation.
-globalThis.__bricklabConnectorV4StartMode = menuResult.action
-await import('./connectors-v4/runtime-v4.js')
-
-// Connector Discovery is an additive second pass over official LDraw semantic
-// primitives. Shadow remains authoritative; this runtime can only append connection
-// sites that are physically absent from the hydrated V4 endpoint set.
-try {
-  await import('./connectors-v4/discovery-runtime-v4.js?v=connector-engine-continuous-rim-20260917-v3')
-} catch (error) {
-  console.warn('[BrickLab Connector Discovery] Additional primitive scan unavailable; using Shadow endpoints only.', error)
-}
-
 // Start predictive LDraw warming before the editor itself is evaluated. The loader
 // works only in idle/hover/visibility time, deduplicates work and keeps V4 hydration
 // on the same definitions that BUILD will later instantiate.
@@ -185,16 +170,6 @@ try {
   console.warn('[BrickLab Projects] Project Library unavailable; legacy save/import/export remains available.', error)
 }
 
-// app.js still renders its Mechanics inspector from the legacy V3 `connections`
-// array. Connector V4 snaps intentionally avoid duplicating those records, so keep the
-// visible inspector synchronized from the authoritative V4 graph without changing
-// editor/physics ownership.
-try {
-  await import('./connectors-v4/inspector-sync-v4.js?v=connector-inspector-20260912-v1')
-} catch (error) {
-  console.warn('[BrickLab Connector V4] Inspector graph sync unavailable; editor continues normally.', error)
-}
-
 try {
   await import('./ldraw/mechanism-inspector-v1.js?v=ldraw-mechanisms-20260916-v1')
   await import('./ldraw/flex-axle-editor-v1.js?v=flex-axle-editor-20260916-v1')
@@ -245,14 +220,9 @@ try {
 const { assertArchitectureContract } = await import('./architecture/contract-assert-v1.js?v=architecture-20260911-v1')
 assertArchitectureContract()
 
-// F9 toggles the V4 endpoint/axis overlay. It is removed synchronously before physics
-// collider measurement so diagnostics can never affect collision bounds.
-await import('./connectors-v4/debug-overlay-v4.js')
-
 for (const [key, value] of hiddenProjectEntries) {
   try { localStorage.setItem(key, value) } catch { /* storage may be unavailable */ }
 }
-delete globalThis.__bricklabConnectorV4StartMode
 
 // "Open another project" enters the real editor first, then invokes its existing file
 // importer. This keeps import validation/migration in one authoritative code path.

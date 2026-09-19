@@ -53,60 +53,39 @@ test('Architecture API centralizes part metadata and object identity without exp
   assert.equal(object.children[0].userData.instanceRoot, object)
 })
 
-test('legacy BUILD without native takeover leaves SIMULATE unavailable', async () => {
-  const calls = []
-  const globals = {
-    BrickLabConnectorV4:{
-      objects:() => [{ userData:{ instanceId:'a' } }],
-      projectConnections:() => [{ id:'v4-1', physicsReady:false }],
-      reconcileGraph:(objects, options) => ({ kept:1, objectCount:objects.length, persist:options.persist }),
-      removePartConnections:id => { calls.push(['remove', id]); return 2 },
-      restoreConnections:records => ({ restored:records.length, rejected:0 }),
-      clearGraph:() => calls.push(['clear']),
-      audit:id => ({ partId:id, pass:true }),
-    },
-  }
+test('BUILD without native takeover fails closed and leaves SIMULATE unavailable', async () => {
+  const globals = {}
   const api = createBrickLabSubsystemApi({
     globals,
     createPhysicsSession:async (objects, connections) => ({ objects, connections, guarded:true }),
   })
 
-  assert.equal(api.connectivity.authority.build, 'connector-v4-with-legacy-bridge')
+  assert.equal(api.connectivity.authority.build, 'unavailable')
   assert.equal(api.connectivity.authority.simulate, 'unavailable')
-  assert.equal(api.connectivity.build.records()[0].id, 'v4-1')
-  assert.deepEqual(api.connectivity.build.reconcile(undefined, { persist:false }), { kept:1, objectCount:1, persist:false })
-  assert.equal(api.connectivity.build.removePart('a'), 2)
+  assert.deepEqual(api.connectivity.build.records(), [])
+  assert.equal(api.connectivity.build.reconcile().unavailable, true)
+  assert.equal(api.connectivity.build.removePart('a'), 0)
   assert.equal(api.connectivity.simulate.ready(), false)
   assert.equal(api.physics.guard(), null)
 
   const session = await api.physics.createSession([{ id:1 }], [{ id:2 }])
   assert.equal(session.guarded, true)
-  assert.deepEqual(calls, [['remove','a']])
 })
 
 test('Architecture does not claim native SIMULATE before BUILD authority is published', () => {
   const globals = {
-    BrickLabConnectorV4:{objects:()=>[],projectConnections:()=>[]},
     BrickLabMechanicsNextPhysicsOwner:{
       active:true,
       createOwner:'mechanics-next-physics-owner-0.1.0',
     },
   }
   const api=createBrickLabSubsystemApi({globals})
-  assert.equal(api.connectivity.authority.build,'connector-v4-with-legacy-bridge')
+  assert.equal(api.connectivity.authority.build,'unavailable')
   assert.equal(api.connectivity.authority.simulate,'unavailable')
 })
 
 test('Architecture authority reports Mechanics Next after native BUILD and physics handoff', () => {
   const globals = {
-    BrickLabConnectorV4:{
-      objects:() => [],
-      projectConnections:() => [],
-    },
-    BrickLabConnectorV4PhysicsGuard:{
-      active:true,
-      createOwner:'guard-v4',
-    },
     BrickLabMechanicsNextBuildOwner:{
       active:true,
       authoritative:() => true,
@@ -198,7 +177,8 @@ test('legacy editor adapter binds live editor state without making app internals
   assert.equal(state.name, 'Adapter Build')
   assert.deepEqual(state.parts[0].position, [4,5,6])
   assert.deepEqual(state.connections, [{ id:'legacy-link' }])
-  assert.deepEqual(state.connectionsV4, [{ id:'live-v4' }])
+  assert.equal(state.connectionsV4, undefined)
+  assert.equal(state.connectorSystemV4, undefined)
   assert.equal(reconciles.length, 1)
   assert.deepEqual(reconciles[0][1], { persist:false })
 

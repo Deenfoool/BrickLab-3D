@@ -15,7 +15,7 @@ const snapshot={
     {instanceId:'b',partId:'gear-24',color:0xd9d9d9,position:[3,0,4],rotation:[0,0,0]},
   ],
   connections:[{id:'legacy'}],
-  connectionsV4:[{id:'v4-a'},{id:'v4-b'}],
+  mechanicsNext:{schemaVersion:1,connections:[{id:'native-a'}],relations:[{id:'native-b'}]},
 }
 
 test('Project Library metadata is lightweight and counts project content without scene loading',()=>{
@@ -26,7 +26,7 @@ test('Project Library metadata is lightweight and counts project content without
   assert.equal(meta.partCount,2)
   assert.equal(meta.linkCount,3)
   assert.match(meta.thumbnailSvg,/^<svg/)
-  assert.doesNotMatch(JSON.stringify(meta),/connectionsV4|instanceId/)
+  assert.doesNotMatch(JSON.stringify(meta),/mechanicsNext|instanceId/)
 })
 
 test('thumbnail generation stays deterministic for the same project geometry',()=>{
@@ -39,8 +39,9 @@ test('roadmap starter templates are normal v2 BrickLab snapshots',()=>{
   for(const template of PROJECT_TEMPLATES){
     assert.equal(template.snapshot.version,2)
     assert.ok(Array.isArray(template.snapshot.parts))
-    assert.ok(Array.isArray(template.snapshot.connectionsV4))
-    assert.equal(template.snapshot.connectionsV4.length,0)
+    assert.equal(template.snapshot.mechanicsNext.engine,'mechanics-next')
+    assert.equal(template.snapshot.mechanicsNext.connections.length,0)
+    assert.equal(template.snapshot.mechanicsNext.relations.length,0)
   }
 })
 

@@ -1,6 +1,4 @@
 import { FrameBudgetScheduler } from '../performance/work-queue-v1.js'
-import { buildPhysicsPlanV4, drivetrainSemanticLinksV4 } from '../connectors-v4/physics-policy-v4.js'
-import { hardenPhysicsPlanV4 } from '../connectors-v4/physics-plan-safety-v4.js'
 import {
   bestAssemblyChoice,
   isCompatibleAssemblyPresent,
@@ -91,44 +89,16 @@ function buildConnectionContext(objects, projectState, v4Records) {
   return { connected, endpointUse, byId, duplicateInstanceIds, legacy }
 }
 
-function physicsPreview(objects, v4Records, subsystems) {
-  const v4 = globalThis.BrickLabConnectorV4
-  if (!v4 || !v4Records.length) return { status:'empty', pass:true, blockers:[], joints:[] }
-
-  const notReady = new Set()
-  for (const connection of v4Records) {
-    for (const side of ['a','b']) {
-      const partId = connection?.[side]?.partId
-      if (!partId) continue
-      const def = subsystems.parts.get(partId)
-      if (def?.connectivityV4?.status !== 'ready') notReady.add(partId)
-    }
-  }
-  if (notReady.size) {
-    return { status:'pending', pass:null, blockers:[], joints:[], pendingPartIds:[...notReady] }
-  }
-
-  try {
-    const raw = buildPhysicsPlanV4({
-      objects,
-      connections:v4Records,
-      getConnector:(partId, endpointId) => v4.getConnector?.(partId, endpointId) ?? null,
-    })
-    return { status:'ready', ...hardenPhysicsPlanV4(raw) }
-  } catch (error) {
-    return {
-      status:'error',
-      pass:false,
-      joints:[],
-      blockers:[{ connectionId:null, family:null, reason:`preflight-error:${error?.message || error}` }],
-    }
-  }
+function physicsPreview(_objects, records) {
+  if (!records.length) return { status:'empty', pass:true, blockers:[], joints:[] }
+  const preview = globalThis.BrickLabMechanicsNext?.physicsPreview?.()
+  const status = preview?.status?.() ?? preview
+  return status ? { status:'ready', ...status } : { status:'pending', pass:null, blockers:[], joints:[] }
 }
 
-function drivetrainPreview(objects, connectionContext, v4Records, subsystems) {
+function drivetrainPreview(objects, connectionContext, records, subsystems) {
   try {
-    const semantic = drivetrainSemanticLinksV4(v4Records)
-    const connections = [...connectionContext.legacy, ...semantic]
+    const connections = [...connectionContext.legacy, ...records]
     return subsystems.mechanics.analyze(objects, connections)
   } catch (error) {
     return { error:String(error?.message || error), shafts:[], motors:[], conflicts:[], stats:{ conflicts:0 } }

@@ -1,6 +1,6 @@
 # Mechanics Next — Stage 12 legacy purge plan
 
-Status: **PREPARED, NOT ACTIVE**
+Status: **COMPLETE (2026-09-19)**
 
 Stage 12 must not start until Stage 11 is checked green in `mechanics-next/ROADMAP.md`.
 This file is an execution map only. It exists so the final purge is deterministic and
@@ -174,3 +174,12 @@ Abort the purge step immediately if any of these appears:
 
 The purge is complete only when there is one owner for every domain in
 `MECHANICS_DOMAINS` and no runtime compatibility owner can re-enter after takeover.
+
+## Completion evidence
+
+- BUILD connection graph, snapping, KINEMATICS and SIMULATE ownership are published only by Mechanics Next.
+- Historical `connectionsV4` is accepted only at the project import boundary; new snapshots write canonical `mechanicsNext` state.
+- Connector V4 runtime, discovery, mutation bridges, history/project bridges and runtime parity adapters are removed from production.
+- The canonical import-map audit reports no dangling local JavaScript targets.
+- Final release gate: 686 tests passed, 0 failed, followed by a successful TypeScript/Vite production build.
+- Real-browser package fixture: 18 objects, 12 native stored constraints, migration gate 14/14, 14 physics joints, 5 couplers, 1 motor, 0 fallbacks; BUILD → KINEMATICS → SIMULATE → BUILD completed under native ownership.

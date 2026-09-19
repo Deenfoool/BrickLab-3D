@@ -18,7 +18,7 @@ function rotaryMechanicalPart(object){
   if(!partId)return false
   const mechanics=subsystems?.parts?.get?.(partId)?.mechanics
   if(mechanics?.gear||mechanics?.shaft||mechanics?.wheel)return true
-  const connectivity=globalThis.BrickLabConnectorV4?.get?.(partId)
+  const connectivity=subsystems?.parts?.get?.(partId)?.connectivityV4
   return Boolean(connectivity?.connectors?.some?.(connector=>
     connector?.family==='cylinder' && (connector.geometry?.sections??[]).some(section=>
       section?.shape==='A' && Math.abs((section.radiusLdu??0)-6)<.1

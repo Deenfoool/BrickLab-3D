@@ -2,15 +2,9 @@ import { deterministicId, MECHANICS_NEXT_VERSION } from './core/model.js'
 import { createOwnershipLedger } from './core/ownership.js'
 import { createAssemblyGraph } from './topology/assembly-graph.js'
 import { createKinematicSolver } from './solver/kinematic-solver.js'
-import {
-  assertLegacyReadOnly,
-  snapshotLegacyPartConnectivity,
-  snapshotLegacyV4,
-} from './adapters/legacy-v4-readonly.js'
 import { createCatalogObservationProvider } from './adapters/catalog-readonly.js'
 import { createPartIntelligenceRegistry } from './intelligence/registry.js'
 import { createNativeConnectivityProvider } from './ldraw/native-connectivity-provider.js'
-import { compareNativeToLegacyConnectivity, ConnectivityParityLedger } from './diagnostics/native-v4-parity.js'
 import { createSceneMechanicalObserver } from './intelligence/scene-observer.js'
 import { createShadowConnectionInterpreter } from './intelligence/connection-interpreter.js'
 import { endpointSemanticKind } from './intelligence/endpoint-semantics.js'
@@ -45,7 +39,6 @@ export const MECHANICS_NEXT_OWNER_ID = 'mechanics-next'
 
 export function createMechanicsNextRuntime({
   globals = globalThis,
-  legacyProvider = globals.BrickLabConnectorV4,
   subsystems = globals.BrickLabSubsystems,
 } = {}) {
   const ownership = createOwnershipLedger()
@@ -57,13 +50,12 @@ export function createMechanicsNextRuntime({
   const nativeObservedRecords = new Map()
   const releasedObservedConnectionIds = createReleasedConnectionState()
   let nativeProjectAuthoritative = false
-  let legacySnapshot = snapshotLegacyV4(legacyProvider)
+  let legacyImportRecords = Object.freeze([])
   let decompositionRefreshQueued = false
 
   const catalog = subsystems?.parts
     ? createCatalogObservationProvider(subsystems)
     : null
-  const parityLedger=new ConnectivityParityLedger()
   let connectivity=null
   connectivity=catalog&&globals.BrickLabLDraw?.readText
     ?createNativeConnectivityProvider({
@@ -72,7 +64,6 @@ export function createMechanicsNextRuntime({
         onUpdate(partId,value){
           intelligence?.invalidate?.(partId)
           sceneObserver?.invalidatePart?.(partId)
-          if(value?.status==='ready')refreshParityForPart(partId)
           scheduleSceneSync()
         },
       })
@@ -81,19 +72,6 @@ export function createMechanicsNextRuntime({
   const intelligence = catalog&&connectivity
     ? createPartIntelligenceRegistry({ catalog, connectivity })
     : null
-
-  const refreshParityForPart=partId=>{
-    const native=connectivity?.get?.(partId)
-    const legacy=snapshotLegacyPartConnectivity(legacyProvider,partId)
-    if(native?.status!=='ready'||legacy?.status!=='ready')return null
-    const result=parityLedger.record(compareNativeToLegacyConnectivity({
-      partId,
-      nativeConnectors:native.connectors,
-      legacyConnectors:legacy.connectors,
-    }))
-    parityEvidence=parityLedger.summary()
-    return result
-  }
 
   const migrationParitySummary=partIds=>{
     const ids=[...new Set((partIds||[]).map(String).filter(Boolean))]
@@ -111,34 +89,15 @@ export function createMechanicsNextRuntime({
         continue
       }
 
-      const def=subsystems?.parts?.get?.(partId)
-      if(!def?.ldraw?.file){
-        nativeOnly+=1
+      nativeOnly+=1
+      compared+=1
+      if(Array.isArray(native.connectors)){
         semanticPass+=1
         geometryPass+=1
-        continue
-      }
-
-      const legacy=snapshotLegacyPartConnectivity(legacyProvider,partId)
-      if(legacy.status!=='ready'){
-        referenceUnavailable+=1
+      }else{
         semanticFail+=1
         geometryFail+=1
-        failures.push(Object.freeze({partId,reason:'v4-reference-not-ready',status:legacy.status}))
-        continue
-      }
-
-      const parity=parityLedger.get(partId)??refreshParityForPart(partId)
-      compared+=1
-      if(parity?.semanticParity)semanticPass+=1
-      else{
-        semanticFail+=1
-        failures.push(Object.freeze({partId,reason:'semantic-parity-failed'}))
-      }
-      if(parity?.geometryParity)geometryPass+=1
-      else{
-        geometryFail+=1
-        failures.push(Object.freeze({partId,reason:'geometry-parity-failed'}))
+        failures.push(Object.freeze({partId,reason:'native-connectivity-empty'}))
       }
     }
 
@@ -365,7 +324,7 @@ export function createMechanicsNextRuntime({
     }
     for(const record of nativeObservedRecords.values())add(record)
     if(!nativeProjectAuthoritative){
-      for(const record of legacySnapshot.connections||[])add(record)
+      for(const record of legacyImportRecords)add(record)
       const project=subsystems?.editor?.projectState?.()
       for(const record of project?.connections||[])add(record)
     }
@@ -505,12 +464,6 @@ export function createMechanicsNextRuntime({
     releaseConstraint:handlePhysicsJointRelease,
   })
 
-  const refreshLegacySnapshot = () => {
-    legacySnapshot = snapshotLegacyV4(legacyProvider || globals.BrickLabConnectorV4)
-    assertLegacyReadOnly(legacySnapshot)
-    return legacySnapshot
-  }
-
   const syncScene = () => {
     if (activeDragSession?.active) {
       activeDragSession.cancel()
@@ -520,7 +473,6 @@ export function createMechanicsNextRuntime({
     if (!sceneObserver || !subsystems?.editor?.ready?.()) {
       return Object.freeze({ unavailable:true, reason:'editor-contract-not-ready' })
     }
-    refreshLegacySnapshot()
     const scene = sceneObserver.sync()
     void connectivity?.prefetch?.(sceneObserver.instances().map(instance=>instance.body.partId))
     void compoundDecompositions?.prefetch?.(sceneObserver.instances())
@@ -655,7 +607,6 @@ export function createMechanicsNextRuntime({
         })
       }
       const objects=subsystems.editor.objects?.()??[]
-      try{await legacyProvider?.hydrateObjects?.(objects)}catch{}
       const initial=sceneObserver.sync(objects)
       const instances=sceneObserver.instances()
       await connectivity?.prefetch?.(instances.map(instance=>instance.body.partId))
@@ -669,7 +620,6 @@ export function createMechanicsNextRuntime({
           delete globals.__bricklabPendingMechanicsNextProject
         }
       }
-      for(const instance of sceneObserver.instances())refreshParityForPart(instance.body.partId)
       parityEvidence=migrationParitySummary(sceneObserver.instances().map(instance=>instance.body.partId))
       const refreshed=syncScene()
       return Object.freeze({
@@ -679,7 +629,7 @@ export function createMechanicsNextRuntime({
           initial,
           refreshed,
           nativeConnectivity:connectivity?.stats?.()??null,
-          parity:parityLedger.summary(),
+          parity:parityEvidence,
         }),
       })
     },
@@ -858,8 +808,17 @@ export function createMechanicsNextRuntime({
         summary:Object.freeze({...gate.summary,total:gate.summary.total+1,failed:gate.summary.failed+1,blockers:gate.summary.blockers+1}),
       })
     },
-    refreshLegacySnapshot,
-    legacySnapshot:() => legacySnapshot,
+    importLegacyConnections(records=[]) {
+      if(nativeProjectAuthoritative)return Object.freeze({accepted:false,reason:'native-project-authoritative'})
+      legacyImportRecords=Object.freeze((records??[]).map(record=>Object.freeze(structuredClone(record))))
+      scheduleSceneSync()
+      return Object.freeze({accepted:true,imported:legacyImportRecords.length})
+    },
+    clearLegacyConnections() {
+      legacyImportRecords=Object.freeze([])
+      scheduleSceneSync()
+      return true
+    },
     describePart(partId, options) {
       return intelligence?.describe(partId, options) ?? null
     },
@@ -1160,12 +1119,10 @@ export function createMechanicsNextRuntime({
         graphRevision:graph.revision,
         graphBodies:graph.size,
         solverRevision:solver.revision,
-        legacyAvailable:legacySnapshot.available,
-        legacySystemVersion:legacySnapshot.systemVersion,
-        legacyConnections:legacySnapshot.connections.length,
+        legacyImportConnections:legacyImportRecords.length,
         partIntelligence:intelligence?.stats?.() ?? null,
         nativeConnectivity:connectivity?.stats?.() ?? null,
-        nativeParity:parityLedger.summary(),
+        nativeParity:parityEvidence,
         scene:sceneObserver?.stats?.() ?? null,
         mechanicalRecordFailures:lastMechanicalRecordFailures,
         interpretedConnections:connectionInterpreter?.stats?.() ?? null,
@@ -1192,19 +1149,6 @@ export function createMechanicsNextRuntime({
       })
     },
   })
-
-  const refreshLegacy = event => {
-    try { refreshLegacySnapshot() }
-    catch (error) {
-      console.warn('[BrickLab Mechanics Next] Legacy observation refresh failed.', error)
-    }
-    const partId = event?.detail?.partId ?? event?.detail?.id ?? null
-    if (partId) invalidatePart(partId)
-  }
-
-  globals.addEventListener?.('bricklab:connectorv4runtime', refreshLegacy)
-  globals.addEventListener?.('bricklab:connectorv4reconcile', refreshLegacy)
-  globals.addEventListener?.('bricklab:connectorv4', refreshLegacy)
 
   globals.addEventListener?.('bricklab:ldrawloaded', event => {
     const partId = event?.detail?.id

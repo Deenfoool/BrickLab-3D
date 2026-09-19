@@ -223,12 +223,13 @@ test('V4.3 replaces the legacy axlehol0 origin candidate before endpoint identit
   assert.equal(hint.geometry.sections[0].lengthLdu,40)
 })
 
-test('production bootstrap mounts Connector Discovery V4.3 after Connector V4 and before editor evaluation',async()=>{
+test('production bootstrap leaves Connector V4 discovery as reference-only code',async()=>{
   const bootstrap=await readFile(new URL('../bootstrap.js',import.meta.url),'utf8')
   const connectorV4=bootstrap.indexOf("await import('./connectors-v4/runtime-v4.js')")
   const discovery=bootstrap.indexOf("./connectors-v4/discovery-runtime-v4.js")
   const app=bootstrap.indexOf("await import('./app.js')")
-  assert.ok(connectorV4>=0)
-  assert.ok(discovery>connectorV4)
-  assert.ok(app>discovery)
+  const mechanics=bootstrap.indexOf("await import('./mechanics-next/runtime.js')")
+  assert.equal(connectorV4,-1)
+  assert.equal(discovery,-1)
+  assert.ok(mechanics>=0&&app>mechanics)
 })

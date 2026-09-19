@@ -13,7 +13,7 @@ const uid=()=>globalThis.crypto?.randomUUID?.()||`project-${Date.now().toString(
 function colorHex(value){if(typeof value==='string'&&/^#[0-9a-f]{6}$/i.test(value))return value;const n=Number(value);return Number.isFinite(n)?`#${(n>>>0).toString(16).padStart(6,'0').slice(-6)}`:'#7b8794'}
 function hashText(text){let hash=0x811c9dc5;for(let i=0;i<text.length;i+=1){hash^=text.charCodeAt(i);hash=Math.imul(hash,0x01000193)}return(hash>>>0).toString(16).padStart(8,'0')}
 export function projectSnapshotFingerprint(snapshot){
-  const payload={name:snapshot?.name||'',parts:(snapshot?.parts||[]).map(p=>[p.instanceId,p.partId,p.color,p.groupId,p.position,p.rotation,p.mechanismPose||null]),connections:(snapshot?.connections||[]).map(c=>c.id||c),connectionsV4:(snapshot?.connectionsV4||[]).map(c=>c.id||[c.a?.instanceId,c.a?.endpointId,c.b?.instanceId,c.b?.endpointId]),mechanicsNext:snapshot?.mechanicsNext?{schemaVersion:snapshot.mechanicsNext.schemaVersion,connections:(snapshot.mechanicsNext.connections||[]).map(c=>c.id),relations:(snapshot.mechanicsNext.relations||[]).map(r=>r.id),compoundState:snapshot.mechanicsNext.compoundState||null}:null}
+  const payload={name:snapshot?.name||'',parts:(snapshot?.parts||[]).map(p=>[p.instanceId,p.partId,p.color,p.groupId,p.position,p.rotation,p.mechanismPose||null]),connections:(snapshot?.connections||[]).map(c=>c.id||c),mechanicsNext:snapshot?.mechanicsNext?{schemaVersion:snapshot.mechanicsNext.schemaVersion,connections:(snapshot.mechanicsNext.connections||[]).map(c=>c.id),relations:(snapshot.mechanicsNext.relations||[]).map(r=>r.id),compoundState:snapshot.mechanicsNext.compoundState||null}:null}
   return hashText(JSON.stringify(payload))
 }
 
@@ -28,11 +28,11 @@ export function createProjectThumbnailSvg(snapshot,{width=320,height=180}={}){
 
 export function projectMetadataFromSnapshot(snapshot,{id=uid(),name,createdAt,template=null}={}){
   const normalizedName=String(name||snapshot?.name||'Untitled Build').trim()||'Untitled Build',modifiedAt=nowIso()
-  return Object.freeze({id,name:normalizedName,createdAt:createdAt||modifiedAt,modifiedAt,partCount:Array.isArray(snapshot?.parts)?snapshot.parts.length:0,linkCount:(snapshot?.connectionsV4?.length||0)+(snapshot?.connections?.length||0),template:template||null,thumbnailSvg:createProjectThumbnailSvg(snapshot),fingerprint:projectSnapshotFingerprint({...snapshot,name:normalizedName}),version:1})
+  return Object.freeze({id,name:normalizedName,createdAt:createdAt||modifiedAt,modifiedAt,partCount:Array.isArray(snapshot?.parts)?snapshot.parts.length:0,linkCount:(snapshot?.mechanicsNext?.connections?.length||0)+(snapshot?.mechanicsNext?.relations?.length||0)+(snapshot?.connections?.length||0),template:template||null,thumbnailSvg:createProjectThumbnailSvg(snapshot),fingerprint:projectSnapshotFingerprint({...snapshot,name:normalizedName}),version:1})
 }
 
 function part(instanceId,partId,position,rotation=[0,0,0],color=null){return{instanceId,partId,position,rotation,color,groupId:null}}
-function templateSnapshot(name,parts){return{version:2,name,parts,connections:[],connectorSystemV4:{version:4},connectionsV4:[]}}
+function templateSnapshot(name,parts){return{version:2,name,parts,connections:[],mechanicsNext:{schemaVersion:1,engine:'mechanics-next',connections:[],relations:[],compoundState:null}}}
 export const PROJECT_TEMPLATES=Object.freeze([
   {id:'empty',name:'Empty project',description:'Blank workspace',snapshot:templateSnapshot('Untitled Build',[])},
   {id:'vehicle-chassis',name:'Vehicle chassis',description:'Starter rails and cross-members',snapshot:templateSnapshot('Vehicle Chassis',[part('vc-rail-l','beam-9',[-2,1,0]),part('vc-rail-r','beam-9',[2,1,0]),part('vc-cross-a','technic-brick-1x6',[0,1,-3],[0,Math.PI/2,0]),part('vc-cross-b','technic-brick-1x6',[0,1,3],[0,Math.PI/2,0])])},

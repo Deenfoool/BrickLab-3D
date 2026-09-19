@@ -30,6 +30,17 @@ const retiredFiles = [
   'connectors-v4/physics-guard-v4.js',
   'connectors-v4/physics-adapter-v4.js',
   'technic/rack-pinion-physics-v1.js',
+  'connectors-v4/connections-bridge-v4.js',
+  'connectors-v4/snapping-bridge-v4.js',
+  'connectors-v4/multi-contact-bridge-v4.js',
+  'connectors-v4/auto-link-v4.js',
+  'connectors-v4/history-sync-v4.js',
+  'connectors-v4/project-bridge-v4.js',
+  'connectors-v4/inspector-sync-v4.js',
+  'mechanics-next/adapters/legacy-v4-readonly.js',
+  'mechanics-next/diagnostics/native-v4-parity.js',
+  'connectors-v4/runtime-v4.js',
+  'connectors-v4/discovery-runtime-v4.js',
 ]
 
 function localTarget(target) {
@@ -52,8 +63,8 @@ test('retired duplicate and unreachable files stay out of the repository', async
 test('retired public specifiers resolve to current authoritative implementations', async () => {
   const imports = await productionImports()
   const aliases = {
-    './connections.js':'./connectors-v4/connections-bridge-v4.js',
-    './snapping.js':'./connectors-v4/snapping-bridge-v4.js',
+    './connections.js':'./connections-v3.js',
+    './snapping.js':'./snapping-v3.js',
     './connector-validation.js':'./connector-validation-v3.js',
     './main-menu.js':'./menu/main-menu-v5.js',
     './testlab.js':'./testlab-v2.js',

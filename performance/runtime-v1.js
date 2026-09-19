@@ -262,7 +262,7 @@ export function createPerformanceEngine({
 const engine=createPerformanceEngine()
 globalThis.BrickLabPerformance=engine
 
-const editorObjects=()=>globalThis.BrickLabSubsystems?.editor?.objects?.() ?? globalThis.BrickLabConnectorV4?.objects?.() ?? []
+const editorObjects=()=>globalThis.BrickLabSubsystems?.editor?.objects?.() ?? []
 const initial=editorObjects()
 if(initial.length)void engine.rebuild(initial,'startup').catch(error=>console.warn?.('[BrickLab Performance] Startup index failed.',error))
 

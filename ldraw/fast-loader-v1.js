@@ -14,8 +14,6 @@ const queued = new Map()
 const active = new Map()
 const prepared = new Set()
 const failed = new Map()
-const warmRoots = new Map()
-const connectorWarm = new Map()
 let workers = 0
 let backgroundStarted = 0
 
@@ -23,7 +21,7 @@ const diagnostics = {
   queued:0, active:0, prepared:0, failed:0, backgroundStarted:0,
   cacheHits:0, intentRequests:0, criticalRequests:0,
   projectWarmRequests:0, directPrototypePreloads:0,
-  connectorWarm:0, connectorWarmFailed:0, totalPrepareMs:0, lastPrepareMs:0,
+  totalPrepareMs:0, lastPrepareMs:0,
 }
 
 function normalizeFile(value) {
@@ -67,28 +65,6 @@ function waitForVisual(def, root, timeoutMs = 30000) {
     tick()
   })
 }
-async function hydrateV4(def, root) {
-  const runtime = globalThis.BrickLabConnectorV4
-  if (!runtime?.hydrate || !def?.ldraw?.ready) return null
-  const current = def.connectivityV4
-  if (current?.status === 'ready') return current
-  return runtime.hydrate(def, root)
-}
-function startConnectorWarm(file, def, root) {
-  const normalized = normalizeFile(file)
-  const existing = connectorWarm.get(normalized)
-  if (existing) return existing
-  const promise = hydrateV4(def, root)
-    .then(value => { diagnostics.connectorWarm += 1; return value })
-    .catch(error => { diagnostics.connectorWarmFailed += 1; console.debug?.(`[BrickLab LDraw Fast] V4 warm failed for ${normalized}`, error); return null })
-    .finally(() => {
-      connectorWarm.delete(normalized)
-      warmRoots.delete(normalized)
-      disposeWarmRoot(root)
-    })
-  connectorWarm.set(normalized, promise)
-  return promise
-}
 async function perform(file) {
   const normalized = normalizeFile(file)
   const def = ensureDefinition(normalized)
@@ -96,11 +72,6 @@ async function perform(file) {
   if (def.ldraw?.ready) {
     diagnostics.cacheHits += 1
     prepared.add(normalized)
-    if (def.connectivityV4?.status !== 'ready') {
-      const root = def.create(def.defaultColor)
-      warmRoots.set(normalized, root)
-      void startConnectorWarm(normalized, def, root)
-    }
     return def
   }
   const started = performance.now()
@@ -111,18 +82,16 @@ async function perform(file) {
       await runtime.preload(normalized)
     }
     root = def.create(def.defaultColor)
-    warmRoots.set(normalized, root)
     await waitForVisual(def, root)
     prepared.add(normalized)
     failed.delete(normalized)
     const elapsed = performance.now() - started
     diagnostics.lastPrepareMs = elapsed
     diagnostics.totalPrepareMs += elapsed
-    void startConnectorWarm(normalized, def, root)
+    disposeWarmRoot(root)
     return def
   } catch (error) {
     if (root) {
-      warmRoots.delete(normalized)
       disposeWarmRoot(root)
     }
     throw error
@@ -216,7 +185,7 @@ startRegisteredWarmup()
 export const BrickLabLDrawFastLoader = Object.freeze({
   version:LDRAW_FAST_LOADER_VERSION,
   preload:preloadLDrawPart,
-  stats:()=>Object.freeze({...diagnostics,prepared:prepared.size,failed:failed.size,queued:queue.length,active:workers,connectorWarmActive:connectorWarm.size,backgroundLimit,concurrency,criticalConcurrency,constrainedNetwork,averagePrepareMs:prepared.size?diagnostics.totalPrepareMs/prepared.size:0,runtime:globalThis.BrickLabLDraw?.stats?.() ?? null}),
+  stats:()=>Object.freeze({...diagnostics,prepared:prepared.size,failed:failed.size,queued:queue.length,active:workers,backgroundLimit,concurrency,criticalConcurrency,constrainedNetwork,averagePrepareMs:prepared.size?diagnostics.totalPrepareMs/prepared.size:0,runtime:globalThis.BrickLabLDraw?.stats?.() ?? null}),
   isPrepared:file=>prepared.has(normalizeFile(file)),
 })
 globalThis.BrickLabLDrawFastLoader = BrickLabLDrawFastLoader

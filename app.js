@@ -566,9 +566,8 @@ function detachPartConnections(object, silent = false, preserveV4 = true) {
       connection?.a?.instanceId !== instanceId && connection?.b?.instanceId !== instanceId)
   } else {
     const before = connections.length
-    const v4Before = globalThis.BrickLabConnectorV4?.projectConnections().length ?? 0
     connections = removeConnectionsForPart(connections, object.userData.instanceId, {preserveV4})
-    removed = before - connections.length + v4Before - (globalThis.BrickLabConnectorV4?.projectConnections().length ?? 0)
+    removed = before - connections.length
   }
 
   if (removed) {
@@ -647,9 +646,6 @@ for (const eventName of [
 }
 
 function projectState() {
-  if (mode === 'build' && !mechanicsNextBuildActive()) {
-    globalThis.BrickLabConnectorV4?.reconcileGraph(buildRoot.children, {persist:false})
-  }
   return {
     version: 2,
     name: projectName,
@@ -663,10 +659,6 @@ function projectState() {
       mechanismPose: object.userData.mechanismPose ? cloneState(object.userData.mechanismPose) : undefined,
     })),
     connections: cloneState(connections),
-    connectorSystemV4:{version:4},
-    connectionsV4:mechanicsNextBuildActive()
-      ? []
-      : (globalThis.BrickLabConnectorV4?.projectConnections() ?? []),
     mechanicsNext:globalThis.__bricklabPendingMechanicsNextProject
       ? cloneState(globalThis.__bricklabPendingMechanicsNextProject)
       : globalThis.BrickLabMechanicsNext?.exportProjectState?.() ?? undefined,
@@ -742,7 +734,7 @@ function applyProject(data, { reset = false, persist = true } = {}) {
   select(null)
   globalThis.BrickLabMechanicsNext?.clearProjectState?.({keepAuthority:false})
   delete globalThis.__bricklabPendingMechanicsNextProject
-  globalThis.BrickLabConnectorV4?.clearGraph()
+  globalThis.BrickLabMechanicsNext?.clearLegacyConnections?.()
   buildRoot.clear()
   connections = []
   projectName = data.name || 'Imported Build'
@@ -762,7 +754,7 @@ function applyProject(data, { reset = false, persist = true } = {}) {
     buildRoot.add(object)
   }
 
-  globalThis.BrickLabConnectorV4?.restoreConnections(data.connectionsV4 ?? [])
+  globalThis.BrickLabMechanicsNext?.importLegacyConnections?.(data.connectionsV4 ?? [])
   try {
     const mechanics=globalThis.BrickLabMechanicsNext
     const editorReady=globalThis.BrickLabSubsystems?.editor?.ready?.()===true
@@ -1370,7 +1362,7 @@ function newProject() {
   if (mode === 'simulate') setMode('build')
   select(null)
   globalThis.BrickLabMechanicsNext?.clearProjectState?.({keepAuthority:false})
-  globalThis.BrickLabConnectorV4?.clearGraph()
+  globalThis.BrickLabMechanicsNext?.clearLegacyConnections?.()
   buildRoot.clear()
   connections = []
   delete globalThis.__bricklabPendingMechanicsNextProject
@@ -1692,7 +1684,6 @@ function animate() {
   const mechanicsNextKinematicsActive=globalThis.BrickLabMechanicsNextKinematics?.active?.()===true
   const mechanicsNextBuildOwnerActive=mechanicsNextBuildActive()
   if (mode === 'build' && !isDragging && !mechanicsNextKinematicsActive && !mechanicsNextBuildOwnerActive) {
-    globalThis.BrickLabConnectorV4?.updateEditor(performance.now())
   }
   orbit.update()
   emitAudioEvent('frame', { session: physicsSession, mode, camera })
@@ -1701,7 +1692,10 @@ function animate() {
   requestAnimationFrame(animate)
 }
 
-globalThis.BrickLabConnectorV4?.attachEditor(() => buildRoot.children)
+globalThis.BrickLabEditorRuntime=Object.freeze({
+  version:'bricklab-editor-runtime-v1.0.0',
+  objects:()=>buildRoot.children,
+})
 
 // Read-only viewport boundary for optional editor subsystems. The active camera is
 // lexical state and changes when projection mode toggles, so consumers must request

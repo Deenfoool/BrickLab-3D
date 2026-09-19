@@ -57,7 +57,6 @@ import { createConnectionGraphV4, createConnectionProposalV4 } from '../connecto
 import { restoreRecordsIntoGraphV4 } from '../connectors-v4/persistence-v4.js'
 import { activationForMatchV4 } from '../connectors-v4/activation-v4.js'
 import { matchConnectorV4 } from '../connectors-v4/matcher-v4.js'
-import { v4OwnsLegacyCandidate } from '../connectors-v4/snapping-bridge-v4.js'
 function endpoint(meta,id) {
   const c=parseShadowTextV4(`0 !LDCAD ${meta}`).operations[0].connector
   c.endpointId=id
@@ -121,12 +120,4 @@ test('graph replacement releases old occupancy and persistence distrusts importe
 test('certified BUILD families do not claim unproven persisted physics',()=>{
   const policy=activationForMatchV4(axle,hole,matchConnectorV4(axle,hole))
   assert.equal(policy.active,true);assert.equal(policy.family,'technic-axle-round-hole');assert.equal(policy.physics,false)
-})
-test('V4 strict ownership applies only when both structural sides are LDraw',()=>{
-  const a=obj('a'),b=obj('b')
-  const native=new THREE.Group();native.userData={instanceId:'native',partId:'technic-beam-1x6'}
-  assert.equal(v4OwnsLegacyCandidate(a,{kind:'fixed',targetObject:b}),true)
-  assert.equal(v4OwnsLegacyCandidate(a,{kind:'fixed',targetObject:native}),false)
-  assert.equal(v4OwnsLegacyCandidate(native,{kind:'fixed',targetObject:a}),false)
-  assert.equal(v4OwnsLegacyCandidate(a,{kind:'gear-mesh',targetObject:b}),false)
 })

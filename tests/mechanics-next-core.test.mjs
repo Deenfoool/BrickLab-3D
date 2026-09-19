@@ -31,7 +31,7 @@ import {
   screwLinearEquation,
 } from '../mechanics-next/transmission/equations.js'
 import { createKinematicSolver } from '../mechanics-next/solver/kinematic-solver.js'
-import { legacyV4ConnectorToEndpoint, snapshotLegacyV4 } from '../mechanics-next/adapters/legacy-v4-readonly.js'
+import { legacyV4ConnectorToEndpoint, snapshotLegacyV4 } from './legacy-v4-fixture.mjs'
 import {
   frictionPinDynamics,
   mechanicalInterfaceRule,
@@ -45,7 +45,6 @@ import { expandGrid, parseCylinderSections, parseLdcadShadowText } from '../mech
 import { ldcadConnectorToEndpoint } from '../mechanics-next/ldraw/connector-adapter.js'
 import { createNativeShadowResolver } from '../mechanics-next/ldraw/shadow-resolver.js'
 import { createNativeConnectivityProvider } from '../mechanics-next/ldraw/native-connectivity-provider.js'
-import { compareNativeToLegacyConnectivity, ConnectivityParityLedger } from '../mechanics-next/diagnostics/native-v4-parity.js'
 import { inheritancePolicyForChild, parseLDrawHeader, parseType1References } from '../mechanics-next/ldraw/official-parser.js'
 import { createNativeLDrawInheritanceResolver } from '../mechanics-next/ldraw/official-inheritance.js'
 import { solveMechanicalPlacement } from '../mechanics-next/connectors/placement-solver.js'
@@ -733,73 +732,6 @@ test('native Shadow resolver keeps explicit capability boundary for official inh
   assert.equal(resolver.capabilities.directShadow, true)
   assert.equal(resolver.capabilities.includes, true)
   assert.equal(resolver.capabilities.officialInheritance, false)
-})
-
-
-test('native/V4 parity accepts equivalent source connectors despite V4 BrickLab frame decoration', () => {
-  const base = {
-    id:'axle',
-    endpointId:'legacy-axle',
-    family:'cylinder',
-    gender:'male',
-    group:'drive',
-    frame:{
-      positionLdu:[10,20,30],
-      orientation:[1,0,0,0,1,0,0,0,1],
-      positionStud:[.5,-1,-1.5],
-      orientationBrickLab:[1,0,0,0,-1,0,0,0,-1],
-    },
-    geometry:{
-      centered:true,
-      caps:'none',
-      sections:[{shape:'A',radiusLdu:6,lengthLdu:40,elastic:false}],
-    },
-    snap:{slide:true},
-  }
-  const native = {
-    ...base,
-    endpointId:undefined,
-    frame:{
-      positionLdu:[10,20,30],
-      orientation:[1,0,0,0,1,0,0,0,1],
-    },
-  }
-  const result = compareNativeToLegacyConnectivity({
-    partId:'part',
-    nativeConnectors:[native],
-    legacyConnectors:[base],
-  })
-  assert.equal(result.semanticParity, true)
-  assert.equal(result.geometryParity, true)
-})
-
-test('native/V4 parity exposes missing semantics instead of hiding migration gaps', () => {
-  const legacy = {
-    endpointId:'stud',
-    family:'cylinder',
-    gender:'male',
-    group:null,
-    frame:{positionLdu:[0,0,0],orientation:[1,0,0,0,1,0,0,0,1]},
-    geometry:{centered:false,caps:'one',sections:[{shape:'R',radiusLdu:6,lengthLdu:4}]},
-    snap:{slide:false},
-  }
-  const result = compareNativeToLegacyConnectivity({
-    partId:'part',
-    nativeConnectors:[],
-    legacyConnectors:[legacy],
-  })
-  assert.equal(result.semanticParity, false)
-  assert.equal(result.semanticMissingFromNative.length, 1)
-
-  const ledger = new ConnectivityParityLedger()
-  ledger.record(result)
-  assert.deepEqual(ledger.summary(), {
-    parts:1,
-    semanticPass:0,
-    geometryPass:0,
-    semanticFail:1,
-    geometryFail:1,
-  })
 })
 
 

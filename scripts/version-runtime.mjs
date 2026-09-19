@@ -4,7 +4,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { posix as path } from 'node:path'
 
 const root = new URL('../', import.meta.url)
-const tag = process.argv[2] ?? 'runtime-29-mechanics-next-stage12-physics-purge-v1'
+const tag = process.argv[2] ?? 'runtime-31-mechanics-next-stage12-final-v1'
 if (!/^(?:(?:runtime|connect|connector|physics|parts)-\d+|connector-v4-physics)-[a-z0-9-]+$/.test(tag)) throw new Error('Invalid runtime tag')
 const id = tag.match(/^(?:(?:runtime|connect|connector|physics|parts)-\d+|connector-v4-physics)/)[0].toUpperCase()
 const files = (await readdir(root)).filter(name => name.endsWith('.js')).sort()
@@ -62,8 +62,8 @@ for (const importer of files) {
 
 // Legacy import specifiers remain stable where a current read-only or UI owner exists.
 const connectorAliases = {
-  './connections.js': `./connectors-v4/connections-bridge-v4.js?v=${tag}`,
-  './snapping.js': `./connectors-v4/snapping-bridge-v4.js?v=${tag}`,
+  './connections.js': `./connections-v3.js?v=${tag}`,
+  './snapping.js': `./snapping-v3.js?v=${tag}`,
   './connector-validation.js': `./connector-validation-v3.js?v=${tag}`,
   './main-menu.js': `./menu/main-menu-v5.js?v=${tag}`,
   './testlab.js': `./testlab-v2.js?v=${tag}`,

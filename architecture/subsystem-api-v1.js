@@ -60,8 +60,10 @@ export function createBrickLabSubsystemApi({
   const telemetrySlot = makeAdapterSlot('Telemetry')
 
   const definitionFor = value => findPart(normalizePartId(value)) ?? null
-  const connectorRuntime = () => globals?.BrickLabConnectorV4 ?? null
   const physicsOwner = () => globals?.BrickLabMechanicsNextPhysicsOwner ?? null
+  const nativeMechanics = () => globals?.BrickLabMechanicsNext ?? null
+  const nativeBuild = () => globals?.BrickLabMechanicsNextBuildOwner?.active===true &&
+    globals?.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true
 
   const parts = Object.freeze({
     list() { return [...listParts()] },
@@ -111,8 +113,7 @@ export function createBrickLabSubsystemApi({
     ready: editorSlot.ready,
     objects() {
       const bound = editorSlot.get()
-      if (bound) return [...(bound.objects() ?? [])]
-      return [...(connectorRuntime()?.objects?.() ?? [])]
+      return bound ? [...(bound.objects() ?? [])] : []
     },
     selection() { return [...(editorSlot.get()?.selection?.() ?? [])] },
     primarySelection() { return editorSlot.get()?.primarySelection?.() ?? null },
@@ -157,10 +158,7 @@ export function createBrickLabSubsystemApi({
   const connectivity = Object.freeze({
     authority:Object.freeze({
       get build(){
-        return globals?.BrickLabMechanicsNextBuildOwner?.active &&
-          globals?.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true
-          ?'mechanics-next-build-owner'
-          :'connector-v4-with-legacy-bridge'
+        return nativeBuild() ? 'mechanics-next-build-owner' : 'unavailable'
       },
       get simulate(){
         const buildNative=globals?.BrickLabMechanicsNextBuildOwner?.active===true &&
@@ -171,20 +169,36 @@ export function createBrickLabSubsystemApi({
       },
     }),
     build:Object.freeze({
-      ready() { return Boolean(connectorRuntime()) },
-      records() { return snapshot(connectorRuntime()?.projectConnections?.() ?? []) },
-      reconcile(objects = editor.objects(), options = {}) {
-        return connectorRuntime()?.reconcileGraph?.(objects, options) ?? { removed:0, updated:0, kept:0, unavailable:true }
+      ready() { return nativeBuild() },
+      records() { return snapshot(nativeBuild() ? nativeMechanics()?.projectConnections?.()??[] : []) },
+      reconcile() {
+        return nativeBuild()
+          ? nativeMechanics()?.syncScene?.()??{unavailable:true}
+          : { removed:0, updated:0, kept:0, unavailable:true }
       },
       findCandidate(movingObject, targetObjects, options = {}) {
-        return connectorRuntime()?.findActiveCandidate?.(movingObject, targetObjects, options) ?? null
+        if(!nativeBuild())return null
+        const movingId=movingObject?.userData?.instanceId??movingObject
+        const targetIds=(targetObjects??[]).map(value=>value?.userData?.instanceId??value)
+        return nativeMechanics()?.findCandidate?.(movingId,targetIds,options)??null
       },
-      commitCandidate(candidate) { return connectorRuntime()?.commitActiveCandidate?.(candidate) ?? { accepted:false, reason:'connector-v4-unavailable' } },
-      removePart(instanceId) { return connectorRuntime()?.removePartConnections?.(instanceId) ?? 0 },
-      restore(records, options = {}) { return connectorRuntime()?.restoreConnections?.(records, options) ?? { restored:0, rejected:(records ?? []).length } },
-      clear() { return connectorRuntime()?.clearGraph?.() },
-      audit(partId) { return snapshot(connectorRuntime()?.audit?.(partId) ?? null) },
-      update(now) { return connectorRuntime()?.updateEditor?.(now) },
+      commitCandidate(candidate) {
+        return nativeBuild()
+          ? nativeMechanics()?.commitCandidate?.(candidate)??{accepted:false,reason:'mechanics-next-unavailable'}
+          : {accepted:false,reason:'mechanics-next-unavailable'}
+      },
+      removePart(instanceId) {
+        return nativeBuild() ? nativeMechanics()?.removePartConnections?.(instanceId)??0 : 0
+      },
+      restore(records) {
+        const result=nativeMechanics()?.importLegacyConnections?.(records??[])
+        return result?.accepted
+          ? {restored:result.imported??0,rejected:0}
+          : {restored:0,rejected:(records??[]).length}
+      },
+      clear() { return nativeMechanics()?.clearLegacyConnections?.()??false },
+      audit(partId) { return snapshot(nativeMechanics()?.describePart?.(partId) ?? null) },
+      update() { return nativeBuild() ? nativeMechanics()?.syncScene?.() : undefined },
     }),
     simulate:Object.freeze({
       ready() {
