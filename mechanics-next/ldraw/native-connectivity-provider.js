@@ -199,7 +199,7 @@ export function createNativeConnectivityProvider({
   if(typeof ldraw?.readText!=='function')throw new TypeError('Native connectivity provider requires BrickLabLDraw.readText')
 
   const shadowRoot=`https://raw.githubusercontent.com/${NATIVE_SHADOW_SOURCE.repository}/${NATIVE_SHADOW_SOURCE.commit}/`
-  const cachedShadowFetch=createCachedShadowTextFetcher()
+  const cachedShadowFetch=fetchShadowText?null:createCachedShadowTextFetcher()
   const readShadow=fetchShadowText??(path=>cachedShadowFetch(shadowRoot+encoded(path)))
   const shadow=createNativeShadowResolver({fetchShadowText:readShadow})
   const resolver=createNativeLDrawInheritanceResolver({
