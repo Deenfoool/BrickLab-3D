@@ -382,6 +382,8 @@ export function createMechanicsNextRuntime({
     endpoint?.id
 
   const contactBundleFromCandidate=candidate=>{
+    const primary=new Set(candidate?.match?.interfacePair||[])
+    if(!primary.has('stud')||!primary.has('anti-stud'))return null
     const contacts=(candidate?.supportPairs||[]).filter(pair=>{
       const values=new Set(pair?.match?.interfacePair||[])
       return values.has('stud')&&values.has('anti-stud')
