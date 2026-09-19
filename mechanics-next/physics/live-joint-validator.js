@@ -117,6 +117,41 @@ function relativeOrientationSignature(frameA,frameB){
   return value
 }
 
+function connectorTwistPhase(frameA,frameB){
+  const axis=frameB?.axis
+  const refA=frameA?.reference
+  const refB=frameB?.reference
+  if(!Array.isArray(axis)||!Array.isArray(refA)||!Array.isArray(refB))return null
+  const project=(ref)=>{
+    const dot=dot3(ref,axis)
+    const value=sub3(ref,scale3(axis,dot))
+    const length=len3(value)
+    return length>1e-9?scale3(value,1/length):null
+  }
+  const a=project(refA),b=project(refB)
+  if(!a||!b)return null
+  const cross=[
+    a[1]*b[2]-a[2]*b[1],
+    a[2]*b[0]-a[0]*b[2],
+    a[0]*b[1]-a[1]*b[0],
+  ]
+  const sin=dot3(axis,cross)
+  const cos=Math.max(-1,Math.min(1,dot3(a,b)))
+  return Math.atan2(sin,cos)
+}
+function wrapPeriod(value,period){
+  if(!(Number.isFinite(value)&&Number.isFinite(period)&&period>0))return value
+  return((value+period/2)%period+period)%period-period/2
+}
+function symmetryAwareOrientationDrift(match,savedGeometry,frameA,frameB,rawDrift){
+  const symmetry=Number(match?.rotationalSymmetry)
+  const saved=Number(savedGeometry?.twistPhaseRad)
+  const current=connectorTwistPhase(frameA,frameB)
+  if(match?.keyed!==true||!Number.isFinite(symmetry)||symmetry<=1||
+     !Number.isFinite(saved)||!Number.isFinite(current))return rawDrift
+  return Math.abs(wrapPeriod(current-saved,Math.PI*2/symmetry))
+}
+
 function orientationDrift(saved,frameA,frameB){
   if(!Array.isArray(saved)||saved.length!==9)return 0
   const current=relativeOrientationSignature(frameA,frameB)
@@ -268,10 +303,17 @@ export function createLiveJointValidator({
     })
 
     const orientationTolerance=.035
-    const drift=orientationDrift(
+    const rawDrift=orientationDrift(
       savedGeometry.relativeOrientation,
       frameA,
       frameB,
+    )
+    const drift=symmetryAwareOrientationDrift(
+      entry.match,
+      savedGeometry,
+      frameA,
+      frameB,
+      rawDrift,
     )
     const orientationLocked=kind==='fixed'||kind==='prismatic'
 
