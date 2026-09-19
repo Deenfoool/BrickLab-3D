@@ -822,6 +822,23 @@ export function createMechanicsNextRuntime({
     describePart(partId, options) {
       return intelligence?.describe(partId, options) ?? null
     },
+    async ensurePartConnectivity(partId) {
+      const id=String(partId||'')
+      if(!id||!connectivity)return Object.freeze({ready:false,partId:id,reason:'connectivity-unavailable'})
+      const result=await connectivity.hydrate(id)
+      intelligence?.invalidate?.(id)
+      sceneObserver?.invalidatePart?.(id)
+      const refreshed=syncScene()
+      const descriptor=intelligence?.describe?.(id,{force:true})??null
+      return Object.freeze({
+        ready:result?.status==='ready'&&Boolean(descriptor),
+        partId:id,
+        status:result?.status??null,
+        endpointCount:descriptor?.endpoints?.length??0,
+        warnings:Object.freeze([...(result?.warnings||[])]),
+        refreshed,
+      })
+    },
     mechanicalInstance(instanceId) {
       let instance=sceneObserver?.instance(instanceId) ?? null
       if(!instance&&sceneObserver&&subsystems?.editor?.ready?.()===true){
