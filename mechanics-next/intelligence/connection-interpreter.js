@@ -418,6 +418,33 @@ function relativeOrientationSignature(frameA,frameB){
   return Object.freeze(value)
 }
 
+function connectorTwistPhase(frameA,frameB){
+  const axis=frameB?.axis
+  const refA=frameA?.reference
+  const refB=frameB?.reference
+  if(!Array.isArray(axis)||!Array.isArray(refA)||!Array.isArray(refB))return null
+  const project=(ref)=>{
+    const dot=ref[0]*axis[0]+ref[1]*axis[1]+ref[2]*axis[2]
+    const value=[
+      ref[0]-axis[0]*dot,
+      ref[1]-axis[1]*dot,
+      ref[2]-axis[2]*dot,
+    ]
+    const length=Math.hypot(...value)
+    return length>1e-9?value.map(item=>item/length):null
+  }
+  const a=project(refA),b=project(refB)
+  if(!a||!b)return null
+  const cross=[
+    a[1]*b[2]-a[2]*b[1],
+    a[2]*b[0]-a[0]*b[2],
+    a[0]*b[1]-a[1]*b[0],
+  ]
+  const sin=axis[0]*cross[0]+axis[1]*cross[1]+axis[2]*cross[2]
+  const cos=Math.max(-1,Math.min(1,a[0]*b[0]+a[1]*b[1]+a[2]*b[2]))
+  return Math.atan2(sin,cos)
+}
+
 function connectionGeometry(frameA,frameB){
   const dx=frameA.position[0]-frameB.position[0]
   const dy=frameA.position[1]-frameB.position[1]
@@ -436,6 +463,7 @@ function connectionGeometry(frameA,frameB){
       frameA.axis[1]*frameB.axis[1]+
       frameA.axis[2]*frameB.axis[2],
     relativeOrientation:relativeOrientationSignature(frameA,frameB),
+    twistPhaseRad:connectorTwistPhase(frameA,frameB),
   })
 }
 
@@ -454,6 +482,8 @@ function persistedConnectionGeometry(value,fallback){
     axisDot:Number.isFinite(Number(value.axisDot))
       ?Number(value.axisDot):fallback?.axisDot??1,
     relativeOrientation:relative,
+    twistPhaseRad:Number.isFinite(Number(value.twistPhaseRad))
+      ?Number(value.twistPhaseRad):fallback?.twistPhaseRad??null,
   })
 }
 
