@@ -1,0 +1,33 @@
+export function semanticInterfaceVariants(kind,{endpoint=null}={}){
+  const value=String(kind||'')
+  if(value==='technic-axle')return['axle']
+  if(value==='technic-axle-hole')return['axle-hole']
+  if(value==='technic-round-hole')return['round-hole']
+  if(value==='technic-pin')return['technic-pin']
+  if(value==='technic-pin-hole')return['technic-hole','round-hole']
+  if(value==='technic-axle-pin')return['technic-pin','axle']
+  if(value==='bar')return['bar']
+  if(value==='bar-hole')return['round-hole']
+  if(value==='stud')return['stud']
+  if(value==='anti-stud')return['anti-stud']
+  if(value==='ball')return['ball']
+  if(value==='socket')return['socket']
+  if(value==='ball-socket')return['ball','socket']
+  if(value==='clip')return['clip']
+  if(value==='hinge-fingers')return['hinge','fingers']
+  if(value==='click-hinge')return['click-hinge','fingers']
+  if(value==='turntable-bearing')return['turntable']
+  if(value==='steering-pivot')return['steering-pivot']
+  if(value==='linear-guide'||value==='rack-guide')return['linear-guide']
+  if(value==='linear-actuator-guide')return['linear-actuator-guide']
+  if(value==='pneumatic-cylinder-guide')return['pneumatic-cylinder-guide']
+  if(value==='engine-slider')return['engine-slider']
+  if(value==='wheel-retainer')return['wheel-retainer']
+  if(value==='driving-ring')return['driving-ring']
+  if(value==='wheel-axle-interface'){
+    if(endpoint?.gender==='male')return['axle']
+    if(endpoint?.gender==='female')return['axle-hole']
+    return['axle','axle-hole']
+  }
+  return[value]
+}
