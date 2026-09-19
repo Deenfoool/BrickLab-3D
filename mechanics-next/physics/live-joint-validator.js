@@ -2,6 +2,7 @@ import { rigidPoseFromMatrix4 } from '../math/rigid.js'
 import { worldConnectorFrame } from '../connectors/world-frame.js'
 import { matchMechanicalEndpoints } from '../connectors/profile-matcher.js'
 import { evaluateAxialOffset } from '../connectors/axial-fit.js'
+import { validateStudContactBundle } from '../connectors/contact-bundle.js'
 
 export const LIVE_JOINT_VALIDATOR_VERSION='mechanics-live-joint-validator-0.1.0'
 const EPS=1e-8
@@ -210,6 +211,22 @@ export function createLiveJointValidator({
       reason:'live-frame-unavailable',
       constraintId:entry.id,
     })
+
+    const contactBundle=entry.constraint?.metadata?.contactBundle??null
+    if(contactBundle?.kind==='stud-bundle'){
+      const bundleValidation=validateStudContactBundle(contactBundle,{
+        instanceA:entry.recordA.instance,
+        instanceB:entry.recordB.instance,
+        frameAForEndpoint:endpoint=>liveFrame(entry.recordA,endpoint),
+        frameBForEndpoint:endpoint=>liveFrame(entry.recordB,endpoint),
+      })
+      if(!bundleValidation.valid)return Object.freeze({
+        valid:false,
+        reason:`contact-bundle-invalid:${bundleValidation.reason}`,
+        constraintId:entry.id,
+        bundleValidation,
+      })
+    }
 
     const kind=String(entry.constraint?.constraintKind??entry.constraint?.kind??'fixed')
     const delta=sub3(frameA.position,frameB.position)
