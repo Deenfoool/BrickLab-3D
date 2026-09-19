@@ -138,4 +138,84 @@ test('native Mechanics Next gear records drive BUILD gear placement without lega
   }
 })
 
+
+test('native bevel gear records snap and become a bevel transmission without legacy gear metadata', () => {
+  const fixed=new THREE.Object3D()
+  fixed.userData={partId:'ldraw-native-bevel-20',instanceId:'native-bevel-fixed-20'}
+  fixed.position.set(0,0,0)
+  fixed.updateMatrixWorld(true)
+
+  const moving=new THREE.Object3D()
+  moving.userData={partId:'ldraw-native-bevel-12',instanceId:'native-bevel-moving-12'}
+  moving.position.set(-1.18,.92,0)
+  moving.updateMatrixWorld(true)
+
+  const endpoint=(bodyId)=>({
+    id:`${bodyId}:axle-hole`,
+    bodyId,
+    family:'cylinder',
+    gender:'female',
+    frame:{positionStud:[0,0,0],orientationBrickLab:[1,0,0,0,1,0,0,0,1]},
+    profile:{centered:true,caps:'none',sections:[{shape:'A',radiusLdu:6,lengthLdu:20}]},
+    capabilities:['slide'],
+    metadata:{semantics:{semanticKind:'technic-axle-hole'}},
+  })
+  const record=(object,teeth,meshAxisLdu)=>({
+    instance:{
+      body:{id:`${object.userData.instanceId}:body`,instanceId:object.userData.instanceId,partId:object.userData.partId},
+      endpoints:[endpoint(`${object.userData.instanceId}:body`)],
+      transmissions:[{
+        kind:'bevel-gear',
+        equationFamily:'gear-mesh',
+        toothCount:teeth,
+        pitchRadius:teeth/16,
+        gearGeometry:{
+          pitchRadius:teeth/16,
+          meshAnchorLdu:[0,0,0],
+          meshAxisLdu,
+          bevelApexSigns:[-1,1],
+          meshApexToleranceStud:.12,
+          meshCaptureDistanceStud:.65,
+        },
+      }],
+    },
+    pose:{position:object.position.toArray(),quaternion:object.quaternion.toArray()},
+    visualOffsetStud:[0,0,0],
+    object,
+  })
+  const records=()=>[
+    record(fixed,20,[0,-1,0]),
+    record(moving,12,[1,0,0]),
+  ]
+  const previous=globalThis.BrickLabMechanicsNext
+  globalThis.BrickLabMechanicsNext={records}
+  try{
+    const candidate=findGearSnapCandidate(moving,[fixed,moving])
+    assert.ok(candidate,'native bevel candidate should exist')
+    assert.equal(candidate.kind,'gear-mesh')
+    assert.equal(candidate.gearKind,'bevel')
+    assert.equal(candidate.movingGear.teeth,12)
+    assert.equal(candidate.fixedGear.teeth,20)
+    assert.equal(candidate.movingGear.gearFrameSource,'gear-geometry-evidence')
+    assert.equal(candidate.fixedGear.gearFrameSource,'gear-geometry-evidence')
+
+    applySnap(moving,candidate)
+    moving.updateMatrixWorld(true)
+
+    const discovery=discoverMechanicalTransmissions({
+      records:records(),
+      graph:createAssemblyGraph(),
+      relations:[],
+    })
+    const mesh=discovery.transmissions.find(item=>item.kind==='bevel-gear-mesh')
+    assert.ok(mesh,'native discovery should see the snapped bevel mesh')
+    assert.equal(mesh.parameters.teethA+mesh.parameters.teethB,32)
+    assert.ok(mesh.parameters.geometry.apexError<=mesh.parameters.geometry.apexTolerance)
+    assert.ok(mesh.parameters.geometry.axisOrthogonality<=.12)
+  }finally{
+    if(previous===undefined)delete globalThis.BrickLabMechanicsNext
+    else globalThis.BrickLabMechanicsNext=previous
+  }
+})
+ 
 await dom.happyDOM.close()
