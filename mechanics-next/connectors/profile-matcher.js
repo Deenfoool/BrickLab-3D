@@ -1,5 +1,5 @@
 import { endpointSemanticKind } from '../intelligence/endpoint-semantics.js'
-import { mechanicalInterfaceRule } from '../intelligence/interface-rules.js'
+import { mechanicalInterfaceRule, profileDerivedInterfaceRule } from '../intelligence/interface-rules.js'
 import { semanticInterfaceVariants } from '../intelligence/interface-variants.js'
 
 export const PROFILE_MATCHER_VERSION = 'mechanics-profile-matcher-0.1.0'
@@ -26,6 +26,14 @@ function maleFemale(a,b) {
   if (a?.gender==='male' && b?.gender==='female') return { male:a, female:b, reversed:false }
   if (b?.gender==='male' && a?.gender==='female') return { male:b, female:a, reversed:true }
   return null
+}
+
+function explicitShadowEndpoint(endpoint){
+  return endpoint?.evidence?.source==='ldcad-shadow-library' &&
+    endpoint?.metadata?.parser==='mechanics-next'
+}
+function profileFallbackAllowed(a,b){
+  return explicitShadowEndpoint(a)&&explicitShadowEndpoint(b)
 }
 
 export function sectionProfileFit(maleSection, femaleSection) {
@@ -118,6 +126,11 @@ function cylinderMatch(a,b,context={}) {
   const best=compatiblePairs[0]
   const slide=Boolean(a?.capabilities?.includes?.('slide') || b?.capabilities?.includes?.('slide'))
   const semantic=intendedInterfaceRule(a,b,context)
+  const fallback=semantic.rule?null:profileFallbackAllowed(a,b)
+    ?profileDerivedInterfaceRule({family:'cylinder',keyed:Boolean(best.fit.keyed),slide})
+    :null
+  const interfaceRule=semantic.rule??fallback
+  const interfacePair=semantic.pair??(fallback?['profile-cylinder','profile-cylinder']:null)
 
   return {
     compatible:true,
@@ -133,8 +146,8 @@ function cylinderMatch(a,b,context={}) {
     compatiblePairs:Object.freeze(compatiblePairs),
     incompatiblePairs:Object.freeze(incompatiblePairs),
     requiresAxialFit:true,
-    interfaceRule:semantic.rule,
-    interfacePair:semantic.pair,
+    interfaceRule,
+    interfacePair,
     semanticA:semantic.semanticA,
     semanticB:semantic.semanticB,
   }
@@ -152,18 +165,24 @@ function clipCylinderMatch(a,b,context={}) {
     .sort((x,y)=>Math.abs(x.clearance)-Math.abs(y.clearance))
   if (!candidates.length) return {compatible:false,reason:'clip-radius'}
   const semantic=intendedInterfaceRule(a,b,context)
+  const axialSlide=Boolean(clip?.capabilities?.includes?.('slide') || cylinder?.capabilities?.includes?.('slide'))
+  const fallback=semantic.rule?null:profileFallbackAllowed(a,b)
+    ?profileDerivedInterfaceRule({family:'clip-cylinder',slide:axialSlide})
+    :null
+  const interfaceRule=semantic.rule??fallback
+  const interfacePair=semantic.pair??(fallback?['clip','profile-cylinder']:null)
   return {
     compatible:true,
     family:'clip-cylinder',
     reason:'round-clip',
     keyed:false,
     rotationalSymmetry:Infinity,
-    axialSlide:Boolean(clip?.capabilities?.includes?.('slide') || cylinder?.capabilities?.includes?.('slide')),
+    axialSlide,
     freeTwist:true,
     requiresAxialFit:true,
     fit:Object.freeze(candidates[0]),
-    interfaceRule:semantic.rule,
-    interfacePair:semantic.pair,
+    interfaceRule,
+    interfacePair,
     semanticA:semantic.semanticA,
     semanticB:semantic.semanticB,
   }
@@ -195,6 +214,11 @@ function fingersMatch(a,b,context={}) {
     if (sa&&sb&&sa.gender===sb.gender) return {compatible:false,reason:'finger-overlap'}
   }
   const semantic=intendedInterfaceRule(a,b,context)
+  const fallback=semantic.rule?null:profileFallbackAllowed(a,b)
+    ?profileDerivedInterfaceRule({family:'fingers'})
+    :null
+  const interfaceRule=semantic.rule??fallback
+  const interfacePair=semantic.pair??(fallback?['profile-fingers','profile-fingers']:null)
   return {
     compatible:true,
     family:'fingers',
@@ -204,8 +228,8 @@ function fingersMatch(a,b,context={}) {
     axialSlide:false,
     freeTwist:true,
     requiresAxialFit:false,
-    interfaceRule:semantic.rule,
-    interfacePair:semantic.pair,
+    interfaceRule,
+    interfacePair,
     semanticA:semantic.semanticA,
     semanticB:semantic.semanticB,
   }
