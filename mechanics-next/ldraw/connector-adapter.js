@@ -1,7 +1,7 @@
 import { createEndpointDescriptor, deterministicId, evidence } from '../core/model.js'
 
 function sourceKey(connector, index = 0) {
-  const resolved = connector?.resolutionKey || connector?.compatibilityEndpointId || null
+  const resolved = connector?.compatibilityEndpointId || connector?.resolutionKey || null
   if (resolved) return String(resolved)
   return [
     connector?.source?.file || '',
