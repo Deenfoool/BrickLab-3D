@@ -186,6 +186,77 @@ test('keyed axle validation treats quarter turns as equivalent symmetry phases',
   assert.ok(halfPhase.orientationDrift>.7)
 })
 
+test('bar clip cylindrical joint slides while engaged and releases after axial exit', () => {
+  const graph=createAssemblyGraph()
+  const barBody=createBodyDescriptor({id:'clip-bar-body',instanceId:'clip-bar-i',partId:'bar'})
+  const clipBody=createBodyDescriptor({id:'clip-body',instanceId:'clip-i',partId:'clip'})
+  graph.addBody(barBody)
+  graph.addBody(clipBody)
+
+  const bar=createEndpointDescriptor({
+    id:'clip-bar-end',bodyId:barBody.id,family:'cylinder',gender:'male',
+    frame:{positionStud:[0,0,0],orientationBrickLab:[1,0,0,0,1,0,0,0,1]},
+    profile:{centered:true,caps:'none',sections:[{shape:'R',radiusLdu:4,lengthLdu:80}]},
+    capabilities:['slide'],
+    metadata:{semantics:{semanticKind:'bar'}},
+  })
+  const clip=createEndpointDescriptor({
+    id:'clip-end',bodyId:clipBody.id,family:'clip',gender:'female',
+    frame:{positionStud:[0,0,0],orientationBrickLab:[1,0,0,0,1,0,0,0,1]},
+    profile:{centered:true,radiusLdu:4,lengthLdu:8},
+    capabilities:[],
+    metadata:{semantics:{semanticKind:'clip'}},
+  })
+  graph.addConstraint(createConstraint({
+    id:'clip-bar-constraint',
+    bodyA:barBody.id,
+    bodyB:clipBody.id,
+    kind:'cylindrical',
+    metadata:{
+      endpointAId:bar.id,
+      endpointBId:clip.id,
+      observedConnectionId:'clip-bar-observed',
+      connectionGeometry:{
+        anchorDistanceStud:0,
+        axialSeparationStud:0,
+        lateralDistanceStud:0,
+        axisDot:1,
+        relativeOrientation:[1,0,0,0,1,0,0,0,1],
+        twistPhaseRad:0,
+      },
+      occupancy:{
+        connectionId:'clip-bar-observed',
+        exclusiveChannels:[endpointChannel(clipBody.id,clip.id)],
+        axialReservations:[{
+          channel:endpointChannel(barBody.id,bar.id),
+          interval:[-4,4],
+        }],
+      },
+    },
+  }))
+
+  const barObject=new THREE.Object3D()
+  const clipObject=new THREE.Object3D()
+  const records=[
+    recordFor(barBody,bar,barObject),
+    recordFor(clipBody,clip,clipObject),
+  ]
+
+  barObject.position.y=1
+  barObject.rotation.y=.6
+  barObject.updateMatrixWorld(true)
+  const retained=createLiveJointValidator({graph,records}).validateConstraint('clip-bar-constraint')
+  assert.equal(retained.valid,true)
+  assert.equal(retained.reason,'ok')
+  assert.ok(retained.engagementLdu>=7.999)
+
+  barObject.position.y=3
+  barObject.updateMatrixWorld(true)
+  const released=createLiveJointValidator({graph,records}).validateConstraint('clip-bar-constraint')
+  assert.equal(released.valid,false)
+  assert.equal(released.reason,'axial-disengaged')
+})
+
 test('live disengagement requires confirmation frames before removing the Rapier joint', () => {
   const graph=createAssemblyGraph()
   const maleBody=createBodyDescriptor({id:'release-male-body',instanceId:'release-male-i',partId:'pin'})
