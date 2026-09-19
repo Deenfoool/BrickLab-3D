@@ -105,8 +105,9 @@ function transmissionHints(classification) {
 function endpointTemplateKey(endpoint, index) {
   return String(
     endpoint?.metadata?.legacyEndpointId ??
-    endpoint?.metadata?.sourceEndpointId ??
+    endpoint?.metadata?.compatibilityEndpointId ??
     endpoint?.id ??
+    endpoint?.metadata?.sourceEndpointId ??
     `endpoint-${index}`
   )
 }
