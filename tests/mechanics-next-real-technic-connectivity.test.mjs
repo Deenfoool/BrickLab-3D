@@ -8,6 +8,7 @@ import { matchMechanicalEndpoints } from '../mechanics-next/connectors/profile-m
 import { findMechanicalCandidates } from '../mechanics-next/connectors/candidate-search.js'
 import { worldConnectorFrame } from '../mechanics-next/connectors/world-frame.js'
 import { quatFromUnitVectors } from '../mechanics-next/math/rigid.js'
+import { createPartMechanicalDescriptor, instantiatePartMechanicalDescriptor } from '../mechanics-next/intelligence/part-descriptor.js'
 
 const files=new Map([
   ['parts/3701.dat',[
@@ -180,4 +181,33 @@ test('real Technic Axle Pin acts as pin or axle according to the receiver',async
     assert.ok(candidates.length>0,`Technic Axle Pin should snap into ${label}`)
     assert.equal(candidates[0].connectionEligible,true)
   }
+})
+
+
+test('full descriptor instantiation preserves all real Technic hole identities',async()=>{
+  const resolver=createNativeShadowResolver({fetchShadowText:async path=>files.get(path)??null})
+  const brick=await resolver.resolve('parts/3701.dat')
+  const templateBodyId='template-brick'
+  const endpoints=brick.connectors.map(connector=>endpoint(connector,templateBodyId))
+  const descriptor=createPartMechanicalDescriptor({
+    observation:{
+      id:'ldraw-3701',
+      name:'Technic Brick 1 x 4 with Holes',
+      description:'Technic Brick 1 x 4 with Holes',
+      tags:['technic'],
+      ldraw:{code:'3701',file:'3701.dat'},
+    },
+    endpoints,
+  })
+  assert.equal(descriptor.endpoints.length,3)
+  assert.equal(new Set(descriptor.endpoints.map(item=>item.templateKey)).size,3)
+
+  const first=instantiatePartMechanicalDescriptor(descriptor,{instanceId:'brick-instance-a'})
+  const second=instantiatePartMechanicalDescriptor(descriptor,{instanceId:'brick-instance-b'})
+  assert.equal(new Set(first.endpoints.map(item=>item.id)).size,3)
+  assert.equal(new Set(second.endpoints.map(item=>item.id)).size,3)
+  assert.equal(
+    first.endpoints.some(left=>second.endpoints.some(right=>left.id===right.id)),
+    false,
+  )
 })
