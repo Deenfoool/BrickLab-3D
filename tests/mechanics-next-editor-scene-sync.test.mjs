@@ -27,3 +27,17 @@ test('native snapping self-heals when selected instance has not entered the obse
     /findCandidate\(instanceId, targetInstanceIds = null, options = \{\}\)[\s\S]{0,700}if\(!moving&&sceneObserver&&subsystems\?\.editor\?\.ready\?\.\(\)===true\)[\s\S]{0,300}sceneObserver\.sync/,
   )
 })
+
+
+test('native BUILD keeps gear placement snapping after legacy runtime purge',()=>{
+  assert.match(appSource,/findGearSnapCandidate/)
+  assert.match(
+    appSource,
+    /mechanicsNextBuildActive\(\)[\s\S]{0,1600}findGearSnapCandidate\(selected, buildRoot\.children\)/,
+  )
+  assert.match(appSource,/owner:'mechanics-next-gear'/)
+  assert.match(
+    appSource,
+    /snapCandidate\.owner === 'mechanics-next-gear'[\s\S]{0,700}applySnap\(selected, snapCandidate\)[\s\S]{0,350}BrickLabMechanicsNext\?\.syncScene\?\.\(\)/,
+  )
+})
