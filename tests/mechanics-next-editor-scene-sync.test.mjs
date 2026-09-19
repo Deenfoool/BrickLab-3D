@@ -11,6 +11,10 @@ test('editor structural edits synchronize Mechanics Next scene membership before
   assert.match(appSource,/syncMechanicsSceneMutation\('part-added'\)/)
   assert.match(appSource,/syncMechanicsSceneMutation\('parts-removed'\)/)
   assert.match(appSource,/syncMechanicsSceneMutation\('parts-duplicated'\)/)
+  assert.match(
+    appSource,
+    /function syncMechanicsSceneMutation[\s\S]{0,700}scheduleMechanicsNextBuildHandoff\(reason\)/,
+  )
 })
 
 test('native snapping self-heals when selected instance has not entered the observer yet',()=>{
