@@ -6,14 +6,14 @@ const appSource=await readFile(new URL('../app.js',import.meta.url),'utf8')
 const runtimeSource=await readFile(new URL('../mechanics-next/runtime.js',import.meta.url),'utf8')
 
 test('editor structural edits synchronize Mechanics Next scene membership before snap UI continues',()=>{
-  assert.match(appSource,/function syncMechanicsSceneMutation\(reason = 'editor-structure-change'\)/)
+  assert.match(appSource,/function syncMechanicsSceneMutation\(reason = 'editor-structure-change', partIds = \[\]\)/)
   assert.match(appSource,/BrickLabMechanicsNext\?\.syncScene\?\.\(\)/)
   assert.match(appSource,/syncMechanicsSceneMutation\('part-added'\)/)
   assert.match(appSource,/syncMechanicsSceneMutation\('parts-removed'\)/)
   assert.match(appSource,/syncMechanicsSceneMutation\('parts-duplicated'\)/)
   assert.match(
     appSource,
-    /function syncMechanicsSceneMutation[\s\S]{0,700}scheduleMechanicsNextBuildHandoff\(reason\)/,
+    /function syncMechanicsSceneMutation[\s\S]{0,1800}scheduleMechanicsNextBuildHandoff/,
   )
 })
 
@@ -73,4 +73,23 @@ test('native BUILD project state never dual-writes legacy connections',()=>{
     appSource,
     /const compatibilityConnections = data\.mechanicsNext\s*\? \[\]\s*:\s*\(Array\.isArray\(data\.connections\)/,
   )
+})
+
+
+test('native BUILD movement revalidates DOF before detaching',()=>{
+  assert.match(
+    appSource,
+    /transform\.addEventListener\('objectChange'[\s\S]{0,700}mechanicsNextBuildActive\(\)[\s\S]{0,350}scheduleNativeConnectionRevalidation\('transform-controls'\)/,
+  )
+  assert.match(
+    appSource,
+    /transform\.addEventListener\('mouseUp'[\s\S]{0,700}flushNativeConnectionRevalidation\('transform-release'\)[\s\S]{0,700}retainedConnection/,
+  )
+  assert.match(
+    appSource,
+    /function detachPartConnectionsForEdit\(object\)[\s\S]{0,220}if \(mechanicsNextBuildActive\(\)\) return 0/,
+  )
+  assert.match(appSource,/revalidateNativeConnectionsNow\('quarter-rotate'\)/)
+  assert.match(appSource,/revalidateNativeConnectionsNow\('inspector-position'\)/)
+  assert.match(appSource,/revalidateNativeConnectionsNow\('inspector-rotation'\)/)
 })
