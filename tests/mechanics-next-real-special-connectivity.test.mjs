@@ -10,6 +10,7 @@ import { worldConnectorFrame } from '../mechanics-next/connectors/world-frame.js
 import { quatFromUnitVectors } from '../mechanics-next/math/rigid.js'
 import { interpretObservedConnection } from '../mechanics-next/intelligence/connection-interpreter.js'
 import { exportMechanicsProjectState } from '../mechanics-next/migration/project-state.js'
+import { createLiveJointValidator } from '../mechanics-next/physics/live-joint-validator.js'
 
 const files=new Map([
   ['p/stud.dat','0 !LDCAD SNAP_CYL [ID=studC] [gender=M] [caps=one] [secs=R 6 4]'],
@@ -244,6 +245,35 @@ test('real multi-stud support becomes one validated fixed structural bundle',asy
   })
   assert.equal(state.connections.length,1)
   assert.equal(state.connections[0].contactBundle.contactCount,2)
+
+  const liveRecords=[
+    {...moving,object:objects.get('moving-stud-brick')},
+    {...target,object:objects.get('target-antistud-brick')},
+  ]
+  const liveValidator=createLiveJointValidator({
+    graph:{edges:kind=>kind==='constraint'?[interpreted.constraint]:[]},
+    records:liveRecords,
+  })
+  assert.equal(liveValidator.validateConstraint(interpreted.constraint.id).valid,true)
+
+  const secondId=contactBundle.contacts[1].targetEndpointId
+  const secondIndex=target.instance.endpoints.findIndex(item=>item.id===secondId)
+  assert.ok(secondIndex>=0)
+  const displaced=target.instance.endpoints[secondIndex]
+  target.instance.endpoints[secondIndex]=Object.freeze({
+    ...displaced,
+    frame:Object.freeze({
+      ...displaced.frame,
+      positionLdu:Object.freeze([
+        Number(displaced.frame.positionLdu?.[0]||0)+20,
+        Number(displaced.frame.positionLdu?.[1]||0),
+        Number(displaced.frame.positionLdu?.[2]||0),
+      ]),
+    }),
+  })
+  const broken=liveValidator.validateConstraint(interpreted.constraint.id)
+  assert.equal(broken.valid,false)
+  assert.match(broken.reason,/contact-bundle-invalid:bundle-geometry-mismatch/)
 
   const fakeBundle={
     ...record,
