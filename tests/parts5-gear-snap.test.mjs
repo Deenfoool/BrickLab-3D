@@ -20,6 +20,8 @@ const { findPart } = await import('../parts.js')
 const { findGearSnapCandidate, findSnapCandidate, applySnap, connectorWorldPosition } = await import('../snapping-v3.js')
 const { isEndpointOccupied, createConnection } = await import('../connections-v3.js')
 const { evaluateSpurMesh } = await import('../parts5/gear-mesh-math-v1.js')
+const { createAssemblyGraph } = await import('../mechanics-next/topology/assembly-graph.js')
+const { discoverMechanicalTransmissions } = await import('../mechanics-next/transmission/discovery.js')
 
 function makeGear(partId, instanceId) {
   const part = findPart(partId)
@@ -119,6 +121,17 @@ test('native Mechanics Next gear records drive BUILD gear placement without lega
     applySnap(moving,candidate)
     moving.updateMatrixWorld(true)
     assert.ok(Math.abs(moving.position.x-2.018)<1e-6)
+
+    const records=[record(fixed,20),record(moving,12)]
+    const discovery=discoverMechanicalTransmissions({
+      records,
+      graph:createAssemblyGraph(),
+      relations:[],
+    })
+    const mesh=discovery.transmissions.find(item=>item.kind==='spur-gear-mesh')
+    assert.ok(mesh,'native transmission discovery should see the snapped gear mesh')
+    assert.deepEqual(new Set(mesh.bodies),new Set(records.map(item=>item.instance.body.id)))
+    assert.equal(mesh.parameters.teethA+mesh.parameters.teethB,32)
   }finally{
     if(previous===undefined)delete globalThis.BrickLabMechanicsNext
     else globalThis.BrickLabMechanicsNext=previous
