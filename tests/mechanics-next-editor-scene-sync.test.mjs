@@ -58,3 +58,19 @@ test('inserted parts warm their native connectivity before relying on BUILD snap
     /async ensurePartConnectivity\(partId\)[\s\S]{0,900}connectivity\.hydrate\(id\)[\s\S]{0,900}syncScene\(\)/,
   )
 })
+
+
+test('native BUILD project state never dual-writes legacy connections',()=>{
+  assert.doesNotMatch(
+    appSource,
+    /if \(connection && !connections\.some\([\s\S]{0,180}connections\.push\(cloneState\(connection\)\)/,
+  )
+  assert.match(
+    appSource,
+    /connections:\s*mechanicsNextBuildActive\(\) \? \[\] : cloneState\(connections\)/,
+  )
+  assert.match(
+    appSource,
+    /const compatibilityConnections = data\.mechanicsNext\s*\? \[\]\s*:\s*\(Array\.isArray\(data\.connections\)/,
+  )
+})
