@@ -90,6 +90,7 @@ test('runtime BUILD transaction commits pin into hole and releases only after in
   assert.equal(committed.accepted,true)
   assert.equal(runtime.projectConnections().length,1)
   assert.equal(runtime.projectConnections()[0].kind,'revolute')
+  const initialGeometry=structuredClone(runtime.exportProjectState().connections[0].geometry)
 
   const pin=objects.get('pin-i')
   pin.position.y+=.2
@@ -97,6 +98,11 @@ test('runtime BUILD transaction commits pin into hole and releases only after in
   const retained=runtime.syncScene()
   assert.equal(retained.revalidation.released,0)
   assert.equal(runtime.projectConnections().length,1,'allowed axial engagement must retain the pin joint')
+  assert.deepEqual(
+    runtime.exportProjectState().connections[0].geometry,
+    initialGeometry,
+    'allowed BUILD motion must not rewrite the committed geometry baseline',
+  )
 
   pin.position.x+=.5
   pin.updateMatrixWorld(true)
@@ -126,6 +132,7 @@ test('runtime keyed axle joint survives 90 degree symmetry but rejects 45 degree
   const committed=await runtime.commitCandidate(candidate)
   assert.equal(committed.accepted,true)
   assert.equal(runtime.projectConnections().length,1)
+  const initialGeometry=structuredClone(runtime.exportProjectState().connections[0].geometry)
 
   const axle=objects.get('axle-i')
   axle.rotation.y+=Math.PI/2
@@ -133,6 +140,11 @@ test('runtime keyed axle joint survives 90 degree symmetry but rejects 45 degree
   const quarter=runtime.syncScene()
   assert.equal(quarter.revalidation.released,0)
   assert.equal(runtime.projectConnections().length,1,'quarter-turn keyed symmetry must remain connected')
+  assert.deepEqual(
+    runtime.exportProjectState().connections[0].geometry,
+    initialGeometry,
+    'symmetric keyed rotation must not rewrite the committed twist baseline',
+  )
 
   axle.rotation.y+=Math.PI/4
   axle.updateMatrixWorld(true)
