@@ -21,6 +21,16 @@ const files=new Map([
     '0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2   R 6 16   R 8 4   R 6 16   _L 6.25 2] [center=true] [slide=true] [ori=0 -1 0 1 0 0 0 0 1]',
   ].join('\n')],
   ['parts/3705.dat','0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=A 6 80] [center=true] [slide=true] [ori=0 -1 0 1 0 0 0 0 1]'],
+  ['parts/43093.dat',[
+    '0 LDCad shadow info for "Technic Axle Pin with Friction"',
+    '0 !LDCAD SNAP_CLEAR',
+    '0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=L_ 6.25 2   R 6 16   R 8 2   A 6 20] [center=true] [slide=true] [ori=0 -1 0 1 0 0 0 0 1]',
+  ].join('\n')],
+  ['parts/32269.dat',[
+    '0 LDCad shadow info for "Technic Gear 20 Tooth Double Bevel"',
+    '0 !LDCAD SNAP_CLEAR',
+    '0 !LDCAD SNAP_CYL [gender=F] [caps=none] [secs=A 6 20] [center=true] [slide=true] [ori=1 0 0 0 0 1 0 -1 0]',
+  ].join('\n')],
 ])
 
 const endpoint=(connector,bodyId)=>enrichEndpointSemantics(ldcadConnectorToEndpoint(connector,{bodyId,partId:bodyId}))
@@ -133,5 +143,41 @@ test('real Technic pin and axle profiles produce BUILD placement candidates',asy
     assert.ok(candidates.length>0,`${label} should produce a native BUILD candidate`)
     assert.equal(candidates[0].connectionEligible,true)
     assert.ok(candidates[0].solution?.valid)
+  }
+})
+
+
+test('real Technic Axle Pin acts as pin or axle according to the receiver',async()=>{
+  const resolver=createNativeShadowResolver({fetchShadowText:async path=>files.get(path)??null})
+  const [axlePin,brick,gear]=await Promise.all([
+    resolver.resolve('parts/43093.dat'),
+    resolver.resolve('parts/3701.dat'),
+    resolver.resolve('parts/32269.dat'),
+  ])
+  const mixed=endpoint(axlePin.connectors[0],'mixed-body')
+  assert.equal(mixed.metadata.semantics.semanticKind,'technic-axle-pin')
+
+  const pinHole=endpoint(brick.connectors[0],'pin-hole-body')
+  const pinMatch=matchMechanicalEndpoints(mixed,pinHole)
+  assert.equal(pinMatch.compatible,true)
+  assert.equal(pinMatch.interfaceRule?.kind,'revolute')
+  assert.deepEqual(pinMatch.interfacePair,['technic-pin','technic-hole'])
+
+  const axleHole=endpoint(gear.connectors[0],'axle-hole-body')
+  const axleMatch=matchMechanicalEndpoints(mixed,axleHole)
+  assert.equal(axleMatch.compatible,true)
+  assert.equal(axleMatch.interfaceRule?.kind,'prismatic')
+  assert.deepEqual(axleMatch.interfacePair,['axle','axle-hole'])
+
+  for(const [label,target] of [['pin-hole',pinHole],['axle-hole',axleHole]]){
+    const pair=candidateRecordPair(mixed,target)
+    const candidates=findMechanicalCandidates({
+      moving:pair.moving,
+      targets:[pair.target],
+      captureDistanceStud:1,
+      minAxisAlignment:.55,
+    })
+    assert.ok(candidates.length>0,`Technic Axle Pin should snap into ${label}`)
+    assert.equal(candidates[0].connectionEligible,true)
   }
 })
