@@ -493,6 +493,61 @@ function identityObject() {
   }
 }
 
+test('profile-derived explicit Shadow joint survives candidate-to-interpreter boundary', () => {
+  const raw=(gender,line)=>({
+    family:'cylinder',
+    gender,
+    group:null,
+    frame:{positionLdu:[0,0,0],orientation:[1,0,0,0,1,0,0,0,1]},
+    geometry:{
+      sections:[{shape:'R',radiusLdu:5,lengthLdu:20,elastic:false}],
+      caps:'none',
+      centered:true,
+    },
+    snap:{slide:false},
+    inheritance:{scale:'none',mirror:'cor'},
+    source:{kind:'ldcad-shadow',file:'parts/custom-profile.dat',line,meta:'SNAP_CYL'},
+  })
+  const male=enrichEndpointSemantics(ldcadConnectorToEndpoint(raw('male',1),{
+    bodyId:'profile-body-a',partId:'profile-a',
+  }))
+  const female=enrichEndpointSemantics(ldcadConnectorToEndpoint(raw('female',2),{
+    bodyId:'profile-body-b',partId:'profile-b',
+  }))
+  assert.equal(male.metadata.semantics.semanticKind,'cylinder-other')
+  assert.equal(female.metadata.semantics.semanticKind,'cylinder-other')
+
+  const match=matchMechanicalEndpoints(male,female)
+  assert.equal(match.compatible,true)
+  assert.equal(match.interfaceRule?.kind,'revolute')
+  assert.deepEqual(match.interfacePair,['profile-cylinder','profile-cylinder'])
+  assert.equal(match.interfaceRule?.topology?.profileDerived,true)
+
+  const instances=new Map([
+    ['profile-a',{body:{id:'profile-body-a',instanceId:'profile-a',partId:'profile-a'},descriptor:{classification:{role:'unknown'}},endpoints:[male]}],
+    ['profile-b',{body:{id:'profile-body-b',instanceId:'profile-b',partId:'profile-b'},descriptor:{classification:{role:'unknown'}},endpoints:[female]}],
+  ])
+  const identity=()=>({
+    children:[],
+    matrixWorld:{elements:[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},
+    updateWorldMatrix(){},
+  })
+  const objects=new Map([['profile-a',identity()],['profile-b',identity()]])
+  const interpreted=interpretObservedConnection({
+    id:'profile-derived-observed',
+    a:{instanceId:'profile-a',endpointId:male.id},
+    b:{instanceId:'profile-b',endpointId:female.id},
+    match:{family:'cylinder'},
+  },{
+    sceneObserver:{instance:id=>instances.get(id)??null},
+    objectById:id=>objects.get(id)??null,
+  })
+  assert.equal(interpreted.valid,true)
+  assert.equal(interpreted.type,'constraint')
+  assert.equal(interpreted.constraint.kind,'revolute')
+  assert.deepEqual(interpreted.constraint.metadata.interfacePair,['profile-cylinder','profile-cylinder'])
+})
+
 test('shadow interpreter derives keyed prismatic axle coupling independently of V4 constraint hint', () => {
   const maleRaw = {
     endpointId:'male-axle',
