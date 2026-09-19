@@ -14,6 +14,13 @@ import { createLiveJointValidator } from '../mechanics-next/physics/live-joint-v
 
 const files=new Map([
   ['p/stud.dat','0 !LDCAD SNAP_CYL [ID=studC] [gender=M] [caps=one] [secs=R 6 4]'],
+  ['parts/30374.dat','0 !LDCAD SNAP_CYL [gender=M] [caps=none] [secs=R 4 80] [center=true] [slide=true] [pos=0 40 0] [ori=-1 0 0 0 -1 0 0 0 1]'],
+  ['p/clip3.dat','0 !LDCAD SNAP_CLP [radius=4] [length=8] [center=true] [pos=0 2 0] [ori=0 1 0 -1 0 0 0 0 1]'],
+  ['parts/3641.dat','0 !LDCAD SNAP_GEN [group=rim8_6] [gender=F] [bounding=cyl 8 3] [ori=1 0 0 0 0 -1 0 1 0]'],
+  ['parts/4624.dat',[
+    '0 !LDCAD SNAP_CYL [gender=F] [caps=one] [secs=R 4 10   R 5 2] [pos=0 0 8] [ori=1 0 0 0 0 -1 0 1 0]',
+    '0 !LDCAD SNAP_GEN [group=rim8_6] [gender=M] [bounding=cyl 10 3.5] [ori=1 0 0 0 0 -1 0 1 0]',
+  ].join('\n')],
   ['parts/6154.dat','0 !LDCAD SNAP_CYL [gender=F] [caps=one] [secs=S 6 4] [pos=0 96 0] [grid=C 4 1 20 0]'],
   ['p/joint8ball.dat','0 !LDCAD SNAP_GEN [gender=M] [bounding=sph 8] [placement=free]'],
   ['p/joint8socket1.dat','0 !LDCAD SNAP_GEN [gender=F] [bounding=sph 8] [placement=free]'],
@@ -89,6 +96,75 @@ function alignedRecords(source,target,{sourceRole='connector',targetRole='connec
     },
   }
 }
+
+test('real bar and clip produce cylindrical BUILD placement with interval occupancy',async()=>{
+  const [barData,clipData]=await Promise.all([
+    resolver.resolve('parts/30374.dat'),
+    resolver.resolve('p/clip3.dat'),
+  ])
+  const bar=endpoint(barData.connectors[0],'bar-body')
+  const clip=endpoint(clipData.connectors[0],'clip-body')
+  assert.equal(bar.metadata.semantics.semanticKind,'bar')
+  assert.equal(clip.metadata.semantics.semanticKind,'clip')
+
+  const match=matchMechanicalEndpoints(bar,clip)
+  assert.equal(match.compatible,true)
+  assert.equal(match.interfaceRule?.kind,'cylindrical')
+  assert.equal(match.requiresAxialFit,true)
+  assert.equal(match.male.id,bar.id)
+  assert.equal(match.female.family,'cylinder')
+
+  const records=alignedRecords(bar,clip)
+  const candidates=findMechanicalCandidates({
+    moving:records.moving,
+    targets:[records.target],
+    captureDistanceStud:1,
+    minAxisAlignment:.55,
+  })
+  assert.ok(candidates.length>0)
+  const candidate=candidates[0]
+  assert.equal(candidate.connectionEligible,true)
+  assert.equal(candidate.match.family,'clip-cylinder')
+  assert.equal(candidate.occupancyPlan.exclusiveChannels.length,1,'only the clip receiver is exclusive')
+  assert.equal(candidate.occupancyPlan.axialReservations.length,1,'bar uses interval occupancy')
+  assert.match(candidate.occupancyPlan.exclusiveChannels[0],/clip-body/)
+  assert.match(candidate.occupancyPlan.axialReservations[0].channel,/bar-body/)
+  const interval=candidate.occupancyPlan.axialReservations[0].interval
+  assert.ok(interval[1]-interval[0]<=8+1e-6,'clip must reserve only its physical axial span')
+})
+
+test('real tyre and rim group resolve to one fixed elastic fit candidate',async()=>{
+  const [tyreData,rimData]=await Promise.all([
+    resolver.resolve('parts/3641.dat'),
+    resolver.resolve('parts/4624.dat'),
+  ])
+  const tyre=endpoint(tyreData.connectors[0],'tyre-body')
+  const rimConnector=rimData.connectors.find(item=>item.group==='rim8_6')
+  assert.ok(rimConnector)
+  const rim=endpoint(rimConnector,'rim-body')
+  assert.equal(tyre.metadata.semantics.semanticKind,'rim-tire-interface')
+  assert.equal(rim.metadata.semantics.semanticKind,'rim-tire-interface')
+
+  const match=matchMechanicalEndpoints(tyre,rim,{
+    classificationA:{role:'tire'},
+    classificationB:{role:'rim'},
+  })
+  assert.equal(match.compatible,true)
+  assert.equal(match.interfaceRule?.kind,'fixed')
+  assert.equal(match.interfaceRule?.topology?.elasticFit,true)
+
+  const records=alignedRecords(tyre,rim,{sourceRole:'tire',targetRole:'rim'})
+  const candidates=findMechanicalCandidates({
+    moving:records.moving,
+    targets:[records.target],
+    captureDistanceStud:1,
+    minAxisAlignment:.55,
+  })
+  assert.ok(candidates.length>0)
+  assert.equal(candidates[0].connectionEligible,true)
+  assert.equal(candidates[0].match.interfaceRule.kind,'fixed')
+  assert.equal(candidates[0].match.interfaceRule.topology.elasticFit,true)
+})
 
 test('real stud and anti-stud profiles produce a retained structural candidate',async()=>{
   const [stud,receiver]=await Promise.all([
