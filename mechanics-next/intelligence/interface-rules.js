@@ -229,3 +229,44 @@ export function shouldFormRigidIsland(constraint) {
   const dof = constraint?.dof || constraint?.topology?.dof
   return Boolean(dof) && ['tx','ty','tz','rx','ry','rz'].every(key => dof[key]?.state === 'locked')
 }
+
+export function profileDerivedInterfaceRule({
+  family,
+  keyed=false,
+  slide=false,
+  freeOrientation=false,
+  aligned=false,
+}={}){
+  let kind=null
+  let source='LDCad explicit profile geometry'
+  if(family==='cylinder'){
+    kind=keyed?(slide?'prismatic':'fixed'):(slide?'cylindrical':'revolute')
+  }else if(family==='clip-cylinder'){
+    kind=slide?'cylindrical':'revolute'
+  }else if(family==='fingers'){
+    kind='revolute'
+  }else if(family==='sphere'){
+    kind='spherical'
+  }else if(family==='generic'&&aligned===true&&!freeOrientation){
+    kind='fixed'
+  }
+  if(!kind)return null
+  return freezeRule({
+    kind,
+    topology:{
+      dof:constraintDof(kind),
+      axis:kind==='spherical'||kind==='fixed'?null:'y',
+      retained:true,
+      profileDerived:true,
+      ...(keyed?{keyedRotation:true}:{}),
+    },
+    dynamics:{
+      source:'profile-derived',
+      disengagement:'geometry-engagement',
+    },
+    evidence:{
+      tier:'B',
+      source,
+    },
+  })
+}
