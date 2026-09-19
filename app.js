@@ -397,6 +397,11 @@ function nativeEndpointsForObject(object) {
 }
 
 function nativeEndpointAvailable(object, endpoint) {
+  const state=globalThis.BrickLabMechanicsNext?.endpointOccupancy?.(
+    object?.userData?.instanceId,
+    endpoint?.id,
+  )
+  if(state?.known===true)return state.occupied!==true
   return !uiConnections().some(connection =>
     (connection.a.instanceId === object.userData.instanceId && connection.a.endpointId === endpoint.id) ||
     (connection.b.instanceId === object.userData.instanceId && connection.b.endpointId === endpoint.id))
