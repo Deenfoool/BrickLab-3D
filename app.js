@@ -342,6 +342,7 @@ function syncMechanicsSceneMutation(reason = 'editor-structure-change') {
   window.dispatchEvent(new CustomEvent('bricklab:editorexternalmutation', {
     detail:{ reason },
   }))
+  void scheduleMechanicsNextBuildHandoff(reason)
 }
 
 function toast(text) {
