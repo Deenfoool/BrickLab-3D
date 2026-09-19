@@ -67,6 +67,12 @@ export const INTERFACE_RULES = Object.freeze({
     dynamics:{ rotationalResistance:'part-variant' },
     evidence:{ tier:'B', source:'LDCad SNAP_FGR semantics' },
   }),
+  'click-hinge:click-hinge':freezeRule({
+    kind:'revolute',
+    topology:{ dof:constraintDof('revolute'), axis:'y', retained:true, detents:true },
+    dynamics:{ rotationalResistance:'detent', preferredAngles:'part-profile' },
+    evidence:{ tier:'B', source:'LDCad clkRot male/female grouped cylinder connectivity' },
+  }),
   'click-hinge:fingers':freezeRule({
     kind:'revolute',
     topology:{ dof:constraintDof('revolute'), axis:'y', retained:true, detents:true },
