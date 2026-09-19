@@ -5,6 +5,7 @@ import { mechanicalInterfaceRule } from './interface-rules.js'
 import { semanticInterfaceVariants } from './interface-variants.js'
 import { rigidPoseFromMatrix4 } from '../math/rigid.js'
 import { worldConnectorFrame } from '../connectors/world-frame.js'
+import { matchMechanicalEndpoints } from '../connectors/profile-matcher.js'
 
 function evidenceConfidence(tier) {
   if (tier === 'A') return 'verified'
@@ -457,6 +458,75 @@ function worldFrame(object,endpoint){
   }
 }
 
+function validateStudContactBundle(bundle,{instanceA,instanceB,objectA,objectB}={}){
+  const contacts=Array.isArray(bundle?.contacts)?bundle.contacts:[]
+  if(bundle?.kind!=='stud-bundle'||contacts.length<2||Number(bundle?.contactCount)!==contacts.length){
+    return Object.freeze({valid:false,reason:'bundle-shape'})
+  }
+
+  const seenA=new Set(),seenB=new Set(),verified=[]
+  for(const contact of contacts){
+    const idA=String(contact?.sourceEndpointId||'')
+    const idB=String(contact?.targetEndpointId||'')
+    if(!idA||!idB||seenA.has(idA)||seenB.has(idB)){
+      return Object.freeze({valid:false,reason:'bundle-endpoint-identity'})
+    }
+    const endpointA=endpointByLegacyId(instanceA,idA)
+    const endpointB=endpointByLegacyId(instanceB,idB)
+    if(!endpointA||!endpointB){
+      return Object.freeze({valid:false,reason:'bundle-endpoint-missing',endpointA:idA,endpointB:idB})
+    }
+    const match=matchMechanicalEndpoints(endpointA,endpointB,{
+      classificationA:instanceA?.descriptor?.classification,
+      classificationB:instanceB?.descriptor?.classification,
+    })
+    const pair=new Set(match?.interfacePair||[])
+    if(!match?.compatible||!match?.interfaceRule||
+       !pair.has('stud')||!pair.has('anti-stud')||
+       match.interfaceRule?.topology?.bundleCanBecomeRigid!==true){
+      return Object.freeze({valid:false,reason:'bundle-interface-mismatch',endpointA:idA,endpointB:idB})
+    }
+
+    const frameA=worldFrame(objectA,endpointA)
+    const frameB=worldFrame(objectB,endpointB)
+    const dx=frameA.position[0]-frameB.position[0]
+    const dy=frameA.position[1]-frameB.position[1]
+    const dz=frameA.position[2]-frameB.position[2]
+    const distance=Math.hypot(dx,dy,dz)
+    const axis=Math.abs(
+      frameA.axis[0]*frameB.axis[0]+
+      frameA.axis[1]*frameB.axis[1]+
+      frameA.axis[2]*frameB.axis[2]
+    )
+    if(distance>.045||axis<.997){
+      return Object.freeze({
+        valid:false,
+        reason:'bundle-geometry-mismatch',
+        endpointA:idA,
+        endpointB:idB,
+        distanceStud:distance,
+        axisAlignment:axis,
+      })
+    }
+    seenA.add(idA);seenB.add(idB)
+    verified.push(Object.freeze({
+      sourceEndpointId:idA,
+      targetEndpointId:idB,
+      sourceSemantic:endpointSemanticKind(endpointA),
+      targetSemantic:endpointSemanticKind(endpointB),
+    }))
+  }
+
+  return Object.freeze({
+    valid:true,
+    bundle:Object.freeze({
+      kind:'stud-bundle',
+      contactCount:verified.length,
+      contacts:Object.freeze(verified),
+    }),
+  })
+}
+
 export function interpretObservedConnection(record, {
   sceneObserver,
   objectById = () => null,
@@ -525,9 +595,22 @@ export function interpretObservedConnection(record, {
   }
 
   const contactBundle=record?.metadata?.contactBundle??null
-  if(contactBundle?.kind==='stud-bundle'&&
-     Number(contactBundle?.contactCount)>=2&&
-     resolved.rule?.topology?.bundleCanBecomeRigid===true){
+  const objectA = objectById(record.a.instanceId)
+  const objectB = objectById(record.b.instanceId)
+  let verifiedContactBundle=null
+  if(contactBundle?.kind==='stud-bundle'){
+    const bundleValidation=validateStudContactBundle(contactBundle,{
+      instanceA,instanceB,objectA,objectB,
+    })
+    if(!bundleValidation.valid){
+      return Object.freeze({
+        valid:false,
+        reason:`contact-bundle-invalid:${bundleValidation.reason}`,
+        recordId:record.id??null,
+        bundleValidation,
+      })
+    }
+    verifiedContactBundle=bundleValidation.bundle
     resolved.rule=Object.freeze({
       ...resolved.rule,
       kind:'fixed',
@@ -544,9 +627,6 @@ export function interpretObservedConnection(record, {
       }),
     })
   }
-
-  const objectA = objectById(record.a.instanceId)
-  const objectB = objectById(record.b.instanceId)
   const worldFrameA = worldFrame(objectA, endpointA)
   const worldFrameB = worldFrame(objectB, endpointB)
   const referenceFrame = worldFrameA
@@ -691,7 +771,7 @@ export function interpretObservedConnection(record, {
       steeringRack,
       legacyMatchFamily:record?.match?.family ?? null,
       occupancy:record?.occupancy ?? null,
-      contactBundle,
+      contactBundle:verifiedContactBundle,
       axisPolarity,
       endpointWorldAxes:Object.freeze({
         a:Object.freeze([...worldFrameA.axis]),
