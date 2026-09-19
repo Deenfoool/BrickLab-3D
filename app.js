@@ -401,7 +401,7 @@ function nativeEndpointAvailable(object, endpoint) {
     object?.userData?.instanceId,
     endpoint?.id,
   )
-  if(state?.known===true)return state.occupied!==true
+  if(state?.known===true)return state.available!==false
   return !uiConnections().some(connection =>
     (connection.a.instanceId === object.userData.instanceId && connection.a.endpointId === endpoint.id) ||
     (connection.b.instanceId === object.userData.instanceId && connection.b.endpointId === endpoint.id))
