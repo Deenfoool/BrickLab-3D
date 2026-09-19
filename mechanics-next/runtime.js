@@ -823,7 +823,12 @@ export function createMechanicsNextRuntime({
       return intelligence?.describe(partId, options) ?? null
     },
     mechanicalInstance(instanceId) {
-      return sceneObserver?.instance(instanceId) ?? null
+      let instance=sceneObserver?.instance(instanceId) ?? null
+      if(!instance&&sceneObserver&&subsystems?.editor?.ready?.()===true){
+        sceneObserver.sync(subsystems.editor.objects?.()??[])
+        instance=sceneObserver.instance(instanceId)
+      }
+      return instance
     },
     endpointWorldFrame(instanceId, endpointId) {
       const record=mechanicalRecords().find(item=>
@@ -1023,8 +1028,13 @@ export function createMechanicsNextRuntime({
     },
     nativeProjectAuthoritative:()=>nativeProjectAuthoritative,
     findCandidate(instanceId, targetInstanceIds = null, options = {}) {
-      const records = mechanicalRecords()
-      const moving = records.find(record => record.instance.body.instanceId === String(instanceId))
+      let records = mechanicalRecords()
+      let moving = records.find(record => record.instance.body.instanceId === String(instanceId))
+      if(!moving&&sceneObserver&&subsystems?.editor?.ready?.()===true){
+        sceneObserver.sync(subsystems.editor.objects?.()??[])
+        records=mechanicalRecords()
+        moving=records.find(record => record.instance.body.instanceId === String(instanceId))
+      }
       if (!moving) return null
       const wanted = Array.isArray(targetInstanceIds) ? new Set(targetInstanceIds.map(String)) : null
       const targets = records.filter(record =>
