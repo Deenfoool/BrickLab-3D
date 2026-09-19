@@ -53,7 +53,7 @@ test('Architecture API centralizes part metadata and object identity without exp
   assert.equal(object.children[0].userData.instanceRoot, object)
 })
 
-test('BUILD and SIMULATE authority remain delegated to Connector V4 and its fail-closed physics guard', async () => {
+test('legacy BUILD without native takeover leaves SIMULATE unavailable', async () => {
   const calls = []
   const globals = {
     BrickLabConnectorV4:{
@@ -65,12 +65,6 @@ test('BUILD and SIMULATE authority remain delegated to Connector V4 and its fail
       clearGraph:() => calls.push(['clear']),
       audit:id => ({ partId:id, pass:true }),
     },
-    BrickLabConnectorV4PhysicsGuard:{
-      version:'guard-v4', safetyVersion:'safe-v4', policyVersion:'policy-v4', adapterVersion:'adapter-v4',
-      errorCode:'BLOCKED', active:true, createOwner:'guard-v4',
-      lastPlan:() => ({ pass:false, blockers:[{ reason:'uncertified' }] }),
-      lastFailure:() => null,
-    },
   }
   const api = createBrickLabSubsystemApi({
     globals,
@@ -78,13 +72,12 @@ test('BUILD and SIMULATE authority remain delegated to Connector V4 and its fail
   })
 
   assert.equal(api.connectivity.authority.build, 'connector-v4-with-legacy-bridge')
-  assert.equal(api.connectivity.authority.simulate, 'connector-v4-physics-guard')
+  assert.equal(api.connectivity.authority.simulate, 'unavailable')
   assert.equal(api.connectivity.build.records()[0].id, 'v4-1')
   assert.deepEqual(api.connectivity.build.reconcile(undefined, { persist:false }), { kept:1, objectCount:1, persist:false })
   assert.equal(api.connectivity.build.removePart('a'), 2)
-  assert.equal(api.connectivity.simulate.ready(), true)
-  assert.equal(api.physics.guard().createOwner, 'guard-v4')
-  assert.equal(api.physics.lastPlan().blockers[0].reason, 'uncertified')
+  assert.equal(api.connectivity.simulate.ready(), false)
+  assert.equal(api.physics.guard(), null)
 
   const session = await api.physics.createSession([{ id:1 }], [{ id:2 }])
   assert.equal(session.guarded, true)
@@ -94,7 +87,6 @@ test('BUILD and SIMULATE authority remain delegated to Connector V4 and its fail
 test('Architecture does not claim native SIMULATE before BUILD authority is published', () => {
   const globals = {
     BrickLabConnectorV4:{objects:()=>[],projectConnections:()=>[]},
-    BrickLabConnectorV4PhysicsGuard:{active:true,createOwner:'guard-v4'},
     BrickLabMechanicsNextPhysicsOwner:{
       active:true,
       createOwner:'mechanics-next-physics-owner-0.1.0',
@@ -102,7 +94,7 @@ test('Architecture does not claim native SIMULATE before BUILD authority is publ
   }
   const api=createBrickLabSubsystemApi({globals})
   assert.equal(api.connectivity.authority.build,'connector-v4-with-legacy-bridge')
-  assert.equal(api.connectivity.authority.simulate,'connector-v4-physics-guard')
+  assert.equal(api.connectivity.authority.simulate,'unavailable')
 })
 
 test('Architecture authority reports Mechanics Next after native BUILD and physics handoff', () => {
@@ -214,15 +206,15 @@ test('legacy editor adapter binds live editor state without making app internals
   assert.deepEqual(clicks, ['undo','redo','save','new','import','export'])
 })
 
-test('production bootstrap installs Architecture API after the V4 physics guard and before app.js', async () => {
+test('production bootstrap installs Architecture API before app.js without a legacy physics guard', async () => {
   const source = await readFile(new URL('../bootstrap.js', import.meta.url), 'utf8')
   const guard = source.indexOf("await import('./connectors-v4/physics-guard-v4.js')")
   const architecture = source.indexOf("await import('./architecture/runtime-v1.js")
   const app = source.indexOf("await import('./app.js')")
   const editorAdapter = source.indexOf("await import('./architecture/editor-adapter-v1.js?v=architecture-20260911-v1')")
 
-  assert.ok(guard >= 0, 'Connector V4 physics guard is installed')
-  assert.ok(architecture > guard, 'Architecture API is loaded after the guard')
+  assert.equal(guard, -1, 'Connector V4 physics guard is retired')
+  assert.ok(architecture >= 0, 'Architecture API is installed')
   assert.ok(app > architecture, 'editor starts only after stable subsystem facade exists')
   assert.ok(editorAdapter > app, 'legacy editor state is bound only after app.js creates it')
 })

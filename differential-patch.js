@@ -102,22 +102,6 @@ function applyOpenDifferential(group) {
   }
 }
 
-PhysicsSession.prototype.applyGearCouplingTorques = function applyPowertrainCouplingTorques() {
-  const differentialGroups = new Map()
-
-  for (const coupling of this.gearCouplers) {
-    const key = differentialKey(coupling)
-    if (!key) {
-      applyGenericCoupler(coupling)
-      continue
-    }
-    if (!differentialGroups.has(key)) differentialGroups.set(key, [])
-    differentialGroups.get(key).push(coupling)
-  }
-
-  for (const group of differentialGroups.values()) applyOpenDifferential(group)
-}
-
 const previousMountTelemetry = PhysicsSession.prototype.mountTelemetry
 PhysicsSession.prototype.mountTelemetry = function mountDifferentialTelemetry(...args) {
   const result = previousMountTelemetry.apply(this, args)

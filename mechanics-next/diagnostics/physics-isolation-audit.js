@@ -4,14 +4,21 @@ function check(id,pass,detail=null){
   return Object.freeze({id,pass:Boolean(pass),detail})
 }
 
-function writerCheck(PhysicsSession,name){
+const RETIRED_WRITER_OWNERS=new Set([
+  'joint-stability-v5',
+  'articulated-driveline-physics-v1',
+  'steering-suspension-physics-v1',
+])
+
+function retiredWriterCheck(PhysicsSession,name){
   const fn=PhysicsSession?.prototype?.[name]
+  const owner=fn?.__bricklabOwner??null
   return check(
-    `writer:${name}`,
-    typeof fn==='function'&&fn.__mechanicsNextBypass===true,
+    `retired-writer:${name}`,
+    fn?.__mechanicsNextBypass!==true&&!RETIRED_WRITER_OWNERS.has(owner),
     Object.freeze({
       present:typeof fn==='function',
-      owner:fn?.__bricklabOwner??null,
+      owner,
       mechanicsNextBypass:fn?.__mechanicsNextBypass===true,
     }),
   )
@@ -81,7 +88,7 @@ export function auditMechanicsNextPhysicsIsolation({
     'initializeParts4LinearMechanisms',
     'updateSuspensionV2',
     'updateVehicleControlsV1',
-  ])checks.push(writerCheck(PhysicsSession,name))
+  ])checks.push(retiredWriterCheck(PhysicsSession,name))
 
   const failures=checks.filter(item=>!item.pass)
   return Object.freeze({

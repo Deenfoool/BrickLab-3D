@@ -9,15 +9,12 @@ test('production runtime mounts the Technic semantic layer before editor mechani
   assert.match(architecture, /technic\/runtime-v1\.js\?v=technic-family-20260917-differential-bevel-v1/)
 })
 
-test('Architecture and Connector V4 physics use the same Technic-aware drivetrain analyzer', async () => {
-  const [architecture, guard, drivetrain] = await Promise.all([
+test('Architecture keeps the Technic-aware drivetrain analyzer as a read-only diagnostic', async () => {
+  const [architecture, drivetrain] = await Promise.all([
     text('architecture/runtime-v1.js'),
-    text('connectors-v4/physics-guard-v4.js'),
     text('technic/drivetrain-v1.js'),
   ])
   assert.match(architecture, /analyzeTechnicAwareDrivetrain/)
-  assert.match(guard, /analyzeTechnicAwareDrivetrain/)
-  assert.match(guard, /technic-family-20260917-differential-bevel-v1/)
   assert.match(drivetrain, /connectorWorldFrameV4/)
   assert.match(drivetrain, /analyzeLegacyDrivetrain/)
   assert.match(drivetrain, /if \(!needsEnhancedAnalysis\(objects\)\) return base/)

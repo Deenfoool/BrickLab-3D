@@ -4341,21 +4341,8 @@ test('Rapier native prismatic applies metre limits and shock motor target', () =
 })
 
 
-test('physics isolation audit requires every final legacy writer to declare native bypass', () => {
+test('physics isolation audit rejects retired compatibility writers', () => {
   class FakePhysicsSession {}
-  for(const name of [
-    'createJoint',
-    'applyMotorTorques',
-    'applyGearCouplingTorques',
-    'initializeSuspensionJointsV1',
-    'initializeParts4LinearMechanisms',
-    'updateSuspensionV2',
-    'updateVehicleControlsV1',
-  ]){
-    const fn=function(){}
-    fn.__mechanicsNextBypass=true
-    FakePhysicsSession.prototype[name]=fn
-  }
   const session={
     mechanicsNextBootstrap:true,
     creationOptions:{mechanicsNextOwned:true},
@@ -4377,14 +4364,15 @@ test('physics isolation audit requires every final legacy writer to declare nati
   assert.equal(pass.pass,true)
   assert.equal(pass.failures.length,0)
 
-  FakePhysicsSession.prototype.applyMotorTorques.__mechanicsNextBypass=false
+  FakePhysicsSession.prototype.applyMotorTorques=function(){}
+  FakePhysicsSession.prototype.applyMotorTorques.__mechanicsNextBypass=true
   session.connections.push({id:'foreign',kind:'bearing'})
   const fail=auditMechanicsNextPhysicsIsolation({
     PhysicsSession:FakePhysicsSession,
     session,
   })
   assert.equal(fail.pass,false)
-  assert.ok(fail.failures.some(item=>item.id==='writer:applyMotorTorques'))
+  assert.ok(fail.failures.some(item=>item.id==='retired-writer:applyMotorTorques'))
   assert.ok(fail.failures.some(item=>item.id==='compatibility-connections-only'))
 })
 

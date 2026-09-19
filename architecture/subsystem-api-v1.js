@@ -61,7 +61,7 @@ export function createBrickLabSubsystemApi({
 
   const definitionFor = value => findPart(normalizePartId(value)) ?? null
   const connectorRuntime = () => globals?.BrickLabConnectorV4 ?? null
-  const physicsGuard = () => globals?.BrickLabConnectorV4PhysicsGuard ?? null
+  const physicsOwner = () => globals?.BrickLabMechanicsNextPhysicsOwner ?? null
 
   const parts = Object.freeze({
     list() { return [...listParts()] },
@@ -167,7 +167,7 @@ export function createBrickLabSubsystemApi({
           globals?.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true
         return buildNative&&globals?.BrickLabMechanicsNextPhysicsOwner?.active===true
           ?'mechanics-next-physics-owner'
-          :'connector-v4-physics-guard'
+          :'unavailable'
       },
     }),
     build:Object.freeze({
@@ -188,23 +188,22 @@ export function createBrickLabSubsystemApi({
     }),
     simulate:Object.freeze({
       ready() {
-        const guard = physicsGuard()
-        return Boolean(guard?.active && guard?.createOwner)
+        const owner = physicsOwner()
+        return Boolean(owner?.active && owner?.createOwner)
       },
       guard() {
-        const guard = physicsGuard()
-        return guard ? Object.freeze({
-          version:guard.version,
-          safetyVersion:guard.safetyVersion,
-          policyVersion:guard.policyVersion,
-          adapterVersion:guard.adapterVersion,
-          errorCode:guard.errorCode,
-          active:Boolean(guard.active),
-          createOwner:guard.createOwner ?? null,
+        const owner = physicsOwner()
+        return owner ? Object.freeze({
+          version:owner.version,
+          active:Boolean(owner.active),
+          createOwner:owner.createOwner ?? null,
         }) : null
       },
-      lastPlan() { return snapshot(physicsGuard()?.lastPlan?.() ?? null) },
-      lastFailure() { return snapshot(physicsGuard()?.lastFailure?.() ?? null) },
+      lastPlan() { return snapshot(physicsOwner()?.lastAttempt?.() ?? null) },
+      lastFailure() {
+        const attempt=physicsOwner()?.lastAttempt?.() ?? null
+        return attempt?.owner==='blocked'?snapshot(attempt):null
+      },
     }),
   })
 

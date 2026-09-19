@@ -142,13 +142,8 @@ try {
   console.warn('[BrickLab LDraw] Predictive fast loader unavailable; using normal on-demand loading.', error)
 }
 
-// The guard creates V4 Rapier constraints only from a fresh physics policy plan. Any
-// unsupported/ambiguous connection blocks SIMULATE rather than downgrading silently.
-await import('./connectors-v4/physics-guard-v4.js')
-
-// Architecture API v1 is the stable ownership facade. During Stage 11 it can report
-// either the certified Connector V4 compatibility owners or the converged Mechanics
-// Next BUILD/SIMULATE owners; split ownership is rejected by the architecture contract.
+// Architecture API v1 is the stable ownership facade. Stage 12 exposes only the
+// authoritative Mechanics Next BUILD/SIMULATE owners.
 await import('./architecture/runtime-v1.js?v=technic-family-20260915-v2')
 
 // Mechanics Next is the Stage 11 migration candidate. It starts from a read-only V4
@@ -159,7 +154,7 @@ try {
   await import('./mechanics-next/runtime.js')
   await import('./mechanics-next/production/physics-owner.js')
 } catch (error) {
-  console.warn('[BrickLab Mechanics Next] Migration runtime unavailable; legacy engine remains authoritative.', error)
+  console.warn('[BrickLab Mechanics Next] Native runtime unavailable; mechanics remain fail-closed.', error)
 }
 
 // app.js keeps selection state lexical. The editor-group layer installs a short-lived

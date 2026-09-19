@@ -31,7 +31,6 @@ await import('./physical-parts.js')
 await import('./parts3/parts-3-physics.js?v=parts-3-20260908-mechanical-v1')
 await import('./parts3/parts-3-diagnostics.js?v=parts-3-20260908-mechanical-v1')
 await import('./parts4/parts-4-physics.js?v=parts-4-20260908-driveline-v1')
-await import('./suspension-patch.js')
 await import('./differential-patch.js')
 await import('./sensors-patch.js')
 await import('./part-visual-v3.js')
@@ -98,27 +97,8 @@ await import('./parts6/rack-gear-fidelity-v1.js?v=parts-6-20260909-realism-v1')
 await import('./physics-v2.js')
 await import('./colliders-v2.js')
 await import('./collider-clearance-v3.js')
-await import('./connector-physics-v3.js')
-await import('./connector-mechanical-recovery-v4.js')
-// joint-stability-v4.js is retained as the stable import path; it now exports
-// joint-stability-v5 and owns stabilized revolute, spherical and prismatic joints.
-await import('./joint-stability-v4.js')
-
-// Physics Stability is the authoritative drivetrain coupling owner. Do not install a
-// provisional coupling solver before it: transient prototype ownership makes startup
-// order harder to reason about and provides no runtime behavior after this import.
-await import('./physics-stability-v3.js')
-await import('./drivetrain-stress-v2.js')
-// This is intentionally outside the stress layer: it supplies the final ratio
-// presented to the already inertia-aware, stress-limited drivetrain solver.
-// CV remains constant-velocity; the universal joint gets Cardan phase variation.
-await import('./parts4/articulated-driveline-physics-v1.js?v=parts-4-20260908-driveline-v1')
 await import('./surface-v2.js')
-await import('./suspension-v2.js')
 await import('./vehicle-system-v1.js')
-// Loaded after Vehicle System so a complete rack/tie-rod linkage becomes the
-// steering actuator instead of fighting the direct steering-knuckle servos.
-await import('./parts4/steering-suspension-physics-v1.js?v=parts-4-20260908-driveline-v1')
 await import('./vehicle-performance-v1.js')
 
 // Mechanism controls own motor/transmission runtime state. Vehicle Drive v2 consumes

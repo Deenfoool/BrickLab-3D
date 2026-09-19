@@ -339,6 +339,7 @@ PhysicsSession.prototype.updateVehicleControlsV1 = function updateVehicleControl
   applyPhysicalSteeringTargets(this)
   applyMechanicsNextRackTargets(this)
 }
+PhysicsSession.prototype.updateVehicleControlsV1.__bricklabOwner = `${VEHICLE_SYSTEM_VERSION}:native-controls`
 
 PhysicsSession.prototype.updateVehicleVisualsV1 = function updateVehicleVisualsV1() {
   for (const wheel of this.wheelMonitors ?? []) applyWheelVisual(wheel, wheel.steerAngle ?? 0)

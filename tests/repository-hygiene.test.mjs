@@ -25,6 +25,11 @@ const retiredFiles = [
   'test-scenarios-v2.js',
   'torque-test-patch.js',
   'powertrain-physics-v2.js',
+  'connector-physics-v3.js',
+  'connector-mechanical-recovery-v4.js',
+  'connectors-v4/physics-guard-v4.js',
+  'connectors-v4/physics-adapter-v4.js',
+  'technic/rack-pinion-physics-v1.js',
 ]
 
 function localTarget(target) {
@@ -50,7 +55,6 @@ test('retired public specifiers resolve to current authoritative implementations
     './connections.js':'./connectors-v4/connections-bridge-v4.js',
     './snapping.js':'./connectors-v4/snapping-bridge-v4.js',
     './connector-validation.js':'./connector-validation-v3.js',
-    './structural-auto-weld-v2.js':'./connector-physics-v3.js',
     './main-menu.js':'./menu/main-menu-v5.js',
     './testlab.js':'./testlab-v2.js',
     './ldraw/catalog-v1.js':'./ldraw/catalog-v3.js',
@@ -58,7 +62,6 @@ test('retired public specifiers resolve to current authoritative implementations
     './ldraw/runtime-v1.js':'./ldraw/runtime-v3.js',
     './ldraw/runtime-v2.js':'./ldraw/runtime-v3.js',
     './ldraw/runtime-v2.js?v=ldraw-20260910-v2':'./ldraw/runtime-v3.js',
-    './powertrain-physics-v2.js':'./physics-stability-v3.js',
   }
 
   for (const [specifier, target] of Object.entries(aliases)) {
@@ -79,10 +82,9 @@ test('unreachable TEST patch specifiers stay out of the production import map', 
 
 test('transient drivetrain coupling layer stays retired', async () => {
   const runtime = await readFile(new URL('runtime-extensions.js', root), 'utf8')
-  const stability = await readFile(new URL('physics-stability-v3.js', root), 'utf8')
-  assert.doesNotMatch(runtime, /powertrain-physics-v2\.js/, 'runtime does not install a provisional coupling owner')
-  assert.match(stability, /inertia-aware-coupling-v3/, 'Physics Stability exposes the authoritative coupling owner')
-  assert.match(stability, /PhysicsSession\.prototype\.applyGearCouplingTorques\s*=/, 'Physics Stability installs the final coupling solver')
+  assert.doesNotMatch(runtime, /physics-stability-v3|drivetrain-stress-v2|articulated-driveline-physics-v1/)
+  const native = await readFile(new URL('mechanics-next/physics/coupling-runtime.js', root), 'utf8')
+  assert.match(native, /createMechanicsCouplingRuntime/)
 })
 
 test('dynamically loaded drivetrain stylesheet remains available', async () => {
@@ -105,7 +107,6 @@ test('the live menu, TEST Lab, physics and LDraw generations remain present', as
     'menu/project-preloader-v4.js',
     'testlab-v2.js',
     'physics-v2.js',
-    'physics-stability-v3.js',
     'test-world-visuals-v2.js',
     'ldraw/catalog-v3.js',
     'ldraw/catalog-v2.css',

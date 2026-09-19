@@ -45,10 +45,10 @@ function completeSubsystemFixture() {
     mechanics:{ metadata(){} },
     physics:{
       createSession(){},
-      guard:() => ({ active:true, createOwner:'connector-physics-guard-v4.5.1' }),
+      guard:() => ({ active:true, createOwner:'mechanics-next-physics-owner-0.1.0' }),
     },
     connectivity:{
-      authority:{ build:'connector-v4-with-legacy-bridge', simulate:'connector-v4-physics-guard' },
+      authority:{ build:'mechanics-next-build-owner', simulate:'mechanics-next-physics-owner' },
       build:{ reconcile(){}, records(){} },
     },
   }
@@ -120,7 +120,7 @@ test('completion contract fails closed when BUILD or SIMULATE authority is bypas
   simulateBypass.physics.guard = () => ({ active:false, createOwner:null })
   const report = architectureContractReport(simulateBypass)
   assert.equal(report.pass, false)
-  assert.ok(report.issues.some(issue => /guard/.test(issue)))
+  assert.ok(report.issues.some(issue => /physics owner/.test(issue)))
 })
 
 test('completion contract requires editor, projects and centralized metadata access', () => {

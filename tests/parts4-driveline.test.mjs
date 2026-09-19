@@ -21,7 +21,6 @@ const {
   isRigidAxleConnection,
 } = await import('../drivetrain.js')
 const { PhysicsSession } = await import('../physics.js')
-const { JOINT_STABILITY_VERSION } = await import('../joint-stability-v4.js')
 
 function instance(partId, instanceId) {
   const object = new THREE.Object3D()
@@ -120,52 +119,6 @@ test('12T and 20T bevel gears mesh on perpendicular shafts using a shared pitch-
   assert.equal(meshes[0].kind, 'bevel')
   assert.ok(meshes[0].apexError < 1e-8)
   assert.ok(Math.abs(Math.abs(meshes[0].ratioAB) - 0.6) < 1e-9)
-})
-
-test('articulated axle output creates one stable spherical Rapier joint', () => {
-  const couplingObject = instance('universal-joint-30', 'coupling')
-  const shaftObject = instance('axle-3', 'shaft')
-  shaftObject.position.set(0.54, 0.26, 0.31)
-  shaftObject.updateMatrixWorld(true)
-
-  const identity = new THREE.Matrix4()
-  const bodyA = { rotation: () => new THREE.Quaternion() }
-  const bodyB = { rotation: () => new THREE.Quaternion() }
-  const session = Object.create(PhysicsSession.prototype)
-  session.members = new Map([
-    ['coupling', { object: couplingObject, body: bodyA, component: { id: 'body-a', bodyWorldInverse: identity.clone() } }],
-    ['shaft', { object: shaftObject, body: bodyB, component: { id: 'body-b', bodyWorldInverse: identity.clone() } }],
-  ])
-  session.jointCount = 0
-  session.failedJointCount = 0
-  session.internalJointCount = 0
-  session.bearingCount = 0
-  const created = []
-  session.RAPIER = {
-    JointData: {
-      spherical(anchorA, anchorB) { return { type: 'spherical', anchorA, anchorB } },
-      revoluteWithAxes() { throw new Error('unexpected revolute') },
-    },
-  }
-  session.world = {
-    createImpulseJoint(params) {
-      created.push(params)
-      return { setContactsEnabled() {} }
-    },
-  }
-
-  session.createJoint({
-    kind: 'axle',
-    a: { instanceId: 'coupling', connectorId: 'output' },
-    b: { instanceId: 'shaft', connectorId: 'axle-1' },
-  })
-
-  assert.equal(JOINT_STABILITY_VERSION, 'joint-stability-v5')
-  assert.equal(created.length, 1)
-  assert.equal(created[0].type, 'spherical')
-  assert.equal(session.sphericalJoints.length, 1)
-  assert.equal(session.__bricklabJointStability.createdSpherical, 1)
-  assert.equal(session.jointCount, 1)
 })
 
 await dom.happyDOM.close()

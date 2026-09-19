@@ -283,63 +283,6 @@ PhysicsSession.prototype.build = function buildWithMechanismControls(...args) {
   return result
 }
 
-const oldRegisterMotorDrive = PhysicsSession.prototype.registerMotorDrive
-PhysicsSession.prototype.registerMotorDrive = function registerControlledMotor(...args) {
-  const before = this.motorDrives.length
-  const result = oldRegisterMotorDrive.apply(this, args)
-  const drive = this.motorDrives[before]
-  if (!drive) return result
-
-  const config = getConfig(drive.id)
-  if (!config || config.type !== 'motor') return result
-  const originalNominal = Math.max(1, Math.abs(drive.nominalRpm || 120))
-  drive.controlId = drive.id
-  drive.controlAxisSign = Math.sign(drive.targetRpm / originalNominal) || 1
-  drive.nominalRpm = config.motor.baseRpm
-  return result
-}
-
-const oldApplyMotorTorques = PhysicsSession.prototype.applyMotorTorques
-PhysicsSession.prototype.applyMotorTorques = function applyControlledMotorTorques(dt) {
-  if (this.mechanicsNextBootstrap) return
-  for (const drive of this.motorDrives ?? []) {
-    const state = runtime.get(drive.controlId ?? drive.id)
-    if (!state || state.type !== 'motor') continue
-    drive.targetRpm = state.rpm * state.direction * (drive.controlAxisSign ?? 1)
-    drive.commandRpm = state.rpm * state.direction
-  }
-  return oldApplyMotorTorques.call(this, dt)
-}
-PhysicsSession.prototype.applyMotorTorques.__mechanicsNextBypass = true
-
-const oldApplyGearTorques = PhysicsSession.prototype.applyGearCouplingTorques
-PhysicsSession.prototype.applyGearCouplingTorques = function applyControlledTransmissionTorques(...args) {
-  if (this.mechanicsNextBootstrap) return
-  const neutralStates = []
-  for (const coupling of this.gearCouplers ?? []) {
-    if (!coupling.controlId) continue
-    const state = runtime.get(coupling.controlId)
-    if (!state || state.type !== 'transmission') continue
-    coupling.controlMode = state.mode
-    if (state.mode === 'forward') coupling.factor = coupling.controlForwardFactor
-    else if (state.mode === 'reverse') coupling.factor = -coupling.controlForwardFactor
-    else {
-      neutralStates.push([coupling, Boolean(coupling.failed)])
-      coupling.failed = true
-      coupling.transferTorque = 0
-      coupling.requestedTorque = 0
-    }
-  }
-
-  const result = oldApplyGearTorques.apply(this, args)
-  for (const [coupling, wasFailed] of neutralStates) coupling.failed = wasFailed
-  return result
-}
-if (oldApplyGearTorques?.__bricklabOwner) {
-  PhysicsSession.prototype.applyGearCouplingTorques.__bricklabOwner = oldApplyGearTorques.__bricklabOwner
-}
-PhysicsSession.prototype.applyGearCouplingTorques.__mechanicsNextBypass = true
-
 const oldDispose = PhysicsSession.prototype.dispose
 PhysicsSession.prototype.dispose = function disposeControlledSession(...args) {
   if (window.__bricklabPhysicsSession === this) window.__bricklabPhysicsSession = null

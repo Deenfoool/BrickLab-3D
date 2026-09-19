@@ -27,10 +27,7 @@ export function architectureContractReport(subsystems = globalThis.BrickLabSubsy
     'connector-v4-with-legacy-bridge',
     'mechanics-next-build-owner',
   ])
-  const certifiedSimulateOwners=new Set([
-    'connector-v4-physics-guard',
-    'mechanics-next-physics-owner',
-  ])
+  const certifiedSimulateOwners=new Set(['mechanics-next-physics-owner'])
   if (!certifiedBuildOwners.has(authority?.build)) {
     issues.push('BUILD authority is not a certified mechanics owner')
   }
@@ -46,7 +43,7 @@ export function architectureContractReport(subsystems = globalThis.BrickLabSubsy
     issues.push('Mechanics Next SIMULATE ownership requires Mechanics Next BUILD authority')
   }
 
-  if (!guard?.active) issues.push('Connector V4 fallback physics guard is not active')
+  if (!guard?.active) issues.push('Mechanics Next physics owner is not active')
   const createOwner=globalThis.BrickLabMechanicsNextPhysicsOwner?.createOwner ?? guard?.createOwner
   if (!createOwner) issues.push('PhysicsSession.create has no certified owner')
 

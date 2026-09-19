@@ -5,10 +5,7 @@ export const PHYSICS_PHASES = Object.freeze([
   'clear-accumulators',
   'vehicle-controls',
   'vehicle-drive',
-  'motor',
-  'suspension',
   'mechanics-next',
-  'drivetrain',
   'tires',
   'scenario',
   'rapier-step',
@@ -43,10 +40,7 @@ export function runPhysicsMicrostep(session, dt, { advanceTestPhase } = {}) {
 
   call(session, 'updateVehicleControlsV1', dt)
   call(session, 'updateVehicleDriveV2', dt)
-  call(session, 'applyMotorTorques', dt)
-  call(session, 'updateSuspensionV2', dt)
   session.mechanicsNextPhysics?.beforeStep?.(dt)
-  call(session, 'applyGearCouplingTorques', dt)
   call(session, 'applyTireForcesV2', dt)
   call(session, 'applyScenarioForcesV2', dt)
 

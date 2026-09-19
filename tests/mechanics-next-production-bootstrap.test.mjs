@@ -79,25 +79,12 @@ test('production stage diagnostics retain native bypass and preserve error conte
   assert.throws(()=>new Session().createJoint(),error=>error.bricklabStage==='createJoint')
 })
 
-test('final production controls cannot touch native motor or transmission worklists',async()=>{
+test('production controls expose state without installing physics force writers',async()=>{
   const text=await source('mechanism-controls-core.js')
-  const wrappers=text.slice(text.indexOf('const oldApplyMotorTorques ='),text.indexOf('const oldDispose ='))
-  class Session{}
-  let writes=0
-  Session.prototype.applyMotorTorques=()=>{writes++}
-  Session.prototype.applyGearCouplingTorques=()=>{writes++}
-  const runtime={get(){throw new Error('legacy runtime touched')}}
-  new Function('PhysicsSession','runtime',wrappers)(Session,runtime)
-  const session=new Session()
-  session.mechanicsNextBootstrap=true
-  session.motorDrives=[{id:'motor'}]
-  session.gearCouplers=[{controlId:'gearbox'}]
-  session.applyMotorTorques(1/120)
-  session.applyGearCouplingTorques(1/120)
-  assert.equal(writes,0)
-  for(const key of ['applyMotorTorques','applyGearCouplingTorques']){
-    assert.equal(Session.prototype[key].__mechanicsNextBypass,true)
-  }
+  assert.doesNotMatch(text,/prototype\.applyMotorTorques|prototype\.applyGearCouplingTorques/)
+  assert.match(text,/getRuntime,/)
+  assert.match(text,/setMotorRpm,/)
+  assert.match(text,/setTransmissionMode,/)
 })
 
 test('migration preparation restores deferred native state and blocks takeover while it is pending',async()=>{

@@ -37,7 +37,6 @@ test('every root JavaScript module has one canonical cache-busted mapping', asyn
     'connections.js': 'connectors-v4/connections-bridge-v4.js',
     'snapping.js': 'connectors-v4/snapping-bridge-v4.js',
     'connector-validation.js': 'connector-validation-v3.js',
-    'structural-auto-weld-v2.js': 'connector-physics-v3.js',
   }
   const modules = (await readdir(root)).filter(name => name.endsWith('.js'))
   for (const name of modules) {

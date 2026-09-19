@@ -1,19 +1,7 @@
 import { TIME_SCALES, normalizeTimeScale, isTestSession, getTimeDiagnostics } from './simulation-time.js'
-import * as THREE from 'three'
 import { PhysicsSession } from './physics.js'
-import { findPart } from './parts.js'
 
 const TIME_SCALE_KEY = 'bricklab.sim.timeScale.v1'
-const TAU = Math.PI * 2
-
-const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0))
-const rpmToRad = rpm => rpm * TAU / 60
-const vec = value => ({ x: value.x, y: value.y, z: value.z })
-
-function bodyRotation(body) {
-  const q = body.rotation()
-  return new THREE.Quaternion(q.x, q.y, q.z, q.w)
-}
 
 function readTimeScale() {
   try { return normalizeTimeScale(localStorage.getItem(TIME_SCALE_KEY) ?? 1) }
@@ -43,106 +31,6 @@ function setTimeScale(value, { persist = true } = {}) {
   }))
   return applied
 }
-
-function syncDriveCommand(drive) {
-  const controls = window.BrickLabControls
-  const state = controls?.getRuntime?.(drive.controlId ?? drive.id)
-  if (!state || state.type !== 'motor') return
-
-  const userCommand = state.rpm * state.direction
-  drive.commandRpm = userCommand
-  drive.targetRpm = userCommand * (drive.controlAxisSign ?? 1)
-  drive.nominalRpm = Math.abs(userCommand)
-  drive.controlRunning = Boolean(state.running && state.direction && state.rpm > 0)
-}
-
-// Inverse inertia along the shaft axis, including the housing reaction.
-// Limit the per-tick angular impulse so a light axle cannot overshoot its RPM
-// command by hundreds of RPM in one safe but finite Rapier microstep.
-function inverseInertiaAlong(body, axis) {
-  if (!body.isDynamic()) return 0
-  const frame = bodyRotation(body).multiply(new THREE.Quaternion().copy(body.principalInertiaLocalFrame()))
-  const local = axis.clone().applyQuaternion(frame.invert())
-  const inverse = body.invPrincipalInertia()
-  return local.x ** 2 * inverse.x + local.y ** 2 * inverse.y + local.z ** 2 * inverse.z
-}
-
-function motorVoltage(session, drive) {
-  if (Number.isFinite(drive.voltage)) return drive.voltage
-  const object = session.objects?.find(object => object.userData?.instanceId === (drive.controlId ?? drive.id))
-  const voltage = findPart(object?.userData?.partId)?.mechanics?.motor?.voltage ?? 9
-  drive.voltage = voltage
-  return voltage
-}
-
-// Final motor controller: runtime RPM is a real command/setpoint.
-PhysicsSession.prototype.applyMotorTorques = function applyCommandRpmMotorTorques(dt) {
-  if (this.mechanicsNextBootstrap) return
-  const testBlocked = this.scenarioData && this.scenarioData.phase !== 'RUN'
-
-  for (const drive of this.motorDrives ?? []) {
-    syncDriveCommand(drive)
-
-    const actualRpm = this.relativeMotorRpm(drive)
-    const targetRpm = Number(drive.targetRpm) || 0
-    const commandAbs = Math.abs(targetRpm)
-    const targetSign = Math.sign(targetRpm)
-    const running = drive.controlRunning !== false && commandAbs > 0.01
-
-    drive.actualRpm = actualRpm
-    drive.setpointErrorRpm = targetRpm - actualRpm
-
-    if (testBlocked || !running) {
-      drive.torque = 0
-      drive.availableTorqueNm = 0
-      drive.load = 0
-      drive.current = 0
-      drive.powerW = 0
-      drive.inputPowerW = 0
-      drive.efficiency = 0
-      drive.stallTime = 0
-      drive.stalled = false
-      continue
-    }
-
-    const actualAlongCommand = actualRpm * targetSign
-    const speedRatio = Math.max(0, actualAlongCommand) / Math.max(commandAbs, 1)
-    const stallTorque = Math.max(0, Number(drive.stallTorque) || 0)
-    const motoringLimit = stallTorque * clamp(1 - speedRatio, 0, 1)
-    const errorRpm = targetRpm - actualRpm
-    const errorScale = Math.max(commandAbs * 0.08, 4)
-    const controller = clamp(Math.abs(errorRpm) / errorScale, 0, 1)
-    const overspeed = actualAlongCommand > commandAbs && Math.sign(actualRpm) === targetSign
-    const torqueLimit = overspeed ? stallTorque * 0.38 : motoringLimit
-    const axis = drive.localAxisA.clone().applyQuaternion(bodyRotation(drive.bodyA)).normalize()
-    const inverseInertia = inverseInertiaAlong(drive.bodyA, axis) + inverseInertiaAlong(drive.bodyB, axis)
-    const stepTorqueLimit = inverseInertia > 0 && dt > 0
-      ? Math.abs(rpmToRad(errorRpm)) / (inverseInertia * dt)
-      : 0
-    const torqueMagnitude = Math.min(torqueLimit * controller, stepTorqueLimit)
-    const torqueSign = Math.sign(errorRpm)
-
-    if (torqueMagnitude > 0 && torqueSign) {
-      const torqueVector = axis.multiplyScalar(torqueMagnitude * torqueSign)
-      drive.bodyB.addTorque(vec(torqueVector), true)
-      drive.bodyA.addTorque(vec(torqueVector.clone().multiplyScalar(-1)), true)
-    }
-
-    drive.availableTorqueNm = torqueLimit
-    drive.torque = torqueMagnitude
-    drive.load = stallTorque > 0 ? clamp(torqueMagnitude / stallTorque, 0, 1) : 0
-    drive.current = (drive.freeCurrent ?? 0.15) + ((drive.stallCurrent ?? 2.2) - (drive.freeCurrent ?? 0.15)) * drive.load
-    drive.powerW = Math.abs(torqueMagnitude * rpmToRad(actualRpm))
-    drive.inputPowerW = motorVoltage(this, drive) * drive.current
-    drive.efficiency = drive.inputPowerW > 0 ? clamp(drive.powerW / drive.inputPowerW, 0, 1) : 0
-
-    const stalled = commandAbs > 10 && Math.abs(actualRpm) < commandAbs * 0.12 && drive.load > 0.82
-    drive.stallTime = stalled ? (drive.stallTime ?? 0) + dt : 0
-    drive.stalled = drive.stallTime > 0.65
-  }
-}
-
-PhysicsSession.prototype.applyMotorTorques.__mechanicsNextBypass = true
 
 window.__bricklabTimeDebug = () => getTimeDiagnostics(currentSession(), PhysicsSession.prototype.step)
 

@@ -28,18 +28,14 @@ test('PARTS-4 package tag does not pin the newer production build id', async () 
   assert.match(badge, /const BUILD_TAG = new URL\(import\.meta\.url\)\.searchParams\.get\('v'\) \|\| 'unversioned-runtime'/)
 })
 
-test('PARTS-4 advances joint, coupling and steering ownership deliberately', async () => {
+test('PARTS-4 mechanical writers are replaced by native physics ownership', async () => {
   const ownership = await readFile(new URL('physics-ownership-v1.js', root), 'utf8')
-  const joints = await readFile(new URL('joint-stability-v4.js', root), 'utf8')
-  assert.match(ownership, /const JOINT_OWNER = 'joint-stability-v5'/)
-  assert.match(ownership, /const COUPLING_OWNER = 'articulated-driveline-physics-v1'/)
-  assert.match(ownership, /const STEERING_OWNER = 'steering-suspension-physics-v1'/)
-  assert.match(ownership, /updateVehicleControlsV1\?\.__bricklabOwner !== STEERING_OWNER/)
-  assert.match(joints, /JOINT_STABILITY_VERSION = 'joint-stability-v5'/)
-  assert.match(joints, /JointData\.spherical/)
-  assert.match(joints, /JointData\.prismatic/)
-  assert.match(joints, /createdSemanticBearings/)
-  assert.match(joints, /createdPrismatic/)
+  const native = await readFile(new URL('mechanics-next/physics/rapier-adapter.js', root), 'utf8')
+  assert.match(ownership, /retired legacy writer re-entered production/)
+  assert.match(ownership, /physics-ownership-v7/)
+  assert.match(native, /JointData\.spherical/)
+  assert.match(native, /JointData\.prismatic/)
+  assert.match(native, /JointData\.revolute/)
 })
 
 test('slider connector types are validated and map to prismatic joints', async () => {
@@ -51,20 +47,23 @@ test('slider connector types are validated and map to prismatic joints', async (
   assert.match(validation, /shockBody\.railConnectorId/)
 })
 
-test('rack steering runtime is loaded after Vehicle System and catalog exposes Suspension', async () => {
+test('native rack steering uses Vehicle System input and catalog still exposes Suspension', async () => {
   const runtime = await readFile(new URL('runtime-extensions.js', root), 'utf8')
   const bootstrap = await readFile(new URL('bootstrap.js', root), 'utf8')
   const vehicle = runtime.indexOf("import('./vehicle-system-v1.js')")
-  const rack = runtime.indexOf("import('./parts4/steering-suspension-physics-v1.js?v=parts-4-20260908-driveline-v1')")
-  assert.ok(vehicle >= 0 && rack > vehicle)
+  assert.ok(vehicle >= 0)
+  assert.doesNotMatch(runtime,/steering-suspension-physics-v1/)
+  const bridge = await readFile(new URL('mechanics-next/physics/steering-bridge.js', root), 'utf8')
+  assert.match(bridge,/rackBindings/)
   assert.match(bootstrap, /parts4\/catalog-parts-4\.js\?v=parts-4-20260908-driveline-v1/)
 })
 
-test('articulated coupling loads after the stress layer so it is the final ratio owner', async () => {
+test('native couplings replace legacy stress and articulated torque writers', async () => {
   const runtime = await readFile(new URL('runtime-extensions.js', root), 'utf8')
-  const stress = runtime.indexOf("import('./drivetrain-stress-v2.js')")
-  const articulation = runtime.indexOf("import('./parts4/articulated-driveline-physics-v1.js?v=parts-4-20260908-driveline-v1')")
-  assert.ok(stress >= 0 && articulation > stress)
+  assert.doesNotMatch(runtime,/drivetrain-stress-v2|articulated-driveline-physics-v1/)
+  const coupling = await readFile(new URL('mechanics-next/physics/coupling-runtime.js', root), 'utf8')
+  assert.match(coupling,/controlledTransmission/)
+  assert.match(coupling,/instantaneousRatio/)
 })
 
 test('drivetrain source retains distinct spur and bevel mesh adapters', async () => {
