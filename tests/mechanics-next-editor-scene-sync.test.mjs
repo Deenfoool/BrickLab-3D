@@ -41,3 +41,20 @@ test('native BUILD keeps gear placement snapping after legacy runtime purge',()=
     /snapCandidate\.owner === 'mechanics-next-gear'[\s\S]{0,700}applySnap\(selected, snapCandidate\)[\s\S]{0,350}BrickLabMechanicsNext\?\.syncScene\?\.\(\)/,
   )
 })
+
+
+test('inserted parts warm their native connectivity before relying on BUILD snap',()=>{
+  assert.match(
+    appSource,
+    /syncMechanicsSceneMutation\(reason = 'editor-structure-change', partIds = \[\]\)[\s\S]{0,1000}ensurePartConnectivity/,
+  )
+  assert.match(appSource,/syncMechanicsSceneMutation\('part-added',\[partId\]\)/)
+  assert.match(
+    appSource,
+    /syncMechanicsSceneMutation\('parts-duplicated',copies\.map\(object=>object\.userData\.partId\)\)/,
+  )
+  assert.match(
+    runtimeSource,
+    /async ensurePartConnectivity\(partId\)[\s\S]{0,900}connectivity\.hydrate\(id\)[\s\S]{0,900}syncScene\(\)/,
+  )
+})
