@@ -493,6 +493,38 @@ function identityObject() {
   }
 }
 
+test('aligned explicit SNAP_GEN profile becomes a fixed native joint while free placement stays fail-closed', () => {
+  const raw=(gender,line,placement='aligned')=>({
+    family:'generic',
+    gender,
+    group:'',
+    frame:{positionLdu:[0,0,0],orientation:[1,0,0,0,1,0,0,0,1]},
+    geometry:{bounding:{kind:'box',halfExtentsLdu:[4,6,4]}},
+    snap:{placement,match:'size',slide:false},
+    inheritance:{scale:'none',mirror:'none'},
+    source:{kind:'ldcad-shadow',file:'parts/custom-generic.dat',line,meta:'SNAP_GEN'},
+  })
+  const alignedMale=enrichEndpointSemantics(ldcadConnectorToEndpoint(raw('male',1),{
+    bodyId:'generic-a',partId:'generic-a',
+  }))
+  const alignedFemale=enrichEndpointSemantics(ldcadConnectorToEndpoint(raw('female',2),{
+    bodyId:'generic-b',partId:'generic-b',
+  }))
+  const aligned=matchMechanicalEndpoints(alignedMale,alignedFemale)
+  assert.equal(aligned.compatible,true)
+  assert.equal(aligned.interfaceRule?.kind,'fixed')
+  assert.equal(aligned.interfaceRule?.topology?.profileDerived,true)
+  assert.deepEqual(aligned.interfacePair,['profile-generic','profile-generic'])
+
+  const freeFemale=enrichEndpointSemantics(ldcadConnectorToEndpoint(raw('female',3,'free'),{
+    bodyId:'generic-c',partId:'generic-c',
+  }))
+  const free=matchMechanicalEndpoints(alignedMale,freeFemale)
+  assert.equal(free.compatible,true)
+  assert.equal(free.interfaceRule,null)
+  assert.equal(free.interfacePair,null)
+})
+
 test('profile-derived explicit Shadow joint survives candidate-to-interpreter boundary', () => {
   const raw=(gender,line)=>({
     family:'cylinder',
