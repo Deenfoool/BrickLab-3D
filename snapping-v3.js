@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { findPart } from './parts.js'
 import { connectorRule, stageConnectionBundle, suppressNextConnectionForEndpoint } from './connections.js'
 import { solveBevelSnap, solveSpurSnap } from './parts5/gear-mesh-math-v1.js'
+import { gearFrameForRecord } from './mechanics-next/transmission/gear-geometry.js'
 
 let stickyKey = ''
 let lastGearEventKey = ''
@@ -158,7 +159,48 @@ function explicitLDrawGearFrame(object, gear) {
   }
 }
 
+function nativeGearDescriptor(object) {
+  const instanceId=object?.userData?.instanceId
+  if(!instanceId)return null
+  const record=globalThis.BrickLabMechanicsNext?.records?.()
+    ?.find?.(item=>String(item?.instance?.body?.instanceId||'')===String(instanceId))
+  const native=record?gearFrameForRecord(record):null
+  if(!native)return null
+  const axis=new THREE.Vector3(...native.axis).normalize()
+  const center=new THREE.Vector3(...native.center)
+  const localPosition=object.worldToLocal(center.clone())
+  const localAxis=axis.clone()
+  const parentQuaternion=object.getWorldQuaternion(new THREE.Quaternion()).invert()
+  localAxis.applyQuaternion(parentQuaternion).normalize()
+  return {
+    object,
+    definition:findPart(object.userData.partId),
+    connector:{
+      id:'gear-mesh-anchor',
+      type:'gear-mesh',
+      position:localPosition.toArray(),
+      axis:localAxis.toArray(),
+    },
+    kind:native.kind,
+    teeth:native.teeth,
+    pitchRadius:native.pitchRadius,
+    center,
+    axis,
+    reference:gearWorldReference(object,axis),
+    gearFrameSource:native.source||'mechanics-next',
+    virtualConnector:true,
+    meshLocalPosition:localPosition.toArray(),
+    meshLocalAxis:localAxis.toArray(),
+    bevelApexSigns:[...(native.bevelApexSigns||[])],
+    meshApexToleranceStud:native.meshApexToleranceStud,
+    meshCaptureDistanceStud:native.meshCaptureDistanceStud,
+  }
+}
+
 function gearDescriptor(object) {
+  const native=nativeGearDescriptor(object)
+  if(native)return native
+
   const definition = findPart(object?.userData?.partId)
   const gear = definition?.mechanics?.gear
   if (!gear) return null
@@ -173,8 +215,6 @@ function gearDescriptor(object) {
   } : null)
   if (!basisConnector) return null
 
-  // The pitch-circle endpoint is deliberately distinct from the axle hole. A gear
-  // can simultaneously be keyed to an axle and meshed with another gear.
   const connector = {
     id:'gear-mesh-anchor',
     type:'gear-mesh',
