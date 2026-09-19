@@ -875,6 +875,26 @@ export function createMechanicsNextRuntime({
         visualOffsetStud:record.visualOffsetStud||[0,0,0],
       })
     },
+    endpointOccupancy(instanceId, endpointId) {
+      const instance=api.mechanicalInstance(instanceId)
+      const endpoint=instance?.endpoints?.find(item=>String(item.id)===String(endpointId||''))
+      if(!instance||!endpoint)return Object.freeze({
+        known:false,
+        occupied:false,
+        exclusiveOwner:null,
+        axialReservations:Object.freeze([]),
+      })
+      rebuildNativeOccupancy()
+      const channel=endpointChannel(instance.body.id,endpoint.id)
+      const exclusiveOwner=occupancy.exclusiveOwner(channel)
+      const axialReservations=occupancy.axialReservations(channel)
+      return Object.freeze({
+        known:true,
+        occupied:Boolean(exclusiveOwner)||axialReservations.length>0,
+        exclusiveOwner,
+        axialReservations,
+      })
+    },
     records:mechanicalRecords,
     solveKinematics(options = {}) {
       return transmissionCompiler.solve(options)
