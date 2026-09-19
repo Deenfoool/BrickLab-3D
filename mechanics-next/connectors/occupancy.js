@@ -140,6 +140,39 @@ export class OccupancyLedger{
   clear(){this.#exclusive.clear();this.#axial.clear()}
 }
 
+export function occupancyStateForEndpoint(ledger,bodyId,endpoint,{minimumFreeLdu=1}={}){
+  if(!ledger||!bodyId||!endpoint?.id)return Object.freeze({
+    known:false,occupied:false,available:true,partiallyOccupied:false,fullyOccupied:false,
+    exclusiveOwner:null,axialReservations:Object.freeze([]),freeAxialIntervals:Object.freeze([]),
+  })
+  const channel=endpointChannel(bodyId,endpoint.id)
+  const exclusiveOwner=ledger.exclusiveOwner(channel)
+  const axialReservations=ledger.axialReservations(channel)
+  const sections=Array.isArray(endpoint?.profile?.sections)?endpoint.profile.sections:[]
+  const totalLdu=sections.reduce((sum,section)=>sum+Math.max(0,Number(section?.lengthLdu)||0),0)
+  const bounds=totalLdu>0
+    ?(endpoint?.profile?.centered===true?[-totalLdu/2,totalLdu/2]:[0,totalLdu])
+    :null
+  const freeAxialIntervals=!exclusiveOwner&&axialReservations.length&&bounds
+    ?ledger.freeIntervals(channel,bounds)
+    :Object.freeze([])
+  const usableFreeInterval=freeAxialIntervals.some(interval=>
+    Number(interval?.[1])-Number(interval?.[0])>=Math.max(0,Number(minimumFreeLdu)||0)
+  )
+  const partiallyOccupied=!exclusiveOwner&&axialReservations.length>0&&usableFreeInterval
+  const fullyOccupied=Boolean(exclusiveOwner)||(axialReservations.length>0&&!usableFreeInterval)
+  return Object.freeze({
+    known:true,
+    occupied:fullyOccupied,
+    available:!fullyOccupied,
+    partiallyOccupied,
+    fullyOccupied,
+    exclusiveOwner,
+    axialReservations,
+    freeAxialIntervals,
+  })
+}
+
 export function occupancyPlanForPlacement(candidate,{connectionId}={}){
   const id=String(connectionId||candidate?.id||candidate?.key||'').trim()
   if(!id)throw new TypeError('connectionId is required')
