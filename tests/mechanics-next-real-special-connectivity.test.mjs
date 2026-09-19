@@ -29,6 +29,20 @@ const files=new Map([
     '0 !LDCAD SNAP_GEN [gender=F] [bounding=sph 15] [pos=0 -13 0]',
   ].join('\n')],
   ['parts/s/2998a.dat','0 !LDCAD SNAP_GEN [group=techWhlCon1] [gender=F] [bounding=cyl 17 32] [pos=0 0 9] [ori=0 0 -1 1 0 0 0 -1 0]'],
+  ['parts/41679.dat','0 !LDCAD SNAP_CYL [group=clkRot] [gender=M] [caps=one] [secs=R 9.5 5] [ori=1 0 0 0 -1 0 0 0 -1]'],
+  ['parts/41680.dat','0 !LDCAD SNAP_CYL [group=clkRot] [gender=F] [caps=none] [secs=R 9.5 10] [center=true]'],
+  ['parts/2942.dat','0 !LDCAD SNAP_CYL [group=pneuCyl] [gender=F] [caps=one] [secs=R 8 58] [slide=true] [pos=0 -78 0] [ori=-1 0 0 0 -1 0 0 0 1]'],
+  ['parts/70834.dat','0 !LDCAD SNAP_CYL [group=pneuCyl] [gender=M] [caps=none] [secs=R 8 10] [pos=0 10 0]'],
+  ['parts/2851.dat','0 !LDCAD SNAP_CYL [group=techEngine] [gender=M] [caps=none] [secs=R 12 24] [slide=true] [pos=0 8 0]'],
+  ['parts/2850a.dat','0 !LDCAD SNAP_CYL [group=techEngine] [gender=F] [caps=none] [secs=R 12 47] [pos=0 43 0]'],
+  ['parts/18938.dat','0 !LDCAD SNAP_CYL [group=techTrnTbl60] [gender=M] [caps=one] [secs=R 37 16] [pos=0 -6 0] [ori=1 0 0 0 -1 0 0 0 -1]'],
+  ['parts/18939.dat','0 !LDCAD SNAP_CYL [group=techTrnTbl60] [gender=F] [caps=one] [secs=R 37 16] [pos=0 -6 0] [ori=1 0 0 0 -1 0 0 0 -1]'],
+  ['parts/41895.dat','0 !LDCAD SNAP_GEN [group=steerHub1] [gender=M] [bounding=cyl 8 15]'],
+  ['parts/41894.dat','0 !LDCAD SNAP_GEN [group=steerHub1] [gender=F] [bounding=cyl 8 15] [pos=100 -20 0] [ori=0 0 -1 0 1 0 1 0 0]'],
+  ['parts/6538a.dat','0 !LDCAD SNAP_CYL [group=drivingRing1] [gender=M] [caps=none] [secs=A 9 9   A 10 2   A 9 8   A 10 2   A 9 8   A 10 2   A 9 9] [center=true] [slide=true] [ori=1 0 0 0 0 -1 0 1 0]'],
+  ['parts/6539.dat','0 !LDCAD SNAP_CYL [group=drivingRing1] [gender=F] [caps=none] [secs=A 10 11   _L 9 8   A 10 2   _L 9 8   A 10 11] [center=true] [ori=0 0 -1 1 0 0 0 -1 0]'],
+  ['parts/92696.dat','0 !LDCAD SNAP_CYL [group=linAct1] [gender=M] [caps=one] [secs=R 6 60] [slide=true] [pos=0 0 -18] [ori=1 0 0 0 0 -1 0 1 0]'],
+  ['parts/92693c01.dat','0 !LDCAD SNAP_CYL [group=linAct1] [gender=F] [caps=one] [secs=R 6 60] [pos=0 0 102] [ori=1 0 0 0 0 -1 0 1 0]'],
 ])
 
 const resolver=createNativeShadowResolver({fetchShadowText:async path=>files.get(path)??null})
@@ -295,4 +309,78 @@ test('real multi-stud support becomes one validated fixed structural bundle',asy
   })
   assert.equal(rejected.valid,false)
   assert.match(rejected.reason,/contact-bundle-invalid/)
+})
+
+
+test('pinned real special groups survive parser semantics matcher and BUILD candidate search',async()=>{
+  const cases=[
+    {
+      label:'click rotation',
+      malePath:'parts/41679.dat',femalePath:'parts/41680.dat',
+      semantic:'click-hinge',kind:'revolute',retained:true,
+      pick:items=>items.find(item=>item.group==='clkRot'),
+    },
+    {
+      label:'pneumatic cylinder guide',
+      malePath:'parts/70834.dat',femalePath:'parts/2942.dat',
+      semantic:'pneumatic-cylinder-guide',kind:'prismatic',retained:true,
+    },
+    {
+      label:'technic engine slider',
+      malePath:'parts/2851.dat',femalePath:'parts/2850a.dat',
+      semantic:'engine-slider',kind:'prismatic',retained:true,
+    },
+    {
+      label:'technic turntable 60',
+      malePath:'parts/18938.dat',femalePath:'parts/18939.dat',
+      semantic:'turntable-bearing',kind:'revolute',retained:true,
+    },
+    {
+      label:'steering hub pivot',
+      malePath:'parts/41895.dat',femalePath:'parts/41894.dat',
+      semantic:'steering-pivot',kind:'revolute',retained:true,
+    },
+    {
+      label:'driving ring slider',
+      malePath:'parts/6538a.dat',femalePath:'parts/6539.dat',
+      semantic:'driving-ring',kind:'prismatic',retained:true,
+    },
+    {
+      label:'linear actuator guide',
+      malePath:'parts/92696.dat',femalePath:'parts/92693c01.dat',
+      semantic:'linear-actuator-guide',kind:'prismatic',retained:true,
+    },
+  ]
+
+  for(const item of cases){
+    const [maleData,femaleData]=await Promise.all([
+      resolver.resolve(item.malePath),
+      resolver.resolve(item.femalePath),
+    ])
+    const pick=item.pick??(items=>items[0])
+    const maleConnector=pick(maleData.connectors)
+    const femaleConnector=pick(femaleData.connectors)
+    assert.ok(maleConnector,`${item.label}: male Shadow connector missing`)
+    assert.ok(femaleConnector,`${item.label}: female Shadow connector missing`)
+
+    const male=endpoint(maleConnector,`${item.label}-male`)
+    const female=endpoint(femaleConnector,`${item.label}-female`)
+    assert.equal(male.metadata.semantics.semanticKind,item.semantic,`${item.label}: male semantic`)
+    assert.equal(female.metadata.semantics.semanticKind,item.semantic,`${item.label}: female semantic`)
+
+    const match=matchMechanicalEndpoints(male,female)
+    assert.equal(match.compatible,true,`${item.label}: profile compatibility`)
+    assert.equal(match.interfaceRule?.kind,item.kind,`${item.label}: interface kind`)
+    if(item.retained)assert.equal(match.interfaceRule?.topology?.retained,true,`${item.label}: retained topology`)
+
+    const records=alignedRecords(male,female)
+    const candidates=findMechanicalCandidates({
+      moving:records.moving,
+      targets:[records.target],
+      captureDistanceStud:2,
+      minAxisAlignment:.55,
+    })
+    assert.ok(candidates.length>0,`${item.label}: native BUILD candidate missing`)
+    assert.equal(candidates[0].connectionEligible,true,`${item.label}: candidate must be committable`)
+  }
 })
