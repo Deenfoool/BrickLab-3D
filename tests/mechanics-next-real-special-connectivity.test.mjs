@@ -43,6 +43,8 @@ const files=new Map([
   ['parts/6539.dat','0 !LDCAD SNAP_CYL [group=drivingRing1] [gender=F] [caps=none] [secs=A 10 11   _L 9 8   A 10 2   _L 9 8   A 10 11] [center=true] [ori=0 0 -1 1 0 0 0 -1 0]'],
   ['parts/92696.dat','0 !LDCAD SNAP_CYL [group=linAct1] [gender=M] [caps=one] [secs=R 6 60] [slide=true] [pos=0 0 -18] [ori=1 0 0 0 0 -1 0 1 0]'],
   ['parts/92693c01.dat','0 !LDCAD SNAP_CYL [group=linAct1] [gender=F] [caps=one] [secs=R 6 60] [pos=0 0 102] [ori=1 0 0 0 0 -1 0 1 0]'],
+  ['parts/2792.dat','0 !LDCAD SNAP_FGR [group=steerHold1] [genderOfs=M] [seq=4 32 4] [radius=13] [pos=0 -14 0] [ori=0 -1 0 1 0 0 0 0 1]'],
+  ['parts/2791a.dat','0 !LDCAD SNAP_FGR [group=steerHold1] [genderOfs=M] [seq=32] [radius=13] [ori=0 -1 0 1 0 0 0 0 1]'],
 ])
 
 const resolver=createNativeShadowResolver({fetchShadowText:async path=>files.get(path)??null})
@@ -349,6 +351,11 @@ test('pinned real special groups survive parser semantics matcher and BUILD cand
       label:'linear actuator guide',
       malePath:'parts/92696.dat',femalePath:'parts/92693c01.dat',
       semantic:'linear-actuator-guide',kind:'prismatic',retained:true,
+    },
+    {
+      label:'steering holder fingers',
+      malePath:'parts/2792.dat',femalePath:'parts/2791a.dat',
+      semantic:'steering-pivot',kind:'revolute',retained:true,
     },
   ]
 
