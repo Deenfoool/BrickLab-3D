@@ -28,3 +28,17 @@ test('disabled connector snapping never commits a stale candidate',()=>{
   assert.equal(plan.candidate,null)
   assert.equal(plan.applyGrid,true)
 })
+
+
+test('retained native connection suppresses grid snap when there is no new candidate',()=>{
+  const plan=releaseSnapPlan({
+    candidate:null,
+    connectorSnapEnabled:true,
+    gridSnapEnabled:true,
+    retainedConnection:true,
+  })
+
+  assert.equal(plan.candidate,null)
+  assert.equal(plan.applyGrid,false)
+  assert.equal(plan.retainedConnection,true)
+})
