@@ -148,10 +148,12 @@ export function occupancyPlanForPlacement(candidate,{connectionId}={}){
   const exclusiveChannels=[]
   const axialReservations=[]
 
-  const studBundle=(candidate?.supportPairs||[]).filter(pair=>{
+  const primaryPair=new Set(match?.interfacePair||[])
+  const primaryIsStud=primaryPair.has('stud')&&primaryPair.has('anti-stud')
+  const studBundle=primaryIsStud?(candidate?.supportPairs||[]).filter(pair=>{
     const values=new Set(pair?.match?.interfacePair||[])
     return values.has('stud')&&values.has('anti-stud')
-  })
+  }):[]
   if(studBundle.length>=2){
     for(const pair of studBundle){
       if(sourceBody&&pair?.source?.id)exclusiveChannels.push(endpointChannel(sourceBody,pair.source.id))
