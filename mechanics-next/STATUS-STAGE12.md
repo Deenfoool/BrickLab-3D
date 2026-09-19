@@ -50,6 +50,8 @@ Fixes now on the feature branch:
 - endpoint IDs prefer the final transformed connector signature, preserving unique grid/inheritance identities;
 - real `3673` pin, `3705` axle and `3701` Technic-hole Shadow profiles have dedicated native compatibility and candidate regressions;
 - editor add/remove/duplicate synchronizes Mechanics Next and reacquires native BUILD ownership;
+- inserted/duplicated parts explicitly warm their native Shadow connectivity before BUILD snapping relies on those endpoints;
+- mixed `technic-axle-pin` endpoints are matched as `technic-pin` or `axle` according to the receiver; real `43093.dat` is covered against both Technic pin-hole and A6 axle-hole profiles;
 - native BUILD considers gear placement candidates again;
 - gear placement can derive center/axis/teeth/pitch radius from Mechanics Next `gearFrameForRecord()` instead of requiring legacy `mechanics.gear` metadata.
 
