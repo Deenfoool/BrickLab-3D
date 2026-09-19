@@ -10,6 +10,7 @@ import { worldConnectorFrame } from '../mechanics-next/connectors/world-frame.js
 import { quatFromUnitVectors } from '../mechanics-next/math/rigid.js'
 import { createPartMechanicalDescriptor, instantiatePartMechanicalDescriptor } from '../mechanics-next/intelligence/part-descriptor.js'
 import { interpretObservedConnection } from '../mechanics-next/intelligence/connection-interpreter.js'
+import { OccupancyLedger, occupancyStateForEndpoint } from '../mechanics-next/connectors/occupancy.js'
 
 const files=new Map([
   ['parts/3701.dat',[
@@ -145,6 +146,15 @@ test('real Technic pin and axle profiles produce BUILD placement candidates',asy
     assert.ok(candidates.length>0,`${label} should produce a native BUILD candidate`)
     assert.equal(candidates[0].connectionEligible,true)
     assert.ok(candidates[0].solution?.valid)
+    assert.equal(candidates[0].occupancyPlan.exclusiveChannels.length,1)
+    assert.equal(candidates[0].occupancyPlan.axialReservations.length,1)
+
+    const ledger=new OccupancyLedger()
+    assert.equal(ledger.reserve(candidates[0].occupancyPlan).accepted,true)
+    const state=occupancyStateForEndpoint(ledger,'moving-body',source)
+    assert.equal(state.known,true)
+    assert.equal(state.partiallyOccupied,true,`${label} should keep unused shaft length available`)
+    assert.equal(state.available,true)
   }
 })
 
