@@ -171,15 +171,37 @@ function clipCylinderMatch(a,b,context={}) {
     :null
   const interfaceRule=semantic.rule??fallback
   const interfacePair=semantic.pair??(fallback?['clip','profile-cylinder']:null)
+  const receiverLength=Math.max(0,Number(clip?.profile?.lengthLdu)||0)
+  const axialFemale=Object.freeze({
+    ...clip,
+    family:'cylinder',
+    gender:'female',
+    profile:Object.freeze({
+      centered:clip?.profile?.centered===true,
+      caps:'none',
+      sections:Object.freeze([
+        Object.freeze({
+          shape:'R',
+          radiusLdu:clipRadius,
+          lengthLdu:receiverLength,
+          elastic:false,
+        }),
+      ]),
+    }),
+  })
   return {
     compatible:true,
     family:'clip-cylinder',
     reason:'round-clip',
+    male:cylinder,
+    female:axialFemale,
+    clipEndpoint:clip,
+    cylinderEndpoint:cylinder,
     keyed:false,
     rotationalSymmetry:Infinity,
     axialSlide,
     freeTwist:true,
-    requiresAxialFit:true,
+    requiresAxialFit:receiverLength>0,
     fit:Object.freeze(candidates[0]),
     interfaceRule,
     interfacePair,
