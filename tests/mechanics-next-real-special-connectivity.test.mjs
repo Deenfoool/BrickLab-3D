@@ -8,6 +8,8 @@ import { matchMechanicalEndpoints } from '../mechanics-next/connectors/profile-m
 import { findMechanicalCandidates } from '../mechanics-next/connectors/candidate-search.js'
 import { worldConnectorFrame } from '../mechanics-next/connectors/world-frame.js'
 import { quatFromUnitVectors } from '../mechanics-next/math/rigid.js'
+import { interpretObservedConnection } from '../mechanics-next/intelligence/connection-interpreter.js'
+import { exportMechanicsProjectState } from '../mechanics-next/migration/project-state.js'
 
 const files=new Map([
   ['p/stud.dat','0 !LDCAD SNAP_CYL [ID=studC] [gender=M] [caps=one] [secs=R 6 4]'],
@@ -145,4 +147,122 @@ test('real click-wheel generic group resolves to retained revolute interface',as
   assert.equal(match.interfaceRule?.topology?.retained,true)
   const records=alignedRecords(male,female)
   assert.ok(findMechanicalCandidates({moving:records.moving,targets:[records.target],captureDistanceStud:1}).length>0)
+})
+
+
+test('real multi-stud support becomes one validated fixed structural bundle',async()=>{
+  const [studData,receiverData]=await Promise.all([
+    resolver.resolve('p/stud.dat'),
+    resolver.resolve('parts/6154.dat'),
+  ])
+  const targetEndpoints=receiverData.connectors.slice(0,2)
+    .map(connector=>endpoint(connector,'target-body'))
+  const studTemplate=endpoint(studData.connectors[0],'stud-template')
+  const sourceEndpoints=targetEndpoints.map((target,index)=>enrichEndpointSemantics({
+    ...studTemplate,
+    id:`stud-source-${index}`,
+    bodyId:'moving-body',
+    frame:target.frame,
+    metadata:{
+      ...(studTemplate.metadata||{}),
+      compatibilityEndpointId:`stud-source-${index}`,
+      sourceEndpointId:`stud-source-${index}`,
+    },
+  }))
+
+  const moving={
+    instance:{
+      body:{id:'moving-body',instanceId:'moving-stud-brick',partId:'stud-brick'},
+      descriptor:{classification:{role:'brick',properties:{}}},
+      endpoints:sourceEndpoints,
+    },
+    pose:{position:[0,0,0],quaternion:[0,0,0,1]},
+    visualOffsetStud:[0,0,0],
+  }
+  const target={
+    instance:{
+      body:{id:'target-body',instanceId:'target-antistud-brick',partId:'anti-brick'},
+      descriptor:{classification:{role:'brick',properties:{}}},
+      endpoints:targetEndpoints,
+    },
+    pose:{position:[0,0,0],quaternion:[0,0,0,1]},
+    visualOffsetStud:[0,0,0],
+  }
+
+  const candidates=findMechanicalCandidates({
+    moving,
+    targets:[target],
+    captureDistanceStud:1,
+  })
+  assert.ok(candidates.length>0)
+  const candidate=candidates[0]
+  assert.equal(candidate.supportCount,2)
+  assert.equal(candidate.supportPairs.length,2)
+  assert.equal(candidate.occupancyPlan.exclusiveChannels.length,4)
+  assert.equal(candidate.occupancyPlan.axialReservations.length,0)
+
+  const instances=new Map([
+    ['moving-stud-brick',moving.instance],
+    ['target-antistud-brick',target.instance],
+  ])
+  const identityObject=()=>({
+    children:[],
+    matrixWorld:{elements:[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},
+    updateWorldMatrix(){},
+  })
+  const objects=new Map([...instances.keys()].map(id=>[id,identityObject()]))
+  const contactBundle={
+    kind:'stud-bundle',
+    contactCount:candidate.supportPairs.length,
+    contacts:candidate.supportPairs.map(pair=>({
+      sourceEndpointId:pair.source.id,
+      targetEndpointId:pair.target.id,
+      sourceSemantic:pair.source.metadata.semantics.semanticKind,
+      targetSemantic:pair.target.metadata.semantics.semanticKind,
+    })),
+  }
+  const record={
+    id:'stud-bundle-record',
+    a:{instanceId:'moving-stud-brick',endpointId:candidate.source.id},
+    b:{instanceId:'target-antistud-brick',endpointId:candidate.target.id},
+    match:{family:'cylinder'},
+    occupancy:candidate.occupancyPlan,
+    metadata:{contactBundle},
+  }
+  const interpreted=interpretObservedConnection(record,{
+    sceneObserver:{instance:id=>instances.get(id)??null},
+    objectById:id=>objects.get(id),
+  })
+  assert.equal(interpreted.valid,true)
+  assert.equal(interpreted.type,'constraint')
+  assert.equal(interpreted.constraint.kind,'fixed')
+  assert.equal(interpreted.constraint.metadata.contactBundle.contactCount,2)
+
+  const state=exportMechanicsProjectState({
+    graph:{edges:kind=>kind==='constraint'?[interpreted.constraint]:[]},
+    relations:[],
+  })
+  assert.equal(state.connections.length,1)
+  assert.equal(state.connections[0].contactBundle.contactCount,2)
+
+  const fakeBundle={
+    ...record,
+    id:'fake-stud-bundle',
+    metadata:{
+      contactBundle:{
+        kind:'stud-bundle',
+        contactCount:2,
+        contacts:[
+          contactBundle.contacts[0],
+          contactBundle.contacts[0],
+        ],
+      },
+    },
+  }
+  const rejected=interpretObservedConnection(fakeBundle,{
+    sceneObserver:{instance:id=>instances.get(id)??null},
+    objectById:id=>objects.get(id),
+  })
+  assert.equal(rejected.valid,false)
+  assert.match(rejected.reason,/contact-bundle-invalid/)
 })
