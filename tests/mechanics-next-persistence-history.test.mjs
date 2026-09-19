@@ -107,6 +107,7 @@ test('project export persists the original connection geometry snapshot', () => 
     lateralDistanceStud:0,
     axisDot:1,
     relativeOrientation:[1,0,0,0,1,0,0,0,1],
+    twistPhaseRad:.25,
   }
   graph.addConstraint(createConstraint({
     id:'history-edge',
@@ -136,6 +137,7 @@ test('project export persists the original connection geometry snapshot', () => 
   const state=exportMechanicsProjectState({graph,relations:[]})
   assert.equal(state.connections.length,1)
   assert.deepEqual(state.connections[0].geometry,geometry)
+  assert.equal(state.connections[0].geometry.twistPhaseRad,.25)
 })
 
 test('restore keeps persisted geometry so a moved-open project cannot bless its new pose', () => {
@@ -165,6 +167,7 @@ test('restore keeps persisted geometry so a moved-open project cannot bless its 
         lateralDistanceStud:0,
         axisDot:1,
         relativeOrientation:[1,0,0,0,1,0,0,0,1],
+        twistPhaseRad:.5,
       },
       occupancy:{
         connectionId:'history-observed',
@@ -190,6 +193,7 @@ test('restore keeps persisted geometry so a moved-open project cannot bless its 
   assert.ok(edge)
   assert.equal(edge.metadata.connectionGeometry.anchorDistanceStud,.5)
   assert.equal(edge.metadata.connectionGeometry.axialSeparationStud,-.5)
+  assert.equal(edge.metadata.connectionGeometry.twistPhaseRad,.5)
 
   let released=null
   const moved=revalidateSceneConnections({
