@@ -243,6 +243,20 @@ export function classifyEndpointSemantics(endpoint) {
     return result(endpoint, endpoint.gender === 'male' ? 'ball' : 'socket', { reason:'sphere-family' })
   }
   if (endpoint.family === 'generic') {
+    const bounding=endpoint?.profile?.bounding
+    const placement=String(endpoint?.metadata?.snap?.placement||'').toLowerCase()
+    if(bounding?.kind==='sphere'&&Number.isFinite(Number(bounding.radiusLdu))&&placement==='free'){
+      if(endpoint.gender==='male')return result(endpoint,'ball',{
+        confidence:'strong',
+        reason:'generic-free-sphere-male',
+        properties:{radiusLdu:Number(bounding.radiusLdu)},
+      })
+      if(endpoint.gender==='female')return result(endpoint,'socket',{
+        confidence:'strong',
+        reason:'generic-free-sphere-female',
+        properties:{radiusLdu:Number(bounding.radiusLdu)},
+      })
+    }
     return result(endpoint, 'generic-interface', {
       confidence:'inferred',
       reason:'generic-connector-family',
