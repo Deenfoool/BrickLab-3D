@@ -9,6 +9,7 @@ import { findMechanicalCandidates } from '../mechanics-next/connectors/candidate
 import { worldConnectorFrame } from '../mechanics-next/connectors/world-frame.js'
 import { quatFromUnitVectors } from '../mechanics-next/math/rigid.js'
 import { createPartMechanicalDescriptor, instantiatePartMechanicalDescriptor } from '../mechanics-next/intelligence/part-descriptor.js'
+import { interpretObservedConnection } from '../mechanics-next/intelligence/connection-interpreter.js'
 
 const files=new Map([
   ['parts/3701.dat',[
@@ -210,4 +211,55 @@ test('full descriptor instantiation preserves all real Technic hole identities',
     first.endpoints.some(left=>second.endpoints.some(right=>left.id===right.id)),
     false,
   )
+})
+
+
+test('mixed Axle Pin survives connection interpretation after placement',async()=>{
+  const resolver=createNativeShadowResolver({fetchShadowText:async path=>files.get(path)??null})
+  const [axlePin,brick,gear]=await Promise.all([
+    resolver.resolve('parts/43093.dat'),
+    resolver.resolve('parts/3701.dat'),
+    resolver.resolve('parts/32269.dat'),
+  ])
+  const makeInstance=(instanceId,partId,endpoints)=>({
+    body:{id:`body-${instanceId}`,instanceId,partId},
+    descriptor:{classification:{role:'connector',properties:{}}},
+    endpoints,
+  })
+  const mixed=endpoint(axlePin.connectors[0],'body-mixed')
+  const pinHole=endpoint(brick.connectors[0],'body-pin-hole')
+  const axleHole=endpoint(gear.connectors[0],'body-axle-hole')
+  const instances=new Map([
+    ['mixed',makeInstance('mixed','ldraw-43093',[mixed])],
+    ['pin-hole',makeInstance('pin-hole','ldraw-3701',[pinHole])],
+    ['axle-hole',makeInstance('axle-hole','ldraw-32269',[axleHole])],
+  ])
+  const sceneObserver={instance:id=>instances.get(id)??null}
+  const identityObject=()=>({
+    children:[],
+    matrixWorld:{elements:[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},
+    updateWorldMatrix(){},
+  })
+  const objects=new Map([...instances.keys()].map(id=>[id,identityObject()]))
+  const interpret=(targetId,targetEndpoint,id)=>interpretObservedConnection({
+    id,
+    a:{instanceId:'mixed',endpointId:mixed.id},
+    b:{instanceId:targetId,endpointId:targetEndpoint.id},
+    match:{family:'cylinder'},
+  },{
+    sceneObserver,
+    objectById:id=>objects.get(id),
+  })
+
+  const pin=interpret('pin-hole',pinHole,'mixed-to-pin')
+  assert.equal(pin.valid,true)
+  assert.equal(pin.type,'constraint')
+  assert.equal(pin.constraint.kind,'revolute')
+  assert.deepEqual(pin.constraint.metadata.interfacePair,['technic-pin','technic-hole'])
+
+  const axle=interpret('axle-hole',axleHole,'mixed-to-axle')
+  assert.equal(axle.valid,true)
+  assert.equal(axle.type,'constraint')
+  assert.equal(axle.constraint.kind,'prismatic')
+  assert.deepEqual(axle.constraint.metadata.interfacePair,['axle','axle-hole'])
 })
