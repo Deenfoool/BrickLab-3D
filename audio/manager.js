@@ -76,7 +76,7 @@ export class AudioManager {
     if (!element) return null
     this.cooldowns.set(key, now)
     try { element.pause?.(); element.currentTime = 0 } catch { /* restarting a not-yet-loaded short sample is harmless */ }
-    element.muted = false
+    element.muted = this.settings.mute || this.hidden || this.settings.master === 0 || this.settings.sfx === 0
     element.volume = clamp(this.settings.master * this.settings.sfx * volume)
     this.safeMediaPlay(element, assetName(src))
     this.lastAsset = assetName(src)
@@ -93,10 +93,21 @@ export class AudioManager {
     return element
   }
   applyMediaSettings() {
-    const element = this.musicElement
-    if (!element) return
-    element.volume = clamp(this.settings.master * this.settings.music)
-    element.muted = this.settings.mute || this.hidden || this.settings.master === 0 || this.settings.music === 0
+    const music = this.musicElement
+    if (music) {
+      music.volume = clamp(this.settings.master * this.settings.music)
+      music.muted = this.settings.mute || this.hidden || this.settings.master === 0 || this.settings.music === 0
+    }
+    const sfxMuted = this.settings.mute || this.hidden || this.settings.master === 0 || this.settings.sfx === 0
+    const sfxVolume = clamp(this.settings.master * this.settings.sfx)
+    for (const [key, element] of this.media) {
+      if (!key.startsWith('sfx:') || !element) continue
+      element.muted = sfxMuted
+      element.volume = sfxVolume
+      if (this.hidden) {
+        try { element.pause?.() } catch { /* optional media backend */ }
+      }
+    }
   }
   advanceMusic() {
     if (!this.musicWanted || !this.musicElement) return
@@ -223,5 +234,5 @@ export class AudioManager {
     if (l.positionX) for (const [key,value] of Object.entries(values)) l[key].setTargetAtTime(value, t, .04)
     else { l.setPosition(e[12],e[13],e[14]); l.setOrientation(-e[8],-e[9],-e[10],e[4],e[5],e[6]) }
   }
-  debug() { return { settings: { ...this.settings }, state: this.context?.state ?? 'locked', lastAsset:this.lastAsset, voices:this.voices.size, loops:[...this.loops.keys()], cachedBuffers:this.buffers.size, failed:[...this.failed], musicTrack:this.musicIndex + 1 } }
+  debug() { return { settings: { ...this.settings }, state: this.context?.state ?? 'locked', hidden:this.hidden, lastAsset:this.lastAsset, voices:this.voices.size, loops:[...this.loops.keys()], cachedBuffers:this.buffers.size, media:this.media.size, failed:[...this.failed], musicTrack:this.musicIndex + 1 } }
 }
