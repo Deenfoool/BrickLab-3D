@@ -1,4 +1,4 @@
-export const MECHANICS_MIGRATION_GATE_VERSION='mechanics-migration-gate-0.2.1'
+export const MECHANICS_MIGRATION_GATE_VERSION='mechanics-migration-gate-0.3.0'
 
 function check(id,pass,detail=null,severity='blocker'){
   return Object.freeze({
@@ -19,7 +19,7 @@ export function evaluateMechanicsMigrationGate({
   scope='production',
 }={}){
   const checks=[]
-  const gateScope=scope==='kinematics'?'kinematics':'production'
+  const gateScope=scope==='kinematics'||scope==='build'?scope:'production'
   const requirePhysics=gateScope==='production'
 
   checks.push(check(
@@ -117,11 +117,11 @@ export function evaluateMechanicsMigrationGate({
     {
       unsupported:Object.freeze(unsupportedTransmissions),
       scope:gateScope,
-      note:gateScope==='kinematics'
-        ?'unsupported families are isolated to their own transmission path; KINEMATICS may run supported mechanisms'
+      note:gateScope!=='production'
+        ?'unsupported families are isolated to their own transmission path; non-physics BUILD/KINEMATICS may continue'
         :'all transmission-capable scene parts must have a production model',
     },
-    gateScope==='kinematics'?'warning':'blocker',
+    gateScope!=='production'?'warning':'blocker',
   ))
 
   const ambiguousPackages=[

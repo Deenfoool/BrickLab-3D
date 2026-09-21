@@ -61,6 +61,7 @@ const shortcutGroups = [
       ['Alt+R', 'Reset rotation'],
       ['Alt+G', 'Reset position'],
       ['C', 'Connector points'],
+      ['Shift+L', 'Auto-link safe contacts'],
       ['L', 'Connection graph'],
       ['D', 'Disconnect selected'],
       ['I', 'Mechanics properties'],
@@ -307,12 +308,12 @@ function scheduleMechanicsNextBuildHandoff(reason = 'scene-change') {
 
   mechanicsNextBuildHandoffTask = (async () => {
     try {
-      const prepared = await mechanics.prepareMigration()
+      const prepared = await mechanics.prepareMigration({scope:'build'})
       if (!prepared?.pass) {
         console.info('[BrickLab Mechanics Next] BUILD handoff remains blocked.', { reason, prepared })
         return false
       }
-      const adopted = mechanics.adoptNativeProjectOwnership()
+      const adopted = mechanics.adoptNativeProjectOwnership({gateScope:'build',preparedGate:prepared})
       if (!adopted?.accepted) {
         console.warn('[BrickLab Mechanics Next] BUILD handoff rejected.', { reason, adopted })
         return false
@@ -1113,6 +1114,125 @@ function disconnectSelected() {
   toast(`Disconnected ${count} link${count === 1 ? '' : 's'}`)
 }
 
+const AUTO_LINK_CAPTURE_DISTANCE_STUD = .08
+const AUTO_LINK_MAX_TRANSLATION_STUD = .015
+const AUTO_LINK_MAX_ROTATION_RAD = THREE.MathUtils.degToRad(.75)
+const AUTO_LINK_MAX_CONTACTS_PER_PAIR = 16
+let autoLinkRunning = false
+
+function autoLinkPairKey(a, b) {
+  const ai = String(a?.userData?.instanceId || '')
+  const bi = String(b?.userData?.instanceId || '')
+  return ai < bi ? `${ai}|${bi}` : `${bi}|${ai}`
+}
+
+async function autoLinkCurrentPose() {
+  if (autoLinkRunning) return
+  if (mode !== 'build') {
+    toast('Автосвязь работает только в СБОРКЕ')
+    return
+  }
+
+  const mechanics = globalThis.BrickLabMechanicsNext
+  if (!mechanics?.findCandidate || !mechanics?.commitCurrentPoseCandidate) {
+    toast('Автосвязь недоступна')
+    return
+  }
+
+  autoLinkRunning = true
+  try {
+    if (!mechanicsNextBuildActive()) {
+      const prepared = await mechanics.prepareMigration?.({scope:'build'})
+      const adopted = prepared?.pass
+        ? mechanics.adoptNativeProjectOwnership?.({gateScope:'build',preparedGate:prepared})
+        : null
+      if (!adopted?.accepted && !mechanicsNextBuildActive()) {
+        console.info('[BrickLab Mechanics Next] Auto-link BUILD ownership blocked.', {prepared,adopted})
+        toast('Автосвязь недоступна: Mechanics Next BUILD не готов')
+        return
+      }
+    }
+
+    const all = [...buildRoot.children].filter(Boolean)
+    const sources = selectedObjects.size ? [...selectedObjects].filter(Boolean) : all
+    const partIds = [...new Set(all.map(object => object?.userData?.partId).filter(Boolean))]
+    await Promise.allSettled(partIds.map(partId => mechanics.ensurePartConnectivity?.(partId)))
+    mechanics.syncScene?.()
+
+    let accepted = 0
+    let skipped = 0
+    const processedPairs = new Set()
+
+    for (const source of sources) {
+      for (const target of all) {
+        if (!target || target === source) continue
+        const pair = autoLinkPairKey(source, target)
+        if (processedPairs.has(pair)) continue
+        processedPairs.add(pair)
+
+        const seenCandidates = new Set()
+        for (let pass = 0; pass < AUTO_LINK_MAX_CONTACTS_PER_PAIR; pass += 1) {
+          const candidate = mechanics.findCandidate(
+            source.userData.instanceId,
+            [target.userData.instanceId],
+            {captureDistanceStud:AUTO_LINK_CAPTURE_DISTANCE_STUD},
+          )
+          if (!candidate) break
+          if (seenCandidates.has(candidate.key)) break
+          seenCandidates.add(candidate.key)
+
+          const result = mechanics.commitCurrentPoseCandidate(candidate, {
+            maxTranslationStud:AUTO_LINK_MAX_TRANSLATION_STUD,
+            maxRotationRad:AUTO_LINK_MAX_ROTATION_RAD,
+          })
+          if (!result?.accepted) {
+            skipped += 1
+            break
+          }
+          accepted += 1
+        }
+      }
+    }
+
+    mechanics.syncScene?.()
+    updateConnectionVisuals()
+    updateProjectStats()
+    updateInspector()
+    connectorGuides()
+    refreshSnap()
+
+    if (accepted > 0) {
+      commitHistory()
+      emitAudioEvent('connector', {source:'mechanics-next-auto-link'})
+      window.dispatchEvent(new CustomEvent('bricklab:editorexternalmutation', {
+        detail:{reason:'mechanics-next-auto-link',count:accepted},
+      }))
+      toast(`Автосвязь: создано ${accepted}`)
+    } else {
+      toast('Автосвязь: новых безопасных связей нет')
+    }
+
+    return {accepted,skipped,scope:sources.length===all.length?'all':'selection'}
+  } catch (error) {
+    console.warn('[BrickLab Mechanics Next] Auto-link failed.', error)
+    toast('Автосвязь завершилась с ошибкой')
+    return {accepted:0,skipped:0,reason:String(error?.message||error)}
+  } finally {
+    autoLinkRunning = false
+  }
+}
+
+globalThis.BrickLabMechanicsNextAutoLink = Object.freeze({
+  version:'mechanics-next-auto-link-0.1.0',
+  hotkey:'Shift+L',
+  run:autoLinkCurrentPose,
+  limits:Object.freeze({
+    captureDistanceStud:AUTO_LINK_CAPTURE_DISTANCE_STUD,
+    maxTranslationStud:AUTO_LINK_MAX_TRANSLATION_STUD,
+    maxRotationRad:AUTO_LINK_MAX_ROTATION_RAD,
+  }),
+})
+
 function groupSelected() {
   if (mode !== 'build' || selectedObjects.size < 2) {
     toast('Select at least two parts to group')
@@ -1802,6 +1922,11 @@ window.addEventListener('keydown', event => {
   if (shift && code === 'KeyG') {
     event.preventDefault()
     toggleGridSnap()
+    return
+  }
+  if (shift && code === 'KeyL') {
+    event.preventDefault()
+    void autoLinkCurrentPose()
     return
   }
   if (shift && code === 'Space') {

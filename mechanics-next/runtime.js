@@ -456,6 +456,23 @@ export function createMechanicsNextRuntime({
     return rigidPoseFromMatrix4(Array.from(elements))
   }
 
+  const commitObservedCandidateRecord=candidate=>{
+    const record=recordFromCandidate(candidate)
+    releasedObservedConnectionIds.reconnect(record.id)
+    nativeObservedRecords.set(record.id,record)
+    const refreshed=syncScene()
+    const unresolved=connectionInterpreter?.unresolved?.().find(item=>item.recordId===record.id)
+    if(unresolved){
+      nativeObservedRecords.delete(record.id)
+      occupancy.release(record.id)
+      syncScene()
+      return Object.freeze({accepted:false,reason:unresolved.reason,unresolved})
+    }
+    const committed=freezeCommittedConnectionGeometry(record)
+    nativeObservedRecords.set(committed.id,committed)
+    return Object.freeze({accepted:true,record:committed,refreshed})
+  }
+
   const validateCommittedCandidate=candidate=>{
     const moving={...candidate.moving,pose:currentPoseForRecord(candidate.moving)}
     const sourceFrame=worldConnectorFrame(moving.pose,candidate.source,{
@@ -1038,19 +1055,9 @@ export function createMechanicsNextRuntime({
         occupancy,
         validate:()=>validateCommittedCandidate(candidate),
         commitConnection:async()=>{
-          const record=recordFromCandidate(candidate)
-          releasedObservedConnectionIds.reconnect(record.id)
-          nativeObservedRecords.set(record.id,record)
-          const refreshed=syncScene()
-          const unresolved=connectionInterpreter?.unresolved?.().find(item=>item.recordId===record.id)
-          if(unresolved){
-            nativeObservedRecords.delete(record.id)
-            syncScene()
-            return Object.freeze({accepted:false,reason:unresolved.reason,unresolved})
-          }
-          committedRecord=freezeCommittedConnectionGeometry(record)
-          nativeObservedRecords.set(committedRecord.id,committedRecord)
-          return Object.freeze({accepted:true,record:committedRecord,refreshed})
+          const committed=commitObservedCandidateRecord(candidate)
+          if(committed.accepted)committedRecord=committed.record
+          return committed
         },
       })
       if(!result.accepted&&committedRecord){
@@ -1060,6 +1067,60 @@ export function createMechanicsNextRuntime({
       return Object.freeze({
         ...result,
         record:committedRecord,
+      })
+    },
+    commitCurrentPoseCandidate(candidate,{
+      maxTranslationStud=.015,
+      maxRotationRad=Math.PI/240,
+    }={}) {
+      if(!nativeProjectAuthoritative)return Object.freeze({
+        accepted:false,
+        reason:'native-project-not-authoritative',
+      })
+      if(!candidate?.solution?.valid||!candidate?.moving?.object){
+        return Object.freeze({accepted:false,reason:'invalid-candidate'})
+      }
+      const translation=Number(candidate.solution?.diagnostics?.translationStud)
+      const rotation=Math.abs(Number(candidate.solution?.diagnostics?.rotationRad))
+      if(!Number.isFinite(translation)||!Number.isFinite(rotation)||
+         translation>maxTranslationStud||rotation>maxRotationRad){
+        return Object.freeze({
+          accepted:false,
+          reason:'current-pose-outside-safe-contact',
+          translationStud:translation,
+          rotationRad:rotation,
+        })
+      }
+
+      rebuildNativeOccupancy()
+      const plan=candidate.occupancyPlan??null
+      if(plan&&occupancy?.canReserve){
+        const availability=occupancy.canReserve(plan)
+        if(!availability.accepted)return Object.freeze({
+          accepted:false,
+          reason:'occupied',
+          conflicts:availability.conflicts,
+        })
+      }
+
+      let reserved=false
+      if(plan&&occupancy?.reserve){
+        const reservation=occupancy.reserve(plan)
+        if(!reservation.accepted)return Object.freeze({
+          accepted:false,
+          reason:'occupied',
+          conflicts:reservation.conflicts,
+        })
+        reserved=true
+      }
+
+      const committed=commitObservedCandidateRecord(candidate)
+      if(!committed.accepted&&reserved)occupancy.release(plan.connectionId)
+      return Object.freeze({
+        ...committed,
+        currentPose:true,
+        translationStud:translation,
+        rotationRad:rotation,
       })
     },
     removePartConnections(instanceId) {

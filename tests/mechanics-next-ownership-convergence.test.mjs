@@ -183,3 +183,24 @@ test('production still blocks unsupported transmission families',()=>{
   assert.equal(gate.pass,false)
   assert.ok(gate.blockers.some(item=>item.id==='transmission-family-coverage'))
 })
+
+
+test('BUILD gate is non-physics and treats unsupported transmission coverage as warning',()=>{
+  const runtime=greenRuntime({build:true,kinematics:false,physicsCreateOwner:null})
+  runtime.lastSceneSync.transmissions.diagnostics.coverage=[
+    {bodyId:'pulley',role:'pulley',supported:false,model:'explicit-belt-or-chain-required'},
+  ]
+  const gate=evaluateMechanicsMigrationGate({
+    runtimeStatus:runtime,
+    physicsStatus:{pass:false,blockers:[{code:'physics-not-required'}]},
+    paritySummary:{parts:0,semanticFail:0,geometryFail:0},
+    persistence:{pass:true},
+    regression:{status:'passed'},
+    nativeProjectAuthoritative:true,
+    scope:'build',
+  })
+  assert.equal(gate.scope,'build')
+  assert.equal(gate.checks.find(item=>item.id==='physics-preflight').pass,true)
+  assert.equal(gate.checks.find(item=>item.id==='transmission-family-coverage').severity,'warning')
+  assert.equal(gate.pass,true)
+})

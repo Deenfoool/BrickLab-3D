@@ -220,3 +220,66 @@ test('unknown-role parts with valid endpoints can hand off BUILD and create a gr
   assert.equal(runtime.projectConnections()[0].kind,'revolute')
 })
 
+
+
+test('current-pose auto-link commit creates native link without moving either part',()=>{
+  const {runtime,objects}=createHarness(
+    [pinDef,pinHoleDef],
+    [
+      {instanceId:'auto-pin-i',partId:pinDef.id,position:[.01,.1,0]},
+      {instanceId:'auto-hole-i',partId:pinHoleDef.id,position:[0,0,0]},
+    ],
+  )
+  const pin=objects.get('auto-pin-i')
+  const hole=objects.get('auto-hole-i')
+  const beforePin={
+    position:pin.position.toArray(),
+    quaternion:pin.quaternion.toArray(),
+    scale:pin.scale.toArray(),
+  }
+  const beforeHole={
+    position:hole.position.toArray(),
+    quaternion:hole.quaternion.toArray(),
+    scale:hole.scale.toArray(),
+  }
+
+  const candidate=runtime.findCandidate('auto-pin-i',['auto-hole-i'],{
+    captureDistanceStud:.08,
+    minAxisAlignment:.55,
+  })
+  assert.ok(candidate)
+  assert.ok(candidate.solution.diagnostics.translationStud<=.015)
+
+  const committed=runtime.commitCurrentPoseCandidate(candidate)
+  assert.equal(committed.accepted,true)
+  assert.equal(committed.currentPose,true)
+  assert.equal(runtime.projectConnections().length,1)
+  assert.deepEqual(pin.position.toArray(),beforePin.position)
+  assert.deepEqual(pin.quaternion.toArray(),beforePin.quaternion)
+  assert.deepEqual(pin.scale.toArray(),beforePin.scale)
+  assert.deepEqual(hole.position.toArray(),beforeHole.position)
+  assert.deepEqual(hole.quaternion.toArray(),beforeHole.quaternion)
+  assert.deepEqual(hole.scale.toArray(),beforeHole.scale)
+})
+
+test('current-pose auto-link refuses a contact that would require visible movement',()=>{
+  const {runtime,objects}=createHarness(
+    [pinDef,pinHoleDef],
+    [
+      {instanceId:'far-pin-i',partId:pinDef.id,position:[.05,.1,0]},
+      {instanceId:'far-hole-i',partId:pinHoleDef.id,position:[0,0,0]},
+    ],
+  )
+  const pin=objects.get('far-pin-i')
+  const before=pin.position.toArray()
+  const candidate=runtime.findCandidate('far-pin-i',['far-hole-i'],{
+    captureDistanceStud:.08,
+    minAxisAlignment:.55,
+  })
+  assert.ok(candidate)
+  const committed=runtime.commitCurrentPoseCandidate(candidate)
+  assert.equal(committed.accepted,false)
+  assert.equal(committed.reason,'current-pose-outside-safe-contact')
+  assert.equal(runtime.projectConnections().length,0)
+  assert.deepEqual(pin.position.toArray(),before)
+})
