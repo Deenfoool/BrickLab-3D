@@ -27,7 +27,7 @@ export class AudioManager {
     if (!storage) { try { storage = globalThis.localStorage } catch { /* Storage may be denied. */ } }
     this.storage = storage; this.random = random; this.now = now
     try { this.settings = sanitizeSettings(JSON.parse(storage?.getItem(SETTINGS_KEY) || '{}')) } catch { this.settings = { ...DEFAULTS } }
-    this.buffers = new Map(); this.voices = new Set(); this.loops = new Map(); this.cooldowns = new Map(); this.media = new Map()
+    this.buffers = new Map(); this.voices = new Set(); this.loops = new Map(); this.cooldowns = new Map(); this.media = new Map(); this.mediaSfxGain = new Map()
     this.hidden = false; this.lastAsset = ''; this.failed = new Set(); this.maxVoices = 20
     this.musicElement = null; this.musicIndex = 0; this.musicWanted = false
   }
@@ -75,9 +75,11 @@ export class AudioManager {
     const element = this.createMedia(`sfx:${name}`, src, 'auto')
     if (!element) return null
     this.cooldowns.set(key, now)
+    const mediaKey=`sfx:${name}`
+    this.mediaSfxGain.set(mediaKey, clamp(volume, 1))
     try { element.pause?.(); element.currentTime = 0 } catch { /* restarting a not-yet-loaded short sample is harmless */ }
     element.muted = this.settings.mute || this.hidden || this.settings.master === 0 || this.settings.sfx === 0
-    element.volume = clamp(this.settings.master * this.settings.sfx * volume)
+    element.volume = clamp(this.settings.master * this.settings.sfx * (this.mediaSfxGain.get(mediaKey) ?? 1))
     this.safeMediaPlay(element, assetName(src))
     this.lastAsset = assetName(src)
     return { name, element, external: true }
@@ -103,7 +105,7 @@ export class AudioManager {
     for (const [key, element] of this.media) {
       if (!key.startsWith('sfx:') || !element) continue
       element.muted = sfxMuted
-      element.volume = sfxVolume
+      element.volume = clamp(sfxVolume * (this.mediaSfxGain.get(key) ?? 1))
       if (this.hidden) {
         try { element.pause?.() } catch { /* optional media backend */ }
       }
