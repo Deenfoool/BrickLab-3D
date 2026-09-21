@@ -152,3 +152,71 @@ test('runtime keyed axle joint survives 90 degree symmetry but rejects 45 degree
   assert.ok(wrongPhase.revalidation.released>=1)
   assert.equal(runtime.projectConnections().length,0,'non-symmetric keyed phase must release')
 })
+
+test('unknown-role parts with valid endpoints can hand off BUILD and create a graph link',async()=>{
+  const unknownPin={
+    id:'fixture-unknown-pin',
+    name:'Fixture Alpha',
+    connectors:[{id:'pin',type:'pin',position:[0,0,0],axis:[0,1,0]}],
+  }
+  const unknownHole={
+    id:'fixture-unknown-hole',
+    name:'Fixture Beta',
+    connectors:[{id:'hole',type:'pin-hole',position:[0,0,0],axis:[0,1,0]}],
+  }
+  const byPart=new Map([[unknownPin.id,unknownPin],[unknownHole.id,unknownHole]])
+  const root=new THREE.Group()
+  const objects=new Map()
+  for(const item of [
+    {instanceId:'unknown-pin-i',partId:unknownPin.id,position:[0.18,0.1,0]},
+    {instanceId:'unknown-hole-i',partId:unknownHole.id,position:[0,0,0]},
+  ]){
+    const object=new THREE.Object3D()
+    object.userData={instanceId:item.instanceId,partId:item.partId}
+    object.position.fromArray(item.position)
+    root.add(object)
+    object.updateMatrixWorld(true)
+    objects.set(item.instanceId,object)
+  }
+  const globals={
+    addEventListener(){},
+    dispatchEvent(){},
+    BrickLabLDraw:{readText:async()=>null},
+    BrickLabMechanicsNextPhysicsOwner:{createOwner:'mechanics-next-physics-owner-0.1.0'},
+  }
+  const subsystems={
+    parts:{list:()=>[unknownPin,unknownHole],get:id=>byPart.get(String(id))??null},
+    editor:{
+      ready:()=>true,
+      objects:()=>[...objects.values()],
+      objectById:id=>objects.get(String(id))??null,
+      projectState:()=>({connections:[]}),
+    },
+  }
+  const runtime=createMechanicsNextRuntime({globals,subsystems})
+  runtime.syncScene()
+
+  assert.equal(runtime.status().scene.roles.unknown,2)
+  const prepared=await runtime.prepareMigration()
+  assert.equal(
+    prepared.pass,
+    true,
+    `unknown role must not block native BUILD: ${JSON.stringify(prepared.blockers)}`,
+  )
+  const adopted=runtime.adoptNativeProjectOwnership()
+  assert.equal(adopted.accepted,true)
+  assert.equal(runtime.nativeProjectAuthoritative(),true)
+  assert.equal(globals.BrickLabMechanicsNextBuildOwner?.active,true)
+
+  const candidate=runtime.findCandidate('unknown-pin-i',['unknown-hole-i'],{
+    captureDistanceStud:1,
+    minAxisAlignment:.55,
+  })
+  assert.ok(candidate,'native candidate must be reachable after BUILD handoff')
+  assert.equal(candidate.connectionEligible,true)
+  const committed=await runtime.commitCandidate(candidate)
+  assert.equal(committed.accepted,true)
+  assert.equal(runtime.projectConnections().length,1)
+  assert.equal(runtime.projectConnections()[0].kind,'revolute')
+})
+
