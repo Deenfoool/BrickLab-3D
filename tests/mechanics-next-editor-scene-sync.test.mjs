@@ -93,3 +93,19 @@ test('native BUILD movement revalidates DOF before detaching',()=>{
   assert.match(appSource,/revalidateNativeConnectionsNow\('inspector-position'\)/)
   assert.match(appSource,/revalidateNativeConnectionsNow\('inspector-rotation'\)/)
 })
+
+
+test('native BUILD handoff starts on editor contract readiness and never silently falls back',()=>{
+  assert.match(
+    appSource,
+    /'bricklab:editorcontractready'[\s\S]{0,500}scheduleMechanicsNextBuildHandoff\(eventName\)/,
+  )
+  assert.match(
+    appSource,
+    /else if \(globalThis\.BrickLabMechanicsNext\)[\s\S]{0,220}scheduleMechanicsNextBuildHandoff\('snap-preview'\)/,
+  )
+  assert.match(
+    appSource,
+    /globalThis\.BrickLabMechanicsNext[\s\S]{0,220}' · Mechanics Next starting'/,
+  )
+})
