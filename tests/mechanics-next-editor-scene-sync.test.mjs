@@ -109,3 +109,19 @@ test('native BUILD snap never silently falls back while Mechanics Next is presen
     /'bricklab:editorcontractready'[\s\S]{0,350}scheduleMechanicsNextBuildHandoff\(eventName\)/,
   )
 })
+
+
+test('inspector counts partial native occupancy as an engaged connector without blocking further snap',()=>{
+  assert.match(
+    appSource,
+    /function nativeEndpointEngaged\(object, endpoint\)[\s\S]{0,420}axialReservations[\s\S]{0,180}length > 0/,
+  )
+  assert.match(
+    appSource,
+    /const usedConnectors = nativeEndpoints\.length[\s\S]{0,220}nativeEndpointEngaged\(selected, endpoint\)/,
+  )
+  assert.match(
+    appSource,
+    /function nativeEndpointAvailable\(object, endpoint\)[\s\S]{0,260}state\.available!==false/,
+  )
+})
