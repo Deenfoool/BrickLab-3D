@@ -423,6 +423,10 @@ function mechanicsNextBuildActive() {
     globalThis.BrickLabMechanicsNext?.nativeProjectAuthoritative?.() === true
 }
 
+function mechanicsNextKinematicsActive() {
+  return globalThis.BrickLabMechanicsNextKinematics?.active?.() === true
+}
+
 function uiConnections() {
   if (mechanicsNextBuildActive()) {
     return globalThis.BrickLabMechanicsNext?.projectConnections?.() ?? []
@@ -494,7 +498,7 @@ function updateProjectStats() {
   const selectedCount = selectedObjects.size
   const linkCount = uiConnections().length
   $('#projectStats').textContent = `${buildRoot.children.length} parts · ${linkCount} links${selectedCount > 1 ? ` · ${selectedCount} selected` : ''}`
-  if (mode === 'build') {
+  if (mode === 'build' && !mechanicsNextKinematicsActive()) {
     const nativeState = mechanicsNextBuildActive()
       ? ' · Mechanics Next'
       : globalThis.BrickLabMechanicsNext
@@ -1136,6 +1140,10 @@ function autoLinkPairKey(a, b) {
 
 async function autoLinkCurrentPose({all:useAll=false,silent=false}={}) {
   if (autoLinkRunning) return {accepted:0,skipped:0,running:true}
+  if (mechanicsNextKinematicsActive()) {
+    if(!silent)toast('Автосвязь недоступна во время КИНЕМАТИКИ')
+    return {accepted:0,skipped:0,reason:'kinematics-active'}
+  }
   if (mode !== 'build') {
     toast('Автосвязь работает только в СБОРКЕ')
     return
@@ -1249,7 +1257,7 @@ let mechanicsNextAutoLinkBackfillTimer=0
 function scheduleMechanicsNextAutoLinkBackfill(){
   clearTimeout(mechanicsNextAutoLinkBackfillTimer)
   mechanicsNextAutoLinkBackfillTimer=setTimeout(()=>{
-    if(mode!=='build')return
+    if(mode!=='build'||mechanicsNextKinematicsActive())return
     void autoLinkCurrentPose({all:true,silent:true})
   },420)
 }
@@ -2035,8 +2043,6 @@ new ResizeObserver(resize).observe(viewport)
 
 function animate() {
   if (mode === 'simulate' && physicsSession) physicsSession.step()
-  const mechanicsNextKinematicsActive=globalThis.BrickLabMechanicsNextKinematics?.active?.()===true
-  void mechanicsNextKinematicsActive
   orbit.update()
   emitAudioEvent('frame', { session: physicsSession, mode, camera })
   for (const box of selectionBoxes.values()) box.update()
