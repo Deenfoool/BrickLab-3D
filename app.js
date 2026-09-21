@@ -769,8 +769,6 @@ window.addEventListener('bricklab:ldrawloaded',scheduleGearMeshBackfill)
 window.addEventListener('bricklab:projectlibrarychange',scheduleGearMeshBackfill)
 
 for (const eventName of [
-  'bricklab:editorcontractready',
-  'bricklab:mechanicsnextready',
   'bricklab:ldrawloaded',
   'bricklab:connectorv4',
   'bricklab:partcatalogchange',
