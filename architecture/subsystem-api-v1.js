@@ -1,4 +1,4 @@
-export const BRICKLAB_SUBSYSTEM_API_VERSION = 'architecture-v1.2.0'
+export const BRICKLAB_SUBSYSTEM_API_VERSION = 'architecture-v1.2.1'
 
 function cloneValue(value) {
   if (value == null) return value
@@ -8,10 +8,12 @@ function cloneValue(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
-function freezeSnapshot(value) {
+function freezeSnapshot(value, seen = new WeakSet()) {
   if (!value || typeof value !== 'object') return value
-  for (const nested of Object.values(value)) freezeSnapshot(nested)
-  return Object.freeze(value)
+  if (seen.has(value)) return value
+  seen.add(value)
+  for (const nested of Object.values(value)) freezeSnapshot(nested, seen)
+  try { return Object.freeze(value) } catch { return value }
 }
 
 function snapshot(value) {
@@ -53,20 +55,26 @@ export function createBrickLabSubsystemApi({
   globals = globalThis,
   uuid = () => globalThis.crypto?.randomUUID?.() ?? `part-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
 } = {}) {
-  const editorSlot = makeAdapterSlot('Editor', ['objects', 'selection', 'projectState'])
-  const projectsSlot = makeAdapterSlot('Projects')
+  const editorSlot = makeAdapterSlot('Editor', ['objects', 'selection', 'primarySelection', 'objectById', 'projectState', 'history'])
+  const projectsSlot = makeAdapterSlot('Projects', ['current', 'save', 'createNew', 'requestImport', 'exportProject'])
   const testLabSlot = makeAdapterSlot('TEST Lab')
   const guidanceSlot = makeAdapterSlot('Guidance')
   const telemetrySlot = makeAdapterSlot('Telemetry')
 
   const definitionFor = value => findPart(normalizePartId(value)) ?? null
   const physicsOwner = () => globals?.BrickLabMechanicsNextPhysicsOwner ?? null
+  const certifiedPhysicsOwner = () => {
+    const owner=physicsOwner()
+    return owner?.active===true && String(owner?.createOwner??'').startsWith('mechanics-next-physics-owner-')
+      ? owner
+      : null
+  }
   const nativeMechanics = () => globals?.BrickLabMechanicsNext ?? null
   const nativeBuild = () => globals?.BrickLabMechanicsNextBuildOwner?.active===true &&
     globals?.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true
 
   const parts = Object.freeze({
-    list() { return [...listParts()] },
+    list() { return [...(listParts() ?? [])] },
     get(value) { return definitionFor(value) },
     require(value) {
       const definition = definitionFor(value)
@@ -81,10 +89,23 @@ export function createBrickLabSubsystemApi({
       const definition = definitionFor(value)
       if (!definition) return Object.freeze({ visual:false, snap:false, mechanical:false })
       const v4 = definition.connectivityV4
+      const nativeDescriptor=nativeMechanics()?.describePart?.(definition.id)??null
+      const nativeEndpointCount=nativeDescriptor?.endpoints?.length??0
+      const nativeRole=nativeDescriptor?.classification?.role??'unknown'
+      const nativeTransmissionCount=nativeDescriptor?.transmissionHints?.length??0
       return Object.freeze({
         visual: typeof definition.create === 'function',
-        snap: Boolean((v4?.status === 'ready' && v4.connectors?.length) || definition.connectors?.length),
-        mechanical: Boolean(definition.mechanics && Object.keys(definition.mechanics).length),
+        snap: Boolean(
+          nativeEndpointCount ||
+          (v4?.status === 'ready' && v4.connectors?.length) ||
+          definition.connectors?.length
+        ),
+        mechanical: Boolean(
+          nativeEndpointCount ||
+          nativeTransmissionCount ||
+          nativeRole!=='unknown' ||
+          (definition.mechanics && Object.keys(definition.mechanics).length)
+        ),
       })
     },
     instantiate(value, color, options = {}) {
@@ -145,7 +166,7 @@ export function createBrickLabSubsystemApi({
     undo(...args) { return editorSlot.require().undo?.(...args) },
     redo(...args) { return editorSlot.require().redo?.(...args) },
     groups:Object.freeze({
-      members(object) { return [...groupMembers(object)] },
+      members(object) { return [...(groupMembers(object) ?? [])] },
       isGroup,
     }),
     identity:Object.freeze({
@@ -161,9 +182,7 @@ export function createBrickLabSubsystemApi({
         return nativeBuild() ? 'mechanics-next-build-owner' : 'unavailable'
       },
       get simulate(){
-        const buildNative=globals?.BrickLabMechanicsNextBuildOwner?.active===true &&
-          globals?.BrickLabMechanicsNextBuildOwner?.authoritative?.()===true
-        return buildNative&&globals?.BrickLabMechanicsNextPhysicsOwner?.active===true
+        return nativeBuild()&&certifiedPhysicsOwner()
           ?'mechanics-next-physics-owner'
           :'unavailable'
       },
@@ -202,8 +221,7 @@ export function createBrickLabSubsystemApi({
     }),
     simulate:Object.freeze({
       ready() {
-        const owner = physicsOwner()
-        return Boolean(owner?.active && owner?.createOwner)
+        return Boolean(certifiedPhysicsOwner())
       },
       guard() {
         const owner = physicsOwner()
@@ -223,14 +241,14 @@ export function createBrickLabSubsystemApi({
 
   const mechanics = Object.freeze({
     metadata(value) { return parts.mechanical(value) },
-    analyze(objects = editor.objects(), connections = []) {
+    analyze(objects = editor.objects(), connections = connectivity.build.records()) {
       if (typeof analyzeDrivetrain !== 'function') throw new Error('Mechanics analyzer is unavailable')
       return analyzeDrivetrain(objects, connections)
     },
   })
 
   const physics = Object.freeze({
-    async createSession(objects = editor.objects(), connections = [], ...rest) {
+    async createSession(objects = editor.objects(), connections = connectivity.build.records(), ...rest) {
       if (typeof createPhysicsSession !== 'function') throw new Error('Physics subsystem is unavailable')
       return createPhysicsSession(objects, connections, ...rest)
     },
