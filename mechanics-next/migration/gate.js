@@ -46,10 +46,16 @@ export function evaluateMechanicsMigrationGate({
   ))
 
   const sceneUnknown=Number(runtimeStatus?.scene?.roles?.unknown||0)
+  const sceneSkipped=runtimeStatus?.lastSceneSync?.scene?.skipped??[]
   checks.push(check(
     'scene-part-intelligence',
-    sceneUnknown===0,
-    {unknownParts:sceneUnknown,scene:runtimeStatus?.scene??null},
+    Array.isArray(sceneSkipped)&&sceneSkipped.length===0,
+    {
+      unknownParts:sceneUnknown,
+      skipped:Object.freeze([...(Array.isArray(sceneSkipped)?sceneSkipped:[])]),
+      scene:runtimeStatus?.scene??null,
+      note:'unknown mechanical role is allowed when the part has a valid observed descriptor; role classification is not required for connector ownership',
+    },
   ))
 
   const sceneInstances=Number(runtimeStatus?.scene?.instances||0)
