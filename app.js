@@ -407,6 +407,16 @@ function nativeEndpointAvailable(object, endpoint) {
     (connection.b.instanceId === object.userData.instanceId && connection.b.endpointId === endpoint.id))
 }
 
+function nativeEndpointEngaged(object, endpoint) {
+  const state=globalThis.BrickLabMechanicsNext?.endpointOccupancy?.(
+    object?.userData?.instanceId,
+    endpoint?.id,
+  )
+  if(state?.known!==true)return !nativeEndpointAvailable(object,endpoint)
+  return Boolean(state.exclusiveOwner)||
+    (Array.isArray(state.axialReservations)&&state.axialReservations.length>0)
+}
+
 function mechanicsNextBuildActive() {
   return globalThis.BrickLabMechanicsNextBuildOwner?.active === true &&
     globalThis.BrickLabMechanicsNext?.nativeProjectAuthoritative?.() === true
@@ -1294,7 +1304,7 @@ function updateInspector() {
   const nativeEndpoints = nativeEndpointsForObject(selected)
   const connectorCount = nativeEndpoints.length || def?.connectors?.length || 0
   const usedConnectors = nativeEndpoints.length
-    ? nativeEndpoints.filter(endpoint => !nativeEndpointAvailable(selected, endpoint)).length
+    ? nativeEndpoints.filter(endpoint => nativeEndpointEngaged(selected, endpoint)).length
     : (def?.connectors ?? []).filter(connector => !connectorAvailable(selected, connector)).length
   const selectedExtra = Math.max(0, selectedObjects.size - 1)
 
