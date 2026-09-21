@@ -58,3 +58,46 @@ Fixes now on the feature branch:
 ## Re-close criteria
 
 The old **686 passed / browser fixture PASS** result above predates these fixes and must not be used to claim release readiness. Stage 12 remains open until the current branch HEAD passes the full release gate and a real browser/WebGL user-path smoke test performs actual editor drag/release for pin→hole, axle→hole and spur/bevel gear→gear, then verifies Save/Open and SIMULATE topology consumption. No publication to `gh-pages` or `main` should occur before that verification.
+
+
+## 2026-09-21 manual BUILD blocker
+
+Real editor use reported the same inspector state on every attempted connection:
+
+- connector occupancy: `0 / 1`;
+- graph links: `0`;
+- no usable structural connection could be committed from the normal BUILD UI.
+
+This is a **release blocker**. It invalidates any interpretation of earlier green component/browser fixtures as proof that normal BUILD assembly is production-ready.
+
+Root cause found in the ownership gate:
+
+- native BUILD handoff rejected any scene containing a part classified as `role: unknown`;
+- ordinary LDraw parts can have valid Shadow endpoints and a complete mechanical record without belonging to a special mechanism role;
+- when handoff stayed blocked, `app.js` silently fell back to the legacy snap path even though Stage 12 had already removed legacy runtime ownership;
+- the UI could therefore render a connector while `findCandidate() / commitCandidate()` in Mechanics Next were never reached.
+
+Recovery fixes:
+
+- migration gate now allows `role: unknown` when the scene object has a valid observed descriptor and no skipped scene records;
+- direct regression locks this gate behavior;
+- end-to-end runtime regression requires `prepareMigration() -> adoptNativeProjectOwnership() -> findCandidate() -> commitCandidate() -> projectConnections().length === 1` for two unknown-role parts with valid pin/pin-hole endpoints;
+- normal BUILD snap no longer silently falls back to the legacy engine while `BrickLabMechanicsNext` is present; it retries native handoff instead;
+- BUILD status now exposes `Mechanics Next starting` until ownership is authoritative;
+- startup handoff remains single-owner through `architecture/editor-adapter-v1.js`; app-level retries are reserved for later scene/catalog/LDraw changes;
+- production cache tag was bumped so browsers cannot keep the pre-fix runtime under the old URL.
+
+Additional recovery completed in the same reopened Stage 12 window:
+
+- real Technic pin/axle/axle-pin candidate and interpretation coverage;
+- profile-derived Shadow joints survive candidate -> interpreter -> commit;
+- bar/clip now has true axial placement, interval occupancy and live disengagement;
+- tyre/rim real Shadow group matching is covered;
+- long axle/pin interval occupancy remains reusable;
+- keyed axle 90-degree rotational symmetry is preserved while invalid 45-degree phase releases;
+- native connection geometry/twist baseline is frozen across valid motion and Save/Open;
+- native BUILD drag/inspector edits revalidate DOF instead of unconditionally detaching;
+- spur and bevel gear placement must result in native transmission discovery;
+- pinned Shadow metadata gains persistent browser cache after first successful fetch.
+
+Stage 12 remains open until the **current** branch HEAD is re-run through the full release suite and a real browser/WebGL user-path smoke confirms the exact inspector transition from `0 / 1, 0 links` to a committed native graph link after drag/release.
