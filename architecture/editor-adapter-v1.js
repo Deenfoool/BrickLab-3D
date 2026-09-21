@@ -1,4 +1,4 @@
-export const EDITOR_ADAPTER_VERSION = 'editor-adapter-v1.2.0'
+export const EDITOR_ADAPTER_VERSION = 'editor-adapter-v1.2.1'
 
 function safeParse(value) {
   if (!value) return null
@@ -80,21 +80,25 @@ export function createLegacyEditorAdapter({
 
   function projectState() {
     const liveObjects = objects()
-    if(globalThis.BrickLabMechanicsNextBuildOwner?.active!==true){
-      subsystems.connectivity.build.reconcile(liveObjects, { persist:false })
-    }
     const stored = storedProject(storage) ?? {}
     const { connectionsV4:_legacyConnectionsV4, connectorSystemV4:_legacyConnectorSystemV4, ...canonicalStored } = stored
     const name = element('projectName')?.textContent?.trim() || stored.name || 'Untitled Build'
+    const mechanicsAuthoritative=
+      globalThis.BrickLabMechanicsNext?.nativeProjectAuthoritative?.()===true
+    const mechanicsSnapshot=globalThis.__bricklabPendingMechanicsNextProject
+      ? JSON.parse(JSON.stringify(globalThis.__bricklabPendingMechanicsNextProject))
+      : mechanicsAuthoritative
+        ? globalThis.BrickLabMechanicsNext?.exportProjectState?.()
+        : stored.mechanicsNext ?? undefined
     return {
       ...canonicalStored,
       version:2,
       name,
       parts:liveObjects.map(serializePart),
-      connections:Array.isArray(stored.connections) ? stored.connections : [],
-      mechanicsNext:globalThis.__bricklabPendingMechanicsNextProject
-        ? JSON.parse(JSON.stringify(globalThis.__bricklabPendingMechanicsNextProject))
-        : globalThis.BrickLabMechanicsNext?.exportProjectState?.() ?? stored.mechanicsNext ?? undefined,
+      connections:mechanicsAuthoritative
+        ? []
+        : Array.isArray(stored.connections) ? stored.connections : [],
+      mechanicsNext:mechanicsSnapshot,
     }
   }
 
@@ -227,17 +231,23 @@ if (globalThis.BrickLabSubsystems) boundEditorAdapter=bindLegacyEditorAdapter()
 
 if(boundEditorAdapter&&globalThis.BrickLabMechanicsNext){
   try{
-    const prepared=await globalThis.BrickLabMechanicsNext.prepareMigration()
+    const mechanics=globalThis.BrickLabMechanicsNext
+    const prepared=await mechanics.prepareMigration({scope:'build'})
     if(prepared?.pass){
-      const adopted=globalThis.BrickLabMechanicsNext.adoptNativeProjectOwnership()
-      if(!adopted?.accepted){
-        console.warn('[BrickLab Mechanics Next] BUILD handoff rejected after preparation.',adopted)
+      if(mechanics.nativeProjectAuthoritative?.()!==true){
+        const adopted=mechanics.adoptNativeProjectOwnership({
+          gateScope:'build',
+          preparedGate:prepared,
+        })
+        if(!adopted?.accepted){
+          console.warn('[BrickLab Mechanics Next] Native BUILD handoff rejected after preparation.',adopted)
+        }
       }
     }else{
-      console.info('[BrickLab Mechanics Next] BUILD migration gate remains blocked; Connector V4 stays temporary owner.',prepared)
+      console.info('[BrickLab Mechanics Next] Native BUILD migration gate remains blocked.',prepared)
     }
   }catch(error){
-    console.warn('[BrickLab Mechanics Next] BUILD ownership preparation failed; Connector V4 stays temporary owner.',error)
+    console.warn('[BrickLab Mechanics Next] Native BUILD ownership preparation failed.',error)
   }
 }
 
