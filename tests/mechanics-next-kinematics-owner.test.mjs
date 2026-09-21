@@ -207,3 +207,44 @@ test('Mechanics Next KINEMATICS fails closed when BUILD adoption is rejected',as
     env.cleanup()
   }
 })
+
+
+test('Kinematics owner late-binds editor and Mechanics Next runtime instead of failing at module import',async()=>{
+  const env=installDom()
+  const object=mechanicalObject()
+
+  delete globalThis.BrickLabSubsystems
+  delete globalThis.BrickLabMechanicsNext
+  delete globalThis.BrickLabMechanicsNextBuildOwner
+  globalThis.BrickLabViewportV1={camera:()=>new THREE.PerspectiveCamera()}
+
+  try{
+    const module=await import('../mechanics-next/production/kinematics-owner.js?test=late-dependency-bind')
+    const api=module.default
+    assert.ok(api?.enter,'owner module must import even before runtime globals exist')
+
+    globalThis.BrickLabSubsystems=subsystemFor(object)
+    globalThis.BrickLabMechanicsNext={
+      async prepareMigration(){return{pass:true,scope:'kinematics',summary:{blockers:0}}},
+      nativeProjectAuthoritative:()=>true,
+      adoptNativeProjectOwnership(){return{accepted:true}},
+      handoffDomains(){return[]},
+      syncScene(){},
+      beginDrag(){throw new Error('not used')},
+      updateDrag(){return null},
+      endDrag(){return null},
+      cancelDrag(){return false},
+    }
+    globalThis.BrickLabMechanicsNextBuildOwner={
+      active:true,
+      authoritative:()=>true,
+    }
+
+    const entered=await api.enter()
+    assert.equal(entered.accepted,true)
+    assert.equal(api.active(),true)
+    api.exit({restore:true})
+  }finally{
+    env.cleanup()
+  }
+})

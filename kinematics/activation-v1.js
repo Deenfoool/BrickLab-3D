@@ -1,4 +1,4 @@
-export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.8.1'
+export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.8.2'
 
 const LANGUAGE_KEY = 'bricklab.ui.language.v1'
 
@@ -22,6 +22,27 @@ function toast(message, timeout = 3600) {
   node.textContent = message
   node.classList.add('show')
   globalThis.setTimeout?.(() => node.classList.remove('show'), timeout)
+}
+
+async function ensureNativeKinematicsDependencies(){
+  if(!globalThis.BrickLabMechanicsNext){
+    await import('../mechanics-next/runtime.js')
+  }
+
+  const deadline=(globalThis.performance?.now?.()??Date.now())+1200
+  while(
+    (!globalThis.BrickLabMechanicsNext||globalThis.BrickLabSubsystems?.editor?.ready?.()!==true) &&
+    (globalThis.performance?.now?.()??Date.now())<deadline
+  ){
+    await new Promise(resolve=>globalThis.setTimeout?.(resolve,20))
+  }
+
+  const missing=[]
+  if(!globalThis.BrickLabMechanicsNext)missing.push('Mechanics Next runtime')
+  if(globalThis.BrickLabSubsystems?.editor?.ready?.()!==true)missing.push('editor contract')
+  if(missing.length){
+    throw new Error(`Mechanics Next Kinematics dependency unavailable: ${missing.join(', ')}`)
+  }
 }
 
 function ensureStylesheet() {
@@ -113,11 +134,16 @@ async function activate(event) {
   button.dataset.kinematicsState = 'loading'
   button.title = copy().loading
   try {
+    await ensureNativeKinematicsDependencies()
     const module=await import('../mechanics-next/production/kinematics-owner.js')
     const api=module.default ?? globalThis.BrickLabMechanicsNextKinematics
     if(!api?.enter)throw new Error('Mechanics Next Kinematics enter API unavailable')
     const attempt=await api.enter()
     if(!attempt?.accepted){
+      if(attempt?.reason==='runtime-dependencies-not-ready'){
+        const missing=(attempt?.missing??[]).join(', ')||'unknown dependency'
+        throw new Error('Mechanics Next Kinematics dependencies not ready: '+missing)
+      }
       const blockerIds=(attempt?.gate?.blockers??[]).map(item=>item?.id).filter(Boolean)
       const suffix=blockerIds.length?': '+blockerIds.join(', '):''
       const error=new Error('Mechanics Next Kinematics migration gate blocked'+suffix)

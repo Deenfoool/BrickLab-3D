@@ -1,13 +1,27 @@
 import * as THREE from 'three'
 
-export const MECHANICS_NEXT_KINEMATICS_VERSION='mechanics-next-kinematics-owner-0.1.1'
+export const MECHANICS_NEXT_KINEMATICS_VERSION='mechanics-next-kinematics-owner-0.1.2'
 
-const subsystems=globalThis.BrickLabSubsystems
-const mechanics=globalThis.BrickLabMechanicsNext
-const viewport=document.querySelector('#viewport')
-const modeBar=document.querySelector('.modes')
-if(!subsystems?.editor?.ready?.()||!mechanics||!viewport||!modeBar){
-  throw new Error('Mechanics Next Kinematics requires editor and Mechanics Next runtime')
+let subsystems=null
+let mechanics=null
+let viewport=null
+let modeBar=null
+let listenersInstalled=false
+
+function resolveDependencies(){
+  subsystems=globalThis.BrickLabSubsystems??null
+  mechanics=globalThis.BrickLabMechanicsNext??null
+  viewport=document.querySelector('#viewport')
+  modeBar=document.querySelector('.modes')
+  const missing=[]
+  if(!subsystems?.editor?.ready?.())missing.push('editor')
+  if(!mechanics)missing.push('mechanics-runtime')
+  if(!viewport)missing.push('viewport')
+  if(!modeBar)missing.push('mode-bar')
+  return Object.freeze({
+    ready:missing.length===0,
+    missing:Object.freeze(missing),
+  })
 }
 
 let active=false
@@ -21,8 +35,8 @@ let lastGate=null
 const raycaster=new THREE.Raycaster()
 const pointerNdc=new THREE.Vector2()
 
-const canvas=()=>viewport.querySelector('canvas')
-const objects=()=>subsystems.editor.objects?.()??[]
+const canvas=()=>viewport?.querySelector?.('canvas')??null
+const objects=()=>subsystems?.editor?.objects?.()??[]
 const camera=()=>globalThis.BrickLabViewportV1?.camera?.()??null
 
 function toast(message,timeout=3200){
@@ -110,7 +124,7 @@ function beginPointer(event){
   if(!active||entering||event.button!==0||pointer)return
   for(const picked of pickRecords(event)){
     try{
-      const started=mechanics.beginDrag({
+      const started=mechanics?.beginDrag({
         instanceId:picked.instanceId,
         start:{x:event.clientX,y:event.clientY},
         camera:picked.cam,
@@ -137,7 +151,7 @@ function movePointer(event){
   if(!active||!pointer||event.pointerId!==pointer.pointerId)return
   event.preventDefault()
   event.stopImmediatePropagation()
-  const result=mechanics.updateDrag(
+  const result=mechanics?.updateDrag(
     {x:event.clientX,y:event.clientY},
     {apply:true},
   )
@@ -154,8 +168,8 @@ function finishPointer(event,{cancel=false}={}){
   event?.stopImmediatePropagation?.()
   pointer.canvas?.releasePointerCapture?.(pointer.pointerId)
   pointer.canvas?.classList.remove('kinematics-dragging')
-  if(cancel)mechanics.cancelDrag?.()
-  else mechanics.endDrag?.({restore:false})
+  if(cancel)mechanics?.cancelDrag?.()
+  else mechanics?.endDrag?.({restore:false})
   pointer=null
 }
 
@@ -202,7 +216,16 @@ function blockProjectActions(event){
 
 export async function enter(){
   if(active||entering)return Object.freeze({accepted:active,gate:lastGate})
-  if(subsystems.editor.mode?.()!=='build'){
+  const dependencies=resolveDependencies()
+  if(!dependencies.ready){
+    return Object.freeze({
+      accepted:false,
+      reason:'runtime-dependencies-not-ready',
+      missing:dependencies.missing,
+    })
+  }
+  installListeners()
+  if(subsystems?.editor?.mode?.()!=='build'){
     return Object.freeze({accepted:false,reason:'build-mode-required'})
   }
   if(!objects().length){
@@ -212,7 +235,7 @@ export async function enter(){
 
   entering=true
   try{
-    lastGate=await mechanics.prepareMigration({scope:'kinematics'})
+    lastGate=await mechanics?.prepareMigration?.({scope:'kinematics'})
     if(!lastGate?.pass){
       return Object.freeze({
         accepted:false,
@@ -222,8 +245,8 @@ export async function enter(){
     }
 
     let buildOwnership=null
-    if(mechanics.nativeProjectAuthoritative?.()!==true){
-      buildOwnership=mechanics.adoptNativeProjectOwnership?.({
+    if(mechanics?.nativeProjectAuthoritative?.()!==true){
+      buildOwnership=mechanics?.adoptNativeProjectOwnership?.({
         gateScope:'kinematics',
         preparedGate:lastGate,
       })??null
@@ -247,7 +270,7 @@ export async function enter(){
     }
 
     entryBaseline=captureBaseline()
-    mechanics.handoffDomains?.(['kinematics'],'validated Mechanics Next KINEMATICS entry')
+    mechanics?.handoffDomains?.(['kinematics'],'validated Mechanics Next KINEMATICS entry')
     active=true
     setModeVisual()
     globalThis.dispatchEvent?.(new CustomEvent('bricklab:kinematicsenter',{
@@ -267,7 +290,7 @@ export function exit({restore=true}={}){
   if(pointer)finishPointer(null,{cancel:true})
   if(!active)return api
   if(restore)restoreBaseline(entryBaseline)
-  mechanics.syncScene?.()
+  mechanics?.syncScene?.()
   active=false
   entryBaseline.clear()
   restoreModeVisual()
@@ -281,17 +304,38 @@ export function reset(){
   if(!active)return false
   if(pointer)finishPointer(null,{cancel:true})
   restoreBaseline(entryBaseline)
-  mechanics.syncScene?.()
+  mechanics?.syncScene?.()
   return true
 }
 
-modeBar.addEventListener('click',modeCapture,true)
-document.querySelector('.top-actions')?.addEventListener('click',blockProjectActions,true)
-canvas()?.addEventListener('pointerdown',beginPointer,true)
-canvas()?.addEventListener('pointermove',movePointer,true)
-canvas()?.addEventListener('pointerup',event=>finishPointer(event),true)
-canvas()?.addEventListener('pointercancel',event=>finishPointer(event,{cancel:true}),true)
-globalThis.addEventListener?.('keydown',keyCapture,true)
+function installListeners(){
+  if(listenersInstalled)return true
+  const dependencies=resolveDependencies()
+  if(!dependencies.ready)return false
+  modeBar?.addEventListener?.('click',modeCapture,true)
+  document.querySelector('.top-actions')?.addEventListener('click',blockProjectActions,true)
+  const view=canvas()
+  view?.addEventListener?.('pointerdown',beginPointer,true)
+  view?.addEventListener?.('pointermove',movePointer,true)
+  view?.addEventListener?.('pointerup',event=>finishPointer(event),true)
+  view?.addEventListener?.('pointercancel',event=>finishPointer(event,{cancel:true}),true)
+  globalThis.addEventListener?.('keydown',keyCapture,true)
+  listenersInstalled=true
+  return true
+}
+
+resolveDependencies()
+installListeners()
+for(const eventName of [
+  'bricklab:subsystemsready',
+  'bricklab:editorcontractready',
+  'bricklab:mechanicsnextready',
+]){
+  globalThis.addEventListener?.(eventName,()=>{
+    resolveDependencies()
+    installListeners()
+  },{once:false})
+}
 
 const api=Object.freeze({
   version:MECHANICS_NEXT_KINEMATICS_VERSION,
