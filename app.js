@@ -1201,6 +1201,7 @@ async function autoLinkCurrentPose({all:useAll=false,silent=false}={}) {
             {
               captureDistanceStud:AUTO_LINK_CAPTURE_DISTANCE_STUD,
               maxResults:96,
+              supportAnalysisLimit:96,
             },
           ) ?? [
             mechanics.findCandidate?.(
