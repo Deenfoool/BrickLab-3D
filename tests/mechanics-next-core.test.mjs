@@ -2976,6 +2976,30 @@ test('production migration gate accepts a fully proven empty project', () => {
   assert.equal(gate.blockers.length,0)
 })
 
+test('production migration gate allows unknown role when the scene record itself is valid', () => {
+  const gate=evaluateMechanicsMigrationGate({
+    runtimeStatus:{
+      version:'test',
+      scene:{instances:1,roles:{unknown:1}},
+      mechanicalRecordFailures:[],
+      lastSceneSync:{
+        observedRecords:1,
+        scene:{skipped:[]},
+      },
+      interpretedConnections:{unresolved:0},
+      compoundDecompositions:{pending:0,failures:0},
+      compoundEndpointOwnership:{compounds:0,complete:0,assignments:0,unresolvedCount:0,unresolved:[]},
+      transmissionCompiler:{diagnostics:{coverage:[],packaged:[],differentials:[]}},
+    },
+    physicsStatus:{pass:true,blockers:[]},
+    paritySummary:{parts:1,semanticFail:0,geometryFail:0},
+    persistence:{pass:true},
+    regression:{status:'passed'},
+  })
+  assert.equal(gate.pass,true)
+  assert.equal(gate.blockers.some(item=>item.id==='scene-part-intelligence'),false)
+})
+
 test('native project schema preserves compound mechanism state across round trip', () => {
   const source=createAssemblyGraph()
   const compound=createCompoundStateRegistry()
