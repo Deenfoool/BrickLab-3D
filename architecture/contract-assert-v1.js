@@ -1,4 +1,4 @@
-export const ARCHITECTURE_CONSOLIDATION_VERSION = 'architecture-consolidation-v1.0.0'
+export const ARCHITECTURE_CONSOLIDATION_VERSION = 'architecture-consolidation-v1.0.1'
 export const ARCHITECTURE_CONSOLIDATION_STATUS = 'complete'
 
 const REQUIRED_PART_METHODS = ['list', 'get', 'mechanical', 'physical', 'connectors', 'capabilities', 'instantiate']
@@ -23,10 +23,7 @@ export function architectureContractReport(subsystems = globalThis.BrickLabSubsy
   if (!status?.connectorBuild) issues.push('BUILD connectivity owner unavailable')
   if (!status?.connectorSimulate) issues.push('SIMULATE connector guard unavailable')
 
-  const certifiedBuildOwners=new Set([
-    'connector-v4-with-legacy-bridge',
-    'mechanics-next-build-owner',
-  ])
+  const certifiedBuildOwners=new Set(['mechanics-next-build-owner'])
   const certifiedSimulateOwners=new Set(['mechanics-next-physics-owner'])
   if (!certifiedBuildOwners.has(authority?.build)) {
     issues.push('BUILD authority is not a certified mechanics owner')
@@ -44,8 +41,20 @@ export function architectureContractReport(subsystems = globalThis.BrickLabSubsy
   }
 
   if (!guard?.active) issues.push('Mechanics Next physics owner is not active')
-  const createOwner=globalThis.BrickLabMechanicsNextPhysicsOwner?.createOwner ?? guard?.createOwner
-  if (!createOwner) issues.push('PhysicsSession.create has no certified owner')
+  const guardCreateOwner=guard?.createOwner ?? null
+  const publishedCreateOwner=globalThis.BrickLabMechanicsNextPhysicsOwner?.createOwner ?? null
+  const createOwner=guardCreateOwner ?? publishedCreateOwner
+  if (!createOwner) {
+    issues.push('PhysicsSession.create has no certified owner')
+  } else if (!String(createOwner).startsWith('mechanics-next-physics-owner-')) {
+    issues.push('PhysicsSession.create is not owned by Mechanics Next')
+  }
+  if (
+    guardCreateOwner && publishedCreateOwner &&
+    String(guardCreateOwner)!==String(publishedCreateOwner)
+  ) {
+    issues.push('Physics owner publication does not match subsystem guard')
+  }
 
   issues.push(...methodIssues(subsystems?.parts, REQUIRED_PART_METHODS, 'parts'))
   issues.push(...methodIssues(subsystems?.editor, REQUIRED_EDITOR_METHODS, 'editor'))
