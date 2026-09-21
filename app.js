@@ -500,7 +500,7 @@ function updateProjectStats() {
       : globalThis.BrickLabMechanicsNext
         ? ' · Mechanics Next starting'
         : ''
-    $('#statusText').textContent = `BUILD MODE · ${buildRoot.children.length} parts · ${linkCount} connections${nativeState}`
+    $('#statusText').textContent = `BUILD MODE · ${buildRoot.children.length} parts · ${linkCount} graph links${nativeState}`
   }
 }
 
@@ -784,6 +784,8 @@ for (const eventName of [
   'bricklab:connectorv4',
   'bricklab:partcatalogchange',
   'bricklab:mechanicalintelligencechange',
+  'bricklab:editorcontractready',
+  'bricklab:mechanicsnextready',
 ]) {
   window.addEventListener(eventName, () => {
     if (mode !== 'build' || mechanicsNextBuildActive()) return
@@ -792,6 +794,14 @@ for (const eventName of [
 }
 
 function projectState() {
+  const mechanicsAuthoritative=
+    globalThis.BrickLabMechanicsNext?.nativeProjectAuthoritative?.()===true
+  const mechanicsSnapshot=globalThis.__bricklabPendingMechanicsNextProject
+    ? cloneState(globalThis.__bricklabPendingMechanicsNextProject)
+    : mechanicsAuthoritative
+      ? globalThis.BrickLabMechanicsNext?.exportProjectState?.()
+      : undefined
+
   return {
     version: 2,
     name: projectName,
@@ -804,10 +814,8 @@ function projectState() {
       rotation: [object.rotation.x, object.rotation.y, object.rotation.z],
       mechanismPose: object.userData.mechanismPose ? cloneState(object.userData.mechanismPose) : undefined,
     })),
-    connections: mechanicsNextBuildActive() ? [] : cloneState(connections),
-    mechanicsNext:globalThis.__bricklabPendingMechanicsNextProject
-      ? cloneState(globalThis.__bricklabPendingMechanicsNextProject)
-      : globalThis.BrickLabMechanicsNext?.exportProjectState?.() ?? undefined,
+    connections: mechanicsAuthoritative ? [] : cloneState(connections),
+    mechanicsNext:mechanicsSnapshot,
   }
 }
 
@@ -1126,8 +1134,8 @@ function autoLinkPairKey(a, b) {
   return ai < bi ? `${ai}|${bi}` : `${bi}|${ai}`
 }
 
-async function autoLinkCurrentPose() {
-  if (autoLinkRunning) return
+async function autoLinkCurrentPose({all:useAll=false,silent=false}={}) {
+  if (autoLinkRunning) return {accepted:0,skipped:0,running:true}
   if (mode !== 'build') {
     toast('Автосвязь работает только в СБОРКЕ')
     return
@@ -1154,7 +1162,11 @@ async function autoLinkCurrentPose() {
     }
 
     const all = [...buildRoot.children].filter(Boolean)
-    const sources = selectedObjects.size ? [...selectedObjects].filter(Boolean) : all
+    const sources = useAll
+      ? all
+      : selectedObjects.size
+        ? [...selectedObjects].filter(Boolean)
+        : all
     const partIds = [...new Set(all.map(object => object?.userData?.partId).filter(Boolean))]
     await Promise.allSettled(partIds.map(partId => mechanics.ensurePartConnectivity?.(partId)))
     mechanics.syncScene?.()
@@ -1207,8 +1219,8 @@ async function autoLinkCurrentPose() {
       window.dispatchEvent(new CustomEvent('bricklab:editorexternalmutation', {
         detail:{reason:'mechanics-next-auto-link',count:accepted},
       }))
-      toast(`Автосвязь: создано ${accepted}`)
-    } else {
+      if(!silent)toast(`Автосвязь: создано ${accepted}`)
+    } else if(!silent) {
       toast('Автосвязь: новых безопасных связей нет')
     }
 
@@ -1223,7 +1235,7 @@ async function autoLinkCurrentPose() {
 }
 
 globalThis.BrickLabMechanicsNextAutoLink = Object.freeze({
-  version:'mechanics-next-auto-link-0.1.0',
+  version:'mechanics-next-auto-link-0.1.1',
   hotkey:'Shift+L',
   run:autoLinkCurrentPose,
   limits:Object.freeze({
@@ -1232,6 +1244,24 @@ globalThis.BrickLabMechanicsNextAutoLink = Object.freeze({
     maxRotationRad:AUTO_LINK_MAX_ROTATION_RAD,
   }),
 })
+
+let mechanicsNextAutoLinkBackfillTimer=0
+function scheduleMechanicsNextAutoLinkBackfill(){
+  clearTimeout(mechanicsNextAutoLinkBackfillTimer)
+  mechanicsNextAutoLinkBackfillTimer=setTimeout(()=>{
+    if(mode!=='build')return
+    void autoLinkCurrentPose({all:true,silent:true})
+  },420)
+}
+for(const eventName of [
+  'bricklab:ldrawloaded',
+  'bricklab:projectlibrarychange',
+  'bricklab:editorexternalmutation',
+  'bricklab:editorcontractready',
+]){
+  window.addEventListener(eventName,scheduleMechanicsNextAutoLinkBackfill)
+}
+scheduleMechanicsNextAutoLinkBackfill()
 
 function groupSelected() {
   if (mode !== 'build' || selectedObjects.size < 2) {
@@ -1532,7 +1562,16 @@ async function startSimulation({ preserveStartState = false } = {}) {
   $('#statusText').textContent = `SIMULATE · loading physics · ${uiConnections().length} graph links`
 
   try {
-    const session = await PhysicsSession.create([...buildRoot.children], cloneState(connections))
+    if(
+      mechanicsNextBuildActive() &&
+      !String(PhysicsSession.create?.__bricklabOwner||'').startsWith('mechanics-next-physics-owner')
+    ){
+      throw new Error('Mechanics Next physics owner is unavailable for authoritative BUILD')
+    }
+    const session = await PhysicsSession.create(
+      [...buildRoot.children],
+      cloneState(uiConnections()),
+    )
     if (generation !== simulationGeneration || mode !== 'simulate') {
       session.dispose()
       return
@@ -1924,7 +1963,7 @@ window.addEventListener('keydown', event => {
     toggleGridSnap()
     return
   }
-  if (shift && code === 'KeyL') {
+  if (shift && !mod && !alt && code === 'KeyL') {
     event.preventDefault()
     void autoLinkCurrentPose()
     return
@@ -1997,9 +2036,7 @@ new ResizeObserver(resize).observe(viewport)
 function animate() {
   if (mode === 'simulate' && physicsSession) physicsSession.step()
   const mechanicsNextKinematicsActive=globalThis.BrickLabMechanicsNextKinematics?.active?.()===true
-  const mechanicsNextBuildOwnerActive=mechanicsNextBuildActive()
-  if (mode === 'build' && !isDragging && !mechanicsNextKinematicsActive && !mechanicsNextBuildOwnerActive) {
-  }
+  void mechanicsNextKinematicsActive
   orbit.update()
   emitAudioEvent('frame', { session: physicsSession, mode, camera })
   for (const box of selectionBoxes.values()) box.update()
