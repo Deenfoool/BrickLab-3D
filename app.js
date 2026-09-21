@@ -484,7 +484,12 @@ function updateProjectStats() {
   const linkCount = uiConnections().length
   $('#projectStats').textContent = `${buildRoot.children.length} parts · ${linkCount} links${selectedCount > 1 ? ` · ${selectedCount} selected` : ''}`
   if (mode === 'build') {
-    $('#statusText').textContent = `BUILD MODE · ${buildRoot.children.length} parts · ${linkCount} connections${mechanicsNextBuildActive() ? ' · Mechanics Next' : ''}`
+    const nativeState = mechanicsNextBuildActive()
+      ? ' · Mechanics Next'
+      : globalThis.BrickLabMechanicsNext
+        ? ' · Mechanics Next starting'
+        : ''
+    $('#statusText').textContent = `BUILD MODE · ${buildRoot.children.length} parts · ${linkCount} connections${nativeState}`
   }
 }
 
@@ -572,6 +577,9 @@ function refreshSnap() {
       console.warn('[BrickLab Mechanics Next] Native snap preview failed.', error)
       snapCandidate = null
     }
+  } else if (globalThis.BrickLabMechanicsNext) {
+    snapCandidate = null
+    void scheduleMechanicsNextBuildHandoff('snap-preview')
   } else {
     snapCandidate = findSnapCandidate(selected, buildRoot.children, { isAvailable: connectorAvailable })
   }
