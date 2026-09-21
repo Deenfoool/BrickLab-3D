@@ -26,14 +26,15 @@ function greenRuntime(productionOwnership){
   }
 }
 
-function evaluate({nativeProjectAuthoritative=false,productionOwnership=null}={}){
+function evaluate({nativeProjectAuthoritative=false,productionOwnership=null,scope='production',physicsStatus={pass:true,blockers:[]}}={}){
   return evaluateMechanicsMigrationGate({
     runtimeStatus:greenRuntime(productionOwnership),
-    physicsStatus:{pass:true,blockers:[]},
+    physicsStatus,
     paritySummary:{parts:0,semanticFail:0,geometryFail:0},
     persistence:{pass:true},
     regression:{status:'passed'},
     nativeProjectAuthoritative,
+    scope,
   })
 }
 
@@ -95,4 +96,33 @@ test('native authoritative project fails closed when production ownership is spl
     assert.equal(gate.pass,false)
     assert.ok(gate.blockers.some(item=>item.id==='native-ownership-convergence'))
   }
+})
+
+
+test('KINEMATICS gate ignores Rapier readiness but still requires native BUILD ownership',()=>{
+  const gate=evaluate({
+    nativeProjectAuthoritative:true,
+    scope:'kinematics',
+    productionOwnership:{build:true,kinematics:false,physicsCreateOwner:null},
+    physicsStatus:{pass:false,blockers:[{code:'unsupported-physics-fixture'}]},
+  })
+  const ownership=gate.checks.find(item=>item.id==='native-ownership-convergence')
+  const physics=gate.checks.find(item=>item.id==='physics-preflight')
+  assert.equal(gate.scope,'kinematics')
+  assert.equal(ownership.pass,true)
+  assert.equal(physics.pass,true)
+  assert.equal(physics.detail.required,false)
+  assert.equal(gate.pass,true)
+})
+
+test('production gate remains fail-closed on physics blockers',()=>{
+  const gate=evaluate({
+    nativeProjectAuthoritative:true,
+    scope:'production',
+    productionOwnership:{build:true,kinematics:false,physicsCreateOwner:'mechanics-next-physics-owner-0.1.0'},
+    physicsStatus:{pass:false,blockers:[{code:'unsupported-physics-fixture'}]},
+  })
+  assert.equal(gate.scope,'production')
+  assert.equal(gate.pass,false)
+  assert.ok(gate.blockers.some(item=>item.id==='physics-preflight'))
 })

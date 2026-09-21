@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-export const MECHANICS_NEXT_KINEMATICS_VERSION='mechanics-next-kinematics-owner-0.1.0'
+export const MECHANICS_NEXT_KINEMATICS_VERSION='mechanics-next-kinematics-owner-0.1.1'
 
 const subsystems=globalThis.BrickLabSubsystems
 const mechanics=globalThis.BrickLabMechanicsNext
@@ -212,7 +212,7 @@ export async function enter(){
 
   entering=true
   try{
-    lastGate=await mechanics.prepareMigration()
+    lastGate=await mechanics.prepareMigration({scope:'kinematics'})
     if(!lastGate?.pass){
       return Object.freeze({
         accepted:false,
@@ -223,7 +223,10 @@ export async function enter(){
 
     let buildOwnership=null
     if(mechanics.nativeProjectAuthoritative?.()!==true){
-      buildOwnership=mechanics.adoptNativeProjectOwnership?.()??null
+      buildOwnership=mechanics.adoptNativeProjectOwnership?.({
+        gateScope:'kinematics',
+        preparedGate:lastGate,
+      })??null
       if(!buildOwnership?.accepted){
         return Object.freeze({
           accepted:false,

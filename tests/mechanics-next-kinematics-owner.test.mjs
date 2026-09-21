@@ -122,14 +122,17 @@ test('Mechanics Next KINEMATICS adopts BUILD first and restores entry baseline o
   let authoritative=false
   let adoptionCalls=0
   let syncCalls=0
+  let preparedScope=null
+  let adoptedOptions=null
   const handoffs=[]
 
   globalThis.BrickLabSubsystems=subsystemFor(object)
   globalThis.BrickLabMechanicsNext={
-    async prepareMigration(){return{pass:true,summary:{blockers:0}}},
+    async prepareMigration(options){preparedScope=options?.scope??null;return{pass:true,scope:'kinematics',summary:{blockers:0}}},
     nativeProjectAuthoritative:()=>authoritative,
-    adoptNativeProjectOwnership(){
+    adoptNativeProjectOwnership(options){
       adoptionCalls+=1
+      adoptedOptions=options
       authoritative=true
       globalThis.BrickLabMechanicsNextBuildOwner={
         active:true,
@@ -156,6 +159,9 @@ test('Mechanics Next KINEMATICS adopts BUILD first and restores entry baseline o
     assert.equal(entered.accepted,true)
     assert.equal(api.active(),true)
     assert.equal(adoptionCalls,1)
+    assert.equal(preparedScope,'kinematics')
+    assert.equal(adoptedOptions?.gateScope,'kinematics')
+    assert.equal(adoptedOptions?.preparedGate?.scope,'kinematics')
     assert.equal(handoffs.length,1)
     assert.deepEqual(handoffs[0].domains,['kinematics'])
     assert.match(handoffs[0].reason,/validated Mechanics Next KINEMATICS entry/)

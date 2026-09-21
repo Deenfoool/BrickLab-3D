@@ -636,7 +636,7 @@ export function createMechanicsNextRuntime({
     compoundState,
     compoundDecompositions,
     physicsPreview:() => physicsPreview,
-    async prepareMigration() {
+    async prepareMigration({scope='production'}={}) {
       if(!sceneObserver||!subsystems?.editor?.ready?.()){
         return Object.freeze({
           pass:false,
@@ -660,8 +660,9 @@ export function createMechanicsNextRuntime({
       parityEvidence=migrationParitySummary(sceneObserver.instances().map(instance=>instance.body.partId))
       const refreshed=syncScene()
       return Object.freeze({
-        ...api.migrationGate(),
+        ...api.migrationGate({scope}),
         prepared:Object.freeze({
+          scope,
           objects:objects.length,
           initial,
           refreshed,
@@ -826,7 +827,7 @@ export function createMechanicsNextRuntime({
       if(regression)regressionEvidence=Object.freeze({...regression})
       return api.migrationGate()
     },
-    migrationGate() {
+    migrationGate({scope='production'}={}) {
       const gate=evaluateMechanicsMigrationGate({
         runtimeStatus:api.status(),
         physicsStatus:physicsPreview?.status?.()??null,
@@ -834,6 +835,7 @@ export function createMechanicsNextRuntime({
         regression:regressionEvidence,
         persistence:lastPersistenceReport,
         nativeProjectAuthoritative,
+        scope,
         nativeObservedConnections:nativeObservedRecords.size,
         occupancy:occupancy.snapshot(),
       })
@@ -926,8 +928,10 @@ export function createMechanicsNextRuntime({
       if (result) scheduleSceneSync()
       return result
     },
-    adoptNativeProjectOwnership() {
-      const gate=api.migrationGate()
+    adoptNativeProjectOwnership({gateScope='production',preparedGate=null}={}) {
+      const gate=preparedGate?.pass===true&&preparedGate?.scope===gateScope
+        ?preparedGate
+        :api.migrationGate({scope:gateScope})
       if(!gate.pass)return Object.freeze({accepted:false,reason:'migration-gate-blocked',gate})
       if(nativeProjectAuthoritative){
         api.handoffDomains(

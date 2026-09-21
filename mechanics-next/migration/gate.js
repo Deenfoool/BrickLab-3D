@@ -1,4 +1,4 @@
-export const MECHANICS_MIGRATION_GATE_VERSION='mechanics-migration-gate-0.1.0'
+export const MECHANICS_MIGRATION_GATE_VERSION='mechanics-migration-gate-0.2.0'
 
 function check(id,pass,detail=null,severity='blocker'){
   return Object.freeze({
@@ -16,8 +16,11 @@ export function evaluateMechanicsMigrationGate({
   regression=null,
   persistence=null,
   nativeProjectAuthoritative=false,
+  scope='production',
 }={}){
   const checks=[]
+  const gateScope=scope==='kinematics'?'kinematics':'production'
+  const requirePhysics=gateScope==='production'
 
   checks.push(check(
     'runtime-present',
@@ -31,15 +34,16 @@ export function evaluateMechanicsMigrationGate({
   checks.push(check(
     'native-ownership-convergence',
     nativeProjectAuthoritative!==true||(
-      productionOwnership?.build===true&&nativePhysicsOwner
+      productionOwnership?.build===true&&(!requirePhysics||nativePhysicsOwner)
     ),
     {
+      scope:gateScope,
       nativeProjectAuthoritative:nativeProjectAuthoritative===true,
       productionOwnership,
       required:nativeProjectAuthoritative===true
         ?Object.freeze({
             build:true,
-            physicsCreateOwner:'mechanics-next-physics-owner*',
+            physicsCreateOwner:requirePhysics?'mechanics-next-physics-owner*':'not-required-for-kinematics',
           })
         :null,
     },
@@ -138,10 +142,13 @@ export function evaluateMechanicsMigrationGate({
   const physicsBlockers=physicsStatus?.blockers??[]
   checks.push(check(
     'physics-preflight',
-    physicsStatus?.pass===true&&physicsBlockers.length===0,
+    !requirePhysics||(physicsStatus?.pass===true&&physicsBlockers.length===0),
     {
+      scope:gateScope,
+      required:requirePhysics,
       pass:physicsStatus?.pass===true,
       blockers:Object.freeze([...(physicsBlockers||[])]),
+      note:requirePhysics?'required for production physics':'not required for deterministic KINEMATICS',
     },
   ))
 
@@ -169,6 +176,7 @@ export function evaluateMechanicsMigrationGate({
   const blockers=checks.filter(item=>!item.pass&&item.severity==='blocker')
   return Object.freeze({
     version:MECHANICS_MIGRATION_GATE_VERSION,
+    scope:gateScope,
     pass:blockers.length===0,
     checks:Object.freeze(checks),
     blockers:Object.freeze(blockers),

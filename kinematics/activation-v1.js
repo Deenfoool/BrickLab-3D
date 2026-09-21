@@ -1,4 +1,4 @@
-export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.8.0'
+export const KINEMATICS_ACTIVATION_VERSION = 'kinematics-activation-v1.8.1'
 
 const LANGUAGE_KEY = 'bricklab.ui.language.v1'
 
@@ -118,7 +118,9 @@ async function activate(event) {
     if(!api?.enter)throw new Error('Mechanics Next Kinematics enter API unavailable')
     const attempt=await api.enter()
     if(!attempt?.accepted){
-      const error=new Error('Mechanics Next Kinematics migration gate blocked')
+      const blockerIds=(attempt?.gate?.blockers??[]).map(item=>item?.id).filter(Boolean)
+      const suffix=blockerIds.length?': '+blockerIds.join(', '):''
+      const error=new Error('Mechanics Next Kinematics migration gate blocked'+suffix)
       error.code='BRICKLAB_MECHANICS_NEXT_KINEMATICS_BLOCKED'
       error.gate=attempt?.gate??null
       throw error
