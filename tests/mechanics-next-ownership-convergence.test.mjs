@@ -126,3 +126,60 @@ test('production gate remains fail-closed on physics blockers',()=>{
   assert.equal(gate.pass,false)
   assert.ok(gate.blockers.some(item=>item.id==='physics-preflight'))
 })
+
+
+test('KINEMATICS does not globally fail when one transmission family is unsupported',()=>{
+  const runtime=greenRuntime({
+    build:true,
+    kinematics:false,
+    physicsCreateOwner:null,
+  })
+  runtime.lastSceneSync.transmissions.diagnostics.coverage=[
+    {
+      bodyId:'pulley-body',
+      instanceId:'pulley-instance',
+      partId:'pulley-part',
+      role:'pulley',
+      supported:false,
+      model:'explicit-belt-or-chain-required',
+    },
+  ]
+  const gate=evaluateMechanicsMigrationGate({
+    runtimeStatus:runtime,
+    physicsStatus:{pass:false,blockers:[{code:'not-needed-for-kinematics'}]},
+    paritySummary:{parts:0,semanticFail:0,geometryFail:0},
+    persistence:{pass:true},
+    regression:{status:'passed'},
+    nativeProjectAuthoritative:true,
+    scope:'kinematics',
+  })
+  const coverage=gate.checks.find(item=>item.id==='transmission-family-coverage')
+  assert.equal(coverage.pass,false)
+  assert.equal(coverage.severity,'warning')
+  assert.equal(gate.blockers.some(item=>item.id==='transmission-family-coverage'),false)
+  assert.equal(gate.pass,true)
+})
+
+test('production still blocks unsupported transmission families',()=>{
+  const runtime=greenRuntime({
+    build:true,
+    kinematics:false,
+    physicsCreateOwner:'mechanics-next-physics-owner-0.1.0',
+  })
+  runtime.lastSceneSync.transmissions.diagnostics.coverage=[
+    {bodyId:'pulley-body',role:'pulley',supported:false,model:'explicit-belt-or-chain-required'},
+  ]
+  const gate=evaluateMechanicsMigrationGate({
+    runtimeStatus:runtime,
+    physicsStatus:{pass:true,blockers:[]},
+    paritySummary:{parts:0,semanticFail:0,geometryFail:0},
+    persistence:{pass:true},
+    regression:{status:'passed'},
+    nativeProjectAuthoritative:true,
+    scope:'production',
+  })
+  const coverage=gate.checks.find(item=>item.id==='transmission-family-coverage')
+  assert.equal(coverage.severity,'blocker')
+  assert.equal(gate.pass,false)
+  assert.ok(gate.blockers.some(item=>item.id==='transmission-family-coverage'))
+})
