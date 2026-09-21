@@ -95,11 +95,7 @@ test('native BUILD movement revalidates DOF before detaching',()=>{
 })
 
 
-test('native BUILD handoff starts on editor contract readiness and never silently falls back',()=>{
-  assert.match(
-    appSource,
-    /'bricklab:editorcontractready'[\s\S]{0,500}scheduleMechanicsNextBuildHandoff\(eventName\)/,
-  )
+test('native BUILD snap never silently falls back while Mechanics Next is present',()=>{
   assert.match(
     appSource,
     /else if \(globalThis\.BrickLabMechanicsNext\)[\s\S]{0,220}scheduleMechanicsNextBuildHandoff\('snap-preview'\)/,
@@ -107,5 +103,9 @@ test('native BUILD handoff starts on editor contract readiness and never silentl
   assert.match(
     appSource,
     /globalThis\.BrickLabMechanicsNext[\s\S]{0,220}' · Mechanics Next starting'/,
+  )
+  assert.doesNotMatch(
+    appSource,
+    /'bricklab:editorcontractready'[\s\S]{0,350}scheduleMechanicsNextBuildHandoff\(eventName\)/,
   )
 })
