@@ -3,18 +3,25 @@ import { PhysicsSession } from '../physics.js'
 import '../technic/runtime-v1.js?v=technic-family-20260917-differential-bevel-v1'
 import { analyzeTechnicAwareDrivetrain } from '../technic/drivetrain-v1.js?v=technic-family-20260917-differential-bevel-v1'
 import { interactionGroupMembers, isEditorGroup } from '../editor-groups-v1.js'
-import { createBrickLabSubsystemApi } from './subsystem-api-v1.js'
+import { BRICKLAB_SUBSYSTEM_API_VERSION, createBrickLabSubsystemApi } from './subsystem-api-v1.js'
 
-export const BrickLabSubsystems = createBrickLabSubsystemApi({
-  listParts:() => PARTS,
-  findPart,
-  createPhysicsSession:(objects, connections, ...rest) => PhysicsSession.create(objects, connections, ...rest),
-  analyzeDrivetrain:analyzeTechnicAwareDrivetrain,
-  groupMembers:interactionGroupMembers,
-  isGroup:isEditorGroup,
-})
+const existingSubsystems=globalThis.BrickLabSubsystems
+const reuseExisting=existingSubsystems?.version===BRICKLAB_SUBSYSTEM_API_VERSION
 
-globalThis.BrickLabSubsystems = BrickLabSubsystems
-globalThis.dispatchEvent?.(new CustomEvent('bricklab:subsystemsready', {
-  detail:{ version:BrickLabSubsystems.version, status:BrickLabSubsystems.status() },
-}))
+export const BrickLabSubsystems = reuseExisting
+  ? existingSubsystems
+  : createBrickLabSubsystemApi({
+      listParts:() => PARTS,
+      findPart,
+      createPhysicsSession:(objects, connections, ...rest) => PhysicsSession.create(objects, connections, ...rest),
+      analyzeDrivetrain:analyzeTechnicAwareDrivetrain,
+      groupMembers:interactionGroupMembers,
+      isGroup:isEditorGroup,
+    })
+
+if(!reuseExisting){
+  globalThis.BrickLabSubsystems = BrickLabSubsystems
+  globalThis.dispatchEvent?.(new CustomEvent('bricklab:subsystemsready', {
+    detail:{ version:BrickLabSubsystems.version, status:BrickLabSubsystems.status() },
+  }))
+}
