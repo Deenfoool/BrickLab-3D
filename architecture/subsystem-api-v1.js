@@ -1,11 +1,46 @@
-export const BRICKLAB_SUBSYSTEM_API_VERSION = 'architecture-v1.2.1'
+export const BRICKLAB_SUBSYSTEM_API_VERSION = 'architecture-v1.2.2'
+
+function cloneFallback(value, seen = new WeakMap()) {
+  if (value == null || typeof value !== 'object') return value
+  if (seen.has(value)) return seen.get(value)
+
+  if (value instanceof Date) return new Date(value.getTime())
+  if (value instanceof RegExp) return new RegExp(value.source, value.flags)
+  if (value instanceof ArrayBuffer) return value.slice(0)
+  if (ArrayBuffer.isView(value)) {
+    if (value instanceof DataView) {
+      const clonedBuffer=value.buffer.slice(value.byteOffset,value.byteOffset+value.byteLength)
+      return new DataView(clonedBuffer)
+    }
+    return new value.constructor(value)
+  }
+  if (value instanceof Map) {
+    const result=new Map()
+    seen.set(value,result)
+    for(const [key,nested] of value)result.set(cloneFallback(key,seen),cloneFallback(nested,seen))
+    return result
+  }
+  if (value instanceof Set) {
+    const result=new Set()
+    seen.set(value,result)
+    for(const nested of value)result.add(cloneFallback(nested,seen))
+    return result
+  }
+
+  const result=Array.isArray(value)
+    ? []
+    : Object.create(Object.getPrototypeOf(value)===Object.prototype?Object.prototype:null)
+  seen.set(value,result)
+  for(const [key,nested] of Object.entries(value))result[key]=cloneFallback(nested,seen)
+  return result
+}
 
 function cloneValue(value) {
   if (value == null) return value
   if (typeof structuredClone === 'function') {
     try { return structuredClone(value) } catch {}
   }
-  return JSON.parse(JSON.stringify(value))
+  return cloneFallback(value)
 }
 
 function freezeSnapshot(value, seen = new WeakSet()) {
