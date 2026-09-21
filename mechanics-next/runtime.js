@@ -11,7 +11,7 @@ import { endpointSemanticKind } from './intelligence/endpoint-semantics.js'
 import { rigidPoseFromMatrix4 } from './math/rigid.js'
 import { discoverMechanicalTransmissions } from './transmission/discovery.js'
 import { createTransmissionCompiler } from './transmission/compiler.js'
-import { findBestMechanicalCandidate } from './connectors/candidate-search.js'
+import { findBestMechanicalCandidate, findMechanicalCandidates } from './connectors/candidate-search.js'
 import { OccupancyLedger, endpointChannel, occupancyStateForEndpoint } from './connectors/occupancy.js'
 import { commitPlacementTransaction } from './connectors/placement-transaction.js'
 import { solveMechanicalPlacement } from './connectors/placement-solver.js'
@@ -1174,7 +1174,7 @@ export function createMechanicsNextRuntime({
       })))
     },
     nativeProjectAuthoritative:()=>nativeProjectAuthoritative,
-    findCandidate(instanceId, targetInstanceIds = null, options = {}) {
+    findCandidates(instanceId, targetInstanceIds = null, options = {}) {
       let records = mechanicalRecords()
       let moving = records.find(record => record.instance.body.instanceId === String(instanceId))
       if(!moving&&sceneObserver&&subsystems?.editor?.ready?.()===true){
@@ -1182,12 +1182,12 @@ export function createMechanicsNextRuntime({
         records=mechanicalRecords()
         moving=records.find(record => record.instance.body.instanceId === String(instanceId))
       }
-      if (!moving) return null
+      if (!moving) return Object.freeze([])
       const wanted = Array.isArray(targetInstanceIds) ? new Set(targetInstanceIds.map(String)) : null
       const targets = records.filter(record =>
         record !== moving && (!wanted || wanted.has(String(record.instance.body.instanceId))))
       rebuildNativeOccupancy()
-      return findBestMechanicalCandidate({
+      return findMechanicalCandidates({
         moving,
         targets,
         occupancy,
@@ -1195,7 +1195,12 @@ export function createMechanicsNextRuntime({
         captureDistanceStud:options.captureDistanceStud,
         minAxisAlignment:options.minAxisAlignment,
         collisionProbe:options.collisionProbe,
+        maxResults:options.maxResults,
+        supportAnalysisLimit:options.supportAnalysisLimit,
       })
+    },
+    findCandidate(instanceId, targetInstanceIds = null, options = {}) {
+      return api.findCandidates(instanceId,targetInstanceIds,{...options,maxResults:1})[0]??null
     },
     beginDrag({
       instanceId,

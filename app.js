@@ -948,10 +948,13 @@ function applyProject(data, { reset = false, persist = true } = {}) {
   refreshSnap()
 
   scheduleGearMeshBackfill()
-  void scheduleMechanicsNextBuildHandoff('project-apply')
 
   if (reset) resetHistory()
   else if (persist) saveLocal()
+
+  // BUILD migration reads the live editor project boundary. Schedule it only after
+  // history/storage have been brought to the same state so no stale graph can win a race.
+  void scheduleMechanicsNextBuildHandoff('project-apply')
 }
 
 function undo() {
@@ -1192,24 +1195,46 @@ async function autoLinkCurrentPose({all:useAll=false,silent=false}={}) {
 
         const seenCandidates = new Set()
         for (let pass = 0; pass < AUTO_LINK_MAX_CONTACTS_PER_PAIR; pass += 1) {
-          const candidate = mechanics.findCandidate(
+          const candidates = mechanics.findCandidates?.(
             source.userData.instanceId,
             [target.userData.instanceId],
-            {captureDistanceStud:AUTO_LINK_CAPTURE_DISTANCE_STUD},
-          )
-          if (!candidate) break
-          if (seenCandidates.has(candidate.key)) break
-          seenCandidates.add(candidate.key)
+            {
+              captureDistanceStud:AUTO_LINK_CAPTURE_DISTANCE_STUD,
+              maxResults:96,
+            },
+          ) ?? [
+            mechanics.findCandidate?.(
+              source.userData.instanceId,
+              [target.userData.instanceId],
+              {captureDistanceStud:AUTO_LINK_CAPTURE_DISTANCE_STUD},
+            ),
+          ].filter(Boolean)
 
-          const result = mechanics.commitCurrentPoseCandidate(candidate, {
-            maxTranslationStud:AUTO_LINK_MAX_TRANSLATION_STUD,
-            maxRotationRad:AUTO_LINK_MAX_ROTATION_RAD,
-          })
-          if (!result?.accepted) {
-            skipped += 1
+          if (!candidates.length) break
+
+          let committedThisPass = false
+          for (const candidate of candidates) {
+            const candidateKey=String(
+              candidate?.key ??
+              `${candidate?.source?.id??candidate?.source?.endpointId??'source'}>${candidate?.target?.id??candidate?.target?.endpointId??'target'}`
+            )
+            if (seenCandidates.has(candidateKey)) continue
+            seenCandidates.add(candidateKey)
+
+            const result = mechanics.commitCurrentPoseCandidate(candidate, {
+              maxTranslationStud:AUTO_LINK_MAX_TRANSLATION_STUD,
+              maxRotationRad:AUTO_LINK_MAX_ROTATION_RAD,
+            })
+            if (!result?.accepted) {
+              skipped += 1
+              continue
+            }
+            accepted += 1
+            committedThisPass = true
             break
           }
-          accepted += 1
+
+          if (!committedThisPass) break
         }
       }
     }
@@ -1243,7 +1268,7 @@ async function autoLinkCurrentPose({all:useAll=false,silent=false}={}) {
 }
 
 globalThis.BrickLabMechanicsNextAutoLink = Object.freeze({
-  version:'mechanics-next-auto-link-0.1.1',
+  version:'mechanics-next-auto-link-0.2.0',
   hotkey:'Shift+L',
   run:autoLinkCurrentPose,
   limits:Object.freeze({
@@ -2051,8 +2076,9 @@ function animate() {
 }
 
 globalThis.BrickLabEditorRuntime=Object.freeze({
-  version:'bricklab-editor-runtime-v1.0.0',
-  objects:()=>buildRoot.children,
+  version:'bricklab-editor-runtime-v1.1.0',
+  objects:()=>[...buildRoot.children],
+  projectState:()=>cloneState(projectState()),
 })
 
 // Read-only viewport boundary for optional editor subsystems. The active camera is

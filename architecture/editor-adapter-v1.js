@@ -1,4 +1,4 @@
-export const EDITOR_ADAPTER_VERSION = 'editor-adapter-v1.2.1'
+export const EDITOR_ADAPTER_VERSION = 'editor-adapter-v1.3.0'
 
 function safeParse(value) {
   if (!value) return null
@@ -81,23 +81,25 @@ export function createLegacyEditorAdapter({
   function projectState() {
     const liveObjects = objects()
     const stored = storedProject(storage) ?? {}
-    const { connectionsV4:_legacyConnectionsV4, connectorSystemV4:_legacyConnectorSystemV4, ...canonicalStored } = stored
-    const name = element('projectName')?.textContent?.trim() || stored.name || 'Untitled Build'
+    const live = connectorRuntime?.projectState?.() ?? null
+    const source = live && typeof live === 'object' ? live : stored
+    const { connectionsV4:_legacyConnectionsV4, connectorSystemV4:_legacyConnectorSystemV4, ...canonicalSource } = source
+    const name = element('projectName')?.textContent?.trim() || source.name || stored.name || 'Untitled Build'
     const mechanicsAuthoritative=
       globalThis.BrickLabMechanicsNext?.nativeProjectAuthoritative?.()===true
     const mechanicsSnapshot=globalThis.__bricklabPendingMechanicsNextProject
       ? JSON.parse(JSON.stringify(globalThis.__bricklabPendingMechanicsNextProject))
       : mechanicsAuthoritative
         ? globalThis.BrickLabMechanicsNext?.exportProjectState?.()
-        : stored.mechanicsNext ?? undefined
+        : source.mechanicsNext ?? stored.mechanicsNext ?? undefined
     return {
-      ...canonicalStored,
+      ...canonicalSource,
       version:2,
       name,
       parts:liveObjects.map(serializePart),
       connections:mechanicsAuthoritative
         ? []
-        : Array.isArray(stored.connections) ? stored.connections : [],
+        : Array.isArray(source.connections) ? source.connections : [],
       mechanicsNext:mechanicsSnapshot,
     }
   }
