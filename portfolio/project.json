@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Deenfoool/portfolio/main/schemas/project.schema.json",
+  "version": 1,
+  "title": "BrickLab 3D",
+  "tagline": "Mechanical construction sandbox for building, simulating and testing brick mechanisms",
+  "kind": "web",
+  "status": "active",
+  "featured": true,
+  "tags": ["JavaScript", "Three.js", "Rapier", "LDraw", "Physics", "3D"],
+  "primaryAction": {
+    "type": "website",
+    "label": "Открыть сайт",
+    "source": "github-pages"
+  }
+}
