@@ -1,6 +1,6 @@
-import { portLength } from '../mechanics/axial.js'
-import { technic } from '../mechanics/catalog.js?v=axle-length'
-import { candidateOffsets, joinedPose, worldPort } from './placement.js'
+import { portLength } from '../mechanics/axial.js?v=mechanics-audit'
+import { technic } from '../mechanics/catalog.js?v=mechanics-audit'
+import { candidateOffsets, joinedPose, worldPort } from './placement.js?v=mechanics-audit'
 
 export function nearbyConnections({ scene, assembly, parts, moving, event, depth, roll, acceptPose }) {
   const candidates = []

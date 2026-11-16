@@ -1,6 +1,20 @@
-import { evaluateInsertion, overlap, portLength } from './axial.js'
+import { evaluateInsertion, overlap, portLength } from './axial.js?v=mechanics-audit'
 import { evaluateSpurMesh } from './gears.js'
-import { dot } from './vector.js'
+import { rotationPort } from './catalog.js?v=mechanics-audit'
+import { cross, dot, isVector, length, subtract, unit } from './vector.js?v=mechanics-audit'
+
+const LINEAR_TOLERANCE = .01
+const AXIS_TOLERANCE = 1e-5
+
+export function measureInsertion(shaft, socket) {
+  const a = unit(shaft?.axis)
+  const b = unit(socket?.axis)
+  if (!a || !b || !isVector(shaft.start) || !isVector(socket.start)) return null
+  const alignment = dot(a, b)
+  const delta = subtract(shaft.start, socket.start)
+  if (1 - Math.abs(alignment) > AXIS_TOLERANCE || length(cross(delta, b)) > LINEAR_TOLERANCE) return null
+  return { offset: dot(delta, b), direction: Math.sign(alignment) }
+}
 
 const samePort = (a, b) => a.part === b.part && a.port === b.port
 
@@ -26,11 +40,20 @@ export class Assembly {
     return structuredClone(this.#connections)
   }
 
-  previewInsertion(shaft, socket, placement) {
+  previewInsertion(shaft, socket, placement, { world, seated = false } = {}) {
     const male = this.port(shaft.part, shaft.port)
     const female = this.port(socket.part, socket.port)
     if (!male || !female || shaft.part === socket.part) return { ok: false, reason: 'invalid-endpoint' }
-    const fit = evaluateInsertion(male, female, placement)
+    if (world) {
+      const measured = measureInsertion(world.shaft, world.socket)
+      if (!measured) return { ok: false, reason: 'non-coaxial-ports' }
+      if (!Number.isFinite(placement?.offset) || Math.abs(placement.offset - measured.offset) > LINEAR_TOLERANCE ||
+          (placement.direction ?? 1) !== measured.direction) {
+        return { ok: false, reason: 'placement-pose-mismatch' }
+      }
+      placement = { ...placement, ...measured }
+    }
+    const fit = evaluateInsertion(male, female, placement, { seated })
     if (!fit.ok) return fit
     const onShaft = this.#connections.filter(link => samePort(link.shaft, shaft))
     if (this.#connections.some(link => samePort(link.socket, socket))) {
@@ -40,41 +63,54 @@ export class Assembly {
     const [lo, hi] = fit.occupancy.shaft
     const socketEntersAtShaftEnd = (fit.placement.side === 'start') === (fit.placement.direction > 0)
     // A socket placed past another socket on the shaft cannot pass through it.
-    const sweep = socketEntersAtShaftEnd ? [lo, span] : [0, hi]
+    const sweep = seated ? [lo, hi] : socketEntersAtShaftEnd ? [lo, span] : [0, hi]
     if (onShaft.some(link => overlap(link.fit.occupancy.shaft, sweep) > 1e-6)) {
-      return { ok: false, reason: 'shaft-path-occupied' }
+      return { ok: false, reason: seated ? 'shaft-occupied' : 'shaft-path-occupied' }
     }
     return fit
   }
 
-  connect(shaft, socket, placement) {
-    const fit = this.previewInsertion(shaft, socket, placement)
+  connect(shaft, socket, placement, options) {
+    const fit = this.previewInsertion(shaft, socket, placement, options)
     if (fit.ok) this.#connections.push(structuredClone({ shaft, socket, fit }))
     return fit
   }
 
-  axialTravel(shaft, socket) {
+  axialTravel(shaft, socket, { coMovingSockets = [] } = {}) {
     const links = this.#connections.filter(link => samePort(link.shaft, shaft))
     const current = links.find(link => samePort(link.socket, socket))
     if (!current) return null
-    const [lo, hi] = current.fit.occupancy.shaft
     const { direction } = current.fit.placement
     let [min, max] = current.fit.motion.travel
+    const moving = []
+    const fixed = []
     for (const link of links) {
-      if (link === current || link.fit.motion.travel.some(distance => distance !== 0)) continue
-      const [otherLo, otherHi] = link.fit.occupancy.shaft
-      if (otherHi <= lo + 1e-6) {
-        const distance = Math.max(0, lo - otherHi)
-        if (direction > 0) max = Math.min(max, distance)
-        else min = Math.max(min, distance === 0 ? 0 : -distance)
-      }
-      if (otherLo >= hi - 1e-6) {
-        const distance = Math.max(0, otherLo - hi)
-        if (direction > 0) min = Math.max(min, distance === 0 ? 0 : -distance)
-        else max = Math.min(max, distance)
+      if (link === current || coMovingSockets.some(port => samePort(link.socket, port))) moving.push(link)
+      else fixed.push(link)
+    }
+    for (const link of moving) {
+      const [from, to] = link.fit.motion.travel
+      const sameDirection = direction === link.fit.placement.direction
+      min = Math.max(min, sameDirection ? from : -to)
+      max = Math.min(max, sameDirection ? to : -from)
+      const [lo, hi] = link.fit.occupancy.shaft
+      for (const neighbor of fixed) {
+        const [otherLo, otherHi] = neighbor.fit.occupancy.shaft
+        // Positive offset moves all selected occupancy intervals toward the
+        // start of the shaft when its axis points in the socket direction.
+        if (otherHi <= lo + 1e-6) {
+          const gap = Math.max(0, lo - otherHi)
+          if (direction > 0) max = Math.min(max, gap)
+          else min = Math.max(min, -gap)
+        }
+        if (otherLo >= hi - 1e-6) {
+          const gap = Math.max(0, otherLo - hi)
+          if (direction > 0) min = Math.max(min, -gap)
+          else max = Math.min(max, gap)
+        }
       }
     }
-    return [min, max]
+    return [min || 0, max || 0]
   }
 
   rotationFrom(driver, gears = []) {
@@ -89,16 +125,19 @@ export class Assembly {
       neighbors.get(a).push([b, ratio])
       neighbors.get(b).push([a, 1 / ratio])
     }
+    const unsupported = new Set()
     for (const { shaft, socket, fit } of this.#connections) {
       if (fit.motion.rotation !== 'locked') continue
       const shaftPorts = this.#parts.get(shaft.part)
       const socketPorts = this.#parts.get(socket.part)
-      const shaftAlignment = dot(shaftPorts[0].axis, this.port(shaft.part, shaft.port).axis)
-      const socketAlignment = dot(socketPorts[0].axis, this.port(socket.part, socket.port).axis)
-      if (Math.abs(shaftAlignment) < 0.999 || Math.abs(socketAlignment) < 0.999) {
-        return { ok: false, reason: 'non-coaxial-shaft', meshes: [] }
+      const shaftAlignment = measureInsertion(this.port(shaft.part, shaft.port), rotationPort(shaftPorts))
+      const socketAlignment = measureInsertion(this.port(socket.part, socket.port), rotationPort(socketPorts))
+      if (!shaftAlignment || !socketAlignment) {
+        unsupported.add(shaft.part)
+        unsupported.add(socket.part)
+        continue
       }
-      link(shaft.part, socket.part, fit.placement.direction * Math.sign(shaftAlignment * socketAlignment))
+      link(shaft.part, socket.part, fit.placement.direction * shaftAlignment.direction * socketAlignment.direction)
     }
     const meshes = []
     for (let i = 0; i < gears.length; i++) {
@@ -113,12 +152,20 @@ export class Assembly {
       }
     }
     const ratios = new Map([[driver, 1]])
-    for (const [part, ratio] of ratios) {
+    const pending = [driver]
+    for (let index = 0; index < pending.length; index++) {
+      const part = pending[index]
+      if (unsupported.has(part)) return { ok: false, reason: 'non-coaxial-shaft', meshes }
       for (const [next, gain] of neighbors.get(part) ?? []) {
-        const predicted = ratio * gain
+        const predicted = ratios.get(part) * gain
+        if (!Number.isFinite(predicted) || predicted === 0) return { ok: false, reason: 'ratio-out-of-range', meshes }
         if (!ratios.has(next)) {
           ratios.set(next, predicted)
-        } else if (Math.abs(ratios.get(next) - predicted) > 1e-8 * Math.max(1, Math.abs(predicted))) {
+          pending.push(next)
+          continue
+        }
+        const known = ratios.get(next)
+        if (Math.abs(known - predicted) > 1e-8 * Math.max(Math.abs(known), Math.abs(predicted))) {
           return { ok: false, reason: 'inconsistent-transmission', meshes }
         }
       }

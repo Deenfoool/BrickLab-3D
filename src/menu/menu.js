@@ -1,4 +1,4 @@
-import { editorLabels } from '../editor/labels.js?v=axle-length'
+import { editorLabels } from '../editor/labels.js?v=mechanics-audit'
 import { locales } from './locale.js'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
@@ -212,7 +212,7 @@ async function openEditor(project) {
   editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=axle-length')
+    const { mountEditor } = await import('../editor/editor.js?v=mechanics-audit')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

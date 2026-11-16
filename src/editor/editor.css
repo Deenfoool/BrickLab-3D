@@ -51,7 +51,9 @@
 .editor-insertion small{color:#a7adb8}
 .editor-motion input{display:block;width:100%;accent-color:#ffb01b}
 .editor-status{display:flex;justify-content:space-between;gap:14px;padding:8px 15px;border-top:1px solid #343840;color:#c4c9d4;font-size:12px}
-.editor-status span:last-child{white-space:nowrap}
+.editor-status span:last-child{margin-inline-start:auto;white-space:nowrap}
+.editor-status [data-el="loadNotice"]:empty{display:none}
+.editor-status [data-el="loadNotice"]{color:#ffbd42}
 .editor-loading{display:grid;place-content:center;justify-items:center;gap:16px;text-align:center;padding:20px;color:var(--muted)}
 .editor-loading a{color:var(--gold)}
 body:has(.editor:not([hidden])){overflow:hidden}

@@ -1,19 +1,20 @@
 import { Plane, Quaternion, Vector3 } from 'three'
-import { technic } from '../mechanics/catalog.js?v=axle-length'
-import { baseRotation, retainedPlacement, samePose, worldPort } from './placement.js?v=axle-length'
-import { createAssembly, gearPoses, loadParts, raisedPose, snapGrid } from './model.js?v=axle-length'
+import { technic } from '../mechanics/catalog.js?v=mechanics-audit'
+import { baseRotation, samePose, worldPort } from './placement.js?v=mechanics-audit'
+import { connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, snapGrid } from './model.js?v=mechanics-audit'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js'
-import { portLength } from '../mechanics/axial.js'
-import { nearbyConnections } from './snap.js?v=axle-length'
-import { loadPalette, partOrder, parts } from './parts.js?v=axle-length'
-import { createScene } from './scene.js?v=axle-length'
-import { editorLabels } from './labels.js?v=axle-length'
+import { nearestDetent, portLength } from '../mechanics/axial.js?v=mechanics-audit'
+import { nearbyConnections } from './snap.js?v=mechanics-audit'
+import { loadPalette, partOrder, parts } from './parts.js?v=mechanics-audit'
+import { createScene } from './scene.js?v=mechanics-audit'
+import { editorLabels } from './labels.js?v=mechanics-audit'
 
 const isDriver = part => part && technic[part.design].some(port => port.role === 'axle' || port.role === 'gear')
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
 const heldTurns = { ArrowUp: [X, -1], ArrowDown: [X, 1], ArrowLeft: [Y, -1], ArrowRight: [Y, 1] }
 const steps = { ArrowUp: [0, 0, -1], ArrowDown: [0, 0, 1], ArrowLeft: [-1, 0, 0], ArrowRight: [1, 0, 0] }
+const connectionRecord = ({ shaft, socket, fit }) => ({ shaft, socket, placement: fit.placement })
 const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
@@ -81,12 +82,13 @@ export async function mountEditor(root, { document: source, language, save, down
             <label>${t.drive}<input data-el="angle" type="range" min="-1080" max="1080" step="1" value="0"></label>
             <output data-el="degrees">0°</output>
             <button type="button" data-el="play">${t.play}</button>
+            <button type="button" data-el="applyHinge" hidden>${t.applyHinge}</button>
           </div>
           <p class="editor-links" data-el="links"></p>
         </details>
       </aside>
     </div>
-    <footer class="editor-status"><span data-el="hint" role="status"></span><span data-el="count"></span></footer>`
+    <footer class="editor-status"><span data-el="hint" role="status"></span><span data-el="loadNotice" role="status"></span><span data-el="count"></span></footer>`
   const el = name => root.querySelector(`[data-el="${name}"]`)
   const on = (target, event, callback, capture = false) => target.addEventListener(event, callback, { signal, capture })
   let scene
@@ -98,11 +100,14 @@ export async function mountEditor(root, { document: source, language, save, down
   }
   const visibleParts = loadParts(source, models)
   const shown = new Set(visibleParts.map(part => part.id))
-  const hiddenParts = source.parts.filter(part => !shown.has(part?.id))
+  const hiddenParts = source.parts.filter(part => !models.has(String(part?.design ?? '')))
   const hiddenGears = Array.isArray(source.gears) ? source.gears.filter(gear => !shown.has(gear?.part)) : []
-  const unknownLinks = source.connections.filter(link => !shown.has(link?.shaft?.part) || !shown.has(link?.socket?.part))
+  const hiddenIds = new Set(hiddenParts.map(part => part?.id).filter(id => typeof id === 'string' && !shown.has(id)))
+  const unknownLinks = source.connections.filter(link => hiddenIds.has(link?.shaft?.part) || hiddenIds.has(link?.socket?.part))
   let state = { parts: visibleParts, links: source.connections.filter(link => shown.has(link?.shaft?.part) && shown.has(link?.socket?.part)) }
   let assembly = createAssembly(state.parts, state.links)
+  const discardedLinks = source.connections.length - assembly.connections.length - unknownLinks.length
+  state.links = assembly.connections.map(connectionRecord)
   let mode = 'build'
   let selected
   let moving
@@ -128,6 +133,7 @@ export async function mountEditor(root, { document: source, language, save, down
   let angle = 0
   let frame
   let transmission
+  let hinge
   let pointerDown
   let directDrag
   let drag
@@ -168,8 +174,14 @@ export async function mountEditor(root, { document: source, language, save, down
   }, { once: true })
 
   function showMotion() {
-    if (transmission?.ok) scene.turn(state.parts, transmission.ratios, angle * Math.PI / 180)
-    el('degrees').textContent = `${Math.round(angle)}°`
+    if (hinge?.ok) {
+      const target = nearestDetent(hinge.detents, angle * Math.PI / 180)
+      angle = target * 180 / Math.PI
+      scene.previewParts(hingePoses(state.parts, hinge, target).filter(part => hinge.moving.has(part.id)))
+      scene.select(selected)
+      el('applyHinge').disabled = Math.abs(target - hinge.roll) < 1e-8
+    } else if (transmission?.ok) scene.turn(state.parts, transmission.ratios, angle * Math.PI / 180)
+    el('degrees').textContent = `${Number(angle.toFixed(2))}°`
     el('angle').value = angle
   }
 
@@ -203,7 +215,8 @@ export async function mountEditor(root, { document: source, language, save, down
     if (tool === 'length' && !canResize(selectedPart())) tool = 'move'
     scene.select(id)
     updateHighlights()
-    angle = 0
+    hinge = mode === 'kinematics' && id ? hingeMotion(id, state.parts, links) : undefined
+    angle = hinge?.ok ? hinge.roll * 180 / Math.PI : 0
     transmission = mode === 'kinematics' && isDriver(selectedPart())
       ? assembly.rotationFrom(id, gearPoses(state.parts)) : null
     showMotion()
@@ -214,6 +227,7 @@ export async function mountEditor(root, { document: source, language, save, down
     state = next
     assembly = createAssembly(state.parts, state.links)
     links = assembly.connections
+    state.links = links.map(connectionRecord)
     const ids = new Set(state.parts.map(part => part.id))
     for (const id of additional) if (!ids.has(id)) additional.delete(id)
     if (!ids.has(selected)) {
@@ -287,14 +301,24 @@ export async function mountEditor(root, { document: source, language, save, down
     positionHandles()
     if (part) el('color').value = /^#[0-9a-f]{6}$/i.test(part.color) ? part.color : parts[part.design].color
     el('links').textContent = mode === 'kinematics'
-      ? transmission?.ok ? `${t.mesh}: ${transmission.meshes.length}` : t.driver
+      ? hinge ? (hinge.ok ? t.detented : t.closedHinge)
+        : transmission ? (transmission.ok ? `${t.mesh}: ${transmission.meshes.length}` : t.transmissionError)
+          : t.driver
       : part ? `${t.joints}: ${selectedLinks.length}` : ''
-    el('motion').hidden = !transmission?.ok || mode !== 'kinematics'
+    el('motion').hidden = (!hinge?.ok && !transmission?.ok) || mode !== 'kinematics'
+    el('play').hidden = Boolean(hinge)
+    el('applyHinge').hidden = !hinge?.ok
+    const range = el('angle')
+    range.min = hinge?.ok ? hinge.detents[0] * 180 / Math.PI : -1080
+    range.max = hinge?.ok ? hinge.detents.at(-1) * 180 / Math.PI : 1080
+    range.step = hinge?.ok ? 'any' : '1'
+    range.value = angle
     el('play').textContent = frame ? t.stop : t.play
     el('insertion').hidden = !moving
     el('depth').value = String(depth)
     el('empty').hidden = Boolean(state.parts.length || moving)
     el('count').textContent = `${t.count}: ${state.parts.length} · ${t.linkCount}: ${links.length}`
+    el('loadNotice').textContent = discardedLinks ? t.discarded(discardedLinks) : ''
     for (const name of ['build', 'kinematics']) el(name).setAttribute('aria-pressed', String(mode === name))
     for (const button of el('parts').children) {
       button.disabled = mode !== 'build'
@@ -388,7 +412,7 @@ export async function mountEditor(root, { document: source, language, save, down
     const copied = pastedGroup ? groupTransforms(pastedGroup.items, pastedGroup.anchor, pose) : []
     const placed = original ? state.parts.map(part => part.id === id ? pose : part) : [...state.parts, pose, ...copied]
     const added = fit ? [{ shaft: candidate.shaft, socket: candidate.socket, placement: fit.placement }] : []
-    const nextLinks = original ? transformLinks(placed, id, placementAssembly, added) : [...state.links, ...(pastedGroup?.links ?? []), ...added]
+    const nextLinks = original ? transformLinks(placed, id, added) : [...state.links, ...(pastedGroup?.links ?? []), ...added]
     cancelPlacement()
     additional.clear()
     for (const part of copied) additional.add(part.id)
@@ -431,15 +455,9 @@ export async function mountEditor(root, { document: source, language, save, down
     for (const { shaft: a, socket: b, placement: previous } of state.links.filter(attached)) {
       const shaft = byId.get(a?.part)
       const socket = byId.get(b?.part)
-      const male = shaft && checked.port(shaft.id, a.port)
-      const female = socket && checked.port(socket.id, b.port)
-      if (!male || !female || !previous) continue
-      const placement = retainedPlacement(shaft, male, socket, female, previous)
-      if (!placement) continue
-      const fit = checked.previewInsertion(a, b, placement)
-      if (!fit.ok || Math.abs(Math.sin((fit.placement.roll - placement.roll) / 2)) > .001) continue
-      checked.connect(a, b, fit.placement)
-      retained.push({ shaft: a, socket: b, placement: fit.placement })
+      if (!shaft || !socket || !previous) continue
+      const fit = connectPlaced(checked, shaft, socket, { shaft: a, socket: b, placement: previous })
+      if (fit.ok) retained.push(connectionRecord({ shaft: a, socket: b, fit }))
     }
     return retained
   }
@@ -710,6 +728,13 @@ export async function mountEditor(root, { document: source, language, save, down
     showMotion()
     render()
   })
+  on(el('applyHinge'), 'click', () => {
+    if (!hinge?.ok) return
+    const target = nearestDetent(hinge.detents, angle * Math.PI / 180)
+    if (Math.abs(target - hinge.roll) < 1e-8) return
+    const placed = hingePoses(state.parts, hinge, target)
+    commit({ parts: placed, links: transformLinks(placed, [...hinge.moving]) })
+  })
   on(el('play'), 'click', () => {
     if (frame) stopAnimation()
     else {
@@ -765,16 +790,19 @@ export async function mountEditor(root, { document: source, language, save, down
     }
     const hit = scene.pointer(event).hit
     const part = state.parts.find(entry => entry.id === hit)
-    if (!isDriver(part)) return
+    if (!part) return
     if (hit !== selected) setSelection(hit)
+    if (!hinge?.ok && !transmission?.ok) return
     stopAnimation()
     scene.canvas.setPointerCapture(event.pointerId)
-    drag = { x: event.clientX, angle }
+    drag = { x: event.clientX, angle, sign: hinge?.sign ?? 1 }
     render()
   })
   on(scene.canvas, 'pointermove', event => {
     if (drag) {
-      angle = Math.max(-1080, Math.min(1080, drag.angle + (event.clientX - drag.x) * 2))
+      const min = Number(el('angle').min)
+      const max = Number(el('angle').max)
+      angle = Math.max(min, Math.min(max, drag.angle + (event.clientX - drag.x) * 2 * drag.sign))
       showMotion()
     } else if (directDrag && !moving && (event.buttons & 1) &&
         Math.hypot(event.clientX - directDrag.start.clientX, event.clientY - directDrag.start.clientY) >= 5) {

@@ -1,6 +1,8 @@
-import technic from '../../catalog/technic.json?v=axle-length' with { type: 'json' }
+import technic from '../../catalog/technic.json?v=mechanics-audit' with { type: 'json' }
 
 export { technic }
+
+export const rotationPort = ports => ports.find(port => port.role === 'gear') ?? ports[0]
 
 export function gearAt(part, design, center, axis) {
   const section = technic[design]?.find(port => port.role === 'gear')?.sections[0]

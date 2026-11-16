@@ -11,7 +11,7 @@ const MOTION = {
   'axle:bush': { rotation: 'locked', translation: false },
   'pin:bearing': { rotation: 'continuous', translation: false },
   'friction-pin:bearing': { rotation: 'continuous', translation: false, friction: true },
-  'shaft:detent-hinge': { rotation: 'detented', translation: false },
+  'hinge-pin:detent-hinge': { rotation: 'detented', translation: false },
 }
 
 export const overlap = (a, b) => Math.min(a[1], b[1]) - Math.max(a[0], b[0])
@@ -106,7 +106,12 @@ function travelLimit(male, female, offset, direction, events, sign) {
   return current
 }
 
-export function evaluateInsertion(male, female, { offset, direction = 1, side = 'start', roll = 0 } = {}) {
+export function nearestDetent(detents, angle) {
+  const distance = detent => Math.abs(Math.sin((angle - detent) / 2))
+  return detents.reduce((best, candidate) => distance(candidate) < distance(best) ? candidate : best)
+}
+
+export function evaluateInsertion(male, female, { offset, direction = 1, side = 'start', roll = 0 } = {}, { seated = false } = {}) {
   if (male?.gender !== 'M' || female?.gender !== 'F') return { ok: false, reason: 'connector-role' }
   const mode = MOTION[`${male.role}:${female.role}`]
   if (!mode) return { ok: false, reason: 'incompatible-family' }
@@ -117,17 +122,22 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
     return { ok: false, reason: 'missing-detents' }
   }
   if (!female.openings.includes(side)) return { ok: false, reason: 'closed-entry' }
+  if (mode.rotation === 'detented' && female.seat !== undefined && Math.abs(offset - female.seat) > EPSILON) {
+    return { ok: false, reason: 'hinge-seat' }
+  }
 
   const fit = fitAt(male, female, offset, direction)
   if (fit.reason || fit.engagement < MIN_ENGAGEMENT) {
     return { ok: false, reason: fit.reason ?? 'insufficient-engagement' }
   }
   const events = breakpoints(male, female, direction)
-  const pathBlocked = sweep(male, female, offset, direction, side, events)
+  const pathBlocked = !seated && sweep(male, female, offset, direction, side, events)
   if (pathBlocked) return { ok: false, reason: pathBlocked }
 
+  const detents = mode.rotation === 'detented' ? [...female.detents] : []
   const keyStep = mode.rotation === 'locked' ? Math.PI / 2 : null
-  const snappedRoll = keyStep === null ? roll : Math.round(roll / keyStep) * keyStep
+  const snappedRoll = detents.length ? nearestDetent(detents, roll)
+    : keyStep === null ? roll : Math.round(roll / keyStep) * keyStep
   const [low, high] = fit.interval.map(point => (point - offset) * direction).sort((a, b) => a - b)
   return {
     ok: true,
@@ -135,11 +145,11 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
     motion: {
       rotation: mode.rotation,
       friction: mode.friction ?? false,
-      detents: mode.rotation === 'detented' ? [...(female.detents ?? [])] : [],
+      detents,
       travel: mode.translation
         ? [-1, 1].map(sign => travelLimit(male, female, offset, direction, events, sign) - offset)
         : [0, 0],
     },
-    placement: { offset, direction, side, roll: snappedRoll, keyStep },
+    placement: { offset, direction, side, roll: snappedRoll, keyStep, ...(detents.length ? { detents } : {}) },
   }
 }

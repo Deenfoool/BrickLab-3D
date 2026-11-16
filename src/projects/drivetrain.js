@@ -10,7 +10,7 @@ export const drivetrain = {
     { shaft: port('driven', 'shaft'), socket: port('gear24', 'bore'), placement: { offset: -30 } },
   ],
   gears: [
-    { part: 'gear8', center: [0, 0, 0], axis: [1, 0, 0] },
+    { part: 'gear8', center: [0, 0, 0], axis: [-1, 0, 0] },
     { part: 'gear24', center: [0, 40, 0], axis: [1, 0, 0] },
   ],
 }

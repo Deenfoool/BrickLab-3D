@@ -434,5 +434,203 @@
         }
       ]
     }
+  ],
+  "41679": [
+    {
+      "id": "hinge-pin",
+      "role": "hinge-pin",
+      "gender": "M",
+      "openings": [
+        "end"
+      ],
+      "start": [
+        0,
+        0,
+        0
+      ],
+      "axis": [
+        0,
+        1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 9.5,
+          "length": 5
+        }
+      ],
+      "reference": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "axle-hole",
+      "role": "key",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        5,
+        40
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "A",
+          "radius": 6,
+          "length": 10
+        }
+      ]
+    },
+    {
+      "id": "hinge-axle-hole",
+      "role": "key",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        5,
+        0
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "A",
+          "radius": 6,
+          "length": 10
+        }
+      ]
+    },
+    {
+      "id": "bore",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        5,
+        60
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 6
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    }
+  ],
+  "41680": [
+    {
+      "id": "hinge-ring",
+      "role": "detent-hinge",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        5,
+        0
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 9.5,
+          "length": 10
+        }
+      ],
+      "reference": [
+        -1,
+        0,
+        0
+      ],
+      "detents": [
+        -0.7853981633974483,
+        -0.5235987755982988,
+        -0.2617993877991494,
+        0.0,
+        0.2617993877991494,
+        0.5235987755982988,
+        0.7853981633974483
+      ],
+      "seat": 5
+    },
+    {
+      "id": "pin",
+      "role": "friction-pin",
+      "gender": "M",
+      "openings": [
+        "end"
+      ],
+      "start": [
+        20,
+        0,
+        0
+      ],
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "L",
+          "radius": 6.25,
+          "length": 2
+        }
+      ]
+    }
   ]
 }

@@ -1,5 +1,6 @@
 import { Quaternion, Vector3 } from 'three'
-import { portLength } from '../mechanics/axial.js'
+import { measureInsertion } from '../mechanics/assembly.js?v=mechanics-audit'
+import { portLength } from '../mechanics/axial.js?v=mechanics-audit'
 
 const Y = new Vector3(0, 1, 0)
 const base = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI)
@@ -15,7 +16,9 @@ export function worldPort(pose, port) {
   }
 }
 
-function reference(axis) {
+function reference(port) {
+  if (port.reference) return vector(port.reference).normalize()
+  const axis = vector(port.axis)
   const x = Math.abs(axis.x)
   const basis = x > .5 ? Y.clone() : new Vector3(1, 0, 0)
   return basis.addScaledVector(axis, -basis.dot(axis)).normalize()
@@ -26,14 +29,14 @@ export function joinedPose(movingPose, movingPort, fixedPose, fixedPort, placeme
   const moving = worldPort(movingPose, movingPort)
   const movingShaft = movingPort.gender === 'M'
   const axis = fixed.axis.clone().multiplyScalar(placement.direction)
-  const from = reference(vector(movingPort.axis))
-  const fixedReference = reference(vector(fixedPort.axis)).applyQuaternion(rotation(fixedPose.rotation))
+  const from = reference(movingPort)
+  const fixedReference = reference(fixedPort).applyQuaternion(rotation(fixedPose.rotation))
   const to = fixedReference.applyAxisAngle(fixed.axis, movingShaft ? placement.roll : -placement.roll * placement.direction)
   const q = rotation(movingPose.rotation)
   q.premultiply(new Quaternion().setFromUnitVectors(moving.axis, axis))
   const current = from.applyQuaternion(q)
   const angle = Math.atan2(axis.dot(current.clone().cross(to)), current.dot(to))
-  if (placement.keyStep) q.premultiply(new Quaternion().setFromAxisAngle(axis, angle))
+  if (placement.keyStep || placement.detents?.length) q.premultiply(new Quaternion().setFromAxisAngle(axis, angle))
   else if (placement.roll) q.premultiply(new Quaternion().setFromAxisAngle(axis, placement.roll))
   const socketAxis = movingShaft ? fixed.axis : axis
   const position = fixed.start.clone().addScaledVector(socketAxis, (movingShaft ? 1 : -1) * placement.offset)
@@ -44,6 +47,7 @@ export function joinedPose(movingPose, movingPort, fixedPose, fixedPort, placeme
 export function candidateOffsets(shaft, socket, direction, side, depth) {
   const shaftSize = portLength(shaft)
   const socketSize = portLength(socket)
+  if (socket.seat !== undefined) return [socket.seat]
   const points = [
     (socketSize - direction * shaftSize) / 2,
     side === 'start' ? socketSize - Math.max(0, direction * shaftSize) : -Math.min(0, direction * shaftSize),
@@ -60,15 +64,16 @@ export function candidateOffsets(shaft, socket, direction, side, depth) {
 export function retainedPlacement(shaft, male, socket, female, previous) {
   const a = worldPort(shaft, male)
   const b = worldPort(socket, female)
-  const alignment = a.axis.dot(b.axis)
-  if (Math.abs(alignment) < .99999) return null
-  const delta = a.start.clone().sub(b.start)
-  const offset = delta.dot(b.axis)
-  if (delta.addScaledVector(b.axis, -offset).lengthSq() > 1e-4) return null
-  const aRef = reference(vector(male.axis)).applyQuaternion(rotation(shaft.rotation))
-  const bRef = reference(vector(female.axis)).applyQuaternion(rotation(socket.rotation))
+  const world = {
+    shaft: { start: a.start.toArray(), axis: a.axis.toArray() },
+    socket: { start: b.start.toArray(), axis: b.axis.toArray() },
+  }
+  const measured = measureInsertion(world.shaft, world.socket)
+  if (!measured) return null
+  const aRef = reference(male).applyQuaternion(rotation(shaft.rotation))
+  const bRef = reference(female).applyQuaternion(rotation(socket.rotation))
   const roll = Math.atan2(b.axis.dot(bRef.clone().cross(aRef)), bRef.dot(aRef))
-  return { ...previous, offset, direction: Math.sign(alignment), roll }
+  return { placement: { ...previous, ...measured, roll }, world }
 }
 
 export function samePose(a, b) {

@@ -1,9 +1,9 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
-import { partMesh, parts } from './parts.js?v=axle-length'
-import { worldPort } from './placement.js'
-import { technic } from '../mechanics/catalog.js?v=axle-length'
+import { partMesh, parts } from './parts.js?v=mechanics-audit'
+import { worldPort } from './placement.js?v=mechanics-audit'
+import { partRotationPort, snapGrid } from './model.js?v=mechanics-audit'
 
 export function createScene(host, models) {
   const world = new THREE.Scene()
@@ -37,7 +37,8 @@ export function createScene(host, models) {
   controls.maxPolarAngle = Math.PI * .98
   controls.minDistance = 42
   controls.maxDistance = 1800
-  const floor = new THREE.GridHelper(1600, 80, 0x475267, 0x2b3039)
+  const gridSize = 1600
+  const floor = new THREE.GridHelper(gridSize, gridSize / snapGrid, 0x475267, 0x2b3039)
   const axes = new THREE.AxesHelper(52)
   axes.position.y = .08
   world.add(floor, axes, new THREE.HemisphereLight(0xddeaff, 0x424956, 2.05))
@@ -302,7 +303,7 @@ export function createScene(host, models) {
       const ratio = ratios[part.id]
       if (ratio === undefined) continue
       const object = objects.get(part.id)
-      const port = technic[part.design][0]
+      const port = partRotationPort(part)
       const localAxis = new THREE.Vector3().fromArray(port.axis)
       const pivot = worldPort(part, port).start
       object.quaternion.fromArray(part.rotation).multiply(new THREE.Quaternion().setFromAxisAngle(localAxis, angle * ratio))

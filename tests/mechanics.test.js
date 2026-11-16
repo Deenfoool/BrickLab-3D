@@ -69,7 +69,7 @@ test('the drivetrain uses separate shaft intervals, limits travel and transfers 
   assert.deepEqual(result.occupancy.slice(0, 3), [[80, 100], [50, 70], [100, 120]])
   assert.equal(result.bearingTravel[0], 0)
   assert.equal(result.bearingMotion, 'continuous')
-  assert.equal(result.transmission.ratios.gear8, 1)
+  assert.equal(result.transmission.ratios.gear8, -1)
   assert.equal(result.transmission.ratios.driven, -1 / 3)
   assert.equal(result.transmission.ratios.bearing, undefined)
 })
@@ -85,15 +85,83 @@ test('spur gears require matching pitch, parallel axes and overlapping tooth fac
   assert.equal(evaluateSpurMesh(a, { ...b, teeth: 25 }).reason, 'tooth-pitch')
 })
 
-test('hinge detents describe stable angles independently of the insertion roll', () => {
-  const hinge = {
-    ...bearing, role: 'detent-hinge', detents: [0, Math.PI / 4, Math.PI / 2],
-  }
-  const pin = { ...shaft, role: 'shaft', sections: [{ shape: 'R', radius: 6, length: 30 }] }
-  const fit = evaluateInsertion(pin, hinge, { offset: -5, roll: 0.3 })
+test('a real 41679 and 41680 hinge seats and snaps to catalog detents', () => {
+  const pin = technic['41679'].find(port => port.id === 'hinge-pin')
+  const ring = technic['41680'].find(port => port.id === 'hinge-ring')
+  const fit = evaluateInsertion(pin, ring, { offset: 5, direction: -1, roll: 0.3 })
   assert.equal(fit.ok, true)
-  assert.equal(fit.placement.roll, 0.3)
+  assert.equal(fit.placement.roll, Math.PI / 12)
   assert.equal(fit.motion.rotation, 'detented')
-  assert.deepEqual(fit.motion.detents, hinge.detents)
-  assert.equal(evaluateInsertion(pin, { ...hinge, detents: [] }, { offset: -5 }).reason, 'missing-detents')
+  assert.deepEqual(fit.motion.travel, [0, 0])
+  assert.deepEqual(fit.motion.detents, ring.detents)
+  assert.equal(evaluateInsertion(pin, ring, { offset: 3 }).reason, 'hinge-seat')
+  assert.equal(evaluateInsertion(pin, { ...ring, detents: [] }, { offset: 5 }).reason, 'missing-detents')
+})
+
+test('a contradictory gear loop is rejected in every order from every driver', () => {
+  const gears = [
+    gearAt('a', '10928', [0, 0, 0], [1, 0, 0]),
+    gearAt('b', '10928', [0, 20, 0], [1, 0, 0]),
+    gearAt('c', '10928', [0, 10, 10 * Math.sqrt(3)], [1, 0, 0]),
+  ]
+  for (const [a, b, c] of [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]) {
+    const input = [gears[a], gears[b], gears[c]]
+    const assembly = new Assembly(technic)
+    for (const { part } of input) assembly.addPart(part, '10928')
+    for (const { part } of input) {
+      const result = assembly.rotationFrom(part, input)
+      assert.equal(result.reason, 'inconsistent-transmission')
+      assert.equal(result.meshes.length, 3)
+    }
+  }
+})
+
+test('world validation rejects perpendicular and offset ports before connecting', () => {
+  const assembly = new Assembly(technic)
+  assembly.addPart('axle', '3705')
+  assembly.addPart('gear', '3648')
+  const a = { part: 'axle', port: 'shaft' }
+  const b = { part: 'gear', port: 'bore' }
+  const shaft = { start: [-30, 0, 0], axis: [1, 0, 0] }
+  const socket = { start: [0, 0, 0], axis: [1, 0, 0] }
+  for (const bad of [{ ...socket, axis: [0, 0, 1] }, { ...socket, start: [0, 2, 0] }]) {
+    assert.equal(assembly.connect(a, b, { offset: -30 }, { world: { shaft, socket: bad } }).reason, 'non-coaxial-ports')
+  }
+  assert.equal(assembly.connect(a, b, { offset: -29 }, { world: { shaft, socket } }).reason, 'placement-pose-mismatch')
+  assert.equal(assembly.rotationFrom('axle').ratios.gear, undefined)
+  assert.equal(assembly.connect(a, b, { offset: -30 }, { world: { shaft, socket } }).ok, true)
+  assert.equal(assembly.rotationFrom('axle').ratios.gear, 1)
+})
+
+test('axial travel uses gaps for fixed neighbors and intersects travel for co-moving sockets', () => {
+  const assembly = new Assembly(technic)
+  assembly.addPart('axle', '3737')
+  const shaft = { part: 'axle', port: 'shaft' }
+  for (const [part, offset, direction, side] of [
+    ['bearing', -80, 1, 'start'], ['left', -52, 1, 'end'], ['right', 122, -1, 'end'],
+  ]) {
+    assembly.addPart(part, '3700')
+    assert.equal(assembly.connect(shaft, { part, port: 'bore' }, { offset, direction, side }).ok, true)
+  }
+  const socket = { part: 'bearing', port: 'bore' }
+  assert.deepEqual(assembly.axialTravel(shaft, socket), [-2, 8])
+  assert.deepEqual(assembly.axialTravel(shaft, socket, { coMovingSockets: [
+    { part: 'left', port: 'bore' },
+  ] }), [-2, 69])
+  assert.deepEqual(assembly.axialTravel(shaft, socket, { coMovingSockets: [
+    { part: 'left', port: 'bore' }, { part: 'right', port: 'bore' },
+  ] }), [-95, 69])
+})
+
+test('seated connections restore without requiring a second insertion path', () => {
+  const assembly = new Assembly(technic)
+  assembly.addPart('a', '3737')
+  const shaft = { part: 'a', port: 'shaft' }
+  for (const [part, offset, ok] of [['outer', -50, true], ['inner', -80, true], ['overlap', -81, false]]) {
+    assembly.addPart(part, '3700')
+    const fit = assembly.connect(shaft, { part, port: 'bore' }, { offset, side: 'end' }, { seated: true })
+    assert.equal(fit.ok, ok)
+    if (!ok) assert.equal(fit.reason, 'shaft-occupied')
+  }
+  assert.equal(assembly.connections.length, 2)
 })
