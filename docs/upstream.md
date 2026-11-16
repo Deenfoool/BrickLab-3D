@@ -12,6 +12,6 @@
 
 ## 3D-сцена
 
-Геометрия `assets/ldraw/technic.mpd` взята из [официального архива LDraw](https://library.ldraw.org/updates). В MPD упакованы девять деталей палитры и их зависимости. Авторство и лицензия сохранены в заголовках встроенных файлов. Условия и атрибуция LDraw находятся в `assets/ldraw/CAreadme.txt`, `CAlicense.txt` и `CAlicense4.txt`.
+Геометрия `assets/ldraw/technic.mpd` взята из [официального архива LDraw](https://library.ldraw.org/updates). В MPD упакованы одиннадцать деталей палитры и их зависимости. Авторство и лицензия сохранены в заголовках встроенных файлов. Условия и атрибуция LDraw находятся в `assets/ldraw/CAreadme.txt`, `CAlicense.txt` и `CAlicense4.txt`.
 
 [Three.js](https://threejs.org/) r180, OrbitControls и LDrawLoader загружаются локально из `vendor/three`. Лицензия MIT включена в этот каталог.

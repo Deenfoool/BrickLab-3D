@@ -78,3 +78,7 @@ body:has(.editor:not([hidden])){overflow:hidden}
   .editor-inspector button{padding:5px;font-size:11px}
   .editor-status{gap:5px;flex-wrap:wrap;padding:5px 8px;font-size:10px}
 }
+.editor-axle-handles{position:absolute;inset:0;pointer-events:none}
+.editor .editor-axle-end{position:absolute;pointer-events:auto;touch-action:none;transform:translate(-50%,-50%);width:32px;height:32px;display:grid;place-items:center;padding:0;border:1px solid #ffbc3a;border-radius:50%;background:#3a2e19;color:#ffcf65;font-size:18px;cursor:grab}
+.editor .editor-axle-end:active{cursor:grabbing}
+.editor .editor-axle-end:hover{background:#60471b}

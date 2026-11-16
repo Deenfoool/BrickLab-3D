@@ -1,8 +1,8 @@
 import { portLength } from '../mechanics/axial.js'
-import { technic } from '../mechanics/catalog.js'
+import { technic } from '../mechanics/catalog.js?v=axle-length'
 import { candidateOffsets, joinedPose, worldPort } from './placement.js'
 
-export function nearbyConnections({ scene, assembly, parts, moving, event, depth, roll }) {
+export function nearbyConnections({ scene, assembly, parts, moving, event, depth, roll, acceptPose }) {
   const candidates = []
   const ownPorts = technic[moving.design].filter(port => port.role !== 'gear')
   for (const fixed of parts) {
@@ -32,20 +32,38 @@ export function nearbyConnections({ scene, assembly, parts, moving, event, depth
               const entersAtShaftEnd = (entry === 'start') === (direction > 0)
               if (!movingShaft && entersAtShaftEnd !== (side === 'end')) continue
               const signedDepth = movingShaft ? (entry === 'start' ? depth : -depth) : (side === 'start' ? -direction : direction) * depth
-              for (const offset of candidateOffsets(male, female, direction, entry, signedDepth)) {
+              const offsets = candidateOffsets(male, female, direction, entry, signedDepth)
+              if (acceptPose) {
+                const ownWorld = worldPort(moving, own)
+                const fixedAxis = movingShaft ? axis : axis.clone().multiplyScalar(direction)
+                const offset = ownWorld.start.clone().sub(start).dot(fixedAxis)
+                offsets.push(movingShaft ? offset : -offset)
+              }
+              for (const offset of offsets) {
                 const placement = { direction, side: entry, offset, roll }
                 const fit = assembly.previewInsertion(shaft, socket, placement)
                 if (!fit.ok) {
                   if (!failure || fit.reason.includes('occupied')) failure = fit.reason
                   continue
                 }
-                const pose = joinedPose(moving, own, fixed, fixedPort, fit.placement)
+                let pose = joinedPose(moving, own, fixed, fixedPort, fit.placement)
+                if (acceptPose && !acceptPose(pose)) {
+                  if (!fit.placement.keyStep) continue
+                  const matchingKey = [1, 2, 3].find(step => {
+                    const placement = { ...fit.placement, roll: roll + step * fit.placement.keyStep }
+                    pose = joinedPose(moving, own, fixed, fixedPort, placement)
+                    return acceptPose(pose)
+                  })
+                  if (!matchingKey) continue
+                  fit.placement.roll = roll + matchingKey * fit.placement.keyStep
+                }
                 const bounds = fit.occupancy.shaft
                 const endpoint = side === 'end' ? span : 0
                 const reach = movingShaft ? 0 : Math.abs((bounds[0] + bounds[1]) / 2 - endpoint)
-                const score = reach + (movingShaft && direction < 0 ? .01 : 0)
+                const score = acceptPose ? pose.position.reduce((sum, value, index) =>
+                  sum + (value - moving.position[index]) ** 2, 0) : reach + (movingShaft && direction < 0 ? .01 : 0)
                 if (!best || score < best.score) best = { key, point, distance, fit, pose, shaft, socket, score }
-                if (movingShaft) break
+                if (movingShaft && !acceptPose) break
               }
             }
           }

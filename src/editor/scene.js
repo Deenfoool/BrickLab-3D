@@ -1,9 +1,9 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
-import { partMesh, parts } from './parts.js?v=editor-retry'
+import { partMesh, parts } from './parts.js?v=axle-length'
 import { worldPort } from './placement.js'
-import { technic } from '../mechanics/catalog.js'
+import { technic } from '../mechanics/catalog.js?v=axle-length'
 
 export function createScene(host, models) {
   const world = new THREE.Scene()
@@ -28,9 +28,12 @@ export function createScene(host, models) {
   gizmo.setSize(.82)
   gizmo.enabled = false
   const pivot = new THREE.Object3D()
+  const pivotOffset = new THREE.Vector3()
+  const warnings = new Map()
   world.add(gizmo.getHelper(), pivot)
   gizmo.addEventListener('change', invalidate)
   gizmo.addEventListener('dragging-changed', ({ value }) => { controls.enabled = !value })
+  controls.zoomToCursor = true
   controls.maxPolarAngle = Math.PI * .98
   controls.minDistance = 42
   controls.maxDistance = 1800
@@ -59,6 +62,7 @@ export function createScene(host, models) {
   const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0))
   const ray = new THREE.Raycaster()
   let ghost
+  const groupGhosts = new Map()
   let frame = null
   let active = true
   let selectedId
@@ -77,11 +81,13 @@ export function createScene(host, models) {
   resize.observe(host)
   controls.addEventListener('change', invalidate)
 
+  let onViewChange
   function invalidate() {
     if (!active || frame !== null) return
     frame = requestAnimationFrame(() => {
       frame = null
       renderer.render(world, camera)
+      onViewChange?.()
     })
   }
 
@@ -98,9 +104,9 @@ export function createScene(host, models) {
   }
 
   function setParts(list) {
-    const keep = new Set(list.map(part => part.id))
+    const keep = new Map(list.map(part => [part.id, part.design]))
     for (const [id, object] of objects) {
-      if (keep.has(id)) continue
+      if (keep.get(id) === object.userData.design) continue
       solids.remove(object)
       object.userData.finish.dispose()
       objects.delete(id)
@@ -110,6 +116,7 @@ export function createScene(host, models) {
       if (!object) {
         object = partMesh(models.get(part.design), part.color ?? parts[part.design].color)
         object.userData.id = part.id
+        object.userData.design = part.design
         objects.set(part.id, object)
         solids.add(object)
       }
@@ -117,6 +124,7 @@ export function createScene(host, models) {
       object.quaternion.fromArray(part.rotation)
       object.userData.finish.color.set(part.color ?? parts[part.design].color)
       object.updateMatrixWorld(true)
+      warnings.get(part.id)?.setFromObject(object)
     }
     select(selectedId)
   }
@@ -155,34 +163,116 @@ export function createScene(host, models) {
     invalidate()
   }
 
+  function setGroupGhost(partsToPreview) {
+    const current = new Set(partsToPreview.map(part => part.id))
+    for (const [id, mesh] of groupGhosts) {
+      if (current.has(id)) continue
+      world.remove(mesh)
+      mesh.userData.finish.dispose()
+      groupGhosts.delete(id)
+    }
+    for (const part of partsToPreview) {
+      let mesh = groupGhosts.get(part.id)
+      if (!mesh) {
+        mesh = partMesh(models.get(part.design), part.color ?? parts[part.design].color, true)
+        groupGhosts.set(part.id, mesh)
+        world.add(mesh)
+      }
+      mesh.position.fromArray(part.position)
+      mesh.quaternion.fromArray(part.rotation)
+    }
+    invalidate()
+  }
+
   function setMoving(id, enabled) {
     const object = objects.get(id)
     if (object) object.visible = !enabled
     select(selectedId)
   }
 
-  function setTool(mode, part) {
+  function setTool(mode, part, ids = []) {
     if (gizmo.dragging) return
     if (!mode || !part) {
       gizmo.enabled = false
       gizmo.detach()
       return
     }
-    pivot.position.fromArray(part.position)
+    pivotOffset.copy(models.get(part.design).bounds.getCenter(new THREE.Vector3()))
     pivot.quaternion.fromArray(part.rotation)
+    if (ids.length > 1) {
+      const bounds = new THREE.Box3()
+      for (const id of ids) bounds.expandByObject(objects.get(id), true)
+      pivotOffset.copy(bounds.getCenter(new THREE.Vector3()).sub(new THREE.Vector3().fromArray(part.position))
+        .applyQuaternion(pivot.quaternion.clone().invert()))
+    }
+    pivot.position.fromArray(part.position).add(pivotOffset.clone().applyQuaternion(pivot.quaternion))
     gizmo.setMode(mode)
     gizmo.enabled = true
     gizmo.attach(pivot)
     invalidate()
   }
 
+  function previewParts(parts) {
+    for (const part of parts) {
+      const object = objects.get(part.id)
+      object.position.fromArray(part.position)
+      object.quaternion.fromArray(part.rotation)
+      object.updateMatrixWorld(true)
+      warnings.get(part.id)?.setFromObject(object)
+    }
+    invalidate()
+  }
+
   function gizmoPose(part) {
-    return { ...part, position: pivot.position.toArray(), rotation: pivot.quaternion.toArray() }
+    return { ...part, position: pivot.position.clone().sub(pivotOffset.clone().applyQuaternion(pivot.quaternion)).toArray(), rotation: pivot.quaternion.toArray() }
   }
 
   function cancelGizmo() {
     gizmo.axis = null
     gizmo.dragging = false
+  }
+
+  function project(point) {
+    const rect = canvas.getBoundingClientRect()
+    camera.updateMatrixWorld()
+    const clip = point.clone().project(camera)
+    return { clientX: rect.left + (clip.x + 1) * rect.width / 2,
+      clientY: rect.top + (1 - clip.y) * rect.height / 2, visible: clip.z >= -1 && clip.z <= 1 }
+  }
+
+  function focus(ids) {
+    const bounds = new THREE.Box3()
+    for (const id of ids) {
+      const object = objects.get(id)
+      if (object) bounds.expandByObject(object, true)
+    }
+    if (bounds.isEmpty()) return
+    const direction = camera.position.clone().sub(controls.target).normalize()
+    bounds.getCenter(controls.target)
+    const size = bounds.getSize(new THREE.Vector3()).length()
+    camera.position.copy(controls.target).addScaledVector(direction,
+      Math.min(controls.maxDistance, Math.max(48, size * 1.65 / Math.min(1, camera.aspect))))
+    controls.update()
+    invalidate()
+  }
+
+  function highlight(ids, color = 0xff6666) {
+    for (const [id, helper] of warnings) {
+      if (ids.includes(id) && helper.material.color.getHex() === color) continue
+      world.remove(helper)
+      helper.geometry.dispose()
+      helper.material.dispose()
+      warnings.delete(id)
+    }
+    for (const id of ids) {
+      const object = objects.get(id)
+      if (!object || warnings.has(id)) continue
+      const helper = new THREE.BoxHelper(object, color)
+      helper.material.depthTest = false
+      world.add(helper)
+      warnings.set(id, helper)
+    }
+    invalidate()
   }
 
   function pointer(event, pick = true) {
@@ -218,6 +308,7 @@ export function createScene(host, models) {
       object.quaternion.fromArray(part.rotation).multiply(new THREE.Quaternion().setFromAxisAngle(localAxis, angle * ratio))
       object.position.copy(pivot).sub(new THREE.Vector3().fromArray(port.start).applyQuaternion(object.quaternion))
       object.updateMatrixWorld(true)
+      warnings.get(part.id)?.setFromObject(object)
     }
     select(selectedId)
   }
@@ -227,8 +318,10 @@ export function createScene(host, models) {
     if (frame !== null) cancelAnimationFrame(frame)
     resize.disconnect()
     controls.dispose()
+    highlight([])
     gizmo.dispose()
     setGhost(null)
+    setGroupGhost([])
     for (const object of objects.values()) object.userData.finish.dispose()
     for (const object of [floor, axes, selection, marker]) {
       object.geometry.dispose()
@@ -240,5 +333,5 @@ export function createScene(host, models) {
   }
 
   resetView()
-  return { canvas, camera, gizmo, gizmoPose, cancelGizmo, setTool, pointer, pixelDistance, setParts, select, setGhost, setMoving, resetView, turn, dispose }
+  return { canvas, camera, gizmo, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, cancelGizmo, setTool, pointer, pixelDistance, setParts, select, setGhost, setGroupGhost, setMoving, resetView, turn, dispose }
 }

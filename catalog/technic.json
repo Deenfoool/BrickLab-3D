@@ -216,6 +216,62 @@
       ]
     }
   ],
+  "3706": [
+    {
+      "id": "shaft",
+      "role": "axle",
+      "gender": "M",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        -60.0,
+        0,
+        0
+      ],
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "A",
+          "radius": 6,
+          "length": 120
+        }
+      ]
+    }
+  ],
+  "3707": [
+    {
+      "id": "shaft",
+      "role": "axle",
+      "gender": "M",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        -80.0,
+        0,
+        0
+      ],
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "A",
+          "radius": 6,
+          "length": 160
+        }
+      ]
+    }
+  ],
   "3713": [
     {
       "id": "bore",

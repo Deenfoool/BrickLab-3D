@@ -1,6 +1,6 @@
 import { Quaternion, Vector3 } from 'three'
 import { Assembly } from '../mechanics/assembly.js'
-import { gearAt, technic } from '../mechanics/catalog.js'
+import { gearAt, technic } from '../mechanics/catalog.js?v=axle-length'
 import { baseRotation, joinedPose, worldPort } from './placement.js'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)

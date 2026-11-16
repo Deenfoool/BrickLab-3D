@@ -1,4 +1,4 @@
-import technic from '../../catalog/technic.json' with { type: 'json' }
+import technic from '../../catalog/technic.json?v=axle-length' with { type: 'json' }
 
 export { technic }
 
