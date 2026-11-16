@@ -7,11 +7,13 @@ import { nearestDetent, portLength } from '../mechanics/axial.js?v=mechanics-aud
 import { nearbyConnections } from './snap.js?v=mechanics-audit'
 import { loadPalette, partOrder, parts } from './parts.js?v=mechanics-audit'
 import { createScene } from './scene.js?v=mechanics-audit'
-import { editorLabels } from './labels.js?v=mechanics-audit'
+import { editorLabels } from './labels.js?v=rotation-step'
 
 const isDriver = part => part && technic[part.design].some(port => port.role === 'axle' || port.role === 'gear')
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
+const rotationStep = Math.PI / 4
+const freeKeyboardStep = Math.PI / 36
 const heldTurns = { ArrowUp: [X, -1], ArrowDown: [X, 1], ArrowLeft: [Y, -1], ArrowRight: [Y, 1] }
 const steps = { ArrowUp: [0, 0, -1], ArrowDown: [0, 0, 1], ArrowLeft: [-1, 0, 0], ArrowRight: [1, 0, 0] }
 const connectionRecord = ({ shaft, socket, fit }) => ({ shaft, socket, placement: fit.placement })
@@ -50,6 +52,7 @@ export async function mountEditor(root, { document: source, language, save, down
           <button type="button" data-el="selectTool" title="${t.select} (V)" aria-label="${t.select}"><svg class="icon" viewBox="0 0 24 24"><path d="m5 3 13 10-6 1-3 6z"/></svg></button>
           <button type="button" data-el="moveTool" title="${t.move} (G / П)" aria-label="${t.move}"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3m-6 12 3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/></svg></button>
           <button type="button" data-el="rotateTool" title="${t.rotate} (R / К)" aria-label="${t.rotate}"><svg class="icon" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 1-3-6m-2 3h5V3"/></svg></button>
+          <button type="button" data-el="rotationSnap" aria-label="${t.rotationSnap}" aria-pressed="true">45°</button>
           <button type="button" data-el="lengthTool" title="${t.length} (S / Ы)" aria-label="${t.length}"><svg class="icon" viewBox="0 0 24 24"><path d="M3 12h18M7 8l-4 4 4 4m10-8 4 4-4 4M12 7v10"/></svg></button>
           <button type="button" data-el="snap" aria-pressed="true">${t.snap}</button>
           <button type="button" data-el="frame">${t.reset}</button>
@@ -119,6 +122,7 @@ export async function mountEditor(root, { document: source, language, save, down
   let gizmoSnap
   let gizmoRaw
   let snapEnabled = true
+  let steppedRotation = true
   let grab
   let rightDown
   let gizmoPart
@@ -296,6 +300,11 @@ export async function mountEditor(root, { document: source, language, save, down
       control.disabled = !building || (name === 'length' && !canResize(part))
       control.setAttribute('aria-pressed', String(tool === name))
     }
+    const rotationSnap = el('rotationSnap')
+    rotationSnap.disabled = !building || Boolean(gizmoPart || resize)
+    rotationSnap.setAttribute('aria-pressed', String(steppedRotation))
+    rotationSnap.textContent = steppedRotation ? '45°' : t.freeRotation
+    rotationSnap.title = steppedRotation ? t.enableFreeRotation : t.enableRotationSnap
     scene.setTool(building && !moving && !resize && (tool === 'move' || tool === 'rotate')
       ? tool === 'move' ? 'translate' : 'rotate' : null, part, selectionIds())
     positionHandles()
@@ -420,10 +429,10 @@ export async function mountEditor(root, { document: source, language, save, down
     commit({ parts: placed, links: nextLinks })
   }
 
-  function turnPart([axis, direction], smallStep) {
+  function turnPart([axis, direction]) {
     const part = moving
     if (!part) return
-    const angle = direction * (smallStep ? Math.PI / 4 : Math.PI / 2)
+    const angle = direction * (steppedRotation ? rotationStep : freeKeyboardStep)
     const rotation = new Quaternion().setFromAxisAngle(axis, angle)
       .multiply(new Quaternion().fromArray(part.rotation)).toArray()
     const next = { ...part, rotation }
@@ -701,6 +710,12 @@ export async function mountEditor(root, { document: source, language, save, down
       if (gizmoPart) updateGizmo()
     }
   })
+  scene.gizmo.setRotationSnap(rotationStep)
+  on(el('rotationSnap'), 'click', () => {
+    steppedRotation = !steppedRotation
+    scene.gizmo.setRotationSnap(steppedRotation ? rotationStep : null)
+    render()
+  })
   on(el('snap'), 'click', () => {
     snapEnabled = !snapEnabled
     if (moving && pointer) updatePointer(pointer)
@@ -894,7 +909,7 @@ export async function mountEditor(root, { document: source, language, save, down
     const turn = moving && heldTurns[event.code]
     if (turn) {
       event.preventDefault()
-      if (!event.repeat) turnPart(turn, event.shiftKey)
+      if (!event.repeat || !steppedRotation) turnPart(turn)
       return
     }
     if (moving) {
