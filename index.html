@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#181a1d">
+  <title>BrickLab 3D</title>
+  <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./src/menu/menu.css">
+  <script type="module" src="./src/menu/menu.js"></script>
+</head>
+<body>
+  <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7M5 9v12h5v-7h4v7h5V9"/></symbol>
+    <symbol id="folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l3 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+    <symbol id="layers" viewBox="0 0 24 24"><path d="m12 3 10 5-10 5L2 8ZM2 12l10 5 10-5M2 16l10 5 10-5"/></symbol>
+    <symbol id="settings" viewBox="0 0 24 24"><path d="M12 2h2l.6 2.6 1.8 1 2.6-.8 2 3.4-2 1.8v2l2 1.8-2 3.4-2.6-.8-1.8 1L14 21h-4l-.6-2.6-1.8-1-2.6.8-2-3.4 2-1.8v-2l-2-1.8 2-3.4 2.6.8 1.8-1L10 2Z"/><circle cx="12" cy="11.5" r="3"/></symbol>
+    <symbol id="search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="file" viewBox="0 0 24 24"><path d="M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm7 0v6h6"/></symbol>
+    <symbol id="plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+    <symbol id="right" viewBox="0 0 24 24"><path d="M3 12h17m-7-7 7 7-7 7"/></symbol>
+    <symbol id="diagonal" viewBox="0 0 24 24"><path d="M4 20 20 4M8 4h12v12"/></symbol>
+    <symbol id="more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  </svg>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="#home"><img src="./assets/bricklab.svg" alt="" width="48" height="48"><span>BrickLab 3D</span></a>
+      <nav class="navigation" aria-label="Разделы">
+        <a href="#home" data-page="home"><svg class="icon"><use href="#icon-home"/></svg><span data-text="home">Главная</span></a>
+        <a href="#projects" data-page="projects"><svg class="icon"><use href="#folder"/></svg><span data-text="projects">Мои сборки</span></a>
+        <a href="#examples" data-page="examples"><svg class="icon"><use href="#layers"/></svg><span data-text="examples">Примеры</span></a>
+      </nav>
+      <div class="sidebar-bottom">
+        <button type="button" id="settings-button" aria-label="Настройки"><svg class="icon"><use href="#settings"/></svg><span data-text="settings">Настройки</span></button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <label class="language">
+          <select id="language" aria-label="Язык / Language"><option value="ru">RU</option><option value="en">EN</option></select>
+          <svg class="icon"><use href="#down"/></svg>
+        </label>
+      </header>
+      <div class="content">
+        <h1 id="page-title">Рабочая область</h1>
+        <div class="dashboard" id="dashboard">
+          <section class="project-list" aria-labelledby="list-title">
+            <div class="section-head">
+              <h2 id="list-title">Недавние сборки</h2>
+              <label class="search"><svg class="icon"><use href="#search"/></svg><input id="query" type="search" placeholder="Найти сборку" aria-label="Найти сборку"></label>
+            </div>
+            <div class="table-frame">
+              <table>
+                <thead><tr><th scope="col" data-text="name">Название</th><th scope="col" data-text="modified">Изменено</th><th scope="col"><span class="sr-only" data-text="actions">Действия</span></th></tr></thead>
+                <tbody id="project-rows"></tbody>
+              </table>
+              <div class="empty" id="empty-state" hidden></div>
+            </div>
+            <a class="all-projects" id="all-projects" href="#projects"><span data-text="all">Все сборки</span><svg class="icon"><use href="#right"/></svg></a>
+          </section>
+          <section class="commands">
+            <button class="create" id="create" type="button">
+              <svg class="blueprint" viewBox="0 0 300 250" fill="none" aria-hidden="true">
+                <defs><pattern id="draft-grid" width="23" height="23" patternUnits="userSpaceOnUse"><path d="M23 0H0v23" stroke="currentColor" stroke-opacity=".23"/></pattern></defs>
+                <path d="M28 30h250v180H28z" fill="url(#draft-grid)"/>
+                <path d="M90 75h108v110H90zM173 147h60v60h-60z" stroke="currentColor" stroke-width="2"/>
+                <path d="M90 17v57m108-57v57M5 91h85M5 182h85m108-35h96m-61 60h61m-61 0v29m-60-29v29" stroke="currentColor" stroke-dasharray="5 5"/>
+                <path d="M90 25h108m-108-8v16m108-16v16M15 91v91m-7-91h14m-14 91h14M271 10h18v18m0 192v18h-18" stroke="currentColor" stroke-width="1.6"/>
+              </svg>
+              <span class="create-icon"><svg class="icon"><use href="#plus"/></svg></span>
+              <span class="create-title" data-text="create">Новая сборка</span>
+              <svg class="icon create-arrow"><use href="#diagonal"/></svg>
+            </button>
+            <button class="open" id="open" type="button"><svg class="icon"><use href="#folder"/></svg><span data-text="open">Открыть файл</span><svg class="icon"><use href="#right"/></svg></button>
+            <input type="file" id="import-file" accept=".bricklab,.json" hidden>
+          </section>
+        </div>
+        <section id="example-panel" hidden>
+          <div class="example-card">
+            <span class="file-icon"><svg class="icon"><use href="#layers"/></svg></span>
+            <div><h2 data-text="exampleTitle">Редуктор 8T / 24T</h2><p data-text="exampleDescription">Передача вращения между двумя осями.</p></div>
+            <button type="button" class="secondary" id="example-open" data-text="exampleOpen">Создать копию</button>
+          </div>
+        </section>
+        <section id="project-panel" class="project-panel" hidden>
+          <form id="project-form">
+            <label for="project-name" data-text="name">Название</label>
+            <input id="project-name" autocomplete="off" maxlength="120" required>
+            <button type="submit" class="secondary" data-text="save">Сохранить</button>
+          </form>
+          <p id="project-summary"></p>
+          <button type="button" class="secondary" id="export" data-text="export">Скачать файл</button>
+        </section>
+        <p id="status" class="status" role="status" hidden></p>
+      </div>
+    </main>
+  </div>
+  <dialog id="settings-dialog">
+    <form method="dialog">
+      <h2 data-text="settings">Настройки</h2>
+      <label class="setting"><span data-text="language">Язык интерфейса</span><select id="settings-language"><option value="ru">Русский</option><option value="en">English</option></select></label>
+      <button class="secondary" value="close" data-text="done">Готово</button>
+    </form>
+  </dialog>
+  <dialog id="remove-dialog">
+    <form method="dialog">
+      <h2 data-text="removeTitle">Удалить сборку?</h2>
+      <p id="remove-name"></p>
+      <div class="dialog-actions">
+        <button class="secondary" value="cancel" data-text="cancel" autofocus>Отмена</button>
+        <button class="secondary danger" value="remove" data-text="remove">Удалить</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
