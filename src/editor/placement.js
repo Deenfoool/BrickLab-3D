@@ -55,3 +55,18 @@ export function candidateOffsets(shaft, socket, direction, side, depth) {
   for (const f of femaleEnds) for (const m of maleEnds) points.push(f - m)
   return [...new Set(points)].map(offset => offset + depth)
 }
+
+// Find the actual offset and roll of a connection after a manual transform.
+export function retainedPlacement(shaft, male, socket, female, previous) {
+  const a = worldPort(shaft, male)
+  const b = worldPort(socket, female)
+  const alignment = a.axis.dot(b.axis)
+  if (Math.abs(alignment) < .99999) return null
+  const delta = a.start.clone().sub(b.start)
+  const offset = delta.dot(b.axis)
+  if (delta.addScaledVector(b.axis, -offset).lengthSq() > 1e-4) return null
+  const aRef = reference(vector(male.axis)).applyQuaternion(rotation(shaft.rotation))
+  const bRef = reference(vector(female.axis)).applyQuaternion(rotation(socket.rotation))
+  const roll = Math.atan2(b.axis.dot(bRef.clone().cross(aRef)), bRef.dot(aRef))
+  return { ...previous, offset, direction: Math.sign(alignment), roll }
+}

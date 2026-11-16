@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { partMesh, parts } from './parts.js?v=editor-retry'
 import { worldPort } from './placement.js'
 import { technic } from '../mechanics/catalog.js'
@@ -19,9 +20,17 @@ export function createScene(host, models) {
   renderer.setClearColor('#16191f')
   renderer.outputColorSpace = THREE.SRGBColorSpace
   const canvas = renderer.domElement
+  canvas.tabIndex = 0
   host.prepend(canvas)
   const controls = new OrbitControls(camera, canvas)
-  controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE }
+  controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: null }
+  const gizmo = new TransformControls(camera, canvas)
+  gizmo.setSize(.82)
+  gizmo.enabled = false
+  const pivot = new THREE.Object3D()
+  world.add(gizmo.getHelper(), pivot)
+  gizmo.addEventListener('change', invalidate)
+  gizmo.addEventListener('dragging-changed', ({ value }) => { controls.enabled = !value })
   controls.maxPolarAngle = Math.PI * .98
   controls.minDistance = 42
   controls.maxDistance = 1800
@@ -152,6 +161,40 @@ export function createScene(host, models) {
     select(selectedId)
   }
 
+  function setTool(mode, part) {
+    if (gizmo.dragging) return
+    if (!mode || !part) {
+      gizmo.enabled = false
+      gizmo.detach()
+      return
+    }
+    pivot.position.fromArray(part.position)
+    pivot.quaternion.fromArray(part.rotation)
+    gizmo.setMode(mode)
+    gizmo.enabled = true
+    gizmo.attach(pivot)
+    invalidate()
+  }
+
+  function gizmoPose(part) {
+    return { ...part, position: pivot.position.toArray(), rotation: pivot.quaternion.toArray() }
+  }
+
+  function cancelGizmo() {
+    gizmo.axis = null
+    gizmo.dragging = false
+  }
+
+  function screenPoint(position) {
+    const rect = canvas.getBoundingClientRect()
+    camera.updateMatrixWorld()
+    const projected = new THREE.Vector3().fromArray(position).project(camera)
+    return {
+      clientX: rect.left + (projected.x + 1) * rect.width / 2,
+      clientY: rect.top + (1 - projected.y) * rect.height / 2,
+    }
+  }
+
   function pointer(event, pick = true) {
     const rect = canvas.getBoundingClientRect()
     camera.updateMatrixWorld()
@@ -194,6 +237,7 @@ export function createScene(host, models) {
     if (frame !== null) cancelAnimationFrame(frame)
     resize.disconnect()
     controls.dispose()
+    gizmo.dispose()
     setGhost(null)
     for (const object of objects.values()) object.userData.finish.dispose()
     for (const object of [floor, axes, selection, marker]) {
@@ -206,5 +250,5 @@ export function createScene(host, models) {
   }
 
   resetView()
-  return { canvas, camera, pointer, pixelDistance, setParts, select, setGhost, setMoving, resetView, turn, dispose }
+  return { canvas, camera, gizmo, gizmoPose, cancelGizmo, setTool, screenPoint, pointer, pixelDistance, setParts, select, setGhost, setMoving, resetView, turn, dispose }
 }

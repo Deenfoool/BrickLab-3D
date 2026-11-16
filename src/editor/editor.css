@@ -32,8 +32,11 @@
 .editor-viewport{position:relative;min-width:0;min-height:0;overflow:hidden;background:#16191f}
 .editor-viewport canvas{display:block;width:100%;height:100%;touch-action:none}
 .editor-viewport-tools,.editor-empty,.editor-coordinates{position:absolute}
-.editor-viewport-tools{left:14px;top:14px}
-.editor-viewport-tools button{font-size:12px}
+.editor-viewport-tools{left:14px;top:14px;display:flex;align-items:center;gap:4px}
+.editor-viewport-tools button{display:grid;place-items:center;min-width:32px;min-height:33px;padding:5px 7px;font-size:12px}
+.editor-viewport-tools .icon{width:17px;height:17px}
+.editor-viewport-tools button[aria-pressed="true"]{background:#3b301c;color:#ffd376;border-color:#826631}
+.editor-viewport canvas:focus-visible{outline-offset:-3px}
 .editor-empty{left:50%;top:42%;transform:translateX(-50%);text-align:center;pointer-events:none;color:#c2c7d1;font-size:14px;background:#181a20df;border:1px solid #3f4652;border-radius:8px;padding:8px 12px}
 .editor-coordinates{right:14px;bottom:14px;display:flex;gap:8px;font-size:11px;font-weight:700;pointer-events:none}
 .editor-coordinates span:nth-child(1){color:#f07770}
@@ -71,6 +74,7 @@ body:has(.editor:not([hidden])){overflow:hidden}
   .editor-parts{display:flex;overflow-x:auto;margin-top:2px}
   .editor .editor-parts button{white-space:nowrap}
   .editor-inspector{padding:8px}
+  .editor-viewport-tools{top:7px;left:7px}
   .editor-inspector button{padding:5px;font-size:11px}
   .editor-status{gap:5px;flex-wrap:wrap;padding:5px 8px;font-size:10px}
 }
