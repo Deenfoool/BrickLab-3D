@@ -12,12 +12,21 @@
 .editor button.editor-primary{background:#ffb01b;color:#171410;border-color:#ffb01b;font-weight:650}
 .editor button.editor-primary:hover{background:#ffbf40}
 .editor .editor-square{font-size:20px;padding:0;width:35px;line-height:1}
-.editor-workspace{display:grid;grid-template-columns:218px minmax(0,1fr) 218px;min-height:0}
-.editor-catalog,.editor-inspector{padding:15px;background:#1b1d22;overflow:auto;min-height:0}
-.editor-catalog{border-right:1px solid #343840}
-.editor-inspector{border-left:1px solid #343840}
-.editor-catalog h2,#editor summary{font-size:16px;font-weight:680;letter-spacing:0;margin-bottom:14px}
-.editor summary{cursor:pointer}
+.editor-workspace{position:relative;min-height:0;isolation:isolate}
+.editor-overlay{position:absolute;inset:14px;display:grid;gap:10px;grid-template-rows:auto minmax(0,1fr);pointer-events:none}
+.editor-panel-layer{position:relative;min-width:0;min-height:0}
+.editor-panel{position:absolute;top:0;display:flex;flex-direction:column;width:min(218px,100%);max-height:100%;background:#1b1d22;border:1px solid #41454e;border-radius:10px;box-shadow:0 8px 24px #0006;pointer-events:auto;overflow:hidden}
+.editor-catalog{left:0;max-height:min(100%,440px)}
+.editor-inspector{right:0}
+.editor-panel[data-front]{z-index:1}
+.editor-panel[data-dragging]{border-color:#ad8642}
+.editor-panel-header{display:flex;align-items:stretch;background:#202329}
+.editor-panel-header h2{display:flex;flex:1;align-items:center;gap:9px;min-width:0;margin:0;padding:9px 10px;font-size:13px;font-weight:680;cursor:grab;touch-action:none;user-select:none}
+.editor-panel-header h2::before{content:"";width:9px;height:13px;flex:none;background:radial-gradient(circle,#949aa5 1px,transparent 1.3px) 0 0/4px 4px}
+.editor-panel-header h2:focus-visible{outline-offset:-3px}
+.editor-panel[data-dragging] h2{cursor:grabbing}
+.editor .editor-panel-header button{flex:none;align-self:center;width:29px;height:27px;margin:4px 5px 4px 0;padding:0;border-color:transparent;background:transparent;font-size:17px;line-height:1}
+.editor-panel-body{padding:10px;border-top:1px solid #343840;overflow:auto;overscroll-behavior:contain}
 .editor-catalog input{width:100%;background:#13161a;border:1px solid #424650;border-radius:7px;padding:8px 9px;font-size:12px}
 .editor-parts{display:grid;gap:5px;margin-top:12px}
 .editor .editor-parts button{border-color:transparent;background:none;display:flex;align-items:center;text-align:left;gap:9px;min-height:46px;padding:6px;font-size:13px}
@@ -29,10 +38,10 @@
 .editor-glyph-pin{width:22px;margin-inline:2.5px}
 .editor-glyph-bush,.editor-glyph-gear{width:18px;height:18px;margin-inline:4.5px;border:4px solid currentColor;border-radius:50%}
 .editor-glyph-gear{outline:1px dashed currentColor;outline-offset:2px}
-.editor-viewport{position:relative;min-width:0;min-height:0;overflow:hidden;background:#16191f}
+.editor-viewport{position:absolute;inset:0;min-width:0;min-height:0;overflow:hidden;background:#16191f}
 .editor-viewport canvas{display:block;width:100%;height:100%;touch-action:none}
-.editor-viewport-tools,.editor-empty,.editor-coordinates{position:absolute}
-.editor-viewport-tools{left:14px;right:14px;top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:4px;pointer-events:none}
+.editor-empty,.editor-coordinates{position:absolute}
+.editor-viewport-tools{display:flex;flex-wrap:wrap;align-items:center;gap:4px;pointer-events:none}
 .editor-viewport-tools button{display:grid;place-items:center;min-width:32px;min-height:33px;padding:5px 7px;font-size:12px;pointer-events:auto}
 .editor-viewport-tools [data-el="rotationSnap"]{min-width:56px}
 .editor-viewport-tools .icon{width:17px;height:17px}
@@ -59,8 +68,7 @@
 .editor-loading a{color:var(--gold)}
 body:has(.editor:not([hidden])){overflow:hidden}
 @media(max-width:1050px){
-  .editor-workspace{grid-template-columns:170px minmax(0,1fr) 166px}
-  .editor-catalog,.editor-inspector{padding:10px}
+  .editor-panel{width:min(192px,100%)}
   .editor-back span{display:none}
 }
 @media(max-width:720px){
@@ -70,14 +78,13 @@ body:has(.editor:not([hidden])){overflow:hidden}
   .editor-actions .editor-square{width:25px;font-size:17px}
   .editor-modes{order:4;justify-content:center;width:100%;margin:0}
   .editor-modes button{font-size:12px}
-  .editor-workspace{grid-template-columns:minmax(0,1fr) 115px;grid-template-rows:minmax(0,1fr) 92px}
-  .editor-catalog{grid-row:2;grid-column:1/-1;border:0;border-top:1px solid #343840;padding:6px}
-  .editor-catalog h2{display:none}
-  .editor-catalog input{height:26px;padding:2px 6px}
-  .editor-parts{display:flex;overflow-x:auto;margin-top:2px}
-  .editor .editor-parts button{white-space:nowrap}
-  .editor-inspector{padding:8px}
-  .editor-viewport-tools{top:7px;left:7px;right:7px}
+  .editor-overlay{inset:7px;gap:6px}
+  .editor-panel{width:min(177px,calc((100% - 6px)/2));max-height:min(100%,45dvh)}
+  .editor-panel-header h2{gap:4px;padding:7px 4px;font-size:12px}
+  .editor-panel-body{padding:7px}
+  .editor-catalog input{height:30px;padding:3px 6px}
+  .editor-parts{margin-top:6px}
+  .editor .editor-parts button{min-height:36px;font-size:11px}
   .editor-inspector button{padding:5px;font-size:11px}
   .editor-status{gap:5px;flex-wrap:wrap;padding:5px 8px;font-size:10px}
 }

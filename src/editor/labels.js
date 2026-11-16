@@ -2,6 +2,8 @@ export const editorLabels = {
   ru: {
     home: 'К сборкам', parts: 'Детали', search: 'Поиск по названию или ID', build: 'Сборка', kinematics: 'Кинематика',
     save: 'Сохранить', download: 'Скачать', undo: 'Отменить', redo: 'Повторить', reset: 'По центру', info: 'Инспектор',
+    library: 'Библиотека', collapse: 'Свернуть панель', expand: 'Развернуть панель',
+    movePanel: 'Перетащите панель или переместите её стрелками',
     name: 'Название сборки', empty: 'Выберите деталь из каталога', place: 'ЛКМ / пробел — поставить · Стрелки — повернуть · Esc — отменить',
     camera: 'ЛКМ — взять деталь · ПКМ — обзор · Shift+ПКМ — панорама · Колесо — масштаб', selected: 'Выбранная деталь', none: 'Выберите деталь на сцене',
     select: 'Выбрать', move: 'Переместить', rotate: 'Повернуть', snap: 'Привязка',
@@ -30,6 +32,8 @@ export const editorLabels = {
   en: {
     home: 'Back to builds', parts: 'Parts', search: 'Search by name or ID', build: 'Build', kinematics: 'Kinematics',
     save: 'Save', download: 'Download', undo: 'Undo', redo: 'Redo', reset: 'Frame all', info: 'Inspector',
+    library: 'Library', collapse: 'Collapse panel', expand: 'Expand panel',
+    movePanel: 'Drag the panel or move it with the arrow keys',
     name: 'Build name', empty: 'Choose a part from the catalog', place: 'LMB / Space place · Arrows rotate · Esc cancel',
     camera: 'LMB drag part · RMB orbit · Shift+RMB pan · Scroll zoom', selected: 'Selected part', none: 'Select a part in the scene',
     select: 'Select', move: 'Move', rotate: 'Rotate', snap: 'Snap',

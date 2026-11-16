@@ -1,3 +1,4 @@
+import { mountFloatingPanels } from './floating-panels.js?v=floating-panels'
 import { Plane, Quaternion, Vector3 } from 'three'
 import { technic } from '../mechanics/catalog.js?v=connector-coverage'
 import { baseRotation, samePose, worldPort } from './placement.js?v=connector-coverage'
@@ -7,7 +8,7 @@ import { nearestDetent, portLength } from '../mechanics/axial.js?v=connector-cov
 import { nearbyConnections } from './snap.js?v=connector-coverage'
 import { loadPalette, partOrder, parts } from './parts.js?v=connector-coverage'
 import { createScene } from './scene.js?v=connector-coverage'
-import { editorLabels } from './labels.js?v=connector-coverage'
+import { editorLabels } from './labels.js?v=floating-panels'
 
 const driveRoles = new Set(['axle', 'axle-pin', 'friction-axle-pin', 'gear'])
 const isDriver = part => part && technic[part.design].some(port => driveRoles.has(port.role))
@@ -43,12 +44,14 @@ export async function mountEditor(root, { document: source, language, save, down
       </div>
     </header>
     <div class="editor-workspace">
-      <aside class="editor-catalog">
-        <h2>${t.parts}</h2>
-        <input data-el="search" type="search" aria-label="${t.search}" placeholder="${t.search}">
-        <div class="editor-parts" data-el="parts"></div>
-      </aside>
       <section class="editor-viewport" data-el="viewport">
+        <div class="editor-axle-handles" data-el="axleHandles" hidden>
+          ${[0, 1].map(end => `<button type="button" class="editor-axle-end" data-end="${end}" aria-label="${t.axleEnd(end + 1)}" title="${t.axleEnd(end + 1)}">↔</button>`).join('')}
+        </div>
+        <div data-el="empty" class="editor-empty">${t.empty}</div>
+        <div class="editor-coordinates" aria-hidden="true"><span>X</span><span>Y</span><span>Z</span></div>
+      </section>
+      <div class="editor-overlay">
         <div class="editor-viewport-tools">
           <button type="button" data-el="selectTool" title="${t.select} (V)" aria-label="${t.select}"><svg class="icon" viewBox="0 0 24 24"><path d="m5 3 13 10-6 1-3 6z"/></svg></button>
           <button type="button" data-el="moveTool" title="${t.move} (G / П)" aria-label="${t.move}"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3m-6 12 3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/></svg></button>
@@ -58,39 +61,50 @@ export async function mountEditor(root, { document: source, language, save, down
           <button type="button" data-el="snap" aria-pressed="true">${t.snap}</button>
           <button type="button" data-el="frame">${t.reset}</button>
         </div>
-        <div class="editor-axle-handles" data-el="axleHandles" hidden>
-          ${[0, 1].map(end => `<button type="button" class="editor-axle-end" data-end="${end}" aria-label="${t.axleEnd(end + 1)}" title="${t.axleEnd(end + 1)}">↔</button>`).join('')}
-        </div>
-        <div data-el="empty" class="editor-empty">${t.empty}</div>
-        <div class="editor-coordinates" aria-hidden="true"><span>X</span><span>Y</span><span>Z</span></div>
-      </section>
-      <aside class="editor-inspector">
-        <details open><summary>${t.info}</summary>
-          <p data-el="selection"></p>
-          <div class="editor-part-actions" data-el="partActions" hidden>
-            <label>${t.color}<input type="color" data-el="color"></label>
-            <button type="button" data-el="copy">${t.copy}</button>
-            <button type="button" data-el="duplicate">${t.duplicate}</button>
-            <button type="button" data-el="remove" class="editor-danger">${t.delete}</button>
-          </div>
-          <button type="button" data-el="paste" hidden>${t.paste}</button>
-          <div data-el="insertion" class="editor-insertion" hidden>
-            <span>${t.depth}</span><div>
-              <button type="button" data-el="shallower" aria-label="${t.out}">−</button>
-              <output data-el="depth">0</output>
-              <button type="button" data-el="deeper" aria-label="${t.in}">+</button>
+        <div class="editor-panel-layer" data-el="panelLayer">
+          <aside class="editor-panel editor-catalog" data-panel="library" aria-labelledby="editor-library-heading">
+            <header class="editor-panel-header">
+              <h2 id="editor-library-heading" data-panel-grip tabindex="0" title="${t.movePanel}">${t.library}</h2>
+              <button type="button" data-panel-toggle aria-controls="editor-library-body"></button>
+            </header>
+            <div class="editor-panel-body" id="editor-library-body">
+              <input data-el="search" type="search" aria-label="${t.search}" placeholder="${t.search}">
+              <div class="editor-parts" data-el="parts"></div>
             </div>
-            <small>${t.side}</small>
-          </div>
-          <div data-el="motion" class="editor-motion" hidden>
-            <label>${t.drive}<input data-el="angle" type="range" min="-1080" max="1080" step="1" value="0"></label>
-            <output data-el="degrees">0°</output>
-            <button type="button" data-el="play">${t.play}</button>
-            <button type="button" data-el="applyHinge" hidden>${t.applyHinge}</button>
-          </div>
-          <p class="editor-links" data-el="links"></p>
-        </details>
-      </aside>
+          </aside>
+          <aside class="editor-panel editor-inspector" data-panel="inspector" aria-labelledby="editor-inspector-heading">
+            <header class="editor-panel-header">
+              <h2 id="editor-inspector-heading" data-panel-grip tabindex="0" title="${t.movePanel}">${t.info}</h2>
+              <button type="button" data-panel-toggle aria-controls="editor-inspector-body"></button>
+            </header>
+            <div class="editor-panel-body" id="editor-inspector-body">
+              <p data-el="selection"></p>
+              <div class="editor-part-actions" data-el="partActions" hidden>
+                <label>${t.color}<input type="color" data-el="color"></label>
+                <button type="button" data-el="copy">${t.copy}</button>
+                <button type="button" data-el="duplicate">${t.duplicate}</button>
+                <button type="button" data-el="remove" class="editor-danger">${t.delete}</button>
+              </div>
+              <button type="button" data-el="paste" hidden>${t.paste}</button>
+              <div data-el="insertion" class="editor-insertion" hidden>
+                <span>${t.depth}</span><div>
+                  <button type="button" data-el="shallower" aria-label="${t.out}">−</button>
+                  <output data-el="depth">0</output>
+                  <button type="button" data-el="deeper" aria-label="${t.in}">+</button>
+                </div>
+                <small>${t.side}</small>
+              </div>
+              <div data-el="motion" class="editor-motion" hidden>
+                <label>${t.drive}<input data-el="angle" type="range" min="-1080" max="1080" step="1" value="0"></label>
+                <output data-el="degrees">0°</output>
+                <button type="button" data-el="play">${t.play}</button>
+                <button type="button" data-el="applyHinge" hidden>${t.applyHinge}</button>
+              </div>
+              <p class="editor-links" data-el="links"></p>
+            </div>
+          </aside>
+        </div>
+      </div>
     </div>
     <footer class="editor-status"><span data-el="hint" role="status"></span><span data-el="loadNotice" role="status"></span><span data-el="count"></span></footer>`
   const el = name => root.querySelector(`[data-el="${name}"]`)
@@ -102,6 +116,7 @@ export async function mountEditor(root, { document: source, language, save, down
     root.replaceChildren()
     throw error
   }
+  mountFloatingPanels(el('panelLayer'), t, signal)
   const visibleParts = loadParts(source, models)
   const shown = new Set(visibleParts.map(part => part.id))
   const hiddenParts = source.parts.filter(part => !models.has(String(part?.design ?? '')))
