@@ -23,7 +23,7 @@ export function createScene(host, models) {
   canvas.tabIndex = 0
   host.prepend(canvas)
   const controls = new OrbitControls(camera, canvas)
-  controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: null }
+  controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE }
   const gizmo = new TransformControls(camera, canvas)
   gizmo.setSize(.82)
   gizmo.enabled = false
@@ -185,16 +185,6 @@ export function createScene(host, models) {
     gizmo.dragging = false
   }
 
-  function screenPoint(position) {
-    const rect = canvas.getBoundingClientRect()
-    camera.updateMatrixWorld()
-    const projected = new THREE.Vector3().fromArray(position).project(camera)
-    return {
-      clientX: rect.left + (projected.x + 1) * rect.width / 2,
-      clientY: rect.top + (1 - projected.y) * rect.height / 2,
-    }
-  }
-
   function pointer(event, pick = true) {
     const rect = canvas.getBoundingClientRect()
     camera.updateMatrixWorld()
@@ -250,5 +240,5 @@ export function createScene(host, models) {
   }
 
   resetView()
-  return { canvas, camera, gizmo, gizmoPose, cancelGizmo, setTool, screenPoint, pointer, pixelDistance, setParts, select, setGhost, setMoving, resetView, turn, dispose }
+  return { canvas, camera, gizmo, gizmoPose, cancelGizmo, setTool, pointer, pixelDistance, setParts, select, setGhost, setMoving, resetView, turn, dispose }
 }

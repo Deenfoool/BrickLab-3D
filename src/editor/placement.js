@@ -70,3 +70,9 @@ export function retainedPlacement(shaft, male, socket, female, previous) {
   const roll = Math.atan2(b.axis.dot(bRef.clone().cross(aRef)), bRef.dot(aRef))
   return { ...previous, offset, direction: Math.sign(alignment), roll }
 }
+
+export function samePose(a, b) {
+  const position = vector(a.position).distanceToSquared(vector(b.position))
+  const alignment = Math.abs(rotation(a.rotation).dot(rotation(b.rotation)))
+  return position < 1e-10 && alignment > 1 - 1e-10
+}

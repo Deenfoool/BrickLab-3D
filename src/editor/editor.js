@@ -1,15 +1,19 @@
-import { Quaternion, Vector3 } from 'three'
+import { Plane, Quaternion, Vector3 } from 'three'
 import { technic } from '../mechanics/catalog.js'
-import { baseRotation, retainedPlacement } from './placement.js?v=editor-controls'
-import { axes, samePose, transformPose } from './transform.js'
-import { createAssembly, gearPoses, loadParts, raisedPose } from './model.js'
-import { nearbyConnections } from './snap.js'
+import { baseRotation, retainedPlacement, samePose } from './placement.js?v=studio-controls'
+import { createAssembly, gearPoses, loadParts, raisedPose, snapGrid } from './model.js'
+import { nearbyConnections } from './snap.js?v=studio-controls'
 import { loadPalette, partOrder, parts } from './parts.js?v=editor-retry'
-import { createScene } from './scene.js?v=editor-controls'
-import { editorLabels } from './labels.js?v=editor-controls'
+import { createScene } from './scene.js?v=studio-controls'
+import { editorLabels } from './labels.js?v=studio-controls'
 
 const isDriver = part => part && technic[part.design].some(port => port.role === 'axle' || port.role === 'gear')
+const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
+const turns = { KeyW: [X, -1], KeyS: [X, 1], KeyA: [Y, -1], KeyD: [Y, 1] }
+const heldTurns = { ArrowUp: 'KeyW', ArrowDown: 'KeyS', ArrowLeft: 'KeyA', ArrowRight: 'KeyD' }
+const steps = { ArrowUp: [0, 0, -1], ArrowDown: [0, 0, 1], ArrowLeft: [-1, 0, 0], ArrowRight: [1, 0, 0] }
+const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
 export async function mountEditor(root, { document: source, language, save, download, signal }) {
@@ -41,9 +45,10 @@ export async function mountEditor(root, { document: source, language, save, down
       </aside>
       <section class="editor-viewport" data-el="viewport">
         <div class="editor-viewport-tools">
-          <button type="button" data-el="selectTool" title="${t.select} (Q)" aria-label="${t.select}"><svg class="icon" viewBox="0 0 24 24"><path d="m5 3 13 10-6 1-3 6z"/></svg></button>
-          <button type="button" data-el="moveTool" title="${t.move} (G)" aria-label="${t.move}"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3m-6 12 3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/></svg></button>
+          <button type="button" data-el="selectTool" title="${t.select} (V)" aria-label="${t.select}"><svg class="icon" viewBox="0 0 24 24"><path d="m5 3 13 10-6 1-3 6z"/></svg></button>
+          <button type="button" data-el="moveTool" title="${t.move} (T)" aria-label="${t.move}"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3m-6 12 3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/></svg></button>
           <button type="button" data-el="rotateTool" title="${t.rotate} (R)" aria-label="${t.rotate}"><svg class="icon" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 1-3-6m-2 3h5V3"/></svg></button>
+          <button type="button" data-el="snap" aria-pressed="true">${t.snap}</button>
           <button type="button" data-el="frame">${t.reset}</button>
         </div>
         <div data-el="empty" class="editor-empty">${t.empty}</div>
@@ -54,7 +59,6 @@ export async function mountEditor(root, { document: source, language, save, down
           <p data-el="selection"></p>
           <div class="editor-part-actions" data-el="partActions" hidden>
             <label>${t.color}<input type="color" data-el="color"></label>
-            <button type="button" data-el="resnap">${t.resnap}</button>
             <button type="button" data-el="copy">${t.copy}</button>
             <button type="button" data-el="duplicate">${t.duplicate}</button>
             <button type="button" data-el="remove" class="editor-danger">${t.delete}</button>
@@ -98,7 +102,9 @@ export async function mountEditor(root, { document: source, language, save, down
   let selected
   let moving
   let tool = 'select'
-  let operation
+  let snapEnabled = true
+  let grab
+  let rightDown
   let gizmoPart
   let ignoreGizmoClick = false
   let movesExisting = false
@@ -108,7 +114,6 @@ export async function mountEditor(root, { document: source, language, save, down
   let pose
   let depth = 0
   let roll = 0
-  let chooseNext = false
   let angle = 0
   let frame
   let transmission
@@ -187,9 +192,15 @@ export async function mountEditor(root, { document: source, language, save, down
   function restore(from, to) {
     if (!from.length) return
     cancelPlacement()
-    cancelTransform()
+    cancelGizmo()
     to.push(state)
-    applyState(from.pop())
+    const next = from.pop()
+    if (!selected) {
+      const currentIds = new Set(state.parts.map(part => part.id))
+      const restored = next.parts.filter(part => !currentIds.has(part.id))
+      if (restored.length === 1) selected = restored[0].id
+    }
+    applyState(next)
   }
 
   function renderCatalog() {
@@ -221,14 +232,14 @@ export async function mountEditor(root, { document: source, language, save, down
     const selectedLinks = part ? links.filter(link => link.shaft.part === part.id || link.socket.part === part.id) : []
     el('selection').textContent = part ? parts[part.design][language] : t.none
     const building = mode === 'build'
-    el('partActions').hidden = !part || !building || Boolean(moving || operation)
-    el('paste').hidden = !clipboard || !building || Boolean(moving || operation)
+    el('partActions').hidden = !part || !building || Boolean(moving || gizmoPart)
+    el('paste').hidden = !clipboard || !building || Boolean(moving || gizmoPart)
     for (const name of ['select', 'move', 'rotate']) {
       const control = el(`${name}Tool`)
       control.disabled = !building
       control.setAttribute('aria-pressed', String(tool === name))
     }
-    scene.setTool(building && !moving && !operation && tool !== 'select'
+    scene.setTool(building && !moving && tool !== 'select'
       ? tool === 'move' ? 'translate' : 'rotate' : null, part)
     if (part) el('color').value = /^#[0-9a-f]{6}$/i.test(part.color) ? part.color : parts[part.design].color
     el('links').textContent = mode === 'kinematics'
@@ -245,49 +256,56 @@ export async function mountEditor(root, { document: source, language, save, down
       button.disabled = mode !== 'build'
       button.setAttribute('aria-pressed', String(moving?.design === button.dataset.design && !movesExisting))
     }
+    el('snap').disabled = !building
+    el('snap').setAttribute('aria-pressed', String(snapEnabled))
     el('undo').disabled = !undo.length
     el('redo').disabled = !redo.length
     const fit = candidate?.fit
     const cue = fit ? (fit.motion.rotation === 'locked' ? t.locked : fit.motion.rotation === 'detented' ? t.detented : t.freely)
       : candidate?.failure?.includes('occupied') ? t.occupied : candidate?.failure ? t.blocked : t.free
-    const transformHint = operation
-      ? `${t[operation.kind]} ${operation.axis ?? ''}${operation.input ? ' · ' + operation.input : ''} · ${t.transformHint}`
-      : null
-    el('hint').textContent = transformHint ?? (moving ? `${cue} · ${t.place}`
-      : message || (hiddenParts.length ? t.unknown(hiddenParts.length) : t.camera))
+    el('hint').textContent = moving ? `${cue} · ${t.place}`
+      : message || (hiddenParts.length ? t.unknown(hiddenParts.length) : t.camera)
   }
 
-  function updatePointer(event) {
+  function updatePointer(event, cycle = false) {
     pointer = event
-    if (operation) {
-      previewTransform()
-      return
-    }
     if (!moving) return
-    const { ground } = scene.pointer(event, false)
-    const options = nearbyConnections({
-      scene, assembly: placementAssembly, parts: state.parts, moving, event, depth, roll, previous: candidate?.key,
-    })
+    const { ground, ray } = scene.pointer(event, false)
+    const freePoint = grab ? ray.intersectPlane(grab.plane, new Vector3()) : ground
+    const options = snapEnabled && !event.ctrlKey && !event.metaKey
+      ? nearbyConnections({ scene, assembly: placementAssembly, parts: state.parts, moving, event, depth, roll })
+      : []
     const index = options.findIndex(option => option.key === candidate?.key)
-    candidate = chooseNext ? options[(index + 1) % options.length] : options[0]
-    chooseNext = false
+    const sticky = options[index]
+    const first = options[0]
+    if (cycle && options.length) candidate = options[(index + 1) % options.length]
+    else if (sticky && Boolean(sticky.fit) === Boolean(first.fit) && sticky.distance <= first.distance + 8) candidate = sticky
+    else candidate = first
     if (candidate?.fit) pose = { ...moving, ...candidate.pose }
-    else pose = ground ? raisedPose(moving, models.get(moving.design), ground) : null
+    else if (grab) {
+      const delta = freePoint?.sub(grab.anchor)
+      const position = moving.position.map((value, i) => i === 1 ? value : value + onGrid(delta?.getComponent(i) ?? 0))
+      pose = { ...moving, position }
+    } else pose = freePoint ? raisedPose(moving, models.get(moving.design), freePoint) : null
     scene.setGhost(pose, candidate?.point, Boolean(candidate?.failure))
     render()
   }
 
-  function startPlacement(part, existing = false) {
-    cancelTransform()
+  function startPlacement(part, existing = false, origin) {
+    cancelGizmo()
     cancelPlacement()
     message = ''
     moving = part
     movesExisting = existing
     placementAssembly = createAssembly(existing ? state.parts : [...state.parts, part],
       existing ? state.links.filter(link => link.shaft.part !== part.id && link.socket.part !== part.id) : state.links)
-    if (existing) scene.setMoving(part.id, true)
-    pose = part
-    scene.setGhost(pose)
+    if (existing) {
+      scene.setMoving(part.id, true)
+      const plane = new Plane(Y, -part.position[1])
+      const anchor = scene.pointer(origin, false).ray.intersectPlane(plane, new Vector3())
+      if (anchor) grab = { plane, anchor }
+    }
+    pose = null
     if (pointer) updatePointer(pointer)
     render()
   }
@@ -295,7 +313,9 @@ export async function mountEditor(root, { document: source, language, save, down
   function cancelPlacement() {
     if (movesExisting) scene.setMoving(moving.id, false)
     moving = null
+    directDrag = null
     movesExisting = false
+    grab = null
     candidate = null
     pose = null
     depth = 0
@@ -306,69 +326,51 @@ export async function mountEditor(root, { document: source, language, save, down
 
   function place() {
     if (!pose || candidate?.failure) return
+    const original = movesExisting ? state.parts.find(part => part.id === moving.id) : null
+    if (original && samePose(original, pose) && !candidate) {
+      cancelPlacement()
+      return
+    }
     const fit = candidate?.fit && placementAssembly.connect(candidate.shaft, candidate.socket, candidate.fit.placement)
     if (fit && !fit.ok) return
     const id = pose.id
-    const placed = movesExisting ? state.parts.map(part => part.id === id ? pose : part) : [...state.parts, pose]
-    const links = movesExisting ? state.links.filter(link => link.shaft.part !== id && link.socket.part !== id) : [...state.links]
-    if (fit) links.push({ shaft: candidate.shaft, socket: candidate.socket, placement: fit.placement })
+    const placed = original ? state.parts.map(part => part.id === id ? pose : part) : [...state.parts, pose]
+    const added = fit ? [{ shaft: candidate.shaft, socket: candidate.socket, placement: fit.placement }] : []
+    const nextLinks = original ? transformLinks(placed, id, placementAssembly, added) : [...state.links, ...added]
     cancelPlacement()
     selected = id
-    commit({ parts: placed, links })
+    commit({ parts: placed, links: nextLinks })
   }
 
-  function rotatePlacement() {
-    if (!moving) return
-    roll = (roll + Math.PI / 2) % (Math.PI * 2)
-    moving = { ...moving, rotation: new Quaternion().setFromAxisAngle(Y, Math.PI / 2)
-      .multiply(new Quaternion().fromArray(moving.rotation)).toArray() }
-    if (pointer) updatePointer(pointer)
+  function turnPart([axis, direction], smallStep) {
+    const part = moving ?? selectedPart()
+    if (!part) return
+    const angle = direction * (smallStep ? Math.PI / 4 : Math.PI / 2)
+    const rotation = new Quaternion().setFromAxisAngle(axis, angle)
+      .multiply(new Quaternion().fromArray(part.rotation)).toArray()
+    const next = { ...part, rotation }
+    if (moving) {
+      moving = next
+      if (axis === Y) roll += angle
+      if (pointer) updatePointer(pointer)
+    } else finishTransform(part, next)
   }
 
-  function previewTransform() {
-    if (!operation) return
-    operation.pose = transformPose(scene, operation, pointer ?? operation.start)
-    scene.setGhost(operation.pose)
-    render()
-  }
-
-  function startTransform(kind, part = selectedPart(), duplicate = false, anchor = pointer) {
-    if (mode !== 'build' || !part) return
-    cancelTransform()
-    cancelPlacement()
-    message = ''
-    const rect = scene.canvas.getBoundingClientRect()
-    const origin = scene.screenPoint(part.position)
-    const start = anchor ?? {
-      clientX: Math.max(rect.left, Math.min(rect.right, origin.clientX + (kind === 'rotate' ? 45 : 0))),
-      clientY: Math.max(rect.top, Math.min(rect.bottom, origin.clientY)),
-    }
-    operation = { kind, part, start, duplicate, input: '', pose: part }
-    if (!duplicate) scene.setMoving(part.id, true)
-    scene.canvas.focus({ preventScroll: true })
-    previewTransform()
-  }
-
-  function cancelTransform() {
-    if (!operation && !gizmoPart) return
-    const part = operation && !operation.duplicate ? operation.part : gizmoPart
-    operation = null
-    directDrag = null
+  function cancelGizmo() {
+    if (!gizmoPart) return
+    const part = gizmoPart
     gizmoPart = null
     scene.cancelGizmo()
-    if (part) scene.setMoving(part.id, false)
+    scene.setMoving(part.id, false)
     scene.setGhost(null)
     render()
   }
 
-  function transformLinks(placed, id) {
+  function transformLinks(placed, id, prepared, added = []) {
     const byId = new Map(placed.map(part => [part.id, part]))
-    const checked = createAssembly(placed, [])
     const attached = link => link?.shaft?.part === id || link?.socket?.part === id
-    const retained = state.links.filter(link => !attached(link))
-    for (const { shaft, socket, placement } of retained) {
-      if (shaft && socket && placement) checked.connect(shaft, socket, placement)
-    }
+    const retained = [...state.links.filter(link => !attached(link)), ...added]
+    const checked = prepared ?? createAssembly(placed, retained)
     for (const { shaft: a, socket: b, placement: previous } of state.links.filter(attached)) {
       const shaft = byId.get(a?.part)
       const socket = byId.get(b?.part)
@@ -385,24 +387,17 @@ export async function mountEditor(root, { document: source, language, save, down
     return retained
   }
 
-  function finishTransform(before, after, duplicate = false) {
-    cancelTransform()
-    if (!duplicate && samePose(before, after)) return
-    const placed = duplicate ? [...state.parts, after] : state.parts.map(part => part.id === after.id ? after : part)
+  function finishTransform(before, after) {
+    cancelGizmo()
+    if (samePose(before, after)) return
+    const placed = state.parts.map(part => part.id === after.id ? after : part)
     selected = after.id
-    const nextLinks = duplicate ? state.links : transformLinks(placed, after.id)
-    commit({ parts: placed, links: nextLinks })
-  }
-
-  function confirmTransform() {
-    if (!operation || (operation.input && !Number.isFinite(Number(operation.input)))) return
-    const { part, pose, duplicate } = operation
-    finishTransform(part, pose, duplicate)
+    commit({ parts: placed, links: transformLinks(placed, after.id) })
   }
 
   function copyPart() {
     const part = selectedPart()
-    if (!part || mode !== 'build' || operation || moving || gizmoPart) return
+    if (!part || mode !== 'build' || moving || gizmoPart) return
     clipboard = structuredClone(part)
     message = t.copied
     render()
@@ -411,14 +406,12 @@ export async function mountEditor(root, { document: source, language, save, down
   function insertCopy(part) {
     if (!part || mode !== 'build') return
     const copy = { ...structuredClone(part), id: crypto.randomUUID() }
-    // Start next to the original so a confirmation without mouse motion is visible.
-    copy.position[0] += 20
-    startTransform('move', copy, true)
+    startPlacement(copy)
   }
 
   function setTool(next) {
     if (mode !== 'build') return
-    cancelTransform()
+    cancelGizmo()
     cancelPlacement()
     tool = next
     render()
@@ -431,7 +424,7 @@ export async function mountEditor(root, { document: source, language, save, down
   }
 
   function setMode(next) {
-    cancelTransform()
+    cancelGizmo()
     cancelPlacement()
     mode = next
     setSelection(selected)
@@ -471,17 +464,26 @@ export async function mountEditor(root, { document: source, language, save, down
   on(el('save'), 'click', () => persist(true))
   on(el('export'), 'click', () => download(currentDocument()))
   for (const name of ['select', 'move', 'rotate']) on(el(`${name}Tool`), 'click', () => setTool(name))
-  on(el('resnap'), 'click', () => { if (selectedPart()) startPlacement(selectedPart(), true) })
+  on(window, 'keyup', event => {
+    if (moving && pointer && ['Control', 'Meta'].includes(event.key)) {
+      updatePointer({ clientX: pointer.clientX, clientY: pointer.clientY, ctrlKey: event.ctrlKey, metaKey: event.metaKey })
+    }
+  })
+  on(el('snap'), 'click', () => {
+    snapEnabled = !snapEnabled
+    if (moving && pointer) updatePointer(pointer)
+    else render()
+  })
   on(el('copy'), 'click', copyPart)
   on(el('paste'), 'click', () => insertCopy(clipboard))
   on(el('duplicate'), 'click', () => insertCopy(selectedPart()))
   on(el('remove'), 'click', () => {
-    if (!selected || mode !== 'build' || moving || operation || gizmoPart) return
+    if (!selected || mode !== 'build' || moving || gizmoPart) return
     commit({ parts: state.parts.filter(part => part.id !== selected),
       links: state.links.filter(link => link.shaft.part !== selected && link.socket.part !== selected) })
   })
   on(el('color'), 'change', event => {
-    if (!selected || mode !== 'build' || moving || operation || gizmoPart) return
+    if (!selected || mode !== 'build' || moving || gizmoPart) return
     commit({ ...state, parts: state.parts.map(part => part.id === selected ? { ...part, color: event.target.value } : part) })
   })
   on(el('shallower'), 'click', () => changeDepth(-2))
@@ -517,9 +519,8 @@ export async function mountEditor(root, { document: source, language, save, down
     queueMicrotask(() => { if (gizmoPart === part) finishTransform(part, pose) })
   })
   on(scene.canvas, 'pointerdown', event => {
-    if (event.button === 2 && (operation || moving || gizmoPart)) {
-      cancelTransform()
-      cancelPlacement()
+    if (event.button === 2) {
+      rightDown = [event.clientX, event.clientY]
       return
     }
     if (event.button !== 0) return
@@ -527,7 +528,7 @@ export async function mountEditor(root, { document: source, language, save, down
     scene.canvas.focus({ preventScroll: true })
     pointerDown = [event.clientX, event.clientY]
     if (mode === 'build') {
-      if (!gizmoPart && !moving && !operation && tool === 'select' && event.pointerType !== 'touch') {
+      if (!gizmoPart && !moving && tool === 'select' && event.pointerType !== 'touch') {
         const hit = scene.pointer(event).hit
         const part = state.parts.find(entry => entry.id === hit)
         if (part) {
@@ -550,23 +551,28 @@ export async function mountEditor(root, { document: source, language, save, down
     if (drag) {
       angle = Math.max(-1080, Math.min(1080, drag.angle + (event.clientX - drag.x) * 2))
       showMotion()
-    } else if (directDrag && !operation && (event.buttons & 1) &&
+    } else if (directDrag && !moving && (event.buttons & 1) &&
         Math.hypot(event.clientX - directDrag.start.clientX, event.clientY - directDrag.start.clientY) >= 5) {
       const { part, start } = directDrag
       pointer = event
-      startTransform('move', part, false, start)
+      startPlacement(part, true, start)
       directDrag = { part, start }
-    } else if (operation || !event.buttons) updatePointer(event)
+    } else if ((moving && directDrag && (event.buttons & 1)) || !event.buttons) {
+      updatePointer(event)
+    }
   })
   on(scene.canvas, 'pointerup', event => {
-    const click = event.button === 0 && pointerDown && Math.hypot(event.clientX - pointerDown[0], event.clientY - pointerDown[1]) < 5
-    pointerDown = null
-    if (event.button === 0 && directDrag && operation) {
-      updatePointer(event)
-      confirmTransform()
+    if (event.button === 2) {
+      if (rightDown && Math.hypot(event.clientX - rightDown[0], event.clientY - rightDown[1]) < 5) {
+        cancelGizmo()
+        cancelPlacement()
+      } else if (moving) updatePointer(event)
+      rightDown = null
       return
     }
-    if (event.button === 0) directDrag = null
+    if (event.button !== 0) return
+    const click = pointerDown && Math.hypot(event.clientX - pointerDown[0], event.clientY - pointerDown[1]) < 5
+    pointerDown = null
     if (ignoreGizmoClick) {
       ignoreGizmoClick = false
       return
@@ -575,87 +581,86 @@ export async function mountEditor(root, { document: source, language, save, down
       drag = null
       return
     }
-    if (!click) return
-    if (operation) {
-      updatePointer(event)
-      confirmTransform()
-    } else if (moving) {
+    const releasedPart = Boolean(directDrag && moving)
+    directDrag = null
+    if (moving && (click || releasedPart)) {
       updatePointer(event)
       place()
-    } else setSelection(scene.pointer(event).hit)
+    } else if (click) setSelection(scene.pointer(event).hit)
   })
   on(scene.canvas, 'pointercancel', () => {
     pointerDown = null
+    rightDown = null
     drag = null
-    directDrag = null
     ignoreGizmoClick = false
-    cancelTransform()
+    cancelGizmo()
+    cancelPlacement()
   })
   on(window, 'keydown', event => {
-    if (event.key === 'Escape' && (moving || operation || gizmoPart)) {
+    if (event.key === 'Escape' && (moving || gizmoPart)) {
       event.preventDefault()
-      cancelTransform()
+      cancelGizmo()
       cancelPlacement()
       return
     }
     if (event.target.closest?.('input, textarea, select, [contenteditable]') || event.altKey) return
     if (event.ctrlKey || event.metaKey) {
+      if (moving && pointer && ['Control', 'Meta'].includes(event.key)) {
+        updatePointer({ clientX: pointer.clientX, clientY: pointer.clientY, ctrlKey: event.ctrlKey, metaKey: event.metaKey })
+      }
       const actions = {
         KeyZ: () => event.shiftKey ? restore(redo, undo) : restore(undo, redo),
         KeyY: () => restore(redo, undo),
         KeyS: () => persist(true),
         KeyC: copyPart,
         KeyV: () => insertCopy(clipboard),
+        KeyD: () => insertCopy(selectedPart()),
+        KeyX: () => {
+          copyPart()
+          el('remove').click()
+        },
       }
       const action = actions[event.code]
-      if (action && (!['KeyC', 'KeyV'].includes(event.code) || mode === 'build')) {
+      if (action && (!['KeyC', 'KeyV', 'KeyD', 'KeyX'].includes(event.code) || mode === 'build')) {
         event.preventDefault()
         action()
       }
       return
     }
-    if (mode !== 'build') return
-    if (operation) {
-      if (event.key === 'Enter') {
+    if (mode !== 'build' || gizmoPart) return
+    const turn = turns[moving ? heldTurns[event.code] ?? event.code : event.code]
+    if (turn) {
+      event.preventDefault()
+      if (!event.repeat) turnPart(turn, event.shiftKey)
+      return
+    }
+    if (moving) {
+      if (event.code === 'Space' || event.key === 'Enter' && !event.target.closest?.('button, a')) {
         event.preventDefault()
-        confirmTransform()
-      } else if (Object.hasOwn(axes, event.code.slice(3))) {
-        const axis = event.code.slice(3)
-        operation.axis = operation.axis === axis ? undefined : axis
-        previewTransform()
-      } else if (/^[0-9.-]$/.test(event.key) || event.key === 'Backspace') {
+        place()
+      } else if (event.key === 'Tab' && candidate && pointer) {
         event.preventDefault()
-        const input = event.key === 'Backspace' ? operation.input.slice(0, -1) : operation.input + event.key
-        if (input.length <= 12 && /^-?\d*(?:\.\d*)?$/.test(input)) operation.input = input
-        if (operation.kind === 'move' && !operation.axis) operation.axis = 'X'
-        previewTransform()
+        updatePointer(pointer, true)
       }
       return
     }
-    if (gizmoPart || event.repeat) return
-    if (moving) {
-      if (event.code === 'KeyR') rotatePlacement()
-      if (event.key === 'Enter' && !event.target.closest?.('button, a')) {
-        event.preventDefault()
-        place()
-      }
-      if (event.key === 'Tab' && candidate && pointer) {
-        event.preventDefault()
-        chooseNext = true
-        updatePointer(pointer)
-      }
+    const step = steps[event.code]
+    const part = selectedPart()
+    if (step && part) {
+      event.preventDefault()
+      const position = part.position.map((value, axis) => value + step[axis] * snapGrid)
+      finishTransform(part, { ...part, position })
       return
     }
     const actions = {
-      KeyQ: () => setTool('select'),
-      KeyG: () => startTransform('move'),
-      KeyR: () => startTransform('rotate'),
-      KeyD: () => { if (event.shiftKey) insertCopy(selectedPart()) },
-      KeyX: () => el('remove').click(),
+      Escape: () => setTool('select'),
+      KeyV: () => setTool('select'),
+      KeyT: () => setTool('move'),
+      KeyR: () => setTool('rotate'),
       Delete: () => el('remove').click(),
     }
     const action = actions[event.code]
-    if (action) {
+    if (action && !event.repeat) {
       event.preventDefault()
       action()
     }

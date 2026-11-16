@@ -2,7 +2,7 @@ import { portLength } from '../mechanics/axial.js'
 import { technic } from '../mechanics/catalog.js'
 import { candidateOffsets, joinedPose, worldPort } from './placement.js'
 
-export function nearbyConnections({ scene, assembly, parts, moving, event, depth, roll, previous }) {
+export function nearbyConnections({ scene, assembly, parts, moving, event, depth, roll }) {
   const candidates = []
   const ownPorts = technic[moving.design].filter(port => port.role !== 'gear')
   for (const fixed of parts) {
@@ -56,6 +56,5 @@ export function nearbyConnections({ scene, assembly, parts, moving, event, depth
     }
   }
   return candidates.sort((a, b) =>
-    (a.distance - (a.key === previous ? 8 : 0)) - (b.distance - (b.key === previous ? 8 : 0)) ||
-    Number(Boolean(b.fit)) - Number(Boolean(a.fit)) || a.key.localeCompare(b.key))
+    Number(Boolean(b.fit)) - Number(Boolean(a.fit)) || a.distance - b.distance || a.key.localeCompare(b.key))
 }
