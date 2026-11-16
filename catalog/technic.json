@@ -45,6 +45,32 @@
           "length": 2
         }
       ]
+    },
+    {
+      "id": "core",
+      "role": "rod-bore",
+      "gender": "F",
+      "start": [
+        -20,
+        0,
+        0
+      ],
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 4,
+          "length": 40
+        }
+      ],
+      "openings": [
+        "start",
+        "end"
+      ]
     }
   ],
   "3648": [
@@ -100,6 +126,150 @@
           "teeth": 24
         }
       ]
+    },
+    {
+      "id": "pin-hole-1",
+      "role": "bearing",
+      "gender": "F",
+      "start": [
+        -10,
+        -10,
+        -7.8
+      ],
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 1.75
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 12.1
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 1.75
+        }
+      ],
+      "openings": [
+        "start",
+        "end"
+      ]
+    },
+    {
+      "id": "pin-hole-2",
+      "role": "bearing",
+      "gender": "F",
+      "start": [
+        -10,
+        10,
+        -7.8
+      ],
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 1.75
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 12.1
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 1.75
+        }
+      ],
+      "openings": [
+        "start",
+        "end"
+      ]
+    },
+    {
+      "id": "pin-hole-3",
+      "role": "bearing",
+      "gender": "F",
+      "start": [
+        10,
+        -10,
+        -7.8
+      ],
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 1.75
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 12.1
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 1.75
+        }
+      ],
+      "openings": [
+        "start",
+        "end"
+      ]
+    },
+    {
+      "id": "pin-hole-4",
+      "role": "bearing",
+      "gender": "F",
+      "start": [
+        10,
+        10,
+        -7.8
+      ],
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 1.75
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 12.1
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 1.75
+        }
+      ],
+      "openings": [
+        "start",
+        "end"
+      ]
     }
   ],
   "3673": [
@@ -148,6 +318,32 @@
           "length": 2
         }
       ]
+    },
+    {
+      "id": "core",
+      "role": "rod-bore",
+      "gender": "F",
+      "start": [
+        -20,
+        0,
+        0
+      ],
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 4,
+          "length": 40
+        }
+      ],
+      "openings": [
+        "start",
+        "end"
+      ]
     }
   ],
   "3700": [
@@ -185,6 +381,156 @@
           "radius": 8,
           "length": 2
         }
+      ]
+    },
+    {
+      "id": "stud-left",
+      "role": "stud",
+      "gender": "M",
+      "start": [
+        -10,
+        0,
+        0
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 4
+        }
+      ],
+      "openings": [
+        "end"
+      ]
+    },
+    {
+      "id": "anti-stud-left",
+      "role": "anti-stud",
+      "gender": "F",
+      "start": [
+        -10,
+        24,
+        0
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "S",
+          "radius": 6,
+          "length": 4
+        }
+      ],
+      "openings": [
+        "start"
+      ]
+    },
+    {
+      "id": "hollow-stud-left",
+      "role": "rod-bore",
+      "gender": "F",
+      "start": [
+        -10,
+        -4,
+        0
+      ],
+      "axis": [
+        0,
+        1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 4,
+          "length": 4
+        }
+      ],
+      "openings": [
+        "start"
+      ]
+    },
+    {
+      "id": "stud-right",
+      "role": "stud",
+      "gender": "M",
+      "start": [
+        10,
+        0,
+        0
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 4
+        }
+      ],
+      "openings": [
+        "end"
+      ]
+    },
+    {
+      "id": "anti-stud-right",
+      "role": "anti-stud",
+      "gender": "F",
+      "start": [
+        10,
+        24,
+        0
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "S",
+          "radius": 6,
+          "length": 4
+        }
+      ],
+      "openings": [
+        "start"
+      ]
+    },
+    {
+      "id": "hollow-stud-right",
+      "role": "rod-bore",
+      "gender": "F",
+      "start": [
+        10,
+        -4,
+        0
+      ],
+      "axis": [
+        0,
+        1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 4,
+          "length": 4
+        }
+      ],
+      "openings": [
+        "start"
       ]
     }
   ],
@@ -629,6 +975,938 @@
           "shape": "L",
           "radius": 6.25,
           "length": 2
+        }
+      ]
+    }
+  ],
+  "30374": [
+    {
+      "id": "shaft",
+      "role": "rod",
+      "gender": "M",
+      "start": [
+        0,
+        0,
+        0
+      ],
+      "axis": [
+        0,
+        1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 4,
+          "length": 80
+        }
+      ],
+      "openings": [
+        "start",
+        "end"
+      ]
+    }
+  ],
+  "32316": [
+    {
+      "id": "bore-1",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        -40
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-2",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        -20
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-3",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        0
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-4",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        20
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-5",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        40
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    }
+  ],
+  "32278": [
+    {
+      "id": "bore-1",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        -140
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-2",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        -120
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-3",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        -100
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-4",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        -80
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-5",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        -60
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-6",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        -40
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-7",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        -20
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-8",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        0
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-9",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        20
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-10",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        40
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-11",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        60
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-12",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        80
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-13",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        100
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-14",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        120
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "bore-15",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        140
+      ],
+      "axis": [
+        0,
+        -1,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    }
+  ],
+  "43093": [
+    {
+      "id": "shaft",
+      "role": "friction-axle-pin",
+      "gender": "M",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        -20,
+        0,
+        0
+      ],
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "L",
+          "radius": 6.25,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "A",
+          "radius": 6,
+          "length": 20
+        }
+      ]
+    }
+  ],
+  "6558": [
+    {
+      "id": "shaft",
+      "role": "friction-pin",
+      "gender": "M",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        -30,
+        0,
+        0
+      ],
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "L",
+          "radius": 6.5,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 4
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "L",
+          "radius": 6.5,
+          "length": 4
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "L",
+          "radius": 6.5,
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "core",
+      "role": "rod-bore",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        -30,
+        0,
+        0
+      ],
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 4,
+          "length": 60
+        }
+      ]
+    }
+  ],
+  "11214": [
+    {
+      "id": "shaft",
+      "role": "axle-pin",
+      "gender": "M",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        -30,
+        0,
+        0
+      ],
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "L",
+          "radius": 6.25,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "L",
+          "radius": 6.25,
+          "length": 4
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "A",
+          "radius": 6,
+          "length": 20
         }
       ]
     }

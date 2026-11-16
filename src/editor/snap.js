@@ -1,28 +1,80 @@
-import { portLength } from '../mechanics/axial.js?v=mechanics-audit'
-import { technic } from '../mechanics/catalog.js?v=mechanics-audit'
-import { candidateOffsets, joinedPose, worldPort } from './placement.js?v=mechanics-audit'
+import { Plane, Vector3 } from 'three'
+import { evaluateSpurMesh } from '../mechanics/gears.js'
+import { connectionMode, portLength } from '../mechanics/axial.js?v=connector-coverage'
+import { gearAt, technic } from '../mechanics/catalog.js?v=connector-coverage'
+import { candidateOffsets, joinedPose, worldPort } from './placement.js?v=connector-coverage'
 
-export function nearbyConnections({ scene, assembly, parts, moving, event, depth, roll, acceptPose }) {
+const gearPort = part => technic[part.design].find(port => port.role === 'gear')
+
+function gearCenter(part, port) {
+  const { start, axis } = worldPort(part, port)
+  return { center: start.addScaledVector(axis, portLength(port) / 2), axis }
+}
+
+function meshCandidate({ scene, moving, fixed, ownGear, fixedGear, event, ray, acceptPose }) {
+  const a = gearCenter(moving, ownGear)
+  const b = gearCenter(fixed, fixedGear)
+  if (1 - Math.abs(a.axis.dot(b.axis)) > 0.00005) return
+  const plane = ray && new Plane().setFromNormalAndCoplanarPoint(b.axis, b.center)
+  const aim = plane ? ray.intersectPlane(plane, new Vector3()) : a.center
+  if (!aim) return
+  const radial = aim.clone().sub(b.center)
+  radial.addScaledVector(b.axis, -radial.dot(b.axis))
+  if (radial.lengthSq() < 1e-6) return
+  const point = b.center.clone().add(radial.setLength(ownGear.sections[0].radius + fixedGear.sections[0].radius))
+  // Keep an already overlapping tooth face at its current depth during an axial gizmo drag.
+  if (acceptPose) point.addScaledVector(b.axis, a.center.clone().sub(b.center).dot(b.axis))
+  const distance = scene.pixelDistance(point, event)
+  if (!Number.isFinite(distance) || distance > 25) return
+  const pose = { position: new Vector3().fromArray(moving.position).add(point.clone().sub(a.center)).toArray(), rotation: moving.rotation }
+  if (acceptPose && !acceptPose(pose)) return
+  const mesh = evaluateSpurMesh(gearAt(moving.id, moving.design, point.toArray(), a.axis.toArray()),
+    gearAt(fixed.id, fixed.design, b.center.toArray(), b.axis.toArray()))
+  if (mesh.ok) return { key: JSON.stringify(['mesh', fixed.id]), point, distance, pose, mesh }
+}
+
+function targetsOnPort(scene, event, fixedPort, start, axis, span, ray) {
+  const targets = fixedPort.openings.map(side => ({
+    side, point: start.clone().addScaledVector(axis, side === 'end' ? span : 0),
+  }))
+  const canSlide = fixedPort.role === 'axle' || fixedPort.role === 'rod'
+  if (canSlide && ray) {
+    const nearest = new Vector3()
+    ray.distanceSqToSegment(start, start.clone().addScaledVector(axis, span), undefined, nearest)
+    const along = nearest.clone().sub(start).dot(axis)
+    if (along > 10 && along < span - 10) {
+      for (const side of fixedPort.openings) targets.push({ side, point: nearest, along })
+    }
+  }
+  return targets.map(target => ({ ...target, distance: scene.pixelDistance(target.point, event) }))
+    .filter(({ distance }) => Number.isFinite(distance) && distance <= 31)
+}
+
+export function nearbyConnections({ scene, assembly, parts, moving, event, depth, roll, acceptPose, ray }) {
   const candidates = []
   const ownPorts = technic[moving.design].filter(port => port.role !== 'gear')
+  const ownGear = gearPort(moving)
   for (const fixed of parts) {
     if (fixed.id === moving.id) continue
+    const fixedGear = ownGear && gearPort(fixed)
+    if (fixedGear) {
+      const candidate = meshCandidate({ scene, moving, fixed, ownGear, fixedGear, event, ray, acceptPose })
+      if (candidate) candidates.push(candidate)
+    }
     for (const fixedPort of technic[fixed.design]) {
       if (fixedPort.role === 'gear') continue
       const { start, axis } = worldPort(fixed, fixedPort)
       const span = portLength(fixedPort)
-      for (const side of fixedPort.openings) {
-        const point = start.clone().addScaledVector(axis, side === 'end' ? span : 0)
-        const distance = scene.pixelDistance(point, event)
-        if (distance > 31) continue
+      const targets = targetsOnPort(scene, event, fixedPort, start, axis, span, ray)
+      for (const { side, point, along, distance } of targets) {
         for (const own of ownPorts) {
-          if (own.gender === fixedPort.gender) continue
           const movingShaft = own.gender === 'M'
           const male = movingShaft ? own : fixedPort
           const female = movingShaft ? fixedPort : own
+          if (!connectionMode(male, female)) continue
           const shaft = { part: movingShaft ? moving.id : fixed.id, port: male.id }
           const socket = { part: movingShaft ? fixed.id : moving.id, port: female.id }
-          const key = JSON.stringify([fixed.id, fixedPort.id, own.id, side])
+          const key = JSON.stringify([fixed.id, fixedPort.id, own.id, side, along !== undefined])
           const directions = movingShaft ? [1, -1] : [side === 'start' ? -1 : 1, side === 'start' ? 1 : -1]
           const entries = movingShaft ? [side] : female.openings
           let best
@@ -32,7 +84,8 @@ export function nearbyConnections({ scene, assembly, parts, moving, event, depth
               const entersAtShaftEnd = (entry === 'start') === (direction > 0)
               if (!movingShaft && entersAtShaftEnd !== (side === 'end')) continue
               const signedDepth = movingShaft ? (entry === 'start' ? depth : -depth) : (side === 'start' ? -direction : direction) * depth
-              const offsets = candidateOffsets(male, female, direction, entry, signedDepth)
+              const offsets = along === undefined ? candidateOffsets(male, female, direction, entry, signedDepth)
+                : [portLength(female) / 2 - direction * (along + depth)]
               if (acceptPose) {
                 const ownWorld = worldPort(moving, own)
                 const fixedAxis = movingShaft ? axis : axis.clone().multiplyScalar(direction)
@@ -48,17 +101,18 @@ export function nearbyConnections({ scene, assembly, parts, moving, event, depth
                 }
                 let pose = joinedPose(moving, own, fixed, fixedPort, fit.placement)
                 if (acceptPose && !acceptPose(pose)) {
-                  if (!fit.placement.keyStep) continue
-                  const matchingKey = [1, 2, 3].find(step => {
-                    const placement = { ...fit.placement, roll: roll + step * fit.placement.keyStep }
+                  const alternatives = fit.placement.detents ?? (fit.placement.keyStep
+                    ? [1, 2, 3].map(step => fit.placement.roll + step * fit.placement.keyStep) : [])
+                  const matchingRoll = alternatives.find(roll => {
+                    const placement = { ...fit.placement, roll }
                     pose = joinedPose(moving, own, fixed, fixedPort, placement)
                     return acceptPose(pose)
                   })
-                  if (!matchingKey) continue
-                  fit.placement.roll = roll + matchingKey * fit.placement.keyStep
+                  if (matchingRoll === undefined) continue
+                  fit.placement.roll = matchingRoll
                 }
                 const bounds = fit.occupancy.shaft
-                const endpoint = side === 'end' ? span : 0
+                const endpoint = along ?? (side === 'end' ? span : 0)
                 const reach = movingShaft ? 0 : Math.abs((bounds[0] + bounds[1]) / 2 - endpoint)
                 const score = acceptPose ? pose.position.reduce((sum, value, index) =>
                   sum + (value - moving.position[index]) ** 2, 0) : reach + (movingShaft && direction < 0 ? .01 : 0)
@@ -74,5 +128,5 @@ export function nearbyConnections({ scene, assembly, parts, moving, event, depth
     }
   }
   return candidates.sort((a, b) =>
-    Number(Boolean(b.fit)) - Number(Boolean(a.fit)) || a.distance - b.distance || a.key.localeCompare(b.key))
+    Number(Boolean(b.fit || b.mesh)) - Number(Boolean(a.fit || a.mesh)) || a.distance - b.distance || a.key.localeCompare(b.key))
 }

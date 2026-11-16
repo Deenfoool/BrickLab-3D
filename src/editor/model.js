@@ -1,7 +1,8 @@
 import { Quaternion, Vector3 } from 'three'
-import { Assembly } from '../mechanics/assembly.js?v=mechanics-audit'
-import { gearAt, rotationPort, technic } from '../mechanics/catalog.js?v=mechanics-audit'
-import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=mechanics-audit'
+import { connectionMode } from '../mechanics/axial.js?v=connector-coverage'
+import { Assembly } from '../mechanics/assembly.js?v=connector-coverage'
+import { gearAt, rotationPort, technic } from '../mechanics/catalog.js?v=connector-coverage'
+import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=connector-coverage'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
 export const snapGrid = 10
@@ -70,13 +71,45 @@ export function connectPlaced(assembly, a, b, { shaft, socket, placement }, chec
       (placement.direction ?? 1) !== measured.placement.direction)) {
     return { ok: false, reason: 'placement-pose-mismatch' }
   }
-  const fit = assembly.previewInsertion(shaft, socket, measured.placement, options)
-  if (!fit.ok) return fit
-  if ((fit.placement.keyStep || fit.motion.detents.length) &&
-      Math.abs(Math.sin((fit.placement.roll - measured.placement.roll) / 2)) > .001) {
-    return { ok: false, reason: 'invalid-rotation' }
+  const sides = [...new Set([placement?.side, ...female.openings])].filter(Boolean)
+  let failure
+  for (const side of sides) {
+    const entry = { ...measured.placement, side }
+    const fit = assembly.previewInsertion(shaft, socket, entry, options)
+    if (!fit.ok) {
+      failure ??= fit
+      continue
+    }
+    if ((fit.placement.keyStep || fit.motion.detents.length) &&
+        Math.abs(Math.sin((fit.placement.roll - measured.placement.roll) / 2)) > .001) {
+      return { ok: false, reason: 'invalid-rotation' }
+    }
+    return assembly.connect(shaft, socket, fit.placement, options)
   }
-  return assembly.connect(shaft, socket, fit.placement, options)
+  return failure ?? { ok: false, reason: 'closed-entry' }
+}
+
+export function connectAligned(assembly, changed, fixed) {
+  const added = []
+  for (const a of changed) {
+    for (const b of fixed) {
+      for (const portA of technic[a.design]) {
+        for (const portB of technic[b.design]) {
+          const movingShaft = portA.gender === 'M'
+          const male = movingShaft ? portA : portB
+          const female = movingShaft ? portB : portA
+          if (!connectionMode(male, female)) continue
+          const shaftPart = movingShaft ? a : b
+          const socketPart = movingShaft ? b : a
+          const shaft = { part: shaftPart.id, port: male.id }
+          const socket = { part: socketPart.id, port: female.id }
+          const fit = connectPlaced(assembly, shaftPart, socketPart, { shaft, socket })
+          if (fit.ok) added.push({ shaft, socket, placement: fit.placement })
+        }
+      }
+    }
+  }
+  return added
 }
 
 export function partRotationPort(part) {

@@ -11,8 +11,22 @@ const MOTION = {
   'axle:bush': { rotation: 'locked', translation: false },
   'pin:bearing': { rotation: 'continuous', translation: false },
   'friction-pin:bearing': { rotation: 'continuous', translation: false, friction: true },
-  'hinge-pin:detent-hinge': { rotation: 'detented', translation: false },
+  'hinge-pin:detent-hinge': { rotation: 'detented' },
+  'stud:anti-stud': { rotation: 'fixed', seat: true },
+  'stud:bearing': { rotation: 'continuous', seat: true },
+  'axle-pin:bearing': { rotation: 'continuous' },
+  'friction-axle-pin:bearing': { rotation: 'continuous', friction: true },
+  'axle-pin:key': { rotation: 'locked' },
+  'friction-axle-pin:key': { rotation: 'locked' },
+  'axle-pin:blind-key': { rotation: 'locked' },
+  'friction-axle-pin:blind-key': { rotation: 'locked' },
+  'axle-pin:bush': { rotation: 'locked' },
+  'friction-axle-pin:bush': { rotation: 'locked' },
+  'rod:rod-bore': { rotation: 'continuous', translation: true },
 }
+
+export const connectionMode = (male, female) => male?.gender === 'M' && female?.gender === 'F'
+  ? MOTION[`${male.role}:${female.role}`] : undefined
 
 export const overlap = (a, b) => Math.min(a[1], b[1]) - Math.max(a[0], b[0])
 
@@ -35,6 +49,7 @@ function sectionFit(male, female) {
   // A wider round counterbore may clear a shaft without supporting it.
   const different = male.radius - female.radius
   if (different > RADIUS_TOLERANCE) return 'blocked'
+  if (male.shape === 'R' && female.shape === 'S' && Math.abs(different) <= RADIUS_TOLERANCE) return 'contact'
   if (male.shape === 'A' && female.shape === 'A') {
     return Math.abs(different) <= RADIUS_TOLERANCE ? 'contact' : 'clear'
   }
@@ -113,7 +128,7 @@ export function nearestDetent(detents, angle) {
 
 export function evaluateInsertion(male, female, { offset, direction = 1, side = 'start', roll = 0 } = {}, { seated = false } = {}) {
   if (male?.gender !== 'M' || female?.gender !== 'F') return { ok: false, reason: 'connector-role' }
-  const mode = MOTION[`${male.role}:${female.role}`]
+  const mode = connectionMode(male, female)
   if (!mode) return { ok: false, reason: 'incompatible-family' }
   if (!Number.isFinite(offset) || !Number.isFinite(roll) || ![1, -1].includes(direction) ||
       !['start', 'end'].includes(side)) return { ok: false, reason: 'invalid-placement' }
@@ -122,12 +137,19 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
     return { ok: false, reason: 'missing-detents' }
   }
   if (!female.openings.includes(side)) return { ok: false, reason: 'closed-entry' }
+  if (!mode.seat && mode.rotation !== 'detented' && !male.openings.includes((side === 'start') === (direction > 0) ? 'end' : 'start')) {
+    return { ok: false, reason: 'closed-tip' }
+  }
+  if (mode.seat && (direction !== (side === 'start' ? 1 : -1) ||
+      Math.abs(offset - (side === 'start' ? 0 : portLength(female))) > EPSILON)) {
+    return { ok: false, reason: 'stud-seat' }
+  }
   if (mode.rotation === 'detented' && female.seat !== undefined && Math.abs(offset - female.seat) > EPSILON) {
     return { ok: false, reason: 'hinge-seat' }
   }
 
   const fit = fitAt(male, female, offset, direction)
-  if (fit.reason || fit.engagement < MIN_ENGAGEMENT) {
+  if (fit.reason || fit.engagement + EPSILON < MIN_ENGAGEMENT) {
     return { ok: false, reason: fit.reason ?? 'insufficient-engagement' }
   }
   const events = breakpoints(male, female, direction)
@@ -135,7 +157,7 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
   if (pathBlocked) return { ok: false, reason: pathBlocked }
 
   const detents = mode.rotation === 'detented' ? [...female.detents] : []
-  const keyStep = mode.rotation === 'locked' ? Math.PI / 2 : null
+  const keyStep = ['locked', 'fixed'].includes(mode.rotation) ? Math.PI / 2 : null
   const snappedRoll = detents.length ? nearestDetent(detents, roll)
     : keyStep === null ? roll : Math.round(roll / keyStep) * keyStep
   const [low, high] = fit.interval.map(point => (point - offset) * direction).sort((a, b) => a - b)

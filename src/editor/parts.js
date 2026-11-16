@@ -1,9 +1,15 @@
 import * as THREE from 'three'
 import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.js'
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js'
-import { technic } from '../mechanics/catalog.js?v=mechanics-audit'
+import { technic } from '../mechanics/catalog.js?v=connector-coverage'
 
 export const parts = {
+  32316: { ru: 'Балка 5L', en: 'Beam 5L', color: '#8094ac', glyph: 'brick' },
+  32278: { ru: 'Балка 15L', en: 'Beam 15L', color: '#8094ac', glyph: 'brick' },
+  43093: { ru: 'Штифт-ось 2L с трением', en: 'Friction axle pin 2L', color: '#626975', glyph: 'pin' },
+  6558: { ru: 'Длинный штифт 3L с трением', en: 'Long friction pin 3L', color: '#626975', glyph: 'pin' },
+  11214: { ru: 'Длинный штифт-ось 3L', en: 'Long axle pin 3L', color: '#626975', glyph: 'pin' },
+  30374: { ru: 'Стержень 4L', en: 'Bar 4L', color: '#aeb7c2', glyph: 'axle' },
   3700: { ru: 'Кирпич Technic 1×2', en: 'Technic brick 1×2', color: '#bfc5cc', glyph: 'brick' },
   3737: { ru: 'Крестовая ось 10L', en: 'Cross axle 10L', color: '#6b7480', glyph: 'axle' },
   3705: { ru: 'Крестовая ось 4L', en: 'Cross axle 4L', color: '#aeb7c2', glyph: 'axle' },
@@ -18,8 +24,8 @@ export const parts = {
   10928: { ru: 'Шестерня 8T', en: '8T gear', color: '#e7ac3c', glyph: 'gear' },
   3648: { ru: 'Шестерня 24T', en: '24T gear', color: '#b6bfca', glyph: 'gear' },
 }
-export const partOrder = ['3700', '3705', '3706', '3707', '3737', '3673', '2780', '3713', '6538', '10928', '3648', '41679', '41680']
-const fileURL = new URL('../../assets/ldraw/technic.mpd?v=mechanics-audit', import.meta.url)
+export const partOrder = ['3700', '3705', '3706', '3707', '3737', '3673', '2780', '3713', '6538', '10928', '3648', '41679', '41680', '30374', '32316', '32278', '43093', '6558', '11214']
+const fileURL = new URL('../../assets/ldraw/technic.mpd?v=connector-coverage', import.meta.url)
 const material = new THREE.MeshStandardMaterial({ roughness: .47, metalness: .08 })
 let palette
 

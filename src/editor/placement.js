@@ -1,6 +1,6 @@
 import { Quaternion, Vector3 } from 'three'
-import { measureInsertion } from '../mechanics/assembly.js?v=mechanics-audit'
-import { portLength } from '../mechanics/axial.js?v=mechanics-audit'
+import { measureInsertion } from '../mechanics/assembly.js?v=connector-coverage'
+import { connectionMode, portLength } from '../mechanics/axial.js?v=connector-coverage'
 
 const Y = new Vector3(0, 1, 0)
 const base = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI)
@@ -47,6 +47,7 @@ export function joinedPose(movingPose, movingPort, fixedPose, fixedPort, placeme
 export function candidateOffsets(shaft, socket, direction, side, depth) {
   const shaftSize = portLength(shaft)
   const socketSize = portLength(socket)
+  if (connectionMode(shaft, socket)?.seat) return [side === 'start' ? 0 : socketSize]
   if (socket.seat !== undefined) return [socket.seat]
   const points = [
     (socketSize - direction * shaftSize) / 2,

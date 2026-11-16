@@ -1,15 +1,16 @@
 import { Plane, Quaternion, Vector3 } from 'three'
-import { technic } from '../mechanics/catalog.js?v=mechanics-audit'
-import { baseRotation, samePose, worldPort } from './placement.js?v=mechanics-audit'
-import { connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, snapGrid } from './model.js?v=mechanics-audit'
-import { axleEnds, axleOptions, resizeAxle } from './axle-length.js'
-import { nearestDetent, portLength } from '../mechanics/axial.js?v=mechanics-audit'
-import { nearbyConnections } from './snap.js?v=mechanics-audit'
-import { loadPalette, partOrder, parts } from './parts.js?v=mechanics-audit'
-import { createScene } from './scene.js?v=mechanics-audit'
-import { editorLabels } from './labels.js?v=rotation-step'
+import { technic } from '../mechanics/catalog.js?v=connector-coverage'
+import { baseRotation, samePose, worldPort } from './placement.js?v=connector-coverage'
+import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, snapGrid } from './model.js?v=connector-coverage'
+import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=connector-coverage'
+import { nearestDetent, portLength } from '../mechanics/axial.js?v=connector-coverage'
+import { nearbyConnections } from './snap.js?v=connector-coverage'
+import { loadPalette, partOrder, parts } from './parts.js?v=connector-coverage'
+import { createScene } from './scene.js?v=connector-coverage'
+import { editorLabels } from './labels.js?v=connector-coverage'
 
-const isDriver = part => part && technic[part.design].some(port => port.role === 'axle' || port.role === 'gear')
+const driveRoles = new Set(['axle', 'axle-pin', 'friction-axle-pin', 'gear'])
+const isDriver = part => part && technic[part.design].some(port => driveRoles.has(port.role))
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
 const rotationStep = Math.PI / 4
@@ -338,10 +339,11 @@ export async function mountEditor(root, { document: source, language, save, down
     el('undo').disabled = !undo.length
     el('redo').disabled = !redo.length
     const fit = candidate?.fit
-    const cue = fit ? (fit.motion.rotation === 'locked' ? t.locked : fit.motion.rotation === 'detented' ? t.detented : t.freely)
-      : candidate?.failure?.includes('occupied') ? t.occupied : candidate?.failure ? t.blocked : t.free
+    const rotationCue = { fixed: t.fixed, locked: t.locked, detented: t.detented, continuous: t.freely }
+    const cue = fit ? rotationCue[fit.motion.rotation]
+      : candidate?.mesh ? t.gearSnap : candidate?.failure?.includes('occupied') ? t.occupied : candidate?.failure ? t.blocked : t.free
     el('hint').textContent = resize ? t.lengthPreview(parts[resize.pose.design][language], resize.lost.length, resize.kept) :
-      gizmoSnap?.fit ? t.snapPreview : moving ? `${cue} · ${t.place}`
+      gizmoSnap?.mesh ? t.gearSnap : gizmoSnap?.fit ? t.snapPreview : moving ? `${cue} · ${t.place}`
       : message || (hiddenParts.length ? t.unknown(hiddenParts.length) : t.camera)
   }
 
@@ -350,21 +352,22 @@ export async function mountEditor(root, { document: source, language, save, down
     if (!moving) return
     const { ground, ray } = scene.pointer(event, false)
     const freePoint = grab ? ray.intersectPlane(grab.plane, new Vector3()) : ground
+    let freePosition = null
+    if (grab) {
+      const delta = freePoint?.sub(grab.anchor)
+      const position = moving.position.map((value, i) => i === 1 ? value : value + onGrid(delta?.getComponent(i) ?? 0))
+      freePosition = { ...moving, position }
+    } else if (freePoint) freePosition = raisedPose(moving, models.get(moving.design), freePoint)
     const options = !pastedGroup && snapAllowed(event)
-      ? nearbyConnections({ scene, assembly: placementAssembly, parts: state.parts, moving, event, depth, roll })
+      ? nearbyConnections({ scene, assembly: placementAssembly, parts: state.parts, moving: freePosition ?? moving, event, depth, roll, ray })
       : []
     const index = options.findIndex(option => option.key === candidate?.key)
     const sticky = options[index]
     const first = options[0]
     if (cycle && options.length) candidate = options[(index + 1) % options.length]
-    else if (sticky && Boolean(sticky.fit) === Boolean(first.fit) && sticky.distance <= first.distance + 8) candidate = sticky
+    else if (sticky && Boolean(sticky.fit || sticky.mesh) === Boolean(first.fit || first.mesh) && sticky.distance <= first.distance + 8) candidate = sticky
     else candidate = first
-    if (candidate?.fit) pose = { ...moving, ...candidate.pose }
-    else if (grab) {
-      const delta = freePoint?.sub(grab.anchor)
-      const position = moving.position.map((value, i) => i === 1 ? value : value + onGrid(delta?.getComponent(i) ?? 0))
-      pose = { ...moving, position }
-    } else pose = freePoint ? raisedPose(moving, models.get(moving.design), freePoint) : null
+    pose = candidate?.pose ? { ...moving, ...candidate.pose } : freePosition
     scene.setGhost(pose, candidate?.point, Boolean(candidate?.failure))
     scene.setGroupGhost(pose && pastedGroup ? groupTransforms(pastedGroup.items, pastedGroup.anchor, pose) : [])
     render()
@@ -421,7 +424,8 @@ export async function mountEditor(root, { document: source, language, save, down
     const copied = pastedGroup ? groupTransforms(pastedGroup.items, pastedGroup.anchor, pose) : []
     const placed = original ? state.parts.map(part => part.id === id ? pose : part) : [...state.parts, pose, ...copied]
     const added = fit ? [{ shaft: candidate.shaft, socket: candidate.socket, placement: fit.placement }] : []
-    const nextLinks = original ? transformLinks(placed, id, added) : [...state.links, ...(pastedGroup?.links ?? []), ...added]
+    const nextLinks = transformLinks(placed, [id, ...copied.map(part => part.id)],
+      [...(pastedGroup?.links ?? []), ...added], Boolean(candidate?.pose))
     cancelPlacement()
     additional.clear()
     for (const part of copied) additional.add(part.id)
@@ -455,7 +459,7 @@ export async function mountEditor(root, { document: source, language, save, down
     render()
   }
 
-  function transformLinks(placed, ids, added = []) {
+  function transformLinks(placed, ids, added = [], infer = false) {
     const byId = new Map(placed.map(part => [part.id, part]))
     const changed = new Set(Array.isArray(ids) ? ids : [ids])
     const attached = link => changed.has(link?.shaft?.part) || changed.has(link?.socket?.part)
@@ -468,6 +472,11 @@ export async function mountEditor(root, { document: source, language, save, down
       const fit = connectPlaced(checked, shaft, socket, { shaft: a, socket: b, placement: previous })
       if (fit.ok) retained.push(connectionRecord({ shaft: a, socket: b, fit }))
     }
+    if (infer) {
+      const changedParts = placed.filter(part => changed.has(part.id))
+      const fixedParts = placed.filter(part => !changed.has(part.id))
+      retained.push(...connectAligned(checked, changedParts, fixedParts))
+    }
     return retained
   }
 
@@ -478,7 +487,7 @@ export async function mountEditor(root, { document: source, language, save, down
     const placed = state.parts.map(part => edited.get(part.id) ?? part)
     selected = after.id
     const added = snap?.fit ? [{ shaft: snap.shaft, socket: snap.socket, placement: snap.fit.placement }] : []
-    commit({ parts: placed, links: transformLinks(placed, [...edited.keys()], added) })
+    commit({ parts: placed, links: transformLinks(placed, [...edited.keys()], added, Boolean(snap?.pose)) })
   }
 
   function clipboardSelection() {
@@ -626,7 +635,7 @@ export async function mountEditor(root, { document: source, language, save, down
   function updateGizmo(cycle = false) {
     if (!gizmoPart || !gizmoRaw) return
     if (tool === 'move' && snapAllowed(pointer) && transform && !additional.size) {
-      const ownPorts = technic[gizmoRaw.design].filter(port => port.role !== 'gear')
+      const ownPorts = technic[gizmoRaw.design]
       const points = ownPorts.flatMap(port => {
         const { start, axis } = worldPort(gizmoRaw, port)
         return [start, start.clone().addScaledVector(axis, portLength(port))]
@@ -640,11 +649,11 @@ export async function mountEditor(root, { document: source, language, save, down
           Math.hypot(...delta) <= 12
       }
       const options = nearbyConnections({ scene: snapScene, assembly: transform, parts: state.parts,
-        moving: gizmoRaw, depth: 0, roll: 0, acceptPose }).filter(option => option.fit)
+        moving: gizmoRaw, depth: 0, roll: 0, acceptPose }).filter(option => option.pose)
       const previous = options.findIndex(option => option.key === gizmoSnap?.key)
       gizmoSnap = options.length ? options[cycle ? (previous + 1) % options.length : Math.max(0, previous)] : null
     } else gizmoSnap = null
-    const pose = gizmoSnap?.fit ? { ...gizmoRaw, ...gizmoSnap.pose } : gizmoRaw
+    const pose = gizmoSnap?.pose ? { ...gizmoRaw, ...gizmoSnap.pose } : gizmoRaw
     scene.setGhost(pose, gizmoSnap?.point)
     if (additional.size) scene.previewParts(groupTransforms(state.parts.filter(item => additional.has(item.id)), gizmoPart, pose))
     render()
@@ -778,7 +787,7 @@ export async function mountEditor(root, { document: source, language, save, down
     if (!gizmoPart) return
     const part = gizmoPart
     const snap = gizmoSnap
-    const pose = snap?.fit ? { ...gizmoRaw, ...snap.pose } : gizmoRaw
+    const pose = snap?.pose ? { ...gizmoRaw, ...snap.pose } : gizmoRaw
     // TransformControls clears its own dragging flag after this event.
     queueMicrotask(() => { if (gizmoPart === part) finishTransform(part, pose, snap) })
   })
@@ -920,6 +929,15 @@ export async function mountEditor(root, { document: source, language, save, down
         event.preventDefault()
         updatePointer(pointer, true)
       }
+      return
+    }
+    if (event.code === 'KeyL' && event.shiftKey && !event.repeat && selected) {
+      event.preventDefault()
+      const ids = new Set(selectionIds())
+      const next = [...state.links, ...connectAligned(createAssembly(state.parts, state.links),
+        state.parts.filter(part => ids.has(part.id)), state.parts.filter(part => !ids.has(part.id)))]
+      if (next.length > state.links.length) commit({ ...state, links: next })
+      else { message = t.noAlignedPorts; render() }
       return
     }
     const step = steps[event.code]

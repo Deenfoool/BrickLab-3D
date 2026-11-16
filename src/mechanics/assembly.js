@@ -1,7 +1,7 @@
-import { evaluateInsertion, overlap, portLength } from './axial.js?v=mechanics-audit'
+import { evaluateInsertion, overlap, portLength } from './axial.js?v=connector-coverage'
 import { evaluateSpurMesh } from './gears.js'
-import { rotationPort } from './catalog.js?v=mechanics-audit'
-import { cross, dot, isVector, length, subtract, unit } from './vector.js?v=mechanics-audit'
+import { rotationPort } from './catalog.js?v=connector-coverage'
+import { cross, dot, isVector, length, subtract, unit } from './vector.js?v=connector-coverage'
 
 const LINEAR_TOLERANCE = .01
 const AXIS_TOLERANCE = 1e-5
@@ -56,7 +56,12 @@ export class Assembly {
     const fit = evaluateInsertion(male, female, placement, { seated })
     if (!fit.ok) return fit
     const onShaft = this.#connections.filter(link => samePort(link.shaft, shaft))
-    if (this.#connections.some(link => samePort(link.socket, socket))) {
+    const socketSpan = portLength(female)
+    const [socketLo, socketHi] = fit.occupancy.socket
+    const socketSweep = seated ? [socketLo, socketHi]
+      : fit.placement.side === 'start' ? [0, socketHi] : [socketLo, socketSpan]
+    if (this.#connections.some(link => samePort(link.socket, socket) &&
+        overlap(link.fit.occupancy.socket, socketSweep) > 1e-6)) {
       return { ok: false, reason: 'socket-occupied' }
     }
     const span = portLength(male)
@@ -93,6 +98,16 @@ export class Assembly {
       const sameDirection = direction === link.fit.placement.direction
       min = Math.max(min, sameDirection ? from : -to)
       max = Math.min(max, sameDirection ? to : -from)
+      const [socketLo, socketHi] = link.fit.occupancy.socket
+      for (const neighbor of this.#connections) {
+        if (neighbor === link || !samePort(neighbor.socket, link.socket)) continue
+        const [neighborLo, neighborHi] = neighbor.fit.occupancy.socket
+        // In socket coordinates a positive offset advances the shaft toward the high end.
+        const minOffset = neighborHi <= socketLo + 1e-6 ? -Math.max(0, socketLo - neighborHi) : -Infinity
+        const maxOffset = neighborLo >= socketHi - 1e-6 ? Math.max(0, neighborLo - socketHi) : Infinity
+        min = Math.max(min, sameDirection ? minOffset : -maxOffset)
+        max = Math.min(max, sameDirection ? maxOffset : -minOffset)
+      }
       const [lo, hi] = link.fit.occupancy.shaft
       for (const neighbor of fixed) {
         const [otherLo, otherHi] = neighbor.fit.occupancy.shaft
