@@ -1,0 +1,9 @@
+{
+  "name": "bricklab-3d",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "demo": "node examples/drivetrain.js"
+  }
+}

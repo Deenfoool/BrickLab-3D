@@ -1,0 +1,382 @@
+{
+  "2780": [
+    {
+      "id": "shaft",
+      "role": "friction-pin",
+      "gender": "M",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        -20,
+        0,
+        0
+      ],
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "L",
+          "radius": 6.25,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 4
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "L",
+          "radius": 6.25,
+          "length": 2
+        }
+      ]
+    }
+  ],
+  "3648": [
+    {
+      "id": "bore",
+      "role": "key",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        0,
+        -10
+      ],
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "sections": [
+        {
+          "shape": "A",
+          "radius": 6,
+          "length": 20
+        }
+      ]
+    },
+    {
+      "id": "teeth",
+      "role": "gear",
+      "gender": "M",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        0,
+        -4.75
+      ],
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "sections": [
+        {
+          "shape": "G",
+          "radius": 30,
+          "length": 9.5,
+          "teeth": 24
+        }
+      ]
+    }
+  ],
+  "3673": [
+    {
+      "id": "shaft",
+      "role": "pin",
+      "gender": "M",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        -20,
+        0,
+        0
+      ],
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "L",
+          "radius": 6.25,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 4
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "L",
+          "radius": 6.25,
+          "length": 2
+        }
+      ]
+    }
+  ],
+  "3700": [
+    {
+      "id": "bore",
+      "role": "bearing",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        10,
+        -10
+      ],
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "sections": [
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        },
+        {
+          "shape": "R",
+          "radius": 6,
+          "length": 16
+        },
+        {
+          "shape": "R",
+          "radius": 8,
+          "length": 2
+        }
+      ]
+    }
+  ],
+  "3705": [
+    {
+      "id": "shaft",
+      "role": "axle",
+      "gender": "M",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        -40,
+        0,
+        0
+      ],
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "A",
+          "radius": 6,
+          "length": 80
+        }
+      ]
+    }
+  ],
+  "3713": [
+    {
+      "id": "bore",
+      "role": "bush",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        0,
+        10
+      ],
+      "axis": [
+        0,
+        0,
+        -1
+      ],
+      "sections": [
+        {
+          "shape": "A",
+          "radius": 6,
+          "length": 20
+        }
+      ]
+    }
+  ],
+  "3737": [
+    {
+      "id": "shaft",
+      "role": "axle",
+      "gender": "M",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        -100,
+        0,
+        0
+      ],
+      "axis": [
+        1,
+        0,
+        0
+      ],
+      "sections": [
+        {
+          "shape": "A",
+          "radius": 6,
+          "length": 200
+        }
+      ]
+    }
+  ],
+  "6538": [
+    {
+      "id": "bore-a",
+      "role": "blind-key",
+      "gender": "F",
+      "openings": [
+        "start"
+      ],
+      "start": [
+        0,
+        0,
+        -20
+      ],
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "sections": [
+        {
+          "shape": "A",
+          "radius": 6,
+          "length": 20
+        }
+      ]
+    },
+    {
+      "id": "bore-b",
+      "role": "blind-key",
+      "gender": "F",
+      "openings": [
+        "start"
+      ],
+      "start": [
+        0,
+        0,
+        20
+      ],
+      "axis": [
+        0,
+        0,
+        -1
+      ],
+      "sections": [
+        {
+          "shape": "A",
+          "radius": 6,
+          "length": 20
+        }
+      ]
+    }
+  ],
+  "10928": [
+    {
+      "id": "bore",
+      "role": "key",
+      "gender": "F",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        0,
+        10
+      ],
+      "axis": [
+        0,
+        0,
+        -1
+      ],
+      "sections": [
+        {
+          "shape": "A",
+          "radius": 6,
+          "length": 20
+        }
+      ]
+    },
+    {
+      "id": "teeth",
+      "role": "gear",
+      "gender": "M",
+      "openings": [
+        "start",
+        "end"
+      ],
+      "start": [
+        0,
+        0,
+        -4.75
+      ],
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "sections": [
+        {
+          "shape": "G",
+          "radius": 10,
+          "length": 9.5,
+          "teeth": 8
+        }
+      ]
+    }
+  ]
+}
