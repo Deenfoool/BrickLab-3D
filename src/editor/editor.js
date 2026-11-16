@@ -3,16 +3,18 @@ import { technic } from '../mechanics/catalog.js'
 import { baseRotation } from './placement.js'
 import { createAssembly, gearPoses, loadParts, raisedPose } from './model.js'
 import { nearbyConnections } from './snap.js'
-import { loadPalette, partOrder, parts } from './parts.js'
-import { createScene } from './scene.js'
-import { editorLabels } from './labels.js'
+import { loadPalette, partOrder, parts } from './parts.js?v=editor-retry'
+import { createScene } from './scene.js?v=editor-retry'
+import { editorLabels } from './labels.js?v=editor-retry'
 
 const isDriver = part => part && technic[part.design].some(port => port.role === 'axle' || port.role === 'gear')
 const Y = new Vector3(0, 1, 0)
 
 export async function mountEditor(root, { document: source, language, save, download, signal }) {
   const t = editorLabels[language]
-  const models = await loadPalette()
+  const models = await loadPalette().catch(cause => {
+    throw Object.assign(new Error('Failed to load parts palette', { cause }), { code: 'palette-load' })
+  })
   if (signal.aborted) return
   root.innerHTML = `
     <header class="editor-bar">

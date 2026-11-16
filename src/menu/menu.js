@@ -1,4 +1,4 @@
-import { editorLabels } from '../editor/labels.js'
+import { editorLabels } from '../editor/labels.js?v=editor-retry'
 import { locales } from './locale.js'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
@@ -210,9 +210,11 @@ async function openEditor(project) {
   editorSession = session
   const t = editorLabels[language]
   editorRoot.append(element('div', 'editor-loading', t.loading))
+  let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js')
+    const { mountEditor } = await import('../editor/editor.js?v=editor-retry')
     if (controller.signal.aborted) return
+    phase = 'startEditorError'
     await mountEditor(editorRoot, {
       document: project.document, language, signal: controller.signal,
       download: downloadProject,
@@ -231,8 +233,22 @@ async function openEditor(project) {
     const back = element('a', null, t.home)
     back.href = '#projects'
     const retry = button(null, t.retry)
-    retry.addEventListener('click', () => { closeEditor(); openEditor(project) })
-    panel.append(element('p', null, t.noWebgl), retry, back)
+    const key = error?.code === 'webgl-init' ? 'noWebgl' :
+      error?.code === 'palette-load' ? 'loadPartsError' : phase
+    const message = element('p', null, t[key])
+    message.setAttribute('role', 'alert')
+    retry.addEventListener('click', () => {
+      // A failed dependency can stay in the current document's module map.
+      // Reload the document at the current project URL to retry the whole graph.
+      if (key === 'loadEditorError' && !storageWarning) {
+        location.reload()
+        return
+      }
+      closeEditor()
+      openEditor(project)
+    })
+    controller.abort()
+    panel.append(message, retry, back)
     editorRoot.replaceChildren(panel)
   }
 }

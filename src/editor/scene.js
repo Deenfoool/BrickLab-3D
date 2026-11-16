@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { partMesh, parts } from './parts.js'
+import { partMesh, parts } from './parts.js?v=editor-retry'
 import { worldPort } from './placement.js'
 import { technic } from '../mechanics/catalog.js'
 
@@ -9,7 +9,12 @@ export function createScene(host, models) {
   world.background = new THREE.Color('#16191f')
   world.fog = new THREE.FogExp2('#16191f', .0017)
   const camera = new THREE.PerspectiveCamera(42, 1, 1, 14000)
-  const renderer = new THREE.WebGLRenderer({ antialias: true })
+  let renderer
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: true })
+  } catch (cause) {
+    throw Object.assign(new Error('Failed to initialize WebGL', { cause }), { code: 'webgl-init' })
+  }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75))
   renderer.setClearColor('#16191f')
   renderer.outputColorSpace = THREE.SRGBColorSpace
