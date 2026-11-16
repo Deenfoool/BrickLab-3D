@@ -80,12 +80,11 @@ time{font-size:clamp(14px,1.38vw,21px);color:var(--muted);white-space:nowrap}
 .open:hover{background:var(--hover)}
 .open .icon{width:33px;height:33px}
 .open .icon:last-child{margin-left:auto;width:26px;height:26px}
-.example-card,.project-panel,dialog{border:1px solid var(--line);border-radius:12px;background:#202226;padding:26px}
+.example-card,dialog{border:1px solid var(--line);border-radius:12px;background:#202226;padding:26px}
 .example-card{display:flex;align-items:center;gap:20px}
-.example-card p,.project-panel p{margin:13px 0;color:var(--muted)}
+.example-card p{margin:13px 0;color:var(--muted)}
 .example-card button{margin-left:auto}
-.project-panel form{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.project-panel input,.setting select{padding:9px 12px;border:1px solid var(--line);border-radius:7px;background:var(--side)}
+.setting select{padding:9px 12px;border:1px solid var(--line);border-radius:7px;background:var(--side)}
 .secondary{border:1px solid var(--line);border-radius:7px;padding:8px 14px;background:#2b2e33}
 .secondary:hover{background:#373a40}
 .status{color:var(--gold);margin-top:18px}

@@ -1,3 +1,4 @@
+import { editorLabels } from '../editor/labels.js'
 import { locales } from './locale.js'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
@@ -12,7 +13,9 @@ let projects = readProjects()
 let storageWarning = false
 let activeMenu = null
 let pendingRemoval = null
-let activeProject = null
+const editorRoot = byId('editor')
+const shell = document.querySelector('.shell')
+let editorSession
 let language = 'ru'
 
 try {
@@ -160,7 +163,10 @@ function render() {
   const page = currentPage()
   const listVisible = page === 'home' || page === 'projects'
   const requestedId = page === 'project' ? location.hash.slice('#project/'.length) : null
-  activeProject = requestedId ? projects.find(project => project.id === requestedId) ?? null : null
+  const activeProject = requestedId ? projects.find(project => project.id === requestedId) : null
+  shell.hidden = Boolean(activeProject)
+  editorRoot.hidden = !activeProject
+  if (!activeProject) closeEditor()
   document.documentElement.lang = language
   document.querySelectorAll('[data-text]').forEach(node => {
     node.textContent = t[node.dataset.text]
@@ -179,18 +185,56 @@ function render() {
   byId('dashboard').hidden = !listVisible
   byId('example-panel').hidden = page !== 'examples'
   byId('all-projects').hidden = page !== 'home'
-  byId('project-panel').hidden = !activeProject
   byId('page-title').textContent = page === 'home' ? t.workspace :
     page === 'project' ? activeProject?.document.name ?? t.projects : t[page]
   if (listVisible) {
     byId('list-title').textContent = page === 'home' ? t.recent : t.projects
     renderList(page)
   }
-  if (activeProject) {
-    byId('project-name').value = activeProject.document.name
-    byId('project-summary').textContent = t.partCount(activeProject.document.parts.length)
-  }
+  if (activeProject) openEditor(activeProject)
   setStatus(requestedId && !activeProject ? 'missing' : storageWarning ? 'storageError' : null)
+}
+
+function closeEditor() {
+  if (!editorSession) return
+  editorSession.controller.abort()
+  editorSession = null
+  editorRoot.replaceChildren()
+}
+
+async function openEditor(project) {
+  if (editorSession?.id === project.id && editorSession.language === language) return
+  closeEditor()
+  const controller = new AbortController()
+  const session = { id: project.id, language, controller }
+  editorSession = session
+  const t = editorLabels[language]
+  editorRoot.append(element('div', 'editor-loading', t.loading))
+  try {
+    const { mountEditor } = await import('../editor/editor.js')
+    if (controller.signal.aborted) return
+    await mountEditor(editorRoot, {
+      document: project.document, language, signal: controller.signal,
+      download: downloadProject,
+      save(document) {
+        if (controller.signal.aborted) return false
+        const record = makeRecord(document, project.id)
+        const latest = storageWarning ? projects : readProjects()
+        updateProjects([record, ...latest.filter(item => item.id !== project.id)])
+        return !storageWarning
+      },
+    })
+  } catch (error) {
+    if (controller.signal.aborted) return
+    console.error(error)
+    const panel = element('div', 'editor-loading')
+    const back = element('a', null, t.home)
+    back.href = '#projects'
+    const retry = button(null, t.retry)
+    retry.addEventListener('click', () => { closeEditor(); openEditor(project) })
+    panel.append(element('p', null, t.noWebgl), retry, back)
+    editorRoot.replaceChildren(panel)
+  }
 }
 
 function setLanguage(value) {
@@ -226,22 +270,6 @@ byId('example-open').addEventListener('click', async () => {
   } catch {
     setStatus('invalidFile')
   }
-})
-byId('project-form').addEventListener('submit', event => {
-  event.preventDefault()
-  const input = byId('project-name')
-  const name = input.value.trim()
-  if (!activeProject || !name) {
-    input.focus()
-    return
-  }
-  const record = makeRecord({ ...activeProject.document, name }, activeProject.id)
-  updateProjects(projects.map(project => project.id === record.id ? record : project))
-  render()
-  if (!storageWarning) setStatus('saved')
-})
-byId('export').addEventListener('click', () => {
-  if (activeProject) downloadProject(activeProject.document)
 })
 removeDialog.addEventListener('close', () => {
   if (removeDialog.returnValue === 'remove' && pendingRemoval) {

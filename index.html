@@ -7,6 +7,10 @@
   <title>BrickLab 3D</title>
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./src/menu/menu.css">
+  <link rel="stylesheet" href="./src/editor/editor.css">
+  <script type="importmap">
+    {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
+  </script>
   <script type="module" src="./src/menu/menu.js"></script>
 </head>
 <body>
@@ -84,19 +88,11 @@
             <button type="button" class="secondary" id="example-open" data-text="exampleOpen">Создать копию</button>
           </div>
         </section>
-        <section id="project-panel" class="project-panel" hidden>
-          <form id="project-form">
-            <label for="project-name" data-text="name">Название</label>
-            <input id="project-name" autocomplete="off" maxlength="120" required>
-            <button type="submit" class="secondary" data-text="save">Сохранить</button>
-          </form>
-          <p id="project-summary"></p>
-          <button type="button" class="secondary" id="export" data-text="export">Скачать файл</button>
-        </section>
         <p id="status" class="status" role="status" hidden></p>
       </div>
     </main>
   </div>
+  <main id="editor" class="editor" hidden></main>
   <dialog id="settings-dialog">
     <form method="dialog">
       <h2 data-text="settings">Настройки</h2>

@@ -1,0 +1,57 @@
+import { Quaternion, Vector3 } from 'three'
+import { portLength } from '../mechanics/axial.js'
+
+const Y = new Vector3(0, 1, 0)
+const base = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI)
+export const baseRotation = base.toArray()
+const vector = value => new Vector3().fromArray(value)
+const rotation = value => new Quaternion().fromArray(value).normalize()
+
+export function worldPort(pose, port) {
+  const q = rotation(pose.rotation)
+  return {
+    start: vector(port.start).applyQuaternion(q).add(vector(pose.position)),
+    axis: vector(port.axis).applyQuaternion(q).normalize(),
+  }
+}
+
+function reference(axis) {
+  const x = Math.abs(axis.x)
+  const basis = x > .5 ? Y.clone() : new Vector3(1, 0, 0)
+  return basis.addScaledVector(axis, -basis.dot(axis)).normalize()
+}
+
+export function joinedPose(movingPose, movingPort, fixedPose, fixedPort, placement) {
+  const fixed = worldPort(fixedPose, fixedPort)
+  const moving = worldPort(movingPose, movingPort)
+  const movingShaft = movingPort.gender === 'M'
+  const axis = fixed.axis.clone().multiplyScalar(placement.direction)
+  const from = reference(vector(movingPort.axis))
+  const fixedReference = reference(vector(fixedPort.axis)).applyQuaternion(rotation(fixedPose.rotation))
+  const to = fixedReference.applyAxisAngle(fixed.axis, movingShaft ? placement.roll : -placement.roll * placement.direction)
+  const q = rotation(movingPose.rotation)
+  q.premultiply(new Quaternion().setFromUnitVectors(moving.axis, axis))
+  const current = from.applyQuaternion(q)
+  const angle = Math.atan2(axis.dot(current.clone().cross(to)), current.dot(to))
+  if (placement.keyStep) q.premultiply(new Quaternion().setFromAxisAngle(axis, angle))
+  else if (placement.roll) q.premultiply(new Quaternion().setFromAxisAngle(axis, placement.roll))
+  const socketAxis = movingShaft ? fixed.axis : axis
+  const position = fixed.start.clone().addScaledVector(socketAxis, (movingShaft ? 1 : -1) * placement.offset)
+    .sub(vector(movingPort.start).applyQuaternion(q))
+  return { position: position.toArray(), rotation: q.toArray() }
+}
+
+export function candidateOffsets(shaft, socket, direction, side, depth) {
+  const shaftSize = portLength(shaft)
+  const socketSize = portLength(socket)
+  const points = [
+    (socketSize - direction * shaftSize) / 2,
+    side === 'start' ? socketSize - Math.max(0, direction * shaftSize) : -Math.min(0, direction * shaftSize),
+  ]
+  const maleEnds = [0]
+  const femaleEnds = [0]
+  for (const section of shaft.sections) maleEnds.push(maleEnds.at(-1) + direction * section.length)
+  for (const section of socket.sections) femaleEnds.push(femaleEnds.at(-1) + section.length)
+  for (const f of femaleEnds) for (const m of maleEnds) points.push(f - m)
+  return [...new Set(points)].map(offset => offset + depth)
+}
