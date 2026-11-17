@@ -19,7 +19,7 @@ const { rotationalDrive } = await import('../src/mechanics/rotation.js')
 const { upgradeInlineEngineFan } = await import('../src/editor/inline-engine.js')
 const { componentBundle, expandComponents } = await import('../src/editor/components.js')
 const { jointBodies, linkageDrive } = await import('../src/mechanics/linkage.js')
-const { Quaternion, Vector3 } = await import('three')
+const { Quaternion, Ray, Vector3 } = await import('three')
 const { worldPort } = await import('../src/editor/placement.js')
 const { nearbyConnections } = await import('../src/editor/snap.js')
 const { portsFor } = await import('../src/mechanics/catalog.js')
@@ -70,6 +70,64 @@ test('the imported frames keep separate holes and allow round pin fits, includin
   const seated = fits[0]
   const placed = { ...pin, ...seated.pose }
   assert.equal(connectAligned(createAssembly([beam, placed], []), [placed], [beam]).length, 1)
+})
+
+test('thin Technic liftarms snap to an axle next to either end and keep the keyed fit on reload', () => {
+  const axle = part('axle', '44294')
+  for (const beamDesign of ['41677', '6632']) {
+    const beam = part('beam', beamDesign)
+    const keyPorts = portsFor(beamDesign).filter(port => port.role === 'key')
+    const axleFirst = options(axle, beam).filter(option => option.fit?.motion.rotation === 'locked' && restore(option, axle, beam).length === 1)
+    assert.deepEqual(new Set(axleFirst.map(fit => fit.socket.port)), new Set(keyPorts.map(port => port.id)))
+    for (const x of [-67, 67]) {
+      const ray = new Ray(new Vector3(x, 0, 100), new Vector3(0, 0, -1))
+      const fits = nearbyConnections({ moving: beam, parts: [axle], ray, depth: 0, roll: 0,
+        assembly: createAssembly([axle, beam], []), scene: { pixelDistance: point => Math.abs(point.x - x) * 12 },
+      }).filter(snap => snap.fit?.motion.rotation === 'locked')
+      assert.deepEqual(new Set(fits.map(fit => fit.socket.port)), new Set(keyPorts.map(port => port.id)))
+      for (const snap of fits) {
+        assert.deepEqual(snap.fit.occupancy.shaft.map(value => value || 0), x < 0 ? [0, 10] : [130, 140])
+        assert.equal(restore(snap, beam, axle).length, 1)
+      }
+    }
+  }
+})
+
+test('thin liftarms slide onto a shared axle through its open end', () => {
+  const axle = part('axle', '44294')
+  const rotation = [0, 0, -Math.SQRT1_2, Math.SQRT1_2]
+  const left = { ...part('left', '41677'), position: [-65, 0, 0], rotation }
+  const right = { ...part('right', '41677'), position: [65, 0, 0], rotation }
+  const moving = part('center', '6632')
+  const seated = createAssembly([axle, left, right], [])
+  const links = connectAligned(seated, [left, right], [axle])
+  assert.equal(links.length, 2)
+  const x = -55
+  const ray = new Ray(new Vector3(x, 0, 100), new Vector3(0, 0, -1))
+  const find = (fixed, links) => nearbyConnections({ moving, parts: [axle], ray, depth: 0, roll: 0,
+    assembly: createAssembly([...fixed, moving], links), scene: { pixelDistance: point => Math.abs(point.x - x) * 12 },
+  })
+  const fits = find([axle, left], links.filter(link => link.socket.part === left.id))
+  const [round] = fits.filter(option => option.fit?.motion.rotation === 'continuous')
+  assert.ok(round)
+  assert.equal(portsFor(moving.design).find(port => port.id === round.socket.port).role, 'bearing')
+  assert.ok(fits.some(option => option.fit?.motion.rotation === 'locked'))
+  const blocked = find([axle, left, right], links)
+  assert.ok(blocked.length)
+  assert.ok(blocked.every(option => option.failure === 'shaft-path-occupied'))
+})
+
+test('a correctly oriented thin liftarm can snap with the move gizmo at the middle of an axle', () => {
+  const axle = part('axle', '44294')
+  const beam = { ...part('beam', '6632'), position: [5, 2, 0], rotation: [0, 0, Math.SQRT1_2, Math.SQRT1_2] }
+  const acceptPose = pose => Math.abs(pose.position[0] - 5) < .001 && Math.abs(pose.position[2]) < .001 &&
+    Math.abs(new Quaternion().fromArray(pose.rotation).dot(new Quaternion().fromArray(beam.rotation))) > .999999
+  const snap = nearbyConnections({ moving: beam, parts: [axle], acceptPose, depth: 0, roll: 0,
+    assembly: createAssembly([axle, beam], []), scene: { pixelDistance: point => Math.abs(point.x - 5) * 12 },
+  }).find(option => option.fit?.motion.rotation === 'locked')
+  assert.ok(snap)
+  assert.ok(new Vector3(...snap.pose.position).distanceTo(new Vector3(5, 0, 0)) < .001)
+  assert.equal(restore(snap, beam, axle).length, 1)
 })
 
 test('an angular keyed joiner stops a pin and accepts the axle only through its open end', () => {

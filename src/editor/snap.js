@@ -5,6 +5,7 @@ import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=belt-driv
 import { candidateOffsets, joinedPose, worldPort } from './placement.js?v=belt-drive'
 
 const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')
+const canSlideOn = port => ['axle', 'duplo-axle', 'rod'].includes(port.role)
 
 function gearCenter(part, port) {
   const { start, axis } = worldPort(part, port)
@@ -56,21 +57,27 @@ function rackCandidate(scene, moving, fixed, ownGear, fixedGear, event, ray, acc
   if (!acceptPose || acceptPose(pose)) return { key: JSON.stringify(['rack', fixed.id]), point, distance, pose, mesh: { ok: true } }
 }
 
-function targetsOnPort(scene, event, fixedPort, start, axis, span, ray) {
-  const targets = fixedPort.openings.map(side => ({
-    side, point: start.clone().addScaledVector(axis, side === 'end' ? span : 0),
-  }))
-  const canSlide = ['axle', 'duplo-axle', 'rod'].includes(fixedPort.role)
-  if (canSlide && ray) {
-    const nearest = new Vector3()
-    ray.distanceSqToSegment(start, start.clone().addScaledVector(axis, span), undefined, nearest)
-    const along = nearest.clone().sub(start).dot(axis)
-    if (along > 10 && along < span - 10) {
-      for (const side of fixedPort.openings) targets.push({ side, point: nearest, along })
-    }
-  }
+function shaftTargets(port, start, axis, span, along) {
+  if (along <= .001 || along >= span - .001) return []
+  const point = start.clone().addScaledVector(axis, along)
+  return port.openings.map(side => ({ side, point, along }))
+}
+
+function withinSnapRange(scene, event, targets) {
   return targets.map(target => ({ ...target, distance: scene.pixelDistance(target.point, event) }))
     .filter(({ distance }) => Number.isFinite(distance) && distance <= 31)
+}
+
+function targetsOnPort(scene, event, port, start, axis, span, ray) {
+  const targets = port.openings.map(side => ({
+    side, point: start.clone().addScaledVector(axis, side === 'end' ? span : 0),
+  }))
+  if (ray && canSlideOn(port)) {
+    const nearest = new Vector3()
+    ray.distanceSqToSegment(start, start.clone().addScaledVector(axis, span), undefined, nearest)
+    targets.push(...shaftTargets(port, start, axis, span, nearest.sub(start).dot(axis)))
+  }
+  return withinSnapRange(scene, event, targets)
 }
 
 function anchorCandidate(context, fixed, fixedPort, own, start, mode) {
@@ -131,13 +138,23 @@ export function nearbyConnections(context) {
         continue
       }
       const targets = targetsOnPort(scene, event, fixedPort, start, axis, span, ray)
-      for (const { side, point, along, distance } of targets) {
-        for (const own of ownConnectors) {
-          const movingShaft = own.gender === 'M'
-          const male = movingShaft ? own : fixedPort
-          const female = movingShaft ? fixedPort : own
-          const mode = connectionMode(male, female)
-          if (!mode || mode.anchor) continue
+      const gizmoShaft = acceptPose && canSlideOn(fixedPort)
+      if (!targets.length && !gizmoShaft) continue
+      for (const own of ownConnectors) {
+        const movingShaft = own.gender === 'M'
+        const male = movingShaft ? own : fixedPort
+        const female = movingShaft ? fixedPort : own
+        const mode = connectionMode(male, female)
+        if (!mode || mode.anchor) continue
+        const ownWorld = acceptPose && worldPort(moving, own)
+        const socketWidth = portLength(female)
+        let points = targets
+        if (gizmoShaft && !movingShaft) {
+          const center = ownWorld.start.clone().addScaledVector(ownWorld.axis, socketWidth / 2)
+          const along = center.sub(start).dot(axis)
+          points = [...targets, ...withinSnapRange(scene, event, shaftTargets(fixedPort, start, axis, span, along))]
+        }
+        for (const { side, point, along, distance } of points) {
           const shaft = { part: movingShaft ? moving.id : fixed.id, port: male.id }
           const socket = { part: movingShaft ? fixed.id : moving.id, port: female.id }
           const key = JSON.stringify([fixed.id, fixedPort.id, own.id, side, along !== undefined])
@@ -150,10 +167,15 @@ export function nearbyConnections(context) {
               const entersAtShaftEnd = (entry === 'start') === (direction > 0)
               if (!movingShaft && entersAtShaftEnd !== (side === 'end')) continue
               const signedDepth = movingShaft ? (entry === 'start' ? depth : -depth) : (side === 'start' ? -direction : direction) * depth
-              const offsets = along === undefined ? candidateOffsets(male, female, direction, entry, signedDepth)
-                : [portLength(female) / 2 - direction * (along + depth)]
-              if (acceptPose) {
-                const ownWorld = worldPort(moving, own)
+              let offsets
+              if (along === undefined) {
+                offsets = candidateOffsets(male, female, direction, entry, signedDepth)
+              } else {
+                const inset = Math.min(socketWidth, span) / 2
+                const center = Math.max(inset, Math.min(span - inset, along))
+                offsets = [socketWidth / 2 - direction * (center + depth)]
+              }
+              if (ownWorld) {
                 const fixedAxis = movingShaft ? axis : axis.clone().multiplyScalar(direction)
                 const offset = ownWorld.start.clone().sub(start).dot(fixedAxis)
                 offsets.push(movingShaft ? offset : -offset)

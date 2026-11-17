@@ -5,7 +5,7 @@ import { baseRotation, samePose, worldPort } from './placement.js?v=belt-drive'
 import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=belt-drive'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
 import { nearestDetent, portLength } from '../mechanics/axial.js?v=linkages'
-import { nearbyConnections } from './snap.js?v=belt-drive'
+import { nearbyConnections } from './snap.js?v=shaft-placement'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=inline-engine'
 import { mountLibrary } from './library.js?v=belt-drive'
 import { createScene } from './scene.js?v=part-outlines'
@@ -914,7 +914,9 @@ export async function mountEditor(root, { document, language, save, download, si
       const ownPorts = portsFor(gizmoRaw.design)
       const points = ownPorts.flatMap(port => {
         const { start, axis } = worldPort(gizmoRaw, port)
-        return [start, start.clone().addScaledVector(axis, portLength(port))]
+        const length = portLength(port)
+        const end = start.clone().addScaledVector(axis, length)
+        return port.gender === 'F' ? [start, start.clone().addScaledVector(axis, length / 2), end] : [start, end]
       }).map(scene.project).filter(point => point.visible)
       const snapScene = { pixelDistance: point => Math.min(...points.map(screen => scene.pixelDistance(point, screen))) }
       const axes = scene.gizmo.axis ?? ''
