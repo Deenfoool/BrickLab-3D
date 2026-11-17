@@ -16,6 +16,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { createAssembly, connectAligned, connectPlaced, rotationMotion, rotationPoses } = await import('../src/editor/model.js')
 const { assembleBelts, beltLayout, beltPath, beltTravel, grooveOf, promoteLegacyBelts } = await import('../src/mechanics/belts.js')
 const { rotationalDrive } = await import('../src/mechanics/rotation.js')
+const { upgradeInlineEngineFan } = await import('../src/editor/inline-engine.js')
 const { componentBundle, expandComponents } = await import('../src/editor/components.js')
 const { jointBodies, linkageDrive } = await import('../src/mechanics/linkage.js')
 const { Quaternion, Vector3 } = await import('three')
@@ -240,6 +241,46 @@ test('858 retains two belts, the seated fan and all three pistons on reload', ()
   assert.equal(withoutFan.spins.has('858-114'), false)
   assert.ok(withoutFan.spins.has('858-53'))
   assert.equal(withoutFan.meshes.length, 4)
+})
+
+test('opening a saved 858 with the short fan axle restores all blade connections', () => {
+  const fixturePin = engine.parts.find(part => part.id === '858-111')
+  const oldPin = { ...fixturePin, design: '3749', color: '#4B8E60', position: [-120, 126, -20] }
+  const parts = engine.parts.map(part => part === fixturePin ? oldPin : part)
+  const retained = engine.connections.filter(link => link.shaft.part !== oldPin.id)
+  const mount = parts.filter(part => ['858-100', '858-112'].includes(part.id))
+  const oldLinks = connectAligned(createAssembly(parts, retained), [oldPin], mount)
+  assert.equal(oldLinks.length, 2)
+  const old = { ...engine, name: 'My saved engine', parts, connections: [...retained, ...oldLinks] }
+  const before = createAssembly(parts, old.connections, { belts: old.belts })
+  assert.ok(rotationMotion('858-44', parts, before).spins.has(oldPin.id))
+  assert.equal(rotationMotion('858-44', parts, before).spins.has('858-114'), false)
+
+  const restored = upgradeInlineEngineFan(old)
+  const pin = restored.parts.find(part => part.id === oldPin.id)
+  assert.equal(pin.design, '65249')
+  assert.equal(pin.color, oldPin.color)
+  assert.equal(oldPin.design, '3749')
+  assert.equal(restored.name, old.name)
+  assert.equal(restored.belts, old.belts)
+  assert.equal(upgradeInlineEngineFan(restored), restored)
+
+  const assembly = createAssembly(restored.parts, restored.connections, { belts: restored.belts })
+  assert.equal(assembly.connections.length, restored.connections.length)
+  assert.equal(assembly.connections.length, old.connections.length + 2)
+  for (const driver of ['858-44', '858-114']) {
+    const motion = rotationMotion(driver, restored.parts, assembly)
+    assert.equal(motion.kind, 'engine')
+    for (const id of ['858-114', '858-115', '858-116', '858-117']) {
+      const original = parts.find(part => part.id === id)
+      const blade = rotationPoses(restored.parts, motion, .37).find(part => part.id === id)
+      assert.ok(new Quaternion().fromArray(blade.rotation).angleTo(new Quaternion().fromArray(original.rotation)) > 1)
+    }
+  }
+
+  const modified = { ...old, parts: old.parts.map(part =>
+    part.id === '858-118' ? { ...part, position: [-143, 126, -20] } : part) }
+  assert.equal(upgradeInlineEngineFan(modified), modified, 'a repositioned blade carrier must be left alone')
 })
 
 test('an open belt transfers reversible rotation between independent pulley sizes', () => {

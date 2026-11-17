@@ -12,6 +12,7 @@ import { createScene } from './scene.js?v=belt-drive'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=belt-drive'
 import { mountPhysicsPanel, physicsTitle } from './physics-panel.js?v=belt-drive'
 import { mountBeltPanel } from './belt-panel.js?v=belt-drive'
+import { upgradeInlineEngineFan } from './inline-engine.js'
 import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
 import { editorLabels } from './labels.js?v=belt-drive'
@@ -28,7 +29,7 @@ const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
 export async function mountEditor(root, { document, language, save, download, signal }) {
-  const source = promoteLegacyBelts(expandComponents(document, parts))
+  const source = upgradeInlineEngineFan(promoteLegacyBelts(expandComponents(document, parts)))
   const t = editorLabels[language]
   const models = new Map()
   const requests = new Map()

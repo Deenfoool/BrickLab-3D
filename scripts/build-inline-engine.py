@@ -30,6 +30,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { Matrix4, Quaternion, Vector3 } = await import('three')
 const { connectAligned, createAssembly, gearPoses } = await import('./src/editor/model.js')
 const { newProject } = await import('./src/projects/documents.js')
+const { longerFanAxle } = await import('./src/editor/inline-engine.js')
 const { promoteLegacyBelts } = await import('./src/mechanics/belts.js')
 const { portsFor } = await import('./src/mechanics/catalog.js')
 const { worldPort } = await import('./src/editor/placement.js')
@@ -60,11 +61,8 @@ if (offsets.length !== 1) throw new Error('Crank handle has no unique seat')
 handle.position = new Vector3().fromArray(handle.position).add(offsets[0]).toArray()
 // The original pin ends flush with the bush. Seat the round fan plates
 // on a 2L axle end while keeping the bearing and both pulley planes in place.
-const fanPin = parts[110]
-if (fanPin.design !== '3749' || parts[117].design !== '4032a') throw new Error('Unexpected 858 fan')
-fanPin.design = '65249'
-const pinAxis = worldPort(fanPin, portsFor(fanPin.design).find(port => port.role === 'axle-pin')).axis
-fanPin.position = new Vector3().fromArray(fanPin.position).addScaledVector(pinAxis, 10).toArray()
+if (parts[110].design !== '3749' || parts[117].design !== '4032a') throw new Error('Unexpected 858 fan')
+const fanPin = parts[110] = longerFanAxle(parts[110])
 const assembly = createAssembly(parts, [])
 const connections = parts.flatMap((part, index) => connectAligned(assembly, [part], parts.slice(0, index)))
 if (!connections.some(link => link.shaft.part === handle.id && link.socket.part === gear.id)) {
