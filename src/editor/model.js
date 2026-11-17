@@ -141,28 +141,35 @@ const spinRoles = new Set([
   'axle', 'axle-pin', 'friction-axle-pin', 'duplo-axle', 'gear', 'rim-seat', 'tyre-seat',
 ])
 
+function portLine(part, port) {
+  const { start, axis } = worldPort(part, port)
+  return { start: start.toArray(), axis: axis.toArray() }
+}
+
+export function assemblyJoints(parts, assembly) {
+  const byId = new Map(parts.map(part => [part.id, part]))
+  return assembly.connections.map(({ shaft, socket, fit }) => {
+    const male = assembly.port(shaft.part, shaft.port)
+    const female = assembly.port(socket.part, socket.port)
+    return {
+      a: shaft.part, b: socket.part, motion: fit.motion.rotation, group: male.group, restLength: male.restLength,
+      detents: fit.motion.detents, roll: fit.placement.roll,
+      shaftLine: portLine(byId.get(shaft.part), male),
+      socketLine: portLine(byId.get(socket.part), female),
+      ...(female.stroke && { stroke: female.stroke,
+        springSeat: worldPort(byId.get(shaft.part), { start: male.springSeat, axis: male.axis }).start.toArray() }),
+    }
+  })
+}
+
 export function rotationMotion(selected, parts, assembly) {
   const byId = new Map(parts.map(part => [part.id, part]))
   const driver = byId.get(selected)
   if (!driver) return null
   const ports = portsFor(driver.design)
-  const lineFor = (part, port) => {
-    const { start, axis } = worldPort(part, port)
-    return { start: start.toArray(), axis: axis.toArray() }
-  }
   const rotor = ports.some(port => spinRoles.has(port.role)) ? rotationPort(ports) : ports.find(port => port.rotor)
-  const preferred = rotor && lineFor(driver, rotor)
-  const joints = assembly.connections.map(({ shaft, socket, fit }) => {
-    const male = assembly.port(shaft.part, shaft.port)
-    const female = assembly.port(socket.part, socket.port)
-    return {
-      a: shaft.part, b: socket.part, motion: fit.motion.rotation, group: male.group, restLength: male.restLength,
-      shaftLine: lineFor(byId.get(shaft.part), male),
-      socketLine: lineFor(byId.get(socket.part), female),
-      ...(female.stroke && { stroke: female.stroke,
-        springSeat: worldPort(byId.get(shaft.part), { start: male.springSeat, axis: male.axis }).start.toArray() }),
-    }
-  })
+  const preferred = rotor && portLine(driver, rotor)
+  const joints = assemblyJoints(parts, assembly)
   const crosses = new Map()
   for (const joint of joints) {
     if (joint.group !== 'uniJnt') continue
@@ -176,7 +183,7 @@ export function rotationMotion(selected, parts, assembly) {
     const ends = pivots.map(pivot => {
       const part = byId.get(pivot.b)
       const bore = portsFor(part.design).find(port => port.role === 'blind-key' || port.role === 'key')
-      return bore && { part: part.id, shaftLine: lineFor(part, bore), pinLine: pivot.socketLine }
+      return bore && { part: part.id, shaftLine: portLine(part, bore), pinLine: pivot.socketLine }
     })
     if (ends.some(end => !end)) continue
     const coupling = cardanCoupling(cross, ...ends)

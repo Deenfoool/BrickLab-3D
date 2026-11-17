@@ -12,7 +12,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 
-const { connectAligned, createAssembly } = await import('../src/editor/model.js')
+const { connectAligned, connectPlaced, createAssembly } = await import('../src/editor/model.js')
 const { driveSettings, newDriveState, prepareTestDrive, stepTestDrive } = await import('../src/editor/vehicle-drive.js')
 const { loadPartModel, parts: catalog } = await import('../src/editor/parts.js')
 const { parseProject } = await import('../src/projects/documents.js')
@@ -125,7 +125,7 @@ test('integral wheels can use their mounted axle bore as the running axis', () =
 test('drive assignments preserve file round-tripping and invalid settings stay safe', () => {
   const testDrive = driveSettings({ heading: 90, mode: 'powered', driveParts: ['one', 'one', 2], steering: 'two', invert: true })
   const reopened = parseProject(JSON.stringify({ ...buggy, testDrive }))
-  assert.deepEqual(reopened.testDrive, { venue: 'sketchbook', heading: 90, mode: 'powered', driveParts: ['one'], steering: 'two', invert: true })
+  assert.deepEqual(reopened.testDrive, { simulation: 'physical', venue: 'sketchbook', heading: 90, mode: 'powered', driveParts: ['one'], steering: 'two', invert: true })
   assert.deepEqual(driveSettings({ mode: 'unexpected', heading: NaN }), driveSettings(undefined))
 })
 
@@ -226,5 +226,175 @@ test('Sketchbook shares in-flight and successful loads for the page and can retr
     assert.equal(requests, 2)
   } finally {
     globalThis.fetch = originalFetch
+  }
+})
+
+const { default: rapier } = await import('@dimforge/rapier3d-compat')
+const { createPhysicalDrive } = await import('../src/editor/physical-drive.js')
+const { createPhysicalAssembly } = await import('../src/mechanics/physical-assembly.js')
+const { findSuspension } = await import('../src/editor/suspension.js')
+const { rotationMotion, rotationPoses } = await import('../src/editor/model.js')
+const { Box3, BoxGeometry, Mesh, MeshBasicMaterial } = await import('three')
+
+const neutralInput = { throttle: 0, steer: 0, brake: false }
+const sampleFrames = (simulation, frames, input = {}) => {
+  let frame
+  for (let i = 0; i < frames; i++) frame = simulation.advance({ ...neutralInput, ...input }, 1 / 60)
+  return frame
+}
+
+test('physical test drive compresses one shock over a single-wheel bump and settles after it', async () => {
+  await rapier.init()
+  const rig = prepare()
+  const assembly = createAssembly(buggy.parts, buggy.connections)
+  const shapes = []
+  function box(width, height, length, x, y, z) {
+    const geometry = new BoxGeometry(width, height, length)
+    geometry.computeBoundingBox()
+    const mesh = new Mesh(geometry, new MeshBasicMaterial())
+    mesh.userData.type = 'box'
+    mesh.position.set(x, y, z)
+    mesh.updateMatrixWorld(true)
+    shapes.push(mesh)
+  }
+  box(3200, 80, 10000, 0, -40, 0)
+  box(90, 30, 100, 110, 15, 165)
+  const sim = createPhysicalDrive(rapier, rig, models, assembly,
+    { start: new Vector3(), heading: 0, collisionMeshes: shapes })
+  try {
+    const rested = sampleFrames(sim, 150)
+    assert.equal(rested.grounded, 4)
+    assert.equal(rested.suspension.length, 2)
+    assert.ok(rested.suspension.every(shock => shock.length < 38 && shock.length > 20))
+    let greatestDifference = 0
+    for (let i = 0; i < 150; i++) {
+      const frame = sim.advance({ ...neutralInput, throttle: 1 }, 1 / 60)
+      const [right, left] = frame.suspension
+      greatestDifference = Math.max(greatestDifference, left.length - right.length)
+      assert.ok(frame.poses.find(part => part.id === right.spring).previewScale[1] > 0)
+    }
+    assert.ok(greatestDifference > 1.4, `shock travel difference was ${greatestDifference}`)
+    const stopped = sampleFrames(sim, 210, { brake: true })
+    assert.equal(stopped.grounded, 4)
+    assert.ok(Math.abs(stopped.speed) < .09)
+    assert.ok(Math.abs(stopped.suspension[0].length - stopped.suspension[1].length) < 1)
+  } finally {
+    sim.dispose()
+    for (const shape of shapes) { shape.geometry.dispose(); shape.material.dispose() }
+  }
+})
+
+test('a different installed ride height is detected from its joints with unrelated part IDs', async () => {
+  const original = createAssembly(buggy.parts, buggy.connections)
+  const motion = rotationMotion('8845-106', buggy.parts, original)
+  const reposed = new Map(rotationPoses(buggy.parts, motion, -.28).map(part => [part.id, part]))
+  const id = name => 'alternate-' + name
+  const pieces = buggy.parts.map(part => {
+    const { previewScale, ...pose } = reposed.get(part.id) ?? part
+    return { ...pose, id: id(part.id) }
+  })
+  const byId = new Map(pieces.map(part => [part.id, part]))
+  const assembly = createAssembly(pieces, [])
+  for (const { shaft, socket, placement } of buggy.connections) {
+    const a = byId.get(id(shaft.part))
+    const b = byId.get(id(socket.part))
+    const result = connectPlaced(assembly, a, b, { placement,
+      shaft: { ...shaft, part: a.id }, socket: { ...socket, part: b.id } })
+    assert.ok(result.ok, result.reason)
+  }
+  const rig = prepareTestDrive(pieces, assembly, models, { heading: 0, steering: id(buggy.testDrive.steering) }, catalog)
+  assert.equal(rig.ready, true)
+  const springs = findSuspension(rig, assembly)
+  assert.equal(springs.size, 2)
+  const adjusted = springs.get(id('8845-174'))
+  const unchanged = springs.get(id('8845-176'))
+  assert.ok(adjusted.min < unchanged.min - 10)
+  await rapier.init()
+  const sim = createPhysicalDrive(rapier, rig, models, assembly)
+  try {
+    const settled = sampleFrames(sim, 180)
+    assert.equal(settled.grounded, 4)
+    assert.equal(settled.suspension.length, 2)
+    assert.ok(settled.suspension.every(shock => shock.length > 20 && shock.length < 38))
+    assert.ok(sampleFrames(sim, 80, { throttle: 1 }).speed > .7)
+  } finally { sim.dispose() }
+})
+
+test('assembly physics compiles rigid groups, rotational/linear constraints and a bounded spring damper', async () => {
+  await rapier.init()
+  const pieces = [
+    partWithPose('anchor', [0, 200, 0]),
+    partWithPose('bracket', [-30, 200, 0]),
+    partWithPose('rod', [80, 200, 0]),
+    partWithPose('coil', [10, 200, 0]),
+    partWithPose('arm', [-70, 200, 0]),
+  ]
+  const line = start => ({ start, axis: [1, 0, 0] })
+  const fixedLine = line([0, 200, 0])
+  const joints = [
+    { a: 'anchor', b: 'bracket', motion: 'locked', shaftLine: fixedLine, socketLine: fixedLine },
+    { a: 'arm', b: 'bracket', motion: 'continuous', shaftLine: line([-50, 200, 0]), socketLine: line([-50, 200, 0]) },
+    { a: 'rod', b: 'anchor', motion: 'slider', shaftLine: line([80, 200, 0]), socketLine: fixedLine,
+      stroke: [60, 100], springSeat: [72, 200, 0] },
+    { a: 'coil', b: 'anchor', motion: 'spring', shaftLine: line([10, 200, 0]), socketLine: line([10, 200, 0]),
+      restLength: 65 },
+  ]
+  const bounds = new Box3(new Vector3(-7, -7, -7), new Vector3(7, 7, 7))
+  const sim = createPhysicalAssembly(rapier, pieces, joints, new Map([['probe', { bounds }]]), { pinned: ['anchor'] })
+  try {
+    assert.equal(sim.bodies, 3)
+    assert.equal(sim.constraints, 2)
+    assert.equal(sim.unsupported, 0)
+    sim.push('arm', new Vector3(0, 0, 1))
+    sim.push('rod', new Vector3(1, 0, 0))
+    let poses
+    for (let i = 0; i < 150; i++) poses = new Map(sim.advance(1 / 60).map(part => [part.id, part]))
+    assert.ok(new Vector3().fromArray(poses.get('anchor').position).distanceTo(new Vector3(0, 200, 0)) < .001)
+    const extension = poses.get('rod').position[0]
+    assert.ok(extension >= 59.9 && extension <= 100.1, `damper extension was ${extension}`)
+    assert.ok(Math.abs(extension - 83) < .5, `damper did not return to rest length: ${extension}`)
+    assert.ok(poses.get('coil').previewScale[1] > 0)
+  } finally {
+    sim.dispose()
+  }
+})
+
+function partWithPose(id, position) {
+  return { id, design: 'probe', position, rotation: [0, 0, 0, 1] }
+}
+
+test('a vehicle keeps its momentum in the air and falls when none of its wheels has contact', async () => {
+  await rapier.init()
+  const geometry = new BoxGeometry(2200, 60, 1900)
+  geometry.computeBoundingBox()
+  const surface = new Mesh(geometry, new MeshBasicMaterial())
+  surface.userData.type = 'box'
+  surface.position.set(0, -30, -50)
+  surface.updateMatrixWorld(true)
+  const rig = prepare()
+  const sim = createPhysicalDrive(rapier, rig, models, createAssembly(buggy.parts, buggy.connections),
+    { start: new Vector3(), heading: 0, collisionMeshes: [surface] })
+  try {
+    assert.equal(sampleFrames(sim, 150).grounded, 4)
+    let flight
+    for (let i = 0; i < 450; i++) {
+      const frame = sim.advance({ ...neutralInput, throttle: 1 }, 1 / 60)
+      if (!frame.grounded) {
+        flight = frame
+        break
+      }
+    }
+    assert.ok(flight)
+    const next = sampleFrames(sim, 20, { throttle: 1 })
+    assert.equal(next.grounded, 0)
+    assert.ok(next.position.z > flight.position.z + 8)
+    const falling = sampleFrames(sim, 60, { throttle: 1 })
+    assert.equal(falling.grounded, 0)
+    assert.ok(falling.position.y < next.position.y - 50)
+    assert.equal(sampleFrames(sim, 170).outOfBounds, true)
+  } finally {
+    sim.dispose()
+    geometry.dispose()
+    surface.material.dispose()
   }
 })

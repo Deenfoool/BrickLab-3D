@@ -57,7 +57,7 @@ export function sketchbookTrack(group) {
   start.y = height
   // Start on open tarmac facing the sloped approach to the tunnel.
   const heading = -Math.PI / 2
-  return { group, start, heading, heightAt }
+  return { group, start, heading, heightAt, collisionMeshes: colliders.map(({ mesh }) => mesh) }
 }
 
 function disposeMap(group) {

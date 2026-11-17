@@ -1,6 +1,6 @@
 import { Quaternion, Vector3 } from 'three'
 import { portsFor } from '../mechanics/catalog.js?v=linkages'
-import { rotationMotion, rotationPoses } from './model.js?v=linkages'
+import { rotationMotion, rotationPoses } from './model.js?v=drive-physics'
 import { worldPort } from './placement.js?v=linkages'
 import { terrainPose } from './drive-terrain.js?v=sketchbook'
 
@@ -14,6 +14,7 @@ const horizontal = value => value.setY(0)
 export function driveSettings(value) {
   const id = value => typeof value === 'string' && value.length ? value : null
   return {
+    simulation: value?.simulation === 'kinematic' ? 'kinematic' : 'physical',
     venue: value?.venue === 'flat' ? 'flat' : 'sketchbook',
     heading: Number.isFinite(value?.heading) ? clamp(value.heading, -180, 180) : 0,
     mode: value?.mode === 'powered' ? 'powered' : 'push',
@@ -36,7 +37,7 @@ function wheelGeometry(port, model) {
   return { center, radius }
 }
 
-function contact(wheel, part, forward) {
+export function wheelContact(wheel, part, forward) {
   const rotation = new Quaternion().fromArray(part.rotation)
   const position = wheel.center.clone().applyQuaternion(rotation).add(vector(part.position))
   const { axis } = worldPort(part, wheel.port)
@@ -87,7 +88,7 @@ export function prepareTestDrive(parts, assembly, models, input, catalog = {}) {
   const byId = new Map(parts.map(part => [part.id, part]))
   const wheels = wheelsIn(parts, assembly.connections, models, catalog)
   const forward = forwardVector(settings.heading)
-  const initial = wheels.map(wheel => contact(wheel, byId.get(wheel.id), forward))
+  const initial = wheels.map(wheel => wheelContact(wheel, byId.get(wheel.id), forward))
   const origin = new Vector3()
   for (const { position } of initial) origin.add(position)
   if (initial.length) origin.divideScalar(initial.length)
@@ -112,7 +113,7 @@ export function prepareTestDrive(parts, assembly, models, input, catalog = {}) {
   const right = steeringParts(.6)
   const steered = initial.filter(c => [left, right].some(poses => {
     const part = poses.get(c.wheel.id)
-    return part && c.heading.dot(contact(c.wheel, part, forward).heading) < .9999
+    return part && c.heading.dot(wheelContact(c.wheel, part, forward).heading) < .9999
   })).map(c => c.wheel.id)
 
   const groups = []
@@ -153,17 +154,18 @@ export function newDriveState(vehicle, terrain) {
     turns: vehicle.groups.map(() => 0) }
 }
 
-function carryPose(original, rolling, steered) {
+export function carryPose(original, rolling, steered) {
   if (!steered) return rolling
   const local = new Quaternion().fromArray(steered.rotation).multiply(new Quaternion().fromArray(original.rotation).invert())
   return {
     ...rolling,
     position: vector(rolling.position).sub(vector(original.position)).applyQuaternion(local).add(vector(steered.position)).toArray(),
     rotation: local.multiply(new Quaternion().fromArray(rolling.rotation)).toArray(),
+    ...(steered.previewScale && { previewScale: steered.previewScale }),
   }
 }
 
-function advanceRotor(spin, angle, increment) {
+export function advanceRotor(spin, angle, increment) {
   if (!increment) return angle
   if (!spin.angleAt) return angle + increment / spin.ratio
   const target = spin.angleAt(angle) + increment
@@ -187,7 +189,7 @@ export function stepTestDrive(vehicle, state, controls, dt, terrain) {
   state.speed = approach(state.speed, target, acceleration * step)
 
   const poses = vehicle.steeringParts(state.steering)
-  const contacts = vehicle.initial.map(c => poses.has(c.wheel.id) ? contact(c.wheel, poses.get(c.wheel.id), forward) : c)
+  const contacts = vehicle.initial.map(c => poses.has(c.wheel.id) ? wheelContact(c.wheel, poses.get(c.wheel.id), forward) : c)
   let sum = 0
   let weight = 0
   // Minimize lateral motion at the actual wheel headings around the rear contact line.

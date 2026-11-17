@@ -5,5 +5,8 @@
   "scripts": {
     "test": "node --test",
     "demo": "node examples/drivetrain.js"
+  },
+  "devDependencies": {
+    "@dimforge/rapier3d-compat": "0.19.3"
   }
 }

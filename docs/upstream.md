@@ -49,3 +49,7 @@
 ## Полигон Sketchbook
 
 «Тест-драйв» подгружает [world.glb](https://github.com/swift502/Sketchbook/blob/62f4b7986fd1ce1e4f91daba89ef032c20a6ce55/build/assets/world.glb) из зафиксированной версии Sketchbook от swift502. [Лицензия исходного проекта (MIT)](https://github.com/swift502/Sketchbook/blob/62f4b7986fd1ce1e4f91daba89ef032c20a6ce55/LICENSE). Карта остаётся в исходной системе координат с масштабом 90 LDU на единицу Sketchbook. Узлы `physics` используются как поверхности для поиска опоры колёс. Сцена загружается локальными GLTFLoader и BufferGeometryUtils из Three.js r180, лицензия находится в `vendor/three/LICENSE`.
+
+## Динамика
+
+Тест-драйв и физика сборки используют [Rapier 3D 0.19.3](https://www.npmjs.com/package/@dimforge/rapier3d-compat/v/0.19.3) под Apache 2.0. Браузер загружает выпущенный пакет при первом запуске симуляции. Для тестов та же версия закреплена в `package-lock.json`. Коллизии полигона строятся по коробкам и треугольным поверхностям из узлов `physics` Sketchbook.
