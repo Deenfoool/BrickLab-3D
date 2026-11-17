@@ -1,6 +1,6 @@
-import { evaluateInsertion, overlap, portLength } from './axial.js?v=connector-coverage'
+import { evaluateInsertion, overlap, portLength } from './axial.js?v=shadow-connectors'
 import { evaluateSpurMesh } from './gears.js'
-import { rotationPort } from './catalog.js?v=connector-coverage'
+import { rotationPort } from './catalog.js?v=shadow-connectors'
 import { cross, dot, isVector, length, subtract, unit } from './vector.js?v=connector-coverage'
 
 const LINEAR_TOLERANCE = .01

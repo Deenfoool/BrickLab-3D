@@ -1,8 +1,8 @@
 import { Plane, Vector3 } from 'three'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
-import { connectionMode, portLength } from '../mechanics/axial.js?v=connector-coverage'
-import { gearAt, portsFor } from '../mechanics/catalog.js?v=parts-library'
-import { candidateOffsets, joinedPose, worldPort } from './placement.js?v=connector-coverage'
+import { connectionMode, portLength } from '../mechanics/axial.js?v=shadow-connectors'
+import { gearAt, portsFor } from '../mechanics/catalog.js?v=shadow-connectors'
+import { candidateOffsets, joinedPose, worldPort } from './placement.js?v=shadow-connectors'
 
 const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')
 
@@ -37,7 +37,7 @@ function targetsOnPort(scene, event, fixedPort, start, axis, span, ray) {
   const targets = fixedPort.openings.map(side => ({
     side, point: start.clone().addScaledVector(axis, side === 'end' ? span : 0),
   }))
-  const canSlide = fixedPort.role === 'axle' || fixedPort.role === 'rod'
+  const canSlide = ['axle', 'duplo-axle', 'rod'].includes(fixedPort.role)
   if (canSlide && ray) {
     const nearest = new Vector3()
     ray.distanceSqToSegment(start, start.clone().addScaledVector(axis, span), undefined, nearest)

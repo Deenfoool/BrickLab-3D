@@ -1,6 +1,6 @@
 import { Quaternion, Vector3 } from 'three'
-import { measureInsertion } from '../mechanics/assembly.js?v=connector-coverage'
-import { connectionMode, portLength } from '../mechanics/axial.js?v=connector-coverage'
+import { measureInsertion } from '../mechanics/assembly.js?v=shadow-connectors'
+import { connectionMode, portLength } from '../mechanics/axial.js?v=shadow-connectors'
 
 const Y = new Vector3(0, 1, 0)
 const base = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI)
@@ -17,10 +17,9 @@ export function worldPort(pose, port) {
 }
 
 function reference(port) {
-  if (port.reference) return vector(port.reference).normalize()
-  const axis = vector(port.axis)
-  const x = Math.abs(axis.x)
-  const basis = x > .5 ? Y.clone() : new Vector3(1, 0, 0)
+  const axis = vector(port.axis).normalize()
+  const basis = port.reference ? vector(port.reference)
+    : Math.abs(axis.x) > .5 ? Y.clone() : new Vector3(1, 0, 0)
   return basis.addScaledVector(axis, -basis.dot(axis)).normalize()
 }
 
@@ -47,7 +46,9 @@ export function joinedPose(movingPose, movingPort, fixedPose, fixedPort, placeme
 export function candidateOffsets(shaft, socket, direction, side, depth) {
   const shaftSize = portLength(shaft)
   const socketSize = portLength(socket)
-  if (connectionMode(shaft, socket)?.seat) return [side === 'start' ? 0 : socketSize]
+  const mode = connectionMode(shaft, socket)
+  if (mode?.rimSeat) return direction === mode.rimSeat[1] ? [mode.rimSeat[0]] : []
+  if (mode?.seat) return [side === 'start' ? 0 : socketSize]
   if (socket.seat !== undefined) return [socket.seat]
   const points = [
     (socketSize - direction * shaftSize) / 2,

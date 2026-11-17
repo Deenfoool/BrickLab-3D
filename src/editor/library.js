@@ -1,4 +1,4 @@
-import { portsFor } from '../mechanics/catalog.js?v=parts-library'
+import { hasConnectors } from '../mechanics/catalog.js?v=shadow-connectors'
 import { previewColumns, previewRows, previewPageSize, searchLibrary } from './library-data.js?v=parts-library'
 
 const batchSize = 48
@@ -94,7 +94,7 @@ export function mountLibrary(root, { sections, language, labels, selectPart, sig
       preview.setAttribute('aria-hidden', 'true')
       name.title = part[language]
       info.append(element('span', 'editor-part-id', part.design))
-      if (portsFor(part.design).length) {
+      if (hasConnectors(part.design)) {
         const mechanics = element('span', 'editor-part-mechanics', labels.connectorsReady)
         info.append(mechanics)
       }

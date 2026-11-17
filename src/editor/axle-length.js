@@ -1,7 +1,7 @@
 import { Vector3 } from 'three'
-import { portLength } from '../mechanics/axial.js?v=connector-coverage'
-import { technic } from '../mechanics/catalog.js?v=connector-coverage'
-import { worldPort } from './placement.js?v=connector-coverage'
+import { portLength } from '../mechanics/axial.js?v=shadow-connectors'
+import { technic } from '../mechanics/catalog.js?v=shadow-connectors'
+import { worldPort } from './placement.js?v=shadow-connectors'
 
 const family = ['3705', '3706', '3707', '3737']
 

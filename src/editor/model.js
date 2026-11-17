@@ -1,8 +1,8 @@
 import { Quaternion, Vector3 } from 'three'
-import { connectionMode } from '../mechanics/axial.js?v=connector-coverage'
-import { Assembly } from '../mechanics/assembly.js?v=connector-coverage'
-import { gearAt, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=parts-library'
-import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=connector-coverage'
+import { connectionMode } from '../mechanics/axial.js?v=shadow-connectors'
+import { Assembly } from '../mechanics/assembly.js?v=shadow-connectors'
+import { gearAt, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=shadow-connectors'
+import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=shadow-connectors'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
 export const snapGrid = 10
@@ -48,10 +48,14 @@ export function loadParts(document, models) {
 }
 
 export function createAssembly(parts, links) {
-  const assembly = new Assembly(technic)
+  const catalog = Object.create(null)
+  const assembly = new Assembly(catalog)
   const byId = new Map(parts.map(part => [part.id, part]))
   for (const part of parts) {
-    if (portsFor(part.design).length) assembly.addPart(part.id, part.design)
+    const ports = portsFor(part.design)
+    if (!ports.length) continue
+    catalog[part.design] = ports
+    assembly.addPart(part.id, part.design)
   }
   for (const link of links) {
     const a = byId.get(link?.shaft?.part)
@@ -154,7 +158,7 @@ export function hingeMotion(selected, parts, links) {
   }
   if (moving.has(other)) return { ok: false }
   const socket = parts.find(part => part.id === joint.socket.part)
-  const port = technic[socket.design].find(port => port.id === joint.socket.port)
+  const port = portsFor(socket.design).find(port => port.id === joint.socket.port)
   const { start, axis } = worldPort(socket, port)
   return { ok: true, moving, axis, start, sign: movingShaft ? 1 : -1, roll: joint.fit.placement.roll,
     detents: [...joint.fit.motion.detents].sort((a, b) => a - b) }

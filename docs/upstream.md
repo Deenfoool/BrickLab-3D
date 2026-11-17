@@ -6,6 +6,15 @@
 
 Правила сопоставления профилей и геометрической проверки зацепления перенесены в модель BrickLab по [fits.ts](https://github.com/erik-larsen/kinebrick/blob/c217b4ea13d3c8634e10c4cf6e5728c442833e76/src/inference/fits.ts) и [gears.ts](https://github.com/erik-larsen/kinebrick/blob/c217b4ea13d3c8634e10c4cf6e5728c442833e76/src/inference/gears.ts).
 
+## Расширенные профили стыковки
+
+`catalog/snap-parts.json` и `catalog/snap-profiles.json` содержат преобразованные данные [LDCad Shadow Library](https://github.com/RolandMelkert/LDCadShadowLibrary/tree/f2fb70c55521e0dfdf2af4d26a87167d4d0d9eec) и [Kinebrick](https://github.com/erik-larsen/kinebrick/tree/24366c8f0782a65d6138f41d593300b079859cb1), распространяемые по [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Профили преобразованы в рабочие координаты BrickLab, повторные определения объединены, ориентация крестовых отверстий сохранена. Для модели 4586 отверстия восстановлены по геометрии LDraw. Связи дисков и шин получены из официальных файлов сборок LDraw и сохраняют фактическое осевое смещение.
+
+1. Подготовьте чистый checkout Kinebrick и распакуйте в него тот же архив LDraw, что использован для индекса деталей. Разместите зафиксированный checkout Shadow Library в `ldcad-shadow/` и установите зависимости Kinebrick.
+2. Запустите `python3 scripts/build-shadow-input.py /path/to/kinebrick`, чтобы собрать исходные цилиндры с ориентацией.
+3. Запустите `python3 scripts/build-snap-profiles.py /path/to/kinebrick/data/library-connections.json /path/to/complete.zip`.
+4. Запустите `npm test`. Проверка «Балки и рамы» требует для каждой детали рабочую ответную деталь, возможность установки с обеих сторон операции и сохранение связи при повторной загрузке.
+
 ## Sim Studio
 
 Из [Sim Studio](https://github.com/WorketeWorks/SimStudio-LEGO-Technic-Physics-Simulator/blob/3014c3a34ad0f7878d0392bce8f535241d555a03/README.md) взята модель совместимых посадок: круглая опора допускает вращение и осевой ход крестообразной оси, крестовое отверстие передаёт вращение, одна длинная ось поддерживает несколько опор. В BrickLab доступный ход вычисляется по профилю и занятым участкам. Правила реализованы в общем ядре BrickLab.

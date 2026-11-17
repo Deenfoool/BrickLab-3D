@@ -22,11 +22,23 @@ const MOTION = {
   'friction-axle-pin:blind-key': { rotation: 'locked' },
   'axle-pin:bush': { rotation: 'locked' },
   'friction-axle-pin:bush': { rotation: 'locked' },
+  'duplo-axle:duplo-key': { rotation: 'locked', translation: true },
+  'duplo-axle:duplo-bearing': { rotation: 'continuous', translation: true },
+  'duplo-pin:duplo-bearing': { rotation: 'continuous' },
+  'duplo-stud:duplo-anti-stud': { rotation: 'fixed', seat: true },
+  'stud-pin:hollow-stud': { rotation: 'fixed', seat: true },
+  'rod:hollow-stud': { rotation: 'continuous', translation: true },
   'rod:rod-bore': { rotation: 'continuous', translation: true },
 }
 
-export const connectionMode = (male, female) => male?.gender === 'M' && female?.gender === 'F'
-  ? MOTION[`${male.role}:${female.role}`] : undefined
+export function connectionMode(male, female) {
+  if (male?.gender !== 'M' || female?.gender !== 'F') return undefined
+  if (male.role === 'rim-seat' && female.role === 'tyre-seat') {
+    const mate = male.mates?.[female.design]
+    return mate && { rotation: 'locked', rimSeat: mate }
+  }
+  return MOTION[`${male.role}:${female.role}`]
+}
 
 export const overlap = (a, b) => Math.min(a[1], b[1]) - Math.max(a[0], b[0])
 
@@ -137,6 +149,16 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
     return { ok: false, reason: 'missing-detents' }
   }
   if (!female.openings.includes(side)) return { ok: false, reason: 'closed-entry' }
+  if (mode.rimSeat) {
+    const [seat, orientation] = mode.rimSeat
+    if (orientation !== direction || Math.abs(offset - seat) > .01) return { ok: false, reason: 'rim-seat' }
+    return {
+      ok: true,
+      occupancy: { shaft: [0, portLength(male)], socket: [0, portLength(female)] },
+      motion: { rotation: 'locked', friction: false, detents: [], travel: [0, 0] },
+      placement: { offset, direction, side, roll, keyStep: null },
+    }
+  }
   if (!mode.seat && mode.rotation !== 'detented' && !male.openings.includes((side === 'start') === (direction > 0) ? 'end' : 'start')) {
     return { ok: false, reason: 'closed-tip' }
   }

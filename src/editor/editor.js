@@ -1,17 +1,17 @@
 import { mountFloatingPanels } from './floating-panels.js?v=floating-panels'
 import { Plane, Quaternion, Vector3 } from 'three'
-import { portsFor } from '../mechanics/catalog.js?v=parts-library'
-import { baseRotation, samePose, worldPort } from './placement.js?v=connector-coverage'
-import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, snapGrid } from './model.js?v=parts-library'
-import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=connector-coverage'
-import { nearestDetent, portLength } from '../mechanics/axial.js?v=connector-coverage'
-import { nearbyConnections } from './snap.js?v=parts-library'
+import { portsFor } from '../mechanics/catalog.js?v=shadow-connectors'
+import { baseRotation, samePose, worldPort } from './placement.js?v=shadow-connectors'
+import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, snapGrid } from './model.js?v=shadow-connectors'
+import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=shadow-connectors'
+import { nearestDetent, portLength } from '../mechanics/axial.js?v=shadow-connectors'
+import { nearbyConnections } from './snap.js?v=shadow-connectors'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=parts-library'
-import { mountLibrary } from './library.js?v=parts-library'
-import { createScene } from './scene.js?v=parts-library'
+import { mountLibrary } from './library.js?v=shadow-connectors'
+import { createScene } from './scene.js?v=shadow-connectors'
 import { editorLabels } from './labels.js?v=parts-library'
 
-const driveRoles = new Set(['axle', 'axle-pin', 'friction-axle-pin', 'gear'])
+const driveRoles = new Set(['axle', 'axle-pin', 'friction-axle-pin', 'duplo-axle', 'gear'])
 const isDriver = part => part && portsFor(part.design).some(port => driveRoles.has(port.role))
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
