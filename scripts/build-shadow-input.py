@@ -26,8 +26,11 @@ for before, after in [
     ('  mirrorRule: string; // none, cor', '  mirrorRule: string; // none, cor\n  ref?: Vec3;\n  group?: string;'),
     ("      id: p.get('id') ?? '',\n      gender: p.get('gender')", """      id: p.get('id') ?? '',
       group: p.get('group') ?? '',
-      ref: secs.some(s => s.shape === 'A' || s.shape === 'S') ? applyMatrix(ori, [1, 0, 0]) : undefined,
+      ref: secs.some(s => ['A', 'S', 'Q', 'K'].includes(s.shape)) ? applyMatrix(ori, [1, 0, 0]) : undefined,
       gender: p.get('gender')"""),
+    ("  } else if (bounding[0] === 'cyl') {", """  } else if (['box', 'cube', 'pnt'].includes(bounding[0]) && p.has('group')) {
+    p.set('secs', 'Q 1 1');
+  } else if (bounding[0] === 'cyl') {"""),
     ('    dir: scaleVec(along, 1 / newTotal),', """    dir: scaleVec(along, 1 / newTotal),
     ref: cyl.ref ? applyMatrix(tr.m, cyl.ref) : undefined,"""),
     ('    dir: c.dir.map(round) as Vec3,', """    dir: c.dir.map(round) as Vec3,

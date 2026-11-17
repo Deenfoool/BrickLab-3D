@@ -1,12 +1,16 @@
-import { evaluateInsertion, overlap, portLength } from './axial.js?v=shadow-connectors'
+import { connectionMode, evaluateInsertion, overlap, portLength } from './axial.js?v=technic-seats'
 import { evaluateSpurMesh } from './gears.js'
-import { rotationPort } from './catalog.js?v=shadow-connectors'
+import { rotationPort } from './catalog.js?v=technic-seats'
 import { cross, dot, isVector, length, subtract, unit } from './vector.js?v=connector-coverage'
 
 const LINEAR_TOLERANCE = .01
 const AXIS_TOLERANCE = 1e-5
 
-export function measureInsertion(shaft, socket) {
+export function measureInsertion(shaft, socket, anchor) {
+  if (anchor === 'sphere') {
+    return isVector(shaft?.start) && isVector(socket?.start) &&
+      length(subtract(shaft.start, socket.start)) <= LINEAR_TOLERANCE ? { offset: 0, direction: 1 } : null
+  }
   const a = unit(shaft?.axis)
   const b = unit(socket?.axis)
   if (!a || !b || !isVector(shaft.start) || !isVector(socket.start)) return null
@@ -45,7 +49,7 @@ export class Assembly {
     const female = this.port(socket.part, socket.port)
     if (!male || !female || shaft.part === socket.part) return { ok: false, reason: 'invalid-endpoint' }
     if (world) {
-      const measured = measureInsertion(world.shaft, world.socket)
+      const measured = measureInsertion(world.shaft, world.socket, connectionMode(male, female)?.anchor)
       if (!measured) return { ok: false, reason: 'non-coaxial-ports' }
       if (!Number.isFinite(placement?.offset) || Math.abs(placement.offset - measured.offset) > LINEAR_TOLERANCE ||
           (placement.direction ?? 1) !== measured.direction) {
@@ -55,12 +59,14 @@ export class Assembly {
     }
     const fit = evaluateInsertion(male, female, placement, { seated })
     if (!fit.ok) return fit
-    const onShaft = this.#connections.filter(link => samePort(link.shaft, shaft))
+    const occupies = (existing, wanted, port) => samePort(existing, wanted) ||
+      Boolean(existing.part === wanted.part && port.slot && this.port(existing.part, existing.port)?.slot === port.slot)
+    const onShaft = this.#connections.filter(link => occupies(link.shaft, shaft, male))
     const socketSpan = portLength(female)
     const [socketLo, socketHi] = fit.occupancy.socket
     const socketSweep = seated ? [socketLo, socketHi]
       : fit.placement.side === 'start' ? [0, socketHi] : [socketLo, socketSpan]
-    if (this.#connections.some(link => samePort(link.socket, socket) &&
+    if (this.#connections.some(link => occupies(link.socket, socket, female) &&
         overlap(link.fit.occupancy.socket, socketSweep) > 1e-6)) {
       return { ok: false, reason: 'socket-occupied' }
     }

@@ -1,8 +1,8 @@
 import { Quaternion, Vector3 } from 'three'
-import { connectionMode } from '../mechanics/axial.js?v=shadow-connectors'
-import { Assembly } from '../mechanics/assembly.js?v=shadow-connectors'
-import { gearAt, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=shadow-connectors'
-import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=shadow-connectors'
+import { connectionMode } from '../mechanics/axial.js?v=technic-seats'
+import { Assembly } from '../mechanics/assembly.js?v=technic-seats'
+import { gearAt, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=technic-seats'
+import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=technic-seats'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
 export const snapGrid = 10
@@ -101,6 +101,7 @@ export function connectAligned(assembly, changed, fixed) {
     for (const b of fixed) {
       for (const portA of portsFor(a.design)) {
         for (const portB of portsFor(b.design)) {
+          if (portA.legacy || portB.legacy) continue
           const movingShaft = portA.gender === 'M'
           const male = movingShaft ? portA : portB
           const female = movingShaft ? portB : portA

@@ -1,13 +1,13 @@
 import technic from '../../catalog/technic.json?v=connector-coverage' with { type: 'json' }
-import profiles from '../../catalog/snap-profiles.json?v=shadow-1' with { type: 'json' }
-import designs from '../../catalog/snap-parts.json?v=shadow-1' with { type: 'json' }
+import profiles from '../../catalog/snap-profiles.json?v=technic-seats' with { type: 'json' }
+import designs from '../../catalog/snap-parts.json?v=technic-seats' with { type: 'json' }
 
 export { technic }
 
 const noPorts = Object.freeze([])
 const openings = [[], ['start'], ['end'], ['start', 'end']]
-const definitions = profiles.types.map(([role, gender, ends, sections]) => ({
-  role, gender, openings: openings[ends],
+const definitions = profiles.types.map(([role, gender, ends, sections, group, slot, pneumatic, legacy]) => ({
+  role, gender, openings: openings[ends], ...(group && { group }), ...(slot && { slot }), ...(pneumatic && { pneumatic }), ...(legacy && { legacy }),
   sections: sections.map(([shape, radius, length, teeth]) =>
     teeth === null ? { shape, radius, length } : { shape, radius, length, teeth }),
 }))
@@ -33,7 +33,7 @@ export function portsFor(design) {
   return imported.get(design)
 }
 
-const shaftRoles = new Set(['axle', 'axle-pin', 'friction-axle-pin', 'duplo-axle'])
+const shaftRoles = new Set(['axle', 'axle-pin', 'friction-axle-pin', 'duplo-axle', 'clutch-driver'])
 const socketRoles = new Set(['key', 'blind-key', 'duplo-key', 'bush'])
 export const rotationPort = ports => ports.find(port => port.role === 'gear') ??
   ports.find(port => shaftRoles.has(port.role)) ?? ports.find(port => socketRoles.has(port.role)) ??

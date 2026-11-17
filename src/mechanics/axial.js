@@ -28,6 +28,10 @@ const MOTION = {
   'duplo-stud:duplo-anti-stud': { rotation: 'fixed', seat: true },
   'stud-pin:hollow-stud': { rotation: 'fixed', seat: true },
   'rod:hollow-stud': { rotation: 'continuous', translation: true },
+  'wheel-spindle:wheel-bearing': { rotation: 'continuous' },
+  'wheel-spindle:rod-bore': { rotation: 'continuous' },
+  'rod:wheel-bearing': { rotation: 'continuous' },
+  'labeled-pin:labeled-bore': { rotation: 'continuous', group: true },
   'rod:rod-bore': { rotation: 'continuous', translation: true },
 }
 
@@ -37,7 +41,28 @@ export function connectionMode(male, female) {
     const mate = male.mates?.[female.design]
     return mate && { rotation: 'locked', rimSeat: mate }
   }
-  return MOTION[`${male.role}:${female.role}`]
+  const family = `${male.role}:${female.role}`
+  if (family === 'clutch-driver:clutch-face' &&
+      Math.abs(male.sections[0].radius - female.sections[0].radius) <= RADIUS_TOLERANCE) {
+    return { rotation: 'locked', clutch: true }
+  }
+  if (family === 'rod:tube-end' && male.pneumatic) return { rotation: 'fixed', tube: true }
+  if (family === 'ball:ball-socket' && male.group === female.group &&
+      Math.abs(male.sections[0].radius - female.sections[0].radius) <= RADIUS_TOLERANCE) {
+    return { rotation: 'ball', anchor: 'sphere' }
+  }
+  if (family === 'pivot:clip' && male.group === female.group &&
+      Math.abs(male.sections[0].radius - female.sections[0].radius) <= RADIUS_TOLERANCE &&
+      Math.abs(portLength(male) - portLength(female)) <= .05) {
+    return { rotation: 'continuous', anchor: 'pivot' }
+  }
+  if (family === 'plug:receptacle' && male.group && male.group === female.group) {
+    const coupled = male.group === 'techWhlCon1' || male.group.endsWith(':differential-ring')
+    return { rotation: coupled ? 'locked' : 'fixed', anchor: 'keyed' }
+  }
+  const mode = MOTION[family]
+  if (mode?.group && (!male.group || male.group !== female.group)) return undefined
+  return mode
 }
 
 export const overlap = (a, b) => Math.min(a[1], b[1]) - Math.max(a[0], b[0])
@@ -57,11 +82,14 @@ export const portLength = port => port.sections.reduce((sum, section) => sum + s
 function sectionFit(male, female) {
   // A compliant pin lip can deflect through the normal pin bore.
   if (male.shape === 'L' && female.shape === 'R' &&
-      female.radius >= 6 - RADIUS_TOLERANCE && male.radius <= female.radius + 0.5) return 'clear'
+      male.radius <= female.radius + 0.5) return 'clear'
   // A wider round counterbore may clear a shaft without supporting it.
   const different = male.radius - female.radius
+  if (male.shape === 'K' && female.shape === 'K' && Math.abs(different) <= RADIUS_TOLERANCE) return 'contact'
   if (different > RADIUS_TOLERANCE) return 'blocked'
+  if (female.shape === 'S' && different < -RADIUS_TOLERANCE) return 'clear'
   if (male.shape === 'R' && female.shape === 'S' && Math.abs(different) <= RADIUS_TOLERANCE) return 'contact'
+  if (male.shape === 'R' && female.shape === 'A' && different < -RADIUS_TOLERANCE) return 'clear'
   if (male.shape === 'A' && female.shape === 'A') {
     return Math.abs(different) <= RADIUS_TOLERANCE ? 'contact' : 'clear'
   }
@@ -149,15 +177,25 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
     return { ok: false, reason: 'missing-detents' }
   }
   if (!female.openings.includes(side)) return { ok: false, reason: 'closed-entry' }
-  if (mode.rimSeat) {
-    const [seat, orientation] = mode.rimSeat
-    if (orientation !== direction || Math.abs(offset - seat) > .01) return { ok: false, reason: 'rim-seat' }
+  if (mode.anchor || mode.rimSeat) {
+    const [seat, orientation] = mode.rimSeat ?? [0, mode.anchor === 'pivot' ? direction : 1]
+    if (orientation !== direction || Math.abs(offset - seat) > .01) return { ok: false, reason: 'seat-alignment' }
+    const keyStep = mode.anchor === 'keyed' ? Math.PI * 2 : null
     return {
       ok: true,
       occupancy: { shaft: [0, portLength(male)], socket: [0, portLength(female)] },
-      motion: { rotation: 'locked', friction: false, detents: [], travel: [0, 0] },
-      placement: { offset, direction, side, roll, keyStep: null },
+      motion: { rotation: mode.rotation, friction: false, detents: [], travel: [0, 0] },
+      placement: { offset, direction, side, roll: keyStep ? 0 : roll, keyStep, ...(mode.anchor && { anchor: mode.anchor }) },
     }
+  }
+  if (mode.clutch && (direction !== -1 || side !== 'start' ||
+      Math.abs(offset - Math.min(portLength(male), portLength(female))) > .01)) {
+    return { ok: false, reason: 'clutch-seat' }
+  }
+  if (mode.tube) {
+    if (side !== 'start' || direction !== 1 || Math.abs(offset) > EPSILON) return { ok: false, reason: 'tube-seat' }
+    // The rubber tube's 3 LDU opening expands over the nominal 4 LDU pneumatic nipple.
+    female = { ...female, sections: female.sections.map(section => ({ ...section, radius: 4 })) }
   }
   if (!mode.seat && mode.rotation !== 'detented' && !male.openings.includes((side === 'start') === (direction > 0) ? 'end' : 'start')) {
     return { ok: false, reason: 'closed-tip' }
@@ -179,7 +217,7 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
   if (pathBlocked) return { ok: false, reason: pathBlocked }
 
   const detents = mode.rotation === 'detented' ? [...female.detents] : []
-  const keyStep = ['locked', 'fixed'].includes(mode.rotation) ? Math.PI / 2 : null
+  const keyStep = !mode.tube && ['locked', 'fixed'].includes(mode.rotation) ? Math.PI / 2 : null
   const snappedRoll = detents.length ? nearestDetent(detents, roll)
     : keyStep === null ? roll : Math.round(roll / keyStep) * keyStep
   const [low, high] = fit.interval.map(point => (point - offset) * direction).sort((a, b) => a - b)

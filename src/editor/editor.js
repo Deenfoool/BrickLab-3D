@@ -1,15 +1,15 @@
 import { mountFloatingPanels } from './floating-panels.js?v=floating-panels'
 import { Plane, Quaternion, Vector3 } from 'three'
-import { portsFor } from '../mechanics/catalog.js?v=shadow-connectors'
-import { baseRotation, samePose, worldPort } from './placement.js?v=shadow-connectors'
-import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, snapGrid } from './model.js?v=shadow-connectors'
-import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=shadow-connectors'
-import { nearestDetent, portLength } from '../mechanics/axial.js?v=shadow-connectors'
-import { nearbyConnections } from './snap.js?v=shadow-connectors'
+import { portsFor } from '../mechanics/catalog.js?v=technic-seats'
+import { baseRotation, samePose, worldPort } from './placement.js?v=technic-seats'
+import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, snapGrid } from './model.js?v=technic-seats'
+import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=technic-seats'
+import { nearestDetent, portLength } from '../mechanics/axial.js?v=technic-seats'
+import { nearbyConnections } from './snap.js?v=technic-seats'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=parts-library'
-import { mountLibrary } from './library.js?v=shadow-connectors'
-import { createScene } from './scene.js?v=shadow-connectors'
-import { editorLabels } from './labels.js?v=parts-library'
+import { mountLibrary } from './library.js?v=technic-seats'
+import { createScene } from './scene.js?v=technic-seats'
+import { editorLabels } from './labels.js?v=technic-seats'
 
 const driveRoles = new Set(['axle', 'axle-pin', 'friction-axle-pin', 'duplo-axle', 'gear'])
 const isDriver = part => part && portsFor(part.design).some(port => driveRoles.has(port.role))
@@ -388,7 +388,7 @@ export async function mountEditor(root, { document: source, language, save, down
     el('undo').disabled = !undo.length
     el('redo').disabled = !redo.length
     const fit = candidate?.fit
-    const rotationCue = { fixed: t.fixed, locked: t.locked, detented: t.detented, continuous: t.freely }
+    const rotationCue = { fixed: t.fixed, locked: t.locked, detented: t.detented, continuous: t.freely, ball: t.ballJoint }
     const cue = fit ? rotationCue[fit.motion.rotation]
       : candidate?.mesh ? t.gearSnap : candidate?.failure?.includes('occupied') ? t.occupied : candidate?.failure ? t.blocked : t.free
     el('hint').textContent = resize ? t.lengthPreview(parts[resize.pose.design][language], resize.lost.length, resize.kept) :

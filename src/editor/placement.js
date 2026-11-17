@@ -1,6 +1,6 @@
 import { Quaternion, Vector3 } from 'three'
-import { measureInsertion } from '../mechanics/assembly.js?v=shadow-connectors'
-import { connectionMode, portLength } from '../mechanics/axial.js?v=shadow-connectors'
+import { measureInsertion } from '../mechanics/assembly.js?v=technic-seats'
+import { connectionMode, portLength } from '../mechanics/axial.js?v=technic-seats'
 
 const Y = new Vector3(0, 1, 0)
 const base = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI)
@@ -26,6 +26,9 @@ function reference(port) {
 export function joinedPose(movingPose, movingPort, fixedPose, fixedPort, placement) {
   const fixed = worldPort(fixedPose, fixedPort)
   const moving = worldPort(movingPose, movingPort)
+  if (placement.anchor === 'sphere') {
+    return { position: vector(movingPose.position).add(fixed.start).sub(moving.start).toArray(), rotation: movingPose.rotation }
+  }
   const movingShaft = movingPort.gender === 'M'
   const axis = fixed.axis.clone().multiplyScalar(placement.direction)
   const from = reference(movingPort)
@@ -47,6 +50,9 @@ export function candidateOffsets(shaft, socket, direction, side, depth) {
   const shaftSize = portLength(shaft)
   const socketSize = portLength(socket)
   const mode = connectionMode(shaft, socket)
+  if (mode?.anchor) return direction === 1 || mode.anchor === 'pivot' ? [0] : []
+  if (mode?.clutch) return direction === -1 && side === 'start' ? [Math.min(shaftSize, socketSize)] : []
+  if (mode?.tube) return direction === 1 && side === 'start' ? [0] : []
   if (mode?.rimSeat) return direction === mode.rimSeat[1] ? [mode.rimSeat[0]] : []
   if (mode?.seat) return [side === 'start' ? 0 : socketSize]
   if (socket.seat !== undefined) return [socket.seat]
@@ -70,7 +76,7 @@ export function retainedPlacement(shaft, male, socket, female, previous) {
     shaft: { start: a.start.toArray(), axis: a.axis.toArray() },
     socket: { start: b.start.toArray(), axis: b.axis.toArray() },
   }
-  const measured = measureInsertion(world.shaft, world.socket)
+  const measured = measureInsertion(world.shaft, world.socket, connectionMode(male, female)?.anchor)
   if (!measured) return null
   const aRef = reference(male).applyQuaternion(rotation(shaft.rotation))
   const bRef = reference(female).applyQuaternion(rotation(socket.rotation))

@@ -1,8 +1,8 @@
 import { Plane, Vector3 } from 'three'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
-import { connectionMode, portLength } from '../mechanics/axial.js?v=shadow-connectors'
-import { gearAt, portsFor } from '../mechanics/catalog.js?v=shadow-connectors'
-import { candidateOffsets, joinedPose, worldPort } from './placement.js?v=shadow-connectors'
+import { connectionMode, portLength } from '../mechanics/axial.js?v=technic-seats'
+import { gearAt, portsFor } from '../mechanics/catalog.js?v=technic-seats'
+import { candidateOffsets, joinedPose, worldPort } from './placement.js?v=technic-seats'
 
 const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')
 
@@ -50,11 +50,28 @@ function targetsOnPort(scene, event, fixedPort, start, axis, span, ray) {
     .filter(({ distance }) => Number.isFinite(distance) && distance <= 31)
 }
 
-export function nearbyConnections({ scene, assembly, parts, moving, event, depth, roll, acceptPose, ray }) {
+function anchorCandidate(context, fixed, fixedPort, own, start, mode) {
+  const { scene, assembly, moving, event, acceptPose } = context
+  const distance = scene.pixelDistance(start, event)
+  if (!Number.isFinite(distance) || distance > 31) return undefined
+  const ownMale = own.gender === 'M'
+  const shaft = { part: ownMale ? moving.id : fixed.id, port: (ownMale ? own : fixedPort).id }
+  const socket = { part: ownMale ? fixed.id : moving.id, port: (ownMale ? fixedPort : own).id }
+  const key = JSON.stringify([fixed.id, fixedPort.id, own.id, 'anchor'])
+  const sameDirection = worldPort(moving, own).axis.dot(worldPort(fixed, fixedPort).axis) >= 0
+  const direction = mode.anchor === 'pivot' && !sameDirection ? -1 : 1
+  const fit = assembly.previewInsertion(shaft, socket, { offset: 0, direction })
+  if (!fit.ok) return { key, point: start, distance, failure: fit.reason }
+  const pose = joinedPose(moving, own, fixed, fixedPort, fit.placement)
+  if (!acceptPose || acceptPose(pose)) return { key, point: start, distance, pose, fit, shaft, socket }
+}
+
+export function nearbyConnections(context) {
+  const { scene, assembly, parts, moving, event, depth, roll, acceptPose, ray } = context
   const candidates = []
   const ownPorts = portsFor(moving.design)
   if (!ownPorts.length) return candidates
-  const ownConnectors = ownPorts.filter(port => port.role !== 'gear')
+  const ownConnectors = ownPorts.filter(port => port.role !== 'gear' && !port.legacy)
   const ownGear = gearPort(moving)
   for (const fixed of parts) {
     if (fixed.id === moving.id) continue
@@ -64,16 +81,26 @@ export function nearbyConnections({ scene, assembly, parts, moving, event, depth
       if (candidate) candidates.push(candidate)
     }
     for (const fixedPort of portsFor(fixed.design)) {
-      if (fixedPort.role === 'gear') continue
+      if (fixedPort.role === 'gear' || fixedPort.legacy) continue
       const { start, axis } = worldPort(fixed, fixedPort)
       const span = portLength(fixedPort)
+      if (['ball', 'ball-socket', 'pivot', 'clip', 'plug', 'receptacle'].includes(fixedPort.role)) {
+        for (const own of ownConnectors) {
+          const mode = own.gender === 'M' ? connectionMode(own, fixedPort) : connectionMode(fixedPort, own)
+          if (!mode?.anchor) continue
+          const candidate = anchorCandidate(context, fixed, fixedPort, own, start, mode)
+          if (candidate) candidates.push(candidate)
+        }
+        continue
+      }
       const targets = targetsOnPort(scene, event, fixedPort, start, axis, span, ray)
       for (const { side, point, along, distance } of targets) {
         for (const own of ownConnectors) {
           const movingShaft = own.gender === 'M'
           const male = movingShaft ? own : fixedPort
           const female = movingShaft ? fixedPort : own
-          if (!connectionMode(male, female)) continue
+          const mode = connectionMode(male, female)
+          if (!mode || mode.anchor) continue
           const shaft = { part: movingShaft ? moving.id : fixed.id, port: male.id }
           const socket = { part: movingShaft ? fixed.id : moving.id, port: female.id }
           const key = JSON.stringify([fixed.id, fixedPort.id, own.id, side, along !== undefined])

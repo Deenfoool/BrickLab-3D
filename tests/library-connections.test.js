@@ -95,3 +95,96 @@ test('a rim accepts only its documented tyre and retains that seating when reope
     assert.equal(link.fit.motion.rotation, 'locked')
   }
 })
+
+test('towballs snap at the center and stay connected when the joint changes angle', async () => {
+  const { Quaternion, Vector3 } = await import('three')
+  const { worldPort } = await import('../src/editor/placement.js')
+  const ball = part('ball', '2736')
+  const socket = part('socket', '2739a')
+  const snap = options(ball, socket).find(item => item.fit?.motion.rotation === 'ball')
+  assert.ok(snap)
+  const placed = { ...ball, ...snap.pose }
+  const end = portsFor(ball.design).find(port => port.id === snap.shaft.port)
+  const center = worldPort(placed, end).start
+  const q = new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), Math.PI / 4)
+  placed.rotation = q.toArray()
+  placed.position = center.clone().sub(new Vector3().fromArray(end.start).applyQuaternion(q)).toArray()
+  assert.equal(createAssembly([placed, socket], [{ shaft: snap.shaft, socket: snap.socket,
+    placement: snap.fit.placement }]).connections.length, 1)
+  placed.position[0] += .1
+  assert.equal(createAssembly([placed, socket], [{ shaft: snap.shaft, socket: snap.socket,
+    placement: snap.fit.placement }]).connections.length, 0)
+})
+
+test('the universal joint has two independent centered pivots and keeps legacy endpoint IDs', () => {
+  const cross = part('cross', '62519')
+  const yoke = part('yoke', '62520')
+  const candidates = options(yoke, cross).filter(item => item.fit?.placement.anchor === 'pivot')
+  assert.equal(new Set(candidates.map(snap => snap.shaft.port)).size, 2)
+  assert.ok(candidates.every(snap => restore(snap, yoke, cross).length === 1))
+  const old = portsFor(yoke.design).find(port => port.id === 'shadow-556faf92f9c6')
+  assert.ok(old?.legacy)
+  assert.equal(options(part('axle', '3705'), yoke).some(snap => snap.socket?.port === old.id), false)
+})
+
+test('NXT and Powered Up use their separate keyed plug groups', () => {
+  const cable = part('cable', '11145')
+  const receiver = part('nxt', '53787')
+  const plugs = options(cable, receiver).filter(item => item.fit?.placement.anchor === 'keyed')
+  assert.equal(new Set(plugs.map(snap => snap.shaft.port)).size, 2)
+  assert.ok(plugs.every(snap => restore(snap, cable, receiver).length === 1))
+  assert.equal(options(part('wrong', '23816a'), receiver).some(snap => snap.fit?.placement.anchor === 'keyed'), false)
+})
+
+test('the non-bulged pneumatic tube seats both ends on real nipples', () => {
+  const tube = part('tube', '103671-f1')
+  const valve = part('valve', '4694c01-f1')
+  const seats = new Set(portsFor(tube.design).filter(port => port.role === 'tube-end').map(port => port.id))
+  const fits = options(tube, valve).filter(snap => seats.has(snap.socket?.port))
+  assert.equal(seats.size, 2)
+  assert.deepEqual(new Set(fits.map(snap => snap.socket.port)), seats)
+  assert.ok(fits.every(snap => snap.fit.placement.offset === 0 && restore(snap, tube, valve).length === 1))
+  assert.equal(options(tube, part('bar', '30374')).some(snap => snap.fit), false)
+})
+
+test('EV3 bottom lid and battery are exclusive alternatives at the same mounting slot', () => {
+  const lid = part('lid', '99143')
+  const battery = part('battery', '95656')
+  const brick = part('brick', '99141c01')
+  const lidSnap = options(lid, brick).find(snap => snap.fit?.placement.anchor === 'keyed')
+  const batterySnap = options(battery, brick).find(snap => snap.fit?.placement.anchor === 'keyed')
+  assert.ok(lidSnap && batterySnap)
+  const assembly = createAssembly([brick, { ...lid, ...lidSnap.pose }, battery], [
+    { shaft: lidSnap.shaft, socket: lidSnap.socket, placement: lidSnap.fit.placement },
+  ])
+  assert.equal(assembly.connections.length, 1)
+  assert.equal(assembly.previewInsertion(batterySnap.shaft, batterySnap.socket, batterySnap.fit.placement).reason, 'socket-occupied')
+})
+
+test('the old small wheel rim uses the axis of the real assembled tyre', () => {
+  const rim = part('rim', '30027a')
+  const tyre = part('tyre', '30028b')
+  const candidate = options(tyre, rim).find(snap => snap.fit?.motion.rotation === 'locked')
+  assert.ok(candidate)
+  assert.equal(restore(candidate, tyre, rim).length, 1)
+})
+
+test('two narrow Technic chain links meet at the full-width pivot', () => {
+  const first = part('one', '3711')
+  const second = part('two', '14696')
+  const fit = options(first, second).find(snap => snap.fit?.placement.anchor === 'pivot')
+  assert.ok(fit)
+  assert.equal(restore(fit, first, second).length, 1)
+})
+
+test('driving rings engage the matching generation of clutch gear at the measured depth', () => {
+  const ring = part('ring', '6539')
+  const gear = part('gear', '6542a')
+  const otherGeneration = part('gear', '2471')
+  const candidate = options(ring, gear).find(snap => snap.fit?.motion.rotation === 'locked')
+  assert.ok(candidate)
+  assert.equal(candidate.fit.placement.direction, -1)
+  assert.equal(candidate.fit.placement.offset, 5)
+  assert.equal(restore(candidate, ring, gear).length, 1)
+  assert.equal(options(ring, otherGeneration).some(snap => snap.fit?.motion.rotation === 'locked'), false)
+})
