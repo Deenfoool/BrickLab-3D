@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#181a1d">
   <title>BrickLab 3D</title>
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./src/menu/menu.css">
+  <link rel="stylesheet" href="./src/menu/menu.css?v=8845">
   <link rel="stylesheet" href="./src/editor/editor.css?v=parts-library">
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=technic-seats"></script>
+  <script type="module" src="./src/menu/menu.js?v=8845"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -86,6 +86,11 @@
             <span class="file-icon"><svg class="icon"><use href="#layers"/></svg></span>
             <div><h2 data-text="exampleTitle">Редуктор 8T / 24T</h2><p data-text="exampleDescription">Передача вращения между двумя осями.</p></div>
             <button type="button" class="secondary" id="example-open" data-text="exampleOpen">Создать копию</button>
+          </div>
+          <div class="example-card">
+            <span class="file-icon"><svg class="icon"><use href="#layers"/></svg></span>
+            <div><h2>8845 Dune Buggy</h2><p data-text="buggyDescription">Готовая сборка LEGO Technic из 178 элементов.</p></div>
+            <button type="button" class="secondary" id="buggy-open" data-text="exampleOpen">Создать копию</button>
           </div>
         </section>
         <p id="status" class="status" role="status" hidden></p>

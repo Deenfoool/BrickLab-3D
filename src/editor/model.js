@@ -1,8 +1,8 @@
 import { Quaternion, Vector3 } from 'three'
-import { connectionMode } from '../mechanics/axial.js?v=technic-seats'
-import { Assembly } from '../mechanics/assembly.js?v=technic-seats'
-import { gearAt, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=technic-seats'
-import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=technic-seats'
+import { connectionMode } from '../mechanics/axial.js?v=8845'
+import { Assembly } from '../mechanics/assembly.js?v=8845'
+import { gearAt, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=8845'
+import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=8845'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
 export const snapGrid = 10

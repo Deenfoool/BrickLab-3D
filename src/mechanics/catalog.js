@@ -2,6 +2,8 @@ import technic from '../../catalog/technic.json?v=connector-coverage' with { typ
 import profiles from '../../catalog/snap-profiles.json?v=technic-seats' with { type: 'json' }
 import designs from '../../catalog/snap-parts.json?v=technic-seats' with { type: 'json' }
 
+import support from '../../catalog/dune-buggy-parts.json?v=8845' with { type: 'json' }
+
 export { technic }
 
 const noPorts = Object.freeze([])
@@ -17,12 +19,12 @@ const locations = profiles.locations.map(([point, reference]) => ({
 const imported = new Map()
 
 export function hasConnectors(design) {
-  return Object.hasOwn(technic, design) || Object.hasOwn(designs, design)
+  return Object.hasOwn(technic, design) || Object.hasOwn(designs, design) || Boolean(support[design]?.ports?.length)
 }
 
 export function portsFor(design) {
   if (Object.hasOwn(technic, design)) return technic[design]
-  if (!Object.hasOwn(designs, design)) return noPorts
+  if (!Object.hasOwn(designs, design)) return support[design]?.ports ?? noPorts
   if (!imported.has(design)) {
     imported.set(design, designs[design].map(([key, type, point]) => ({
       id: `shadow-${key}`, ...definitions[type], ...locations[point],

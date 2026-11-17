@@ -39,3 +39,9 @@
 3. `node scripts/render-library-previews.mjs` пересоздаёт атласы WebP. Для этого шага нужен Playwright с Chromium. При использовании системного Chromium передайте `--chromium /path/to/chromium`. Для работы редактора эти зависимости не нужны.
 
 Для подключения нового раздела добавьте запись в `sections` того же индекса. Каждая запись задаёт `id`, названия `ru` и `en`, путь `assetPath` под `assets/ldraw/`, список категорий `[id, ru, en]` и строки деталей `[design, group, en, ru, pack]`. Модели читаются из `common.json.gz` и пакета с указанным номером. Порядок строк задаёт позиции миниатюр в атласах `previews/0.webp`, `previews/1.webp` и далее. Категории и выбор раздела редактор строит из этого индекса.
+
+## 8845 Dune Buggy
+
+Редактируемая сборка `examples/dune-buggy.json` и геометрия пружины получены из модели [Stefan Frenz (smf)](https://library.ldraw.org/omr/sets/1019) под CC BY 2.0. Скрипт читает [файл MPD с вложенными сборками](https://github.com/erik-larsen/kinebrick/blob/24366c8f0782a65d6138f41d593300b079859cb1/models/8845-Dune%20Buggy.mpd), переводит оси LDraw в координаты редактора и отбирает соединения, проходящие проверку в исходных позах. Пакет `assets/ldraw/dune-buggy/common.json.gz` содержит дополнительные детали из того же архива LDraw. Профили в `catalog/dune-buggy-parts.json` адаптированы из [таблицы Kinebrick](https://github.com/erik-larsen/kinebrick/blob/24366c8f0782a65d6138f41d593300b079859cb1/data/library-connections.json) и распространяются по CC BY-SA 4.0.
+
+`python3 scripts/build-dune-buggy.py "<8845-Dune Buggy.mpd>" <complete.zip> <library-connections.json>` пересобирает пример. Нужен Node.js той же версии, что для тестов проекта.

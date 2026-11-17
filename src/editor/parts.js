@@ -3,6 +3,7 @@ import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.js'
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js'
 import library from '../../catalog/parts-library.json?v=parts-library' with { type: 'json' }
 import { sectionsFor } from './library-data.js?v=parts-library'
+import support from '../../catalog/dune-buggy-parts.json?v=8845' with { type: 'json' }
 
 const curated = {
   32316: { ru: 'Балка 5L', en: 'Beam 5L', color: '#8094ac' },
@@ -29,11 +30,16 @@ const partOrder = ['3700', '3705', '3706', '3707', '3737', '3673', '2780', '3713
 export const sections = sectionsFor(library, curated, partOrder)
 export const parts = Object.assign(Object.create(null), ...sections.map(section =>
   Object.fromEntries(section.parts.map(part => [part.design, part]))))
+// Supplementary designs needed to edit the complete downloadable example.
+for (const [design, { en, ru }] of Object.entries(support)) {
+  if (parts[design]) continue
+  parts[design] = { design, en, ru, assetPath: 'dune-buggy', pack: 'common', revision: '8845', color: '#9ba3ad' }
+}
 const packCache = new Map()
 const filesRoot = new URL('../../assets/ldraw/', import.meta.url)
 
 const fileURL = new URL('../../assets/ldraw/technic.mpd?v=connector-coverage', import.meta.url)
-const material = new THREE.MeshStandardMaterial({ roughness: .47, metalness: .08 })
+const material = new THREE.MeshStandardMaterial({ roughness: .47, metalness: .08, fog: false })
 let palette
 
 export function loadCoreModels() {

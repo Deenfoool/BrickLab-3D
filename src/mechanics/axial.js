@@ -200,9 +200,13 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
   if (!mode.seat && mode.rotation !== 'detented' && !male.openings.includes((side === 'start') === (direction > 0) ? 'end' : 'start')) {
     return { ok: false, reason: 'closed-tip' }
   }
-  if (mode.seat && (direction !== (side === 'start' ? 1 : -1) ||
-      Math.abs(offset - (side === 'start' ? 0 : portLength(female))) > EPSILON)) {
-    return { ok: false, reason: 'stud-seat' }
+  if (mode.seat) {
+    const face = side === 'start' ? 0 : portLength(female)
+    const tolerance = seated ? .01 : EPSILON
+    if (direction !== (side === 'start' ? 1 : -1) || Math.abs(offset - face) > tolerance) {
+      return { ok: false, reason: 'stud-seat' }
+    }
+    offset = face
   }
   if (mode.rotation === 'detented' && female.seat !== undefined && Math.abs(offset - female.seat) > EPSILON) {
     return { ok: false, reason: 'hinge-seat' }

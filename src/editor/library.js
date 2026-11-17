@@ -1,4 +1,4 @@
-import { hasConnectors } from '../mechanics/catalog.js?v=technic-seats'
+import { hasConnectors } from '../mechanics/catalog.js?v=8845'
 import { previewColumns, previewRows, previewPageSize, searchLibrary } from './library-data.js?v=parts-library'
 
 const batchSize = 48

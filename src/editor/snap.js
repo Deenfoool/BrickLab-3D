@@ -1,8 +1,8 @@
 import { Plane, Vector3 } from 'three'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
-import { connectionMode, portLength } from '../mechanics/axial.js?v=technic-seats'
-import { gearAt, portsFor } from '../mechanics/catalog.js?v=technic-seats'
-import { candidateOffsets, joinedPose, worldPort } from './placement.js?v=technic-seats'
+import { connectionMode, portLength } from '../mechanics/axial.js?v=8845'
+import { gearAt, portsFor } from '../mechanics/catalog.js?v=8845'
+import { candidateOffsets, joinedPose, worldPort } from './placement.js?v=8845'
 
 const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')
 

@@ -1,6 +1,6 @@
 import { Quaternion, Vector3 } from 'three'
-import { measureInsertion } from '../mechanics/assembly.js?v=technic-seats'
-import { connectionMode, portLength } from '../mechanics/axial.js?v=technic-seats'
+import { measureInsertion } from '../mechanics/assembly.js?v=8845'
+import { connectionMode, portLength } from '../mechanics/axial.js?v=8845'
 
 const Y = new Vector3(0, 1, 0)
 const base = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI)

@@ -2,15 +2,21 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { registerHooks } from 'node:module'
 import library from '../catalog/parts-library.json' with { type: 'json' }
+import buggy from '../examples/dune-buggy.json' with { type: 'json' }
 
 const three = new URL('../vendor/three/build/three.module.min.js', import.meta.url).href
 registerHooks({ resolve(specifier, context, next) {
-  return next(specifier === 'three' ? three : specifier, context)
+  if (specifier === 'three') return next(three, context)
+  if (specifier.startsWith('three/addons/')) {
+    return next(new URL(specifier.replace('three/addons/', '../vendor/three/examples/jsm/'), import.meta.url).href, context)
+  }
+  return next(specifier, context)
 } })
 const { createAssembly, connectAligned } = await import('../src/editor/model.js')
 const { nearbyConnections } = await import('../src/editor/snap.js')
 const { portsFor } = await import('../src/mechanics/catalog.js')
 const { evaluateInsertion, portLength } = await import('../src/mechanics/axial.js')
+const { parts: availableParts } = await import('../src/editor/parts.js')
 
 const part = (id, design) => ({ id, design, position: [0, 0, 0], rotation: [0, 0, 0, 1] })
 const scene = { pixelDistance: () => 0 }
@@ -187,4 +193,31 @@ test('driving rings engage the matching generation of clutch gear at the measure
   assert.equal(candidate.fit.placement.offset, 5)
   assert.equal(restore(candidate, ring, gear).length, 1)
   assert.equal(options(ring, otherGeneration).some(snap => snap.fit?.motion.rotation === 'locked'), false)
+})
+
+test('8845 Dune Buggy keeps all its parts, stored connections and four mounted tyres', () => {
+  assert.equal(buggy.parts.length, 178)
+  assert.equal(buggy.parts.filter(part => part.design === '8845-spring').length, 2)
+  assert.ok(buggy.parts.every(part => availableParts[part.design]))
+  const { connections } = createAssembly(buggy.parts, buggy.connections, buggy.gears)
+  assert.equal(connections.length, buggy.connections.length)
+  assert.equal(connections.length, 249)
+  const designs = new Map(buggy.parts.map(part => [part.id, part.design]))
+  const tyres = buggy.parts.filter(part => part.design === '3634')
+  assert.equal(tyres.length, 4)
+  for (const tyre of tyres) {
+    const mates = connections.filter(link => link.socket.part === tyre.id)
+    assert.equal(mates.length, 1)
+    assert.equal(designs.get(mates[0].shaft.part), '3482')
+  }
+})
+
+test('existing stud fits tolerate LDraw rounding at the seat without allowing additional insertion', () => {
+  const stud = portsFor('3702').find(port => port.role === 'stud')
+  const socket = portsFor('3070b').find(port => port.role === 'anti-stud')
+  const measured = evaluateInsertion(stud, socket, { offset: .008 }, { seated: true })
+  assert.ok(measured.ok)
+  assert.equal(measured.placement.offset, 0)
+  assert.equal(evaluateInsertion(stud, socket, { offset: .008 }).reason, 'stud-seat')
+  assert.equal(evaluateInsertion(stud, socket, { offset: .011 }, { seated: true }).reason, 'stud-seat')
 })

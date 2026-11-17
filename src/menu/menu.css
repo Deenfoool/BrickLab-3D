@@ -80,6 +80,7 @@ time{font-size:clamp(14px,1.38vw,21px);color:var(--muted);white-space:nowrap}
 .open:hover{background:var(--hover)}
 .open .icon{width:33px;height:33px}
 .open .icon:last-child{margin-left:auto;width:26px;height:26px}
+#example-panel{display:grid;gap:12px}
 .example-card,dialog{border:1px solid var(--line);border-radius:12px;background:#202226;padding:26px}
 .example-card{display:flex;align-items:center;gap:20px}
 .example-card p{margin:13px 0;color:var(--muted)}

@@ -1,9 +1,9 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
-import { partMesh, parts } from './parts.js?v=parts-library'
-import { worldPort } from './placement.js?v=technic-seats'
-import { partRotationPort, snapGrid } from './model.js?v=technic-seats'
+import { partMesh, parts } from './parts.js?v=8845'
+import { worldPort } from './placement.js?v=8845'
+import { partRotationPort, snapGrid } from './model.js?v=8845'
 
 export function createScene(host, models) {
   const world = new THREE.Scene()
