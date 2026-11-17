@@ -1,4 +1,5 @@
-import { driveSettings, forwardVector, newDriveState, prepareTestDrive, stepTestDrive } from './vehicle-drive.js?v=drive-physics'
+import { Quaternion, Vector3 } from 'three'
+import { driveScale, driveScaleLimits, driveSettings, forwardVector, newDriveState, prepareTestDrive, resizeKinematicDrive, stepTestDrive } from './vehicle-drive.js?v=drive-scale'
 
 const labels = {
   ru: {
@@ -18,6 +19,8 @@ const labels = {
     trackError: 'Полигон не загрузился. Повтори попытку или выбери ровную площадку.',
     blocked: 'Колёса упёрлись в препятствие или достигли края проезда.',
     heading: 'Направление переда',
+    vehicleScale: 'Масштаб машины',
+    scaleNoRoom: 'Здесь не хватает места для такого масштаба.',
     traction: 'Тяга',
     push: 'Толкать машину',
     powered: 'Ведущий вал или колёса',
@@ -65,6 +68,8 @@ const labels = {
     trackError: 'Could not load the playground. Try again or select the flat test pad.',
     blocked: 'The wheels reached an obstacle or the edge of the driving surface.',
     heading: 'Forward direction',
+    vehicleScale: 'Vehicle scale',
+    scaleNoRoom: 'There is not enough room to use that scale here.',
     traction: 'Traction',
     push: 'Push the vehicle',
     powered: 'Driven shaft or wheels',
@@ -105,8 +110,14 @@ export const driveTitle = language => labels[language].title
 export function mountDrivePanel(root, { language, scene, models, catalog, read, write, nameOf, signal }) {
   const t = labels[language]
   root.setAttribute('aria-label', t.title)
+  const { min, max, step } = driveScaleLimits
   root.innerHTML = `
     <header>${t.title}<small data-drive="venueTitle"></small></header>
+    <div class="drive-scale">
+      <label for="drive-scale">${t.vehicleScale} <output data-drive="scaleValue"></output></label>
+      <input id="drive-scale" data-drive="scale" type="range" min="${min}" max="${max}" step="${step}">
+      <p data-drive="scaleNotice" role="status" hidden></p>
+    </div>
     <div data-drive="setup">
       <label>${t.venue}<select data-drive="venue"><option value="sketchbook">${t.sketchbook}</option><option value="flat">${t.flat}</option></select></label>
       <label>${t.simulation}<select data-drive="simulation"><option value="physical">${t.physical}</option><option value="kinematic">${t.kinematic}</option></select></label>
@@ -144,6 +155,8 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
   const el = name => root.querySelector('[data-drive="' + name + '"]')
   const on = (target, event, handler) => target.addEventListener(event, handler, { signal })
   const held = new Map()
+  const stationary = new Vector3()
+  const upright = new Quaternion()
   let vehicle
   let active = false
   let state
@@ -158,11 +171,23 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
   let physics
   let physicsRun
 
-  function arrow(degrees) {
+  function arrow(degrees, scale = vehicle.settings.scale) {
     const direction = forwardVector(degrees)
-    const start = vehicle.origin.clone().addScaledVector(direction, vehicle.wheelbase + 50)
+    const start = vehicle.origin.clone().addScaledVector(direction, vehicle.wheelbase * scale + 50)
     start.y = 8
     scene.driveArrow(start, direction)
+  }
+
+  function showScale(scale) {
+    const percent = Math.round(scale * 100)
+    el('scale').value = percent
+    el('scale').setAttribute('aria-valuetext', percent + '%')
+    el('scaleValue').value = percent + '%'
+  }
+
+  function previewScale(scale) {
+    scene.driveTransform(vehicle.origin, stationary, 0, upright, scale)
+    arrow(Number(el('heading').value), scale)
   }
 
   function sync() {
@@ -177,6 +202,8 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     el('degrees').value = settings.heading + '°'
     el('mode').value = settings.mode
     el('invert').checked = settings.invert
+    showScale(settings.scale)
+    previewScale(settings.scale)
     el('traction').hidden = settings.mode !== 'powered'
     el('assignedDrive').textContent = settings.driveParts.map(nameOf).join(', ') || t.none
     el('assignedSteering').textContent = settings.steering ? nameOf(settings.steering) : t.none
@@ -192,7 +219,6 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     ].filter(Boolean).join(' · ')
     const showTraction = picking === 'drive' || !vehicle.steered.length
     scene.highlight(showTraction ? vehicle.driven : vehicle.steered, showTraction ? 0xffb01b : 0x65b9ff)
-    arrow(settings.heading)
   }
 
   function change(update) {
@@ -214,7 +240,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     const result = physicsRun ? physicsRun.advance(input, dt) : stepTestDrive(vehicle, state, input, dt, track)
     previous = time
     scene.previewParts(result.poses)
-    scene.driveTransform(vehicle.origin, result.position, result.yaw, result.tilt)
+    scene.driveTransform(vehicle.origin, result.position, result.yaw, result.tilt, result.scale)
     el('trackStatus').hidden = !result.blocked && !result.outOfBounds
     el('trackStatus').textContent = result.outOfBounds ? t.outOfBounds : result.blocked ? t.blocked : ''
     const currentRadius = Number.isFinite(result.radius) ?
@@ -247,6 +273,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     scene.resetView()
     el('setup').hidden = false
     el('run').hidden = true
+    el('scaleNotice').hidden = true
     sync()
   }
 
@@ -272,7 +299,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
           request.message = 'loadingPhysics'
           sync()
           const [{ createPhysicalDrive }, { loadRapier }] = await Promise.all([
-            import('./physical-drive.js'), import('../mechanics/physics-world.js'),
+            import('./physical-drive.js?v=drive-scale'), import('../mechanics/physics-world.js'),
           ])
           const rapier = await loadRapier()
           if (loadingTrack !== request) return
@@ -316,9 +343,10 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     scene.setDriveMap(track?.group)
     state = newDriveState(vehicle, track)
     el('trackStatus').hidden = true
+    el('scaleNotice').hidden = true
     el('mechanics').hidden = !physicsRun
     const initial = physicsRun ? physicsRun.advance({ throttle: 0, steer: 0, brake: false }, 0) : state
-    scene.driveTransform(vehicle.origin, initial.position, initial.yaw, initial.tilt)
+    scene.driveTransform(vehicle.origin, initial.position, initial.yaw, initial.tilt, initial.scale)
     scene.resetView()
     el('setup').hidden = true
     el('run').hidden = false
@@ -333,6 +361,26 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
   on(el('simulation'), 'change', () => {
     clearTrackRequest()
     change({ simulation: el('simulation').value })
+  })
+  on(el('scale'), 'input', () => {
+    const scale = driveScale(Number(el('scale').value) / 100)
+    el('scaleNotice').hidden = true
+    showScale(scale)
+    if (active && vehicle && !state) previewScale(scale)
+  })
+  on(el('scale'), 'change', () => {
+    const scale = driveScale(Number(el('scale').value) / 100)
+    if (physicsRun && !physicsRun.resize(scale)) {
+      showScale(vehicle.settings.scale)
+      el('scaleNotice').textContent = t.scaleNoRoom
+      el('scaleNotice').hidden = false
+      return
+    }
+    if (state && !physicsRun) resizeKinematicDrive(vehicle, state, scale)
+    if (state) vehicle.settings.scale = scale
+    showScale(scale)
+    change({ scale })
+    schedule()
   })
   on(el('heading'), 'input', () => {
     el('degrees').value = el('heading').value + '°'

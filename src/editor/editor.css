@@ -114,6 +114,8 @@ body:has(.editor:not([hidden])){overflow:hidden}
 .editor-test-drive header{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;background:#202329;font-weight:650}
 .editor-test-drive small,.editor-test-drive p{color:#b9c0ca}
 .editor-test-drive [data-drive="setup"],.editor-test-drive [data-drive="run"]{padding:12px;display:grid;gap:9px}
+.editor-test-drive .drive-scale{padding:10px 12px 0}
+.editor-test-drive .drive-scale output{float:right;color:#ffd376}
 .editor-test-drive [hidden]{display:none!important}
 .editor-test-drive label{display:block}
 .editor-test-drive select,.editor-test-drive input[type="range"]{display:block;width:100%;margin-top:5px;accent-color:#ffb01b}

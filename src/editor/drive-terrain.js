@@ -3,14 +3,15 @@ import { Quaternion, Vector3 } from 'three'
 const up = new Vector3(0, 1, 0)
 
 export function terrainPose(terrain, origin, state, contacts, position, yaw) {
+  const { scale } = state
   const previous = new Quaternion().setFromAxisAngle(up, state.yaw).premultiply(state.tilt)
   const samples = []
   for (const { position: center, wheel } of contacts) {
-    const bottom = center.clone().sub(origin).addScaledVector(up, -wheel.radius)
+    const bottom = center.clone().sub(origin).addScaledVector(up, -wheel.radius).multiplyScalar(scale)
     const oldFoot = bottom.clone().applyQuaternion(previous).add(origin).add(state.position)
     const next = bottom.clone().applyAxisAngle(up, yaw)
     const height = terrain.heightAt(origin.x + position.x + next.x, origin.z + position.z + next.z,
-      oldFoot.y + wheel.radius * .65, oldFoot.y - wheel.radius)
+      oldFoot.y + wheel.radius * scale * .65, oldFoot.y - wheel.radius * scale)
     if (!Number.isFinite(height)) return null
     samples.push(new Vector3(next.x, height - origin.y - next.y, next.z))
   }

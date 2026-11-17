@@ -13,7 +13,7 @@ registerHooks({ resolve(specifier, context, next) {
 } })
 
 const { connectAligned, connectPlaced, createAssembly } = await import('../src/editor/model.js')
-const { driveSettings, newDriveState, prepareTestDrive, stepTestDrive } = await import('../src/editor/vehicle-drive.js')
+const { driveSettings, newDriveState, prepareTestDrive, resizeKinematicDrive, stepTestDrive } = await import('../src/editor/vehicle-drive.js')
 const { loadPartModel, parts: catalog } = await import('../src/editor/parts.js')
 const { parseProject } = await import('../src/projects/documents.js')
 const { Quaternion, Vector3 } = await import('three')
@@ -125,8 +125,11 @@ test('integral wheels can use their mounted axle bore as the running axis', () =
 test('drive assignments preserve file round-tripping and invalid settings stay safe', () => {
   const testDrive = driveSettings({ heading: 90, mode: 'powered', driveParts: ['one', 'one', 2], steering: 'two', invert: true })
   const reopened = parseProject(JSON.stringify({ ...buggy, testDrive }))
-  assert.deepEqual(reopened.testDrive, { simulation: 'physical', venue: 'sketchbook', heading: 90, mode: 'powered', driveParts: ['one'], steering: 'two', invert: true })
+  assert.deepEqual(reopened.testDrive, { simulation: 'physical', scale: 1, venue: 'sketchbook', heading: 90, mode: 'powered', driveParts: ['one'], steering: 'two', invert: true })
   assert.deepEqual(driveSettings({ mode: 'unexpected', heading: NaN }), driveSettings(undefined))
+  assert.equal(driveSettings({ scale: .738 }).scale, .75)
+  assert.equal(driveSettings({ scale: 5 }).scale, 2)
+  assert.equal(driveSettings({ scale: 0 }).scale, .25)
 })
 
 test('a drive starts facing along its terrain and follows the ground under the wheels', () => {
@@ -397,4 +400,69 @@ test('a vehicle keeps its momentum in the air and falls when none of its wheels 
     geometry.dispose()
     surface.material.dispose()
   }
+})
+
+test('a live resize lets the chassis clear a low roof and blocks enlarging beneath it', async () => {
+  await rapier.init()
+  const shapes = [
+    new BoxGeometry(1600, 60, 4200),
+    new BoxGeometry(600, 65, 570),
+  ].map(geometry => {
+    geometry.computeBoundingBox()
+    const shape = new Mesh(geometry, new MeshBasicMaterial())
+    shape.userData.type = 'box'
+    return shape
+  })
+  const [floor, roof] = shapes
+  floor.position.y = -30
+  roof.position.set(0, 84.5, 945)
+  for (const shape of shapes) shape.updateMatrixWorld(true)
+  const rig = prepare()
+  const simulation = createPhysicalDrive(rapier, rig, models, createAssembly(buggy.parts, buggy.connections),
+    { start: new Vector3(), heading: 0, collisionMeshes: shapes })
+  const position = frame => frame.position.clone().add(rig.origin)
+
+  try {
+    assert.equal(sampleFrames(simulation, 140).grounded, 4)
+    const blocked = sampleFrames(simulation, 420, { throttle: 1 })
+    const oldPosition = position(blocked)
+    assert.ok(oldPosition.z < 500, 'full-size vehicle advanced beneath the roof')
+    assert.ok(Math.abs(blocked.speed) < .25)
+
+    assert.equal(simulation.resize(.5), true)
+    const smaller = simulation.advance(neutralInput, 0)
+    assert.equal(smaller.scale, .5)
+    assert.ok(Math.abs(position(smaller).z - oldPosition.z) < 1e-4)
+    assert.ok(Math.abs(position(smaller).x - oldPosition.x) < 1e-4)
+
+    let inside
+    for (let i = 0; i < 360; i++) {
+      const frame = simulation.advance({ ...neutralInput, throttle: 1 }, 1 / 60)
+      if (position(frame).z > 760) { inside = frame; break }
+    }
+    assert.ok(inside, 'scaled vehicle did not reach the tunnel interior')
+    assert.equal(inside.grounded, 4)
+    assert.equal(simulation.resize(1.5), false)
+    assert.equal(simulation.advance(neutralInput, 0).scale, .5)
+    const clear = sampleFrames(simulation, 320, { throttle: 1 })
+    assert.ok(position(clear).z > 1270, 'scaled vehicle did not clear the far end')
+  } finally {
+    simulation.dispose()
+    for (const shape of shapes) { shape.geometry.dispose(); shape.material.dispose() }
+  }
+})
+
+
+test('kinematic terrain contact uses the scaled wheel footprint', () => {
+  const rig = prepare()
+  const terrain = { start: new Vector3(), heading: 0, heightAt: x => Math.abs(x) <= 75 ? 0 : undefined }
+  const state = newDriveState(rig, terrain)
+  const input = { ...neutralInput, throttle: 1 }
+  assert.equal(stepTestDrive(rig, state, input, 1 / 60, terrain).blocked, true)
+  resizeKinematicDrive(rig, state, .55)
+  let frame
+  for (let i = 0; i < 120; i++) frame = stepTestDrive(rig, state, input, 1 / 60, terrain)
+  assert.equal(frame.blocked, false)
+  assert.equal(frame.scale, .55)
+  assert.ok(frame.position.z + rig.origin.z > 350)
 })

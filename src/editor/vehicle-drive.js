@@ -2,7 +2,7 @@ import { Quaternion, Vector3 } from 'three'
 import { portsFor } from '../mechanics/catalog.js?v=linkages'
 import { rotationMotion, rotationPoses } from './model.js?v=drive-physics'
 import { worldPort } from './placement.js?v=linkages'
-import { terrainPose } from './drive-terrain.js?v=sketchbook'
+import { terrainPose } from './drive-terrain.js?v=drive-scale'
 
 const up = new Vector3(0, 1, 0)
 const vector = value => new Vector3().fromArray(value)
@@ -11,10 +11,19 @@ const clamp = (value, low, high) => Math.min(high, Math.max(low, value))
 const approach = (value, target, step) => value + clamp(target - value, -step, step)
 const horizontal = value => value.setY(0)
 
+export const driveScaleLimits = { min: 25, max: 200, step: 5 }
+
+export function driveScale(value) {
+  const { min, max, step } = driveScaleLimits
+  const percent = Number.isFinite(value) ? Math.round(value * 100 / step) * step : 100
+  return clamp(percent, min, max) / 100
+}
+
 export function driveSettings(value) {
   const id = value => typeof value === 'string' && value.length ? value : null
   return {
     simulation: value?.simulation === 'kinematic' ? 'kinematic' : 'physical',
+    scale: driveScale(value?.scale),
     venue: value?.venue === 'flat' ? 'flat' : 'sketchbook',
     heading: Number.isFinite(value?.heading) ? clamp(value.heading, -180, 180) : 0,
     mode: value?.mode === 'powered' ? 'powered' : 'push',
@@ -148,10 +157,23 @@ export function prepareTestDrive(parts, assembly, models, input, catalog = {}) {
 
 export function newDriveState(vehicle, terrain) {
   const position = terrain ? terrain.start.clone().sub(vehicle.origin) : new Vector3()
-  position.y += vehicle.lift
+  const { scale } = vehicle.settings
+  position.y += vehicle.lift * scale
   const yaw = terrain ? terrain.heading - Math.atan2(vehicle.forward.x, vehicle.forward.z) : 0
-  return { position, yaw, tilt: new Quaternion(), speed: 0, steering: 0,
+  return { position, yaw, tilt: new Quaternion(), scale, speed: 0, steering: 0,
     turns: vehicle.groups.map(() => 0) }
+}
+
+export function wheelBottom(contact, origin, rotation, offset = 0) {
+  return contact.position.clone().sub(origin).addScaledVector(up, offset - contact.wheel.radius)
+    .applyQuaternion(rotation).y
+}
+
+export function resizeKinematicDrive(vehicle, state, scale) {
+  const rotation = new Quaternion().setFromAxisAngle(up, state.yaw).premultiply(state.tilt)
+  const bottom = Math.min(...vehicle.initial.map(contact => wheelBottom(contact, vehicle.origin, rotation)))
+  state.position.y += (state.scale - scale) * bottom
+  state.scale = scale
 }
 
 export function carryPose(original, rolling, steered) {
@@ -182,6 +204,7 @@ export function advanceRotor(spin, angle, increment) {
 
 export function stepTestDrive(vehicle, state, controls, dt, terrain) {
   const { forward, origin, byId, groups, ready } = vehicle
+  const { scale } = state
   const step = clamp(dt, 0, .05)
   state.steering = approach(state.steering, vehicle.steered.length ? controls.steer : 0, 2.7 * step)
   const target = controls.brake || !ready ? 0 : (controls.throttle > 0 ? 320 : 190) * controls.throttle
@@ -195,7 +218,7 @@ export function stepTestDrive(vehicle, state, controls, dt, terrain) {
   // Minimize lateral motion at the actual wheel headings around the rear contact line.
   for (const c of contacts) {
     const lateral = new Vector3().crossVectors(up, c.heading)
-    const tangent = new Vector3().crossVectors(up, horizontal(c.position.clone().sub(origin)))
+    const tangent = new Vector3().crossVectors(up, horizontal(c.position.clone().sub(origin)).multiplyScalar(scale))
     const arm = lateral.dot(tangent)
     sum += arm * lateral.dot(forward)
     weight += arm * arm
@@ -222,16 +245,16 @@ export function stepTestDrive(vehicle, state, controls, dt, terrain) {
   const contactById = new Map(contacts.map(c => [c.wheel.id, c]))
   groups.forEach(({ plan, sample }, index) => {
     const c = contactById.get(sample.wheel.id)
-    const tangent = new Vector3().crossVectors(up, horizontal(c.position.clone().sub(origin)))
+    const tangent = new Vector3().crossVectors(up, horizontal(c.position.clone().sub(origin)).multiplyScalar(scale))
     const traveled = forward.clone().multiplyScalar(distance).addScaledVector(tangent, yawStep).dot(c.heading)
     const spin = plan.spins.get(c.wheel.id)
     const sign = Math.sign(vector(spin.axis).dot(new Vector3().crossVectors(up, sample.heading)))
-    state.turns[index] = advanceRotor(spin, state.turns[index], traveled * sign / c.wheel.radius)
+    state.turns[index] = advanceRotor(spin, state.turns[index], traveled * sign / (c.wheel.radius * scale))
     for (const part of rotationPoses(vehicle.parts, plan, state.turns[index])) {
       poses.set(part.id, carryPose(byId.get(part.id), part, poses.get(part.id)))
     }
   })
 
-  return { poses: [...poses.values()], yaw: state.yaw, tilt: state.tilt, position: state.position, blocked, radius: Math.abs(curvature) > 1e-6 ? 1 / Math.abs(curvature) : Infinity,
+  return { poses: [...poses.values()], yaw: state.yaw, tilt: state.tilt, position: state.position, scale, blocked, radius: Math.abs(curvature) > 1e-6 ? 1 / Math.abs(curvature) : Infinity,
     speed: state.speed, distance }
 }

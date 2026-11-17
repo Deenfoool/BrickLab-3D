@@ -334,14 +334,20 @@ export function createScene(host, models) {
     invalidate()
   }
 
-  function driveTransform(origin, position, yaw, tilt) {
+  function driveTransform(origin, position, yaw, tilt, scale = 1) {
     solids.quaternion.setFromAxisAngle(axesUp, yaw).premultiply(tilt)
-    solids.position.copy(origin).add(position).sub(origin.clone().applyQuaternion(solids.quaternion))
+    solids.scale.setScalar(scale)
+    solids.position.copy(origin).add(position).sub(origin.clone().multiplyScalar(scale).applyQuaternion(solids.quaternion))
     const offset = position.clone().sub(driveOffset)
     camera.position.add(offset)
     controls.target.add(offset)
     driveOffset.copy(position)
     floor.position.set(Math.round(position.x / 200) * 200, 0, Math.round(position.z / 200) * 200)
+    if (selection.visible) selection.setFromObject(objects.get(selectedId))
+    for (const [id, helper] of warnings) {
+      const object = objects.get(id)
+      if (object) helper.setFromObject(object)
+    }
     controls.update()
     invalidate()
   }
@@ -349,6 +355,7 @@ export function createScene(host, models) {
   function clearDriveTransform() {
     solids.position.set(0, 0, 0)
     solids.quaternion.identity()
+    solids.scale.setScalar(1)
     driveOffset.set(0, 0, 0)
     floor.position.set(0, 0, 0)
     invalidate()
