@@ -11,7 +11,7 @@
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=drive-scale"></script>
+  <script type="module" src="./src/menu/menu.js?v=inline-engine"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -90,7 +90,12 @@
           <div class="example-card">
             <span class="file-icon"><svg class="icon"><use href="#layers"/></svg></span>
             <div><h2>8845 Dune Buggy</h2><p data-text="buggyDescription">Готовая сборка LEGO Technic из 178 элементов.</p></div>
-            <button type="button" class="secondary" id="buggy-open" data-text="exampleOpen">Создать копию</button>
+            <button type="button" class="secondary" id="buggy-open" data-example-file="dune-buggy.json?v=test-drive" data-text="exampleOpen">Создать копию</button>
+          </div>
+          <div class="example-card">
+            <span class="file-icon"><svg class="icon"><use href="#layers"/></svg></span>
+            <div><h2>858 Inline Engine</h2><p data-text="engineDescription">Рядный трёхцилиндровый двигатель LEGO Technic из 187 элементов.</p></div>
+            <button type="button" class="secondary" id="engine-open" data-example-file="inline-engine.json" data-text="exampleOpen">Создать копию</button>
           </div>
         </section>
         <p id="status" class="status" role="status" hidden></p>

@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import { registerHooks } from 'node:module'
 import library from '../catalog/parts-library.json' with { type: 'json' }
 import buggy from '../examples/dune-buggy.json' with { type: 'json' }
+import engine from '../examples/inline-engine.json' with { type: 'json' }
 
 const three = new URL('../vendor/three/build/three.module.min.js', import.meta.url).href
 registerHooks({ resolve(specifier, context, next) {
@@ -213,6 +214,17 @@ test('8845 Dune Buggy keeps all its parts, stored connections and four mounted t
     assert.equal(mates.length, 1)
     assert.equal(designs.get(mates[0].shaft.part), '3482')
   }
+})
+
+test('858 Inline Engine keeps both drive belts, all three pistons and its seated connections', () => {
+  assert.equal(engine.parts.length, 187)
+  assert.equal(engine.parts.filter(part => part.design === '3652').length, 3)
+  assert.deepEqual(engine.parts.filter(part => part.design.startsWith('858-belt-')).map(part => part.design),
+    ['858-belt-1', '858-belt-2'])
+  assert.ok(engine.parts.every(part => availableParts[part.design]))
+  const { connections } = createAssembly(engine.parts, engine.connections)
+  assert.equal(engine.connections.length, 380)
+  assert.equal(connections.length, engine.connections.length)
 })
 
 test('existing stud fits tolerate LDraw rounding at the seat without allowing additional insertion', () => {

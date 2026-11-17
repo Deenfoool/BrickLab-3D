@@ -1,4 +1,4 @@
-import { hasConnectors } from '../mechanics/catalog.js?v=linkages'
+import { hasConnectors } from '../mechanics/catalog.js?v=inline-engine'
 import { previewColumns, previewRows, previewPageSize, searchLibrary } from './library-data.js?v=parts-library'
 
 const batchSize = 48

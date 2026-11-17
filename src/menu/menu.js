@@ -1,5 +1,5 @@
 import { editorLabels } from '../editor/labels.js?v=linkages'
-import { locales } from './locale.js?v=8845'
+import { locales } from './locale.js?v=inline-engine'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
 const byId = id => document.getElementById(id)
@@ -212,7 +212,7 @@ async function openEditor(project) {
   editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=drive-scale')
+    const { mountEditor } = await import('../editor/editor.js?v=inline-engine')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
@@ -287,12 +287,13 @@ byId('example-open').addEventListener('click', async () => {
     setStatus('invalidFile')
   }
 })
-byId('buggy-open').addEventListener('click', async event => {
+async function openExample(event) {
   const control = event.currentTarget
+  const url = new URL(`../../examples/${control.dataset.exampleFile}`, import.meta.url)
   control.disabled = true
   try {
-    const response = await fetch(new URL('../../examples/dune-buggy.json?v=test-drive', import.meta.url))
-    if (!response.ok) throw new Error(`Dune Buggy: HTTP ${response.status}`)
+    const response = await fetch(url)
+    if (!response.ok) throw new Error(`Example ${url.pathname}: HTTP ${response.status}`)
     const example = parseProject(await response.text())
     if (currentPage() === 'examples') addProject(example)
   } catch {
@@ -300,7 +301,10 @@ byId('buggy-open').addEventListener('click', async event => {
   } finally {
     control.disabled = false
   }
-})
+}
+for (const control of document.querySelectorAll('[data-example-file]')) {
+  control.addEventListener('click', openExample)
+}
 removeDialog.addEventListener('close', () => {
   if (removeDialog.returnValue === 'remove' && pendingRemoval) {
     updateProjects(projects.filter(project => project.id !== pendingRemoval))

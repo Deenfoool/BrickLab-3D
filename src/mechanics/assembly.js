@@ -1,6 +1,6 @@
 import { connectionMode, evaluateInsertion, overlap, portLength } from './axial.js?v=linkages'
 import { evaluateSpurMesh } from './gears.js'
-import { rotationPort } from './catalog.js?v=linkages'
+import { rotationPort } from './catalog.js?v=inline-engine'
 import { cross, dot, isVector, length, subtract, unit } from './vector.js?v=connector-coverage'
 
 const LINEAR_TOLERANCE = .01

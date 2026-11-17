@@ -2,10 +2,12 @@ import technic from '../../catalog/technic.json?v=connector-coverage' with { typ
 import profiles from '../../catalog/snap-profiles.json?v=technic-seats' with { type: 'json' }
 import designs from '../../catalog/snap-parts.json?v=technic-seats' with { type: 'json' }
 
-import support from '../../catalog/dune-buggy-parts.json?v=rotation' with { type: 'json' }
+import buggyParts from '../../catalog/dune-buggy-parts.json?v=rotation' with { type: 'json' }
+import engineParts from '../../catalog/inline-engine-parts.json' with { type: 'json' }
 
 export { technic }
 
+const support = { ...engineParts, ...buggyParts }
 const noPorts = Object.freeze([])
 const openings = [[], ['start'], ['end'], ['start', 'end']]
 const definitions = profiles.types.map(([role, gender, ends, sections, group, slot, pneumatic, legacy]) => ({

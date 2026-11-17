@@ -1,4 +1,4 @@
-import { measureInsertion } from './assembly.js?v=linkages'
+import { measureInsertion } from './assembly.js?v=inline-engine'
 import { evaluateSpurMesh } from './gears.js'
 import { dot } from './vector.js?v=connector-coverage'
 

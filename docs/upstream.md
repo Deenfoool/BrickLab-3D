@@ -53,3 +53,11 @@
 ## Динамика
 
 Тест-драйв и физика сборки используют [Rapier 3D 0.19.3](https://www.npmjs.com/package/@dimforge/rapier3d-compat/v/0.19.3) под Apache 2.0. Браузер загружает выпущенный пакет при первом запуске симуляции. Для тестов та же версия закреплена в `package-lock.json`. Коллизии полигона строятся по коробкам и треугольным поверхностям из узлов `physics` Sketchbook.
+
+## 858 Inline Engine
+
+Редактируемая сборка `examples/inline-engine.json` основана на [модели LDraw, опубликованной в Kinebrick](https://github.com/erik-larsen/kinebrick/blob/24366c8f0782a65d6138f41d593300b079859cb1/models/858-Auto%20Engines-Inline%20Engine.mpd). Автор цифровой модели Takeshi Takahashi (RainbowDolphin). Модель и геометрия двух ремней, созданная LDCad для исходного MPD, распространяются по [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/). BrickLab разворачивает вложенные сборки в редактируемые детали, переводит их в координаты редактора и сохраняет посадки, прошедшие проверку в исходных позах.
+
+Пакет `assets/ldraw/inline-engine/common.json.gz` содержит ремни и недостающие модели из официального архива LDraw с сохранёнными заголовками. Профили в `catalog/inline-engine-parts.json` адаптированы из [таблицы Kinebrick](https://github.com/erik-larsen/kinebrick/blob/24366c8f0782a65d6138f41d593300b079859cb1/data/library-connections.json) и распространяются по CC BY-SA 4.0.
+
+`python3 scripts/build-inline-engine.py "<858-Auto Engines-Inline Engine.mpd>" <complete.zip> <library-connections.json>` пересобирает пример.

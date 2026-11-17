@@ -1,7 +1,7 @@
 import { Quaternion, Vector3 } from 'three'
-import { portsFor } from '../mechanics/catalog.js?v=linkages'
-import { rotationMotion, rotationPoses } from './model.js?v=drive-physics'
-import { worldPort } from './placement.js?v=linkages'
+import { portsFor } from '../mechanics/catalog.js?v=inline-engine'
+import { rotationMotion, rotationPoses } from './model.js?v=inline-engine'
+import { worldPort } from './placement.js?v=inline-engine'
 import { terrainPose } from './drive-terrain.js?v=drive-scale'
 
 const up = new Vector3(0, 1, 0)

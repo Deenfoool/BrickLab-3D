@@ -1,11 +1,11 @@
 import { Quaternion, Vector3 } from 'three'
 import { connectionMode } from '../mechanics/axial.js?v=linkages'
-import { Assembly } from '../mechanics/assembly.js?v=linkages'
-import { rotationalDrive } from '../mechanics/rotation.js?v=linkages'
+import { Assembly } from '../mechanics/assembly.js?v=inline-engine'
+import { rotationalDrive } from '../mechanics/rotation.js?v=inline-engine'
 import { cardanCoupling } from '../mechanics/cardan.js'
 import { articulationDrive, jointBodies, linkageDrive, mechanismPoses, motionRange, suspensionDrive } from '../mechanics/linkage.js'
-import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=linkages'
-import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=linkages'
+import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=inline-engine'
+import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=inline-engine'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
 export const snapGrid = 10

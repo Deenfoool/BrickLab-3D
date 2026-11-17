@@ -3,7 +3,8 @@ import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.js'
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js'
 import library from '../../catalog/parts-library.json?v=parts-library' with { type: 'json' }
 import { sectionsFor } from './library-data.js?v=parts-library'
-import support from '../../catalog/dune-buggy-parts.json?v=8845' with { type: 'json' }
+import buggyParts from '../../catalog/dune-buggy-parts.json?v=8845' with { type: 'json' }
+import engineParts from '../../catalog/inline-engine-parts.json' with { type: 'json' }
 
 const curated = {
   32316: { ru: 'Балка 5L', en: 'Beam 5L', color: '#8094ac' },
@@ -30,10 +31,15 @@ const partOrder = ['3700', '3705', '3706', '3707', '3737', '3673', '2780', '3713
 export const sections = sectionsFor(library, curated, partOrder)
 export const parts = Object.assign(Object.create(null), ...sections.map(section =>
   Object.fromEntries(section.parts.map(part => [part.design, part]))))
-// Supplementary designs needed to edit the complete downloadable example.
-for (const [design, { en, ru }] of Object.entries(support)) {
-  if (parts[design]) continue
-  parts[design] = { design, en, ru, assetPath: 'dune-buggy', pack: 'common', revision: '8845', color: '#9ba3ad' }
+// Supplementary designs needed to edit the complete downloadable examples.
+for (const [assetPath, registry, revision] of [
+  ['dune-buggy', buggyParts, '8845'],
+  ['inline-engine', engineParts, '858'],
+]) {
+  for (const [design, { en, ru }] of Object.entries(registry)) {
+    if (parts[design]) continue
+    parts[design] = { design, en, ru, assetPath, pack: 'common', revision, color: '#9ba3ad' }
+  }
 }
 const technicSection = sections.find(section => section.id === 'technic')
 for (const design of ['4254', '4255', '8845-spring']) {

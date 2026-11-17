@@ -1,5 +1,5 @@
 import { Quaternion, Vector3 } from 'three'
-import { measureInsertion } from '../mechanics/assembly.js?v=linkages'
+import { measureInsertion } from '../mechanics/assembly.js?v=inline-engine'
 import { connectionMode, portLength } from '../mechanics/axial.js?v=linkages'
 
 const Y = new Vector3(0, 1, 0)
