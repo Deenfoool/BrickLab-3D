@@ -60,8 +60,10 @@ export function createScene(host, models) {
   const solids = new THREE.Group()
   world.add(solids)
   const objects = new Map()
+  let hidden = new Set()
+  let movingId
   const belts = createBeltScene(solids, id => {
-    const part = objects.get(id)
+    const part = hidden.has(id) ? undefined : objects.get(id)
     return part && { design: part.userData.design, position: part.position.toArray(), rotation: part.quaternion.toArray() }
   }, invalidate)
   const selection = new THREE.BoxHelper(new THREE.Object3D(), 0xffb01b)
@@ -109,7 +111,8 @@ export function createScene(host, models) {
 
   function resetView() {
     solids.updateWorldMatrix(true, true)
-    const bounds = new THREE.Box3().setFromObject(solids)
+    const bounds = new THREE.Box3()
+    for (const object of objects.values()) if (object.visible) bounds.expandByObject(object)
     const center = bounds.isEmpty() ? new THREE.Vector3(0, 12, 0) : bounds.getCenter(new THREE.Vector3())
     const size = bounds.isEmpty() ? 0 : bounds.getSize(new THREE.Vector3()).length()
     const distance = Math.max(175, size * 1.65 / Math.min(1, camera.aspect))
@@ -143,7 +146,21 @@ export function createScene(host, models) {
       object.userData.finish.color.set(part.color ?? parts[part.design].color)
       object.updateMatrixWorld(true)
       warnings.get(part.id)?.setFromObject(object)
+      syncVisibility(part.id, object)
     }
+    belts.update()
+    select(selectedId)
+  }
+
+  function syncVisibility(id, object) {
+    object.visible = !hidden.has(id) && id !== movingId
+    const warning = warnings.get(id)
+    if (warning) warning.visible = object.visible
+  }
+
+  function setHidden(ids) {
+    hidden = ids
+    for (const [id, object] of objects) syncVisibility(id, object)
     belts.update()
     select(selectedId)
   }
@@ -204,14 +221,16 @@ export function createScene(host, models) {
   }
 
   function setMoving(id, enabled) {
+    if (enabled) movingId = id
+    else if (movingId === id) movingId = undefined
     const object = objects.get(id)
-    if (object) object.visible = !enabled
+    if (object) syncVisibility(id, object)
     select(selectedId)
   }
 
   function setTool(mode, part, ids = []) {
     if (gizmo.dragging) return
-    if (!mode || !part) {
+    if (!mode || !part || hidden.has(part.id)) {
       gizmo.enabled = false
       gizmo.detach()
       return
@@ -220,7 +239,10 @@ export function createScene(host, models) {
     pivot.quaternion.fromArray(part.rotation)
     if (ids.length > 1) {
       const bounds = new THREE.Box3()
-      for (const id of ids) bounds.expandByObject(objects.get(id), true)
+      for (const id of ids) {
+        const object = objects.get(id)
+        if (object?.visible) bounds.expandByObject(object, true)
+      }
       pivotOffset.copy(bounds.getCenter(new THREE.Vector3()).sub(new THREE.Vector3().fromArray(part.position))
         .applyQuaternion(pivot.quaternion.clone().invert()))
     }
@@ -265,7 +287,7 @@ export function createScene(host, models) {
     const bounds = new THREE.Box3()
     for (const id of ids) {
       const object = objects.get(id)
-      if (object) bounds.expandByObject(object, true)
+      if (object?.visible) bounds.expandByObject(object, true)
     }
     if (bounds.isEmpty()) return
     const direction = camera.position.clone().sub(controls.target).normalize()
@@ -289,6 +311,7 @@ export function createScene(host, models) {
       const object = objects.get(id)
       if (!object || warnings.has(id)) continue
       const helper = new THREE.BoxHelper(object, color)
+      helper.visible = object.visible
       helper.material.depthTest = false
       world.add(helper)
       warnings.set(id, helper)
@@ -390,5 +413,5 @@ export function createScene(host, models) {
   }
 
   resetView()
-  return { canvas, camera, gizmo, belts, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, select, setGhost, setGroupGhost, setMoving, resetView, dispose }
+  return { canvas, camera, gizmo, belts, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, setGhost, setGroupGhost, setMoving, resetView, dispose }
 }

@@ -33,6 +33,7 @@ export function mountFloatingPanels(layer, labels, signal) {
   function place(panel, x, y) {
     panel.style.left = `${x}px`
     panel.style.top = `${y}px`
+    panel.style.bottom = 'auto'
   }
 
   function move(panel, x, y) {
@@ -112,6 +113,7 @@ export function mountFloatingPanels(layer, labels, signal) {
       if (drag.moved) {
         panel.style.removeProperty('left')
         panel.style.removeProperty('top')
+        panel.style.removeProperty('bottom')
         if (drag.initial) {
           const { width, height } = available(panel)
           place(panel, drag.initial.x * width, drag.initial.y * height)

@@ -1,4 +1,4 @@
-import { editorLabels } from '../editor/labels.js?v=belt-drive'
+import { editorLabels } from '../editor/labels.js?v=scene-parts'
 import { locales } from './locale.js?v=belt-drive'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
@@ -212,7 +212,7 @@ async function openEditor(project) {
   editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=fan-axle')
+    const { mountEditor } = await import('../editor/editor.js?v=scene-parts')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
