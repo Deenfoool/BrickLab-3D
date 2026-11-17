@@ -125,6 +125,59 @@ test('integral wheels can use their mounted axle bore as the running axis', () =
 test('drive assignments preserve file round-tripping and invalid settings stay safe', () => {
   const testDrive = driveSettings({ heading: 90, mode: 'powered', driveParts: ['one', 'one', 2], steering: 'two', invert: true })
   const reopened = parseProject(JSON.stringify({ ...buggy, testDrive }))
-  assert.deepEqual(reopened.testDrive, { heading: 90, mode: 'powered', driveParts: ['one'], steering: 'two', invert: true })
+  assert.deepEqual(reopened.testDrive, { venue: 'sketchbook', heading: 90, mode: 'powered', driveParts: ['one'], steering: 'two', invert: true })
   assert.deepEqual(driveSettings({ mode: 'unexpected', heading: NaN }), driveSettings(undefined))
+})
+
+test('a drive starts facing along its terrain and follows the ground under the wheels', () => {
+  const vehicle = prepare()
+  const terrain = {
+    start: new Vector3(1000, 50, 2000),
+    heading: Math.PI / 2,
+    heightAt(x, _z, top, bottom) {
+      const height = 50 + Math.max(0, x - 1400) * .22
+      return height >= bottom && height <= top ? height : undefined
+    },
+  }
+  const state = newDriveState(vehicle, terrain)
+  assert.deepEqual(state.position.clone().add(vehicle.origin).toArray(),
+    [1000, 50 + vehicle.lift, 2000])
+  assert.ok(Math.abs(state.yaw - Math.PI / 2) < 1e-8)
+  let result
+  for (let i = 0; i < 180; i++) {
+    result = stepTestDrive(vehicle, state, { throttle: 1, steer: 0, brake: false }, 1 / 60, terrain)
+    assert.equal(result.blocked, false)
+  }
+  const point = state.position.clone().add(vehicle.origin)
+  assert.ok(point.x > 1700 && Math.abs(point.z - 2000) < 1e-6)
+  assert.ok(point.y > 50 + vehicle.lift + 60)
+  const normal = new Vector3(0, 1, 0).applyQuaternion(result.tilt)
+  assert.ok(Math.abs(normal.x / normal.y + .22) < .025)
+})
+
+test('a vehicle cannot drive beyond the last supported wheel position', () => {
+  const vehicle = prepare()
+  const terrain = {
+    start: new Vector3(),
+    heading: 0,
+    heightAt(_x, z) { return z < 500 ? 0 : undefined },
+  }
+  const state = newDriveState(vehicle, terrain)
+  let result
+  for (let i = 0; i < 150; i++) {
+    result = stepTestDrive(vehicle, state, { throttle: 1, steer: 0, brake: false }, 1 / 60, terrain)
+    if (result.blocked) break
+  }
+  assert.equal(result.blocked, true)
+  assert.equal(result.speed, 0)
+  assert.equal(result.distance, 0)
+  const front = Math.max(...vehicle.initial.map(wheel => wheel.position.z))
+  for (let i = 0; i < 30; i++) {
+    stepTestDrive(vehicle, state, { throttle: 1, steer: 0, brake: false }, 1 / 60, terrain)
+    assert.ok(front + state.position.z < 500)
+  }
+  const position = state.position.clone()
+  const reverse = stepTestDrive(vehicle, state, { throttle: -1, steer: 0, brake: false }, 1 / 60, terrain)
+  assert.equal(reverse.blocked, false)
+  assert.ok(state.position.z < position.z)
 })

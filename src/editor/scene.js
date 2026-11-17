@@ -9,8 +9,12 @@ const axesUp = new THREE.Vector3(0, 1, 0)
 
 export function createScene(host, models) {
   const world = new THREE.Scene()
-  world.background = new THREE.Color('#16191f')
-  world.fog = new THREE.FogExp2('#16191f', .0017)
+  const editorSky = new THREE.Color('#16191f')
+  const trackSky = new THREE.Color('#b8d2e7')
+  const editorFog = new THREE.FogExp2(editorSky, .0017)
+  const trackFog = new THREE.FogExp2(trackSky, .000023)
+  world.background = editorSky
+  world.fog = editorFog
   const camera = new THREE.PerspectiveCamera(42, 1, 1, 14000)
   let renderer
   try {
@@ -67,6 +71,7 @@ export function createScene(host, models) {
   world.add(marker)
   const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0))
   const ray = new THREE.Raycaster()
+  let driveMap
   let ghost
   const groupGhosts = new Map()
   let frame = null
@@ -315,8 +320,22 @@ export function createScene(host, models) {
     invalidate()
   }
 
-  function driveTransform(origin, position, yaw) {
-    solids.quaternion.setFromAxisAngle(axesUp, yaw)
+  function setDriveMap(group) {
+    if (driveMap) world.remove(driveMap)
+    driveMap = group
+    if (group) world.add(group)
+    floor.visible = axes.visible = !group
+    world.background = group ? trackSky : editorSky
+    world.fog = group ? trackFog : editorFog
+    camera.near = group ? 5 : 1
+    camera.far = group ? 125000 : 14000
+    camera.updateProjectionMatrix()
+    controls.maxDistance = group ? 8500 : 1800
+    invalidate()
+  }
+
+  function driveTransform(origin, position, yaw, tilt) {
+    solids.quaternion.setFromAxisAngle(axesUp, yaw).premultiply(tilt)
     solids.position.copy(origin).add(position).sub(origin.clone().applyQuaternion(solids.quaternion))
     const offset = position.clone().sub(driveOffset)
     camera.position.add(offset)
@@ -356,5 +375,5 @@ export function createScene(host, models) {
   }
 
   resetView()
-  return { canvas, camera, gizmo, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, select, setGhost, setGroupGhost, setMoving, resetView, dispose }
+  return { canvas, camera, gizmo, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, select, setGhost, setGroupGhost, setMoving, resetView, dispose }
 }

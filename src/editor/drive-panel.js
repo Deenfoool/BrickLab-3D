@@ -1,9 +1,14 @@
-import { driveSettings, forwardVector, newDriveState, prepareTestDrive, stepTestDrive } from './vehicle-drive.js'
+import { driveSettings, forwardVector, newDriveState, prepareTestDrive, stepTestDrive } from './vehicle-drive.js?v=sketchbook'
 
 const labels = {
   ru: {
     title: 'Тест-драйв',
     flat: 'Ровная площадка',
+    venue: 'Полигон',
+    sketchbook: 'Sketchbook',
+    loadingTrack: 'Загружаем полигон Sketchbook…',
+    trackError: 'Полигон не загрузился. Повтори попытку или выбери ровную площадку.',
+    blocked: 'Колёса упёрлись в препятствие или достигли края проезда.',
     heading: 'Направление переда',
     traction: 'Тяга',
     push: 'Толкать машину',
@@ -38,6 +43,11 @@ const labels = {
   en: {
     title: 'Test drive',
     flat: 'Flat test pad',
+    venue: 'Test venue',
+    sketchbook: 'Sketchbook',
+    loadingTrack: 'Loading the Sketchbook playground…',
+    trackError: 'Could not load the playground. Try again or select the flat test pad.',
+    blocked: 'The wheels reached an obstacle or the edge of the driving surface.',
     heading: 'Forward direction',
     traction: 'Traction',
     push: 'Push the vehicle',
@@ -80,8 +90,9 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
   const t = labels[language]
   root.setAttribute('aria-label', t.title)
   root.innerHTML = `
-    <header>${t.title}<small>${t.flat}</small></header>
+    <header>${t.title}<small data-drive="venueTitle"></small></header>
     <div data-drive="setup">
+      <label>${t.venue}<select data-drive="venue"><option value="sketchbook">${t.sketchbook}</option><option value="flat">${t.flat}</option></select></label>
       <label for="drive-heading">${t.heading} <output data-drive="degrees"></output></label>
       <input id="drive-heading" data-drive="heading" type="range" min="-180" max="180" step="1">
       <label>${t.traction}<select data-drive="mode"><option value="push">${t.push}</option><option value="powered">${t.powered}</option></select></label>
@@ -101,6 +112,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     </div>
     <div data-drive="run" hidden>
       <output data-drive="telemetry"></output>
+      <p data-drive="trackStatus" role="status" hidden></p>
       <p>${t.shortcuts}</p>
       <div class="drive-controls">
         ${[['forward','W'],['left','A'],['reverse','S'],['right','D'],['brake','⏹']].map(([key, label]) =>
@@ -121,6 +133,10 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
   let frame
   let previous
   let press
+  let sketchbook
+  let track
+  let loadingTrack
+  let trackError = false
 
   function arrow(degrees) {
     const direction = forwardVector(degrees)
@@ -134,6 +150,8 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     const { parts, assembly, config } = read()
     vehicle = prepareTestDrive(parts, assembly, models, config, catalog)
     const { settings } = vehicle
+    el('venue').value = settings.venue
+    el('venueTitle').textContent = t[settings.venue]
     el('heading').value = settings.heading
     el('degrees').value = settings.heading + '°'
     el('mode').value = settings.mode
@@ -143,8 +161,9 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     el('assignedSteering').textContent = settings.steering ? nameOf(settings.steering) : t.none
     el('pickDrive').setAttribute('aria-pressed', String(picking === 'drive'))
     el('pickSteering').setAttribute('aria-pressed', String(picking === 'steering'))
-    el('start').disabled = !vehicle.ready
-    el('info').textContent = picking ? (picking === 'drive' ? t.selectDrive : t.selectSteering) : [
+    el('start').disabled = !vehicle.ready || Boolean(loadingTrack)
+    el('info').textContent = loadingTrack ? t.loadingTrack : trackError ? t.trackError :
+      picking ? (picking === 'drive' ? t.selectDrive : t.selectSteering) : [
       t.wheels + ': ' + vehicle.initial.length,
       settings.mode === 'powered' ? t.driven + ': ' + vehicle.driven.length : '',
       vehicle.steered.length ? t.response + ': ' + vehicle.steered.length : settings.steering ? t.noSteering : '',
@@ -170,20 +189,31 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     const values = new Set(held.values())
     const amount = (positive, negative) => Number(values.has(positive)) - Number(values.has(negative))
     const result = stepTestDrive(vehicle, state, { throttle: amount('forward', 'reverse'),
-      steer: amount('right', 'left'), brake: values.has('brake') }, previous === undefined ? 0 : (time - previous) / 1000)
+      steer: amount('right', 'left'), brake: values.has('brake') }, previous === undefined ? 0 : (time - previous) / 1000, track)
     previous = time
     scene.previewParts(result.poses)
-    scene.driveTransform(vehicle.origin, result.position, result.yaw)
+    scene.driveTransform(vehicle.origin, result.position, result.yaw, result.tilt)
+    el('trackStatus').hidden = !result.blocked
+    el('trackStatus').textContent = result.blocked ? t.blocked : ''
     const currentRadius = Number.isFinite(result.radius) ? (result.radius * .0004).toFixed(2) + ' ' + t.meters : '—'
     el('telemetry').value = (result.speed * .00144).toFixed(2) + ' ' + t.speed + ' · ' + t.radius + ' ' + currentRadius
     if (values.size || state.speed || state.steering) schedule()
     else previous = undefined
   }
 
+  function cancelTrackRequest() {
+    loadingTrack?.abort()
+    loadingTrack = undefined
+    trackError = false
+  }
+
   function stop() {
+    cancelTrackRequest()
     if (frame !== undefined) cancelAnimationFrame(frame)
     frame = previous = state = undefined
     held.clear()
+    track = undefined
+    scene.setDriveMap()
     scene.clearDriveTransform()
     scene.setParts(read().parts)
     scene.resetView()
@@ -192,8 +222,30 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     sync()
   }
 
-  function start() {
-    if (!vehicle?.ready) return
+  async function start() {
+    if (!vehicle?.ready || loadingTrack) return
+    const venue = vehicle.settings.venue
+    if (venue === 'sketchbook' && !sketchbook) {
+      const request = loadingTrack = new AbortController()
+      trackError = false
+      sync()
+      try {
+        const { loadSketchbookTrack } = await import('./sketchbook-track.js?v=sketchbook')
+        request.signal.throwIfAborted()
+        sketchbook = await loadSketchbookTrack(request.signal)
+      } catch (error) {
+        if (request.signal.aborted) return
+        trackError = true
+        console.error(error)
+      } finally {
+        if (loadingTrack === request) {
+          loadingTrack = undefined
+          sync()
+        }
+      }
+      if (!active || request.signal.aborted || !sketchbook || !vehicle.ready) return
+    }
+    track = venue === 'sketchbook' ? sketchbook : undefined
     picking = undefined
     held.clear()
     previous = undefined
@@ -202,14 +254,21 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     scene.select(undefined)
     scene.setParts(vehicle.parts)
     scene.clearDriveTransform()
+    scene.setDriveMap(track?.group)
+    state = newDriveState(vehicle, track)
+    el('trackStatus').hidden = true
+    scene.driveTransform(vehicle.origin, state.position, state.yaw, state.tilt)
     scene.resetView()
-    state = newDriveState(vehicle)
     el('setup').hidden = true
     el('run').hidden = false
     scene.canvas.focus({ preventScroll: true })
     schedule()
   }
 
+  on(el('venue'), 'change', () => {
+    cancelTrackRequest()
+    change({ venue: el('venue').value })
+  })
   on(el('heading'), 'input', () => {
     el('degrees').value = el('heading').value + '°'
     arrow(Number(el('heading').value))
@@ -245,11 +304,11 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
   on(scene.canvas, 'pointercancel', () => { press = undefined })
   on(window, 'keydown', event => {
     if (!active) return
-    if (event.key === 'Escape' && (state || picking)) {
+    if (event.key === 'Escape' && (state || picking || loadingTrack)) {
       event.preventDefault()
       event.stopImmediatePropagation()
       if (state) stop()
-      else { picking = undefined; sync() }
+      else { cancelTrackRequest(); picking = undefined; sync() }
       return
     }
     if (!state || !keys[event.code] || event.altKey || event.ctrlKey || event.metaKey ||
@@ -279,7 +338,10 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     }
   }
   signal.addEventListener('abort', () => {
+    cancelTrackRequest()
     if (frame !== undefined) cancelAnimationFrame(frame)
+    scene.setDriveMap()
+    sketchbook?.dispose()
   }, { once: true })
 
   return {

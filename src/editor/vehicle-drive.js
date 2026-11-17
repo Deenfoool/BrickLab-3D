@@ -2,6 +2,7 @@ import { Quaternion, Vector3 } from 'three'
 import { portsFor } from '../mechanics/catalog.js?v=linkages'
 import { rotationMotion, rotationPoses } from './model.js?v=linkages'
 import { worldPort } from './placement.js?v=linkages'
+import { terrainPose } from './drive-terrain.js?v=sketchbook'
 
 const up = new Vector3(0, 1, 0)
 const vector = value => new Vector3().fromArray(value)
@@ -13,6 +14,7 @@ const horizontal = value => value.setY(0)
 export function driveSettings(value) {
   const id = value => typeof value === 'string' && value.length ? value : null
   return {
+    venue: value?.venue === 'flat' ? 'flat' : 'sketchbook',
     heading: Number.isFinite(value?.heading) ? clamp(value.heading, -180, 180) : 0,
     mode: value?.mode === 'powered' ? 'powered' : 'push',
     driveParts: Array.isArray(value?.driveParts) ? [...new Set(value.driveParts.map(id).filter(Boolean))] : [],
@@ -143,8 +145,11 @@ export function prepareTestDrive(parts, assembly, models, input, catalog = {}) {
     ready: wheelbase > 5 && aligned && (settings.mode === 'push' || driven.length > 0) }
 }
 
-export function newDriveState(vehicle) {
-  return { position: new Vector3(0, vehicle.lift, 0), yaw: 0, speed: 0, steering: 0,
+export function newDriveState(vehicle, terrain) {
+  const position = terrain ? terrain.start.clone().sub(vehicle.origin) : new Vector3()
+  position.y += vehicle.lift
+  const yaw = terrain ? terrain.heading - Math.atan2(vehicle.forward.x, vehicle.forward.z) : 0
+  return { position, yaw, tilt: new Quaternion(), speed: 0, steering: 0,
     turns: vehicle.groups.map(() => 0) }
 }
 
@@ -173,7 +178,7 @@ function advanceRotor(spin, angle, increment) {
   return next
 }
 
-export function stepTestDrive(vehicle, state, controls, dt) {
+export function stepTestDrive(vehicle, state, controls, dt, terrain) {
   const { forward, origin, byId, groups, ready } = vehicle
   const step = clamp(dt, 0, .05)
   state.steering = approach(state.steering, vehicle.steered.length ? controls.steer : 0, 2.7 * step)
@@ -194,10 +199,24 @@ export function stepTestDrive(vehicle, state, controls, dt) {
     weight += arm * arm
   }
   const curvature = weight > 1 && vehicle.steered.length && Math.abs(sum / weight) > 1e-8 ? -sum / weight : 0
-  const distance = state.speed * step
-  const yawStep = curvature * distance
-  state.position.addScaledVector(forward.clone().applyAxisAngle(up, state.yaw + yawStep / 2), distance)
-  state.yaw = (state.yaw + yawStep) % (2 * Math.PI)
+  let distance = state.speed * step
+  let yawStep = curvature * distance
+  const nextPosition = state.position.clone().addScaledVector(
+    forward.clone().applyAxisAngle(up, state.yaw + yawStep / 2), distance)
+  const nextYaw = (state.yaw + yawStep) % (2 * Math.PI)
+  const support = terrain && terrainPose(terrain, origin, state, contacts, nextPosition, nextYaw)
+  const blocked = Boolean(terrain && !support && distance)
+  if (terrain && !support) {
+    distance = yawStep = state.speed = 0
+  } else {
+    if (support) {
+      if (distance) distance = Math.sign(distance) * Math.hypot(distance, support.height - state.position.y)
+      nextPosition.y = support.height
+      state.tilt.copy(support.tilt)
+    }
+    state.position.copy(nextPosition)
+    state.yaw = nextYaw
+  }
   const contactById = new Map(contacts.map(c => [c.wheel.id, c]))
   groups.forEach(({ plan, sample }, index) => {
     const c = contactById.get(sample.wheel.id)
@@ -211,6 +230,6 @@ export function stepTestDrive(vehicle, state, controls, dt) {
     }
   })
 
-  return { poses: [...poses.values()], yaw: state.yaw, position: state.position, radius: Math.abs(curvature) > 1e-6 ? 1 / Math.abs(curvature) : Infinity,
+  return { poses: [...poses.values()], yaw: state.yaw, tilt: state.tilt, position: state.position, blocked, radius: Math.abs(curvature) > 1e-6 ? 1 / Math.abs(curvature) : Infinity,
     speed: state.speed, distance }
 }

@@ -45,3 +45,7 @@
 Редактируемая сборка `examples/dune-buggy.json` и геометрия пружины получены из модели [Stefan Frenz (smf)](https://library.ldraw.org/omr/sets/1019) под CC BY 2.0. Скрипт читает [файл MPD с вложенными сборками](https://github.com/erik-larsen/kinebrick/blob/24366c8f0782a65d6138f41d593300b079859cb1/models/8845-Dune%20Buggy.mpd), переводит оси LDraw в координаты редактора и отбирает соединения, проходящие проверку в исходных позах. Пакет `assets/ldraw/dune-buggy/common.json.gz` содержит дополнительные детали из того же архива LDraw. Профили в `catalog/dune-buggy-parts.json` адаптированы из [таблицы Kinebrick](https://github.com/erik-larsen/kinebrick/blob/24366c8f0782a65d6138f41d593300b079859cb1/data/library-connections.json) и распространяются по CC BY-SA 4.0.
 
 `python3 scripts/build-dune-buggy.py "<8845-Dune Buggy.mpd>" <complete.zip> <library-connections.json>` пересобирает пример. Нужен Node.js той же версии, что для тестов проекта.
+
+## Полигон Sketchbook
+
+«Тест-драйв» подгружает [world.glb](https://github.com/swift502/Sketchbook/blob/62f4b7986fd1ce1e4f91daba89ef032c20a6ce55/build/assets/world.glb) из зафиксированной версии Sketchbook от swift502. [Лицензия исходного проекта (MIT)](https://github.com/swift502/Sketchbook/blob/62f4b7986fd1ce1e4f91daba89ef032c20a6ce55/LICENSE). Карта остаётся в исходной системе координат с масштабом 90 LDU на единицу Sketchbook. Узлы `physics` используются как поверхности для поиска опоры колёс. Сцена загружается локальными GLTFLoader и BufferGeometryUtils из Three.js r180, лицензия находится в `vendor/three/LICENSE`.
