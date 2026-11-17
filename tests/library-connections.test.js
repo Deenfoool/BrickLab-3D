@@ -223,8 +223,108 @@ test('858 Inline Engine keeps both drive belts, all three pistons and its seated
     ['858-belt-1', '858-belt-2'])
   assert.ok(engine.parts.every(part => availableParts[part.design]))
   const { connections } = createAssembly(engine.parts, engine.connections)
-  assert.equal(engine.connections.length, 380)
+  assert.equal(engine.connections.length, 381)
   assert.equal(connections.length, engine.connections.length)
+})
+
+test('858 links its handle, three pistons and valve gear for a complete reversible turn', () => {
+  const assembly = createAssembly(engine.parts, engine.connections)
+  const motion = rotationMotion(undefined, engine.parts, assembly)
+  assert.equal(motion.kind, 'engine')
+  assert.equal(motion.driver, '858-44')
+  assert.equal(motion.meshes.length, 4)
+  assert.equal(motion.periodic, true)
+  assert.equal(rotationMotion('858-45', engine.parts, assembly).kind, 'engine')
+
+  const originals = new Map(engine.parts.map(part => [part.id, part]))
+  const sample = angle => new Map(rotationPoses(engine.parts, motion, angle).map(part => [part.id, part]))
+  const before = sample(0)
+  const quarter = sample(Math.PI / 2)
+  const after = sample(2 * Math.PI)
+  const close = (a, b) => assert.ok(Math.abs(a - b) < .001, `${a} expected to be near ${b}`)
+  assert.equal(quarter.has('858-1'), false)
+  assert.equal(quarter.has('858-173'), false)
+  assert.notDeepEqual(quarter.get('858-45').position, originals.get('858-45').position)
+  for (const [id, part] of before) {
+    const original = originals.get(id)
+    close(new Vector3().fromArray(part.position).distanceTo(new Vector3().fromArray(original.position)), 0)
+    close(new Vector3().fromArray(after.get(id).position).distanceTo(new Vector3().fromArray(part.position)), 0)
+    close(new Quaternion().fromArray(after.get(id).rotation).angleTo(new Quaternion().fromArray(part.rotation)), 0)
+  }
+
+  const pistonPins = new Set([14, 16, 18, 23, 27, 31].map(index => `858-${index}`))
+  const bearings = new Set([21, 25, 29, 24, 28, 32].map(index => `858-${index}`))
+  const pivots = assembly.connections.filter(({ shaft, socket }) =>
+    pistonPins.has(shaft.part) && bearings.has(socket.part) || bearings.has(shaft.part) && pistonPins.has(socket.part))
+  assert.ok(pivots.length >= 6)
+  for (const angle of [.3, 1.2, 2.4, 5.6]) {
+    const positions = sample(angle)
+    for (const { shaft, socket } of pivots) {
+      const a = worldPort(positions.get(shaft.part), assembly.port(shaft.part, shaft.port))
+      const b = worldPort(positions.get(socket.part), assembly.port(socket.part, socket.port))
+      close(Math.abs(a.axis.dot(b.axis)), 1)
+      close(a.start.sub(b.start).cross(b.axis).length(), 0)
+    }
+  }
+
+  const poses = Array.from({ length: 361 }, (_, i) => sample(i * Math.PI / 180))
+  const at = (pose, index) => pose.get(`858-${index}`)
+  for (const index of [24, 28, 32]) {
+    const home = before.get(`858-${index}`)
+    const ys = poses.map(pose => {
+      const part = at(pose, index)
+      close(part.position[0], home.position[0])
+      close(part.position[2], home.position[2])
+      close(new Quaternion().fromArray(part.rotation).angleTo(new Quaternion().fromArray(home.rotation)), 0)
+      return part.position[1]
+    })
+    close(Math.max(...ys) - Math.min(...ys), 32)
+  }
+  assert.ok(at(before, 28).position[1] > at(before, 24).position[1])
+  assert.ok(at(poses[180], 28).position[1] < at(poses[180], 24).position[1])
+  const rot = (pose, index) => new Quaternion().fromArray(at(pose, index).rotation)
+  const camTurn = rot(quarter, 33).multiply(rot(before, 33).invert())
+  const crankTurn = rot(quarter, 44).multiply(rot(before, 44).invert())
+  close(camTurn.angleTo(crankTurn.invert()), 0)
+
+  for (const [rod, rocker] of [[158, 180], [161, 184], [164, 182]]) {
+    const ys = poses.map(pose => at(pose, rod).position[1])
+    assert.ok(Math.max(...ys) - Math.min(...ys) > 13)
+    assert.ok(ys.slice(1).every((y, index) => Math.abs(y - ys[index]) < 4.6))
+    const resting = rot(poses[ys.indexOf(Math.min(...ys))], rocker)
+    const lifted = rot(poses[ys.indexOf(Math.max(...ys))], rocker)
+    assert.ok(resting.angleTo(lifted) > .25)
+  }
+  const reverse = sample(-Math.PI / 2)
+  for (const [id, part] of reverse) {
+    close(new Vector3().fromArray(part.position).distanceTo(new Vector3().fromArray(poses[270].get(id).position)), 0)
+  }
+})
+
+test('engine discovery uses the assembled geometry after changing IDs and orientation', () => {
+  const turn = new Quaternion().setFromAxisAngle(new Vector3(1, 2, 3).normalize(), .73)
+  const offset = new Vector3(-23, 84, 13)
+  const rename = id => `test-part-${id.split('-').at(-1)}`
+  const transform = part => ({
+    ...part, id: rename(part.id),
+    position: new Vector3().fromArray(part.position).applyQuaternion(turn).add(offset).toArray(),
+    rotation: new Quaternion().fromArray(part.rotation).premultiply(turn).toArray(),
+  })
+  const endpoint = ({ part, port }) => ({ part: rename(part), port })
+  const parts = engine.parts.map(transform)
+  const connections = engine.connections.map(link => ({
+    ...link, shaft: endpoint(link.shaft), socket: endpoint(link.socket),
+  }))
+  const assembly = createAssembly(parts, connections)
+  const motion = rotationMotion(rename('858-45'), parts, assembly)
+  assert.equal(motion.kind, 'engine')
+  const original = rotationMotion('858-44', engine.parts, createAssembly(engine.parts, engine.connections))
+  const moved = new Map(rotationPoses(parts, motion, Math.PI / 3).map(part => [part.id, part]))
+  for (const part of rotationPoses(engine.parts, original, Math.PI / 3).map(transform)) {
+    const result = moved.get(part.id)
+    assert.ok(new Vector3().fromArray(part.position).distanceTo(new Vector3().fromArray(result.position)) < .001, part.id)
+    assert.ok(new Quaternion().fromArray(part.rotation).angleTo(new Quaternion().fromArray(result.rotation)) < .001, part.id)
+  }
 })
 
 test('existing stud fits tolerate LDraw rounding at the seat without allowing additional insertion', () => {

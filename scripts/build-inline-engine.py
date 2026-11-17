@@ -30,6 +30,8 @@ registerHooks({ resolve(specifier, context, next) {
 const { Matrix4, Quaternion, Vector3 } = await import('three')
 const { connectAligned, createAssembly, gearPoses } = await import('./src/editor/model.js')
 const { newProject } = await import('./src/projects/documents.js')
+const { portsFor } = await import('./src/mechanics/catalog.js')
+const { worldPort } = await import('./src/editor/placement.js')
 const records = JSON.parse(fs.readFileSync(0, 'utf8'))
 const flip = new Matrix4().makeRotationX(Math.PI)
 const parts = records.map(({ design, position, matrix, color }, index) => {
@@ -43,8 +45,23 @@ const parts = records.map(({ design, position, matrix, color }, index) => {
   const point = new Vector3().fromArray(position).applyMatrix4(flip).add(new Vector3(-20, 8, 0))
   return { id: `858-${index + 1}`, design, position: point.toArray(), rotation, color }
 })
+// The source handle is 2 LDU above its actual hole in the 40T gear.
+const gear = parts.find(part => part.design === '3649')
+const handle = parts[44]
+if (handle.design !== '3673') throw new Error('Crank handle missing from the 858 source')
+const pin = worldPort(handle, portsFor(handle.design).find(port => port.role === 'pin'))
+const holes = portsFor(gear.design).filter(port => port.role === 'bearing').map(port => worldPort(gear, port))
+const offsets = holes.filter(hole => Math.abs(hole.axis.dot(pin.axis)) > .99999).map(hole => {
+  const delta = hole.start.clone().sub(pin.start)
+  return delta.addScaledVector(hole.axis, -delta.dot(hole.axis))
+}).filter(offset => Math.abs(offset.length() - 2) < .001)
+if (offsets.length !== 1) throw new Error('Crank handle has no unique seat')
+handle.position = new Vector3().fromArray(handle.position).add(offsets[0]).toArray()
 const assembly = createAssembly(parts, [])
 const connections = parts.flatMap((part, index) => connectAligned(assembly, [part], parts.slice(0, index)))
+if (!connections.some(link => link.shaft.part === handle.id && link.socket.part === gear.id)) {
+  throw new Error('Crank handle seat is incompatible')
+}
 const gears = gearPoses(parts).map(({ part, center, axis }) => ({ part, center, axis }))
 const project = newProject('858 Inline Engine', { parts, connections, gears })
 fs.writeFileSync('examples/inline-engine.json', JSON.stringify(project) + '\n')

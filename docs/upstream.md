@@ -56,7 +56,7 @@
 
 ## 858 Inline Engine
 
-Редактируемая сборка `examples/inline-engine.json` основана на [модели LDraw, опубликованной в Kinebrick](https://github.com/erik-larsen/kinebrick/blob/24366c8f0782a65d6138f41d593300b079859cb1/models/858-Auto%20Engines-Inline%20Engine.mpd). Автор цифровой модели Takeshi Takahashi (RainbowDolphin). Модель и геометрия двух ремней, созданная LDCad для исходного MPD, распространяются по [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/). BrickLab разворачивает вложенные сборки в редактируемые детали, переводит их в координаты редактора и сохраняет посадки, прошедшие проверку в исходных позах.
+Редактируемая сборка `examples/inline-engine.json` основана на [модели LDraw, опубликованной в Kinebrick](https://github.com/erik-larsen/kinebrick/blob/24366c8f0782a65d6138f41d593300b079859cb1/models/858-Auto%20Engines-Inline%20Engine.mpd). Автор цифровой модели Takeshi Takahashi (RainbowDolphin). Модель и геометрия двух ремней, созданная LDCad для исходного MPD, распространяются по [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/). BrickLab разворачивает вложенные сборки в редактируемые детали, переводит их в координаты редактора и сохраняет проверенные посадки. Ручка на шестерне 40T смещена на 2 LDU в центр отверстия.
 
 Пакет `assets/ldraw/inline-engine/common.json.gz` содержит ремни и недостающие модели из официального архива LDraw с сохранёнными заголовками. Профили в `catalog/inline-engine-parts.json` адаптированы из [таблицы Kinebrick](https://github.com/erik-larsen/kinebrick/blob/24366c8f0782a65d6138f41d593300b079859cb1/data/library-connections.json) и распространяются по CC BY-SA 4.0.
 

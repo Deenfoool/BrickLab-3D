@@ -2,17 +2,17 @@ import { mountFloatingPanels } from './floating-panels.js?v=floating-panels'
 import { Plane, Quaternion, Vector3 } from 'three'
 import { portsFor } from '../mechanics/catalog.js?v=inline-engine'
 import { baseRotation, samePose, worldPort } from './placement.js?v=inline-engine'
-import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=inline-engine'
+import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=engine-motion'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=inline-engine'
 import { nearestDetent, portLength } from '../mechanics/axial.js?v=linkages'
 import { nearbyConnections } from './snap.js?v=inline-engine'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=inline-engine'
 import { mountLibrary } from './library.js?v=inline-engine'
-import { createScene } from './scene.js?v=inline-engine'
-import { driveTitle, mountDrivePanel } from './drive-panel.js?v=inline-engine'
-import { mountPhysicsPanel, physicsTitle } from './physics-panel.js?v=inline-engine'
-import { componentBundle, expandComponents } from './components.js?v=inline-engine'
-import { editorLabels } from './labels.js?v=linkages'
+import { createScene } from './scene.js?v=engine-motion'
+import { driveTitle, mountDrivePanel } from './drive-panel.js?v=engine-motion'
+import { mountPhysicsPanel, physicsTitle } from './physics-panel.js?v=engine-motion'
+import { componentBundle, expandComponents } from './components.js?v=engine-motion'
+import { editorLabels } from './labels.js?v=engine-motion'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
@@ -376,7 +376,8 @@ export async function mountEditor(root, { document, language, save, download, si
   function render() {
     const part = selectedPart()
     const selectedLinks = part ? links.filter(link => link.shaft.part === part.id || link.socket.part === part.id) : []
-    el('selection').textContent = additional.size ? t.selectedCount(selectionIds().length) : part ? parts[part.design][language] : t.none
+    el('selection').textContent = additional.size ? t.selectedCount(selectionIds().length)
+      : part ? parts[part.design][language] : transmission?.kind === 'engine' ? t.crankshaft : t.none
     const building = mode === 'build'
     el('partActions').hidden = !part || !building || dragActive()
     el('paste').hidden = !clipboard || !building || dragActive()
@@ -400,9 +401,10 @@ export async function mountEditor(root, { document, language, save, download, si
           : t.driver
       : part ? (portsFor(part.design).length ? `${t.joints}: ${selectedLinks.length}` : t.geometryOnly) : ''
     el('motion').hidden = (!hinge?.ok && !transmission?.ok) || mode !== 'kinematics'
-    el('play').hidden = Boolean(hinge || transmission?.solve)
+    el('play').hidden = Boolean(hinge || (transmission?.solve && !transmission.playback))
     el('motionAxis').hidden = !transmission?.spherical
-    el('motionLabel').textContent = transmission?.unit === 'linear' ? t.travel : t.drive
+    el('motionLabel').textContent = transmission?.unit === 'linear' ? t.travel
+      : transmission?.kind === 'engine' ? t.crankAngle : t.drive
     el('applyHinge').hidden = !hinge?.ok
     const range = el('angle')
     range.min = hinge?.ok ? hinge.detents[0] * 180 / Math.PI : transmission?.range?.[0] ?? -1080
@@ -770,10 +772,12 @@ export async function mountEditor(root, { document, language, save, download, si
   function stepAnimation(time) {
     if (!frame) return
     if (!stepAnimation.previous) stepAnimation.previous = time
-    angle += Math.min(50, time - stepAnimation.previous) * .0015
+    angle += Math.min(50, time - stepAnimation.previous) * (transmission?.playback ?? 1.5) / 1000
     stepAnimation.previous = time
-    if (angle > 1080) {
-      angle = 1080
+    const limit = Number(el('angle').max)
+    if (transmission?.periodic && angle >= limit) angle %= limit
+    if (angle > limit) {
+      angle = limit
       stopAnimation()
       showMotion()
       render()

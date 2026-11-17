@@ -1,8 +1,8 @@
 import { Quaternion, Vector3 } from 'three'
 import { assemblyBounds, gravity, metersPerLdu, physicsStep, physicsWorld, vectorFrom } from '../mechanics/physics-world.js'
-import { rotationPoses } from './model.js?v=inline-engine'
-import { findSuspension, suspensionValue } from './suspension.js?v=inline-engine'
-import { advanceRotor, carryPose, driveScale, wheelBottom, wheelContact } from './vehicle-drive.js?v=inline-engine'
+import { rotationPoses } from './model.js?v=engine-motion'
+import { findSuspension, suspensionValue } from './suspension.js?v=engine-motion'
+import { advanceRotor, carryPose, driveScale, wheelBottom, wheelContact } from './vehicle-drive.js?v=engine-motion'
 
 const up = new Vector3(0, 1, 0)
 const units = metersPerLdu

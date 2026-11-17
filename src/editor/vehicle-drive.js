@@ -1,6 +1,6 @@
 import { Quaternion, Vector3 } from 'three'
 import { portsFor } from '../mechanics/catalog.js?v=inline-engine'
-import { rotationMotion, rotationPoses } from './model.js?v=inline-engine'
+import { rotationMotion, rotationPoses } from './model.js?v=engine-motion'
 import { worldPort } from './placement.js?v=inline-engine'
 import { terrainPose } from './drive-terrain.js?v=drive-scale'
 

@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { partMesh, parts } from './parts.js?v=inline-engine'
-import { snapGrid } from './model.js?v=inline-engine'
+import { snapGrid } from './model.js?v=engine-motion'
 
 const unitScale = [1, 1, 1]
 const axesUp = new THREE.Vector3(0, 1, 0)

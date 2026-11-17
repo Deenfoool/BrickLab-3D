@@ -2,6 +2,7 @@ import { Quaternion, Vector3 } from 'three'
 import { connectionMode } from '../mechanics/axial.js?v=linkages'
 import { Assembly } from '../mechanics/assembly.js?v=inline-engine'
 import { rotationalDrive } from '../mechanics/rotation.js?v=inline-engine'
+import { engineDrive } from '../mechanics/engine.js'
 import { cardanCoupling } from '../mechanics/cardan.js'
 import { articulationDrive, jointBodies, linkageDrive, mechanismPoses, motionRange, suspensionDrive } from '../mechanics/linkage.js'
 import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=inline-engine'
@@ -165,11 +166,14 @@ export function assemblyJoints(parts, assembly) {
 export function rotationMotion(selected, parts, assembly) {
   const byId = new Map(parts.map(part => [part.id, part]))
   const driver = byId.get(selected)
-  if (!driver) return null
+  const joints = assemblyJoints(parts, assembly)
+  const graph = jointBodies(byId.keys(), joints)
+  const gears = gearPoses(parts)
+  const engine = engineDrive(selected, byId, graph, gears, joints)
+  if (engine || !driver) return engine
   const ports = portsFor(driver.design)
   const rotor = ports.some(port => spinRoles.has(port.role)) ? rotationPort(ports) : ports.find(port => port.rotor)
   const preferred = rotor && portLine(driver, rotor)
-  const joints = assemblyJoints(parts, assembly)
   const crosses = new Map()
   for (const joint of joints) {
     if (joint.group !== 'uniJnt') continue
@@ -191,7 +195,6 @@ export function rotationMotion(selected, parts, assembly) {
     couplings.push(coupling)
     pivots.forEach(pivot => replaced.add(pivot))
   }
-  const gears = gearPoses(parts)
   const spinJoints = joints.filter(joint => !replaced.has(joint))
   const rotation = rotationalDrive(selected, byId.keys(), spinJoints, gears, preferred, couplings)
   const rotateGear = id => {
@@ -204,7 +207,6 @@ export function rotationMotion(selected, parts, assembly) {
     return [{ ...profile, ...worldPort(part, profile), part: part.id,
       normal: new Vector3().fromArray(profile.normal).applyQuaternion(new Quaternion().fromArray(part.rotation)) }]
   })
-  const graph = jointBodies(byId.keys(), joints)
   const spherical = ports.some(port => ['ball', 'ball-socket'].includes(port.role)) ? articulationDrive(selected, graph, true) : null
   const mechanism = linkageDrive(selected, graph, racks, gears, rotation, rotateGear) ?? suspensionDrive(selected, graph) ?? spherical ??
     (!couplings.some(coupling => coupling.cross === selected) && !preferred && (!rotation || rotation.reason === 'multiple-joint-axes') ? articulationDrive(selected, graph) : null)
