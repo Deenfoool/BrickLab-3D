@@ -8,7 +8,7 @@ import { nearestDetent, portLength } from '../mechanics/axial.js?v=linkages'
 import { nearbyConnections } from './snap.js?v=belt-drive'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=inline-engine'
 import { mountLibrary } from './library.js?v=belt-drive'
-import { createScene } from './scene.js?v=scene-parts'
+import { createScene } from './scene.js?v=part-outlines'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=belt-drive'
@@ -803,7 +803,7 @@ export async function mountEditor(root, { document, language, save, download, si
   }
 
   function updateHighlights() {
-    scene.highlight(additional.size ? [...additional] : [], 0xffb01b)
+    scene.highlight(additional, 0xffb01b, false)
   }
 
   function positionHandles() {

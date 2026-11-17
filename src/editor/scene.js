@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { partMesh, parts } from './parts.js?v=inline-engine'
 import { createBeltScene } from './belt-scene.js?v=belt-drive'
+import { createPartOutlines } from './part-outlines.js?v=part-outlines'
 import { snapGrid } from './model.js?v=belt-drive'
 
 const unitScale = [1, 1, 1]
@@ -36,7 +37,7 @@ export function createScene(host, models) {
   gizmo.enabled = false
   const pivot = new THREE.Object3D()
   const pivotOffset = new THREE.Vector3()
-  const warnings = new Map()
+  let highlights = { ids: new Set(), color: 0xff6666, throughParts: true }
   world.add(gizmo.getHelper(), pivot)
   gizmo.addEventListener('change', invalidate)
   gizmo.addEventListener('dragging-changed', ({ value }) => { controls.enabled = !value })
@@ -66,9 +67,7 @@ export function createScene(host, models) {
     const part = hidden.has(id) ? undefined : objects.get(id)
     return part && { design: part.userData.design, position: part.position.toArray(), rotation: part.quaternion.toArray() }
   }, invalidate)
-  const selection = new THREE.BoxHelper(new THREE.Object3D(), 0xffb01b)
-  selection.visible = false
-  world.add(selection)
+  const outlines = createPartOutlines(renderer)
   const marker = new THREE.Mesh(
     new THREE.SphereGeometry(2.8, 14, 10),
     new THREE.MeshBasicMaterial({ color: 0xffbd42, depthTest: false }),
@@ -105,6 +104,7 @@ export function createScene(host, models) {
     frame = requestAnimationFrame(() => {
       frame = null
       renderer.render(world, camera)
+      outlines.render(camera, selectedId, highlights)
       onViewChange?.()
     })
   }
@@ -128,6 +128,7 @@ export function createScene(host, models) {
     for (const [id, object] of objects) {
       if (keep.get(id) === object.userData.design) continue
       solids.remove(object)
+      outlines.untrack(id)
       object.userData.finish.dispose()
       objects.delete(id)
     }
@@ -139,37 +140,32 @@ export function createScene(host, models) {
         object.userData.design = part.design
         objects.set(part.id, object)
         solids.add(object)
+        outlines.track(part.id, object)
       }
       object.position.fromArray(part.position)
       object.quaternion.fromArray(part.rotation)
       object.scale.fromArray(unitScale)
       object.userData.finish.color.set(part.color ?? parts[part.design].color)
       object.updateMatrixWorld(true)
-      warnings.get(part.id)?.setFromObject(object)
       syncVisibility(part.id, object)
     }
     belts.update()
-    select(selectedId)
+    invalidate()
   }
 
   function syncVisibility(id, object) {
     object.visible = !hidden.has(id) && id !== movingId
-    const warning = warnings.get(id)
-    if (warning) warning.visible = object.visible
   }
 
   function setHidden(ids) {
     hidden = ids
     for (const [id, object] of objects) syncVisibility(id, object)
     belts.update()
-    select(selectedId)
+    invalidate()
   }
 
   function select(id) {
     selectedId = id
-    const object = objects.get(id)
-    selection.visible = Boolean(object?.visible)
-    if (selection.visible) selection.setFromObject(object)
     invalidate()
   }
 
@@ -225,7 +221,7 @@ export function createScene(host, models) {
     else if (movingId === id) movingId = undefined
     const object = objects.get(id)
     if (object) syncVisibility(id, object)
-    select(selectedId)
+    invalidate()
   }
 
   function setTool(mode, part, ids = []) {
@@ -260,7 +256,6 @@ export function createScene(host, models) {
       object.quaternion.fromArray(part.rotation)
       object.scale.fromArray(part.previewScale ?? unitScale)
       object.updateMatrixWorld(true)
-      warnings.get(part.id)?.setFromObject(object)
     }
     belts.update()
     invalidate()
@@ -299,23 +294,8 @@ export function createScene(host, models) {
     invalidate()
   }
 
-  function highlight(ids, color = 0xff6666) {
-    for (const [id, helper] of warnings) {
-      if (ids.includes(id) && helper.material.color.getHex() === color) continue
-      world.remove(helper)
-      helper.geometry.dispose()
-      helper.material.dispose()
-      warnings.delete(id)
-    }
-    for (const id of ids) {
-      const object = objects.get(id)
-      if (!object || warnings.has(id)) continue
-      const helper = new THREE.BoxHelper(object, color)
-      helper.visible = object.visible
-      helper.material.depthTest = false
-      world.add(helper)
-      warnings.set(id, helper)
-    }
+  function highlight(ids, color = 0xff6666, throughParts = true) {
+    highlights = { ids: new Set(ids), color, throughParts }
     invalidate()
   }
 
@@ -373,11 +353,6 @@ export function createScene(host, models) {
     controls.target.add(offset)
     driveOffset.copy(position)
     floor.position.set(Math.round(position.x / 200) * 200, 0, Math.round(position.z / 200) * 200)
-    if (selection.visible) selection.setFromObject(objects.get(selectedId))
-    for (const [id, helper] of warnings) {
-      const object = objects.get(id)
-      if (object) helper.setFromObject(object)
-    }
     controls.update()
     invalidate()
   }
@@ -396,13 +371,13 @@ export function createScene(host, models) {
     if (frame !== null) cancelAnimationFrame(frame)
     resize.disconnect()
     controls.dispose()
-    highlight([])
+    outlines.dispose()
     belts.dispose()
     gizmo.dispose()
     setGhost(null)
     setGroupGhost([])
     for (const object of objects.values()) object.userData.finish.dispose()
-    for (const object of [floor, axes, selection, marker]) {
+    for (const object of [floor, axes, marker]) {
       object.geometry.dispose()
       object.material.dispose()
     }
