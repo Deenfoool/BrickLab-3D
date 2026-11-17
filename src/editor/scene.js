@@ -2,8 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { partMesh, parts } from './parts.js?v=8845'
-import { worldPort } from './placement.js?v=8845'
-import { partRotationPort, snapGrid } from './model.js?v=8845'
+import { snapGrid } from './model.js?v=rotation'
 
 export function createScene(host, models) {
   const world = new THREE.Scene()
@@ -298,22 +297,6 @@ export function createScene(host, models) {
       rect.top + (1 - projected.y) * rect.height / 2 - event.clientY)
   }
 
-  function turn(list, ratios, angle) {
-    for (const part of list) {
-      const ratio = ratios[part.id]
-      if (ratio === undefined) continue
-      const object = objects.get(part.id)
-      const port = partRotationPort(part)
-      const localAxis = new THREE.Vector3().fromArray(port.axis)
-      const pivot = worldPort(part, port).start
-      object.quaternion.fromArray(part.rotation).multiply(new THREE.Quaternion().setFromAxisAngle(localAxis, angle * ratio))
-      object.position.copy(pivot).sub(new THREE.Vector3().fromArray(port.start).applyQuaternion(object.quaternion))
-      object.updateMatrixWorld(true)
-      warnings.get(part.id)?.setFromObject(object)
-    }
-    select(selectedId)
-  }
-
   function dispose() {
     active = false
     if (frame !== null) cancelAnimationFrame(frame)
@@ -334,5 +317,5 @@ export function createScene(host, models) {
   }
 
   resetView()
-  return { canvas, camera, gizmo, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, cancelGizmo, setTool, pointer, pixelDistance, setParts, select, setGhost, setGroupGhost, setMoving, resetView, turn, dispose }
+  return { canvas, camera, gizmo, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, cancelGizmo, setTool, pointer, pixelDistance, setParts, select, setGhost, setGroupGhost, setMoving, resetView, dispose }
 }

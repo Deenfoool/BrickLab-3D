@@ -1,18 +1,16 @@
 import { mountFloatingPanels } from './floating-panels.js?v=floating-panels'
 import { Plane, Quaternion, Vector3 } from 'three'
-import { portsFor } from '../mechanics/catalog.js?v=8845'
+import { portsFor } from '../mechanics/catalog.js?v=rotation'
 import { baseRotation, samePose, worldPort } from './placement.js?v=8845'
-import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, snapGrid } from './model.js?v=8845'
+import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=rotation'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=8845'
 import { nearestDetent, portLength } from '../mechanics/axial.js?v=8845'
-import { nearbyConnections } from './snap.js?v=8845'
+import { nearbyConnections } from './snap.js?v=rotation'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=8845'
 import { mountLibrary } from './library.js?v=8845'
-import { createScene } from './scene.js?v=8845'
-import { editorLabels } from './labels.js?v=technic-seats'
+import { createScene } from './scene.js?v=rotation'
+import { editorLabels } from './labels.js?v=rotation'
 
-const driveRoles = new Set(['axle', 'axle-pin', 'friction-axle-pin', 'duplo-axle', 'gear'])
-const isDriver = part => part && portsFor(part.design).some(port => driveRoles.has(port.role))
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
 const rotationStep = Math.PI / 4
@@ -236,7 +234,10 @@ export async function mountEditor(root, { document: source, language, save, down
       scene.previewParts(hingePoses(state.parts, hinge, target).filter(part => hinge.moving.has(part.id)))
       scene.select(selected)
       el('applyHinge').disabled = Math.abs(target - hinge.roll) < 1e-8
-    } else if (transmission?.ok) scene.turn(state.parts, transmission.ratios, angle * Math.PI / 180)
+    } else if (transmission?.ok) {
+      scene.previewParts(rotationPoses(state.parts, transmission, angle * Math.PI / 180))
+      scene.select(selected)
+    }
     el('degrees').textContent = `${Number(angle.toFixed(2))}°`
     el('angle').value = angle
   }
@@ -273,8 +274,7 @@ export async function mountEditor(root, { document: source, language, save, down
     updateHighlights()
     hinge = mode === 'kinematics' && id ? hingeMotion(id, state.parts, links) : undefined
     angle = hinge?.ok ? hinge.roll * 180 / Math.PI : 0
-    transmission = mode === 'kinematics' && isDriver(selectedPart())
-      ? assembly.rotationFrom(id, gearPoses(state.parts)) : null
+    transmission = mode === 'kinematics' && !hinge ? rotationMotion(id, state.parts, assembly) : null
     showMotion()
     render()
   }

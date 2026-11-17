@@ -1,7 +1,8 @@
 import { Quaternion, Vector3 } from 'three'
 import { connectionMode } from '../mechanics/axial.js?v=8845'
-import { Assembly } from '../mechanics/assembly.js?v=8845'
-import { gearAt, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=8845'
+import { Assembly } from '../mechanics/assembly.js?v=rotation'
+import { rotationalDrive } from '../mechanics/rotation.js'
+import { gearAt, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=rotation'
 import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=8845'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
@@ -131,6 +132,46 @@ export function gearPoses(parts) {
     const { start, axis } = worldPort(part, gear)
     const center = start.addScaledVector(axis, gear.sections[0].length / 2).toArray()
     return [gearAt(part.id, part.design, center, worldPort(part, partRotationPort(part)).axis.toArray())]
+  })
+}
+
+const spinRoles = new Set([
+  'axle', 'axle-pin', 'friction-axle-pin', 'duplo-axle', 'gear', 'rim-seat', 'tyre-seat',
+])
+
+export function rotationMotion(selected, parts, assembly) {
+  const byId = new Map(parts.map(part => [part.id, part]))
+  const driver = byId.get(selected)
+  if (!driver) return null
+  const ports = portsFor(driver.design)
+  const lineFor = (part, port) => {
+    const { start, axis } = worldPort(part, port)
+    return { start: start.toArray(), axis: axis.toArray() }
+  }
+  const rotor = ports.some(port => spinRoles.has(port.role)) ? rotationPort(ports) : ports.find(port => port.rotor)
+  const preferred = rotor && lineFor(driver, rotor)
+  const joints = assembly.connections.map(({ shaft, socket, fit }) => ({
+    a: shaft.part,
+    b: socket.part,
+    motion: fit.motion.rotation,
+    shaftLine: lineFor(byId.get(shaft.part), assembly.port(shaft.part, shaft.port)),
+    socketLine: lineFor(byId.get(socket.part), assembly.port(socket.part, socket.port)),
+  }))
+  return rotationalDrive(selected, byId.keys(), joints, gearPoses(parts), preferred)
+}
+
+export function rotationPoses(parts, motion, angle) {
+  return parts.flatMap(part => {
+    const spin = motion.spins.get(part.id)
+    if (!spin) return []
+    const axis = new Vector3().fromArray(spin.axis)
+    const start = new Vector3().fromArray(spin.start)
+    const turn = new Quaternion().setFromAxisAngle(axis, angle * spin.ratio)
+    return [{
+      ...part,
+      position: new Vector3().fromArray(part.position).sub(start).applyQuaternion(turn).add(start).toArray(),
+      rotation: new Quaternion().fromArray(part.rotation).premultiply(turn).toArray(),
+    }]
   })
 }
 

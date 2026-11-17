@@ -1,6 +1,6 @@
 import { connectionMode, evaluateInsertion, overlap, portLength } from './axial.js?v=8845'
 import { evaluateSpurMesh } from './gears.js'
-import { rotationPort } from './catalog.js?v=8845'
+import { rotationPort } from './catalog.js?v=rotation'
 import { cross, dot, isVector, length, subtract, unit } from './vector.js?v=connector-coverage'
 
 const LINEAR_TOLERANCE = .01
@@ -59,6 +59,7 @@ export class Assembly {
     }
     const fit = evaluateInsertion(male, female, placement, { seated })
     if (!fit.ok) return fit
+    const occupancyTolerance = seated ? LINEAR_TOLERANCE : 1e-6
     const occupies = (existing, wanted, port) => samePort(existing, wanted) ||
       Boolean(existing.part === wanted.part && port.slot && this.port(existing.part, existing.port)?.slot === port.slot)
     const onShaft = this.#connections.filter(link => occupies(link.shaft, shaft, male))
@@ -67,7 +68,7 @@ export class Assembly {
     const socketSweep = seated ? [socketLo, socketHi]
       : fit.placement.side === 'start' ? [0, socketHi] : [socketLo, socketSpan]
     if (this.#connections.some(link => occupies(link.socket, socket, female) &&
-        overlap(link.fit.occupancy.socket, socketSweep) > 1e-6)) {
+        overlap(link.fit.occupancy.socket, socketSweep) > occupancyTolerance)) {
       return { ok: false, reason: 'socket-occupied' }
     }
     const span = portLength(male)
@@ -75,7 +76,7 @@ export class Assembly {
     const socketEntersAtShaftEnd = (fit.placement.side === 'start') === (fit.placement.direction > 0)
     // A socket placed past another socket on the shaft cannot pass through it.
     const sweep = seated ? [lo, hi] : socketEntersAtShaftEnd ? [lo, span] : [0, hi]
-    if (onShaft.some(link => overlap(link.fit.occupancy.shaft, sweep) > 1e-6)) {
+    if (onShaft.some(link => overlap(link.fit.occupancy.shaft, sweep) > occupancyTolerance)) {
       return { ok: false, reason: seated ? 'shaft-occupied' : 'shaft-path-occupied' }
     }
     return fit

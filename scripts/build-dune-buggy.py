@@ -23,6 +23,8 @@ registerHooks({ resolve(specifier, context, next) {
 } })
 const { Matrix4, Quaternion, Vector3 } = await import('three')
 const { connectAligned, createAssembly, gearPoses } = await import('./src/editor/model.js')
+const { worldPort } = await import('./src/editor/placement.js')
+const { portsFor } = await import('./src/mechanics/catalog.js')
 const { newProject } = await import('./src/projects/documents.js')
 const { records, lift } = JSON.parse(fs.readFileSync(0, 'utf8'))
 const flip = new Matrix4().makeRotationX(Math.PI)
@@ -35,6 +37,18 @@ const parts = records.map(({ design, position, matrix, color }, index) => {
   const point = new Vector3().fromArray(position).applyMatrix4(flip).add(new Vector3(-50, lift, -130))
   return { id: `8845-${index + 1}`, design, position: point.toArray(), rotation, color }
 })
+// Correct the source pulley's 0.025 LDU lateral offset from its shaft.
+const pulley = parts.find(part => part.design === '4185')
+const bore = worldPort(pulley, portsFor(pulley.design).find(port => port.id === 'pulley-axle-hole'))
+const shafts = parts.filter(part => part.design === '3705')
+const axle = shafts.find(part => new Vector3().fromArray(part.position).distanceTo(bore.start) < 45 &&
+  Math.abs(worldPort(part, portsFor(part.design)[0]).axis.dot(bore.axis)) > .99999)
+if (!axle) throw new Error('Missing pulley axle in 8845 source model')
+const line = worldPort(axle, portsFor(axle.design)[0])
+const delta = bore.start.sub(line.start)
+const correction = delta.clone().projectOnVector(line.axis).sub(delta)
+if (correction.length() > .05) throw new Error('Unexpected pulley offset in 8845 source model')
+pulley.position = new Vector3().fromArray(pulley.position).add(correction).toArray()
 const assembly = createAssembly(parts, [])
 const connections = parts.flatMap((part, index) => connectAligned(assembly, [part], parts.slice(0, index)))
 const gears = gearPoses(parts).map(({ part, center, axis }) => ({ part, center, axis }))
@@ -95,13 +109,22 @@ def supporting_ports(source, design, title, adapter):
                 adapted.append(((spec[0], spec[1], 1, *spec[3:]), point, ref))
         elif entry := adapter['adapt'](cylinder, title):
             adapted.append(entry)
-    return [
+    ports = [
         {'id': f'8845-support-{index + 1}', 'role': spec[0], 'gender': spec[1],
          'openings': [[], ['start'], ['end'], ['start', 'end']][spec[2]],
          'start': point[:3], 'axis': point[3:], **({'reference': ref} if ref else {}),
          'sections': [{'shape': shape, 'radius': radius, 'length': width} for shape, radius, width, _ in spec[3]]}
         for index, (spec, point, ref) in enumerate(adapter['unique_ports'](adapted))
     ]
+
+    if design == '4185':
+        # Central 10 LDU axle hole in the LDraw 4185a pulley.
+        ports.append({
+            'id': 'pulley-axle-hole', 'role': 'key', 'gender': 'F', 'rotor': True, 'openings': ['start', 'end'],
+            'start': [0, 0, -5], 'axis': [0, 0, 1], 'reference': [1, 0, 0],
+            'sections': [{'shape': 'A', 'radius': 6, 'length': 10}],
+        })
+    return ports
 
 
 def main():

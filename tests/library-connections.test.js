@@ -12,7 +12,8 @@ registerHooks({ resolve(specifier, context, next) {
   }
   return next(specifier, context)
 } })
-const { createAssembly, connectAligned } = await import('../src/editor/model.js')
+const { createAssembly, connectAligned, rotationMotion, rotationPoses } = await import('../src/editor/model.js')
+const { rotationalDrive } = await import('../src/mechanics/rotation.js')
 const { nearbyConnections } = await import('../src/editor/snap.js')
 const { portsFor } = await import('../src/mechanics/catalog.js')
 const { evaluateInsertion, portLength } = await import('../src/mechanics/axial.js')
@@ -201,7 +202,7 @@ test('8845 Dune Buggy keeps all its parts, stored connections and four mounted t
   assert.ok(buggy.parts.every(part => availableParts[part.design]))
   const { connections } = createAssembly(buggy.parts, buggy.connections, buggy.gears)
   assert.equal(connections.length, buggy.connections.length)
-  assert.equal(connections.length, 249)
+  assert.equal(connections.length, 255)
   const designs = new Map(buggy.parts.map(part => [part.id, part.design]))
   const tyres = buggy.parts.filter(part => part.design === '3634')
   assert.equal(tyres.length, 4)
@@ -220,4 +221,75 @@ test('existing stud fits tolerate LDraw rounding at the seat without allowing ad
   assert.equal(measured.placement.offset, 0)
   assert.equal(evaluateInsertion(stud, socket, { offset: .008 }).reason, 'stud-seat')
   assert.equal(evaluateInsertion(stud, socket, { offset: .011 }, { seated: true }).reason, 'stud-seat')
+})
+
+test('8845 rotates each wheel with its tyre and axle while leaving the chassis still', () => {
+  const assembly = createAssembly(buggy.parts, buggy.connections)
+  for (const [rim, tyre, axle] of [[171, 172, 48], [173, 174, 5], [175, 176, 6], [177, 178, 49]]) {
+    for (const driver of [rim, tyre, axle]) {
+      const motion = rotationMotion(`8845-${driver}`, buggy.parts, assembly)
+      assert.ok(motion.ok)
+      const poses = rotationPoses(buggy.parts, motion, Math.PI / 2)
+      for (const member of [rim, tyre, axle]) {
+        const pose = poses.find(entry => entry.id === `8845-${member}`)
+        assert.ok(pose)
+        assert.notDeepEqual(pose.rotation, buggy.parts[member - 1].rotation)
+      }
+      assert.equal(poses.some(pose => pose.id === '8845-1'), false)
+      const moved = new Map(poses.map(pose => [pose.id, pose]))
+      const preview = buggy.parts.map(pose => moved.get(pose.id) ?? pose)
+      assert.equal(createAssembly(preview, buggy.connections).connections.length, buggy.connections.length)
+    }
+  }
+})
+
+test('8845 drives both 16-tooth gears in opposite directions from either axle', () => {
+  const assembly = createAssembly(buggy.parts, buggy.connections)
+  for (const driver of ['8845-73', '8845-93']) {
+    const motion = rotationMotion(driver, buggy.parts, assembly)
+    assert.ok(motion.ok)
+    const first = motion.spins.get('8845-76')
+    const second = motion.spins.get('8845-94')
+    const signedProjection = first.axis.reduce((sum, component, i) => sum + component * second.axis[i], 0)
+    assert.ok(Math.abs(first.ratio + second.ratio * signedProjection) < 1e-8)
+    assert.equal(motion.spins.size, 6)
+    assert.equal(motion.meshes.length, 1)
+  }
+  const pulley = rotationMotion('8845-101', buggy.parts, assembly)
+  assert.ok(pulley.ok)
+  assert.ok(pulley.spins.has('8845-96'))
+})
+
+test('rigid offsets orbit together and a second noncoaxial support prevents spin', () => {
+  const axis = { start: [0, 0, 0], axis: [0, 0, 1] }
+  const joint = (a, b, motion, line = axis) => ({ a, b, motion, shaftLine: line, socketLine: line })
+  const parts = [
+    part('rotor', 'test'),
+    { ...part('arm', 'test'), position: [8, 0, 0] },
+    part('support', 'test'),
+  ]
+  const ids = parts.map(entry => entry.id)
+  const joints = [joint('rotor', 'arm', 'fixed'), joint('rotor', 'support', 'continuous')]
+  const drive = rotationalDrive('arm', ids, joints, [])
+  assert.ok(drive.ok)
+  const [rotor, arm] = rotationPoses(parts, drive, Math.PI / 2)
+  assert.equal(rotor.id, 'rotor')
+  assert.equal(arm.id, 'arm')
+  arm.position.forEach((value, i) => assert.ok(Math.abs(value - [0, 8, 0][i]) < 1e-8))
+  joints.push(joint('arm', 'support', 'continuous', { start: [8, 0, 0], axis: [0, 0, 1] }))
+  assert.equal(rotationalDrive('arm', ids, joints, []).reason, 'multiple-joint-axes')
+})
+
+test('the editor drive propagates mixed gear ratios and rejects a contradictory loop', () => {
+  const axis = [0, 0, 1]
+  const gear = (part, center, teeth) => ({ part, center, axis, teeth, radius: teeth * 1.25, width: 8 })
+  const driver = { start: [0, 0, 0], axis }
+  const pair = [gear('input', driver.start, 8), gear('output', [30, 0, 0], 16)]
+  const drive = rotationalDrive('input', ['input', 'output'], [], pair, driver)
+  assert.equal(drive.spins.get('output').ratio, -.5)
+
+  const loop = [gear('input', driver.start, 8), gear('output', [20, 0, 0], 8),
+    gear('third', [10, 10 * Math.sqrt(3), 0], 8)]
+  const blocked = rotationalDrive('input', ['input', 'output', 'third'], [], loop, driver)
+  assert.equal(blocked.reason, 'inconsistent-transmission')
 })

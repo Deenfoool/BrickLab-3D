@@ -1608,8 +1608,8 @@
       "design": "4185",
       "position": [
         40,
-        177.35550900000004,
-        21.552999999999997
+        177.34174401635127,
+        21.532622908134243
       ],
       "rotation": [
         0.883109468985865,
@@ -4708,6 +4708,40 @@
     },
     {
       "shaft": {
+        "part": "8845-73",
+        "port": "shaft"
+      },
+      "socket": {
+        "part": "8845-75",
+        "port": "shadow-2cd46f6f575a"
+      },
+      "placement": {
+        "offset": 79.99986597458728,
+        "direction": -1,
+        "side": "start",
+        "roll": 1.5707963267948966,
+        "keyStep": 1.5707963267948966
+      }
+    },
+    {
+      "shaft": {
+        "part": "8845-73",
+        "port": "shaft"
+      },
+      "socket": {
+        "part": "8845-76",
+        "port": "shadow-2cd46f6f575a"
+      },
+      "placement": {
+        "offset": 20.000307981842216,
+        "direction": -1,
+        "side": "start",
+        "roll": 1.5707963267948966,
+        "keyStep": 1.5707963267948966
+      }
+    },
+    {
+      "shaft": {
         "part": "8845-47",
         "port": "8845-support-2"
       },
@@ -5439,6 +5473,23 @@
     },
     {
       "shaft": {
+        "part": "8845-93",
+        "port": "shaft"
+      },
+      "socket": {
+        "part": "8845-94",
+        "port": "shadow-2cd46f6f575a"
+      },
+      "placement": {
+        "offset": 60.00001331033891,
+        "direction": -1,
+        "side": "start",
+        "roll": 1.5707963267948966,
+        "keyStep": 1.5707963267948966
+      }
+    },
+    {
+      "shaft": {
         "part": "8845-99",
         "port": "shadow-53c62513a862"
       },
@@ -5469,6 +5520,23 @@
         "direction": 1,
         "side": "start",
         "roll": -1.5707963267948966,
+        "keyStep": 1.5707963267948966
+      }
+    },
+    {
+      "shaft": {
+        "part": "8845-96",
+        "port": "shaft"
+      },
+      "socket": {
+        "part": "8845-101",
+        "port": "pulley-axle-hole"
+      },
+      "placement": {
+        "offset": 10.000690116812983,
+        "direction": -1,
+        "side": "start",
+        "roll": 1.5707963267948966,
         "keyStep": 1.5707963267948966
       }
     },
@@ -6708,6 +6776,40 @@
       "placement": {
         "offset": -40.00032135058398,
         "direction": 1,
+        "side": "start",
+        "roll": 1.5707963267948966,
+        "keyStep": 1.5707963267948966
+      }
+    },
+    {
+      "shaft": {
+        "part": "8845-148",
+        "port": "shaft"
+      },
+      "socket": {
+        "part": "8845-162",
+        "port": "bore"
+      },
+      "placement": {
+        "offset": 160.00091564785285,
+        "direction": -1,
+        "side": "start",
+        "roll": 1.5707963267948966,
+        "keyStep": 1.5707963267948966
+      }
+    },
+    {
+      "shaft": {
+        "part": "8845-154",
+        "port": "shaft"
+      },
+      "socket": {
+        "part": "8845-163",
+        "port": "bore"
+      },
+      "placement": {
+        "offset": 160.00091564785285,
+        "direction": -1,
         "side": "start",
         "roll": 1.5707963267948966,
         "keyStep": 1.5707963267948966
