@@ -1,4 +1,4 @@
-import { editorLabels } from '../editor/labels.js?v=floating-panels'
+import { editorLabels } from '../editor/labels.js?v=parts-library'
 import { locales } from './locale.js'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
@@ -212,7 +212,7 @@ async function openEditor(project) {
   editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=floating-panels')
+    const { mountEditor } = await import('../editor/editor.js?v=parts-library')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

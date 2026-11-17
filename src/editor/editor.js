@@ -1,17 +1,18 @@
 import { mountFloatingPanels } from './floating-panels.js?v=floating-panels'
 import { Plane, Quaternion, Vector3 } from 'three'
-import { technic } from '../mechanics/catalog.js?v=connector-coverage'
+import { portsFor } from '../mechanics/catalog.js?v=parts-library'
 import { baseRotation, samePose, worldPort } from './placement.js?v=connector-coverage'
-import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, snapGrid } from './model.js?v=connector-coverage'
+import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, snapGrid } from './model.js?v=parts-library'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=connector-coverage'
 import { nearestDetent, portLength } from '../mechanics/axial.js?v=connector-coverage'
-import { nearbyConnections } from './snap.js?v=connector-coverage'
-import { loadPalette, partOrder, parts } from './parts.js?v=connector-coverage'
-import { createScene } from './scene.js?v=connector-coverage'
-import { editorLabels } from './labels.js?v=floating-panels'
+import { nearbyConnections } from './snap.js?v=parts-library'
+import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=parts-library'
+import { mountLibrary } from './library.js?v=parts-library'
+import { createScene } from './scene.js?v=parts-library'
+import { editorLabels } from './labels.js?v=parts-library'
 
 const driveRoles = new Set(['axle', 'axle-pin', 'friction-axle-pin', 'gear'])
-const isDriver = part => part && technic[part.design].some(port => driveRoles.has(port.role))
+const isDriver = part => part && portsFor(part.design).some(port => driveRoles.has(port.role))
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
 const rotationStep = Math.PI / 4
@@ -24,9 +25,35 @@ let clipboard
 
 export async function mountEditor(root, { document: source, language, save, download, signal }) {
   const t = editorLabels[language]
-  const models = await loadPalette().catch(cause => {
-    throw Object.assign(new Error('Failed to load parts palette', { cause }), { code: 'palette-load' })
-  })
+  const models = new Map()
+  const requests = new Map()
+
+  function prepareModel(part) {
+    if (models.has(part.design)) return Promise.resolve()
+    if (!requests.has(part.design)) {
+      const request = (part.pack ? loadPartModel(part).then(model => models.set(part.design, model))
+        : loadCoreModels().then(core => {
+          for (const [design, model] of core) models.set(design, model)
+        }))
+        .finally(() => requests.delete(part.design))
+      requests.set(part.design, request)
+    }
+    return requests.get(part.design)
+  }
+
+  const designs = [...new Set(source.parts.map(part => String(part?.design ?? '')))].filter(design => parts[design])
+  const failedModels = new Set()
+  // Bound simultaneous model decoding when opening a large existing build.
+  for (let index = 0; index < designs.length && !signal.aborted; index += 4) {
+    const entries = designs.slice(index, index + 4)
+    const results = await Promise.allSettled(entries.map(design => prepareModel(parts[design])))
+    results.forEach((result, i) => {
+      if (result.status === 'rejected') {
+        failedModels.add(entries[i])
+        console.error(result.reason)
+      }
+    })
+  }
   if (signal.aborted) return
   root.innerHTML = `
     <header class="editor-bar">
@@ -67,9 +94,13 @@ export async function mountEditor(root, { document: source, language, save, down
               <h2 id="editor-library-heading" data-panel-grip tabindex="0" title="${t.movePanel}">${t.library}</h2>
               <button type="button" data-panel-toggle aria-controls="editor-library-body"></button>
             </header>
-            <div class="editor-panel-body" id="editor-library-body">
-              <input data-el="search" type="search" aria-label="${t.search}" placeholder="${t.search}">
-              <div class="editor-parts" data-el="parts"></div>
+            <div class="editor-panel-body editor-library-body" id="editor-library-body">
+              <div class="editor-library-controls" data-library-controls>
+                <input type="search" aria-label="${t.search}" placeholder="${t.search}">
+              </div>
+              <div class="editor-library-scroll" data-library-scroll>
+                <div class="editor-parts" data-library-cards></div>
+              </div>
             </div>
           </aside>
           <aside class="editor-panel editor-inspector" data-panel="inspector" aria-labelledby="editor-inspector-heading">
@@ -120,6 +151,7 @@ export async function mountEditor(root, { document: source, language, save, down
   const visibleParts = loadParts(source, models)
   const shown = new Set(visibleParts.map(part => part.id))
   const hiddenParts = source.parts.filter(part => !models.has(String(part?.design ?? '')))
+  const unknownPartCount = hiddenParts.filter(part => !parts[String(part?.design ?? '')]).length
   const hiddenGears = Array.isArray(source.gears) ? source.gears.filter(gear => !shown.has(gear?.part)) : []
   const hiddenIds = new Set(hiddenParts.map(part => part?.id).filter(id => typeof id === 'string' && !shown.has(id)))
   const unknownLinks = source.connections.filter(link => hiddenIds.has(link?.shaft?.part) || hiddenIds.has(link?.socket?.part))
@@ -159,6 +191,10 @@ export async function mountEditor(root, { document: source, language, save, down
   let drag
   let links = assembly.connections
   let message = ''
+  let pendingPart
+  const library = mountLibrary(root.querySelector('#editor-library-body'), {
+    sections, language, labels: t, selectPart: selectLibraryPart, signal,
+  })
   const undo = []
   const redo = []
   el('name').value = source.name
@@ -280,27 +316,25 @@ export async function mountEditor(root, { document: source, language, save, down
     applyState(next)
   }
 
-  function renderCatalog() {
-    const search = el('search').value.trim().toLocaleLowerCase(language)
-    el('parts').replaceChildren()
-    for (const design of partOrder) {
-      const part = parts[design]
-      if (!`${part[language]} ${design}`.toLocaleLowerCase(language).includes(search)) continue
-      const button = document.createElement('button')
-      const glyph = document.createElement('span')
-      const name = document.createElement('span')
-      const id = document.createElement('small')
-      button.type = 'button'
-      button.dataset.design = design
-      button.setAttribute('aria-pressed', String(moving?.design === design && !movesExisting))
-      glyph.className = `editor-glyph editor-glyph-${part.glyph}`
-      glyph.style.color = part.color
-      glyph.setAttribute('aria-hidden', 'true')
-      name.textContent = part[language]
-      id.textContent = design
-      name.append(id)
-      button.append(glyph, name)
-      el('parts').append(button)
+  async function selectLibraryPart(part) {
+    if (mode !== 'build') return
+    cancelPlacement()
+    const request = { part }
+    pendingPart = request
+    message = ''
+    render()
+    try {
+      await prepareModel(part)
+      if (pendingPart !== request || signal.aborted) return
+      pendingPart = undefined
+      startPlacement({ id: crypto.randomUUID(), design: part.design, position: [0, 0, 0],
+        rotation: baseRotation, color: part.color })
+    } catch (error) {
+      if (pendingPart !== request || signal.aborted) return
+      pendingPart = undefined
+      message = t.partLoadError(part[language])
+      console.error(error)
+      render()
     }
   }
 
@@ -329,7 +363,7 @@ export async function mountEditor(root, { document: source, language, save, down
       ? hinge ? (hinge.ok ? t.detented : t.closedHinge)
         : transmission ? (transmission.ok ? `${t.mesh}: ${transmission.meshes.length}` : t.transmissionError)
           : t.driver
-      : part ? `${t.joints}: ${selectedLinks.length}` : ''
+      : part ? (portsFor(part.design).length ? `${t.joints}: ${selectedLinks.length}` : t.geometryOnly) : ''
     el('motion').hidden = (!hinge?.ok && !transmission?.ok) || mode !== 'kinematics'
     el('play').hidden = Boolean(hinge)
     el('applyHinge').hidden = !hinge?.ok
@@ -343,12 +377,12 @@ export async function mountEditor(root, { document: source, language, save, down
     el('depth').value = String(depth)
     el('empty').hidden = Boolean(state.parts.length || moving)
     el('count').textContent = `${t.count}: ${state.parts.length} · ${t.linkCount}: ${links.length}`
-    el('loadNotice').textContent = discardedLinks ? t.discarded(discardedLinks) : ''
+    el('loadNotice').textContent = [
+      failedModels.size ? t.modelsUnavailable(failedModels.size) : '',
+      discardedLinks ? t.discarded(discardedLinks) : '',
+    ].filter(Boolean).join(' · ')
     for (const name of ['build', 'kinematics']) el(name).setAttribute('aria-pressed', String(mode === name))
-    for (const button of el('parts').children) {
-      button.disabled = mode !== 'build'
-      button.setAttribute('aria-pressed', String(moving?.design === button.dataset.design && !movesExisting))
-    }
+    library.setPlacement(!movesExisting ? moving?.design : undefined, pendingPart?.part.design, building)
     el('snap').disabled = !building
     el('snap').setAttribute('aria-pressed', String(snapEnabled))
     el('undo').disabled = !undo.length
@@ -359,7 +393,7 @@ export async function mountEditor(root, { document: source, language, save, down
       : candidate?.mesh ? t.gearSnap : candidate?.failure?.includes('occupied') ? t.occupied : candidate?.failure ? t.blocked : t.free
     el('hint').textContent = resize ? t.lengthPreview(parts[resize.pose.design][language], resize.lost.length, resize.kept) :
       gizmoSnap?.mesh ? t.gearSnap : gizmoSnap?.fit ? t.snapPreview : moving ? `${cue} · ${t.place}`
-      : message || (hiddenParts.length ? t.unknown(hiddenParts.length) : t.camera)
+      : pendingPart ? t.loadingPart(pendingPart.part[language]) : message || (unknownPartCount ? t.unknown(unknownPartCount) : t.camera)
   }
 
   function updatePointer(event, cycle = false) {
@@ -410,6 +444,7 @@ export async function mountEditor(root, { document: source, language, save, down
   }
 
   function cancelPlacement() {
+    pendingPart = undefined
     if (movesExisting) scene.setMoving(moving.id, false)
     moving = null
     pastedGroup = null
@@ -650,7 +685,7 @@ export async function mountEditor(root, { document: source, language, save, down
   function updateGizmo(cycle = false) {
     if (!gizmoPart || !gizmoRaw) return
     if (tool === 'move' && snapAllowed(pointer) && transform && !additional.size) {
-      const ownPorts = technic[gizmoRaw.design]
+      const ownPorts = portsFor(gizmoRaw.design)
       const points = ownPorts.flatMap(port => {
         const { start, axis } = worldPort(gizmoRaw, port)
         return [start, start.clone().addScaledVector(axis, portLength(port))]
@@ -705,12 +740,6 @@ export async function mountEditor(root, { document: source, language, save, down
     frame = requestAnimationFrame(stepAnimation)
   }
 
-  on(el('parts'), 'click', event => {
-    const design = event.target.closest('button')?.dataset.design
-    if (!design || mode !== 'build') return
-    startPlacement({ id: crypto.randomUUID(), design, position: [0, 0, 0], rotation: baseRotation, color: parts[design].color })
-  })
-  on(el('search'), 'input', renderCatalog)
   on(el('build'), 'click', () => setMode('build'))
   on(el('kinematics'), 'click', () => setMode('kinematics'))
   on(el('undo'), 'click', () => restore(undo, redo))
@@ -890,7 +919,7 @@ export async function mountEditor(root, { document: source, language, save, down
     cancelResize()
   })
   on(window, 'keydown', event => {
-    if (event.key === 'Escape' && dragActive()) {
+    if (event.key === 'Escape' && (dragActive() || pendingPart)) {
       event.preventDefault()
       cancelGizmo()
       cancelPlacement()
@@ -981,7 +1010,6 @@ export async function mountEditor(root, { document: source, language, save, down
     }
   })
 
-  renderCatalog()
   scene.setParts(state.parts)
   scene.resetView()
   render()

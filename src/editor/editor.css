@@ -16,7 +16,8 @@
 .editor-overlay{position:absolute;inset:14px;display:grid;gap:10px;grid-template-rows:auto minmax(0,1fr);pointer-events:none}
 .editor-panel-layer{position:relative;min-width:0;min-height:0}
 .editor-panel{position:absolute;top:0;display:flex;flex-direction:column;width:min(218px,100%);max-height:100%;background:#1b1d22;border:1px solid #41454e;border-radius:10px;box-shadow:0 8px 24px #0006;pointer-events:auto;overflow:hidden}
-.editor-catalog{left:0;max-height:min(100%,440px)}
+.editor-catalog{left:0;width:min(342px,100%);height:min(100%,590px)}
+.editor-catalog:has(.editor-library-body[hidden]){height:auto}
 .editor-inspector{right:0}
 .editor-panel[data-front]{z-index:1}
 .editor-panel[data-dragging]{border-color:#ad8642}
@@ -27,17 +28,25 @@
 .editor-panel[data-dragging] h2{cursor:grabbing}
 .editor .editor-panel-header button{flex:none;align-self:center;width:29px;height:27px;margin:4px 5px 4px 0;padding:0;border-color:transparent;background:transparent;font-size:17px;line-height:1}
 .editor-panel-body{padding:10px;border-top:1px solid #343840;overflow:auto;overscroll-behavior:contain}
-.editor-catalog input{width:100%;background:#13161a;border:1px solid #424650;border-radius:7px;padding:8px 9px;font-size:12px}
-.editor-parts{display:grid;gap:5px;margin-top:12px}
-.editor .editor-parts button{border-color:transparent;background:none;display:flex;align-items:center;text-align:left;gap:9px;min-height:46px;padding:6px;font-size:13px}
-.editor .editor-parts button[aria-pressed="true"]{background:#3b301c;border-color:#8d6d32;color:#ffde92}
-.editor-parts small{display:block;font-size:11px;color:#a8adb7}
-.editor-glyph{width:27px;height:18px;display:block;flex:none}
-.editor-glyph-brick{background:currentColor;border-radius:3px;clip-path:polygon(0 30%,15% 30%,15% 9%,38% 9%,38% 30%,63% 30%,63% 9%,85% 9%,85% 30%,100% 30%,100% 100%,0 100%)}
-.editor-glyph-axle,.editor-glyph-pin{height:8px;border:2px solid currentColor;background:#545b66;border-radius:2px}
-.editor-glyph-pin{width:22px;margin-inline:2.5px}
-.editor-glyph-bush,.editor-glyph-gear{width:18px;height:18px;margin-inline:4.5px;border:4px solid currentColor;border-radius:50%}
-.editor-glyph-gear{outline:1px dashed currentColor;outline-offset:2px}
+.editor-library-body{display:flex;flex:1;flex-direction:column;min-height:0;padding:0;overflow:hidden}
+.editor-library-controls{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:7px;padding:11px;border-bottom:1px solid #343840;background:#202329}
+.editor-library-controls input,.editor-library-controls select{width:100%;min-width:0;background:#15181d;border:1px solid #424650;border-radius:7px;padding:8px;color:#e6e8ec;font-size:12px}
+.editor-library-controls input{grid-column:1/-1;grid-row:1}
+.editor-library-count{grid-column:1/-1;color:#aeb5c0;font-size:11px;font-variant-numeric:tabular-nums}
+.editor-library-scroll{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain;padding:10px;scrollbar-gutter:stable}
+.editor-parts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.editor .editor-part-card{display:flex;min-width:0;flex-direction:column;padding:0;overflow:hidden;text-align:left;background:#242830;border-color:#393f4b}
+.editor .editor-part-card:hover:not(:disabled){background:#292f39;border-color:#707b8b}
+.editor .editor-part-card[aria-pressed="true"],.editor .editor-part-card[data-loading]{background:#32291d;border-color:#d59d43}
+.editor-part-preview{position:relative;width:100%;aspect-ratio:144/92;background-color:#161a21;background-size:600% 600%;background-repeat:no-repeat;border-bottom:1px solid #343943}
+.editor-part-preview::after{position:absolute;inset:0;content:'';box-shadow:inset 0 0 20px #252e3b45;pointer-events:none}
+.editor-part-details{display:grid;grid-template-rows:1fr auto;align-content:start;flex:1;gap:7px;width:100%;padding:7px 8px 8px}
+.editor-part-name{display:-webkit-box;min-height:2.6em;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:12px;font-weight:620;line-height:1.3;overflow-wrap:anywhere}
+.editor-part-meta{display:flex;justify-content:space-between;align-items:center;gap:3px;min-height:16px}
+.editor-part-id{color:#aab3c2;font:10px/1.2 ui-monospace,monospace}
+.editor-part-mechanics{color:#ffc768;font-size:10px;line-height:1.2}
+.editor-library-empty{color:#adb4c0;font-size:13px;text-align:center;margin:24px 0}
+.editor .editor-library-more{display:block;width:100%;margin-top:10px;font-size:12px}
 .editor-viewport{position:absolute;inset:0;min-width:0;min-height:0;overflow:hidden;background:#16191f}
 .editor-viewport canvas{display:block;width:100%;height:100%;touch-action:none}
 .editor-empty,.editor-coordinates{position:absolute}
@@ -69,6 +78,7 @@
 body:has(.editor:not([hidden])){overflow:hidden}
 @media(max-width:1050px){
   .editor-panel{width:min(192px,100%)}
+  .editor-catalog{width:min(310px,100%)}
   .editor-back span{display:none}
 }
 @media(max-width:720px){
@@ -82,9 +92,16 @@ body:has(.editor:not([hidden])){overflow:hidden}
   .editor-panel{width:min(177px,calc((100% - 6px)/2));max-height:min(100%,45dvh)}
   .editor-panel-header h2{gap:4px;padding:7px 4px;font-size:12px}
   .editor-panel-body{padding:7px}
-  .editor-catalog input{height:30px;padding:3px 6px}
-  .editor-parts{margin-top:6px}
-  .editor .editor-parts button{min-height:36px;font-size:11px}
+  .editor-catalog{width:min(260px,calc((100% - 6px)*.56));height:min(100%,53dvh);max-height:100%}
+  .editor-library-controls,.editor-library-scroll{padding:6px}
+  .editor-library-controls{gap:4px;grid-template-columns:minmax(0,1fr)}
+  .editor-library-controls input,.editor-library-controls select{padding:4px 5px;font-size:11px}
+  .editor-library-count{font-size:10px}
+  .editor-parts{gap:4px}
+  .editor-part-details{padding:4px;gap:3px}
+  .editor-part-name{font-size:10px}
+  .editor-part-meta{flex-wrap:wrap;min-height:0}
+  .editor-part-id,.editor-part-mechanics{font-size:9px}
   .editor-inspector button{padding:5px;font-size:11px}
   .editor-status{gap:5px;flex-wrap:wrap;padding:5px 8px;font-size:10px}
 }

@@ -1,10 +1,10 @@
 import { Plane, Vector3 } from 'three'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
 import { connectionMode, portLength } from '../mechanics/axial.js?v=connector-coverage'
-import { gearAt, technic } from '../mechanics/catalog.js?v=connector-coverage'
+import { gearAt, portsFor } from '../mechanics/catalog.js?v=parts-library'
 import { candidateOffsets, joinedPose, worldPort } from './placement.js?v=connector-coverage'
 
-const gearPort = part => technic[part.design].find(port => port.role === 'gear')
+const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')
 
 function gearCenter(part, port) {
   const { start, axis } = worldPort(part, port)
@@ -52,7 +52,9 @@ function targetsOnPort(scene, event, fixedPort, start, axis, span, ray) {
 
 export function nearbyConnections({ scene, assembly, parts, moving, event, depth, roll, acceptPose, ray }) {
   const candidates = []
-  const ownPorts = technic[moving.design].filter(port => port.role !== 'gear')
+  const ownPorts = portsFor(moving.design)
+  if (!ownPorts.length) return candidates
+  const ownConnectors = ownPorts.filter(port => port.role !== 'gear')
   const ownGear = gearPort(moving)
   for (const fixed of parts) {
     if (fixed.id === moving.id) continue
@@ -61,13 +63,13 @@ export function nearbyConnections({ scene, assembly, parts, moving, event, depth
       const candidate = meshCandidate({ scene, moving, fixed, ownGear, fixedGear, event, ray, acceptPose })
       if (candidate) candidates.push(candidate)
     }
-    for (const fixedPort of technic[fixed.design]) {
+    for (const fixedPort of portsFor(fixed.design)) {
       if (fixedPort.role === 'gear') continue
       const { start, axis } = worldPort(fixed, fixedPort)
       const span = portLength(fixedPort)
       const targets = targetsOnPort(scene, event, fixedPort, start, axis, span, ray)
       for (const { side, point, along, distance } of targets) {
-        for (const own of ownPorts) {
+        for (const own of ownConnectors) {
           const movingShaft = own.gender === 'M'
           const male = movingShaft ? own : fixedPort
           const female = movingShaft ? fixedPort : own

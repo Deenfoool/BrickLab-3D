@@ -2,6 +2,9 @@ import technic from '../../catalog/technic.json?v=connector-coverage' with { typ
 
 export { technic }
 
+const noPorts = Object.freeze([])
+export const portsFor = design => Object.hasOwn(technic, design) ? technic[design] : noPorts
+
 export const rotationPort = ports => ports.find(port => port.role === 'gear') ?? ports[0]
 
 export function gearAt(part, design, center, axis) {

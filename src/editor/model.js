@@ -1,7 +1,7 @@
 import { Quaternion, Vector3 } from 'three'
 import { connectionMode } from '../mechanics/axial.js?v=connector-coverage'
 import { Assembly } from '../mechanics/assembly.js?v=connector-coverage'
-import { gearAt, rotationPort, technic } from '../mechanics/catalog.js?v=connector-coverage'
+import { gearAt, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=parts-library'
 import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=connector-coverage'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
@@ -50,7 +50,9 @@ export function loadParts(document, models) {
 export function createAssembly(parts, links) {
   const assembly = new Assembly(technic)
   const byId = new Map(parts.map(part => [part.id, part]))
-  for (const part of parts) assembly.addPart(part.id, part.design)
+  for (const part of parts) {
+    if (portsFor(part.design).length) assembly.addPart(part.id, part.design)
+  }
   for (const link of links) {
     const a = byId.get(link?.shaft?.part)
     const b = byId.get(link?.socket?.part)
@@ -93,8 +95,8 @@ export function connectAligned(assembly, changed, fixed) {
   const added = []
   for (const a of changed) {
     for (const b of fixed) {
-      for (const portA of technic[a.design]) {
-        for (const portB of technic[b.design]) {
+      for (const portA of portsFor(a.design)) {
+        for (const portB of portsFor(b.design)) {
           const movingShaft = portA.gender === 'M'
           const male = movingShaft ? portA : portB
           const female = movingShaft ? portB : portA
@@ -113,12 +115,12 @@ export function connectAligned(assembly, changed, fixed) {
 }
 
 export function partRotationPort(part) {
-  return rotationPort(technic[part.design])
+  return rotationPort(portsFor(part.design))
 }
 
 export function gearPoses(parts) {
   return parts.flatMap(part => {
-    const ports = technic[part.design]
+    const ports = portsFor(part.design)
     const gear = ports.find(port => port.role === 'gear')
     if (!gear) return []
     const { start, axis } = worldPort(part, gear)
