@@ -117,6 +117,34 @@ test('thin liftarms slide onto a shared axle through its open end', () => {
   assert.ok(blocked.every(option => option.failure === 'shaft-path-occupied'))
 })
 
+test('the 41677 shifter beam snaps flush to its neighbor on an occupied 7L axle', () => {
+  const axle = part('axle', '44294')
+  const bracket = { ...part('bracket', '92907'), position: [-30, -20, 0] }
+  const neighbor = { ...part('upright', '6632'), position: [-5, 0, 0], rotation: [0, 0, -Math.SQRT1_2, Math.SQRT1_2] }
+  const moving = part('beam', '41677')
+  const installed = [axle, bracket, neighbor]
+  const existing = connectAligned(createAssembly(installed, []), [bracket, neighbor], [axle])
+  assert.equal(existing.length, 3)
+  const assembly = createAssembly([...installed, moving], existing)
+  // At close range, a small aim error overlaps the upright without a flush snap.
+  const x = 4.4
+  const ray = new Ray(new Vector3(x, 0, 100), new Vector3(0, 0, -1))
+  const candidates = nearbyConnections({ moving, parts: installed, assembly, ray, depth: 0, roll: 0,
+    scene: { pixelDistance: point => Math.hypot(point.x - x, point.y) * 12 } })
+  const snap = candidates.find(option => option.fit?.motion.rotation === 'locked' && option.shaft.part === axle.id)
+  assert.ok(snap)
+  assert.deepEqual(snap.fit.occupancy.shaft, [70, 80])
+  const saved = [...existing, { shaft: snap.shaft, socket: snap.socket, placement: snap.fit.placement }]
+  assert.equal(createAssembly([...installed, { ...moving, ...snap.pose }], saved).connections.length, 4)
+
+  const inBracket = -35
+  const throughBracket = nearbyConnections({ moving, parts: installed, assembly,
+    ray: new Ray(new Vector3(inBracket, 0, 100), new Vector3(0, 0, -1)), depth: 0, roll: 0,
+    scene: { pixelDistance: point => Math.hypot(point.x - inBracket, point.y) * 12 } })
+  assert.ok(throughBracket.some(option => option.failure === 'shaft-path-occupied'))
+  assert.ok(throughBracket.every(option => !option.fit))
+})
+
 test('a correctly oriented thin liftarm can snap with the move gizmo at the middle of an axle', () => {
   const axle = part('axle', '44294')
   const beam = { ...part('beam', '6632'), position: [5, 2, 0], rotation: [0, 0, Math.SQRT1_2, Math.SQRT1_2] }

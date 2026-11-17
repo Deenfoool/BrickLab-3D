@@ -1,6 +1,6 @@
 import { Quaternion, Vector3 } from 'three'
 import { connectionMode } from '../mechanics/axial.js?v=linkages'
-import { Assembly } from '../mechanics/assembly.js?v=belt-drive'
+import { Assembly } from '../mechanics/assembly.js?v=axle-stop-snap'
 import { rotationalDrive } from '../mechanics/rotation.js?v=belt-drive'
 import { assembleBelts } from '../mechanics/belts.js?v=belt-drive'
 import { engineDrive } from '../mechanics/engine.js?v=belt-drive'

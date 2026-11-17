@@ -44,6 +44,25 @@ export class Assembly {
     return structuredClone(this.#connections)
   }
 
+  #occupies(existing, wanted, port) {
+    return samePort(existing, wanted) ||
+      Boolean(existing.part === wanted.part && port.slot && this.port(existing.part, existing.port)?.slot === port.slot)
+  }
+
+  shaftEntryStops(shaft) {
+    const port = this.port(shaft.part, shaft.port)
+    if (!port) return null
+    let stops = null
+    for (const link of this.#connections) {
+      if (!this.#occupies(link.shaft, shaft, port)) continue
+      const [lo, hi] = link.fit.occupancy.shaft
+      stops ??= { start: lo, end: hi }
+      stops.start = Math.min(stops.start, lo)
+      stops.end = Math.max(stops.end, hi)
+    }
+    return stops
+  }
+
   previewInsertion(shaft, socket, placement, { world, seated = false } = {}) {
     const male = this.port(shaft.part, shaft.port)
     const female = this.port(socket.part, socket.port)
@@ -60,14 +79,12 @@ export class Assembly {
     const fit = evaluateInsertion(male, female, placement, { seated })
     if (!fit.ok) return fit
     const occupancyTolerance = seated ? LINEAR_TOLERANCE : 1e-6
-    const occupies = (existing, wanted, port) => samePort(existing, wanted) ||
-      Boolean(existing.part === wanted.part && port.slot && this.port(existing.part, existing.port)?.slot === port.slot)
-    const onShaft = this.#connections.filter(link => occupies(link.shaft, shaft, male))
+    const onShaft = this.#connections.filter(link => this.#occupies(link.shaft, shaft, male))
     const socketSpan = portLength(female)
     const [socketLo, socketHi] = fit.occupancy.socket
     const socketSweep = seated ? [socketLo, socketHi]
       : fit.placement.side === 'start' ? [0, socketHi] : [socketLo, socketSpan]
-    if (this.#connections.some(link => occupies(link.socket, socket, female) &&
+    if (this.#connections.some(link => this.#occupies(link.socket, socket, female) &&
         overlap(link.fit.occupancy.socket, socketSweep) > occupancyTolerance)) {
       return { ok: false, reason: 'socket-occupied' }
     }

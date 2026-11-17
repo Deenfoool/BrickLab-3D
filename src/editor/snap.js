@@ -138,8 +138,10 @@ export function nearbyConnections(context) {
         continue
       }
       const targets = targetsOnPort(scene, event, fixedPort, start, axis, span, ray)
-      const gizmoShaft = acceptPose && canSlideOn(fixedPort)
+      const slidingShaft = canSlideOn(fixedPort)
+      const gizmoShaft = acceptPose && slidingShaft
       if (!targets.length && !gizmoShaft) continue
+      const stops = slidingShaft && depth === 0 ? assembly.shaftEntryStops({ part: fixed.id, port: fixedPort.id }) : null
       for (const own of ownConnectors) {
         const movingShaft = own.gender === 'M'
         const male = movingShaft ? own : fixedPort
@@ -160,6 +162,12 @@ export function nearbyConnections(context) {
           const key = JSON.stringify([fixed.id, fixedPort.id, own.id, side, along !== undefined])
           const directions = movingShaft ? [1, -1] : [side === 'start' ? -1 : 1, side === 'start' ? 1 : -1]
           const entries = movingShaft ? [side] : female.openings
+          // Each end can reach only as far as the first installed socket on that side.
+          const shoulder = stops && along !== undefined && (side === 'start'
+            ? stops.start - socketWidth / 2 : stops.end + socketWidth / 2)
+          const nearShoulder = Number.isFinite(shoulder) && shoulder >= socketWidth / 2 &&
+            shoulder <= span - socketWidth / 2 && Math.abs(shoulder - along) <= 2 &&
+            scene.pixelDistance(start.clone().addScaledVector(axis, shoulder), event) <= 31
           let best
           let failure
           for (const direction of directions) {
@@ -174,6 +182,7 @@ export function nearbyConnections(context) {
                 const inset = Math.min(socketWidth, span) / 2
                 const center = Math.max(inset, Math.min(span - inset, along))
                 offsets = [socketWidth / 2 - direction * (center + depth)]
+                if (nearShoulder) offsets.unshift(socketWidth / 2 - direction * shoulder)
               }
               if (ownWorld) {
                 const fixedAxis = movingShaft ? axis : axis.clone().multiplyScalar(direction)
@@ -200,7 +209,7 @@ export function nearbyConnections(context) {
                   fit.placement.roll = matchingRoll
                 }
                 const bounds = fit.occupancy.shaft
-                const endpoint = along ?? (side === 'end' ? span : 0)
+                const endpoint = nearShoulder ? shoulder : along ?? (side === 'end' ? span : 0)
                 const reach = movingShaft ? 0 : Math.abs((bounds[0] + bounds[1]) / 2 - endpoint)
                 const score = acceptPose ? pose.position.reduce((sum, value, index) =>
                   sum + (value - moving.position[index]) ** 2, 0) : reach + (movingShaft && direction < 0 ? .01 : 0)
