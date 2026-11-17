@@ -7452,5 +7452,12 @@
         -0.9847533501748036
       ]
     }
-  ]
+  ],
+  "testDrive": {
+    "heading": 0,
+    "mode": "push",
+    "driveParts": [],
+    "steering": "8845-101",
+    "invert": false
+  }
 }

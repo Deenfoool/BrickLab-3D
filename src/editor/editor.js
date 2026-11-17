@@ -8,7 +8,8 @@ import { nearestDetent, portLength } from '../mechanics/axial.js?v=linkages'
 import { nearbyConnections } from './snap.js?v=linkages'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=linkages'
 import { mountLibrary } from './library.js?v=linkages'
-import { createScene } from './scene.js?v=linkages'
+import { createScene } from './scene.js?v=test-drive'
+import { driveTitle, mountDrivePanel } from './drive-panel.js'
 import { componentBundle, expandComponents } from './components.js'
 import { editorLabels } from './labels.js?v=linkages'
 
@@ -62,6 +63,7 @@ export async function mountEditor(root, { document, language, save, download, si
       <div class="editor-modes">
         <button data-el="build" type="button">${t.build}</button>
         <button data-el="kinematics" type="button">${t.kinematics}</button>
+        <button data-el="testDrive" type="button">${driveTitle(language)}</button>
       </div>
       <div class="editor-actions">
         <button data-el="undo" class="editor-square" type="button" title="${t.undo}" aria-label="${t.undo}">↶</button>
@@ -78,7 +80,8 @@ export async function mountEditor(root, { document, language, save, download, si
         <div data-el="empty" class="editor-empty">${t.empty}</div>
         <div class="editor-coordinates" aria-hidden="true"><span>X</span><span>Y</span><span>Z</span></div>
       </section>
-      <div class="editor-overlay">
+      <aside class="editor-test-drive" data-el="drivePanel" hidden></aside>
+      <div class="editor-overlay" data-el="editorOverlay">
         <div class="editor-viewport-tools">
           <button type="button" data-el="selectTool" title="${t.select} (V)" aria-label="${t.select}"><svg class="icon" viewBox="0 0 24 24"><path d="m5 3 13 10-6 1-3 6z"/></svg></button>
           <button type="button" data-el="moveTool" title="${t.move} (G / П)" aria-label="${t.move}"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3m-6 12 3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/></svg></button>
@@ -199,6 +202,13 @@ export async function mountEditor(root, { document, language, save, download, si
   const library = mountLibrary(root.querySelector('#editor-library-body'), {
     sections, language, labels: t, selectPart: selectLibraryPart, signal,
   })
+  let driveConfig = source.testDrive
+  const drivePanel = mountDrivePanel(el('drivePanel'), {
+    language, scene, models, catalog: parts, signal,
+    read: () => ({ parts: state.parts, assembly, config: driveConfig }),
+    write: config => { driveConfig = config; persist() },
+    nameOf: id => parts[state.parts.find(part => part.id === id)?.design]?.[language] ?? id,
+  })
   const undo = []
   const redo = []
   el('name').value = source.name
@@ -206,6 +216,7 @@ export async function mountEditor(root, { document, language, save, download, si
   function currentDocument() {
     return {
       ...source,
+      ...(driveConfig && { testDrive: driveConfig }),
       name: el('name').value.trim() || source.name,
       parts: [...state.parts, ...hiddenParts],
       connections: [...state.links, ...unknownLinks],
@@ -400,17 +411,18 @@ export async function mountEditor(root, { document, language, save, download, si
       failedModels.size ? t.modelsUnavailable(failedModels.size) : '',
       discardedLinks ? t.discarded(discardedLinks) : '',
     ].filter(Boolean).join(' · ')
-    for (const name of ['build', 'kinematics']) el(name).setAttribute('aria-pressed', String(mode === name))
+    el('editorOverlay').hidden = mode === 'testDrive'
+    for (const name of ['build', 'kinematics', 'testDrive']) el(name).setAttribute('aria-pressed', String(mode === name))
     library.setPlacement(!movesExisting ? moving?.design : undefined, pendingPart?.part.design, building)
     el('snap').disabled = !building
     el('snap').setAttribute('aria-pressed', String(snapEnabled))
-    el('undo').disabled = !undo.length
-    el('redo').disabled = !redo.length
+    el('undo').disabled = mode === 'testDrive' || !undo.length
+    el('redo').disabled = mode === 'testDrive' || !redo.length
     const fit = candidate?.fit
     const rotationCue = { fixed: t.fixed, locked: t.locked, detented: t.detented, continuous: t.freely, ball: t.ballJoint, slider: t.travel, spring: t.mechanisms.suspension }
     const cue = fit ? rotationCue[fit.motion.rotation]
       : candidate?.mesh ? t.gearSnap : candidate?.failure?.includes('occupied') ? t.occupied : candidate?.failure ? t.blocked : t.free
-    el('hint').textContent = resize ? t.lengthPreview(parts[resize.pose.design][language], resize.lost.length, resize.kept) :
+    el('hint').textContent = mode === 'testDrive' ? message : resize ? t.lengthPreview(parts[resize.pose.design][language], resize.lost.length, resize.kept) :
       gizmoSnap?.mesh ? t.gearSnap : gizmoSnap?.fit ? t.snapPreview : moving ? `${cue} · ${t.place}`
       : pendingPart ? t.loadingPart(pendingPart.part[language]) : message || (unknownPartCount ? t.unknown(unknownPartCount) : t.camera)
   }
@@ -735,12 +747,15 @@ export async function mountEditor(root, { document, language, save, download, si
   }
 
   function setMode(next) {
+    if (next === mode) return
+    if (mode === 'testDrive') drivePanel.setActive(false)
     cancelGizmo()
     cancelPlacement()
     cancelResize()
     mode = next
     additional.clear()
     setSelection(selected)
+    if (mode === 'testDrive') drivePanel.setActive(true)
   }
 
   function stepAnimation(time) {
@@ -761,6 +776,7 @@ export async function mountEditor(root, { document, language, save, download, si
 
   on(el('build'), 'click', () => setMode('build'))
   on(el('kinematics'), 'click', () => setMode('kinematics'))
+  on(el('testDrive'), 'click', () => setMode('testDrive'))
   on(el('undo'), 'click', () => restore(undo, redo))
   on(el('redo'), 'click', () => restore(redo, undo))
   on(el('frame'), 'click', scene.resetView)
@@ -860,8 +876,9 @@ export async function mountEditor(root, { document, language, save, download, si
     // TransformControls clears its own dragging flag after this event.
     queueMicrotask(() => { if (gizmoPart === part) finishTransform(part, pose, snap) })
   })
-  on(scene.canvas, 'pointermove', event => { pointer = event }, true)
+  on(scene.canvas, 'pointermove', event => { if (mode !== 'testDrive') pointer = event }, true)
   on(scene.canvas, 'pointerdown', event => {
+    if (mode === 'testDrive') return
     if (event.button === 2) {
       rightDown = [event.clientX, event.clientY]
       return
@@ -892,6 +909,7 @@ export async function mountEditor(root, { document, language, save, download, si
     render()
   })
   on(scene.canvas, 'pointermove', event => {
+    if (mode === 'testDrive') return
     if (drag) {
       const min = Number(el('angle').min)
       const max = Number(el('angle').max)
@@ -909,6 +927,7 @@ export async function mountEditor(root, { document, language, save, download, si
     }
   })
   on(scene.canvas, 'pointerup', event => {
+    if (mode === 'testDrive') return
     if (event.button === 2) {
       if (rightDown && Math.hypot(event.clientX - rightDown[0], event.clientY - rightDown[1]) < 5) {
         cancelGizmo()
@@ -936,6 +955,7 @@ export async function mountEditor(root, { document, language, save, download, si
     } else if (click) selectClick(scene.pointer(event).hit, event.shiftKey)
   })
   on(scene.canvas, 'pointercancel', () => {
+    if (mode === 'testDrive') return
     pointerDown = null
     rightDown = null
     drag = null
@@ -945,6 +965,13 @@ export async function mountEditor(root, { document, language, save, download, si
     cancelResize()
   })
   on(window, 'keydown', event => {
+    if (mode === 'testDrive') {
+      if ((event.ctrlKey || event.metaKey) && event.code === 'KeyS' && !event.target.closest?.('input, textarea, select')) {
+        event.preventDefault()
+        persist(true)
+      } else if (event.key === 'Escape') setMode('build')
+      return
+    }
     if (event.key === 'Escape' && (dragActive() || pendingPart)) {
       event.preventDefault()
       cancelGizmo()

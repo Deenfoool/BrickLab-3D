@@ -5,6 +5,7 @@ import { partMesh, parts } from './parts.js?v=linkages'
 import { snapGrid } from './model.js?v=linkages'
 
 const unitScale = [1, 1, 1]
+const axesUp = new THREE.Vector3(0, 1, 0)
 
 export function createScene(host, models) {
   const world = new THREE.Scene()
@@ -40,9 +41,12 @@ export function createScene(host, models) {
   controls.maxDistance = 1800
   const gridSize = 1600
   const floor = new THREE.GridHelper(gridSize, gridSize / snapGrid, 0x475267, 0x2b3039)
+  const frontArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 50, 0xffb01b, 15, 10)
+  frontArrow.visible = false
+  const driveOffset = new THREE.Vector3()
   const axes = new THREE.AxesHelper(52)
   axes.position.y = .08
-  world.add(floor, axes, new THREE.HemisphereLight(0xddeaff, 0x424956, 2.05))
+  world.add(floor, axes, frontArrow, new THREE.HemisphereLight(0xddeaff, 0x424956, 2.05))
   for (const [color, power, position] of [[0xffe5c3, 2.4, [100, 190, 95]], [0xc6d8ff, 1.55, [-110, 80, -155]]]) {
     const light = new THREE.DirectionalLight(color, power)
     light.position.fromArray(position)
@@ -94,6 +98,7 @@ export function createScene(host, models) {
   }
 
   function resetView() {
+    solids.updateWorldMatrix(true, true)
     const bounds = new THREE.Box3().setFromObject(solids)
     const center = bounds.isEmpty() ? new THREE.Vector3(0, 12, 0) : bounds.getCenter(new THREE.Vector3())
     const size = bounds.isEmpty() ? 0 : bounds.getSize(new THREE.Vector3()).length()
@@ -301,6 +306,35 @@ export function createScene(host, models) {
       rect.top + (1 - projected.y) * rect.height / 2 - event.clientY)
   }
 
+  function driveArrow(start, direction) {
+    frontArrow.visible = Boolean(start)
+    if (start) {
+      frontArrow.position.copy(start)
+      frontArrow.setDirection(direction)
+    }
+    invalidate()
+  }
+
+  function driveTransform(origin, position, yaw) {
+    solids.quaternion.setFromAxisAngle(axesUp, yaw)
+    solids.position.copy(origin).add(position).sub(origin.clone().applyQuaternion(solids.quaternion))
+    const offset = position.clone().sub(driveOffset)
+    camera.position.add(offset)
+    controls.target.add(offset)
+    driveOffset.copy(position)
+    floor.position.set(Math.round(position.x / 200) * 200, 0, Math.round(position.z / 200) * 200)
+    controls.update()
+    invalidate()
+  }
+
+  function clearDriveTransform() {
+    solids.position.set(0, 0, 0)
+    solids.quaternion.identity()
+    driveOffset.set(0, 0, 0)
+    floor.position.set(0, 0, 0)
+    invalidate()
+  }
+
   function dispose() {
     active = false
     if (frame !== null) cancelAnimationFrame(frame)
@@ -315,11 +349,12 @@ export function createScene(host, models) {
       object.geometry.dispose()
       object.material.dispose()
     }
+    frontArrow.dispose()
     renderer.dispose()
     renderer.forceContextLoss()
     canvas.remove()
   }
 
   resetView()
-  return { canvas, camera, gizmo, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, cancelGizmo, setTool, pointer, pixelDistance, setParts, select, setGhost, setGroupGhost, setMoving, resetView, dispose }
+  return { canvas, camera, gizmo, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, select, setGhost, setGroupGhost, setMoving, resetView, dispose }
 }

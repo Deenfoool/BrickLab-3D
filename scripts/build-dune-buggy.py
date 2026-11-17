@@ -55,6 +55,7 @@ const assembly = createAssembly(parts, [])
 const connections = parts.flatMap((part, index) => connectAligned(assembly, [part], parts.slice(0, index)))
 const gears = gearPoses(parts).map(({ part, center, axis }) => ({ part, center, axis }))
 const project = newProject('8845 Dune Buggy', { parts, connections, gears })
+project.testDrive = { heading: 0, mode: 'push', driveParts: [], steering: pulley.id, invert: false }
 fs.writeFileSync('examples/dune-buggy.json', JSON.stringify(project, null, 2) + '\n')
 console.log(`${parts.length} parts and ${connections.length} validated connections`)
 """

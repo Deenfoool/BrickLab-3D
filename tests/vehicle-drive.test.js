@@ -1,0 +1,130 @@
+import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import { registerHooks } from 'node:module'
+import { test } from 'node:test'
+import buggy from '../examples/dune-buggy.json' with { type: 'json' }
+
+registerHooks({ resolve(specifier, context, next) {
+  if (specifier === 'three') return next(new URL('../vendor/three/build/three.module.min.js', import.meta.url).href, context)
+  if (specifier.startsWith('three/addons/')) {
+    return next(new URL(specifier.replace('three/addons/', '../vendor/three/examples/jsm/'), import.meta.url).href, context)
+  }
+  return next(specifier, context)
+} })
+
+const { connectAligned, createAssembly } = await import('../src/editor/model.js')
+const { driveSettings, newDriveState, prepareTestDrive, stepTestDrive } = await import('../src/editor/vehicle-drive.js')
+const { loadPartModel, parts: catalog } = await import('../src/editor/parts.js')
+const { parseProject } = await import('../src/projects/documents.js')
+const { Quaternion, Vector3 } = await import('three')
+const models = new Map()
+const originalFetch = globalThis.fetch
+try {
+  globalThis.fetch = async url => new Response(await readFile(url))
+  for (const id of ['3482', '3634', '4288']) models.set(id, await loadPartModel(catalog[id]))
+} finally {
+  globalThis.fetch = originalFetch
+}
+
+function prepare(options = {}, connections = buggy.connections, parts = buggy.parts) {
+  return prepareTestDrive(parts, createAssembly(parts, connections), models, { ...buggy.testDrive, ...options }, catalog)
+}
+
+function run(vehicle, state = newDriveState(vehicle), input = {}, frames = 90) {
+  let result
+  for (let i = 0; i < frames; i++) {
+    result = stepTestDrive(vehicle, state, { throttle: 0, steer: 0, brake: false, ...input }, 1 / 60)
+  }
+  return result
+}
+
+test('8845 rolls on four catalogue tyres in both directions and stops under braking', () => {
+  const base = structuredClone(buggy.parts)
+  const vehicle = prepare()
+  assert.equal(vehicle.ready, true)
+  assert.equal(vehicle.initial.length, 4)
+  assert.deepEqual(vehicle.steered, ['8845-172', '8845-178'])
+  const forward = newDriveState(vehicle)
+  const rollout = run(vehicle, forward, { throttle: 1 })
+  assert.ok(forward.position.z > 250)
+  assert.equal(forward.yaw, 0)
+  assert.equal(rollout.radius, Infinity)
+  const tyre = rollout.poses.find(pose => pose.id === '8845-172')
+  assert.notDeepEqual(tyre.rotation, base.find(part => part.id === tyre.id).rotation)
+  run(vehicle, forward, { throttle: 1, brake: true }, 25)
+  assert.equal(forward.speed, 0)
+  const reverse = newDriveState(vehicle)
+  run(vehicle, reverse, { throttle: -1 })
+  assert.ok(reverse.position.z < -150)
+  assert.deepEqual(buggy.parts, base)
+})
+
+test('physical wheel angles determine the turn and inversion also applies when reversing', () => {
+  for (const invert of [false, true]) {
+    const vehicle = prepare({ invert })
+    for (const throttle of [1, -1]) {
+      const state = newDriveState(vehicle)
+      const turning = run(vehicle, state, { throttle, steer: -1 })
+      assert.equal(Math.sign(state.yaw), (invert ? 1 : -1) * throttle)
+      assert.ok(Number.isFinite(turning.radius) && turning.radius > 0)
+      for (const id of ['8845-42', '8845-43', '8845-60', '8845-99']) {
+        assert.ok(turning.poses.some(part => part.id === id), id)
+      }
+      const centered = run(vehicle, state, { brake: true })
+      assert.equal(centered.radius, Infinity)
+      const restoredRack = centered.poses.find(part => part.id === '8845-60')
+      const originalRack = buggy.parts.find(part => part.id === restoredRack.id)
+      assert.ok(new Vector3().fromArray(restoredRack.position).distanceTo(new Vector3().fromArray(originalRack.position)) < 1e-8)
+    }
+  }
+})
+
+test('powered drive requires a shaft connected to wheels and reports lost steering', () => {
+  const unassigned = prepare({ mode: 'powered', driveParts: ['8845-101', 'missing'] })
+  assert.equal(unassigned.ready, false)
+  assert.equal(run(unassigned, undefined, { throttle: 1 }).speed, 0)
+  const powered = prepare({ mode: 'powered', driveParts: ['8845-5', '8845-6'] })
+  assert.deepEqual(powered.driven, ['8845-174', '8845-176'])
+  assert.ok(run(powered, undefined, { throttle: 1 }).speed > 0)
+  const cut = buggy.connections.filter(({ shaft, socket }) => !(shaft.part === '8845-99' && socket.part === '8845-98'))
+  const disconnected = prepare({}, cut)
+  assert.deepEqual(disconnected.steered, [])
+  assert.equal(run(disconnected, undefined, { throttle: 1, steer: 1 }).yaw, 0)
+})
+
+test('the same setup works for renamed vehicles placed at a different heading', () => {
+  const turn = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI / 2)
+  const id = id => 'renamed-' + id
+  const parts = buggy.parts.map(part => ({ ...part, id: id(part.id),
+    position: new Vector3().fromArray(part.position).applyQuaternion(turn).toArray(),
+    rotation: new Quaternion().fromArray(part.rotation).premultiply(turn).toArray() }))
+  const connections = buggy.connections.map(link => ({ ...link,
+    shaft: { ...link.shaft, part: id(link.shaft.part) }, socket: { ...link.socket, part: id(link.socket.part) } }))
+  const steering = id(buggy.testDrive.steering)
+  assert.equal(prepare({ steering, heading: 0 }, connections, parts).ready, false)
+  const vehicle = prepare({ steering, heading: 90 }, connections, parts)
+  const state = newDriveState(vehicle)
+  assert.equal(vehicle.ready, true)
+  run(vehicle, state, { throttle: 1 })
+  assert.ok(state.position.x > 250 && Math.abs(state.position.z) < .01)
+})
+
+test('integral wheels can use their mounted axle bore as the running axis', () => {
+  const wheel = (id, z) => ({ id, design: '4288', position: [0, 24, z], rotation: [0, Math.SQRT1_2, 0, Math.SQRT1_2] })
+  const wheels = [wheel('front', 100), wheel('rear', -100)]
+  const axles = wheels.map(part => ({ id: 'axle-' + part.id, design: '3705',
+    position: part.position, rotation: [0, 0, 0, 1] }))
+  const pieces = [...wheels, ...axles]
+  const assembly = createAssembly(pieces, [])
+  connectAligned(assembly, wheels, axles)
+  assert.equal(assembly.connections.length, 2)
+  const vehicle = prepareTestDrive(pieces, assembly, models, { mode: 'push' }, catalog)
+  assert.equal(vehicle.initial.length, 2)
+})
+
+test('drive assignments preserve file round-tripping and invalid settings stay safe', () => {
+  const testDrive = driveSettings({ heading: 90, mode: 'powered', driveParts: ['one', 'one', 2], steering: 'two', invert: true })
+  const reopened = parseProject(JSON.stringify({ ...buggy, testDrive }))
+  assert.deepEqual(reopened.testDrive, { heading: 90, mode: 'powered', driveParts: ['one'], steering: 'two', invert: true })
+  assert.deepEqual(driveSettings({ mode: 'unexpected', heading: NaN }), driveSettings(undefined))
+})
