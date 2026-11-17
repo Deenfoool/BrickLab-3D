@@ -30,6 +30,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { Matrix4, Quaternion, Vector3 } = await import('three')
 const { connectAligned, createAssembly, gearPoses } = await import('./src/editor/model.js')
 const { newProject } = await import('./src/projects/documents.js')
+const { promoteLegacyBelts } = await import('./src/mechanics/belts.js')
 const { portsFor } = await import('./src/mechanics/catalog.js')
 const { worldPort } = await import('./src/editor/placement.js')
 const records = JSON.parse(fs.readFileSync(0, 'utf8'))
@@ -57,15 +58,26 @@ const offsets = holes.filter(hole => Math.abs(hole.axis.dot(pin.axis)) > .99999)
 }).filter(offset => Math.abs(offset.length() - 2) < .001)
 if (offsets.length !== 1) throw new Error('Crank handle has no unique seat')
 handle.position = new Vector3().fromArray(handle.position).add(offsets[0]).toArray()
+// The original pin ends flush with the bush. Seat the round fan plates
+// on a 2L axle end while keeping the bearing and both pulley planes in place.
+const fanPin = parts[110]
+if (fanPin.design !== '3749' || parts[117].design !== '4032a') throw new Error('Unexpected 858 fan')
+fanPin.design = '65249'
+const pinAxis = worldPort(fanPin, portsFor(fanPin.design).find(port => port.role === 'axle-pin')).axis
+fanPin.position = new Vector3().fromArray(fanPin.position).addScaledVector(pinAxis, 10).toArray()
 const assembly = createAssembly(parts, [])
 const connections = parts.flatMap((part, index) => connectAligned(assembly, [part], parts.slice(0, index)))
 if (!connections.some(link => link.shaft.part === handle.id && link.socket.part === gear.id)) {
   throw new Error('Crank handle seat is incompatible')
 }
+if (!connections.some(link => link.shaft.part === fanPin.id && link.socket.part === parts[117].id)) {
+  throw new Error('Fan axle and blade carrier must be engaged')
+}
 const gears = gearPoses(parts).map(({ part, center, axis }) => ({ part, center, axis }))
-const project = newProject('858 Inline Engine', { parts, connections, gears })
+const project = promoteLegacyBelts(newProject('858 Inline Engine', { parts, connections, gears }))
+if (project.belts?.length !== 2) throw new Error('Both 858 drives must fit their pulleys')
 fs.writeFileSync('examples/inline-engine.json', JSON.stringify(project) + '\n')
-console.log(`${parts.length} parts, ${connections.length} validated connections, ${gears.length} gears`)
+console.log(`${project.parts.length} parts, ${connections.length} joints, ${project.belts.length} belts`)
 """
 
 

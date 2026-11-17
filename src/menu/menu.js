@@ -1,5 +1,5 @@
-import { editorLabels } from '../editor/labels.js?v=engine-motion'
-import { locales } from './locale.js?v=inline-engine'
+import { editorLabels } from '../editor/labels.js?v=belt-drive'
+import { locales } from './locale.js?v=belt-drive'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
 const byId = id => document.getElementById(id)
@@ -212,7 +212,7 @@ async function openEditor(project) {
   editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=engine-motion')
+    const { mountEditor } = await import('../editor/editor.js?v=belt-drive')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

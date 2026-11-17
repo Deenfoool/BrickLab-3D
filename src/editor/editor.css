@@ -69,6 +69,11 @@
 .editor-insertion div{display:flex;align-items:center;gap:8px;justify-content:space-between}
 .editor-insertion small{color:#a7adb8}
 .editor-motion input{display:block;width:100%;accent-color:#ffb01b}
+.editor-belt-panel:not([hidden]){display:grid;gap:8px}
+.editor-belt-panel label{display:grid;gap:4px;font-size:12px}
+.editor-belt-panel select{width:100%;min-width:0;padding:6px;color:#e6e8ec;background:#15181d;border:1px solid #424650;border-radius:6px}
+.editor-belt-panel [data-belt="status"]{margin:0}
+.editor-belt-panel [data-belt="list"]>div{display:grid;gap:5px;margin-top:8px;padding-top:8px;border-top:1px solid #41454e}
 .editor-status{display:flex;justify-content:space-between;gap:14px;padding:8px 15px;border-top:1px solid #343840;color:#c4c9d4;font-size:12px}
 .editor-status span:last-child{margin-inline-start:auto;white-space:nowrap}
 .editor-status [data-el="loadNotice"]:empty{display:none}

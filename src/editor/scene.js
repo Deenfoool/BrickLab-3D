@@ -2,7 +2,8 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { partMesh, parts } from './parts.js?v=inline-engine'
-import { snapGrid } from './model.js?v=engine-motion'
+import { createBeltScene } from './belt-scene.js?v=belt-drive'
+import { snapGrid } from './model.js?v=belt-drive'
 
 const unitScale = [1, 1, 1]
 const axesUp = new THREE.Vector3(0, 1, 0)
@@ -59,6 +60,10 @@ export function createScene(host, models) {
   const solids = new THREE.Group()
   world.add(solids)
   const objects = new Map()
+  const belts = createBeltScene(solids, id => {
+    const part = objects.get(id)
+    return part && { design: part.userData.design, position: part.position.toArray(), rotation: part.quaternion.toArray() }
+  }, invalidate)
   const selection = new THREE.BoxHelper(new THREE.Object3D(), 0xffb01b)
   selection.visible = false
   world.add(selection)
@@ -139,6 +144,7 @@ export function createScene(host, models) {
       object.updateMatrixWorld(true)
       warnings.get(part.id)?.setFromObject(object)
     }
+    belts.update()
     select(selectedId)
   }
 
@@ -234,6 +240,7 @@ export function createScene(host, models) {
       object.updateMatrixWorld(true)
       warnings.get(part.id)?.setFromObject(object)
     }
+    belts.update()
     invalidate()
   }
 
@@ -367,6 +374,7 @@ export function createScene(host, models) {
     resize.disconnect()
     controls.dispose()
     highlight([])
+    belts.dispose()
     gizmo.dispose()
     setGhost(null)
     setGroupGhost([])
@@ -382,5 +390,5 @@ export function createScene(host, models) {
   }
 
   resetView()
-  return { canvas, camera, gizmo, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, select, setGhost, setGroupGhost, setMoving, resetView, dispose }
+  return { canvas, camera, gizmo, belts, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, select, setGhost, setGroupGhost, setMoving, resetView, dispose }
 }

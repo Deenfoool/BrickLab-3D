@@ -14,6 +14,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 const { createAssembly, connectAligned, connectPlaced, rotationMotion, rotationPoses } = await import('../src/editor/model.js')
+const { assembleBelts, beltLayout, beltPath, beltTravel, grooveOf, promoteLegacyBelts } = await import('../src/mechanics/belts.js')
 const { rotationalDrive } = await import('../src/mechanics/rotation.js')
 const { componentBundle, expandComponents } = await import('../src/editor/components.js')
 const { jointBodies, linkageDrive } = await import('../src/mechanics/linkage.js')
@@ -216,15 +217,92 @@ test('8845 Dune Buggy keeps all its parts, stored connections and four mounted t
   }
 })
 
-test('858 Inline Engine keeps both drive belts, all three pistons and its seated connections', () => {
-  assert.equal(engine.parts.length, 187)
+test('858 retains two belts, the seated fan and all three pistons on reload', () => {
+  assert.equal(engine.parts.length, 185)
   assert.equal(engine.parts.filter(part => part.design === '3652').length, 3)
-  assert.deepEqual(engine.parts.filter(part => part.design.startsWith('858-belt-')).map(part => part.design),
-    ['858-belt-1', '858-belt-2'])
   assert.ok(engine.parts.every(part => availableParts[part.design]))
-  const { connections } = createAssembly(engine.parts, engine.connections)
-  assert.equal(engine.connections.length, 381)
-  assert.equal(connections.length, engine.connections.length)
+  const project = JSON.parse(JSON.stringify(engine))
+  const assembly = createAssembly(project.parts, project.connections, { belts: project.belts })
+  assert.equal(assembly.connections.length, 383)
+  assert.equal(assembly.connections.length, engine.connections.length)
+  assert.deepEqual(assembly.belts.map(belt => [belt.a, belt.b]),
+    [['858-61', '858-112'], ['858-62', '858-54']])
+  const motion = rotationMotion('858-44', project.parts, assembly)
+  assert.equal(motion.kind, 'engine')
+  const poses = new Map(rotationPoses(project.parts, motion, .5).map(part => [part.id, part]))
+  // Both the fan blades and the other belt's horizontal axle must turn.
+  for (const id of ['858-114', '858-116', '858-53']) {
+    const initial = project.parts.find(part => part.id === id)
+    assert.notDeepEqual(poses.get(id).rotation, initial.rotation)
+  }
+  const disconnected = createAssembly(project.parts, project.connections, { belts: project.belts.slice(1) })
+  const withoutFan = rotationMotion('858-44', project.parts, disconnected)
+  assert.equal(withoutFan.spins.has('858-114'), false)
+  assert.ok(withoutFan.spins.has('858-53'))
+  assert.equal(withoutFan.meshes.length, 4)
+})
+
+test('an open belt transfers reversible rotation between independent pulley sizes', () => {
+  const large = part('motor-wheel', '4185a')
+  const small = { ...part('take-up-wheel', '3713'), position: [88, 26, 0] }
+  const parts = [large, small]
+  const belt = { id: 'loop', a: { part: large.id, groove: 'rim' }, b: { part: small.id, groove: 'rim' } }
+  const assembly = createAssembly(parts, [], { belts: [belt] })
+  const [retained] = assembly.belts
+  const expected = 28.25 / 7.75
+  const check = (a, b) => assert.ok(Math.abs(a - b) < 1e-7, `${a} should equal ${b}`)
+  check(retained.ratio, expected)
+  const fromA = rotationMotion(large.id, parts, assembly)
+  const fromB = rotationMotion(small.id, parts, assembly)
+  check(fromA.spins.get(small.id).ratio, expected)
+  check(fromB.spins.get(large.id).ratio, 1 / expected)
+  check(beltTravel(retained, fromA.spins, .5), 28.25 * .5)
+  check(beltTravel(retained, fromA.spins, -.5), -28.25 * .5)
+  const path = beltPath(retained.layout)
+  assert.ok(path.length > 40)
+  const closedLength = path.reduce((sum, entry, i) => sum + entry.point.distanceTo(path[(i + 1) % path.length].point), 0)
+  assert.ok(Math.abs(closedLength - retained.layout.length) < .1)
+
+  assert.equal(rotationMotion(large.id, parts, createAssembly(parts, []))?.spins?.has(small.id) ?? false, false)
+  const flipped = { ...small, rotation: [1, 0, 0, 0] }
+  const flippedAssembly = createAssembly([large, flipped], [], { belts: [belt] })
+  const reversedNormal = rotationMotion(large.id, [large, flipped], flippedAssembly).spins.get(small.id)
+  check(reversedNormal.ratio, -expected)
+  check(reversedNormal.axis[2], -1)
+})
+
+test('a belt requires flat seating, clearance and a free groove, and rejects a conflicting gear loop', () => {
+  const first = part('first', '4185a')
+  const second = { ...part('second', '3713'), position: [70, 0, 0] }
+  const a = grooveOf(first)
+  assert.equal(beltLayout(a, grooveOf({ ...second, position: [70, 0, 15] })).reason, 'plane')
+  assert.equal(beltLayout(a, grooveOf({ ...second, rotation: [.70710678, 0, 0, .70710678] })).reason, 'axes')
+  assert.equal(beltLayout(a, grooveOf({ ...second, position: [25, 0, 0] })).reason, 'clearance')
+  assert.equal(beltLayout(a, grooveOf(part('plain', '3705'))).reason, 'groove')
+
+  const belt = { id: 'drive', a: { part: first.id, groove: 'rim' }, b: { part: second.id, groove: 'rim' } }
+  const index = new Map([first, second].map(part => [part.id, part]))
+  const repeated = { ...belt, id: 'duplicate', a: belt.b, b: belt.a }
+  const compiled = assembleBelts(index, [belt, repeated])
+  assert.equal(compiled.length, 1)
+  const gears = [first, second].map(part => ({ part: part.id, center: part.position, axis: [0, 0, 1], radius: 35, teeth: 28, width: 8 }))
+  for (const id of index.keys()) {
+    assert.equal(rotationalDrive(id, index.keys(), [], gears, undefined, [], compiled).reason, 'inconsistent-transmission')
+  }
+})
+
+test('legacy 858 belt meshes are upgraded by their geometry in old saved builds', () => {
+  const { belts, ...old } = engine
+  const hidden = belts.map((belt, i) => {
+    const origin = old.parts.find(part => part.id === belt.a.part).position
+    // The original band's local +Z is +X, local -Y is +Y, local -X is -Z.
+    return { ...part('legacy-' + i, '858-belt-' + (i + 1)), position: origin,
+      rotation: new Quaternion().setFromAxisAngle(new Vector3(1, 0, 1).normalize(), Math.PI).toArray() }
+  })
+  const upgraded = promoteLegacyBelts({ ...old, parts: [...old.parts, ...hidden] })
+  assert.equal(upgraded.parts.length, old.parts.length)
+  assert.deepEqual(upgraded.belts.map(({ a, b }) => ({ a, b })), belts.map(({ a, b }) => ({ a, b })))
+  assert.equal(promoteLegacyBelts(upgraded), upgraded)
 })
 
 test('858 links its handle, three pistons and valve gear for a complete reversible turn', () => {

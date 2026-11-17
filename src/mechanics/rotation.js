@@ -1,4 +1,4 @@
-import { measureInsertion } from './assembly.js?v=inline-engine'
+import { measureInsertion } from './assembly.js?v=belt-drive'
 import { evaluateSpurMesh } from './gears.js'
 import { dot } from './vector.js?v=connector-coverage'
 
@@ -6,8 +6,8 @@ const rigid = motion => motion === 'fixed' || motion === 'locked'
 const sameAxis = (a, b) => measureInsertion(a, b)?.direction
 
 // Each rigid component moves as one body, including parts located off the spin axis.
-export function rotationalDrive(driver, ids, joints, gears, preferred, couplings = []) {
-  const groups = new Map(Array.from(ids, id => [id, { members: [id], joints: [], gears: [], couplings: [] }]))
+export function rotationalDrive(driver, ids, joints, gears, preferred, couplings = [], belts = []) {
+  const groups = new Map(Array.from(ids, id => [id, { members: [id], joints: [], gears: [], couplings: [], belts: [] }]))
   if (!groups.has(driver)) return null
   for (const { a, b, motion } of joints) {
     if (!rigid(motion)) continue
@@ -34,10 +34,15 @@ export function rotationalDrive(driver, ids, joints, gears, preferred, couplings
     groups.get(coupling.b).couplings.push(coupling)
   }
 
+  for (const belt of belts) {
+    groups.get(belt.a).belts.push(belt)
+    if (groups.get(belt.a) !== groups.get(belt.b)) groups.get(belt.b).belts.push(belt)
+  }
+
   const jointLine = (joint, body) => groups.get(joint.a) === body ? joint.shaftLine : joint.socketLine
   const source = groups.get(driver)
   const bearings = source.joints.filter(joint => joint.motion === 'continuous').map(joint => jointLine(joint, source))
-  const couplingLines = source.couplings.map(coupling => groups.get(coupling.a) === source ? coupling.lineA : coupling.lineB)
+  const couplingLines = [...source.couplings, ...source.belts].map(coupling => groups.get(coupling.a) === source ? coupling.lineA : coupling.lineB)
   const guides = [...bearings, ...couplingLines]
   const candidates = guides.length ? guides : preferred ? [preferred] : []
   if (!candidates.length) return null
@@ -62,6 +67,18 @@ export function rotationalDrive(driver, ids, joints, gears, preferred, couplings
     return true
   }
   const pending = [source]
+  function transferLinear(spin, next, from, to, gain, invalidAxis) {
+    const direction = sameAxis(spin, from)
+    if (!direction) return invalidAxis
+    const scale = direction * gain
+    const ratio = spin.ratio === undefined ? undefined : spin.ratio * scale
+    if (ratio !== undefined && (!Number.isFinite(ratio) || ratio === 0)) return 'ratio-out-of-range'
+    const mapping = spin.angleAt && (angle => angleAt(spin, angle) * scale)
+    if (!assign(next, to, ratio, mapping)) return 'inconsistent-transmission'
+    return null
+  }
+
+  const activeBelts = new Set()
   const meshes = []
   const seenMeshes = new Set()
   const cardans = new Map()
@@ -82,22 +99,23 @@ export function rotationalDrive(driver, ids, joints, gears, preferred, couplings
       cardans.set(coupling.cross, angle => coupling.crossPose(
         forward ? inputAngle(angle) : outputAngle(angle), forward ? outputAngle(angle) : inputAngle(angle)))
     }
+    for (const belt of body.belts) {
+      const forward = groups.get(belt.a) === body
+      const from = forward ? belt.lineA : belt.lineB
+      const to = forward ? belt.lineB : belt.lineA
+      const next = groups.get(forward ? belt.b : belt.a)
+      const failure = transferLinear(spin, next, from, to, forward ? belt.ratio : 1 / belt.ratio, 'off-axis-belt')
+      if (failure) return { ok: false, reason: failure }
+      activeBelts.add(belt)
+    }
     for (const gear of body.gears) {
       for (const other of gears) {
         if (gear.part === other.part) continue
         const mesh = evaluateSpurMesh(gear, other)
         if (!mesh.ok) continue
-        const gain = sameAxis(spin, { start: gear.center, axis: gear.axis })
-        if (!gain) return { ok: false, reason: 'off-axis-gear' }
-        const next = groups.get(other.part)
-        const line = { start: other.center, axis: other.axis }
-        const scale = gain * mesh.ratio
-        const ratio = spin.ratio === undefined ? undefined : spin.ratio * scale
-        if (ratio !== undefined && (!Number.isFinite(ratio) || ratio === 0)) {
-          return { ok: false, reason: 'ratio-out-of-range' }
-        }
-        const mapping = spin.angleAt && (angle => angleAt(spin, angle) * scale)
-        if (!assign(next, line, ratio, mapping)) return { ok: false, reason: 'inconsistent-transmission' }
+        const failure = transferLinear(spin, groups.get(other.part), { start: gear.center, axis: gear.axis },
+          { start: other.center, axis: other.axis }, mesh.ratio, 'off-axis-gear')
+        if (failure) return { ok: false, reason: failure }
         const key = JSON.stringify([gear.part, other.part].sort())
         if (!seenMeshes.has(key)) {
           seenMeshes.add(key)
@@ -121,5 +139,5 @@ export function rotationalDrive(driver, ids, joints, gears, preferred, couplings
       if (!valid(a, joint.shaftLine) || !valid(b, joint.socketLine)) return { ok: false, reason: 'constrained-joint' }
     }
   }
-  return { ok: true, meshes, cardans, spins: new Map(pending.flatMap(body => body.members.map(id => [id, spins.get(body)]))) }
+  return { ok: true, meshes, cardans, belts: [...activeBelts], spins: new Map(pending.flatMap(body => body.members.map(id => [id, spins.get(body)]))) }
 }

@@ -1,5 +1,5 @@
-import { rotationMotion, rotationPoses } from './model.js?v=engine-motion'
-import { wheelContact } from './vehicle-drive.js?v=engine-motion'
+import { rotationMotion, rotationPoses } from './model.js?v=belt-drive'
+import { wheelContact } from './vehicle-drive.js?v=belt-drive'
 
 function readTravel(vehicle, motion, wheel, spring, restLength, angle) {
   const poses = rotationPoses(vehicle.parts, motion, angle)

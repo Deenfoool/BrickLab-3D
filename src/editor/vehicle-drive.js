@@ -1,7 +1,7 @@
 import { Quaternion, Vector3 } from 'three'
-import { portsFor } from '../mechanics/catalog.js?v=inline-engine'
-import { rotationMotion, rotationPoses } from './model.js?v=engine-motion'
-import { worldPort } from './placement.js?v=inline-engine'
+import { portsFor } from '../mechanics/catalog.js?v=belt-drive'
+import { rotationMotion, rotationPoses } from './model.js?v=belt-drive'
+import { worldPort } from './placement.js?v=belt-drive'
 import { terrainPose } from './drive-terrain.js?v=drive-scale'
 
 const up = new Vector3(0, 1, 0)
@@ -130,7 +130,7 @@ export function prepareTestDrive(parts, assembly, models, input, catalog = {}) {
   function addDrive(id) {
     if (!byId.has(id)) return
     const plan = rotationMotion(id, parts, assembly)
-    if (!plan?.ok || plan.solve) return
+    if (!plan?.ok || !plan.spins) return
     const reached = initial.filter(c => {
       const spin = plan.spins.get(c.wheel.id)
       return spin && Math.abs(vector(spin.axis).dot(c.axis)) > .99

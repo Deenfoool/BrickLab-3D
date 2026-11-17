@@ -1,12 +1,13 @@
 import { Quaternion, Vector3 } from 'three'
 import { connectionMode } from '../mechanics/axial.js?v=linkages'
-import { Assembly } from '../mechanics/assembly.js?v=inline-engine'
-import { rotationalDrive } from '../mechanics/rotation.js?v=inline-engine'
-import { engineDrive } from '../mechanics/engine.js'
+import { Assembly } from '../mechanics/assembly.js?v=belt-drive'
+import { rotationalDrive } from '../mechanics/rotation.js?v=belt-drive'
+import { assembleBelts } from '../mechanics/belts.js?v=belt-drive'
+import { engineDrive } from '../mechanics/engine.js?v=belt-drive'
 import { cardanCoupling } from '../mechanics/cardan.js'
 import { articulationDrive, jointBodies, linkageDrive, mechanismPoses, motionRange, suspensionDrive } from '../mechanics/linkage.js'
-import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=inline-engine'
-import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=inline-engine'
+import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=belt-drive'
+import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=belt-drive'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
 export const snapGrid = 10
@@ -51,7 +52,7 @@ export function loadParts(document, models) {
   return records
 }
 
-export function createAssembly(parts, links) {
+export function createAssembly(parts, links, { belts } = {}) {
   const catalog = Object.create(null)
   const assembly = new Assembly(catalog)
   const byId = new Map(parts.map(part => [part.id, part]))
@@ -66,6 +67,7 @@ export function createAssembly(parts, links) {
     const b = byId.get(link?.socket?.part)
     if (a && b && link.placement) connectPlaced(assembly, a, b, link, true)
   }
+  assembly.belts = assembleBelts(byId, belts)
   return assembly
 }
 
@@ -169,7 +171,7 @@ export function rotationMotion(selected, parts, assembly) {
   const joints = assemblyJoints(parts, assembly)
   const graph = jointBodies(byId.keys(), joints)
   const gears = gearPoses(parts)
-  const engine = engineDrive(selected, byId, graph, gears, joints)
+  const engine = engineDrive(selected, byId, graph, gears, joints, assembly.belts)
   if (engine || !driver) return engine
   const ports = portsFor(driver.design)
   const rotor = ports.some(port => spinRoles.has(port.role)) ? rotationPort(ports) : ports.find(port => port.rotor)
@@ -196,10 +198,10 @@ export function rotationMotion(selected, parts, assembly) {
     pivots.forEach(pivot => replaced.add(pivot))
   }
   const spinJoints = joints.filter(joint => !replaced.has(joint))
-  const rotation = rotationalDrive(selected, byId.keys(), spinJoints, gears, preferred, couplings)
+  const rotation = rotationalDrive(selected, byId.keys(), spinJoints, gears, preferred, couplings, assembly.belts)
   const rotateGear = id => {
     const gear = gears.find(item => item.part === id)
-    return rotationalDrive(id, byId.keys(), spinJoints, gears, { start: gear.center, axis: gear.axis }, couplings)
+    return rotationalDrive(id, byId.keys(), spinJoints, gears, { start: gear.center, axis: gear.axis }, couplings, assembly.belts)
   }
   const racks = parts.flatMap(part => {
     const profile = gearRacks[part.design]

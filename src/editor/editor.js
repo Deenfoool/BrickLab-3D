@@ -1,18 +1,20 @@
 import { mountFloatingPanels } from './floating-panels.js?v=floating-panels'
 import { Plane, Quaternion, Vector3 } from 'three'
-import { portsFor } from '../mechanics/catalog.js?v=inline-engine'
-import { baseRotation, samePose, worldPort } from './placement.js?v=inline-engine'
-import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=engine-motion'
-import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=inline-engine'
+import { portsFor } from '../mechanics/catalog.js?v=belt-drive'
+import { baseRotation, samePose, worldPort } from './placement.js?v=belt-drive'
+import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=belt-drive'
+import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
 import { nearestDetent, portLength } from '../mechanics/axial.js?v=linkages'
-import { nearbyConnections } from './snap.js?v=inline-engine'
+import { nearbyConnections } from './snap.js?v=belt-drive'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=inline-engine'
-import { mountLibrary } from './library.js?v=inline-engine'
-import { createScene } from './scene.js?v=engine-motion'
-import { driveTitle, mountDrivePanel } from './drive-panel.js?v=engine-motion'
-import { mountPhysicsPanel, physicsTitle } from './physics-panel.js?v=engine-motion'
-import { componentBundle, expandComponents } from './components.js?v=engine-motion'
-import { editorLabels } from './labels.js?v=engine-motion'
+import { mountLibrary } from './library.js?v=belt-drive'
+import { createScene } from './scene.js?v=belt-drive'
+import { driveTitle, mountDrivePanel } from './drive-panel.js?v=belt-drive'
+import { mountPhysicsPanel, physicsTitle } from './physics-panel.js?v=belt-drive'
+import { mountBeltPanel } from './belt-panel.js?v=belt-drive'
+import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
+import { componentBundle, expandComponents } from './components.js?v=belt-drive'
+import { editorLabels } from './labels.js?v=belt-drive'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
@@ -26,7 +28,7 @@ const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
 export async function mountEditor(root, { document, language, save, download, signal }) {
-  const source = expandComponents(document, parts)
+  const source = promoteLegacyBelts(expandComponents(document, parts))
   const t = editorLabels[language]
   const models = new Map()
   const requests = new Map()
@@ -92,6 +94,7 @@ export async function mountEditor(root, { document, language, save, download, si
           <button type="button" data-el="rotateTool" title="${t.rotate} (R / К)" aria-label="${t.rotate}"><svg class="icon" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 1-3-6m-2 3h5V3"/></svg></button>
           <button type="button" data-el="rotationSnap" aria-label="${t.rotationSnap}" aria-pressed="true">45°</button>
           <button type="button" data-el="lengthTool" title="${t.length} (S / Ы)" aria-label="${t.length}"><svg class="icon" viewBox="0 0 24 24"><path d="M3 12h18M7 8l-4 4 4 4m10-8 4 4-4 4M12 7v10"/></svg></button>
+          <button type="button" data-el="beltTool" title="${t.beltAdd}" aria-label="${t.beltAdd}">${t.belt}</button>
           <button type="button" data-el="snap" aria-pressed="true">${t.snap}</button>
           <button type="button" data-el="frame">${t.reset}</button>
         </div>
@@ -141,6 +144,7 @@ export async function mountEditor(root, { document, language, save, download, si
                 <button type="button" data-el="play">${t.play}</button>
                 <button type="button" data-el="applyHinge" hidden>${t.applyHinge}</button>
               </div>
+              <section class="editor-belt-panel" data-el="beltPanel" aria-label="${t.beltAdd}" hidden></section>
               <p class="editor-links" data-el="links"></p>
             </div>
           </aside>
@@ -165,8 +169,14 @@ export async function mountEditor(root, { document, language, save, download, si
   const hiddenGears = Array.isArray(source.gears) ? source.gears.filter(gear => !shown.has(gear?.part)) : []
   const hiddenIds = new Set(hiddenParts.map(part => part?.id).filter(id => typeof id === 'string' && !shown.has(id)))
   const unknownLinks = source.connections.filter(link => hiddenIds.has(link?.shaft?.part) || hiddenIds.has(link?.socket?.part))
-  let state = { parts: visibleParts, links: source.connections.filter(link => shown.has(link?.shaft?.part) && shown.has(link?.socket?.part)) }
-  let assembly = createAssembly(state.parts, state.links)
+  const beltRecords = Array.isArray(source.belts) ? source.belts : []
+  const hasHiddenEndpoint = record => hiddenIds.has(record?.a?.part) || hiddenIds.has(record?.b?.part)
+  const hiddenBelts = beltRecords.filter(hasHiddenEndpoint)
+  let state = { parts: visibleParts, belts: beltRecords.filter(record => !hasHiddenEndpoint(record)),
+    links: source.connections.filter(link => shown.has(link?.shaft?.part) && shown.has(link?.socket?.part)) }
+  let assembly = createAssembly(state.parts, state.links, { belts: state.belts })
+  state.belts = assembly.belts.map(({ record }) => record)
+  const discardedBelts = beltRecords.length - state.belts.length - hiddenBelts.length
   const discardedLinks = source.connections.length - assembly.connections.length - unknownLinks.length
   state.links = assembly.connections.map(connectionRecord)
   let mode = 'build'
@@ -206,6 +216,20 @@ export async function mountEditor(root, { document, language, save, download, si
   const library = mountLibrary(root.querySelector('#editor-library-body'), {
     sections, language, labels: t, selectPart: selectLibraryPart, signal,
   })
+  const beltPanel = mountBeltPanel(el('beltPanel'), {
+    t, language, signal,
+    nameOf: part => parts[part.design][language],
+    preview: plan => scene.belts.preview(plan),
+    add: record => {
+      const belts = [...state.belts, record]
+      const trial = createAssembly(state.parts, state.links, { belts })
+      const motion = rotationMotion(record.a.part, state.parts, trial)
+      if (!motion?.ok || !(motion.belts ?? motion.rotation?.belts)?.some(belt => belt.record.id === record.id)) return false
+      commit({ ...state, belts })
+      return true
+    },
+    remove: id => commit({ ...state, belts: state.belts.filter(record => record.id !== id) }),
+  })
   let driveConfig = source.testDrive
   const drivePanel = mountDrivePanel(el('drivePanel'), {
     language, scene, models, catalog: parts, signal,
@@ -227,6 +251,7 @@ export async function mountEditor(root, { document, language, save, download, si
       name: el('name').value.trim() || source.name,
       parts: [...state.parts, ...hiddenParts],
       connections: [...state.links, ...unknownLinks],
+      belts: [...state.belts, ...hiddenBelts],
       gears: [...gearPoses(state.parts).map(({ part, center, axis }) => ({ part, center, axis })), ...hiddenGears],
     }
   }
@@ -266,6 +291,8 @@ export async function mountEditor(root, { document, language, save, download, si
       } else {
         lastPreview = angle
         scene.previewParts(poses)
+        scene.belts.travel(new Map(transmission.belts?.map(belt =>
+          [belt.record.id, beltTravel(belt, transmission.spins, value)])))
         scene.select(selected)
       }
     }
@@ -300,6 +327,7 @@ export async function mountEditor(root, { document, language, save, download, si
   function setSelection(id) {
     stopAnimation()
     scene.setParts(state.parts)
+    scene.belts.travel(new Map())
     selected = id
     if (tool === 'length' && !canResize(selectedPart())) tool = 'move'
     scene.select(id)
@@ -314,7 +342,9 @@ export async function mountEditor(root, { document, language, save, download, si
 
   function applyState(next) {
     state = next
-    assembly = createAssembly(state.parts, state.links)
+    assembly = createAssembly(state.parts, state.links, { belts: state.belts })
+    state.belts = assembly.belts.map(({ record }) => record)
+    scene.belts.set(state.belts)
     links = assembly.connections
     state.links = links.map(connectionRecord)
     const ids = new Set(state.parts.map(part => part.id))
@@ -331,7 +361,7 @@ export async function mountEditor(root, { document, language, save, download, si
     undo.push(state)
     if (undo.length > 80) undo.shift()
     redo.length = 0
-    applyState(next)
+    applyState({ belts: state.belts, ...next })
   }
 
   function restore(from, to) {
@@ -379,13 +409,16 @@ export async function mountEditor(root, { document, language, save, download, si
     el('selection').textContent = additional.size ? t.selectedCount(selectionIds().length)
       : part ? parts[part.design][language] : transmission?.kind === 'engine' ? t.crankshaft : t.none
     const building = mode === 'build'
-    el('partActions').hidden = !part || !building || dragActive()
-    el('paste').hidden = !clipboard || !building || dragActive()
-    for (const name of ['select', 'move', 'rotate', 'length']) {
+    const addingBelt = building && tool === 'belt'
+    el('selection').hidden = addingBelt
+    el('partActions').hidden = !part || !building || addingBelt || dragActive()
+    el('paste').hidden = !clipboard || !building || addingBelt || dragActive()
+    for (const name of ['select', 'move', 'rotate', 'length', 'belt']) {
       const control = el(`${name}Tool`)
-      control.disabled = !building || (name === 'length' && !canResize(part))
+      control.disabled = !building || (name === 'length' && !canResize(part)) || (name === 'belt' && dragActive())
       control.setAttribute('aria-pressed', String(tool === name))
     }
+    beltPanel.render(addingBelt, state.parts, assembly.belts)
     const rotationSnap = el('rotationSnap')
     rotationSnap.disabled = !building || Boolean(gizmoPart || resize)
     rotationSnap.setAttribute('aria-pressed', String(steppedRotation))
@@ -395,9 +428,13 @@ export async function mountEditor(root, { document, language, save, download, si
       ? tool === 'move' ? 'translate' : 'rotate' : null, part, selectionIds())
     positionHandles()
     if (part) el('color').value = /^#[0-9a-f]{6}$/i.test(part.color) ? part.color : parts[part.design].color
+    const engagedBelts = (transmission?.belts ?? transmission?.rotation?.belts)?.length
+    const drives = [transmission?.meshes?.length || !engagedBelts ? `${t.mesh}: ${transmission?.meshes?.length ?? 0}` : '',
+      engagedBelts ? t.beltCount(engagedBelts) : ''].filter(Boolean).join(' · ')
+    el('links').hidden = addingBelt
     el('links').textContent = mode === 'kinematics'
       ? hinge ? (hinge.ok ? t.detented : t.closedHinge)
-        : transmission ? (transmission.ok ? (t.mechanisms[transmission.kind] ?? `${t.mesh}: ${transmission.meshes.length}`) : t.transmissionError)
+        : transmission ? (transmission.ok ? (t.mechanisms[transmission.kind] ?? drives) : t.transmissionError)
           : t.driver
       : part ? (portsFor(part.design).length ? `${t.joints}: ${selectedLinks.length}` : t.geometryOnly) : ''
     el('motion').hidden = (!hinge?.ok && !transmission?.ok) || mode !== 'kinematics'
@@ -415,10 +452,12 @@ export async function mountEditor(root, { document, language, save, download, si
     el('insertion').hidden = !moving
     el('depth').value = String(depth)
     el('empty').hidden = Boolean(state.parts.length || moving)
-    el('count').textContent = `${t.count}: ${state.parts.length} · ${t.linkCount}: ${links.length}`
+    el('count').textContent = `${t.count}: ${state.parts.length} · ${t.linkCount}: ${links.length}` +
+      (state.belts.length ? ` · ${t.beltCount(state.belts.length)}` : '')
     el('loadNotice').textContent = [
       failedModels.size ? t.modelsUnavailable(failedModels.size) : '',
       discardedLinks ? t.discarded(discardedLinks) : '',
+      discardedBelts ? t.beltsDiscarded(discardedBelts) : '',
     ].filter(Boolean).join(' · ')
     el('editorOverlay').hidden = simulating(mode)
     for (const name of ['build', 'kinematics', 'testDrive', 'physics']) el(name).setAttribute('aria-pressed', String(mode === name))
@@ -514,13 +553,14 @@ export async function mountEditor(root, { document, language, save, download, si
     const copied = pastedGroup ? groupTransforms(pastedGroup.items, pastedGroup.anchor, pose) : []
     const placed = original ? state.parts.map(part => part.id === id ? pose : part) : [...state.parts, pose, ...copied]
     const added = fit ? [{ shaft: candidate.shaft, socket: candidate.socket, placement: fit.placement }] : []
+    const pastedBelts = pastedGroup?.belts
     const nextLinks = transformLinks(placed, [id, ...copied.map(part => part.id)],
       [...(pastedGroup?.links ?? []), ...added], Boolean(candidate?.pose))
     cancelPlacement()
     additional.clear()
     for (const part of copied) additional.add(part.id)
     selected = id
-    commit({ parts: placed, links: nextLinks })
+    commit({ parts: placed, links: nextLinks, belts: [...state.belts, ...(pastedBelts ?? [])] })
   }
 
   function turnPart([axis, direction]) {
@@ -586,7 +626,8 @@ export async function mountEditor(root, { document, language, save, download, si
     const items = state.parts.filter(item => additional.has(item.id))
     const ids = new Set(selectionIds())
     const links = state.links.filter(link => ids.has(link.shaft.part) && ids.has(link.socket.part))
-    return structuredClone({ anchor: part, items, links })
+    const belts = state.belts.filter(belt => ids.has(belt.a.part) && ids.has(belt.b.part))
+    return structuredClone({ anchor: part, items, links, belts })
   }
 
   function copyPart() {
@@ -606,8 +647,11 @@ export async function mountEditor(root, { document, language, save, download, si
       socket: { ...link.socket, part: ids.get(link.socket.part) },
       placement: link.placement,
     }))
+    const belts = group.belts.map(belt => ({ ...belt, id: crypto.randomUUID(),
+      a: { ...belt.a, part: ids.get(belt.a.part) }, b: { ...belt.b, part: ids.get(belt.b.part) },
+    }))
     const [anchor, ...items] = copied
-    startPlacement(anchor, false, undefined, items.length ? { anchor, items, links } : undefined)
+    startPlacement(anchor, false, undefined, items.length ? { anchor, items, links, belts } : undefined)
   }
 
   function setTool(next) {
@@ -616,7 +660,7 @@ export async function mountEditor(root, { document, language, save, download, si
     cancelGizmo()
     cancelResize()
     message = ''
-    tool = next
+    tool = next === 'belt' && tool === 'belt' ? 'select' : next
     render()
   }
 
@@ -772,7 +816,8 @@ export async function mountEditor(root, { document, language, save, download, si
   function stepAnimation(time) {
     if (!frame) return
     if (!stepAnimation.previous) stepAnimation.previous = time
-    angle += Math.min(50, time - stepAnimation.previous) * (transmission?.playback ?? 1.5) / 1000
+    const speed = transmission?.playback ?? (transmission?.belts?.length ? 90 : 1.5)
+    angle += Math.min(50, time - stepAnimation.previous) * speed / 1000
     stepAnimation.previous = time
     const limit = Number(el('angle').max)
     if (transmission?.periodic && angle >= limit) angle %= limit
@@ -805,7 +850,7 @@ export async function mountEditor(root, { document, language, save, download, si
   })
   on(el('save'), 'click', () => persist(true))
   on(el('export'), 'click', () => download(currentDocument()))
-  for (const name of ['select', 'move', 'rotate', 'length']) on(el(`${name}Tool`), 'click', () => setTool(name))
+  for (const name of ['select', 'move', 'rotate', 'length', 'belt']) on(el(`${name}Tool`), 'click', () => setTool(name))
   on(window, 'keyup', event => {
     if ((moving || gizmoPart) && pointer && ['Control', 'Meta'].includes(event.key)) {
       updatePointer({ clientX: pointer.clientX, clientY: pointer.clientY, ctrlKey: event.ctrlKey, metaKey: event.metaKey })
@@ -966,7 +1011,11 @@ export async function mountEditor(root, { document, language, save, download, si
     if (moving && (click || releasedPart)) {
       updatePointer(event)
       place()
-    } else if (click) selectClick(scene.pointer(event).hit, event.shiftKey)
+    } else if (click) {
+      const hit = scene.pointer(event).hit
+      if (mode === 'build' && tool === 'belt') beltPanel.pick(hit)
+      else selectClick(hit, event.shiftKey)
+    }
   })
   on(scene.canvas, 'pointercancel', () => {
     if (simulating(mode)) return
@@ -984,6 +1033,11 @@ export async function mountEditor(root, { document, language, save, download, si
         event.preventDefault()
         persist(true)
       } else if (event.key === 'Escape') setMode('build')
+      return
+    }
+    if (event.key === 'Escape' && mode === 'build' && tool === 'belt' && !dragActive()) {
+      event.preventDefault()
+      setTool('select')
       return
     }
     if (event.key === 'Escape' && (dragActive() || pendingPart)) {
@@ -1078,6 +1132,7 @@ export async function mountEditor(root, { document, language, save, download, si
   })
 
   scene.setParts(state.parts)
+  scene.belts.set(state.belts)
   scene.resetView()
   render()
 }

@@ -19,6 +19,11 @@ const locations = profiles.locations.map(([point, reference]) => ({
   start: point.slice(0, 3), axis: point.slice(3), ...(reference && { reference }),
 }))
 const imported = new Map()
+const roundPlateAxleHole = {
+  id: 'axle-hole', role: 'key', gender: 'F', openings: ['start', 'end'],
+  start: [0, 0, 0], axis: [0, 1, 0], reference: [1, 0, 0],
+  sections: [{ shape: 'A', radius: 6, length: 8 }],
+}
 
 const shockPort = (id, role, gender, start, axis, extra) => ({
   id, role, gender, start, axis, openings: ['start'], reference: [0, 0, 1],
@@ -66,7 +71,7 @@ export function portsFor(design) {
       start: [0, -50, -10], axis: [0, 0, 1], sections: [{ shape: 'R', radius: 8, length: 2 },
         { shape: 'R', radius: 6, length: 16 }, { shape: 'R', radius: 8, length: 2 }],
     })
-    imported.set(design, supported)
+    imported.set(design, design === '4032a' ? [...supported, roundPlateAxleHole] : supported)
   }
   return imported.get(design)
 }

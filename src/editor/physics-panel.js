@@ -100,7 +100,7 @@ export function mountPhysicsPanel(root, { language, scene, models, read, signal 
       try {
         const [{ loadRapier }, { createPhysicalAssembly }, { assemblyJoints }] = await Promise.all([
           import('../mechanics/physics-world.js'), import('../mechanics/physical-assembly.js'),
-          import('./model.js?v=engine-motion'),
+          import('./model.js?v=belt-drive'),
         ])
         const rapier = await loadRapier()
         if (request !== pending) return

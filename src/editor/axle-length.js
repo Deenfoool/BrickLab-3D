@@ -1,7 +1,7 @@
 import { Vector3 } from 'three'
 import { portLength } from '../mechanics/axial.js?v=linkages'
-import { technic } from '../mechanics/catalog.js?v=inline-engine'
-import { worldPort } from './placement.js?v=inline-engine'
+import { technic } from '../mechanics/catalog.js?v=belt-drive'
+import { worldPort } from './placement.js?v=belt-drive'
 
 const family = ['3705', '3706', '3707', '3737']
 

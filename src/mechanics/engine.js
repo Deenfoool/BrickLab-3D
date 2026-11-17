@@ -1,8 +1,8 @@
 import { Quaternion, Vector3 } from 'three'
-import { portsFor } from './catalog.js?v=inline-engine'
+import { portsFor } from './catalog.js?v=belt-drive'
 import { assignPose, turnPose } from './linkage.js'
-import { rotationalDrive } from './rotation.js?v=inline-engine'
-import { worldPort } from '../editor/placement.js?v=inline-engine'
+import { rotationalDrive } from './rotation.js?v=belt-drive'
+import { worldPort } from '../editor/placement.js?v=belt-drive'
 
 const vector = value => new Vector3().fromArray(value)
 const center = part => vector(part.position)
@@ -239,7 +239,7 @@ function rodLift(rod, sections, pose, axis, up) {
   return Math.min(rod.maxTravel, Math.max(rod.floor, ...sections.map(section => liftFrom(section, pose, rod.foot, axis, up, rod.floor))))
 }
 
-export function engineDrive(selected, parts, graph, gears, joints) {
+export function engineDrive(selected, parts, graph, gears, joints, belts) {
   for (const engine of sliderCranks(graph, parts)) {
     const { crank, base, main, cylinders } = engine
     const axis = main.axis
@@ -258,7 +258,7 @@ export function engineDrive(selected, parts, graph, gears, joints) {
       ...cams.flatMap(cam => cam.pins.map(pin => pin.edge))]
     const original = new Set(solved.map(edge => edge.joint))
     const drive = rotationalDrive(driver, parts.keys(), joints.filter(joint => !original.has(joint)), gears,
-      { start: main.start.toArray(), axis: axis.toArray() })
+      { start: main.start.toArray(), axis: axis.toArray() }, [], belts)
     if (!drive?.ok) continue
     const engagedCams = cams.filter(cam => drive.spins.has(cam.body.ids[0]))
     const valves = valveTrain(engagedCams, graph, base, parts, up, axis)
@@ -267,7 +267,7 @@ export function engineDrive(selected, parts, graph, gears, joints) {
     if (selected && !drive.spins.has(selected) && !bodies.includes(graph.byPart.get(selected))) continue
     const periodic = [...drive.spins.values()].every(spin => Number.isInteger(spin.ratio))
     return { ok: true, kind: 'engine', driver, periodic, exactRange: true, playback: 90, range: periodic ? [-360, 360] : [-1080, 1080],
-      meshes: drive.meshes, solve(angle) {
+      meshes: drive.meshes, belts: drive.belts, spins: drive.spins, solve(angle) {
         if (!Number.isFinite(angle)) return null
         const poses = new Map()
         const turns = new Map()

@@ -1,6 +1,6 @@
 import { Quaternion, Vector3 } from 'three'
-import { portsFor } from '../mechanics/catalog.js?v=inline-engine'
-import { connectAligned, connectPlaced, createAssembly } from './model.js?v=engine-motion'
+import { portsFor } from '../mechanics/catalog.js?v=belt-drive'
+import { connectAligned, connectPlaced, createAssembly } from './model.js?v=belt-drive'
 
 const identity = [0, 0, 0, 1]
 const reverseYoke = new Quaternion().setFromAxisAngle(new Vector3(1, -1, 0).normalize(), Math.PI).toArray()
