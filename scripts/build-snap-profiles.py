@@ -391,9 +391,9 @@ def geometry_ports(design, title, cylinders, archive):
 
 
 def primitive_holes(archive):
-    """Read explicit LDraw Technic holes when the shadow library has no profile."""
+    """Read explicit LDraw Technic bore primitives and paired mouths."""
     names = set(archive.namelist())
-    standard = {'peghole.dat', 'connhole.dat'}
+    standard = {'peghole.dat', 'connhole.dat', 'connhol3.dat'}
 
     @lru_cache
     def collect(name):
@@ -411,28 +411,70 @@ def primitive_holes(archive):
                 result.append((label, world_point(transform, point), normalize(world_vector(transform, direction))))
         return result
 
-    def as_ports(design):
+    def as_ports(design, include_split=False):
         declared = collect(design + '.dat')
-        mouths = [(start, axis) for kind, start, axis in declared if kind == 'peghole.dat']
+        mouths = [(kind, start, axis) for kind, start, axis in declared if kind == 'peghole.dat']
         spans = [(list(a - 10 * b for a, b in zip(start, axis)), axis, 20)
                  for kind, start, axis in declared if kind == 'connhole.dat']
-        for index, (start, axis) in enumerate(mouths):
-            for other, direction in mouths[index + 1:]:
-                if dist(axis, [-n for n in direction]) > .001:
+        if include_split:
+            mouths += [(kind, [p - 10 * n for p, n in zip(start, axis)], axis)
+                       for kind, start, axis in declared if kind == 'connhol3.dat']
+        for index, (kind, start, axis) in enumerate(mouths):
+            for other_kind, other, direction in mouths[index + 1:]:
+                if kind != other_kind or dist(axis, [-n for n in direction]) > .001:
                     continue
                 delta = [b - a for a, b in zip(start, other)]
                 span = sum(a * b for a, b in zip(delta, axis))
-                length = next((candidate for candidate in (10, 20) if abs(span - candidate) <= .01), None)
-                if length and dist(delta, [span * n for n in axis]) <= .01:
-                    spans.append((start, axis, length))
+                if dist(delta, [span * n for n in axis]) > .01:
+                    continue
+                widths = (40,) if kind == 'connhol3.dat' else (10, 20)
+                width = next((value for value in widths if abs(span - value) <= .01), None)
+                if width:
+                    spans.append((start, axis, width))
         return [
             {'gender': 'F', 'caps': 'none', 'start': start, 'dir': axis,
              'secs': [{'shape': 'R', 'radius': radius, 'length': length}
-                      for radius, length in [(8, 2), (6, span - 4), (8, 2)]]}
+                      for radius, length in ([(8, 2), (6, 16), (8, 4), (6, 16), (8, 2)]
+                                             if span == 40 else [(8, 2), (6, span - 4), (8, 2)])]}
             for start, axis, span in spans
         ]
 
     return as_ports
+
+
+def overlapping_bores(measured, existing):
+    spec, point, _ = existing
+    if spec[0] not in {'bearing', 'key', 'blind-key', 'rod-bore', 'wheel-bearing', 'labeled-bore'}:
+        return False
+    start, end = endpoints(measured)
+    a, b = endpoints(existing)
+    axis = measured[1][3:]
+    if abs(sum(x * y for x, y in zip(axis, point[3:]))) < .9999:
+        return False
+    delta = [x - y for x, y in zip(a, start)]
+    along = sum(d * n for d, n in zip(delta, axis))
+    if dist(delta, [along * n for n in axis]) > .01:
+        return False
+    far = sum((x - y) * n for x, y, n in zip(b, start, axis))
+    lo, hi = sorted((along, far))
+    return min(hi, dist(start, end)) - max(lo, 0) > .01
+
+
+def merge_round_bores(existing, measured):
+    result = list(existing)
+    for bore in measured:
+        matches = [i for i, port in enumerate(result) if overlapping_bores(bore, port)]
+        if not matches:
+            result.append(bore)
+        for i in matches:
+            spec, point, ref = result[i]
+            # Opposing mouths can complete a one-sided shadow profile without moving its datum.
+            direct = dist(point, bore[1]) <= .01 and spec[3] == bore[0][3]
+            reverse = (dist(endpoints(result[i])[1], bore[1][:3]) <= .01 and
+                       dist(point[3:], [-n for n in bore[1][3:]]) <= .001 and spec[3] == bore[0][3][::-1])
+            if spec[0] == 'bearing' and spec[2] != 3 and (direct or reverse):
+                result[i] = ((*spec[:2], 3, *spec[3:]), point, ref)
+    return result
 
 
 def match_signature(port):
@@ -576,6 +618,7 @@ def main():
     parts = sorted(row for section in index['sections'] for row in section['parts'])
     groups = defaultdict(set)
     by_design = {}
+    measured_bores = {}
     with ZipFile(args.archive) as archive:
         contacts = assembly_ports(archive)
         fallback = primitive_holes(archive)
@@ -603,6 +646,12 @@ def main():
             if not ports:
                 ports = list(unique_ports(port for c in fallback(design) if (port := adapt(c, title))))
             by_design[design] = list(unique_ports([*ports, *legacy]))
+            structural = group in {'beams', 'pins'} or title.startswith((
+                'Beam ', 'Cross Block ', 'Connector ', 'Brick ', 'Steering Portal Axle Frame'))
+            # 4586 has a decorative round mouth in the center of an elongated slot.
+            if structural and design != '4586':
+                measured_bores[design] = list(unique_ports(
+                    port for c in fallback(design, include_split=True) if (port := adapt(c, title))))
             for port in ports:
                 if signature := match_signature(port):
                     groups[signature].add(port[0][1])
@@ -611,6 +660,17 @@ def main():
     locations = {}
     registry = {}
     coverage = Counter()
+
+    def record(port):
+        spec, point, ref = port
+        type_index = specs.setdefault(spec, len(specs))
+        loc = (point, ref)
+        loc_index = locations.setdefault(loc, len(locations))
+        # Save geometric keys rather than upstream indices, which move between releases.
+        identity = (spec[0], spec[1], point) if spec[4] is None else (spec[0], spec[1], point, spec[4])
+        key = sha256(json.dumps(identity, separators=(',', ':')).encode()).hexdigest()[:12]
+        return [key, type_index, loc_index]
+
     for design, group, _, _, _ in parts:
         if design in curated or design in registry:
             coverage[group] += 1
@@ -620,18 +680,16 @@ def main():
         if not ports:
             continue
         coverage[group] += 1
-        records = []
-        for spec, point, ref in ports:
-            type_index = specs.setdefault(spec, len(specs))
-            loc = (point, ref)
-            loc_index = locations.setdefault(loc, len(locations))
-            # Save geometric keys rather than upstream indices, which move between releases.
-            identity = (spec[0], spec[1], point) if spec[4] is None else (spec[0], spec[1], point, spec[4])
-            key = sha256(json.dumps(identity, separators=(',', ':')).encode()).hexdigest()[:12]
-            if any(row[0] == key for row in records):
-                raise ValueError(f'Duplicate endpoint key on {design}: {key}')
-            records.append([key, type_index, loc_index])
+        records = [record(port) for port in ports]
+        if len({entry[0] for entry in records}) != len(records):
+            raise ValueError(f'Duplicate endpoint key on {design}')
         registry[design] = records
+        by_design[design] = ports
+
+    # Add verified geometry after encoding shadow data to keep its profile indexes stable.
+    for design, measured in measured_bores.items():
+        if design in registry:
+            registry[design] = [record(port) for port in merge_round_bores(by_design[design], measured)]
     output = {'source': SOURCE, 'shadow': SHADOW, 'ldraw': index['source']['release'],
               'types': list(specs), 'locations': list(locations), 'rimMates': rim_mates}
     # Keep one location or profile per line for review.

@@ -1,7 +1,7 @@
 import { Plane, Quaternion, Vector3 } from 'three'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
 import { connectionMode, portLength } from '../mechanics/axial.js?v=linkages'
-import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=belt-drive'
+import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=structural-bores'
 import { candidateOffsets, joinedPose, worldPort } from './placement.js?v=belt-drive'
 
 const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')

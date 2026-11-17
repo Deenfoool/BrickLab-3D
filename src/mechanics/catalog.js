@@ -1,6 +1,6 @@
 import technic from '../../catalog/technic.json?v=connector-coverage' with { type: 'json' }
 import profiles from '../../catalog/snap-profiles.json?v=technic-seats' with { type: 'json' }
-import designs from '../../catalog/snap-parts.json?v=technic-seats' with { type: 'json' }
+import designs from '../../catalog/snap-parts.json?v=structural-bores' with { type: 'json' }
 
 import buggyParts from '../../catalog/dune-buggy-parts.json?v=rotation' with { type: 'json' }
 import engineParts from '../../catalog/inline-engine-parts.json' with { type: 'json' }

@@ -23,13 +23,15 @@ const { Quaternion, Ray, Vector3 } = await import('three')
 const { worldPort } = await import('../src/editor/placement.js')
 const { nearbyConnections } = await import('../src/editor/snap.js')
 const { portsFor } = await import('../src/mechanics/catalog.js')
-const { evaluateInsertion, portLength } = await import('../src/mechanics/axial.js')
+const { connectionMode, evaluateInsertion, portLength } = await import('../src/mechanics/axial.js')
 const { parts: availableParts } = await import('../src/editor/parts.js')
 
 const part = (id, design) => ({ id, design, position: [0, 0, 0], rotation: [0, 0, 0, 1] })
 const scene = { pixelDistance: () => 0 }
-const beams = library.sections.find(section => section.id === 'technic').parts.filter(row => row[1] === 'beams')
-const mates = ['2780', '3705', '3700', '30374', '43093', '75349', '6524', '6526']
+const technicParts = library.sections.find(section => section.id === 'technic').parts
+const structuralParts = technicParts.filter(([, group, name]) => ['pins', 'beams'].includes(group) ||
+  /^(?:Beam |Cross Block |Connector |Brick |Steering Portal Axle Frame)/.test(name))
+const activePorts = design => portsFor(design).filter(port => !port.legacy && port.role !== 'gear')
 
 function options(moving, fixed) {
   return nearbyConnections({ scene, moving, parts: [fixed], assembly: createAssembly([moving, fixed], []),
@@ -41,16 +43,87 @@ function restore(snap, moving, fixed) {
     [{ shaft: snap.shaft, socket: snap.socket, placement: snap.fit.placement }]).connections
 }
 
-test('each beam and frame has a compatible physical counterpart in both placement orders', () => {
-  for (const [design, , name] of beams) {
-    const beam = part('beam', design)
-    const mate = mates.find(design => {
-      const other = part('mate', design)
-      return [[beam, other], [other, beam]].every(([moving, fixed]) =>
-        options(moving, fixed).some(snap => snap.fit && restore(snap, moving, fixed).length === 1))
-    })
-    assert.ok(mate, `${name} (${design}) has no working counterpart`)
+test('each structural connector mates through its accessible ends and survives reopening', () => {
+  const profiles = new Map()
+  for (const [design] of technicParts) {
+    for (const port of activePorts(design)) {
+      const { id, start, axis, reference, ...profile } = port
+      const key = JSON.stringify(profile)
+      if (!profiles.has(key)) profiles.set(key, [])
+      const representatives = profiles.get(key)
+      if (representatives.length < 2 && !representatives.some(mate => mate.design === design)) {
+        representatives.push({ design, port })
+      }
+    }
   }
+  const mates = [...profiles.values()].flat()
+  const results = new Map()
+  function usableSnaps(moving, fixed) {
+    const key = JSON.stringify([moving.id, moving.design, fixed.design])
+    if (!results.has(key)) {
+      const snaps = options(moving, fixed).filter(snap => snap.fit)
+      for (const snap of snaps) {
+        assert.equal(restore(snap, moving, fixed).length, 1, `Preview cannot reopen: ${moving.design} + ${fixed.design}`)
+      }
+      results.set(key, snaps)
+    }
+    return results.get(key)
+  }
+
+  for (const [design, , name] of structuralParts) {
+    const ports = activePorts(design)
+    assert.ok(ports.length, `${name} (${design}) has no connectors`)
+    for (const port of ports) {
+      const usable = mates.some(mate => {
+        const [male, female] = port.gender === 'M' ? [port, mate.port] : [mate.port, port]
+        const mode = connectionMode(male, female)
+        if (!mode) return false
+        const [shaftDesign, socketDesign] = port.gender === 'M' ? [design, mate.design] : [mate.design, design]
+        const shaft = part('shaft', shaftDesign)
+        const socket = part('socket', socketDesign)
+        const match = snap => snap.shaft.port === male.id && snap.socket.port === female.id
+        const shaftMoves = usableSnaps(shaft, socket).filter(match)
+        const socketMoves = usableSnaps(socket, shaft).filter(match)
+        if (!shaftMoves.length || !socketMoves.length) return false
+        if (mode.anchor || mode.clutch || mode.rimSeat || mode.tube || mode.seat) return true
+        const shaftEntries = socketMoves.map(({ fit: { placement } }) =>
+          (placement.side === 'start') === (placement.direction > 0) ? 'end' : 'start')
+        return male.openings.every(side => shaftEntries.includes(side)) &&
+          female.openings.every(side => shaftMoves.some(snap => snap.fit.placement.side === side))
+      })
+      assert.ok(usable, `${name} (${design}) has an unavailable ${port.role} at ${port.start} (${port.id})`)
+    }
+  }
+})
+
+test('round bores omitted by the shadow profiles remain distinct from the other connectors', () => {
+  for (const [design, positions] of [
+    ['6614', [[-20, 0, -10], [20, 0, -10]]],
+    ['44137', [[-10, 0, 20]]],
+    ['2607b', [[0, 10, -10]]],
+    ['2607bc01', [[0, 10, -10]]],
+  ]) {
+    const fixed = part('block', design)
+    for (const start of positions) {
+      const port = portsFor(design).find(port => port.role === 'bearing' &&
+        port.start.every((value, index) => value === start[index]))
+      assert.ok(port, `Missing bore in ${design} at ${start}`)
+      for (const design of ['3705', '2780']) {
+        const moving = part('shaft', design)
+        const fits = options(moving, fixed).filter(snap => snap.fit && snap.socket.port === port.id)
+        assert.deepEqual([...new Set(fits.map(snap => snap.fit.placement.side))].sort(), ['end', 'start'])
+        assert.ok(fits.every(snap => snap.fit.motion.rotation === 'continuous' && restore(snap, moving, fixed).length === 1))
+      }
+    }
+  }
+
+  const block = part('block', '44137')
+  const split = portsFor(block.design).find(port => port.id === 'shadow-f39c3b5f2da9')
+  assert.deepEqual(split.openings, ['start', 'end'])
+  const axle = part('shaft', '3705')
+  const fits = options(axle, block).filter(snap => snap.fit && snap.socket.port === split.id)
+  assert.deepEqual([...new Set(fits.map(snap => snap.fit.placement.side))].sort(), ['end', 'start'])
+  assert.ok(fits.every(snap => restore(snap, axle, block).length === 1))
 })
 
 test('the imported frames keep separate holes and allow round pin fits, including 64179', () => {

@@ -6,7 +6,7 @@ import { assembleBelts } from '../mechanics/belts.js?v=belt-drive'
 import { engineDrive } from '../mechanics/engine.js?v=belt-drive'
 import { cardanCoupling } from '../mechanics/cardan.js'
 import { articulationDrive, jointBodies, linkageDrive, mechanismPoses, motionRange, suspensionDrive } from '../mechanics/linkage.js'
-import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=belt-drive'
+import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=structural-bores'
 import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=belt-drive'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
