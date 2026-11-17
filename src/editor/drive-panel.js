@@ -201,14 +201,13 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     else previous = undefined
   }
 
-  function cancelTrackRequest() {
-    loadingTrack?.abort()
+  function clearTrackRequest() {
     loadingTrack = undefined
     trackError = false
   }
 
   function stop() {
-    cancelTrackRequest()
+    clearTrackRequest()
     if (frame !== undefined) cancelAnimationFrame(frame)
     frame = previous = state = undefined
     held.clear()
@@ -226,15 +225,16 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     if (!vehicle?.ready || loadingTrack) return
     const venue = vehicle.settings.venue
     if (venue === 'sketchbook' && !sketchbook) {
-      const request = loadingTrack = new AbortController()
+      const request = loadingTrack = {}
       trackError = false
       sync()
       try {
-        const { loadSketchbookTrack } = await import('./sketchbook-track.js?v=sketchbook')
-        request.signal.throwIfAborted()
-        sketchbook = await loadSketchbookTrack(request.signal)
+        const { loadSketchbookTrack } = await import('./sketchbook-track.js?v=track-cache')
+        const loaded = await loadSketchbookTrack()
+        if (loadingTrack !== request) return
+        sketchbook = loaded
       } catch (error) {
-        if (request.signal.aborted) return
+        if (loadingTrack !== request) return
         trackError = true
         console.error(error)
       } finally {
@@ -243,7 +243,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
           sync()
         }
       }
-      if (!active || request.signal.aborted || !sketchbook || !vehicle.ready) return
+      if (!active || !sketchbook || !vehicle.ready) return
     }
     track = venue === 'sketchbook' ? sketchbook : undefined
     picking = undefined
@@ -266,7 +266,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
   }
 
   on(el('venue'), 'change', () => {
-    cancelTrackRequest()
+    clearTrackRequest()
     change({ venue: el('venue').value })
   })
   on(el('heading'), 'input', () => {
@@ -308,7 +308,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
       event.preventDefault()
       event.stopImmediatePropagation()
       if (state) stop()
-      else { cancelTrackRequest(); picking = undefined; sync() }
+      else { clearTrackRequest(); picking = undefined; sync() }
       return
     }
     if (!state || !keys[event.code] || event.altKey || event.ctrlKey || event.metaKey ||
@@ -338,10 +338,9 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     }
   }
   signal.addEventListener('abort', () => {
-    cancelTrackRequest()
+    clearTrackRequest()
     if (frame !== undefined) cancelAnimationFrame(frame)
     scene.setDriveMap()
-    sketchbook?.dispose()
   }, { once: true })
 
   return {

@@ -1,9 +1,10 @@
-import { Box3, Matrix3, Raycaster, Vector3 } from 'three'
+import { Matrix3, Raycaster, Vector3 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 const mapURL = 'https://raw.githubusercontent.com/swift502/Sketchbook/62f4b7986fd1ce1e4f91daba89ef032c20a6ce55/build/assets/world.glb'
 const scale = 90 // LDU per Sketchbook unit for the test-drive diorama.
 const down = new Vector3(0, -1, 0)
+let trackRequest
 
 export function sketchbookTrack(group) {
   group.scale.setScalar(scale)
@@ -56,7 +57,7 @@ export function sketchbookTrack(group) {
   start.y = height
   // Start on open tarmac facing the sloped approach to the tunnel.
   const heading = -Math.PI / 2
-  return { group, start, heading, heightAt, dispose: () => disposeMap(group) }
+  return { group, start, heading, heightAt }
 }
 
 function disposeMap(group) {
@@ -81,18 +82,23 @@ function disposeMap(group) {
   for (const image of images) image?.close?.()
 }
 
-export async function loadSketchbookTrack(signal) {
-  // A fixed upstream version lets the large map load only when its venue is selected.
-  const response = await fetch(mapURL, { signal })
+async function fetchSketchbookTrack() {
+  const response = await fetch(mapURL)
   if (!response.ok) throw new Error(`Sketchbook: HTTP ${response.status}`)
-  const bytes = await response.arrayBuffer()
-  signal?.throwIfAborted()
-  const { scene } = await new GLTFLoader().parseAsync(bytes, mapURL)
+  const { scene } = await new GLTFLoader().parseAsync(await response.arrayBuffer(), mapURL)
   try {
-    signal?.throwIfAborted()
     return sketchbookTrack(scene)
   } catch (error) {
     disposeMap(scene)
     throw error
   }
+}
+
+export function loadSketchbookTrack() {
+  // Editor scenes attach the map when needed. Its data belongs to the page.
+  trackRequest ??= fetchSketchbookTrack().catch(error => {
+    trackRequest = undefined
+    throw error
+  })
+  return trackRequest
 }

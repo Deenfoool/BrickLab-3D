@@ -181,3 +181,50 @@ test('a vehicle cannot drive beyond the last supported wheel position', () => {
   assert.equal(reverse.blocked, false)
   assert.ok(state.position.z < position.z)
 })
+
+test('Sketchbook shares in-flight and successful loads for the page and can retry a failed fetch', async () => {
+  const { loadSketchbookTrack } = await import('../src/editor/sketchbook-track.js')
+  const vertices = Buffer.from(new Float32Array([-10, 0, -10, 0, 0, 10, 10, 0, -10]).buffer)
+  const gltf = {
+    asset: { version: '2.0' }, scenes: [{ nodes: [0, 1] }],
+    nodes: [{ name: 'ground', mesh: 0, extras: { data: 'physics', type: 'trimesh' } },
+      { name: 'Spawn016', translation: [0, 1, 0] }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+    accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3', min: [-10, 0, -10], max: [10, 0, 10] }],
+    bufferViews: [{ buffer: 0, byteLength: vertices.length }],
+    buffers: [{ byteLength: vertices.length }],
+  }
+  const json = Buffer.from(JSON.stringify(gltf))
+  const jsonSize = Math.ceil(json.length / 4) * 4
+  const binOffset = 20 + jsonSize
+  const glb = Buffer.alloc(binOffset + 8 + vertices.length)
+  glb.write('glTF')
+  glb.writeUInt32LE(2, 4)
+  glb.writeUInt32LE(glb.length, 8)
+  glb.writeUInt32LE(jsonSize, 12)
+  glb.write('JSON', 16)
+  glb.fill(0x20, 20, binOffset)
+  json.copy(glb, 20)
+  glb.writeUInt32LE(vertices.length, binOffset)
+  glb.write('BIN\0', binOffset + 4)
+  vertices.copy(glb, binOffset + 8)
+
+  let requests = 0
+  globalThis.fetch = async () => {
+    if (++requests === 1) return new Response(null, { status: 503 })
+    return new Response(glb)
+  }
+  try {
+    const failed = loadSketchbookTrack()
+    assert.equal(loadSketchbookTrack(), failed)
+    await assert.rejects(failed, /503/)
+    const retry = loadSketchbookTrack()
+    assert.equal(loadSketchbookTrack(), retry)
+    const track = await retry
+    assert.deepEqual(track.start.toArray(), [0, 0, 0])
+    assert.equal(await loadSketchbookTrack(), track)
+    assert.equal(requests, 2)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})

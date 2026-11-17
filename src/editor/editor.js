@@ -9,7 +9,7 @@ import { nearbyConnections } from './snap.js?v=linkages'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=linkages'
 import { mountLibrary } from './library.js?v=linkages'
 import { createScene } from './scene.js?v=sketchbook'
-import { driveTitle, mountDrivePanel } from './drive-panel.js?v=sketchbook'
+import { driveTitle, mountDrivePanel } from './drive-panel.js?v=track-cache'
 import { componentBundle, expandComponents } from './components.js'
 import { editorLabels } from './labels.js?v=linkages'
 
