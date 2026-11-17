@@ -1,8 +1,10 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
-import { partMesh, parts } from './parts.js?v=8845'
-import { snapGrid } from './model.js?v=rotation'
+import { partMesh, parts } from './parts.js?v=linkages'
+import { snapGrid } from './model.js?v=linkages'
+
+const unitScale = [1, 1, 1]
 
 export function createScene(host, models) {
   const world = new THREE.Scene()
@@ -122,6 +124,7 @@ export function createScene(host, models) {
       }
       object.position.fromArray(part.position)
       object.quaternion.fromArray(part.rotation)
+      object.scale.fromArray(unitScale)
       object.userData.finish.color.set(part.color ?? parts[part.design].color)
       object.updateMatrixWorld(true)
       warnings.get(part.id)?.setFromObject(object)
@@ -217,6 +220,7 @@ export function createScene(host, models) {
       const object = objects.get(part.id)
       object.position.fromArray(part.position)
       object.quaternion.fromArray(part.rotation)
+      object.scale.fromArray(part.previewScale ?? unitScale)
       object.updateMatrixWorld(true)
       warnings.get(part.id)?.setFromObject(object)
     }

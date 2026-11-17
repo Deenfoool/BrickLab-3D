@@ -1,6 +1,6 @@
 import { Quaternion, Vector3 } from 'three'
-import { measureInsertion } from '../mechanics/assembly.js?v=rotation'
-import { connectionMode, portLength } from '../mechanics/axial.js?v=8845'
+import { measureInsertion } from '../mechanics/assembly.js?v=linkages'
+import { connectionMode, portLength } from '../mechanics/axial.js?v=linkages'
 
 const Y = new Vector3(0, 1, 0)
 const base = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI)
@@ -50,6 +50,7 @@ export function candidateOffsets(shaft, socket, direction, side, depth) {
   const shaftSize = portLength(shaft)
   const socketSize = portLength(socket)
   const mode = connectionMode(shaft, socket)
+  if (mode?.anchor === 'slide') return direction === 1 ? [Math.max(mode.stroke[0], Math.min(mode.stroke[1], mode.stroke[1] + depth))] : []
   if (mode?.anchor) return direction === 1 || mode.anchor === 'pivot' ? [0] : []
   if (mode?.clutch) return direction === -1 && side === 'start' ? [Math.min(shaftSize, socketSize)] : []
   if (mode?.tube) return direction === 1 && side === 'start' ? [0] : []

@@ -1,4 +1,4 @@
-import { editorLabels } from '../editor/labels.js?v=technic-seats'
+import { editorLabels } from '../editor/labels.js?v=linkages'
 import { locales } from './locale.js?v=8845'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
@@ -212,7 +212,7 @@ async function openEditor(project) {
   editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=rotation')
+    const { mountEditor } = await import('../editor/editor.js?v=linkages')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
@@ -291,7 +291,7 @@ byId('buggy-open').addEventListener('click', async event => {
   const control = event.currentTarget
   control.disabled = true
   try {
-    const response = await fetch(new URL('../../examples/dune-buggy.json?v=rotation', import.meta.url))
+    const response = await fetch(new URL('../../examples/dune-buggy.json?v=linkages', import.meta.url))
     if (!response.ok) throw new Error(`Dune Buggy: HTTP ${response.status}`)
     const example = parseProject(await response.text())
     if (currentPage() === 'examples') addProject(example)

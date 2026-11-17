@@ -1,8 +1,8 @@
-import { Plane, Vector3 } from 'three'
+import { Plane, Quaternion, Vector3 } from 'three'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
-import { connectionMode, portLength } from '../mechanics/axial.js?v=8845'
-import { gearAt, portsFor } from '../mechanics/catalog.js?v=rotation'
-import { candidateOffsets, joinedPose, worldPort } from './placement.js?v=8845'
+import { connectionMode, portLength } from '../mechanics/axial.js?v=linkages'
+import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=linkages'
+import { candidateOffsets, joinedPose, worldPort } from './placement.js?v=linkages'
 
 const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')
 
@@ -33,6 +33,29 @@ function meshCandidate({ scene, moving, fixed, ownGear, fixedGear, event, ray, a
   if (mesh.ok) return { key: JSON.stringify(['mesh', fixed.id]), point, distance, pose, mesh }
 }
 
+function rackCandidate(scene, moving, fixed, ownGear, fixedGear, event, ray, acceptPose) {
+  const rackPart = ownGear ? fixed : moving
+  const gearPart = ownGear ? moving : fixed
+  const gear = ownGear ?? fixedGear
+  const rack = gearRacks[rackPart.design]
+  const teeth = gear?.sections[0]
+  if (!rack || !teeth || Math.abs(2 * Math.PI * teeth.radius / teeth.teeth - rack.pitch) > .22) return
+  const { start, axis } = worldPort(rackPart, rack)
+  const normal = new Vector3().fromArray(rack.normal).applyQuaternion(new Quaternion().fromArray(rackPart.rotation))
+  const center = gearCenter(gearPart, gear)
+  if (Math.abs(axis.dot(center.axis)) > 1e-4 || Math.abs(normal.dot(center.axis)) > 1e-4) return
+  const pitch = start.addScaledVector(normal, teeth.radius)
+  const cursor = ownGear && ray ? ray.intersectPlane(new Plane().setFromNormalAndCoplanarPoint(center.axis, pitch), new Vector3()) : null
+  const along = Math.max(-rack.length / 2 + 1, Math.min(rack.length / 2 - 1, (cursor ?? center.center).clone().sub(pitch).dot(axis)))
+  const point = pitch.addScaledVector(axis, along)
+  if (acceptPose) point.addScaledVector(center.axis, center.center.clone().sub(point).dot(center.axis))
+  const distance = scene.pixelDistance(point, event)
+  if (!Number.isFinite(distance) || distance > 25) return
+  const offset = point.clone().sub(center.center).multiplyScalar(ownGear ? 1 : -1)
+  const pose = { position: new Vector3().fromArray(moving.position).add(offset).toArray(), rotation: moving.rotation }
+  if (!acceptPose || acceptPose(pose)) return { key: JSON.stringify(['rack', fixed.id]), point, distance, pose, mesh: { ok: true } }
+}
+
 function targetsOnPort(scene, event, fixedPort, start, axis, span, ray) {
   const targets = fixedPort.openings.map(side => ({
     side, point: start.clone().addScaledVector(axis, side === 'end' ? span : 0),
@@ -59,11 +82,21 @@ function anchorCandidate(context, fixed, fixedPort, own, start, mode) {
   const socket = { part: ownMale ? fixed.id : moving.id, port: (ownMale ? fixedPort : own).id }
   const key = JSON.stringify([fixed.id, fixedPort.id, own.id, 'anchor'])
   const sameDirection = worldPort(moving, own).axis.dot(worldPort(fixed, fixedPort).axis) >= 0
-  const direction = mode.anchor === 'pivot' && !sameDirection ? -1 : 1
-  const fit = assembly.previewInsertion(shaft, socket, { offset: 0, direction })
+  const direction = mode.anchor === 'pivot' && mode.rotation !== 'spring' && !sameDirection ? -1 : 1
+  const offset = mode.stroke ? (mode.stroke[0] + mode.stroke[1]) / 2 : 0
+  const fit = assembly.previewInsertion(shaft, socket, { offset, direction })
   if (!fit.ok) return { key, point: start, distance, failure: fit.reason }
-  const pose = joinedPose(moving, own, fixed, fixedPort, fit.placement)
-  if (!acceptPose || acceptPose(pose)) return { key, point: start, distance, pose, fit, shaft, socket }
+  const poses = mode.stroke && acceptPose
+    ? [offset, worldPort(ownMale ? moving : fixed, ownMale ? own : fixedPort).start
+      .sub(worldPort(ownMale ? fixed : moving, ownMale ? fixedPort : own).start)
+      .dot(worldPort(ownMale ? fixed : moving, ownMale ? fixedPort : own).axis)]
+    : [offset]
+  for (const position of poses) {
+    const candidate = position === offset ? fit : assembly.previewInsertion(shaft, socket, { offset: position, direction })
+    if (!candidate.ok) continue
+    const pose = joinedPose(moving, own, fixed, fixedPort, candidate.placement)
+    if (!acceptPose || acceptPose(pose)) return { key, point: start, distance, pose, fit: candidate, shaft, socket }
+  }
 }
 
 export function nearbyConnections(context) {
@@ -75,16 +108,20 @@ export function nearbyConnections(context) {
   const ownGear = gearPort(moving)
   for (const fixed of parts) {
     if (fixed.id === moving.id) continue
-    const fixedGear = ownGear && gearPort(fixed)
-    if (fixedGear) {
+    const fixedGear = gearPort(fixed)
+    if (ownGear && fixedGear) {
       const candidate = meshCandidate({ scene, moving, fixed, ownGear, fixedGear, event, ray, acceptPose })
+      if (candidate) candidates.push(candidate)
+    }
+    if (ownGear && gearRacks[fixed.design] || fixedGear && gearRacks[moving.design]) {
+      const candidate = rackCandidate(scene, moving, fixed, ownGear, fixedGear, event, ray, acceptPose)
       if (candidate) candidates.push(candidate)
     }
     for (const fixedPort of portsFor(fixed.design)) {
       if (fixedPort.role === 'gear' || fixedPort.legacy) continue
       const { start, axis } = worldPort(fixed, fixedPort)
       const span = portLength(fixedPort)
-      if (['ball', 'ball-socket', 'pivot', 'clip', 'plug', 'receptacle'].includes(fixedPort.role)) {
+      if (['ball', 'ball-socket', 'pivot', 'clip', 'plug', 'receptacle', 'piston', 'damper-cylinder', 'coil', 'coil-seat'].includes(fixedPort.role)) {
         for (const own of ownConnectors) {
           const mode = own.gender === 'M' ? connectionMode(own, fixedPort) : connectionMode(fixedPort, own)
           if (!mode?.anchor) continue

@@ -35,6 +35,12 @@ for (const [design, { en, ru }] of Object.entries(support)) {
   if (parts[design]) continue
   parts[design] = { design, en, ru, assetPath: 'dune-buggy', pack: 'common', revision: '8845', color: '#9ba3ad' }
 }
+const technicSection = sections.find(section => section.id === 'technic')
+for (const design of ['4254', '4255', '8845-spring']) {
+  if (technicSection.parts.some(part => part.design === design)) continue
+  parts[design].group = 'joints'
+  technicSection.parts.push(parts[design])
+}
 const packCache = new Map()
 const filesRoot = new URL('../../assets/ldraw/', import.meta.url)
 

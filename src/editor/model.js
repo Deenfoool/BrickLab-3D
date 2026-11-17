@@ -1,9 +1,11 @@
 import { Quaternion, Vector3 } from 'three'
-import { connectionMode } from '../mechanics/axial.js?v=8845'
-import { Assembly } from '../mechanics/assembly.js?v=rotation'
-import { rotationalDrive } from '../mechanics/rotation.js'
-import { gearAt, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=rotation'
-import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=8845'
+import { connectionMode } from '../mechanics/axial.js?v=linkages'
+import { Assembly } from '../mechanics/assembly.js?v=linkages'
+import { rotationalDrive } from '../mechanics/rotation.js?v=linkages'
+import { cardanCoupling } from '../mechanics/cardan.js'
+import { articulationDrive, jointBodies, linkageDrive, mechanismPoses, motionRange, suspensionDrive } from '../mechanics/linkage.js'
+import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=linkages'
+import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=linkages'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
 export const snapGrid = 10
@@ -150,23 +152,76 @@ export function rotationMotion(selected, parts, assembly) {
   }
   const rotor = ports.some(port => spinRoles.has(port.role)) ? rotationPort(ports) : ports.find(port => port.rotor)
   const preferred = rotor && lineFor(driver, rotor)
-  const joints = assembly.connections.map(({ shaft, socket, fit }) => ({
-    a: shaft.part,
-    b: socket.part,
-    motion: fit.motion.rotation,
-    shaftLine: lineFor(byId.get(shaft.part), assembly.port(shaft.part, shaft.port)),
-    socketLine: lineFor(byId.get(socket.part), assembly.port(socket.part, socket.port)),
-  }))
-  return rotationalDrive(selected, byId.keys(), joints, gearPoses(parts), preferred)
+  const joints = assembly.connections.map(({ shaft, socket, fit }) => {
+    const male = assembly.port(shaft.part, shaft.port)
+    const female = assembly.port(socket.part, socket.port)
+    return {
+      a: shaft.part, b: socket.part, motion: fit.motion.rotation, group: male.group, restLength: male.restLength,
+      shaftLine: lineFor(byId.get(shaft.part), male),
+      socketLine: lineFor(byId.get(socket.part), female),
+      ...(female.stroke && { stroke: female.stroke,
+        springSeat: worldPort(byId.get(shaft.part), { start: male.springSeat, axis: male.axis }).start.toArray() }),
+    }
+  })
+  const crosses = new Map()
+  for (const joint of joints) {
+    if (joint.group !== 'uniJnt') continue
+    if (!crosses.has(joint.a)) crosses.set(joint.a, [])
+    crosses.get(joint.a).push(joint)
+  }
+  const couplings = []
+  const replaced = new Set()
+  for (const [cross, pivots] of crosses) {
+    if (pivots.length !== 2) continue
+    const ends = pivots.map(pivot => {
+      const part = byId.get(pivot.b)
+      const bore = portsFor(part.design).find(port => port.role === 'blind-key' || port.role === 'key')
+      return bore && { part: part.id, shaftLine: lineFor(part, bore), pinLine: pivot.socketLine }
+    })
+    if (ends.some(end => !end)) continue
+    const coupling = cardanCoupling(cross, ...ends)
+    if (!coupling) continue
+    couplings.push(coupling)
+    pivots.forEach(pivot => replaced.add(pivot))
+  }
+  const gears = gearPoses(parts)
+  const spinJoints = joints.filter(joint => !replaced.has(joint))
+  const rotation = rotationalDrive(selected, byId.keys(), spinJoints, gears, preferred, couplings)
+  const rotateGear = id => {
+    const gear = gears.find(item => item.part === id)
+    return rotationalDrive(id, byId.keys(), spinJoints, gears, { start: gear.center, axis: gear.axis }, couplings)
+  }
+  const racks = parts.flatMap(part => {
+    const profile = gearRacks[part.design]
+    if (!profile) return []
+    return [{ ...profile, ...worldPort(part, profile), part: part.id,
+      normal: new Vector3().fromArray(profile.normal).applyQuaternion(new Quaternion().fromArray(part.rotation)) }]
+  })
+  const graph = jointBodies(byId.keys(), joints)
+  const spherical = ports.some(port => ['ball', 'ball-socket'].includes(port.role)) ? articulationDrive(selected, graph, true) : null
+  const mechanism = linkageDrive(selected, graph, racks, gears, rotation, rotateGear) ?? suspensionDrive(selected, graph) ?? spherical ??
+    (!couplings.some(coupling => coupling.cross === selected) && !preferred && (!rotation || rotation.reason === 'multiple-joint-axes') ? articulationDrive(selected, graph) : null)
+  return mechanism ? { ...mechanism, ok: true, range: motionRange(mechanism), meshes: mechanism.rotation?.meshes ?? [] } : rotation
 }
 
-export function rotationPoses(parts, motion, angle) {
+export function rotationPoses(parts, motion, angle, axis) {
+  if (motion.solve) {
+    const transforms = motion.solve(angle, axis)
+    if (!transforms) return null
+    const base = motion.rotation ? rotationPoses(parts, motion.rotation, motion.rotationAngle(angle, transforms)) : []
+    const driven = mechanismPoses(parts, transforms)
+    const moved = new Set(driven.map(part => part.id))
+    return [...base.filter(part => !moved.has(part.id)), ...driven]
+  }
   return parts.flatMap(part => {
     const spin = motion.spins.get(part.id)
-    if (!spin) return []
-    const axis = new Vector3().fromArray(spin.axis)
-    const start = new Vector3().fromArray(spin.start)
-    const turn = new Quaternion().setFromAxisAngle(axis, angle * spin.ratio)
+    const cross = motion.cardans?.get(part.id)
+    if (!spin && !cross) return []
+    const { center: start, rotation: turn } = cross ? cross(angle) : {
+      center: new Vector3().fromArray(spin.start),
+      rotation: new Quaternion().setFromAxisAngle(new Vector3().fromArray(spin.axis),
+        spin.angleAt ? spin.angleAt(angle) : angle * spin.ratio),
+    }
     return [{
       ...part,
       position: new Vector3().fromArray(part.position).sub(start).applyQuaternion(turn).add(start).toArray(),

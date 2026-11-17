@@ -18,19 +18,53 @@ const locations = profiles.locations.map(([point, reference]) => ({
 }))
 const imported = new Map()
 
+const shockPort = (id, role, gender, start, axis, extra) => ({
+  id, role, gender, start, axis, openings: ['start'], reference: [0, 0, 1],
+  sections: [{ shape: 'Q', radius: 1, length: 1 }], ...extra,
+})
+
+// Eye spacing and spring seats from the extended and compressed LDraw assemblies.
+const shockFamilies = [
+  { group: 'shock-6.5', rod: '4254', cylinder: '4255', eye: 0, stroke: [84, 105],
+    coilSeat: 56, rodSeat: -10, coils: ['8845-spring'] },
+  { group: 'shock-9', rod: '2910', cylinder: '2909', eye: -50, stroke: [130, 170],
+    coilSeat: -10, rodSeat: -30, coils: ['41355-f1', '41355-f2', 'u9409-f1', 'u9409-f2', 'u9410-f1', 'u9410-f2', 'u9411-f1', 'u9411-f2'] },
+  { group: 'shock-9-thick', rod: '80021', cylinder: '80022', eye: 0, stroke: [140, 160],
+    coilSeat: 41, rodSeat: -19, coils: ['u9562-f1', 'u9562-f2'] },
+  { group: 'shock-10-damped', rod: '32183c02', cylinder: '32181c05', eye: 0, stroke: [120, 180],
+    coilSeat: 84, rodSeat: -10, coils: ['22020-f1', '22020-f2'] },
+]
+
+const suspensionPorts = Object.fromEntries(shockFamilies.flatMap(({ group, rod, cylinder, eye, stroke, coilSeat, rodSeat, coils }) => [
+  [rod, [shockPort('piston-guide', 'piston', 'M', [0, 0, 0], [0, 1, 0], { group, springSeat: [0, rodSeat, 0] })]],
+  [cylinder, [
+    shockPort('cylinder-guide', 'damper-cylinder', 'F', [0, eye, 0], [0, 1, 0], { group, stroke }),
+    shockPort('coil-seat', 'coil-seat', 'F', [0, coilSeat, 0], [0, 1, 0], { group, slot: 'coil' }),
+  ]],
+  ...coils.map(design => [design, [shockPort('coil-base', 'coil', 'M', [0, 0, 0], [0, 1, 0],
+    { group, slot: 'coil', restLength: design === '8845-spring' ? 38 : stroke[design.endsWith('-f2') ? 0 : 1] - (coilSeat - eye) + rodSeat })]]),
+]))
+
 export function hasConnectors(design) {
-  return Object.hasOwn(technic, design) || Object.hasOwn(designs, design) || Boolean(support[design]?.ports?.length)
+  return Object.hasOwn(technic, design) || Object.hasOwn(designs, design) || Boolean(support[design]?.ports?.length || suspensionPorts[design])
 }
 
 export function portsFor(design) {
   if (Object.hasOwn(technic, design)) return technic[design]
-  if (!Object.hasOwn(designs, design)) return support[design]?.ports ?? noPorts
   if (!imported.has(design)) {
-    imported.set(design, designs[design].map(([key, type, point]) => ({
+    const base = designs[design]?.map(([key, type, point]) => ({
       id: `shadow-${key}`, ...definitions[type], ...locations[point],
       ...(definitions[type].role === 'rim-seat' && { mates: profiles.rimMates[design] }),
       ...(definitions[type].role === 'tyre-seat' && { design }),
-    })))
+      ...(suspensionPorts[design] && /:(?:fake-)?spring-[01]$/.test(definitions[type].group ?? '') && { legacy: true }),
+    })) ?? support[design]?.ports ?? noPorts
+    const supported = suspensionPorts[design] ? [...base, ...suspensionPorts[design]] : base
+    if (design === '2909') supported.push({
+      id: 'damper-eye', role: 'bearing', gender: 'F', openings: ['start', 'end'],
+      start: [0, -50, -10], axis: [0, 0, 1], sections: [{ shape: 'R', radius: 8, length: 2 },
+        { shape: 'R', radius: 6, length: 16 }, { shape: 'R', radius: 8, length: 2 }],
+    })
+    imported.set(design, supported)
   }
   return imported.get(design)
 }
@@ -45,4 +79,9 @@ export function gearAt(part, design, center, axis) {
   const section = portsFor(design).find(port => port.role === 'gear')?.sections[0]
   if (!section) throw new Error(`Design has no supported spur gear: ${design}`)
   return { part, center, axis, teeth: section.teeth, radius: section.radius, width: section.length }
+}
+
+// Local engagement datum and tooth span of the original Technic rack.
+export const gearRacks = {
+  3743: { start: [0, 4, 0], axis: [1, 0, 0], normal: [0, -1, 0], length: 80, width: 20, pitch: 8 },
 }

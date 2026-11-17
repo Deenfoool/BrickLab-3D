@@ -1,4 +1,4 @@
-import { hasConnectors } from '../mechanics/catalog.js?v=8845'
+import { hasConnectors } from '../mechanics/catalog.js?v=linkages'
 import { previewColumns, previewRows, previewPageSize, searchLibrary } from './library-data.js?v=parts-library'
 
 const batchSize = 48
@@ -44,6 +44,10 @@ export function mountLibrary(root, { sections, language, labels, selectPart, sig
       const card = rendered.get(node.dataset.design)
       if (!card?.button.contains(node)) continue
       const { assetPath, preview, revision } = card.part
+      if (!Number.isInteger(preview)) {
+        previews.unobserve(node)
+        continue
+      }
       const tile = preview % previewPageSize
       const image = new URL(`../../assets/ldraw/${assetPath}/previews/${Math.floor(preview / previewPageSize)}.webp`, import.meta.url)
       image.searchParams.set('v', revision)

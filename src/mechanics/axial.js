@@ -42,6 +42,10 @@ export function connectionMode(male, female) {
     return mate && { rotation: 'locked', rimSeat: mate }
   }
   const family = `${male.role}:${female.role}`
+  if (male.group && male.group === female.group) {
+    if (family === 'piston:damper-cylinder') return { rotation: 'slider', anchor: 'slide', stroke: female.stroke }
+    if (family === 'coil:coil-seat') return { rotation: 'spring', anchor: 'pivot' }
+  }
   if (family === 'clutch-driver:clutch-face' &&
       Math.abs(male.sections[0].radius - female.sections[0].radius) <= RADIUS_TOLERANCE) {
     return { rotation: 'locked', clutch: true }
@@ -57,6 +61,7 @@ export function connectionMode(male, female) {
     return { rotation: 'continuous', anchor: 'pivot' }
   }
   if (family === 'plug:receptacle' && male.group && male.group === female.group) {
+    if (/^assembly:.*:(?:fake-)?spring-[01]$/.test(male.group)) return { rotation: 'spring', anchor: 'keyed' }
     const coupled = male.group === 'techWhlCon1' || male.group.endsWith(':differential-ring')
     return { rotation: coupled ? 'locked' : 'fixed', anchor: 'keyed' }
   }
@@ -177,8 +182,20 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
     return { ok: false, reason: 'missing-detents' }
   }
   if (!female.openings.includes(side)) return { ok: false, reason: 'closed-entry' }
+  if (mode.anchor === 'slide') {
+    const [min, max] = mode.stroke
+    if (direction !== 1 || offset < min - EPSILON || offset > max + EPSILON) {
+      return { ok: false, reason: 'stroke-limit' }
+    }
+    return {
+      ok: true,
+      occupancy: { shaft: [0, portLength(male)], socket: [0, portLength(female)] },
+      motion: { rotation: 'slider', friction: false, detents: [], travel: [min - offset, max - offset] },
+      placement: { offset, direction, side, roll: Math.round(roll / Math.PI) * Math.PI, keyStep: Math.PI, anchor: 'slide' },
+    }
+  }
   if (mode.anchor || mode.rimSeat) {
-    const [seat, orientation] = mode.rimSeat ?? [0, mode.anchor === 'pivot' ? direction : 1]
+    const [seat, orientation] = mode.rimSeat ?? [0, mode.anchor === 'pivot' && mode.rotation !== 'spring' ? direction : 1]
     if (orientation !== direction || Math.abs(offset - seat) > .01) return { ok: false, reason: 'seat-alignment' }
     const keyStep = mode.anchor === 'keyed' ? Math.PI * 2 : null
     return {

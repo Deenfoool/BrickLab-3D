@@ -1,15 +1,16 @@
 import { mountFloatingPanels } from './floating-panels.js?v=floating-panels'
 import { Plane, Quaternion, Vector3 } from 'three'
-import { portsFor } from '../mechanics/catalog.js?v=rotation'
-import { baseRotation, samePose, worldPort } from './placement.js?v=8845'
-import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=rotation'
-import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=8845'
-import { nearestDetent, portLength } from '../mechanics/axial.js?v=8845'
-import { nearbyConnections } from './snap.js?v=rotation'
-import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=8845'
-import { mountLibrary } from './library.js?v=8845'
-import { createScene } from './scene.js?v=rotation'
-import { editorLabels } from './labels.js?v=rotation'
+import { portsFor } from '../mechanics/catalog.js?v=linkages'
+import { baseRotation, samePose, worldPort } from './placement.js?v=linkages'
+import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=linkages'
+import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=linkages'
+import { nearestDetent, portLength } from '../mechanics/axial.js?v=linkages'
+import { nearbyConnections } from './snap.js?v=linkages'
+import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=linkages'
+import { mountLibrary } from './library.js?v=linkages'
+import { createScene } from './scene.js?v=linkages'
+import { componentBundle, expandComponents } from './components.js'
+import { editorLabels } from './labels.js?v=linkages'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
@@ -21,7 +22,8 @@ const connectionRecord = ({ shaft, socket, fit }) => ({ shaft, socket, placement
 const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
-export async function mountEditor(root, { document: source, language, save, download, signal }) {
+export async function mountEditor(root, { document, language, save, download, signal }) {
+  const source = expandComponents(document, parts)
   const t = editorLabels[language]
   const models = new Map()
   const requests = new Map()
@@ -124,8 +126,11 @@ export async function mountEditor(root, { document: source, language, save, down
                 <small>${t.side}</small>
               </div>
               <div data-el="motion" class="editor-motion" hidden>
-                <label>${t.drive}<input data-el="angle" type="range" min="-1080" max="1080" step="1" value="0"></label>
+                <label><span data-el="motionLabel">${t.drive}</span><input data-el="angle" type="range" min="-1080" max="1080" step="1" value="0"></label>
                 <output data-el="degrees">0°</output>
+                <select data-el="motionAxis" aria-label="${t.motionAxis}" hidden>
+                  <option value="0">X</option><option value="1" selected>Y</option><option value="2">Z</option>
+                </select>
                 <button type="button" data-el="play">${t.play}</button>
                 <button type="button" data-el="applyHinge" hidden>${t.applyHinge}</button>
               </div>
@@ -181,6 +186,7 @@ export async function mountEditor(root, { document: source, language, save, down
   let depth = 0
   let roll = 0
   let angle = 0
+  let lastPreview = 0
   let frame
   let transmission
   let hinge
@@ -235,10 +241,18 @@ export async function mountEditor(root, { document: source, language, save, down
       scene.select(selected)
       el('applyHinge').disabled = Math.abs(target - hinge.roll) < 1e-8
     } else if (transmission?.ok) {
-      scene.previewParts(rotationPoses(state.parts, transmission, angle * Math.PI / 180))
-      scene.select(selected)
+      const value = transmission.unit === 'linear' ? angle : angle * Math.PI / 180
+      const poses = rotationPoses(state.parts, transmission, value, Number(el('motionAxis').value))
+      if (!poses) {
+        angle = lastPreview
+      } else {
+        lastPreview = angle
+        scene.previewParts(poses)
+        scene.select(selected)
+      }
     }
-    el('degrees').textContent = `${Number(angle.toFixed(2))}°`
+    el('degrees').textContent = transmission?.unit === 'linear'
+      ? `${Number((angle * .4).toFixed(2))} ${t.millimeters}` : `${Number(angle.toFixed(2))}°`
     el('angle').value = angle
   }
 
@@ -274,6 +288,7 @@ export async function mountEditor(root, { document: source, language, save, down
     updateHighlights()
     hinge = mode === 'kinematics' && id ? hingeMotion(id, state.parts, links) : undefined
     angle = hinge?.ok ? hinge.roll * 180 / Math.PI : 0
+    lastPreview = angle
     transmission = mode === 'kinematics' && !hinge ? rotationMotion(id, state.parts, assembly) : null
     showMotion()
     render()
@@ -324,11 +339,13 @@ export async function mountEditor(root, { document: source, language, save, down
     message = ''
     render()
     try {
-      await prepareModel(part)
+      const initial = { id: crypto.randomUUID(), design: part.design, position: [0, 0, 0],
+        rotation: baseRotation, color: part.color }
+      const bundle = componentBundle(initial, parts, () => crypto.randomUUID())
+      await Promise.all((bundle ? [bundle.anchor, ...bundle.items] : [initial]).map(item => prepareModel(parts[item.design])))
       if (pendingPart !== request || signal.aborted) return
       pendingPart = undefined
-      startPlacement({ id: crypto.randomUUID(), design: part.design, position: [0, 0, 0],
-        rotation: baseRotation, color: part.color })
+      startPlacement(bundle?.anchor ?? initial, false, undefined, bundle)
     } catch (error) {
       if (pendingPart !== request || signal.aborted) return
       pendingPart = undefined
@@ -361,16 +378,18 @@ export async function mountEditor(root, { document: source, language, save, down
     if (part) el('color').value = /^#[0-9a-f]{6}$/i.test(part.color) ? part.color : parts[part.design].color
     el('links').textContent = mode === 'kinematics'
       ? hinge ? (hinge.ok ? t.detented : t.closedHinge)
-        : transmission ? (transmission.ok ? `${t.mesh}: ${transmission.meshes.length}` : t.transmissionError)
+        : transmission ? (transmission.ok ? (t.mechanisms[transmission.kind] ?? `${t.mesh}: ${transmission.meshes.length}`) : t.transmissionError)
           : t.driver
       : part ? (portsFor(part.design).length ? `${t.joints}: ${selectedLinks.length}` : t.geometryOnly) : ''
     el('motion').hidden = (!hinge?.ok && !transmission?.ok) || mode !== 'kinematics'
-    el('play').hidden = Boolean(hinge)
+    el('play').hidden = Boolean(hinge || transmission?.solve)
+    el('motionAxis').hidden = !transmission?.spherical
+    el('motionLabel').textContent = transmission?.unit === 'linear' ? t.travel : t.drive
     el('applyHinge').hidden = !hinge?.ok
     const range = el('angle')
-    range.min = hinge?.ok ? hinge.detents[0] * 180 / Math.PI : -1080
-    range.max = hinge?.ok ? hinge.detents.at(-1) * 180 / Math.PI : 1080
-    range.step = hinge?.ok ? 'any' : '1'
+    range.min = hinge?.ok ? hinge.detents[0] * 180 / Math.PI : transmission?.range?.[0] ?? -1080
+    range.max = hinge?.ok ? hinge.detents.at(-1) * 180 / Math.PI : transmission?.range?.[1] ?? 1080
+    range.step = hinge?.ok || transmission?.solve ? 'any' : '1'
     range.value = angle
     el('play').textContent = frame ? t.stop : t.play
     el('insertion').hidden = !moving
@@ -388,7 +407,7 @@ export async function mountEditor(root, { document: source, language, save, down
     el('undo').disabled = !undo.length
     el('redo').disabled = !redo.length
     const fit = candidate?.fit
-    const rotationCue = { fixed: t.fixed, locked: t.locked, detented: t.detented, continuous: t.freely, ball: t.ballJoint }
+    const rotationCue = { fixed: t.fixed, locked: t.locked, detented: t.detented, continuous: t.freely, ball: t.ballJoint, slider: t.travel, spring: t.mechanisms.suspension }
     const cue = fit ? rotationCue[fit.motion.rotation]
       : candidate?.mesh ? t.gearSnap : candidate?.failure?.includes('occupied') ? t.occupied : candidate?.failure ? t.blocked : t.free
     el('hint').textContent = resize ? t.lengthPreview(parts[resize.pose.design][language], resize.lost.length, resize.kept) :
@@ -407,7 +426,7 @@ export async function mountEditor(root, { document: source, language, save, down
       const position = moving.position.map((value, i) => i === 1 ? value : value + onGrid(delta?.getComponent(i) ?? 0))
       freePosition = { ...moving, position }
     } else if (freePoint) freePosition = raisedPose(moving, models.get(moving.design), freePoint)
-    const options = !pastedGroup && snapAllowed(event)
+    const options = (!pastedGroup || pastedGroup.snap) && snapAllowed(event)
       ? nearbyConnections({ scene, assembly: placementAssembly, parts: state.parts, moving: freePosition ?? moving, event, depth, roll, ray })
       : []
     const index = options.findIndex(option => option.key === candidate?.key)
@@ -790,6 +809,12 @@ export async function mountEditor(root, { document: source, language, save, down
   })
   on(el('shallower'), 'click', () => changeDepth(-2))
   on(el('deeper'), 'click', () => changeDepth(2))
+  on(el('motionAxis'), 'change', () => {
+    angle = 0
+    lastPreview = 0
+    scene.setParts(state.parts)
+    showMotion()
+  })
   on(el('angle'), 'input', event => {
     stopAnimation()
     angle = Number(event.target.value)
@@ -870,7 +895,8 @@ export async function mountEditor(root, { document: source, language, save, down
     if (drag) {
       const min = Number(el('angle').min)
       const max = Number(el('angle').max)
-      angle = Math.max(min, Math.min(max, drag.angle + (event.clientX - drag.x) * 2 * drag.sign))
+      const sensitivity = transmission?.solve ? Math.min(2, (max - min) / 180) : 2
+      angle = Math.max(min, Math.min(max, drag.angle + (event.clientX - drag.x) * sensitivity * drag.sign))
       showMotion()
     } else if (directDrag && !moving && (event.buttons & 1) &&
         Math.hypot(event.clientX - directDrag.start.clientX, event.clientY - directDrag.start.clientY) >= 5) {

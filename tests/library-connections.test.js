@@ -12,8 +12,12 @@ registerHooks({ resolve(specifier, context, next) {
   }
   return next(specifier, context)
 } })
-const { createAssembly, connectAligned, rotationMotion, rotationPoses } = await import('../src/editor/model.js')
+const { createAssembly, connectAligned, connectPlaced, rotationMotion, rotationPoses } = await import('../src/editor/model.js')
 const { rotationalDrive } = await import('../src/mechanics/rotation.js')
+const { componentBundle, expandComponents } = await import('../src/editor/components.js')
+const { jointBodies, linkageDrive } = await import('../src/mechanics/linkage.js')
+const { Quaternion, Vector3 } = await import('three')
+const { worldPort } = await import('../src/editor/placement.js')
 const { nearbyConnections } = await import('../src/editor/snap.js')
 const { portsFor } = await import('../src/mechanics/catalog.js')
 const { evaluateInsertion, portLength } = await import('../src/mechanics/axial.js')
@@ -103,9 +107,7 @@ test('a rim accepts only its documented tyre and retains that seating when reope
   }
 })
 
-test('towballs snap at the center and stay connected when the joint changes angle', async () => {
-  const { Quaternion, Vector3 } = await import('three')
-  const { worldPort } = await import('../src/editor/placement.js')
+test('towballs snap at the center and stay connected when the joint changes angle', () => {
   const ball = part('ball', '2736')
   const socket = part('socket', '2739a')
   const snap = options(ball, socket).find(item => item.fit?.motion.rotation === 'ball')
@@ -202,7 +204,7 @@ test('8845 Dune Buggy keeps all its parts, stored connections and four mounted t
   assert.ok(buggy.parts.every(part => availableParts[part.design]))
   const { connections } = createAssembly(buggy.parts, buggy.connections, buggy.gears)
   assert.equal(connections.length, buggy.connections.length)
-  assert.equal(connections.length, 255)
+  assert.equal(connections.length, 267)
   const designs = new Map(buggy.parts.map(part => [part.id, part.design]))
   const tyres = buggy.parts.filter(part => part.design === '3634')
   assert.equal(tyres.length, 4)
@@ -246,18 +248,18 @@ test('8845 rotates each wheel with its tyre and axle while leaving the chassis s
 test('8845 drives both 16-tooth gears in opposite directions from either axle', () => {
   const assembly = createAssembly(buggy.parts, buggy.connections)
   for (const driver of ['8845-73', '8845-93']) {
-    const motion = rotationMotion(driver, buggy.parts, assembly)
+    const motion = rotationMotion(driver, buggy.parts, assembly).rotation
     assert.ok(motion.ok)
     const first = motion.spins.get('8845-76')
     const second = motion.spins.get('8845-94')
     const signedProjection = first.axis.reduce((sum, component, i) => sum + component * second.axis[i], 0)
     assert.ok(Math.abs(first.ratio + second.ratio * signedProjection) < 1e-8)
-    assert.equal(motion.spins.size, 6)
+    assert.equal(motion.spins.size, 11)
     assert.equal(motion.meshes.length, 1)
   }
   const pulley = rotationMotion('8845-101', buggy.parts, assembly)
   assert.ok(pulley.ok)
-  assert.ok(pulley.spins.has('8845-96'))
+  assert.ok(pulley.rotation.spins.has('8845-96'))
 })
 
 test('rigid offsets orbit together and a second noncoaxial support prevents spin', () => {
@@ -292,4 +294,162 @@ test('the editor drive propagates mixed gear ratios and rejects a contradictory 
     gear('third', [10, 10 * Math.sqrt(3), 0], 8)]
   const blocked = rotationalDrive('input', ['input', 'output', 'third'], [], loop, driver)
   assert.equal(blocked.reason, 'inconsistent-transmission')
+})
+
+function preview(parts, motion, angle, axis) {
+  assert.ok(motion?.ok)
+  const poses = rotationPoses(parts, motion, angle, axis)
+  assert.ok(poses)
+  return new Map([...parts, ...poses].map(pose => [pose.id, pose]))
+}
+
+function countRetained(parts, links) {
+  const assembly = createAssembly([...parts.values()], [])
+  return links.filter(link => connectPlaced(assembly, parts.get(link.shaft.part), parts.get(link.socket.part), link).ok).length
+}
+
+test('an assembled Cardan passes motion both ways and preserves its two pivot axes', () => {
+  const bundle = componentBundle(part('joint', '61903'), availableParts, (id, i) => `${id}-${i}`)
+  assert.ok(bundle)
+  const [a, b, cross] = [bundle.anchor, ...bundle.items]
+  b.rotation = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI / 4)
+    .multiply(new Quaternion().fromArray(b.rotation)).toArray()
+  const parts = [a, b, cross]
+  const assembly = createAssembly(parts, bundle.links)
+  assert.equal(assembly.connections.length, 2)
+  for (const driver of [a, b]) {
+    const motion = rotationMotion(driver.id, parts, assembly)
+    assert.ok(motion?.ok)
+    assert.equal(motion.cardans.size, 1)
+    for (const angle of [-4 * Math.PI - .54, -.83, .54, Math.PI + .63]) {
+      const moved = preview(parts, motion, angle)
+      assert.equal(countRetained(moved, bundle.links), 2)
+      const receiver = driver === a ? b : a
+      const spin = motion.spins.get(receiver.id)
+      assert.ok(Math.abs(Math.abs(spin.angleAt(angle)) - Math.abs(angle)) > .03)
+      assert.notDeepEqual(moved.get(cross.id).rotation, cross.rotation)
+    }
+  }
+})
+
+test('a non-parallelogram linkage keeps every joint closed in either direction', () => {
+  const shaftLine = start => ({ start, axis: [0, 0, 1] })
+  const joint = (a, b, start, motion = 'continuous') => ({
+    a, b, shaftLine: shaftLine(start), socketLine: shaftLine(start), motion,
+  })
+  const ids = ['frame', 'mount', 'crank', 'coupler', 'rocker']
+  const joints = [joint('frame', 'mount', [0,0,0], 'fixed'),
+    joint('frame', 'crank', [0,0,0]), joint('crank', 'coupler', [1,3,0]),
+    joint('coupler', 'rocker', [8,4,0], 'ball'), joint('rocker', 'frame', [10,0,0])]
+  const graph = jointBodies(ids, joints)
+  const motion = linkageDrive('crank', graph, [], [], null)
+  assert.equal(motion?.kind, 'linkage')
+  for (const angle of [-.2, .2]) {
+    const transforms = motion.solve(angle)
+    assert.ok(transforms)
+    assert.equal(transforms.has('frame'), false)
+    for (const link of joints.slice(1)) {
+      const point = id => {
+        const value = new Vector3().fromArray(link.socketLine.start)
+        const transform = transforms.get(id)
+        return transform ? value.applyQuaternion(transform.rotation).add(transform.translation) : value
+      }
+      assert.ok(point(link.a).distanceTo(point(link.b)) < 1e-8)
+    }
+  }
+})
+
+test('8845 steering moves both knuckles, the rack and the Cardan while preserving all contacts', () => {
+  const assembly = createAssembly(buggy.parts, buggy.connections)
+  for (const driver of ['8845-42', '8845-60', '8845-101']) {
+    const motion = rotationMotion(driver, buggy.parts, assembly)
+    assert.equal(motion?.kind, 'linkage')
+    for (const angle of [-.25, .25]) {
+      const moved = preview(buggy.parts, motion, angle)
+      for (const index of [42, 43, 60, 172, 178]) assert.notDeepEqual(moved.get(`8845-${index}`), buggy.parts[index - 1])
+      assert.deepEqual(moved.get('8845-72'), buggy.parts[71])
+      assert.notDeepEqual(moved.get('8845-99').rotation, buggy.parts[98].rotation)
+      assert.equal(countRetained(moved, buggy.connections), buggy.connections.length)
+    }
+  }
+})
+
+test('both 8845 shocks compress on their own swing arms within their stroke', () => {
+  const assembly = createAssembly(buggy.parts, buggy.connections)
+  for (const [spring, rod, cylinder, tyre, fixedTyre] of [[106,105,104,174,176], [109,108,107,176,174]]) {
+    const motion = rotationMotion(`8845-${spring}`, buggy.parts, assembly)
+    assert.equal(motion?.kind, 'suspension')
+    const moved = preview(buggy.parts, motion, motion.range[0] * Math.PI / 360)
+    const end = index => new Vector3().fromArray(moved.get(`8845-${index}`).position)
+    const length = end(rod).distanceTo(end(cylinder))
+    assert.ok(length >= 84 && length < 104)
+    assert.ok(moved.get(`8845-${spring}`).previewScale[1] < 1)
+    assert.notDeepEqual(moved.get(`8845-${tyre}`), buggy.parts[tyre - 1])
+    assert.deepEqual(moved.get(`8845-${fixedTyre}`), buggy.parts[fixedTyre - 1])
+    assert.equal(countRetained(moved, buggy.connections), buggy.connections.length)
+  }
+})
+
+test('independent shock families expand and travel between catalog stops', () => {
+  for (const [design, travel] of [['76320-f1', 60], ['41475-f1', 40], ['74741-f2', 40]]) {
+    const source = { parts: [part('shock', design)], connections: [] }
+    const expanded = expandComponents(source, availableParts)
+    assert.equal(expanded.parts.length, 3, design)
+    assert.equal(expanded.connections.length, 2, design)
+    const assembly = createAssembly(expanded.parts, expanded.connections)
+    const motion = rotationMotion('shock', expanded.parts, assembly)
+    assert.equal(motion?.unit, 'linear')
+    assert.equal(motion.range[1] - motion.range[0], travel)
+    const moved = preview(expanded.parts, motion, motion.range[0] + travel / 2)
+    const spring = expanded.parts[2]
+    assert.ok(moved.get(spring.id).previewScale[1] > 0)
+    assert.equal(countRetained(moved, expanded.connections), 2)
+    assert.equal(rotationPoses(expanded.parts, motion, motion.range[1] + 1), null)
+  }
+})
+
+test('a spherical joint can turn about any of the three editor axes', () => {
+  const ball = part('ball', '2736')
+  const socket = part('socket', '2739a')
+  const snap = options(ball, socket).find(candidate => candidate.fit?.motion.rotation === 'ball')
+  assert.ok(snap)
+  const parts = [{ ...ball, ...snap.pose }, socket]
+  const links = [{ shaft: snap.shaft, socket: snap.socket, placement: snap.fit.placement }]
+  const assembly = createAssembly(parts, links)
+  const motion = rotationMotion('ball', parts, assembly)
+  assert.ok(motion?.spherical)
+  const poses = [0, 1, 2].map(axis => preview(parts, motion, .23, axis))
+  assert.equal(new Set(poses.map(moved => moved.get('ball').rotation.join())).size, 3)
+  assert.ok(poses.every(moved => countRetained(moved, links) === 1))
+})
+
+test('snap places telescopic shock parts in either insertion order and pairs the rack with its pinion', () => {
+  const cylinder = part('cylinder', '4255')
+  const rod = part('rod', '4254')
+  for (const [moving, fixed] of [[rod, cylinder], [cylinder, rod]]) {
+    const snap = options(moving, fixed).find(option => option.fit?.motion.rotation === 'slider')
+    assert.ok(snap)
+    assert.equal(restore(snap, moving, fixed).length, 1)
+  }
+  const rack = part('rack', '3743')
+  const gear = part('pinion', '3647')
+  assert.ok(options(gear, rack).some(option => option.mesh?.ok))
+  assert.ok(options(rack, gear).some(option => option.mesh?.ok))
+})
+
+test('expanding a loaded shock preserves its external mount at the piston end', () => {
+  const shock = part('shock', '76320-f1')
+  const pin = part('pin', '3673')
+  const pinEnd = options(pin, shock).find(snap => snap.fit?.ok && snap.socket.port === 'shadow-d2028bdba67a')
+  assert.ok(pinEnd)
+  const source = {
+    parts: [shock, { ...pin, ...pinEnd.pose }],
+    connections: [{ shaft: pinEnd.shaft, socket: pinEnd.socket, placement: pinEnd.fit.placement }],
+  }
+  const expanded = expandComponents(source, availableParts)
+  assert.equal(expanded.parts.length, 4)
+  assert.equal(expanded.connections.length, 3)
+  assert.equal(createAssembly(expanded.parts, expanded.connections).connections.length, 3)
+  assert.equal(expanded.connections.find(link => link.shaft.part === 'pin').socket.part, 'shock:component:1')
+  assert.deepEqual(expandComponents(expanded, availableParts), expanded)
 })
