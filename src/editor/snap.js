@@ -17,8 +17,11 @@ function meshCandidate({ scene, moving, fixed, ownGear, fixedGear, event, ray, a
   const b = gearCenter(fixed, fixedGear)
   if (1 - Math.abs(a.axis.dot(b.axis)) > 0.00005) return
   const plane = ray && new Plane().setFromNormalAndCoplanarPoint(b.axis, b.center)
-  const aim = plane ? ray.intersectPlane(plane, new Vector3()) : a.center
-  if (!aim) return
+  let aim = a.center
+  if (plane) {
+    aim = Math.abs(ray.direction.dot(b.axis)) > 1e-4 ? ray.intersectPlane(plane, new Vector3()) : null
+    aim ??= ray.closestPointToPoint(b.center, new Vector3())
+  }
   const radial = aim.clone().sub(b.center)
   radial.addScaledVector(b.axis, -radial.dot(b.axis))
   if (radial.lengthSq() < 1e-6) return
@@ -135,6 +138,7 @@ export function nearbyConnections(context) {
       const { start, axis } = worldPort(fixed, fixedPort)
       const span = portLength(fixedPort)
       if (['shift-tip', 'shift-groove', 'ball', 'ball-socket', 'pivot', 'clip', 'plug', 'receptacle', 'piston', 'damper-cylinder', 'coil', 'coil-seat'].includes(fixedPort.role)) {
+        if (scene.pixelDistance(start, event) > 31) continue
         for (const own of ownConnectors) {
           const mode = own.gender === 'M' ? connectionMode(own, fixedPort) : connectionMode(fixedPort, own)
           if (!mode?.anchor || (!acceptPose && (own.shift || fixedPort.shift))) continue
@@ -172,7 +176,7 @@ export function nearbyConnections(context) {
           for (const seat of seats) {
             if (seat.along < socketWidth / 2 || seat.along > span - socketWidth / 2) continue
             const point = start.clone().addScaledVector(axis, seat.at)
-            points = [...points, ...withinSnapRange(scene, event, [{ ...seat, point }])]
+            points = [...points, ...withinSnapRange(scene, event, [{ ...seat, point, targetKind: 'stop' }])]
           }
         }
         if (stops && !movingShaft) {
@@ -180,15 +184,15 @@ export function nearbyConnections(context) {
           // A failed aim inside an occupied interval must not hide a nearby legal seat.
           const centers = [stops.start - socketWidth / 2, stops.end + socketWidth / 2]
           const shoulders = centers.flatMap((along, index) => along >= socketWidth / 2 && along <= span - socketWidth / 2
-            ? [{ side: index === 0 ? 'start' : 'end', point: start.clone().addScaledVector(axis, along), along }]
+            ? [{ side: index === 0 ? 'start' : 'end', point: start.clone().addScaledVector(axis, along), along, targetKind: 'neighbor' }]
             : [])
           points = [...points, ...withinSnapRange(scene, event, shoulders)]
         }
         if (!points.length) continue
-        for (const { side, point, along, distance } of points) {
+        for (const { side, point, along, distance, targetKind = along === undefined ? 'end' : 'slide' } of points) {
           const shaft = { part: movingShaft ? moving.id : fixed.id, port: male.id }
           const socket = { part: movingShaft ? fixed.id : moving.id, port: female.id }
-          const key = JSON.stringify([fixed.id, fixedPort.id, own.id, side, along !== undefined])
+          const key = JSON.stringify([fixed.id, fixedPort.id, own.id, side, targetKind])
           const directions = movingShaft ? [1, -1] : [side === 'start' ? -1 : 1, side === 'start' ? 1 : -1]
           const entries = movingShaft ? [side] : female.openings
           // Each end can reach only as far as the first installed socket on that side.
@@ -245,7 +249,10 @@ export function nearbyConnections(context) {
                 const reach = movingShaft ? 0 : Math.abs((bounds[0] + bounds[1]) / 2 - endpoint)
                 const score = acceptPose ? pose.position.reduce((sum, value, index) =>
                   sum + (value - moving.position[index]) ** 2, 0) : movingShaft ? orientation.angleTo(new Quaternion().fromArray(pose.rotation)) : reach
-                if (!best || score < best.score) best = { key, point, distance, fit, pose, shaft, socket, score }
+                if (!best || score <= best.score) {
+                  const turn = orientation.angleTo(new Quaternion().fromArray(pose.rotation))
+                  if (!best || score < best.score || (!mode.axialRange && turn < best.turn)) best = { key, point, distance, fit, pose, shaft, socket, score, turn }
+                }
                 if (movingShaft && !acceptPose) break
               }
             }
@@ -256,8 +263,34 @@ export function nearbyConnections(context) {
       }
     }
   }
-  return candidates.sort((a, b) =>
-    Number(Boolean(b.fit || b.mesh)) - Number(Boolean(a.fit || a.mesh)) || a.distance - b.distance || a.key.localeCompare(b.key))
+  const contacts = new Map()
+  for (const candidate of candidates) {
+    if (!candidate.fit) continue
+    const { position, rotation } = candidate.pose
+    // q and -q describe the same orientation. Ignore roundoff between coincident seats.
+    const sign = Math.sign(rotation.find(value => Math.abs(value) > 1e-6))
+    const poseKey = [...position, ...rotation.map(value => sign * value)].map(value => Math.round(value * 1e4)).join(',')
+    if (!contacts.has(poseKey)) contacts.set(poseKey, new Set())
+    const ownPort = candidate.shaft.part === moving.id ? candidate.shaft.port : candidate.socket.port
+    candidate.contacts = contacts.get(poseKey)
+    candidate.contacts.add(ownPort)
+  }
+  for (const candidate of candidates) {
+    // Give depth a vote only within a narrow band around the pointer.
+    candidate.depth = ray ? candidate.point.clone().sub(ray.origin).dot(ray.direction) : 0
+  }
+  candidates.sort((a, b) =>
+    Number(Boolean(b.pose)) - Number(Boolean(a.pose)) ||
+    Math.floor(a.distance / 2) - Math.floor(b.distance / 2) ||
+    Math.floor(a.depth / 2) - Math.floor(b.depth / 2) || (b.contacts?.size ?? 0) - (a.contacts?.size ?? 0) ||
+    a.depth - b.depth || a.distance - b.distance || (a.turn ?? 0) - (b.turn ?? 0) || a.key.localeCompare(b.key))
+  // Multiple samples of one sliding seat must occupy only one Tab slot.
+  const seen = new Set()
+  return candidates.filter(candidate => {
+    if (seen.has(candidate.key)) return false
+    seen.add(candidate.key)
+    return true
+  })
 }
 
 export function translationSnaps(members, parts, assembly, scene, axes, insertionDepth) {

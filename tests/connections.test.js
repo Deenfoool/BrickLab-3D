@@ -127,3 +127,38 @@ test('a hybrid pin transmits rotation at the cross axle end and turns freely in 
   assert.equal(gear.motion.rotation, 'locked')
   assert.deepEqual(assembly.connections.map(link => link.fit.occupancy.shaft), [[0, 20], [20, 40]])
 })
+
+test('overlapping axle targets prefer the nearer axle regardless of insertion order', () => {
+  const back = part('a-back', '3737')
+  const front = part('z-front', '3737', [0, 0, 30])
+  const bush = part('bush', '3713')
+  const assembly = createAssembly([back, front, bush], [])
+  const ray = new Ray(new Vector3(20, 0, 100), new Vector3(0, 0, -1))
+  for (const parts of [[back, front], [front, back]]) {
+    const options = nearbyConnections({ parts, moving: bush, assembly, ray, depth: 0, roll: 0,
+      scene: { pixelDistance: point => Math.abs(point.x - 20) } })
+    assert.equal(options[0].shaft.part, front.id)
+    assert.ok(options.some(option => option.shaft?.part === back.id))
+    assert.equal(new Set(options.map(option => option.key)).size, options.length)
+  }
+})
+
+test('a side view can engage two parallel gears when the cursor ray misses their plane', () => {
+  const fixed = part('pinion', '10928')
+  const moving = part('gear', '3648', [38, 0, 0])
+  const ray = new Ray(new Vector3(38, 100, 2), new Vector3(0, -1, 0))
+  const options = nearbyConnections({ moving, parts: [fixed], ray, depth: 0, roll: 0, scene,
+    assembly: createAssembly([moving, fixed], []) })
+  assert.deepEqual(options.find(option => option.mesh)?.pose.position, [40, 0, 0])
+})
+
+test('ambiguous stud placement favors the pose that seats both studs', () => {
+  const fixed = part('bottom', '3700')
+  const moving = part('top', '3700', [0, -24, 0])
+  const assembly = createAssembly([moving, fixed], [])
+  const options = nearbyConnections({ moving, parts: [fixed], assembly, depth: 0, roll: 0, scene })
+  const placed = { ...moving, ...options[0].pose }
+  const links = connectAligned(assembly, [placed], [fixed])
+  assert.equal(links.length, 2)
+  assert.equal(createAssembly([placed, fixed], links).connections.length, 2)
+})

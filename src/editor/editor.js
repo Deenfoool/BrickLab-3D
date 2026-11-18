@@ -805,7 +805,7 @@ export async function mountEditor(root, { document, language, save, download, si
       ? translationSnaps([freePosition, ...groupTransforms(pastedGroup.items, pastedGroup.anchor, freePosition)],
         snapTargets(), placementAssembly, scene, 'XYZ', depth)
       : (!pastedGroup || pastedGroup.snap) && snapAllowed(event)
-      ? nearbyConnections({ scene, assembly: placementAssembly, parts: snapTargets(), moving: freePosition ?? moving, event, depth, roll, ray })
+      ? nearbyConnections({ scene, assembly: placementAssembly, parts: snapTargets().filter(part => !pastedGroup?.items.some(item => item.id === part.id)), moving: freePosition ?? moving, event, depth, roll, ray })
       : []
     const index = options.findIndex(option => option.key === candidate?.key)
     const sticky = options[index]
@@ -1112,7 +1112,10 @@ export async function mountEditor(root, { document, language, save, download, si
       const options = translationSnaps([gizmoRaw, ...groupTransforms(members, gizmoPart, gizmoRaw)],
         snapTargets(), transform, scene, scene.gizmo.axis ?? '', 0)
       const previous = options.findIndex(option => option.key === gizmoSnap?.key)
-      gizmoSnap = options.length ? options[cycle ? (previous + 1) % options.length : Math.max(0, previous)] : null
+      const first = options[0]
+      const sticky = options[previous]
+      if (cycle && first) gizmoSnap = options[(previous + 1) % options.length]
+      else gizmoSnap = sticky && sticky.shift <= first.shift + 1.5 ? sticky : first ?? null
     } else gizmoSnap = null
     const pose = gizmoSnap?.pose ? { ...gizmoRaw, ...gizmoSnap.pose } : gizmoRaw
     scene.setGhost(pose, gizmoSnap?.point)
