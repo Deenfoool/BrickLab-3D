@@ -1,3 +1,4 @@
+import { mountCablePanel } from './cable-panel.js'
 import { mountFloatingPanels } from './floating-panels.js?v=scene-parts'
 import { createEditorAudio } from './audio.js?v=editor-sound'
 import { mountMotorPanel } from './motor-panel.js'
@@ -85,6 +86,7 @@ export async function mountEditor(root, { document, language, save, download, si
         <button data-el="physics" type="button">${physicsTitle(language)}</button>
       </div>
       <div class="editor-actions">
+        <button data-el="editCable" type="button" aria-pressed="false">${language === 'ru' ? 'Укладка' : 'Route cables'}</button>
         <button data-el="wires" type="button" aria-pressed="true">${language === 'ru' ? 'Провода' : 'Wires'}</button>
         <button data-el="sound" class="editor-square editor-sound" type="button" aria-label="${t.sound}">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3z"/><path class="sound-waves" d="M15 9a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12"/><path class="sound-muted" d="m16 9 5 6m0-6-5 6"/></svg>
@@ -104,6 +106,7 @@ export async function mountEditor(root, { document, language, save, download, si
         <div data-el="empty" class="editor-empty">${t.empty}</div>
         <div class="editor-coordinates" aria-hidden="true"><span>X</span><span>Y</span><span>Z</span></div>
       </section>
+      <aside class="editor-test-drive cable-route-panel" data-el="cablePanel" hidden></aside>
       <aside class="editor-test-drive" data-el="drivePanel" hidden></aside>
       <aside class="editor-test-drive" data-el="physicsPanel" hidden></aside>
       <div class="editor-overlay" data-el="editorOverlay">
@@ -337,6 +340,10 @@ export async function mountEditor(root, { document, language, save, download, si
     read: () => state.parts,
     change: (id, electric) => commit({ ...state, parts: state.parts.map(part => part.id === id ? { ...part, electric } : part) }),
   })
+
+  const cablePanel = mountCablePanel(el('cablePanel'), el('editCable'), scene, language, (id, route) => {
+    commit({ ...state, parts: state.parts.map(part => part.id === id ? { ...part, electric: { ...part.electric, route } } : part) })
+  }, signal)
 
   function currentDocument() {
     return {
@@ -705,6 +712,9 @@ export async function mountEditor(root, { document, language, save, download, si
     el('play').textContent = frame ? t.stop : t.play
     el('play').disabled = transmission?.kind === 'motor' && !transmission.playback
     motorPanel.render(part, state.parts)
+    el('editCable').disabled = !building || el('wires').getAttribute('aria-pressed') === 'false'
+    if (!building) cablePanel.close()
+    else cablePanel.refresh()
     el('insertion').hidden = !moving
     el('depth').value = String(depth)
     el('empty').textContent = painting ? t.noSceneParts : t.empty
@@ -1126,7 +1136,9 @@ export async function mountEditor(root, { document, language, save, download, si
   on(el('wires'), 'click', () => {
     const visible = el('wires').getAttribute('aria-pressed') !== 'true'
     el('wires').setAttribute('aria-pressed', String(visible))
+    if (!visible) cablePanel.close()
     scene.setWiresVisible(visible)
+    render()
   })
   on(el('sound'), 'click', () => {
     if (audio.toggle()) audio.play('tool')

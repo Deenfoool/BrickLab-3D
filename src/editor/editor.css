@@ -215,3 +215,5 @@ body:has(.editor:not([hidden])){overflow:hidden}
 .editor-motor-panel fieldset label {
   flex-wrap: nowrap;
 }
+
+.editor .cable-route-panel { left: 50%; right: auto; transform: translateX(-50%); z-index: 6; }
