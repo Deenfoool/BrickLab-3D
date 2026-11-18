@@ -1,6 +1,7 @@
 export const locales = {
   ru: {
-    sections: 'Разделы', home: 'Главная', projects: 'Мои сборки', examples: 'Примеры',
+    sections: 'Разделы', home: 'Главная', projects: 'Мои сборки', examples: 'Примеры', library: 'Библиотека',
+    loadingLibrary: 'Загрузка библиотеки…',
     workspace: 'Рабочая область', recent: 'Недавние сборки', search: 'Найти сборку',
     name: 'Название', modified: 'Изменено', actions: 'Действия', all: 'Все сборки',
     create: 'Новая сборка', open: 'Открыть файл', settings: 'Настройки',
@@ -18,7 +19,8 @@ export const locales = {
     saved: 'Сборка сохранена.', partCount: count => `Деталей в сборке: ${count}`,
   },
   en: {
-    sections: 'Sections', home: 'Home', projects: 'My builds', examples: 'Examples',
+    sections: 'Sections', home: 'Home', projects: 'My builds', examples: 'Examples', library: 'Library',
+    loadingLibrary: 'Loading the library…',
     workspace: 'Workspace', recent: 'Recent builds', search: 'Find a build',
     name: 'Name', modified: 'Modified', actions: 'Actions', all: 'All builds',
     create: 'New build', open: 'Open file', settings: 'Settings',

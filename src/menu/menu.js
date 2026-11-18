@@ -1,5 +1,5 @@
 import { editorLabels } from '../editor/labels.js?v=scene-parts'
-import { locales } from './locale.js?v=menu-link-icons'
+import { locales } from './locale.js?v=catalog-page'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
 const byId = id => document.getElementById(id)
@@ -8,14 +8,22 @@ const query = byId('query')
 const status = byId('status')
 const removeDialog = byId('remove-dialog')
 const settingsDialog = byId('settings-dialog')
-const pages = ['home', 'projects', 'examples']
+const pages = ['home', 'projects', 'examples', 'library']
 let projects = readProjects()
 let storageWarning = false
 let activeMenu = null
 let pendingRemoval = null
 const editorRoot = byId('editor')
 const shell = document.querySelector('.shell')
+const libraryRoot = byId('library-panel')
+const libraryStatus = byId('library-status')
+const libraryRetry = byId('library-retry')
+const libraryControls = libraryRoot.querySelector('[data-library-controls]')
+const libraryScroll = libraryRoot.querySelector('[data-library-scroll]')
+const librarySearch = libraryControls.querySelector('input')
 let editorSession
+let librarySession
+let libraryGroup = ''
 let language = 'ru'
 
 try {
@@ -189,6 +197,7 @@ function render() {
   query.setAttribute('aria-label', t.search)
   byId('dashboard').hidden = !listVisible
   byId('example-panel').hidden = page !== 'examples'
+  libraryRoot.hidden = page !== 'library'
   byId('all-projects').hidden = page !== 'home'
   byId('page-title').textContent = page === 'home' ? t.workspace :
     page === 'project' ? activeProject?.document.name ?? t.projects : t[page]
@@ -197,7 +206,51 @@ function render() {
     renderList(page)
   }
   if (activeProject) openEditor(activeProject)
+  if (page === 'library') openLibrary()
+  else closeLibrary()
   setStatus(requestedId && !activeProject ? 'missing' : storageWarning ? 'storageError' : null)
+}
+
+function closeLibrary() {
+  if (!librarySession) return
+  if (librarySession.view) libraryGroup = librarySession.view.group
+  librarySession.controller.abort()
+  librarySession = null
+}
+
+async function openLibrary() {
+  if (librarySession?.language === language) return
+  closeLibrary()
+  const controller = new AbortController()
+  const session = { controller, language, view: null }
+  librarySession = session
+  const labels = editorLabels[language]
+  libraryControls.hidden = true
+  libraryScroll.hidden = true
+  libraryStatus.hidden = false
+  libraryStatus.textContent = strings().loadingLibrary
+  libraryRetry.hidden = true
+  try {
+    const [{ mountLibrary }, { sections }] = await Promise.all([
+      import('../editor/library.js?v=catalog-page'),
+      import('../editor/parts-data.js?v=catalog-page'),
+    ])
+    if (controller.signal.aborted) return
+    librarySearch.placeholder = labels.search
+    librarySearch.setAttribute('aria-label', labels.search)
+    session.view = mountLibrary(libraryRoot, {
+      sections, language: session.language, labels, initialGroup: libraryGroup, signal: controller.signal,
+    })
+    libraryControls.hidden = false
+    libraryScroll.hidden = false
+    libraryStatus.hidden = true
+  } catch (error) {
+    if (controller.signal.aborted) return
+    console.error(error)
+    libraryStatus.textContent = labels.loadPartsError
+    libraryRetry.textContent = labels.retry
+    libraryRetry.hidden = false
+  }
 }
 
 function closeEditor() {
@@ -217,7 +270,7 @@ async function openEditor(project) {
   editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=structural-bores')
+    const { mountEditor } = await import('../editor/editor.js?v=catalog-page')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
@@ -269,6 +322,7 @@ function setLanguage(value) {
 }
 
 query.addEventListener('input', () => renderList(currentPage()))
+libraryRetry.addEventListener('click', () => location.reload())
 byId('language').addEventListener('change', event => setLanguage(event.target.value))
 byId('settings-language').addEventListener('change', event => setLanguage(event.target.value))
 byId('settings-button').addEventListener('click', () => settingsDialog.showModal())
@@ -324,8 +378,9 @@ document.addEventListener('click', event => {
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') closeMenu(true)
 })
-window.addEventListener('hashchange', () => {
+window.addEventListener('hashchange', event => {
   query.value = ''
+  if (currentPage() === 'library' || new URL(event.oldURL).hash === '#library') window.scrollTo(0, 0)
   render()
 })
 window.addEventListener('storage', event => {

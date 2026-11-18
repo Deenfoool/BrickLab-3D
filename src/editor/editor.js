@@ -1,14 +1,14 @@
 import { mountFloatingPanels } from './floating-panels.js?v=scene-parts'
 import { Plane, Quaternion, Vector3 } from 'three'
-import { portsFor } from '../mechanics/catalog.js?v=structural-bores'
+import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=structural-bores'
 import { baseRotation, samePose, worldPort } from './placement.js?v=belt-drive'
 import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=structural-bores'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
 import { nearestDetent, portLength } from '../mechanics/axial.js?v=linkages'
 import { nearbyConnections } from './snap.js?v=structural-bores'
-import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=inline-engine'
-import { mountLibrary } from './library.js?v=belt-drive'
-import { createScene } from './scene.js?v=part-outlines'
+import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=catalog-page'
+import { mountLibrary } from './library.js?v=catalog-page'
+import { createScene } from './scene.js?v=catalog-page'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=belt-drive'
@@ -227,7 +227,7 @@ export async function mountEditor(root, { document, language, save, download, si
   let message = ''
   let pendingPart
   const library = mountLibrary(root.querySelector('#editor-library-body'), {
-    sections, language, labels: t, selectPart: selectLibraryPart, signal,
+    sections, language, labels: t, selectPart: selectLibraryPart, hasConnectors, signal,
   })
   const partsPanel = mountScenePartsPanel(el('sceneParts'), t, {
     nameOf: part => parts[part.design][language],

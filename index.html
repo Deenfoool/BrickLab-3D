@@ -6,18 +6,19 @@
   <meta name="theme-color" content="#181a1d">
   <title>BrickLab 3D</title>
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./src/menu/menu.css?v=menu-link-icons">
+  <link rel="stylesheet" href="./src/menu/menu.css?v=catalog-page">
   <link rel="stylesheet" href="./src/editor/editor.css?v=scene-parts">
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=menu-link-icons"></script>
+  <script type="module" src="./src/menu/menu.js?v=catalog-page"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7M5 9v12h5v-7h4v7h5V9"/></symbol>
     <symbol id="folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l3 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
     <symbol id="layers" viewBox="0 0 24 24"><path d="m12 3 10 5-10 5L2 8ZM2 12l10 5 10-5M2 16l10 5 10-5"/></symbol>
+    <symbol id="icon-library" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
     <symbol id="settings" viewBox="0 0 24 24"><path d="M12 2h2l.6 2.6 1.8 1 2.6-.8 2 3.4-2 1.8v2l2 1.8-2 3.4-2.6-.8-1.8 1L14 21h-4l-.6-2.6-1.8-1-2.6.8-2-3.4 2-1.8v-2l-2-1.8 2-3.4 2.6.8 1.8-1L10 2Z"/><circle cx="12" cy="11.5" r="3"/></symbol>
     <symbol id="search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
     <symbol id="file" viewBox="0 0 24 24"><path d="M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm7 0v6h6"/></symbol>
@@ -37,6 +38,7 @@
         <a href="#home" data-page="home"><svg class="icon"><use href="#icon-home"/></svg><span data-text="home">Главная</span></a>
         <a href="#projects" data-page="projects"><svg class="icon"><use href="#folder"/></svg><span data-text="projects">Мои сборки</span></a>
         <a href="#examples" data-page="examples"><svg class="icon"><use href="#layers"/></svg><span data-text="examples">Примеры</span></a>
+        <a href="#library" data-page="library"><svg class="icon" aria-hidden="true"><use href="#icon-library"/></svg><span data-text="library">Библиотека</span></a>
       </nav>
       <div class="sidebar-bottom">
         <button type="button" id="settings-button" aria-label="Настройки"><svg class="icon"><use href="#settings"/></svg><span data-text="settings">Настройки</span></button>
@@ -109,6 +111,18 @@
             <div><h2>858 Inline Engine</h2><p data-text="engineDescription">Рядный трёхцилиндровый двигатель LEGO Technic. 185 деталей и два приводных ремня.</p></div>
             <button type="button" class="secondary" id="engine-open" data-example-file="inline-engine.json?v=belt-drive" data-text="exampleOpen">Создать копию</button>
           </div>
+        </section>
+        <section id="library-panel" class="menu-library" aria-labelledby="page-title" hidden>
+          <div class="menu-library-controls" data-library-controls hidden>
+            <span class="menu-library-family">LEGO Technic</span>
+            <label class="search">
+              <svg class="icon" aria-hidden="true"><use href="#search"/></svg>
+              <input type="search" aria-label="Поиск по названию или ID" placeholder="Поиск по названию или ID">
+            </label>
+          </div>
+          <div data-library-scroll hidden><div class="menu-library-grid" data-library-cards></div></div>
+          <p id="library-status" class="status" role="status" hidden></p>
+          <button id="library-retry" type="button" class="secondary" hidden>Повторить</button>
         </section>
         <p id="status" class="status" role="status" hidden></p>
       </div>

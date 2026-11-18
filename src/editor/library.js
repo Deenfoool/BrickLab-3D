@@ -1,4 +1,3 @@
-import { hasConnectors } from '../mechanics/catalog.js?v=belt-drive'
 import { previewColumns, previewRows, previewPageSize, searchLibrary } from './library-data.js?v=parts-library'
 
 const batchSize = 48
@@ -10,7 +9,7 @@ function element(tag, className, value) {
   return node
 }
 
-export function mountLibrary(root, { sections, language, labels, selectPart, signal }) {
+export function mountLibrary(root, { sections, language, labels, selectPart, hasConnectors, initialGroup = '', signal }) {
   const controls = root.querySelector('[data-library-controls]')
   const scroll = root.querySelector('[data-library-scroll]')
   const cards = root.querySelector('[data-library-cards]')
@@ -22,7 +21,15 @@ export function mountLibrary(root, { sections, language, labels, selectPart, sig
   const empty = element('p', 'editor-library-empty', labels.noParts)
   const rendered = new Map()
   const options = { signal }
-  let section = sections[0]
+  const browsing = !selectPart
+  const observerRoot = browsing ? null : scroll
+  const catalog = browsing ? sections.map(section => {
+    const order = new Map(section.groups.map(([id], index) => [id, index]))
+    // Keep nearby cards on the same atlases where possible.
+    const parts = [...section.parts].sort((a, b) => order.get(a.group) - order.get(b.group) || a.preview - b.preview)
+    return { ...section, parts }
+  }) : sections
+  let section = catalog[0]
   let matches = []
   let limit = 0
   let activeDesign
@@ -32,8 +39,8 @@ export function mountLibrary(root, { sections, language, labels, selectPart, sig
   total.setAttribute('aria-live', 'polite')
   sectionSelect.setAttribute('aria-label', labels.librarySection)
   groupSelect.setAttribute('aria-label', labels.partFamily)
-  for (const item of sections) sectionSelect.add(new Option(item[language], item.id))
-  controls.prepend(sectionSelect)
+  for (const item of catalog) sectionSelect.add(new Option(item[language], item.id))
+  if (!browsing || catalog.length > 1) controls.prepend(sectionSelect)
   controls.append(groupSelect, total)
   scroll.append(empty, more)
 
@@ -42,29 +49,30 @@ export function mountLibrary(root, { sections, language, labels, selectPart, sig
       if (!entry.isIntersecting) continue
       const node = entry.target
       const card = rendered.get(node.dataset.design)
-      if (!card?.button.contains(node)) continue
-      const { assetPath, preview, revision } = card.part
+      if (!card?.node.contains(node)) continue
+      const { assetPath, preview, revision, previewAssetPath = assetPath, previewRevision = revision } = card.part
       if (!Number.isInteger(preview)) {
         previews.unobserve(node)
         continue
       }
       const tile = preview % previewPageSize
-      const image = new URL(`../../assets/ldraw/${assetPath}/previews/${Math.floor(preview / previewPageSize)}.webp`, import.meta.url)
-      image.searchParams.set('v', revision)
+      const image = new URL(`../../assets/ldraw/${previewAssetPath}/previews/${Math.floor(preview / previewPageSize)}.webp`, import.meta.url)
+      image.searchParams.set('v', previewRevision)
       node.style.backgroundImage = `url("${image.href}")`
       node.style.backgroundPosition = `${tile % previewColumns * 100 / (previewColumns - 1)}% ${Math.floor(tile / previewColumns) * 100 / (previewRows - 1)}%`
       previews.unobserve(node)
     }
-  }, { root: scroll, rootMargin: '75px 0px' })
+  }, { root: observerRoot, rootMargin: '75px 0px' })
 
   const pagination = new IntersectionObserver(([entry]) => {
     if (entry.isIntersecting && !more.hidden) appendBatch()
-  }, { root: scroll, rootMargin: '120px 0px' })
-  pagination.observe(more)
+  }, { root: observerRoot, rootMargin: '120px 0px' })
 
   signal.addEventListener('abort', () => {
     previews.disconnect()
     pagination.disconnect()
+    for (const node of [sectionSelect, groupSelect, total, empty, more]) node.remove()
+    cards.replaceChildren()
   }, { once: true })
 
   function configureGroups() {
@@ -75,7 +83,7 @@ export function mountLibrary(root, { sections, language, labels, selectPart, sig
   }
 
   function updateCard(design) {
-    const card = rendered.get(design)?.button
+    const card = rendered.get(design)?.node
     if (!card) return
     card.disabled = !enabled
     card.setAttribute('aria-pressed', String(design === activeDesign))
@@ -87,31 +95,35 @@ export function mountLibrary(root, { sections, language, labels, selectPart, sig
   function appendBatch() {
     const fragment = document.createDocumentFragment()
     for (const part of matches.slice(limit, limit + batchSize)) {
-      const button = element('button', 'editor-part-card')
+      const card = element(browsing ? 'article' : 'button', 'editor-part-card')
       const preview = element('span', 'editor-part-preview')
       const details = element('span', 'editor-part-details')
       const name = element('span', 'editor-part-name', part[language])
       const info = element('span', 'editor-part-meta')
-      button.type = 'button'
-      button.dataset.design = part.design
+      card.dataset.design = part.design
       preview.dataset.design = part.design
       preview.setAttribute('aria-hidden', 'true')
       name.title = part[language]
       info.append(element('span', 'editor-part-id', part.design))
-      if (hasConnectors(part.design)) {
+      if (hasConnectors?.(part.design)) {
         const mechanics = element('span', 'editor-part-mechanics', labels.connectorsReady)
         info.append(mechanics)
       }
       details.append(name, info)
-      button.append(preview, details)
-      fragment.append(button)
-      rendered.set(part.design, { button, part })
-      updateCard(part.design)
+      card.append(preview, details)
+      fragment.append(card)
+      rendered.set(part.design, { node: card, part })
+      if (!browsing) {
+        card.type = 'button'
+        updateCard(part.design)
+      }
       previews.observe(preview)
     }
     cards.append(fragment)
     limit += batchSize
     more.hidden = limit >= matches.length
+    pagination.unobserve(more)
+    if (!more.hidden) pagination.observe(more)
   }
 
   function filter() {
@@ -127,22 +139,26 @@ export function mountLibrary(root, { sections, language, labels, selectPart, sig
   }
 
   sectionSelect.addEventListener('change', () => {
-    section = sections.find(item => item.id === sectionSelect.value)
+    section = catalog.find(item => item.id === sectionSelect.value)
     configureGroups()
     filter()
   }, options)
   groupSelect.addEventListener('change', filter, options)
   search.addEventListener('input', filter, options)
   more.addEventListener('click', appendBatch, options)
-  cards.addEventListener('click', event => {
-    const design = event.target.closest('button')?.dataset.design
-    if (design) selectPart(rendered.get(design).part)
-  }, options)
+  if (!browsing) {
+    cards.addEventListener('click', event => {
+      const design = event.target.closest('button')?.dataset.design
+      if (design) selectPart(rendered.get(design).part)
+    }, options)
+  }
 
   configureGroups()
+  if (section.groups.some(([id]) => id === initialGroup)) groupSelect.value = initialGroup
   filter()
 
   return {
+    get group() { return groupSelect.value },
     setPlacement(design, pending, canPlace) {
       const previous = [activeDesign, pendingDesign]
       const changedMode = enabled !== canPlace

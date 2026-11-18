@@ -84,6 +84,21 @@ time{font-size:clamp(14px,1.38vw,21px);color:var(--muted);white-space:nowrap}
 .open .icon{width:33px;height:33px}
 .open .icon:last-child{margin-left:auto;width:26px;height:26px}
 #example-panel{display:grid;gap:12px}
+.content:has(#library-panel:not([hidden]))>h1{margin-bottom:24px}
+.menu-library-controls{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+.menu-library-family{font-weight:650;white-space:nowrap}
+.menu-library-controls .search{width:auto;max-width:none;height:42px;flex:1 1 225px;gap:10px}
+.menu-library-controls .search .icon{width:19px;height:19px}
+.menu-library-controls .search input{font-size:14px}
+.menu-library-controls select{width:min(100%,245px);min-height:42px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:14px}
+.menu-library .editor-library-count{margin-inline-start:auto;color:var(--muted);font-size:13px}
+.menu-library-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:12px}
+.menu-library .editor-part-card{display:flex;flex-direction:column;min-width:0;overflow:hidden;border:1px solid #3a3d44;border-radius:9px;background:#202329}
+.menu-library .editor-part-details{padding:10px 11px}
+.menu-library .editor-part-name{display:block;font-size:14px}
+.menu-library .editor-part-id{font-size:12px}
+.menu-library .editor-library-more,.menu-library #library-retry{display:block;width:max-content;margin:16px auto 0;padding:8px 16px;border:1px solid var(--line);border-radius:8px;background:#24272c}
+.menu-library .editor-library-more:hover,.menu-library #library-retry:hover{background:#303339}
 .example-card,dialog{border:1px solid var(--line);border-radius:12px;background:#202226;padding:26px}
 .example-card{display:flex;align-items:center;gap:20px}
 .example-card p{margin:13px 0;color:var(--muted)}
@@ -155,5 +170,9 @@ dialog p,.setting{margin:18px 0}
   .more{width:36px}
   .row-menu{top:49px}
   .example-card{flex-wrap:wrap}
+  .menu-library-grid{grid-template-columns:repeat(auto-fill,minmax(117px,1fr));gap:8px}
+  .menu-library-controls .search{order:-1;flex-basis:100%}
+  .menu-library-controls select{width:auto;max-width:100%}
+  .menu-library .editor-part-details{padding:8px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important}}
