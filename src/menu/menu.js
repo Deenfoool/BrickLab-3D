@@ -1,5 +1,5 @@
 import { editorLabels } from '../editor/labels.js?v=scene-parts'
-import { locales } from './locale.js?v=menu-links'
+import { locales } from './locale.js?v=menu-link-icons'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
 const byId = id => document.getElementById(id)
@@ -170,6 +170,11 @@ function render() {
   document.documentElement.lang = language
   document.querySelectorAll('[data-text]').forEach(node => {
     node.textContent = t[node.dataset.text]
+  })
+  document.querySelectorAll('[data-link-label]').forEach(link => {
+    const label = t[link.dataset.linkLabel]
+    link.setAttribute('aria-label', label)
+    link.title = label
   })
   document.querySelector('.navigation').setAttribute('aria-label', t.sections)
   document.querySelectorAll('[data-page]').forEach(link => {
