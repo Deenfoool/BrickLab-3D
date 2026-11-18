@@ -12,7 +12,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 
-const { connectAligned, connectPlaced, createAssembly } = await import('../src/editor/model.js')
+const { connectAligned, connectPlaced, createAssembly, assemblyJoints } = await import('../src/editor/model.js')
+const { componentBundle } = await import('../src/editor/components.js')
 const { driveSettings, newDriveState, prepareTestDrive, resizeKinematicDrive, stepTestDrive } = await import('../src/editor/vehicle-drive.js')
 const { loadPartModel, parts: catalog } = await import('../src/editor/parts.js')
 const { parseProject } = await import('../src/projects/documents.js')
@@ -365,6 +366,45 @@ test('assembly physics compiles rigid groups, rotational/linear constraints and 
 function partWithPose(id, position) {
   return { id, design: 'probe', position, rotation: [0, 0, 0, 1] }
 }
+
+test('powered Control+ L applies bounded torque to its rotor while the mounted housing stays fixed', async () => {
+  await rapier.init()
+  const bundle = componentBundle({ id: 'motor', design: '22169', position: [0, 200, 0], rotation: [0, 0, 0, 1] },
+    catalog, () => 'rotor')
+  assert.ok(bundle)
+  const hub = { id: 'hub', design: '22127', position: [200, 200, 0], rotation: [0, 0, 0, 1], electric: { on: true, battery: 100 } }
+  const bounds = new Box3(new Vector3(-5, -5, -5), new Vector3(5, 5, 5))
+  const motorModels = new Map(['u9479c01', '40940', '22127'].map(design => [design, { bounds }]))
+  const run = (power, on, locked = false) => {
+    const pieces = [{ ...bundle.anchor, electric: { hubId: 'hub', port: 0, power } }, ...bundle.items,
+      { ...hub, electric: { ...hub.electric, on } }]
+    const assembly = createAssembly(pieces, bundle.links)
+    const sim = createPhysicalAssembly(rapier, pieces, assemblyJoints(pieces, assembly), motorModels,
+      { pinned: ['motor', 'hub', ...(locked ? ['rotor'] : [])] })
+    try {
+      let poses
+      for (let i = 0; i < 120; i++) poses = sim.advance(1 / 120)
+      const housing = poses.find(part => part.id === 'motor')
+      assert.ok(new Vector3().fromArray(housing.position).distanceTo(new Vector3(0, 200, 0)) < 1e-6)
+      const result = sim.motors[0]
+      if (power === 100 && on && !locked) {
+        sim.controlMotor('motor', 0, 'brake')
+        for (let i = 0; i < 120; i++) sim.advance(1 / 120)
+        assert.ok(Math.abs(sim.motors[0].rpm) < Math.abs(result.rpm) / 2)
+        sim.controlMotor('motor', -100, 'coast')
+        for (let i = 0; i < 120; i++) sim.advance(1 / 120)
+        assert.ok(sim.motors[0].rpm < 0)
+      }
+      return result
+    } finally { sim.dispose() }
+  }
+  assert.ok(run(100, true).rpm > 0)
+  assert.ok(run(-100, true).rpm < 0)
+  assert.ok(Math.abs(run(100, false).rpm) < .01)
+  const blocked = run(100, true, true)
+  assert.ok(Math.abs(blocked.rpm) < .01)
+  assert.equal(blocked.stalled, true)
+})
 
 test('a vehicle keeps its momentum in the air and falls when none of its wheels has contact', async () => {
   await rapier.init()

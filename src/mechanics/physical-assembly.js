@@ -1,6 +1,7 @@
 import { Quaternion, Vector3 } from 'three'
 import { jointBodies, movePose } from './linkage.js'
 import { assemblyBounds, gravity, metersPerLdu, physicsStep, physicsWorld, vectorFrom } from './physics-world.js'
+import { controlPlusBodies, hubSettings, motorSettings, motorSupply, motorTorque } from './motors.js'
 
 const units = metersPerLdu
 const vector = values => new Vector3().fromArray(values)
@@ -133,6 +134,38 @@ function simulateAssembly(rapier, world, parts, joints, models, pinned) {
     filterIntersectionPair() { return true },
   }
 
+  const motors = parts.filter(part => controlPlusBodies.has(part.design)).flatMap(part => {
+    const joint = joints.find(joint => joint.a === part.id && joint.group === 'control-plus-l-output')
+    if (!joint) return []
+    const housing = bodies.get(graph.byPart.get(part.id))
+    const output = bodies.get(graph.byPart.get(joint.b))
+    if (!housing || !output) return []
+    return [{ part, housing, output, axis: vector(joint.shaftLine.axis), angle: 0, hold: 0, speed: 0, stalled: false }]
+  })
+  let electricParts = parts.map(part => ({ ...part, electric: { ...part.electric } }))
+
+  function driveMotors() {
+    for (const motor of motors) {
+      const supply = motorSupply(electricParts.find(part => part.id === motor.part.id), electricParts)
+      const axis = motor.axis.clone().applyQuaternion(motor.housing.body.rotation())
+      const speed = vectorFrom(motor.output.body.angvel()).sub(vectorFrom(motor.housing.body.angvel())).dot(axis)
+      motor.angle += speed * physicsStep
+      motor.speed = speed
+      motor.stalled = supply.powered && Math.abs(supply.power) > 1 && Math.abs(speed) < .01
+      const torque = motorTorque(supply, speed, motor.angle, motor.hold)
+      // Approximate 2 Ah battery pack, including no-load current and stall current.
+      const hub = electricParts.find(part => part.id === supply.hubId)
+      if (hub && supply.powered) {
+        const amps = Math.abs(supply.power) > 0 ? .05 + .65 * Math.abs(torque) / .18 : .65 * Math.abs(torque) / .18
+        hub.electric.battery = Math.max(0, hubSettings(hub).battery - amps * physicsStep / (2 * 3600) * 100)
+      }
+      const impulse = axis.multiplyScalar(torque * physicsStep)
+      if (motor.housing === motor.output) continue
+      motor.output.body.applyTorqueImpulse(impulse, true)
+      motor.housing.body.applyTorqueImpulse(impulse.negate(), true)
+    }
+  }
+
   function poseOf(group) {
     const entry = bodies.get(group)
     if (!entry) return
@@ -163,9 +196,21 @@ function simulateAssembly(rapier, world, parts, joints, models, pinned) {
     bodies: bodies.size,
     constraints,
     unsupported,
+    get motors() { return motors.map(motor => ({ part: motor.part.id, rpm: motor.speed * 30 / Math.PI, stalled: motor.stalled,
+      ...motorSupply(electricParts.find(part => part.id === motor.part.id), electricParts) })) },
+    controlMotor(id, power, stop) {
+      const motor = motors.find(motor => motor.part.id === id)
+      if (!motor) return
+      if (power === 0) motor.hold = motor.angle
+      electricParts = electricParts.map(part => part.id === id
+        ? { ...part, electric: { ...motorSettings(part), power, stop } } : part)
+    },
     advance(dt) {
       elapsed += Math.min(.05, Math.max(0, dt))
-      for (; elapsed >= physicsStep; elapsed -= physicsStep) world.step(undefined, hooks)
+      for (; elapsed >= physicsStep; elapsed -= physicsStep) {
+        driveMotors()
+        world.step(undefined, hooks)
+      }
       return preview()
     },
     push(id, direction) {

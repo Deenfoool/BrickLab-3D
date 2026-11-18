@@ -36,6 +36,17 @@ export function mountPhysicsPanel(root, { language, scene, models, read, signal 
       <button type="button" data-physics="pin">${t.picking}</button>
       <p data-physics="status" role="status"></p>
       <p data-physics="help"></p>
+      <div data-physics="motors" hidden>
+        <label>${language === 'ru' ? 'Мотор' : 'Motor'} <select data-physics="motor"></select></label>
+        <label>${language === 'ru' ? 'Мощность / реверс' : 'Power / reverse'} <input data-physics="power" type="range" min="-100" max="100" value="0"></label>
+        <select data-physics="motorStop" aria-label="${language === 'ru' ? 'Режим остановки' : 'Stop mode'}">
+          <option value="coast">${language === 'ru' ? 'Свободный ход' : 'Coast'}</option>
+          <option value="brake">${language === 'ru' ? 'Тормоз' : 'Brake'}</option>
+          <option value="hold">${language === 'ru' ? 'Удержание' : 'Hold'}</option>
+        </select>
+        <button type="button" data-physics="motorZero">${language === 'ru' ? 'Остановить мотор' : 'Stop motor'}</button>
+        <output data-physics="motorStatus" aria-live="off"></output>
+      </div>
     </div>`
   const el = name => root.querySelector('[data-physics="' + name + '"]')
   const on = (node, event, listener) => node.addEventListener(event, listener, { signal })
@@ -58,6 +69,28 @@ export function mountPhysicsPanel(root, { language, scene, models, read, signal 
     el('status').textContent = request ? t.load : failure ? t.fail :
       simulation ? t.stats(simulation) : t.pinCount(pinned.size)
     el('help').textContent = picking ? t.pinHelp : simulation ? t.pushHelp : ''
+    const motors = simulation?.motors ?? []
+    el('motors').hidden = !motors.length
+    const selected = el('motor').value
+    el('motor').replaceChildren(...motors.map((motor, index) => new Option(`Control+ L · ${index + 1}`, motor.part)))
+    if (motors.some(motor => motor.part === selected)) el('motor').value = selected
+    selectMotor()
+  }
+
+  function selectMotor() {
+    const motor = simulation?.motors.find(motor => motor.part === el('motor').value)
+    if (!motor) return
+    el('power').value = motor.power
+    el('motorStop').value = motor.stop
+    showMotorStatus()
+  }
+
+  function showMotorStatus() {
+    const motor = simulation?.motors.find(motor => motor.part === el('motor').value)
+    if (!motor) return
+    el('motorStatus').textContent = `${Math.round(motor.rpm)} ${language === 'ru' ? 'об/мин' : 'rpm'} · ${motor.power}%` +
+      (!motor.powered ? (language === 'ru' ? ' · Нет питания' : ' · No power')
+        : motor.stalled ? (language === 'ru' ? ' · Вал заблокирован' : ' · Stalled') : '')
   }
 
   function pause() {
@@ -83,6 +116,7 @@ export function mountPhysicsPanel(root, { language, scene, models, read, signal 
   function tick(time) {
     if (!running) return
     scene.previewParts(simulation.advance(last === undefined ? 0 : (time - last) / 1000))
+    showMotorStatus()
     last = time
     frame = requestAnimationFrame(tick)
   }
@@ -125,6 +159,11 @@ export function mountPhysicsPanel(root, { language, scene, models, read, signal 
   }
 
   on(el('play'), 'click', play)
+  on(el('motor'), 'change', selectMotor)
+  const controlMotor = () => simulation?.controlMotor(el('motor').value, Number(el('power').value), el('motorStop').value)
+  on(el('power'), 'input', controlMotor)
+  on(el('motorStop'), 'change', controlMotor)
+  on(el('motorZero'), 'click', () => { el('power').value = 0; controlMotor(); showMotorStatus() })
   on(el('reset'), 'click', () => {
     if (!simulation && !request) pinned.clear()
     reset()

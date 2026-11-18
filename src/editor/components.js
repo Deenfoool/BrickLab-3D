@@ -15,6 +15,7 @@ const compositeShocks = {
 }
 
 function components(design) {
+  if (design === '22169' || design === 'u9479c01') return [['u9479c01', 0, identity], ['40940', [0, 0, -10], identity]]
   if (design === '61903') return [['62520', 0, identity], ['62520', 0, reverseYoke], ['62519', 0, identity]]
   const state = design.match(/^(.+)-(f[12])$/)
   const shock = state && compositeShocks[state[1]]
@@ -31,7 +32,7 @@ export function componentBundle(part, available, allocate) {
   const origin = new Vector3().fromArray(part.position)
   const instances = entries.map(([design, y, local], index) => ({
     ...part, id: index ? allocate(part.id, index) : part.id, design,
-    position: new Vector3(0, y, 0).applyQuaternion(rotation).add(origin).toArray(),
+    position: new Vector3(...(Array.isArray(y) ? y : [0, y, 0])).applyQuaternion(rotation).add(origin).toArray(),
     rotation: rotation.clone().multiply(new Quaternion().fromArray(local)).toArray(),
   }))
   const assembly = createAssembly(instances, [])
@@ -60,6 +61,11 @@ export function expandComponents(document, available) {
   let { parts, connections } = document
   for (const part of document.parts) {
     if (typeof part?.id !== 'string' || duplicates.has(part.id) || !finiteArray(part.position, 3) || !finiteArray(part.rotation, 4) || !part.rotation.some(Boolean)) continue
+    if (part.design === 'u9479c01' && connections.some(link => {
+      if (link?.shaft?.part !== part.id || link.shaft.port !== 'control-plus-output') return false
+      const output = parts.find(candidate => candidate.id === link.socket?.part && candidate.design === '40940')
+      return output && createAssembly([part, output], [link]).connections.length === 1
+    })) continue
     const entry = { ...part, rotation: new Quaternion().fromArray(part.rotation).normalize().toArray() }
     const bundle = componentBundle(entry, available, allocate)
     if (!bundle) continue

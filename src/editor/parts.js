@@ -35,14 +35,26 @@ function newLoader() {
   return new LDrawLoader().setConditionalLineMaterial(LDrawConditionalLineMaterial)
 }
 
-function extractModel(group) {
+export function extractModel(group) {
   const meshes = []
   const bounds = new THREE.Box3()
   group.updateMatrixWorld(true)
   const inverse = group.matrixWorld.clone().invert()
   group.traverse(node => {
     if (!node.isMesh) return
-    const geometry = node.geometry.clone().applyMatrix4(inverse.clone().multiply(node.matrixWorld))
+    const transform = inverse.clone().multiply(node.matrixWorld)
+    const geometry = node.geometry.clone().applyMatrix4(transform)
+    // Once a reflection is baked, the renderer cannot correct winding using object scale.
+    if (transform.determinant() < 0) {
+      if (!geometry.index) geometry.setIndex(Array.from({ length: geometry.attributes.position.count }, (_, i) => i))
+      const indices = geometry.index.array
+      for (let i = 0; i < indices.length; i += 3) {
+        const first = indices[i]
+        indices[i] = indices[i + 2]
+        indices[i + 2] = first
+      }
+      geometry.index.needsUpdate = true
+    }
     geometry.computeBoundingBox()
     bounds.union(geometry.boundingBox)
     meshes.push(geometry)

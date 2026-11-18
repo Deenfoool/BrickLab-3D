@@ -1,5 +1,6 @@
 import { mountFloatingPanels } from './floating-panels.js?v=scene-parts'
 import { createEditorAudio } from './audio.js?v=editor-sound'
+import { mountMotorPanel } from './motor-panel.js'
 import { Plane, Quaternion, Vector3 } from 'three'
 import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=gear-selector'
 import { baseRotation, samePose } from './placement.js?v=gear-selector'
@@ -167,6 +168,7 @@ export async function mountEditor(root, { document, language, save, download, si
                 </div>
                 <small>${t.side}</small>
               </div>
+              <section data-el="motorPanel" class="editor-motor-panel" hidden></section>
               <div data-el="motion" class="editor-motion" hidden>
                 <label><span data-el="motionLabel">${t.drive}</span><input data-el="angle" type="range" min="-1080" max="1080" step="1" value="0"></label>
                 <output data-el="degrees">0°</output>
@@ -329,6 +331,11 @@ export async function mountEditor(root, { document, language, save, download, si
   const undo = []
   const redo = []
   el('name').value = source.name
+
+  const motorPanel = mountMotorPanel(el('motorPanel'), { language, signal,
+    read: () => state.parts,
+    change: (id, electric) => commit({ ...state, parts: state.parts.map(part => part.id === id ? { ...part, electric } : part) }),
+  })
 
   function currentDocument() {
     return {
@@ -534,6 +541,12 @@ export async function mountEditor(root, { document, language, save, download, si
     scene.setParts(state.parts)
     scene.belts.travel(new Map())
     selected = id
+    if (mode === 'build') {
+      const selectedIds = new Set([id, ...additional])
+      for (const link of assembly.connections) {
+        if (selectedIds.has(link.shaft.part) && link.shaft.port === 'control-plus-output') additional.add(link.socket.part)
+      }
+    }
     selectorLinkage = linkedSelector(id, state.parts, assembly)
     if (tool === 'length' && !canResize(selectedPart())) tool = 'move'
     scene.select(mode === 'paint' ? undefined : id)
@@ -689,6 +702,8 @@ export async function mountEditor(root, { document, language, save, download, si
     range.step = hinge?.ok || transmission?.solve ? 'any' : '1'
     range.value = angle
     el('play').textContent = frame ? t.stop : t.play
+    el('play').disabled = transmission?.kind === 'motor' && !transmission.playback
+    motorPanel.render(part, state.parts)
     el('insertion').hidden = !moving
     el('depth').value = String(depth)
     el('empty').textContent = painting ? t.noSceneParts : t.empty
@@ -1088,9 +1103,9 @@ export async function mountEditor(root, { document, language, save, download, si
     stepAnimation.previous = time
     const limit = Number(el('angle').max)
     let wrappedAngle = 0
-    if (transmission?.periodic && angle >= limit) {
+    if (transmission?.periodic && (angle >= limit || angle < 0)) {
       wrappedAngle = Math.floor(angle / limit) * limit
-      angle %= limit
+      angle = ((angle % limit) + limit) % limit
     }
     if (angle > limit) {
       angle = limit

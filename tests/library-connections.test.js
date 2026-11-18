@@ -25,6 +25,102 @@ const { nearbyConnections, translationSnaps } = await import('../src/editor/snap
 const { portsFor } = await import('../src/mechanics/catalog.js')
 const { connectionMode, evaluateInsertion, portLength } = await import('../src/mechanics/axial.js')
 const { parts: availableParts } = await import('../src/editor/parts.js')
+const { extractModel, loadPartModel } = await import('../src/editor/parts.js')
+const { BoxGeometry, Group, Mesh } = await import('three')
+const { motorSupply, motorTorque } = await import('../src/mechanics/motors.js')
+const { createMotorCables } = await import('../src/editor/motor-cables.js')
+
+test('motor cables follow the assigned physical hub port and disappear when disconnected', () => {
+  const parent = new Group()
+  const motor = { id: 'motor', design: 'u9479c01', position: [0, 0, 0], rotation: [0, 0, 0, 1], electric: { hubId: 'hub', port: 2 } }
+  const hub = { id: 'hub', design: '22127', position: [200, 0, 0], rotation: [0, 0, 0, 1] }
+  const poses = new Map([[motor.id, motor], [hub.id, hub]])
+  const cables = createMotorCables(parent, id => poses.get(id))
+  cables.set([motor, hub])
+  const group = parent.children[0]
+  assert.equal(group.children.length, 1)
+  const initial = group.children[0].geometry
+  hub.position = [300, 0, 0]
+  cables.update()
+  assert.notEqual(group.children[0].geometry, initial)
+  cables.set([{ ...motor, electric: {} }, hub])
+  assert.equal(group.children.length, 0)
+  cables.dispose()
+  assert.equal(parent.children.length, 0)
+})
+
+test('flattening a reflected mesh preserves outward winding for indexed and plain geometry', () => {
+  for (const indexed of [true, false]) {
+    const source = new BoxGeometry()
+    const geometry = indexed ? source : source.toNonIndexed()
+    const child = new Mesh(geometry)
+    child.scale.x = -1
+    const group = new Group()
+    group.add(child)
+    const baked = extractModel(group).meshes[0]
+    for (let i = 0; i < baked.index.count; i += 3) {
+      const ids = [0, 1, 2].map(offset => baked.index.getX(i + offset))
+      const [a, b, c] = ids.map(id => new Vector3().fromBufferAttribute(baked.attributes.position, id))
+      const face = b.sub(a).cross(c.sub(a)).normalize()
+      assert.ok(face.dot(new Vector3().fromBufferAttribute(baked.attributes.normal, ids[0])) > .999)
+    }
+    assert.equal(geometry.index, indexed ? source.index : null)
+  }
+})
+
+test('Control+ L expands with an independent output, preserves connections, and drives through its hub', () => {
+  const motor = part('motor', '22169')
+  const bundle = componentBundle(motor, availableParts, () => 'output')
+  assert.ok(bundle)
+  assert.equal(bundle.anchor.design, 'u9479c01')
+  assert.equal(bundle.items[0].design, '40940')
+  assert.deepEqual(bundle.items[0].position, [0, 0, -10])
+  const hub = { ...part('hub', '22127'), electric: { on: true, battery: 100 } }
+  const housing = { ...bundle.anchor, electric: { hubId: hub.id, port: 0, power: 50 } }
+  const members = [housing, ...bundle.items, hub]
+  const assembly = createAssembly(members, bundle.links)
+  assert.equal(assembly.connections.length, 1)
+  const motion = rotationMotion(housing.id, members, assembly)
+  assert.ok(motion.ok)
+  assert.equal(motion.kind, 'motor')
+  assert.ok(motion.playback > 0)
+  const moved = rotationPoses(members, motion, Math.PI / 2)
+  assert.ok(moved.some(part => part.id === 'output'))
+  assert.ok(!moved.some(part => part.id === 'motor'))
+  const doc = expandComponents({ parts: [motor, hub], connections: [] }, availableParts)
+  assert.equal(expandComponents(doc, availableParts), doc)
+  const off = motorSupply(housing, [housing, { ...hub, electric: { on: false } }])
+  assert.equal(off.speed, 0)
+  assert.equal(motorTorque(off, 10), 0)
+  const supply = motorSupply(housing, members)
+  assert.ok(motorTorque(supply, 0) > 0)
+  assert.ok(Math.abs(motorTorque(supply, supply.speed)) < 1e-10)
+  assert.ok(motorTorque({ ...supply, power: -50 }, 0) < 0)
+  assert.equal(motorTorque({ ...supply, power: 0, stop: 'coast' }, 10), 0)
+  assert.ok(motorTorque({ ...supply, power: 0, stop: 'brake' }, 10) < 0)
+  assert.ok(motorTorque({ ...supply, power: 0, stop: 'hold' }, 0, .1, 0) < 0)
+  assert.equal(motorSupply(housing, [...members, { ...housing, id: 'duplicate' }]).powered, false)
+  const axle = part('motor-axle', '3737')
+  const fit = options(axle, motor).find(option => option.fit && option.socket.part === motor.id)
+  assert.ok(fit)
+  const saved = { parts: [motor, { ...axle, ...fit.pose }],
+    connections: [{ shaft: fit.shaft, socket: fit.socket, placement: fit.fit.placement }] }
+  const expanded = expandComponents(saved, availableParts)
+  assert.equal(expanded.parts.length, 3)
+  assert.equal(createAssembly(expanded.parts, expanded.connections).connections.length, 2)
+})
+
+test('the actual Control+ L body includes a reflected mesh that needs winding correction', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const fetch = globalThis.fetch
+  try {
+    globalThis.fetch = async url => new Response(await readFile(url))
+    const model = await loadPartModel(availableParts.u9479c01)
+    assert.ok(model.meshes.some(geometry => geometry.index?.count > 0))
+  } finally {
+    globalThis.fetch = fetch
+  }
+})
 
 const part = (id, design) => ({ id, design, position: [0, 0, 0], rotation: [0, 0, 0, 1] })
 const scene = { pixelDistance: () => 0 }

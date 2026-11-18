@@ -9,6 +9,7 @@ import { movePose, turnPose, articulationDrive, jointBodies, linkageDrive, mecha
 import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=gear-selector'
 import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=gear-selector'
 import { clutchTravel, selectorLinkages } from './selector-linkage.js?v=selector-drag'
+import { motorSupply } from '../mechanics/motors.js'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
 export const snapGrid = 10
@@ -224,6 +225,15 @@ export function assemblyJoints(parts, assembly) {
 }
 
 export function rotationMotion(selected, parts, assembly, linkage = linkedSelector(selected, parts, assembly)) {
+  const motor = parts.find(part => part.id === selected && part.design === 'u9479c01')
+  if (motor) {
+    const output = assembly.connections.find(link => link.shaft.part === selected && link.shaft.port === 'control-plus-output')
+    if (!output) return null
+    const motion = rotationMotion(output.socket.part, parts, assembly)
+    const supply = motorSupply(motor, parts)
+    return motion && { ...motion, kind: 'motor', motor: selected, supply,
+      playback: supply.speed * 180 / Math.PI, periodic: true, range: [0, 360] }
+  }
   const selector = linkage?.motion(selected)
   if (selector) return { ...selector, ok: true, range: motionRange(selector), meshes: [] }
   const byId = new Map(parts.map(part => [part.id, part]))

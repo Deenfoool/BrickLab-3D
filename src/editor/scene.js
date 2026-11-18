@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { partMesh, parts } from './parts.js?v=catalog-page'
 import { createBeltScene } from './belt-scene.js?v=belt-drive'
+import { createMotorCables } from './motor-cables.js'
 import { createPartOutlines } from './part-outlines.js?v=part-outlines'
 import { snapGrid } from './model.js?v=belt-drive'
 
@@ -63,6 +64,10 @@ export function createScene(host, models) {
   const objects = new Map()
   let hidden = new Set()
   let movingId
+  const motorCables = createMotorCables(solids, id => {
+    const object = objects.get(id)
+    return object?.visible ? { position: object.position.toArray(), rotation: object.quaternion.toArray() } : undefined
+  })
   const belts = createBeltScene(solids, id => {
     const part = hidden.has(id) ? undefined : objects.get(id)
     return part && { design: part.userData.design, position: part.position.toArray(), rotation: part.quaternion.toArray() }
@@ -149,6 +154,7 @@ export function createScene(host, models) {
       object.updateMatrixWorld(true)
       syncVisibility(part.id, object)
     }
+    motorCables.set(list)
     belts.update()
     invalidate()
   }
@@ -160,6 +166,7 @@ export function createScene(host, models) {
   function setHidden(ids) {
     hidden = ids
     for (const [id, object] of objects) syncVisibility(id, object)
+    motorCables.update()
     belts.update()
     invalidate()
   }
@@ -257,6 +264,7 @@ export function createScene(host, models) {
       object.scale.fromArray(part.previewScale ?? unitScale)
       object.updateMatrixWorld(true)
     }
+    motorCables.update()
     belts.update()
     invalidate()
   }
@@ -402,6 +410,7 @@ export function createScene(host, models) {
     controls.dispose()
     outlines.dispose()
     belts.dispose()
+    motorCables.dispose()
     gizmo.dispose()
     setGhost(null)
     setGroupGhost([])

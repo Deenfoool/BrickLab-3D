@@ -172,3 +172,33 @@ body:has(.editor:not([hidden])){overflow:hidden}
 @media(max-width:720px){
   .editor-scene-parts{width:min(272px,100%);max-height:min(46%,300px)}
 }
+.editor-motor-panel label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0;
+  font-size: 13px;
+}
+.editor-motor-panel select,
+.editor-motor-panel input[type="number"] {
+  max-width: 100%;
+  min-width: 0;
+}
+.editor-motor-panel small {
+  display: block;
+  line-height: 1.5;
+  opacity: .75;
+}
+.editor-motor-panel input[type="range"] {
+  width: 100%;
+  accent-color: #ffb01b;
+}
+.editor-motor-panel select,
+.editor-motor-panel input[type="number"] {
+  color: inherit;
+  background: #20242b;
+  border: 1px solid #424853;
+  border-radius: 5px;
+  padding: 5px;
+}
