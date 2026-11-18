@@ -122,7 +122,8 @@ export const rotationPort = ports => ports.find(port => port.role === 'gear') ??
 export function gearAt(part, design, center, axis) {
   const section = portsFor(design).find(port => port.role === 'gear')?.sections[0]
   if (!section) throw new Error(`Design has no supported spur gear: ${design}`)
-  return { part, center, axis, teeth: section.teeth, radius: section.radius, width: section.length }
+  return { part, center, axis, teeth: section.teeth, radius: section.radius, width: section.length,
+    ...(['94925', '18946'].includes(design) && { pressureAngle: Math.PI / 9 }) }
 }
 
 // Local engagement datum and tooth span of the original Technic rack.

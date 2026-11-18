@@ -165,3 +165,11 @@ test('seated connections restore without requiring a second insertion path', () 
   }
   assert.equal(assembly.connections.length, 2)
 })
+
+test('reinforced and double clutch 16T gears mesh across the gearbox shaft offset', () => {
+  const gear = gearAt('reinforced', '94925', [10, 40, 0], [0, 0, 1])
+  const clutch = gearAt('clutch', '18946', [0, 0, 0], [0, 0, 1])
+  assert.deepEqual(evaluateSpurMesh(gear, clutch), { ok: true, ratio: -1 })
+  assert.equal(evaluateSpurMesh({ ...gear, center: [15, 40, 0] }, clutch).ok, false)
+  assert.equal(evaluateSpurMesh({ ...gear, center: [10, 40, 12] }, clutch).ok, false)
+})

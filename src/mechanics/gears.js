@@ -29,8 +29,16 @@ export function evaluateSpurMesh(a, b) {
     Math.max(-a.width / 2, axial - b.width / 2)
   if (widthOverlap <= 0) return { ok: false, reason: 'no-tooth-overlap' }
   const distance = length(subtract(centerDelta, scale(axisA, axial)))
-  if (Math.abs(distance - a.radius - b.radius) > DISTANCE_TOLERANCE) {
-    return { ok: false, reason: 'pitch-distance' }
+  const clearance = distance - a.radius - b.radius
+  if (clearance < -DISTANCE_TOLERANCE) return { ok: false, reason: 'pitch-distance' }
+  if (clearance > DISTANCE_TOLERANCE) {
+    if (!a.pressureAngle || a.pressureAngle !== b.pressureAngle) return { ok: false, reason: 'pitch-distance' }
+    // Approximate standard full-depth involute teeth. Require at least one pair in contact throughout a turn.
+    const module = 2 * a.radius / a.teeth
+    const cosine = Math.cos(a.pressureAngle)
+    const flank = gear => Math.sqrt((gear.radius + module) ** 2 - (gear.radius * cosine) ** 2)
+    const tangent = Math.sqrt(distance ** 2 - ((a.radius + b.radius) * cosine) ** 2)
+    if (flank(a) + flank(b) - tangent < Math.PI * module * cosine) return { ok: false, reason: 'pitch-distance' }
   }
   return { ok: true, ratio: -Math.sign(alignment) * a.teeth / b.teeth }
 }
