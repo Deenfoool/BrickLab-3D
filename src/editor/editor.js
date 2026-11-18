@@ -1,11 +1,11 @@
 import { mountFloatingPanels } from './floating-panels.js?v=scene-parts'
 import { Plane, Quaternion, Vector3 } from 'three'
 import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=structural-bores'
-import { baseRotation, samePose, worldPort } from './placement.js?v=belt-drive'
+import { baseRotation, samePose } from './placement.js?v=belt-drive'
 import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=structural-bores'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
-import { nearestDetent, portLength } from '../mechanics/axial.js?v=linkages'
-import { nearbyConnections } from './snap.js?v=occupied-axle'
+import { nearestDetent } from '../mechanics/axial.js?v=linkages'
+import { nearbyConnections, translationSnaps } from './snap.js?v=group-snap'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=catalog-page'
 import { mountLibrary } from './library.js?v=catalog-page'
 import { createScene } from './scene.js?v=catalog-page'
@@ -623,7 +623,10 @@ export async function mountEditor(root, { document, language, save, download, si
       const position = moving.position.map((value, i) => i === 1 ? value : value + onGrid(delta?.getComponent(i) ?? 0))
       freePosition = { ...moving, position }
     } else if (freePoint) freePosition = raisedPose(moving, models.get(moving.design), freePoint)
-    const options = (!pastedGroup || pastedGroup.snap) && snapAllowed(event)
+    const options = pastedGroup?.items.length && !pastedGroup.snap && snapAllowed(event) && freePosition
+      ? translationSnaps([freePosition, ...groupTransforms(pastedGroup.items, pastedGroup.anchor, freePosition)],
+        snapTargets(), placementAssembly, scene, 'XYZ', depth)
+      : (!pastedGroup || pastedGroup.snap) && snapAllowed(event)
       ? nearbyConnections({ scene, assembly: placementAssembly, parts: snapTargets(), moving: freePosition ?? moving, event, depth, roll, ray })
       : []
     const index = options.findIndex(option => option.key === candidate?.key)
@@ -634,7 +637,8 @@ export async function mountEditor(root, { document, language, save, download, si
     else candidate = first
     pose = candidate?.pose ? { ...moving, ...candidate.pose } : freePosition
     scene.setGhost(pose, candidate?.point, Boolean(candidate?.failure))
-    scene.setGroupGhost(pose && pastedGroup ? groupTransforms(pastedGroup.items, pastedGroup.anchor, pose) : [])
+    if (movesExisting && pastedGroup && pose) scene.previewParts(groupTransforms(pastedGroup.items, pastedGroup.anchor, pose))
+    else scene.setGroupGhost(pose && pastedGroup ? groupTransforms(pastedGroup.items, pastedGroup.anchor, pose) : [])
     render()
   }
 
@@ -646,8 +650,10 @@ export async function mountEditor(root, { document, language, save, download, si
     moving = part
     pastedGroup = group
     movesExisting = existing
-    placementAssembly = createAssembly(existing ? state.parts : [...state.parts, part],
-      existing ? state.links.filter(link => link.shaft.part !== part.id && link.socket.part !== part.id) : state.links)
+    const ids = new Set([part.id, ...(group?.items ?? []).map(item => item.id)])
+    placementAssembly = createAssembly(existing ? state.parts : [...state.parts, part, ...(group?.items ?? [])],
+      existing ? state.links.filter(link => ids.has(link.shaft.part) === ids.has(link.socket.part))
+        : [...state.links, ...(group?.links ?? [])])
     if (existing) {
       scene.setMoving(part.id, true)
       const plane = new Plane(Y, -part.position[1])
@@ -661,7 +667,10 @@ export async function mountEditor(root, { document, language, save, download, si
 
   function cancelPlacement() {
     pendingPart = undefined
-    if (movesExisting) scene.setMoving(moving.id, false)
+    if (movesExisting) {
+      scene.setMoving(moving.id, false)
+      if (pastedGroup) scene.setParts(state.parts)
+    }
     moving = null
     pastedGroup = null
     directDrag = null
@@ -688,7 +697,8 @@ export async function mountEditor(root, { document, language, save, download, si
     if (fit && !fit.ok) return
     const id = pose.id
     const copied = pastedGroup ? groupTransforms(pastedGroup.items, pastedGroup.anchor, pose) : []
-    const placed = original ? state.parts.map(part => part.id === id ? pose : part) : [...state.parts, pose, ...copied]
+    const transformed = new Map([pose, ...copied].map(part => [part.id, part]))
+    const placed = original ? state.parts.map(part => transformed.get(part.id) ?? part) : [...state.parts, pose, ...copied]
     const added = fit ? [{ shaft: candidate.shaft, socket: candidate.socket, placement: fit.placement }] : []
     const pastedBelts = pastedGroup?.belts
     const nextLinks = transformLinks(placed, [id, ...copied.map(part => part.id)],
@@ -910,24 +920,10 @@ export async function mountEditor(root, { document, language, save, download, si
 
   function updateGizmo(cycle = false) {
     if (!gizmoPart || !gizmoRaw) return
-    if (tool === 'move' && snapAllowed(pointer) && transform && !additional.size) {
-      const ownPorts = portsFor(gizmoRaw.design)
-      const points = ownPorts.flatMap(port => {
-        const { start, axis } = worldPort(gizmoRaw, port)
-        const length = portLength(port)
-        const end = start.clone().addScaledVector(axis, length)
-        return port.gender === 'F' ? [start, start.clone().addScaledVector(axis, length / 2), end] : [start, end]
-      }).map(scene.project).filter(point => point.visible)
-      const snapScene = { pixelDistance: point => Math.min(...points.map(screen => scene.pixelDistance(point, screen))) }
-      const axes = scene.gizmo.axis ?? ''
-      const acceptPose = pose => {
-        const delta = pose.position.map((value, i) => value - gizmoRaw.position[i])
-        return samePose(gizmoRaw, { ...pose, position: gizmoRaw.position }) &&
-          delta.every((value, i) => axes.includes('XYZ'[i]) || Math.abs(value) < .01) &&
-          Math.hypot(...delta) <= 12
-      }
-      const options = nearbyConnections({ scene: snapScene, assembly: transform, parts: snapTargets(),
-        moving: gizmoRaw, depth: 0, roll: 0, acceptPose }).filter(option => option.pose)
+    if (tool === 'move' && snapAllowed(pointer) && transform) {
+      const members = state.parts.filter(item => additional.has(item.id))
+      const options = translationSnaps([gizmoRaw, ...groupTransforms(members, gizmoPart, gizmoRaw)],
+        snapTargets(), transform, scene, scene.gizmo.axis ?? '', 0)
       const previous = options.findIndex(option => option.key === gizmoSnap?.key)
       gizmoSnap = options.length ? options[cycle ? (previous + 1) % options.length : Math.max(0, previous)] : null
     } else gizmoSnap = null
@@ -1054,7 +1050,8 @@ export async function mountEditor(root, { document, language, save, download, si
     ignoreGizmoClick = Boolean(gizmoPart)
     if (gizmoPart) {
       const id = gizmoPart.id
-      transform = createAssembly(state.parts, state.links.filter(link => link.shaft.part !== id && link.socket.part !== id))
+      const ids = new Set(selectionIds())
+      transform = createAssembly(state.parts, state.links.filter(link => ids.has(link.shaft.part) === ids.has(link.socket.part)))
       gizmoRaw = gizmoPart
       scene.setMoving(id, true)
     }
@@ -1089,7 +1086,7 @@ export async function mountEditor(root, { document, language, save, download, si
         const hit = scene.pointer(event).hit
         const part = state.parts.find(entry => entry.id === hit)
         if (part) {
-          selectClick(hit)
+          if (!selectionIds().includes(hit)) selectClick(hit)
           directDrag = { part, start: event }
         }
       }
@@ -1117,7 +1114,8 @@ export async function mountEditor(root, { document, language, save, download, si
         Math.hypot(event.clientX - directDrag.start.clientX, event.clientY - directDrag.start.clientY) >= 5) {
       const { part, start } = directDrag
       pointer = event
-      startPlacement(part, true, start)
+      const items = state.parts.filter(item => item.id !== part.id && selectionIds().includes(item.id))
+      startPlacement(part, true, start, items.length ? { anchor: part, items } : undefined)
       directDrag = { part, start }
     } else if ((moving && directDrag && (event.buttons & 1)) || !event.buttons) {
       updatePointer(event)

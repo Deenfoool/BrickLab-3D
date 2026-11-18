@@ -2,7 +2,7 @@ import { Plane, Quaternion, Vector3 } from 'three'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
 import { connectionMode, portLength } from '../mechanics/axial.js?v=linkages'
 import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=structural-bores'
-import { candidateOffsets, joinedPose, worldPort } from './placement.js?v=belt-drive'
+import { candidateOffsets, joinedPose, samePose, worldPort } from './placement.js?v=belt-drive'
 
 const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')
 const canSlideOn = port => ['axle', 'duplo-axle', 'rod'].includes(port.role)
@@ -235,4 +235,32 @@ export function nearbyConnections(context) {
   }
   return candidates.sort((a, b) =>
     Number(Boolean(b.fit || b.mesh)) - Number(Boolean(a.fit || a.mesh)) || a.distance - b.distance || a.key.localeCompare(b.key))
+}
+
+export function translationSnaps(members, parts, assembly, scene, axes, insertionDepth) {
+  const ids = new Set(members.map(member => member.id))
+  const targets = parts.filter(part => !ids.has(part.id))
+  const options = members.flatMap(member => {
+    const ownPorts = portsFor(member.design)
+    const points = ownPorts.flatMap(port => {
+      const { start, axis } = worldPort(member, port)
+      const length = portLength(port)
+      const end = start.clone().addScaledVector(axis, length)
+      return port.gender === 'F' ? [start, start.clone().addScaledVector(axis, length / 2), end] : [start, end]
+    }).map(scene.project).filter(point => point.visible)
+    const snapScene = { pixelDistance: point => Math.min(...points.map(screen => scene.pixelDistance(point, screen))) }
+    const acceptPose = pose => {
+      const delta = pose.position.map((value, i) => value - member.position[i])
+      return samePose(member, { ...pose, position: member.position }) &&
+        delta.every((value, i) => axes.includes('XYZ'[i]) || Math.abs(value) < (members.length > 1 ? 3 : .01)) &&
+        Math.hypot(...delta) <= 12
+    }
+    return nearbyConnections({ scene: snapScene, assembly, parts: targets,
+      moving: member, depth: insertionDepth, roll: 0, acceptPose }).filter(option => option.pose).map(option => {
+      const delta = option.pose.position.map((value, i) => value - member.position[i])
+      return { ...option, key: JSON.stringify([member.id, option.key]), shift: Math.hypot(...delta),
+        pose: { position: members[0].position.map((value, i) => value + delta[i]), rotation: members[0].rotation } }
+    })
+  })
+  return options.sort((a, b) => a.shift - b.shift || a.distance - b.distance)
 }

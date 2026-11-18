@@ -21,7 +21,7 @@ const { componentBundle, expandComponents } = await import('../src/editor/compon
 const { jointBodies, linkageDrive } = await import('../src/mechanics/linkage.js')
 const { Quaternion, Ray, Vector3 } = await import('three')
 const { worldPort } = await import('../src/editor/placement.js')
-const { nearbyConnections } = await import('../src/editor/snap.js')
+const { nearbyConnections, translationSnaps } = await import('../src/editor/snap.js')
 const { portsFor } = await import('../src/mechanics/catalog.js')
 const { connectionMode, evaluateInsertion, portLength } = await import('../src/mechanics/axial.js')
 const { parts: availableParts } = await import('../src/editor/parts.js')
@@ -884,4 +884,22 @@ test('33299a leaves an 8L axle available for neighboring sockets and can be seat
   const restored = createAssembly(installed, saved)
   assert.equal(restored.connections.length, 4)
   assert.equal(assembly.connections.length, 3)
+})
+
+test('a pin on a secondary group member seats both the pin and a parallel axle in a beam', () => {
+  const h = Math.SQRT1_2
+  const beam = { ...part('beam', '32278'), position: [120, 10, 20], rotation: [h, -h, 0, 0] }
+  const axle = { ...part('axle', '3707'), position: [179, 10, -79], rotation: [1, 0, 0, 0] }
+  const lever = { ...part('lever', '33299a'), position: [140, 10, -79], rotation: [-h, h, 0, 0] }
+  const members = [axle, lever]
+  const parts = [...members, beam]
+  const assembly = createAssembly(parts, [])
+  const view = { project: p => ({ p, visible: true }), pixelDistance: (p, screen) => p.distanceTo(screen.p) }
+  const seat = translationSnaps(members, parts, assembly, view, 'X', 0)
+    .find(option => option.shaft.part === lever.id && option.socket.part === beam.id)
+  assert.ok(seat)
+  const moved = members.map(member => ({ ...member, position: member.position.map((v, i) =>
+    v + seat.pose.position[i] - axle.position[i]) }))
+  const contacts = connectAligned(assembly, moved, [beam])
+  assert.deepEqual(new Set(contacts.map(link => link.socket.port)), new Set(['bore-13', 'bore-15']))
 })
