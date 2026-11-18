@@ -1,6 +1,7 @@
 export const editorLabels = {
   ru: {
     home: 'К сборкам', parts: 'Детали', search: 'Поиск по названию или ID', build: 'Сборка', kinematics: 'Кинематика',
+    paint: 'Покраска', paintCustom: 'Свой цвет', paintHint: 'Выберите цвет и нажмите на деталь. Esc — вернуться к сборке.',
     save: 'Сохранить', download: 'Скачать', undo: 'Отменить', redo: 'Повторить', reset: 'По центру', info: 'Инспектор',
     sceneParts: 'Детали сцены', noSceneParts: 'На сцене пока нет деталей',
     createGroup: 'Создать группу (Ctrl+G / П)', groupName: number => `Группа ${number}`,
@@ -59,6 +60,7 @@ export const editorLabels = {
   },
   en: {
     home: 'Back to builds', parts: 'Parts', search: 'Search by name or ID', build: 'Build', kinematics: 'Kinematics',
+    paint: 'Paint', paintCustom: 'Custom color', paintHint: 'Choose a color and click a part. Esc returns to Build.',
     save: 'Save', download: 'Download', undo: 'Undo', redo: 'Redo', reset: 'Frame all', info: 'Inspector',
     sceneParts: 'Scene parts', noSceneParts: 'No parts in the scene yet',
     createGroup: 'Create group (Ctrl+G)', groupName: number => `Group ${number}`,

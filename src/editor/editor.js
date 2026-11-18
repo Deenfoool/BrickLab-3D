@@ -17,12 +17,14 @@ import { mountBeltPanel } from './belt-panel.js?v=belt-drive'
 import { upgradeInlineEngineFan } from './inline-engine.js'
 import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
-import { editorLabels } from './labels.js?v=scene-parts'
+import { editorLabels } from './labels.js?v=paint-mode'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
 const rotationStep = Math.PI / 4
 const freeKeyboardStep = Math.PI / 36
+const modes = ['build', 'paint', 'kinematics', 'testDrive', 'physics']
+const paintColors = ['#c91a09', '#0055bf', '#f2cd37', '#237841', '#f4f4f4', '#a0a5a9', '#1b2a34']
 const heldTurns = { ArrowUp: [X, -1], ArrowDown: [X, 1], ArrowLeft: [Y, -1], ArrowRight: [Y, 1] }
 const steps = { ArrowUp: [0, 0, -1], ArrowDown: [0, 0, 1], ArrowLeft: [-1, 0, 0], ArrowRight: [1, 0, 0] }
 const connectionRecord = ({ shaft, socket, fit }) => ({ shaft, socket, placement: fit.placement })
@@ -69,6 +71,7 @@ export async function mountEditor(root, { document, language, save, download, si
       <input class="editor-name" data-el="name" aria-label="${t.name}" maxlength="120">
       <div class="editor-modes">
         <button data-el="build" type="button">${t.build}</button>
+        <button data-el="paint" type="button">${t.paint}</button>
         <button data-el="kinematics" type="button">${t.kinematics}</button>
         <button data-el="testDrive" type="button">${driveTitle(language)}</button>
         <button data-el="physics" type="button">${physicsTitle(language)}</button>
@@ -91,7 +94,7 @@ export async function mountEditor(root, { document, language, save, download, si
       <aside class="editor-test-drive" data-el="drivePanel" hidden></aside>
       <aside class="editor-test-drive" data-el="physicsPanel" hidden></aside>
       <div class="editor-overlay" data-el="editorOverlay">
-        <div class="editor-viewport-tools">
+        <div class="editor-viewport-tools" data-el="buildTools">
           <button type="button" data-el="selectTool" title="${t.select} (V)" aria-label="${t.select}"><svg class="icon" viewBox="0 0 24 24"><path d="m5 3 13 10-6 1-3 6z"/></svg></button>
           <button type="button" data-el="moveTool" title="${t.move} (G / П)" aria-label="${t.move}"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3m-6 12 3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/></svg></button>
           <button type="button" data-el="rotateTool" title="${t.rotate} (R / К)" aria-label="${t.rotate}"><svg class="icon" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 1-3-6m-2 3h5V3"/></svg></button>
@@ -100,6 +103,16 @@ export async function mountEditor(root, { document, language, save, download, si
           <button type="button" data-el="beltTool" title="${t.beltAdd}" aria-label="${t.beltAdd}">${t.belt}</button>
           <button type="button" data-el="snap" aria-pressed="true">${t.snap}</button>
           <button type="button" data-el="frame">${t.reset}</button>
+        </div>
+        <div class="editor-paint-tools" data-el="paintTools" role="group" aria-label="${t.paint}" hidden>
+          <div class="editor-paint-swatches">
+            ${paintColors.map(color => {
+              const label = `${t.color} ${color.toUpperCase()}`
+              return `<button type="button" data-paint="${color}" style="--paint-swatch:${color}" title="${label}" aria-label="${label}" aria-pressed="${color === paintColors[0]}"></button>`
+            }).join('')}
+          </div>
+          <label class="editor-paint-custom"><input type="color" data-el="paintColor" value="${paintColors[0]}">${t.paintCustom}</label>
+          <button type="button" data-el="paintFrame">${t.reset}</button>
         </div>
         <div class="editor-panel-layer" data-el="panelLayer">
           <aside class="editor-panel editor-catalog" data-panel="library" aria-labelledby="editor-library-heading">
@@ -164,6 +177,8 @@ export async function mountEditor(root, { document, language, save, download, si
     <footer class="editor-status"><span data-el="hint" role="status"></span><span data-el="loadNotice" role="status"></span><span data-el="count"></span></footer>`
   const el = name => root.querySelector(`[data-el="${name}"]`)
   const on = (target, event, callback, capture = false) => target.addEventListener(event, callback, { signal, capture })
+  const paintColor = el('paintColor')
+  const paintSwatches = [...el('paintTools').querySelectorAll('[data-paint]')]
   let scene
   try {
     scene = createScene(el('viewport'), models)
@@ -461,7 +476,7 @@ export async function mountEditor(root, { document, language, save, download, si
     scene.belts.travel(new Map())
     selected = id
     if (tool === 'length' && !canResize(selectedPart())) tool = 'move'
-    scene.select(id)
+    scene.select(mode === 'paint' ? undefined : id)
     updateHighlights()
     hinge = mode === 'kinematics' && id ? hingeMotion(id, state.parts, links) : undefined
     angle = hinge?.ok ? hinge.roll * 180 / Math.PI : 0
@@ -473,7 +488,13 @@ export async function mountEditor(root, { document, language, save, download, si
   }
 
   function applyState(next) {
-    const mechanicalChange = state.parts !== next.parts || state.links !== next.links || state.belts !== next.belts
+    const geometryChanged = state.parts !== next.parts && (state.parts.length !== next.parts.length ||
+      next.parts.some((part, index) => {
+        const previous = state.parts[index]
+        return part.id !== previous.id || part.design !== previous.design ||
+          part.position !== previous.position || part.rotation !== previous.rotation
+      }))
+    const mechanicalChange = geometryChanged || state.links !== next.links || state.belts !== next.belts
     state = next
     if (mechanicalChange) {
       assembly = createAssembly(state.parts, state.links, { belts: state.belts })
@@ -498,6 +519,16 @@ export async function mountEditor(root, { document, language, save, download, si
     if (undo.length > 80) undo.shift()
     redo.length = 0
     applyState({ belts: state.belts, layers: state.layers, ...next })
+  }
+
+  function paintPart(id, color) {
+    const part = state.parts.find(item => item.id === id)
+    if (!part || String(part.color ?? parts[part.design].color).toLowerCase() === color) return
+    commit({ ...state, parts: state.parts.map(item => item === part ? { ...part, color } : item) })
+  }
+
+  function updatePaintSwatches() {
+    for (const swatch of paintSwatches) swatch.setAttribute('aria-pressed', String(swatch.dataset.paint === paintColor.value))
   }
 
   function restore(from, to) {
@@ -545,6 +576,7 @@ export async function mountEditor(root, { document, language, save, download, si
     el('selection').textContent = additional.size ? t.selectedCount(selectionIds().length)
       : part ? parts[part.design][language] : transmission?.kind === 'engine' ? t.crankshaft : t.none
     const building = mode === 'build'
+    const painting = mode === 'paint'
     const addingBelt = building && tool === 'belt'
     partsPanel.setEditable(building && !dragActive(), Boolean(isolation), Boolean(isolation) || hasSavedHidden())
     el('selection').hidden = addingBelt
@@ -588,6 +620,7 @@ export async function mountEditor(root, { document, language, save, download, si
     el('play').textContent = frame ? t.stop : t.play
     el('insertion').hidden = !moving
     el('depth').value = String(depth)
+    el('empty').textContent = painting ? t.noSceneParts : t.empty
     el('empty').hidden = Boolean(state.parts.length || moving)
     el('count').textContent = `${t.count}: ${state.parts.length} · ${t.linkCount}: ${links.length}` +
       (state.belts.length ? ` · ${t.beltCount(state.belts.length)}` : '')
@@ -597,7 +630,11 @@ export async function mountEditor(root, { document, language, save, download, si
       discardedBelts ? t.beltsDiscarded(discardedBelts) : '',
     ].filter(Boolean).join(' · ')
     el('editorOverlay').hidden = simulating(mode)
-    for (const name of ['build', 'kinematics', 'testDrive', 'physics']) el(name).setAttribute('aria-pressed', String(mode === name))
+    el('buildTools').hidden = painting
+    el('paintTools').hidden = !painting
+    el('panelLayer').hidden = painting
+    el('viewport').toggleAttribute('data-painting', painting)
+    for (const name of modes) el(name).setAttribute('aria-pressed', String(mode === name))
     library.setPlacement(!movesExisting ? moving?.design : undefined, pendingPart?.part.design, building)
     el('snap').disabled = !building
     el('snap').setAttribute('aria-pressed', String(snapEnabled))
@@ -607,7 +644,8 @@ export async function mountEditor(root, { document, language, save, download, si
     const rotationCue = { fixed: t.fixed, locked: t.locked, detented: t.detented, continuous: t.freely, ball: t.ballJoint, slider: t.travel, spring: t.mechanisms.suspension }
     const cue = fit ? rotationCue[fit.motion.rotation]
       : candidate?.mesh ? t.gearSnap : candidate?.failure?.includes('occupied') ? t.occupied : candidate?.failure ? t.blocked : t.free
-    el('hint').textContent = simulating(mode) ? message : resize ? t.lengthPreview(parts[resize.pose.design][language], resize.lost.length, resize.kept) :
+    el('hint').textContent = simulating(mode) ? message : painting ? message || t.paintHint :
+      resize ? t.lengthPreview(parts[resize.pose.design][language], resize.lost.length, resize.kept) :
       gizmoSnap?.mesh ? t.gearSnap : gizmoSnap?.fit ? t.snapPreview : moving ? `${cue} · ${t.place}`
       : pendingPart ? t.loadingPart(pendingPart.part[language]) : message || (unknownPartCount ? t.unknown(unknownPartCount) : t.camera)
   }
@@ -946,6 +984,8 @@ export async function mountEditor(root, { document, language, save, download, si
     cancelGizmo()
     cancelPlacement()
     cancelResize()
+    pointerDown = null
+    if (next === 'paint' && message !== t.storage) message = ''
     mode = next
     additional.clear()
     setSelection(selected)
@@ -972,13 +1012,16 @@ export async function mountEditor(root, { document, language, save, download, si
     frame = requestAnimationFrame(stepAnimation)
   }
 
-  on(el('build'), 'click', () => setMode('build'))
-  on(el('kinematics'), 'click', () => setMode('kinematics'))
-  on(el('testDrive'), 'click', () => setMode('testDrive'))
-  on(el('physics'), 'click', () => setMode('physics'))
+  for (const name of modes) on(el(name), 'click', () => setMode(name))
   on(el('undo'), 'click', () => restore(undo, redo))
   on(el('redo'), 'click', () => restore(redo, undo))
   on(el('frame'), 'click', scene.resetView)
+  on(el('paintFrame'), 'click', scene.resetView)
+  on(paintColor, 'input', updatePaintSwatches)
+  for (const swatch of paintSwatches) on(swatch, 'click', () => {
+    paintColor.value = swatch.dataset.paint
+    updatePaintSwatches()
+  })
   scene.watchView(positionHandles)
   on(el('axleHandles'), 'pointerdown', beginResize)
   on(el('axleHandles'), 'pointermove', previewResize)
@@ -1014,7 +1057,7 @@ export async function mountEditor(root, { document, language, save, download, si
   on(el('remove'), 'click', () => removeParts())
   on(el('color'), 'change', event => {
     if (!selected || mode !== 'build' || dragActive()) return
-    commit({ ...state, parts: state.parts.map(part => part.id === selected ? { ...part, color: event.target.value } : part) })
+    paintPart(selected, event.target.value)
   })
   on(el('shallower'), 'click', () => changeDepth(-2))
   on(el('deeper'), 'click', () => changeDepth(2))
@@ -1081,6 +1124,10 @@ export async function mountEditor(root, { document, language, save, download, si
     if (!gizmoPart) ignoreGizmoClick = false
     scene.canvas.focus({ preventScroll: true })
     pointerDown = [event.clientX, event.clientY]
+    if (mode === 'paint') {
+      if (!event.isPrimary) pointerDown = null
+      return
+    }
     if (mode === 'build') {
       if (!gizmoPart && !moving && tool === 'select' && !event.shiftKey && event.pointerType !== 'touch') {
         const hit = scene.pointer(event).hit
@@ -1104,6 +1151,10 @@ export async function mountEditor(root, { document, language, save, download, si
   })
   on(scene.canvas, 'pointermove', event => {
     if (simulating(mode)) return
+    if (mode === 'paint') {
+      if (pointerDown && Math.hypot(event.clientX - pointerDown[0], event.clientY - pointerDown[1]) >= 5) pointerDown = null
+      return
+    }
     if (drag) {
       const min = Number(el('angle').min)
       const max = Number(el('angle').max)
@@ -1134,6 +1185,10 @@ export async function mountEditor(root, { document, language, save, download, si
     if (event.button !== 0) return
     const click = pointerDown && Math.hypot(event.clientX - pointerDown[0], event.clientY - pointerDown[1]) < 5
     pointerDown = null
+    if (mode === 'paint') {
+      if (click && event.isPrimary) paintPart(scene.pointer(event).hit, paintColor.value)
+      return
+    }
     if (ignoreGizmoClick) {
       ignoreGizmoClick = false
       return
@@ -1170,6 +1225,12 @@ export async function mountEditor(root, { document, language, save, download, si
         event.preventDefault()
         persist(true)
       } else if (event.key === 'Escape') setMode('build')
+      return
+    }
+    if (event.key === 'Escape' && mode === 'paint') {
+      event.preventDefault()
+      setMode('build')
+      el('build').focus()
       return
     }
     if (event.key === 'Escape' && mode === 'build' && tool === 'belt' && !dragActive()) {

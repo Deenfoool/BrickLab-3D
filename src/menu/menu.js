@@ -1,4 +1,4 @@
-import { editorLabels } from '../editor/labels.js?v=scene-parts'
+import { editorLabels } from '../editor/labels.js?v=paint-mode'
 import { locales } from './locale.js?v=catalog-page'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
@@ -270,7 +270,7 @@ async function openEditor(project) {
   editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=group-snap')
+    const { mountEditor } = await import('../editor/editor.js?v=paint-mode')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
