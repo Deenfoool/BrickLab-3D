@@ -140,7 +140,6 @@ export function nearbyConnections(context) {
       const targets = targetsOnPort(scene, event, fixedPort, start, axis, span, ray)
       const slidingShaft = canSlideOn(fixedPort)
       const gizmoShaft = acceptPose && slidingShaft
-      if (!targets.length && !gizmoShaft) continue
       const stops = slidingShaft && depth === 0 ? assembly.shaftEntryStops({ part: fixed.id, port: fixedPort.id }) : null
       for (const own of ownConnectors) {
         const movingShaft = own.gender === 'M'
@@ -156,6 +155,16 @@ export function nearbyConnections(context) {
           const along = center.sub(start).dot(axis)
           points = [...targets, ...withinSnapRange(scene, event, shaftTargets(fixedPort, start, axis, span, along))]
         }
+        if (stops && !movingShaft) {
+          // Present the two accessible shoulders as snap targets in screen space.
+          // A failed aim inside an occupied interval must not hide a nearby legal seat.
+          const centers = [stops.start - socketWidth / 2, stops.end + socketWidth / 2]
+          const shoulders = centers.flatMap((along, index) => along >= socketWidth / 2 && along <= span - socketWidth / 2
+            ? [{ side: index === 0 ? 'start' : 'end', point: start.clone().addScaledVector(axis, along), along }]
+            : [])
+          points = [...points, ...withinSnapRange(scene, event, shoulders)]
+        }
+        if (!points.length) continue
         for (const { side, point, along, distance } of points) {
           const shaft = { part: movingShaft ? moving.id : fixed.id, port: male.id }
           const socket = { part: movingShaft ? fixed.id : moving.id, port: female.id }
@@ -166,7 +175,7 @@ export function nearbyConnections(context) {
           const shoulder = stops && along !== undefined && (side === 'start'
             ? stops.start - socketWidth / 2 : stops.end + socketWidth / 2)
           const nearShoulder = Number.isFinite(shoulder) && shoulder >= socketWidth / 2 &&
-            shoulder <= span - socketWidth / 2 && Math.abs(shoulder - along) <= 2 &&
+            shoulder <= span - socketWidth / 2 &&
             scene.pixelDistance(start.clone().addScaledVector(axis, shoulder), event) <= 31
           let best
           let failure

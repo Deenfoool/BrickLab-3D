@@ -843,3 +843,45 @@ test('expanding a loaded shock preserves its external mount at the piston end', 
   assert.equal(expanded.connections.find(link => link.shaft.part === 'pin').socket.part, 'shock:component:1')
   assert.deepEqual(expandComponents(expanded, availableParts), expanded)
 })
+
+test('33299a leaves an 8L axle available for neighboring sockets and can be seated again after removal', () => {
+  const axle = part('axle', '3707')
+  const beam = part('beam', '33299a')
+  const boss = portsFor(beam.design).find(port => port.role === 'key' && portLength(port) === 20)
+  const initial = options(beam, axle).find(snap => snap.fit && snap.socket.port === boss.id)
+  assert.ok(initial)
+  let installed = [axle, { ...beam, ...initial.pose }]
+  let saved = [{ shaft: initial.shaft, socket: initial.socket, placement: initial.fit.placement }]
+  for (const [index, design] of ['3713', '41677', '6632'].entries()) {
+    const moving = part('neighbor-' + index, design)
+    const assembly = createAssembly([...installed, moving], saved)
+    const stops = assembly.shaftEntryStops(initial.shaft)
+    // Aim four LDU into the neighbor, still within the on-screen snap radius.
+    const halfWidth = design === '3713' ? 10 : 5
+    const x = -80 + stops.start - halfWidth + 4
+    const snaps = nearbyConnections({ moving, parts: [axle], assembly, depth: 0, roll: 0,
+      ray: new Ray(new Vector3(x, 0, 100), new Vector3(0, 0, -1)),
+      scene: { pixelDistance: point => Math.abs(point.x - x) * 6 },
+    })
+    const snap = snaps.find(option => option.fit && option.shaft.part === axle.id &&
+      Math.abs(option.fit.occupancy.shaft[1] - stops.start) < 1e-6)
+    assert.ok(snap, design)
+    installed.push({ ...moving, ...snap.pose })
+    saved.push({ shaft: snap.shaft, socket: snap.socket, placement: snap.fit.placement })
+    assert.equal(createAssembly(installed, saved).connections.length, saved.length)
+  }
+  // Starting an existing-part move releases only that part's occupied interval.
+  const retained = saved.filter(link => link.socket.part !== beam.id)
+  const assembly = createAssembly(installed, retained)
+  assert.ok(assembly.previewInsertion(initial.shaft, initial.socket, initial.fit.placement).ok)
+  const x = -80 + initial.fit.occupancy.shaft.reduce((sum, value) => sum + value, 0) / 2
+  const retry = nearbyConnections({ moving: beam, parts: [axle], assembly, depth: 0, roll: 0,
+    ray: new Ray(new Vector3(x, 0, 100), new Vector3(0, 0, -1)),
+    scene: { pixelDistance: point => Math.abs(point.x - x) * 6 },
+  }).find(snap => snap.fit && snap.socket.port === boss.id)
+  assert.ok(retry)
+  assert.deepEqual(retry.fit.occupancy.shaft, initial.fit.occupancy.shaft)
+  const restored = createAssembly(installed, saved)
+  assert.equal(restored.connections.length, 4)
+  assert.equal(assembly.connections.length, 3)
+})
