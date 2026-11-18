@@ -72,10 +72,10 @@ export function portsFor(design) {
       ...(suspensionPorts[design] && /:(?:fake-)?spring-[01]$/.test(definitions[type].group ?? '') && { legacy: true }),
     })) ?? support[design]?.ports ?? noPorts
     const supported = suspensionPorts[design] ? [...base, ...suspensionPorts[design]] : base
-    if (design === 'u9479c01' || design === '40940') supported.push({
-      id: 'control-plus-output', role: design === '40940' ? 'clip' : 'pivot',
-      gender: design === '40940' ? 'F' : 'M', group: 'control-plus-l-output',
-      start: [0, 0, design === '40940' ? 0 : -10], axis: [0, 0, 1],
+    if (['u9479c01', '40940', '10089c01', '10095'].includes(design)) supported.push({
+      id: 'control-plus-output', role: ['40940', '10095'].includes(design) ? 'clip' : 'pivot',
+      gender: ['40940', '10095'].includes(design) ? 'F' : 'M', group: ['10095', '10089c01'].includes(design) ? 'pf-l-output' : 'control-plus-l-output',
+      start: [0, 0, design === 'u9479c01' ? -10 : 0], axis: [0, 0, 1],
       openings: ['start', 'end'], reference: [1, 0, 0],
       sections: [{ shape: 'Q', radius: 1, length: 1 }],
     })

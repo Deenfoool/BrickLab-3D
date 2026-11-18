@@ -85,6 +85,7 @@ export async function mountEditor(root, { document, language, save, download, si
         <button data-el="physics" type="button">${physicsTitle(language)}</button>
       </div>
       <div class="editor-actions">
+        <button data-el="wires" type="button" aria-pressed="true">${language === 'ru' ? 'Провода' : 'Wires'}</button>
         <button data-el="sound" class="editor-square editor-sound" type="button" aria-label="${t.sound}">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3z"/><path class="sound-waves" d="M15 9a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12"/><path class="sound-muted" d="m16 9 5 6m0-6-5 6"/></svg>
         </button>
@@ -1122,6 +1123,11 @@ export async function mountEditor(root, { document, language, save, download, si
   on(root, 'pointerdown', audio.unlock, true)
   on(root, 'pointerup', audio.unlock, true)
   on(window, 'keydown', audio.unlock, true)
+  on(el('wires'), 'click', () => {
+    const visible = el('wires').getAttribute('aria-pressed') !== 'true'
+    el('wires').setAttribute('aria-pressed', String(visible))
+    scene.setWiresVisible(visible)
+  })
   on(el('sound'), 'click', () => {
     if (audio.toggle()) audio.play('tool')
     updateSoundControl()

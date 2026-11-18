@@ -67,7 +67,7 @@ export function createScene(host, models) {
   const motorCables = createMotorCables(solids, id => {
     const object = objects.get(id)
     return object?.visible ? { position: object.position.toArray(), rotation: object.quaternion.toArray() } : undefined
-  })
+  }, invalidate)
   const belts = createBeltScene(solids, id => {
     const part = hidden.has(id) ? undefined : objects.get(id)
     return part && { design: part.userData.design, position: part.position.toArray(), rotation: part.quaternion.toArray() }
@@ -426,5 +426,5 @@ export function createScene(host, models) {
   }
 
   resetView()
-  return { canvas, camera, gizmo, belts, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, selectInRect, enableBoxSelect, setGhost, setGroupGhost, setMoving, resetView, dispose }
+  return { setWiresVisible(value) { motorCables.visible(value); invalidate() }, canvas, camera, gizmo, belts, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, selectInRect, enableBoxSelect, setGhost, setGroupGhost, setMoving, resetView, dispose }
 }

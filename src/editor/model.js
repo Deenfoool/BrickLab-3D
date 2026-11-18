@@ -225,7 +225,7 @@ export function assemblyJoints(parts, assembly) {
 }
 
 export function rotationMotion(selected, parts, assembly, linkage = linkedSelector(selected, parts, assembly)) {
-  const motor = parts.find(part => part.id === selected && part.design === 'u9479c01')
+  const motor = parts.find(part => part.id === selected && ['u9479c01', '10089c01'].includes(part.design))
   if (motor) {
     const output = assembly.connections.find(link => link.shaft.part === selected && link.shaft.port === 'control-plus-output')
     if (!output) return null

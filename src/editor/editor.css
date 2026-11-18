@@ -202,3 +202,16 @@ body:has(.editor:not([hidden])){overflow:hidden}
   border-radius: 5px;
   padding: 5px;
 }
+
+.editor button[data-el="wires"][aria-pressed="true"] {
+  color: #ffd376;
+  border-color: #a17a39;
+}
+.editor-motor-panel fieldset {
+  border: 1px solid #424853;
+  border-radius: 6px;
+  margin: 10px 0;
+}
+.editor-motor-panel fieldset label {
+  flex-wrap: nowrap;
+}

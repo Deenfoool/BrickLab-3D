@@ -135,7 +135,7 @@ function simulateAssembly(rapier, world, parts, joints, models, pinned) {
   }
 
   const motors = parts.filter(part => controlPlusBodies.has(part.design)).flatMap(part => {
-    const joint = joints.find(joint => joint.a === part.id && joint.group === 'control-plus-l-output')
+    const joint = joints.find(joint => joint.a === part.id && ['control-plus-l-output', 'pf-l-output'].includes(joint.group))
     if (!joint) return []
     const housing = bodies.get(graph.byPart.get(part.id))
     const output = bodies.get(graph.byPart.get(joint.b))

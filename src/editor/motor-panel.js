@@ -1,4 +1,4 @@
-import { controlPlusBodies, controlPlusHubs, hubSettings, motorSettings, motorSupply } from '../mechanics/motors.js'
+import { compatibleSupply, controlPlusBodies, controlPlusHubs, hubSettings, motorSettings, motorSupply } from '../mechanics/motors.js'
 
 export function mountMotorPanel(root, { language, read, change, signal }) {
   const ru = language === 'ru'
@@ -18,7 +18,9 @@ export function mountMotorPanel(root, { language, read, change, signal }) {
       </select></label>
       <button type="button" data-stop-now>${ru ? 'Остановить мотор' : 'Stop motor'}</button>
       <p data-status role="status"></p>
-      <small>${ru ? 'Control+ L · расчётная модель 9 В, 315 об/мин, 0,18 Н·м. Нагрузка и торможение работают в «Физике сборки». Кабель назначается выбором хаба и порта.' : 'Control+ L · approximate model, 9 V, 315 rpm, 0.18 N·m. Load and braking operate in Assembly Physics. Assign a cable by selecting its hub and port.'}</small>
+      <fieldset><legend>${ru ? 'Изгиб кабеля' : 'Cable bend'}</legend>
+        ${['X','Y','Z'].map(axis => `<label>${axis}<input data-bend="${axis}" type="range" min="-200" max="200" step="2"></label>`).join('')}
+      </fieldset><small>${ru ? 'Расчётная модель 9 В. Нагрузка и торможение работают в «Физике сборки». Кабель назначается выбором хаба и порта.' : 'Approximate 9 V model. Load and braking operate in Assembly Physics. Assign a cable by selecting its hub and port.'}</small>
     </div>`
   const el = name => root.querySelector(`[data-${name}]`)
   let selected
@@ -29,6 +31,8 @@ export function mountMotorPanel(root, { language, read, change, signal }) {
   for (const [name, key] of [['battery', 'battery'], ['port', 'port'], ['power', 'power']]) {
     el(name).addEventListener('change', event => update({ [key]: Number(event.target.value) }), { signal })
   }
+  const bends = Array.from(root.querySelectorAll('[data-bend]'))
+  for (const input of bends) input.addEventListener('change', () => update({ bend: bends.map(item => Number(item.value)) }), { signal })
   el('power').addEventListener('input', event => { el('power-value').textContent = event.target.value + '%' }, { signal })
   el('on').addEventListener('change', event => update({ on: event.target.checked }), { signal })
   el('hub-id').addEventListener('change', event => update({ hubId: event.target.value }), { signal })
@@ -50,9 +54,11 @@ export function mountMotorPanel(root, { language, read, change, signal }) {
       if (!motor) return
       const settings = motorSettings(part)
       const supply = motorSupply(part, parts)
+      bends.forEach((input, i) => { input.value = part.electric?.bend?.[i] ?? 0 })
+      el('port').disabled = part.design === '10089c01'
       const options = [new Option(ru ? 'Не подключён' : 'Disconnected', ''),
-        ...parts.filter(part => controlPlusHubs.has(part.design)).map((hub, index) =>
-          new Option(`Control+ ${hub.design} · ${index + 1}`, hub.id))]
+        ...parts.filter(hub => compatibleSupply(part.design, hub.design)).map((hub, index) =>
+          new Option(`${part.design === '10089c01' ? 'PF' : 'Control+'} ${hub.design} · ${index + 1}`, hub.id))]
       el('hub-id').replaceChildren(...options)
       el('hub-id').value = settings.hubId
       el('port').value = settings.port

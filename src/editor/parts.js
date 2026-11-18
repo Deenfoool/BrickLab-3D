@@ -35,7 +35,7 @@ function newLoader() {
   return new LDrawLoader().setConditionalLineMaterial(LDrawConditionalLineMaterial)
 }
 
-export function extractModel(group) {
+export function extractModel(group, preserveColors = false) {
   const meshes = []
   const bounds = new THREE.Box3()
   group.updateMatrixWorld(true)
@@ -54,6 +54,10 @@ export function extractModel(group) {
         indices[i + 2] = first
       }
       geometry.index.needsUpdate = true
+    }
+    if (preserveColors) {
+      const materials = Array.isArray(node.material) ? node.material : [node.material]
+      geometry.userData.codes = materials.map(mat => mat.userData.code)
     }
     geometry.computeBoundingBox()
     bounds.union(geometry.boundingBox)
@@ -113,12 +117,22 @@ export async function loadPartModel(part) {
   }
   const loader = newLoader().setFileMap(fileMap)
   loader.addDefaultMaterials()
-  const content = `0 FILE bricklab-part.ldr\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 ${modelFile}\n${embedded.join('')}`
+  const preserveColors = ['99499', '99499c01', '10089c01', '10095', '58124c01', '23816a',
+    '58119', '64228c01', '84599', '22127', '85824'].includes(part.design)
+  const palette = preserveColors ? Object.entries(electricColors).map(([code, color]) =>
+    `0 !COLOUR Electric_${code} CODE ${code} VALUE ${color} EDGE #333333`).join('\n') : ''
+  const content = `0 FILE bricklab-part.ldr\n${palette}\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 ${modelFile}\n${embedded.join('')}`
   const group = await new Promise((resolve, reject) => loader.parse(content, resolve, reject))
-  const model = extractModel(group)
+  const model = extractModel(group, preserveColors)
   if (!model) throw new Error(`LDraw part has no geometry: ${part.design}`)
   return model
 }
+
+const electricColors = { 0: '#202124', 1: '#16509c', 4: '#ba3028', 7: '#a6a7a1', 14: '#f3c52b',
+  25: '#ed861d', 34: '#55a353', 334: '#d5ae62', 47: '#c4c7c4', 71: '#aaaead', 72: '#60615e', 79: '#777974', 256: '#262626',
+  494: '#acada7', 383: '#aaaead' }
+const fixedFinishes = new Map(Object.entries(electricColors).map(([code, color]) =>
+  [code, new THREE.MeshStandardMaterial({ color, roughness: .52 })]))
 
 export function partMesh(model, color, ghost = false) {
   const group = new THREE.Group()
@@ -129,7 +143,10 @@ export function partMesh(model, color, ghost = false) {
     finish.opacity = .46
     finish.depthWrite = false
   }
-  for (const mesh of model.meshes) group.add(new THREE.Mesh(mesh, finish))
+  for (const mesh of model.meshes) {
+    const colors = !ghost && mesh.userData.codes?.map(code => fixedFinishes.get(String(code)) ?? finish)
+    group.add(new THREE.Mesh(mesh, colors ? (colors.length === 1 ? colors[0] : colors) : finish))
+  }
   group.userData.finish = finish
   return group
 }

@@ -72,7 +72,7 @@ export function mountPhysicsPanel(root, { language, scene, models, read, signal 
     const motors = simulation?.motors ?? []
     el('motors').hidden = !motors.length
     const selected = el('motor').value
-    el('motor').replaceChildren(...motors.map((motor, index) => new Option(`Control+ L · ${index + 1}`, motor.part)))
+    el('motor').replaceChildren(...motors.map((motor, index) => new Option(`${read().parts.find(part => part.id === motor.part)?.design === '10089c01' ? 'PF L' : 'Control+ L'} · ${index + 1}`, motor.part)))
     if (motors.some(motor => motor.part === selected)) el('motor').value = selected
     selectMotor()
   }
