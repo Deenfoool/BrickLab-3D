@@ -1,12 +1,12 @@
 import { mountFloatingPanels } from './floating-panels.js?v=scene-parts'
 import { createEditorAudio } from './audio.js?v=editor-sound'
 import { Plane, Quaternion, Vector3 } from 'three'
-import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=selector-guide'
-import { baseRotation, samePose } from './placement.js?v=selector-guide'
-import { connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=selector-guide'
+import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=gear-selector'
+import { baseRotation, samePose } from './placement.js?v=gear-selector'
+import { shiftSelector, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=gear-selector'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
-import { nearestDetent } from '../mechanics/axial.js?v=linkages'
-import { nearbyConnections, translationSnaps } from './snap.js?v=snap-orientation'
+import { nearestDetent } from '../mechanics/axial.js?v=gear-selector'
+import { nearbyConnections, translationSnaps } from './snap.js?v=gear-selector'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=catalog-page'
 import { mountLibrary } from './library.js?v=catalog-page'
 import { createScene } from './scene.js?v=box-selection'
@@ -149,6 +149,9 @@ export async function mountEditor(root, { document, language, save, download, si
             </header>
             <div class="editor-panel-body" id="editor-inspector-body">
               <p data-el="selection"></p>
+              <div data-el="selector" hidden>${language === 'ru' ? 'Положение муфты' : 'Driving ring position'}
+                <button data-shift="-1">◀</button><button data-shift="0">N</button><button data-shift="1">▶</button>
+              </div>
               <div class="editor-part-actions" data-el="partActions" hidden>
                 <label>${t.color}<input type="color" data-el="color"></label>
                 <button type="button" data-el="copy">${t.copy}</button>
@@ -635,6 +638,7 @@ export async function mountEditor(root, { document, language, save, download, si
     el('selection').textContent = additional.size ? t.selectedCount(selectionIds().length)
       : part ? parts[part.design][language] : transmission?.kind === 'engine' ? t.crankshaft : t.none
     const building = mode === 'build'
+    el('selector').hidden = !building || dragActive() || !selectedLinks.some(l => ['selector-guide', 'shift-groove'].includes(l.socket.port) && (l.socket.part === selected || l.socket.port === 'shift-groove'))
     const painting = mode === 'paint'
     const selectingInBox = building && tool === 'box' && !moving && !pendingPart
     const addingBelt = building && tool === 'belt'
@@ -1168,6 +1172,28 @@ export async function mountEditor(root, { document, language, save, download, si
     if (Math.abs(target - hinge.roll) < 1e-8) return
     const placed = hingePoses(state.parts, hinge, target)
     commit({ parts: placed, links: transformLinks(placed, [...hinge.moving]) })
+  })
+  on(el('selector'), 'click', event => {
+    const button = event.target.closest('[data-shift]')
+    if (!button) return
+    const edits = shiftSelector(selected, Number(button.dataset.shift), state.parts, assembly)
+    if (!edits) return
+    const placed = state.parts.map(part => edits.get(part.id) ?? part)
+    const shifted = [...edits.values()]
+    const nextLinks = transformLinks(placed, [...edits.keys()], [], true)
+    const ring = shifted.find(p => portsFor(p.design).some(port => port.role === 'selector-guide'))
+    const checked = createAssembly(placed, nextLinks)
+    if (ring) nextLinks.push(...connectAligned(checked, [ring], shifted.filter(p => p.id !== ring.id)))
+    const kept = old => nextLinks.some(link => link.shaft.part === old.shaft.part &&
+      link.socket.part === old.socket.part && link.socket.port === old.socket.port &&
+      (link.shaft.port === old.shaft.port || old.socket.port === 'shift-groove'))
+    if (assembly.connections.some(link => !kept(link) &&
+        assembly.port(link.shaft.part, link.shaft.port).role !== 'clutch-driver')) {
+      message = language === 'ru' ? 'Переключению мешает установленное соединение.' : 'An installed connection blocks the shift.'
+      render()
+      return
+    }
+    commit({ ...state, parts: placed, links: nextLinks })
   })
   on(el('play'), 'click', () => {
     if (frame) stopAnimation()

@@ -1,13 +1,13 @@
 import { Quaternion, Vector3 } from 'three'
-import { connectionMode } from '../mechanics/axial.js?v=selector-guide'
-import { Assembly } from '../mechanics/assembly.js?v=selector-guide'
+import { connectionMode } from '../mechanics/axial.js?v=gear-selector'
+import { Assembly } from '../mechanics/assembly.js?v=gear-selector'
 import { rotationalDrive } from '../mechanics/rotation.js?v=belt-drive'
 import { assembleBelts } from '../mechanics/belts.js?v=belt-drive'
 import { engineDrive } from '../mechanics/engine.js?v=belt-drive'
 import { cardanCoupling } from '../mechanics/cardan.js'
-import { articulationDrive, jointBodies, linkageDrive, mechanismPoses, motionRange, suspensionDrive } from '../mechanics/linkage.js'
-import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=selector-guide'
-import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=selector-guide'
+import { movePose, turnPose, articulationDrive, jointBodies, linkageDrive, mechanismPoses, motionRange, suspensionDrive } from '../mechanics/linkage.js'
+import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=gear-selector'
+import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=gear-selector'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
 export const snapGrid = 10
@@ -123,6 +123,51 @@ export function connectAligned(assembly, changed, fixed) {
     }
   }
   return added
+}
+
+// Shift the ring along its installed guide and rock the selector about its control axle.
+export function shiftSelector(selected, direction, parts, assembly) {
+  const links = assembly.connections
+  const catchLink = links.find(l => l.socket.port === 'shift-groove' &&
+    (l.shaft.part === selected || l.socket.part === selected))
+  const ringId = catchLink?.socket.part ?? selected
+  const guide = links.find(l => l.socket.part === ringId && l.socket.port === 'selector-guide')
+  if (!guide) return
+  const byId = new Map(parts.map(p => [p.id, p]))
+  const ring = byId.get(ringId)
+  const center = new Vector3().fromArray(byId.get(guide.shaft.part).position)
+  const axis = worldPort(ring, assembly.port(ringId, 'selector-guide')).axis
+  const drivers = portsFor(ring.design).filter(port => port.role === 'clutch-driver')
+  let travel = 10 * direction
+  // Seat the dog at the depth of the first coaxial clutch face on this side.
+  if (direction) for (const part of parts) {
+    if (part.id === ringId) continue
+    for (const face of portsFor(part.design).filter(port => port.role === 'clutch-face')) {
+      const target = worldPort(part, face)
+      for (const dog of drivers) {
+        if (!connectionMode(dog, face)) continue
+        const tip = worldPort({ ...ring, position: center.toArray() }, dog)
+        if (tip.axis.dot(target.axis) > -.99999 || target.axis.dot(axis) * direction < .99999) continue
+        const delta = target.start.clone().addScaledVector(target.axis, Math.min(face.sections[0].length, dog.sections[0].length)).sub(tip.start)
+        const distance = delta.dot(axis)
+        if (delta.addScaledVector(axis, -distance).length() < .01 && distance * direction > 0 &&
+          Math.abs(distance) <= Math.abs(travel) + .001) travel = distance
+      }
+    }
+  }
+  const edits = new Map([[ringId, { ...ring, position: center.addScaledVector(axis, travel).toArray() }]])
+  if (catchLink) {
+    const lever = byId.get(catchLink.shaft.part)
+    const tip = assembly.port(lever.id, catchLink.shaft.port)
+    const sign = worldPort(lever, tip).axis.dot(axis) > 0 ? 1 : -1
+    const next = portsFor(lever.design).find(p => Math.abs(p.shift - travel * sign) < .01)
+    if (!next) return
+    const pivot = worldPort(lever, portsFor(lever.design).find(p => p.role === 'key'))
+    const turn = turnPose(pivot.start, pivot.axis, Math.asin(next.shift / 22) - Math.asin(tip.shift / 22))
+    const body = jointBodies(byId.keys(), assemblyJoints(parts, assembly)).byPart.get(lever.id)
+    for (const id of body.ids) edits.set(id, movePose(byId.get(id), turn))
+  }
+  return edits
 }
 
 export function partRotationPort(part) {

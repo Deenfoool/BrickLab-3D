@@ -83,6 +83,24 @@ export function portsFor(design) {
         start: [0, 0, -length / 2], axis: [0, 0, 1], reference: [1, 0, 0],
         sections: [{ shape: 'K', radius: 9.5, length }] })
     }
+    if (design === '32187') {
+      // The four dogs also mate with the 3L ring and its two-sided clutch gear.
+      for (const port of supported) port.extension = true
+      supported.push({ id: 'extension-bore', role: 'bearing', gender: 'F', openings: ['start', 'end'],
+        start: [0, 0, -10], axis: [0, 0, 1], sections: [{ shape: 'R', radius: 6, length: 20 }] })
+    }
+    if (design === '18947') supported.push(shockPort('shift-groove', 'shift-groove', 'F',
+      [0, 0, 0], [0, 0, 1], { group: 'changeover', slot: 'shift-groove', reference: [1, 0, 0] }))
+    if (design === '6641') {
+      // Local X pivot at Z=-20. The rounded selector tip is 22 LDU from the pivot.
+      for (const shift of [0, -6, 6, -8, 8, -10, 10]) {
+        const angle = Math.asin(shift / 22)
+        const c = Math.cos(angle), s = Math.sin(angle)
+        supported.push(shockPort('shift-tip-' + shift, 'shift-tip', 'M',
+          [0, shift * c - 40 * s, -20 - shift * s - 40 * c], [0, c, -s],
+          { group: 'changeover', slot: 'shift-tip', shift, reference: [1, 0, 0] }))
+      }
+    }
     imported.set(design, design === '4032a' ? [...supported, roundPlateAxleHole] : supported)
   }
   return imported.get(design)

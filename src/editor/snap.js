@@ -1,8 +1,8 @@
 import { Plane, Quaternion, Vector3 } from 'three'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
-import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=selector-guide'
-import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=selector-guide'
-import { candidateOffsets, joinedPose, samePose, worldPort } from './placement.js?v=selector-guide'
+import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=gear-selector'
+import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=gear-selector'
+import { candidateOffsets, joinedPose, samePose, worldPort } from './placement.js?v=gear-selector'
 
 const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')
 const canSlideOn = port => ['axle', 'duplo-axle', 'rod'].includes(port.role)
@@ -134,10 +134,10 @@ export function nearbyConnections(context) {
       if (fixedPort.role === 'gear' || fixedPort.legacy) continue
       const { start, axis } = worldPort(fixed, fixedPort)
       const span = portLength(fixedPort)
-      if (['ball', 'ball-socket', 'pivot', 'clip', 'plug', 'receptacle', 'piston', 'damper-cylinder', 'coil', 'coil-seat'].includes(fixedPort.role)) {
+      if (['shift-tip', 'shift-groove', 'ball', 'ball-socket', 'pivot', 'clip', 'plug', 'receptacle', 'piston', 'damper-cylinder', 'coil', 'coil-seat'].includes(fixedPort.role)) {
         for (const own of ownConnectors) {
           const mode = own.gender === 'M' ? connectionMode(own, fixedPort) : connectionMode(fixedPort, own)
-          if (!mode?.anchor) continue
+          if (!mode?.anchor || (!acceptPose && (own.shift || fixedPort.shift))) continue
           const candidate = anchorCandidate(context, fixed, fixedPort, own, start, mode)
           if (candidate) candidates.push(candidate)
         }

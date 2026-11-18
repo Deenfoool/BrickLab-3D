@@ -943,3 +943,27 @@ test('a pin on a secondary group member seats both the pin and a parallel axle i
   const contacts = connectAligned(assembly, moved, [beam])
   assert.deepEqual(new Set(contacts.map(link => link.socket.port)), new Set(['bore-13', 'bore-15']))
 })
+
+test('changeover catch selects a clutch gear through an extension and releases it in neutral', async () => {
+  const { shiftSelector } = await import('../src/editor/model.js')
+  const ring = part('ring', '18947'), guide = part('guide', '18948')
+  const lever = { ...part('lever', '6641'), position: [0,-60,0],
+    rotation: new Quaternion().setFromAxisAngle(new Vector3(1,0,0), Math.PI / 2).toArray() }
+  const ext = { ...part('extension', '32187'), position: [0,0,40], rotation: [0,1,0,0] }
+  const gear = { ...part('gear', '18946'), position: [0,0,66] }
+  let parts = [ring, guide, lever, ext, gear]
+  for (const direction of [1, 0, 1]) {
+    const assembly = createAssembly(parts, [])
+    for (let i = 1; i < parts.length; i++) connectAligned(assembly, [parts[i]], parts.slice(0, i))
+    const edits = shiftSelector(lever.id, direction, parts, assembly)
+    assert.ok(edits?.has(ring.id))
+    parts = parts.map(p => edits.get(p.id) ?? p)
+    const checked = createAssembly(parts, [])
+    for (let i = 1; i < parts.length; i++) connectAligned(checked, [parts[i]], parts.slice(0, i))
+    assert.ok(checked.connections.some(l => l.socket.port === 'shift-groove'))
+    const drive = rotationMotion(guide.id, parts, checked)
+    assert.ok(drive.ok)
+    assert.equal(drive.spins.has(gear.id), Boolean(direction))
+    assert.equal(drive.spins.has(lever.id), false)
+  }
+})

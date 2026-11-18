@@ -1,6 +1,6 @@
-import { connectionMode, evaluateInsertion, overlap, portLength } from './axial.js?v=selector-guide'
+import { connectionMode, evaluateInsertion, overlap, portLength } from './axial.js?v=gear-selector'
 import { evaluateSpurMesh } from './gears.js'
-import { rotationPort } from './catalog.js?v=selector-guide'
+import { rotationPort } from './catalog.js?v=gear-selector'
 import { cross, dot, isVector, length, subtract, unit } from './vector.js?v=connector-coverage'
 
 const LINEAR_TOLERANCE = .01

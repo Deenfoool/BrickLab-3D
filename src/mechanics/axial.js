@@ -45,11 +45,14 @@ export function connectionMode(male, female) {
   }
   const family = `${male.role}:${female.role}`
   if (male.group && male.group === female.group) {
+    if (family === 'shift-tip:shift-groove') return { rotation: 'continuous', anchor: 'pivot' }
     if (family === 'piston:damper-cylinder') return { rotation: 'slider', anchor: 'slide', stroke: female.stroke }
     if (family === 'coil:coil-seat') return { rotation: 'spring', anchor: 'pivot' }
   }
   if (family === 'clutch-driver:clutch-face' &&
-      Math.abs(male.sections[0].radius - female.sections[0].radius) <= RADIUS_TOLERANCE) {
+      (Math.abs(male.sections[0].radius - female.sections[0].radius) <= RADIUS_TOLERANCE ||
+        ((male.extension || female.extension) && Math.min(male.sections[0].radius, female.sections[0].radius) === 12 &&
+         Math.max(male.sections[0].radius, female.sections[0].radius) === 13))) {
     return { rotation: 'locked', clutch: true }
   }
   if (family === 'rod:tube-end' && male.pneumatic) return { rotation: 'fixed', tube: true }
@@ -212,6 +215,7 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
       Math.abs(offset - Math.min(portLength(male), portLength(female))) > .01)) {
     return { ok: false, reason: 'clutch-seat' }
   }
+  if (mode.clutch && (male.extension || female.extension)) male = { ...male, sections: male.sections.map(section => ({ ...section, radius: female.sections[0].radius })) }
   if (mode.tube) {
     if (side !== 'start' || direction !== 1 || Math.abs(offset) > EPSILON) return { ok: false, reason: 'tube-seat' }
     // The rubber tube's 3 LDU opening expands over the nominal 4 LDU pneumatic nipple.
@@ -246,7 +250,8 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
   if (pathBlocked) return { ok: false, reason: pathBlocked }
 
   const detents = mode.rotation === 'detented' ? [...female.detents] : []
-  const keyStep = !mode.tube && ['locked', 'fixed'].includes(mode.rotation) ? Math.PI / 2 : null
+  // A seated dog clutch carries the relative angular phase at engagement.
+  const keyStep = !(mode.clutch && seated) && !mode.tube && ['locked', 'fixed'].includes(mode.rotation) ? Math.PI / 2 : null
   const snappedRoll = detents.length ? nearestDetent(detents, roll)
     : keyStep === null ? roll : Math.round(roll / keyStep) * keyStep
   const [low, high] = fit.interval.map(point => (point - offset) * direction).sort((a, b) => a - b)
