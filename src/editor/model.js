@@ -8,7 +8,7 @@ import { cardanCoupling } from '../mechanics/cardan.js'
 import { movePose, turnPose, articulationDrive, jointBodies, linkageDrive, mechanismPoses, motionRange, suspensionDrive } from '../mechanics/linkage.js'
 import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=gear-selector'
 import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=gear-selector'
-import { clutchTravel, selectorLinkages } from './selector-linkage.js?v=shift-linkage'
+import { clutchTravel, selectorLinkages } from './selector-linkage.js?v=selector-drag'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
 export const snapGrid = 10

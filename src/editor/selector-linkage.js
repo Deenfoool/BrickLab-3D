@@ -17,6 +17,28 @@ function supportedPivot(body, excluded, reference) {
   if (joints.every(edge => coaxial(edge, pivot))) return pivot
 }
 
+// A through-pin supported on both sides defines the lever pivot even in older
+// scenes whose middle bearing was never registered as an insertion.
+function handlePivot(body, end, byId, assembly) {
+  const saved = supportedPivot(body, end)
+  if (saved || body.edges.some(edge => edge !== end)) return saved
+  const pivots = []
+  for (const id of body.ids) for (const bore of portsFor(byId.get(id).design).filter(p => p.role === 'bearing')) {
+    const line = worldPort(byId.get(id), bore)
+    const middle = line.start.clone().addScaledVector(line.axis, portLength(bore) / 2)
+    for (const pin of byId.values()) for (const port of portsFor(pin.design).filter(p => ['pin', 'friction-pin'].includes(p.role))) {
+      const shaft = worldPort(pin, port)
+      if (!coaxial(line, shaft)) continue
+      const t = middle.clone().sub(shaft.start).dot(shaft.axis)
+      if (t < portLength(bore) / 2 || t > portLength(port) - portLength(bore) / 2) continue
+      const supports = assembly.connections.filter(l => l.shaft.part === pin.id && l.shaft.port === port.id &&
+        !body.ids.includes(l.socket.part)).map(l => l.fit.occupancy.shaft)
+      if (supports.some(([,hi]) => hi < t) && supports.some(([lo]) => lo > t)) pivots.push(line)
+    }
+  }
+  if (pivots.length === 1) return pivots[0]
+}
+
 export function clutchTravel(ring, axis, center, direction, parts) {
   if (!direction) return 0
   const dogs = portsFor(ring.design).filter(port => port.role === 'clutch-driver')
@@ -158,6 +180,29 @@ export function selectorLinkages(parts, joints, assembly, recover = false) {
     const tip = worldPort(lever, { start: [0, 0, -42], axis: [1, 0, 0] }).start
     const guide = guidedRing(lever, pivot, tip, byId, links, assembly)
     if (!guide) continue
+    // A saved rod may already be seated on the handle and be missing the catch end.
+    if (recover && supportedPivot(rocker, null, pivot)) {
+      const balls = rocker.ids.flatMap(id => portsFor(byId.get(id).design)
+        .filter(port => port.role === 'ball' && !links.some(l => l.shaft.part === id && l.shaft.port === port.id))
+        .map(port => ({ id, port, start: worldPort(byId.get(id), port).start })))
+      const possible = []
+      for (const end of graph.edges.filter(e => e.joint.motion === 'ball' && e.b.edges.length === 1)) {
+        const rodPart = byId.get(end.joint.b)
+        const sockets = portsFor(rodPart.design).filter(p => p.role === 'ball-socket')
+        const support = handlePivot(end.a, end, byId, assembly)
+        if (sockets.length !== 2 || !support || Math.abs(support.axis.dot(pivot.axis)) < .99999) continue
+        const socket = sockets.find(p => p.id !== end.joint.socketPort)
+        const target = worldPort(rodPart, socket).start
+        for (const ball of balls) {
+          if (!connectionMode(ball.port, socket) || ball.start.distanceTo(target) > 4.5) continue
+          const missing = { shaft: { part: ball.id, port: ball.port.id }, socket: { part: rodPart.id, port: socket.id } }
+          const linkage = makeLinkage({ body: end.a, pivot: support, ball: end.start },
+            { body: rocker, pivot, ball: ball.start }, end.b, end.start, target, guide, tip, missing)
+          if (linkage) possible.push(linkage)
+        }
+      }
+      if (possible.length === 1) result.push(possible[0])
+    }
     for (const end of rocker.edges) {
       if (end.joint.motion !== 'ball' || end.a !== rocker || !supportedPivot(rocker, end, pivot)) continue
       const rod = end.b
@@ -180,7 +225,7 @@ export function selectorLinkages(parts, joints, assembly, recover = false) {
       })
       const inputs = candidates.flatMap(candidate => {
         const body = graph.byPart.get(candidate.id)
-        const support = supportedPivot(body, candidate.edge)
+        const support = handlePivot(body, candidate.edge, byId, assembly)
         if (!support || body === rocker || Math.abs(support.axis.dot(pivot.axis)) < .99999) return []
         return [{ ...candidate, body, pivot: support, ball: candidate.start }]
       })

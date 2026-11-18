@@ -3,7 +3,7 @@ import { createEditorAudio } from './audio.js?v=editor-sound'
 import { Plane, Quaternion, Vector3 } from 'three'
 import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=gear-selector'
 import { baseRotation, samePose } from './placement.js?v=gear-selector'
-import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=shift-linkage'
+import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=selector-drag'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
 import { nearestDetent } from '../mechanics/axial.js?v=gear-selector'
 import { nearbyConnections, translationSnaps } from './snap.js?v=gear-selector'
@@ -1184,6 +1184,10 @@ export async function mountEditor(root, { document, language, save, download, si
     const button = event.target.closest('[data-shift]')
     if (!button) return
     const edits = shiftSelector(selected, Number(button.dataset.shift), state.parts, assembly, selectorLinkage)
+    applySelector(edits)
+  })
+
+  function applySelector(edits) {
     if (!edits) return
     const placed = state.parts.map(part => edits.get(part.id) ?? part)
     const shifted = [...edits.values()]
@@ -1201,7 +1205,21 @@ export async function mountEditor(root, { document, language, save, download, si
       return
     }
     commit({ ...state, parts: placed, links: nextLinks })
-  })
+  }
+
+  function finishSelectorDrag() {
+    if (transmission?.kind !== 'selector' || !angle || !selectorLinkage) return
+    const id = selectorLinkage.ring.id
+    const preview = rotationPoses(state.parts, transmission, angle * Math.PI / 180)?.find(part => part.id === id)
+    if (!preview) return
+    const target = new Vector3(...preview.position)
+    const choices = [0, -1, 1].map(direction => shiftSelector(selected, direction, state.parts, assembly, selectorLinkage))
+      .filter(edits => edits?.has(id))
+    const distance = edits => target.distanceToSquared(new Vector3(...edits.get(id).position))
+    choices.sort((a, b) => distance(a) - distance(b))
+    applySelector(choices[0])
+  }
+  on(el('angle'), 'change', finishSelectorDrag)
   on(el('play'), 'click', () => {
     if (frame) stopAnimation()
     else {
@@ -1342,6 +1360,7 @@ export async function mountEditor(root, { document, language, save, download, si
       return
     }
     if (drag) {
+      finishSelectorDrag()
       drag = null
       return
     }
