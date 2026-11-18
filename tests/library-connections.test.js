@@ -360,6 +360,46 @@ test('driving rings engage the matching generation of clutch gear at the measure
   assert.equal(options(ring, otherGeneration).some(snap => snap.fit?.motion.rotation === 'locked'), false)
 })
 
+test('the 3L driving ring mounts on the ridged joiner and stays keyed throughout its shift travel', () => {
+  const ring = part('ring', '18947')
+  const joiner = part('joiner', '18948')
+  const plainJoiner = part('plain', '26287')
+  const axis = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), -Math.PI / 2).toArray()
+  const axles = [-50, 50].map((z, i) => ({ ...part(`axle-${i}`, '3705'), position: [0, 0, z], rotation: axis }))
+  const parts = [joiner, ...axles]
+  const axleLinks = connectAligned(createAssembly(parts, []), axles, [joiner])
+  assert.equal(axleLinks.length, 2)
+
+  const centered = options(ring, joiner).filter(snap => snap.fit)
+  assert.deepEqual(new Set(centered.map(snap => snap.fit.placement.direction)), new Set([1, -1]))
+  for (const snap of centered) {
+    assert.deepEqual(snap.pose.position, [0, 0, 0])
+    assert.equal(snap.fit.motion.rotation, 'locked')
+    assert.deepEqual(snap.fit.motion.travel, [-10, 10])
+    assert.equal(restore(snap, ring, joiner).length, 1)
+  }
+  const reversed = options(joiner, ring).find(snap => snap.fit)
+  assert.ok(reversed)
+  assert.equal(restore(reversed, joiner, ring).length, 1)
+  assert.ok(!options(ring, plainJoiner).some(snap => snap.fit))
+
+  const moving = createAssembly([...parts, ring], axleLinks)
+  const candidates = nearbyConnections({ scene: { pixelDistance: point => Math.abs(point.z) * 5 },
+    moving: ring, parts, assembly: moving, depth: 20, roll: 0,
+    ray: new Ray(new Vector3(0, 100, 0), new Vector3(0, -1, 0)) })
+  const shift = candidates.find(snap => snap.fit?.placement.direction === 1)
+  assert.ok(shift)
+  assert.deepEqual(shift.pose.position, [0, 0, -10])
+  assert.deepEqual(shift.fit.motion.travel, [-20, 0])
+  const links = [...axleLinks, { shaft: shift.shaft, socket: shift.socket, placement: shift.fit.placement }]
+  const shiftedParts = [...parts, { ...ring, ...shift.pose }]
+  const reopened = createAssembly(shiftedParts, links)
+  assert.equal(reopened.connections.length, 3)
+  assert.deepEqual(rotationMotion(joiner.id, shiftedParts, reopened).spins.get(ring.id)?.ratio, 1)
+  assert.equal(moving.previewInsertion(shift.shaft, shift.socket, { ...shift.fit.placement, offset: 9 }).reason, 'stroke-limit')
+  assert.ok(options(ring, part('gear', '18946')).some(snap => snap.fit && snap.shaft.port.startsWith('shadow-')))
+})
+
 test('8845 Dune Buggy keeps all its parts, stored connections and four mounted tyres', () => {
   assert.equal(buggy.parts.length, 178)
   assert.equal(buggy.parts.filter(part => part.design === '8845-spring').length, 2)

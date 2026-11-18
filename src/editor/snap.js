@@ -1,8 +1,8 @@
 import { Plane, Quaternion, Vector3 } from 'three'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
-import { connectionMode, portLength } from '../mechanics/axial.js?v=linkages'
-import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=structural-bores'
-import { candidateOffsets, joinedPose, samePose, worldPort } from './placement.js?v=belt-drive'
+import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=selector-guide'
+import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=selector-guide'
+import { candidateOffsets, joinedPose, samePose, worldPort } from './placement.js?v=selector-guide'
 
 const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')
 const canSlideOn = port => ['axle', 'duplo-axle', 'rod'].includes(port.role)
@@ -69,6 +69,11 @@ function withinSnapRange(scene, event, targets) {
 }
 
 function targetsOnPort(scene, event, port, start, axis, span, ray) {
+  if (port.role === 'selector-spline' || port.role === 'selector-guide') {
+    const point = start.clone().addScaledVector(axis, span / 2)
+    if (ray) ray.distanceSqToSegment(start, start.clone().addScaledVector(axis, span), undefined, point)
+    return withinSnapRange(scene, event, port.openings.map(side => ({ side, point })))
+  }
   const targets = port.openings.map(side => ({
     side, point: start.clone().addScaledVector(axis, side === 'end' ? span : 0),
   }))
@@ -195,8 +200,11 @@ export function nearbyConnections(context) {
               }
               if (ownWorld) {
                 const fixedAxis = movingShaft ? axis : axis.clone().multiplyScalar(direction)
-                const offset = ownWorld.start.clone().sub(start).dot(fixedAxis)
-                offsets.push(movingShaft ? offset : -offset)
+                const offset = ownWorld.start.clone().sub(start).dot(fixedAxis) * (movingShaft ? 1 : -1)
+                if (mode.axialRange) {
+                  const depthFromCenter = offset - centeredOffset(male, female, direction)
+                  offsets.push(...candidateOffsets(male, female, direction, entry, depthFromCenter))
+                } else offsets.push(offset)
               }
               for (const offset of offsets) {
                 const placement = { direction, side: entry, offset, roll }
@@ -246,7 +254,8 @@ export function translationSnaps(members, parts, assembly, scene, axes, insertio
       const { start, axis } = worldPort(member, port)
       const length = portLength(port)
       const end = start.clone().addScaledVector(axis, length)
-      return port.gender === 'F' ? [start, start.clone().addScaledVector(axis, length / 2), end] : [start, end]
+      return port.gender === 'F' || port.role === 'selector-spline'
+        ? [start, start.clone().addScaledVector(axis, length / 2), end] : [start, end]
     }).map(scene.project).filter(point => point.visible)
     const snapScene = { pixelDistance: point => Math.min(...points.map(screen => scene.pixelDistance(point, screen))) }
     const acceptPose = pose => {

@@ -1,13 +1,13 @@
 import { Quaternion, Vector3 } from 'three'
-import { connectionMode } from '../mechanics/axial.js?v=linkages'
-import { Assembly } from '../mechanics/assembly.js?v=axle-stop-snap'
+import { connectionMode } from '../mechanics/axial.js?v=selector-guide'
+import { Assembly } from '../mechanics/assembly.js?v=selector-guide'
 import { rotationalDrive } from '../mechanics/rotation.js?v=belt-drive'
 import { assembleBelts } from '../mechanics/belts.js?v=belt-drive'
 import { engineDrive } from '../mechanics/engine.js?v=belt-drive'
 import { cardanCoupling } from '../mechanics/cardan.js'
 import { articulationDrive, jointBodies, linkageDrive, mechanismPoses, motionRange, suspensionDrive } from '../mechanics/linkage.js'
-import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=structural-bores'
-import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=belt-drive'
+import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=selector-guide'
+import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=selector-guide'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
 export const snapGrid = 10
@@ -141,7 +141,7 @@ export function gearPoses(parts) {
 }
 
 const spinRoles = new Set([
-  'axle', 'axle-pin', 'friction-axle-pin', 'duplo-axle', 'gear', 'rim-seat', 'tyre-seat',
+  'axle', 'axle-pin', 'friction-axle-pin', 'duplo-axle', 'gear', 'rim-seat', 'tyre-seat', 'selector-spline',
 ])
 
 function portLine(part, port) {

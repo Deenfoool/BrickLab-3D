@@ -25,6 +25,12 @@ const roundPlateAxleHole = {
   sections: [{ shape: 'A', radius: 6, length: 8 }],
 }
 
+// The ridged exterior and the driving ring bore share the Z axis in the LDraw models.
+const selectorGuides = {
+  18948: { id: 'selector-spline', role: 'selector-spline', gender: 'M', length: 60 },
+  18947: { id: 'selector-guide', role: 'selector-guide', gender: 'F', length: 56 },
+}
+
 const shockPort = (id, role, gender, start, axis, extra) => ({
   id, role, gender, start, axis, openings: ['start'], reference: [0, 0, 1],
   sections: [{ shape: 'Q', radius: 1, length: 1 }], ...extra,
@@ -71,12 +77,18 @@ export function portsFor(design) {
       start: [0, -50, -10], axis: [0, 0, 1], sections: [{ shape: 'R', radius: 8, length: 2 },
         { shape: 'R', radius: 6, length: 16 }, { shape: 'R', radius: 8, length: 2 }],
     })
+    if (Object.hasOwn(selectorGuides, design)) {
+      const { length, ...guide } = selectorGuides[design]
+      supported.push({ ...guide, group: 'selector-3l-ridged', openings: ['start', 'end'],
+        start: [0, 0, -length / 2], axis: [0, 0, 1], reference: [1, 0, 0],
+        sections: [{ shape: 'K', radius: 9.5, length }] })
+    }
     imported.set(design, design === '4032a' ? [...supported, roundPlateAxleHole] : supported)
   }
   return imported.get(design)
 }
 
-const shaftRoles = new Set(['axle', 'axle-pin', 'friction-axle-pin', 'duplo-axle', 'clutch-driver'])
+const shaftRoles = new Set(['axle', 'axle-pin', 'friction-axle-pin', 'duplo-axle', 'clutch-driver', 'selector-spline'])
 const socketRoles = new Set(['key', 'blind-key', 'duplo-key', 'bush'])
 export const rotationPort = ports => ports.find(port => port.role === 'gear') ??
   ports.find(port => shaftRoles.has(port.role)) ?? ports.find(port => socketRoles.has(port.role)) ??

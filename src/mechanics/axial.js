@@ -33,6 +33,8 @@ const MOTION = {
   'rod:wheel-bearing': { rotation: 'continuous' },
   'labeled-pin:labeled-bore': { rotation: 'continuous', group: true },
   'rod:rod-bore': { rotation: 'continuous', translation: true },
+  // The central valley and the two adjacent valleys in the ridged guide are spaced 10 LDU apart.
+  'selector-spline:selector-guide': { rotation: 'locked', group: true, axialRange: [-10, 10] },
 }
 
 export function connectionMode(male, female) {
@@ -83,6 +85,7 @@ function profile(port, origin = 0, direction = 1) {
 }
 
 export const portLength = port => port.sections.reduce((sum, section) => sum + section.length, 0)
+export const centeredOffset = (male, female, direction) => (portLength(female) - direction * portLength(male)) / 2
 
 function sectionFit(male, female) {
   // A compliant pin lip can deflect through the normal pin bore.
@@ -229,6 +232,11 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
     return { ok: false, reason: 'hinge-seat' }
   }
 
+  const shift = mode.axialRange && offset - centeredOffset(male, female, direction)
+  if (mode.axialRange && (shift < mode.axialRange[0] - EPSILON || shift > mode.axialRange[1] + EPSILON)) {
+    return { ok: false, reason: 'stroke-limit' }
+  }
+
   const fit = fitAt(male, female, offset, direction)
   if (fit.reason || fit.engagement + EPSILON < MIN_ENGAGEMENT) {
     return { ok: false, reason: fit.reason ?? 'insufficient-engagement' }
@@ -249,7 +257,7 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
       rotation: mode.rotation,
       friction: mode.friction ?? false,
       detents,
-      travel: mode.translation
+      travel: mode.axialRange ? mode.axialRange.map(limit => limit - shift) : mode.translation
         ? [-1, 1].map(sign => travelLimit(male, female, offset, direction, events, sign) - offset)
         : [0, 0],
     },
