@@ -114,6 +114,7 @@ function anchorCandidate(context, fixed, fixedPort, own, start, mode) {
 export function nearbyConnections(context) {
   const { scene, assembly, parts, moving, event, depth, roll, acceptPose, ray } = context
   const candidates = []
+  const orientation = new Quaternion().fromArray(moving.rotation)
   const ownPorts = portsFor(moving.design)
   if (!ownPorts.length) return candidates
   const ownConnectors = ownPorts.filter(port => port.role !== 'gear' && !port.legacy)
@@ -229,7 +230,7 @@ export function nearbyConnections(context) {
                 const endpoint = nearShoulder ? shoulder : along ?? (side === 'end' ? span : 0)
                 const reach = movingShaft ? 0 : Math.abs((bounds[0] + bounds[1]) / 2 - endpoint)
                 const score = acceptPose ? pose.position.reduce((sum, value, index) =>
-                  sum + (value - moving.position[index]) ** 2, 0) : reach + (movingShaft && direction < 0 ? .01 : 0)
+                  sum + (value - moving.position[index]) ** 2, 0) : movingShaft ? orientation.angleTo(new Quaternion().fromArray(pose.rotation)) : reach
                 if (!best || score < best.score) best = { key, point, distance, fit, pose, shaft, socket, score }
                 if (movingShaft && !acceptPose) break
               }
