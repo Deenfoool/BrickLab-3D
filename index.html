@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#181a1d">
   <title>BrickLab 3D</title>
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./src/menu/menu.css?v=8845">
+  <link rel="stylesheet" href="./src/menu/menu.css?v=menu-links">
   <link rel="stylesheet" href="./src/editor/editor.css?v=scene-parts">
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=structural-bores"></script>
+  <script type="module" src="./src/menu/menu.js?v=menu-links"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -42,6 +42,12 @@
 
     <main class="main">
       <header class="topbar">
+        <a class="topbar-link" href="https://github.com/Deenfoool/BrickLab-3D" target="_blank" rel="noopener">
+          <span>GitHub</span><svg class="icon" aria-hidden="true"><use href="#diagonal"/></svg>
+        </a>
+        <a class="topbar-link" href="https://deenfoool.github.io/portfolio/" target="_blank" rel="noopener">
+          <span data-text="portfolio">Портфолио</span><svg class="icon" aria-hidden="true"><use href="#diagonal"/></svg>
+        </a>
         <label class="language">
           <select id="language" aria-label="Язык / Language"><option value="ru">RU</option><option value="en">EN</option></select>
           <svg class="icon"><use href="#down"/></svg>

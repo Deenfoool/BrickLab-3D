@@ -28,7 +28,10 @@ a{color:inherit;text-decoration:none}
 .sidebar-bottom{margin:auto 21px 39px;border-top:1px solid #45474a;padding-top:7px}
 .sidebar-bottom button{width:100%;gap:23px;padding-inline:16px}
 .main{min-width:0;background:radial-gradient(ellipse at 65% 32%,#1c1e21 0%,var(--bg) 67%)}
-.topbar{display:flex;justify-content:flex-end;padding:31px 28px 0}
+.topbar{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:31px 28px 0}
+.topbar-link{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 13px;border:1px solid var(--line);border-radius:8px;font-size:14px;font-weight:540;white-space:nowrap}
+.topbar-link:hover{background:var(--hover)}
+.topbar-link .icon{width:14px;height:14px;color:var(--muted)}
 .language{position:relative;display:flex;align-items:center}
 .language select{appearance:none;min-width:88px;height:44px;padding:0 36px 0 16px;border:1px solid var(--line);border-radius:8px;background:#191b1e;font-size:20px;cursor:pointer}
 .language .icon{position:absolute;right:12px;width:18px;height:18px;pointer-events:none}
@@ -130,7 +133,9 @@ dialog p,.setting{margin:18px 0}
   .navigation .icon,.sidebar-bottom .icon{width:18px;height:18px}
   .sidebar-bottom{margin:10px 12px 0 0;padding:0;border:0;grid-column:2;grid-row:1}
   .sidebar-bottom button span{display:none}
-  .topbar{padding:14px 16px 0}
+  .topbar{gap:6px;padding:14px 16px 0}
+  .topbar-link{min-height:36px;padding-inline:9px;font-size:13px}
+  .topbar-link .icon{display:none}
   .language select{height:36px;min-width:70px;font-size:15px}
   .content{padding:6px 15px 30px}
   h1{font-size:32px;margin-bottom:22px}

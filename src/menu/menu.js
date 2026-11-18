@@ -1,5 +1,5 @@
 import { editorLabels } from '../editor/labels.js?v=scene-parts'
-import { locales } from './locale.js?v=belt-drive'
+import { locales } from './locale.js?v=menu-links'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
 const byId = id => document.getElementById(id)
