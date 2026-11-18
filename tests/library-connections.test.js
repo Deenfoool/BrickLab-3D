@@ -231,6 +231,28 @@ test('a correctly oriented thin liftarm can snap with the move gizmo at the midd
   assert.equal(restore(snap, beam, axle).length, 1)
 })
 
+test('move gizmo aligns a slightly tilted 12T gear to a 10L axle and preserves the saved fit', () => {
+  const axle = part('axle', '3737')
+  const gear = part('gear', '32270')
+  const initial = options(gear, axle).find(option => option.fit)
+  assert.ok(initial)
+  const snapped = { ...gear, ...initial.pose }
+  const snapScene = { project: point => ({ ...point, visible: true }), pixelDistance: () => 0 }
+  const tilted = angle => ({ ...snapped, rotation: new Quaternion()
+    .setFromAxisAngle(new Vector3(0, 1, 0), angle)
+    .multiply(new Quaternion().fromArray(snapped.rotation)).toArray() })
+  const moving = tilted(4.26 * Math.PI / 180)
+  const assembly = createAssembly([axle, moving], [])
+  const snap = translationSnaps([moving], [axle, moving], assembly, snapScene, 'XYZ', 0)
+    .find(option => option.fit)
+  assert.ok(snap)
+  assert.ok(new Quaternion().fromArray(snap.pose.rotation)
+    .angleTo(new Quaternion().fromArray(snapped.rotation)) < 1e-6)
+  assert.equal(restore(snap, moving, axle).length, 1)
+  const steep = tilted(15 * Math.PI / 180)
+  assert.equal(translationSnaps([steep], [axle, steep], assembly, snapScene, 'XYZ', 0).length, 0)
+})
+
 test('an angular keyed joiner stops a pin and accepts the axle only through its open end', () => {
   const port = portsFor('32013').find(port => port.role === 'blind-key')
   const pin = portsFor('2780').find(port => port.role === 'friction-pin')

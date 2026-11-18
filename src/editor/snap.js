@@ -261,7 +261,10 @@ export function translationSnaps(members, parts, assembly, scene, axes, insertio
     const snapScene = { pixelDistance: point => Math.min(...points.map(screen => scene.pixelDistance(point, screen))) }
     const acceptPose = pose => {
       const delta = pose.position.map((value, i) => value - member.position[i])
-      return samePose(member, { ...pose, position: member.position }) &&
+      const aligned = samePose(member, { ...pose, position: member.position }) ||
+        members.length === 1 && new Quaternion().fromArray(member.rotation)
+          .angleTo(new Quaternion().fromArray(pose.rotation)) <= Math.PI / 24
+      return aligned &&
         delta.every((value, i) => axes.includes('XYZ'[i]) || Math.abs(value) < (members.length > 1 ? 3 : .01)) &&
         Math.hypot(...delta) <= 12
     }
@@ -269,7 +272,8 @@ export function translationSnaps(members, parts, assembly, scene, axes, insertio
       moving: member, depth: insertionDepth, roll: 0, acceptPose }).filter(option => option.pose).map(option => {
       const delta = option.pose.position.map((value, i) => value - member.position[i])
       return { ...option, key: JSON.stringify([member.id, option.key]), shift: Math.hypot(...delta),
-        pose: { position: members[0].position.map((value, i) => value + delta[i]), rotation: members[0].rotation } }
+        pose: { position: members[0].position.map((value, i) => value + delta[i]),
+          rotation: members.length === 1 ? option.pose.rotation : members[0].rotation } }
     })
   })
   return options.sort((a, b) => a.shift - b.shift || a.distance - b.distance)
