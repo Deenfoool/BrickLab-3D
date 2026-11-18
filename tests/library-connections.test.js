@@ -349,6 +349,22 @@ test('move gizmo aligns a slightly tilted 12T gear to a 10L axle and preserves t
   assert.equal(translationSnaps([steep], [axle, steep], assembly, snapScene, 'XYZ', 0).length, 0)
 })
 
+test('aiming at the 55013 stop seats a reinforced 16T gear from the free end', () => {
+  const axle = part('red', '55013')
+  const gear = part('white', '94925')
+  const assembly = createAssembly([axle, gear], [])
+  // Zoom in on the shoulder so the projected gear center lies outside the pick radius.
+  const snaps = nearbyConnections({ moving: gear, parts: [axle], assembly, depth: 0, roll: 0,
+    ray: new Ray(new Vector3(78, 0, 100), new Vector3(0, 0, -1)),
+    scene: { pixelDistance: point => Math.abs(point.x - 78) * 6 } })
+  const best = snaps[0]
+  assert.deepEqual(best.fit?.occupancy.shaft, [138, 158])
+  assert.equal(best.fit.motion.rotation, 'locked')
+  assert.equal(restore(best, gear, axle).length, 1)
+  const reversed = best.fit.placement.side === 'start' ? 'end' : 'start'
+  assert.equal(assembly.previewInsertion(best.shaft, best.socket, { ...best.fit.placement, side: reversed }).ok, false)
+})
+
 test('an angular keyed joiner stops a pin and accepts the axle only through its open end', () => {
   const port = portsFor('32013').find(port => port.role === 'blind-key')
   const pin = portsFor('2780').find(port => port.role === 'friction-pin')

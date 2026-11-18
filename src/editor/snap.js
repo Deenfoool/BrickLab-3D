@@ -161,6 +161,20 @@ export function nearbyConnections(context) {
           const along = center.sub(start).dot(axis)
           points = [...targets, ...withinSnapRange(scene, event, shaftTargets(fixedPort, start, axis, span, along))]
         }
+        if (slidingShaft && !movingShaft && fixedPort.sections.length > 1) {
+          // Aiming at a molded stop selects the adjacent seat, reached from the opposite end.
+          const boreRadius = Math.max(...female.sections.map(section => section.radius))
+          const first = fixedPort.sections[0]
+          const last = fixedPort.sections.at(-1)
+          const seats = []
+          if (last.radius > boreRadius) seats.push({ side: 'start', along: span - last.length - socketWidth / 2, at: span - last.length })
+          if (first.radius > boreRadius) seats.push({ side: 'end', along: first.length + socketWidth / 2, at: first.length })
+          for (const seat of seats) {
+            if (seat.along < socketWidth / 2 || seat.along > span - socketWidth / 2) continue
+            const point = start.clone().addScaledVector(axis, seat.at)
+            points = [...points, ...withinSnapRange(scene, event, [{ ...seat, point }])]
+          }
+        }
         if (stops && !movingShaft) {
           // Present the two accessible shoulders as snap targets in screen space.
           // A failed aim inside an occupied interval must not hide a nearby legal seat.
