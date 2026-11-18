@@ -967,3 +967,77 @@ test('changeover catch selects a clutch gear through an extension and releases i
     assert.equal(drive.spins.has(lever.id), false)
   }
 })
+
+test('a towball linkage pushes and pulls the changeover catch with an unchanged steering link length', async () => {
+  const { assemblyJoints, recoverSelectorLinks, shiftSelector } = await import('../src/editor/model.js')
+  const half = Math.SQRT1_2
+  const layout = [
+    ['pivotPin', '6558', [0, 0, -160], [1, 0, 0, 0]],
+    ['handle', '32034', [2, 0, -160], [half, 0, 0, half]],
+    ['handleAxle', '32062', [2, -30, -160], [half, half, 0, 0]],
+    ['handleJoiner', '59443', [2, -50, -160], [half, 0, 0, half]],
+    ['inputBall', '2736', [2, -70, -160], [half, half, 0, 0]],
+    ['bearing', '32140', [-80, 0, 0], [.5, .5, -.5, .5]],
+    ['catchAxle', '60485', [5, -40, 0], [0, 0, -1, 0]],
+    ['catch', '6641', [4.5, -60, 0], [0, half, -half, 0]],
+    ['outputBall', '2736', [4.5, -67, 0], [.5, .5, .5, .5]],
+    ['link', '32293', [4.5, -79, 0], [0, -1, 0, 0]],
+    ['guide', '18948', [0, 0, 0], [0, 1, 0, 0]],
+    ['ring', '18947', [0, 0, -.5], [1, 0, 0, 0]],
+    ['gearLeft', '18946', [0, 0, -40], [0, 0, 1, 0]],
+    ['gearRight', '18946', [0, 0, 40], [0, 0, 1, 0]],
+  ]
+  const source = layout.map(([id, design, position, rotation]) => ({ id, design, position, rotation }))
+  const before = createAssembly(source, [])
+  const pairs = [
+    ['pivotPin', 'handle'], ['handleAxle', 'handle'], ['handleAxle', 'handleJoiner'],
+    ['inputBall', 'handleJoiner'], ['catchAxle', 'bearing'], ['catchAxle', 'catch'],
+    ['outputBall', 'catch'], ['outputBall', 'link'], ['guide', 'ring'],
+  ]
+  for (const [a, b] of pairs) assert.equal(connectAligned(before,
+    [source.find(p => p.id === a)], [source.find(p => p.id === b)]).length, 1)
+
+  let { parts, assembly } = recoverSelectorLinks(source, before)
+  assert.equal(assembly.connections.length, before.connections.length + 1)
+  assert.equal(recoverSelectorLinks(parts, assembly).assembly, assembly)
+
+  function assertBallSeats(poses, links) {
+    const joints = assemblyJoints(poses, links).filter(joint => joint.b === 'link')
+    assert.equal(joints.length, 2)
+    const [a, b] = joints.map(joint => new Vector3().fromArray(joint.socketLine.start))
+    assert.ok(Math.abs(a.distanceTo(b) - 160) < 1e-6)
+    for (const joint of joints) assert.ok(new Vector3().fromArray(joint.shaftLine.start)
+      .distanceTo(new Vector3().fromArray(joint.socketLine.start)) < 1e-6)
+  }
+
+  const motion = rotationMotion('inputBall', parts, assembly)
+  assert.equal(motion.kind, 'selector')
+  assert.equal(rotationMotion('outputBall', parts, assembly).kind, 'selector')
+  for (const sign of [-1, 1]) {
+    const preview = new Map(rotationPoses(parts, motion, sign * .05).map(p => [p.id, p]))
+    assert.ok((preview.get('ring').position[2] - parts.find(p => p.id === 'ring').position[2]) * sign > 1)
+    assertBallSeats(parts.map(p => preview.get(p.id) ?? p), assembly)
+  }
+
+  for (const direction of [-1, 0, 1, 0]) {
+    const edited = shiftSelector('inputBall', direction, parts, assembly)
+    assert.ok(edited?.has('catch') && edited.has('link'))
+    parts = parts.map(p => edited.get(p.id) ?? p)
+    const ring = parts.find(p => p.id === 'ring')
+    assert.ok(Math.abs(ring.position[2] + direction * 6) < 1e-6)
+    const next = createAssembly(parts, [])
+    for (const link of assembly.connections) {
+      if (assembly.port(link.shaft.part, link.shaft.port).role === 'clutch-driver') continue
+      const result = connectPlaced(next, parts.find(p => p.id === link.shaft.part), parts.find(p => p.id === link.socket.part), link)
+      assert.ok(result.ok, result.reason)
+    }
+    const engagements = connectAligned(next, [ring], parts.filter(p => p.id.startsWith('gear')))
+    assert.deepEqual(engagements.map(l => l.socket.part), direction ? [direction > 0 ? 'gearLeft' : 'gearRight'] : [])
+    const drive = rotationMotion('guide', parts, next)
+    assert.ok(drive.ok)
+    assert.equal(drive.spins.has('gearLeft'), direction > 0)
+    assert.equal(drive.spins.has('gearRight'), direction < 0)
+    assertBallSeats(parts, next)
+    assembly = next
+  }
+})

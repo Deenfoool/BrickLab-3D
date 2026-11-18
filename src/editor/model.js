@@ -8,6 +8,7 @@ import { cardanCoupling } from '../mechanics/cardan.js'
 import { movePose, turnPose, articulationDrive, jointBodies, linkageDrive, mechanismPoses, motionRange, suspensionDrive } from '../mechanics/linkage.js'
 import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=gear-selector'
 import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=gear-selector'
+import { clutchTravel, selectorLinkages } from './selector-linkage.js?v=shift-linkage'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
 export const snapGrid = 10
@@ -125,35 +126,46 @@ export function connectAligned(assembly, changed, fixed) {
   return added
 }
 
+export function linkedSelector(selected, parts, assembly) {
+  if (!selected || !parts.some(part => part.design === '6641')) return null
+  return selectorLinkages(parts, assemblyJoints(parts, assembly), assembly).find(linkage => linkage.contains(selected)) ?? null
+}
+
+export function recoverSelectorLinks(parts, assembly) {
+  if (!parts.some(part => part.design === '6641')) return { parts, assembly }
+  const missing = selectorLinkages(parts, assemblyJoints(parts, assembly), assembly, true).filter(linkage => linkage.missing)
+  for (const linkage of missing) {
+    const transforms = linkage.recover()
+    if (!transforms) continue
+    const updated = parts.map(part => transforms.has(part.id) ? movePose(part, transforms.get(part.id)) : part)
+    const byId = new Map(updated.map(part => [part.id, part]))
+    const checked = createAssembly(updated, [], { belts: assembly.belts.map(({ record }) => record) })
+    const fits = [...assembly.connections, linkage.missing].every(link =>
+      connectPlaced(checked, byId.get(link.shaft.part), byId.get(link.socket.part), link).ok)
+    if (!fits || checked.belts.length !== assembly.belts.length) continue
+    parts = updated
+    assembly = checked
+  }
+  return { parts, assembly }
+}
+
 // Shift the ring along its installed guide and rock the selector about its control axle.
-export function shiftSelector(selected, direction, parts, assembly) {
+export function shiftSelector(selected, direction, parts, assembly, linkage = linkedSelector(selected, parts, assembly)) {
   const links = assembly.connections
   const catchLink = links.find(l => l.socket.port === 'shift-groove' &&
     (l.shaft.part === selected || l.socket.part === selected))
-  const ringId = catchLink?.socket.part ?? selected
+  const ringId = linkage?.ring.id ?? catchLink?.socket.part ?? selected
   const guide = links.find(l => l.socket.part === ringId && l.socket.port === 'selector-guide')
   if (!guide) return
   const byId = new Map(parts.map(p => [p.id, p]))
   const ring = byId.get(ringId)
   const center = new Vector3().fromArray(byId.get(guide.shaft.part).position)
   const axis = worldPort(ring, assembly.port(ringId, 'selector-guide')).axis
-  const drivers = portsFor(ring.design).filter(port => port.role === 'clutch-driver')
-  let travel = 10 * direction
-  // Seat the dog at the depth of the first coaxial clutch face on this side.
-  if (direction) for (const part of parts) {
-    if (part.id === ringId) continue
-    for (const face of portsFor(part.design).filter(port => port.role === 'clutch-face')) {
-      const target = worldPort(part, face)
-      for (const dog of drivers) {
-        if (!connectionMode(dog, face)) continue
-        const tip = worldPort({ ...ring, position: center.toArray() }, dog)
-        if (tip.axis.dot(target.axis) > -.99999 || target.axis.dot(axis) * direction < .99999) continue
-        const delta = target.start.clone().addScaledVector(target.axis, Math.min(face.sections[0].length, dog.sections[0].length)).sub(tip.start)
-        const distance = delta.dot(axis)
-        if (delta.addScaledVector(axis, -distance).length() < .01 && distance * direction > 0 &&
-          Math.abs(distance) <= Math.abs(travel) + .001) travel = distance
-      }
-    }
+  const travel = clutchTravel(ring, axis, center, direction, parts)
+  if (linkage) {
+    const transforms = linkage.shift(travel)
+    if (!transforms) return
+    return new Map(mechanismPoses(parts, transforms).map(part => [part.id, part]))
   }
   const edits = new Map([[ringId, { ...ring, position: center.addScaledVector(axis, travel).toArray() }]])
   if (catchLink) {
@@ -201,6 +213,7 @@ export function assemblyJoints(parts, assembly) {
     const female = assembly.port(socket.part, socket.port)
     return {
       a: shaft.part, b: socket.part, motion: fit.motion.rotation, group: male.group, restLength: male.restLength,
+      socketPort: socket.port,
       detents: fit.motion.detents, roll: fit.placement.roll,
       shaftLine: portLine(byId.get(shaft.part), male),
       socketLine: portLine(byId.get(socket.part), female),
@@ -210,7 +223,9 @@ export function assemblyJoints(parts, assembly) {
   })
 }
 
-export function rotationMotion(selected, parts, assembly) {
+export function rotationMotion(selected, parts, assembly, linkage = linkedSelector(selected, parts, assembly)) {
+  const selector = linkage?.motion(selected)
+  if (selector) return { ...selector, ok: true, range: motionRange(selector), meshes: [] }
   const byId = new Map(parts.map(part => [part.id, part]))
   const driver = byId.get(selected)
   const joints = assemblyJoints(parts, assembly)

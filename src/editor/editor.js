@@ -3,7 +3,7 @@ import { createEditorAudio } from './audio.js?v=editor-sound'
 import { Plane, Quaternion, Vector3 } from 'three'
 import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=gear-selector'
 import { baseRotation, samePose } from './placement.js?v=gear-selector'
-import { shiftSelector, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=gear-selector'
+import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=shift-linkage'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
 import { nearestDetent } from '../mechanics/axial.js?v=gear-selector'
 import { nearbyConnections, translationSnaps } from './snap.js?v=gear-selector'
@@ -18,7 +18,7 @@ import { mountBeltPanel } from './belt-panel.js?v=belt-drive'
 import { upgradeInlineEngineFan } from './inline-engine.js'
 import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
-import { editorLabels } from './labels.js?v=editor-sound'
+import { editorLabels } from './labels.js?v=shift-linkage'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
@@ -221,9 +221,13 @@ export async function mountEditor(root, { document, language, save, download, si
   state.belts = assembly.belts.map(({ record }) => record)
   const discardedBelts = beltRecords.length - state.belts.length - hiddenBelts.length
   const discardedLinks = source.connections.length - assembly.connections.length - unknownLinks.length
+  const recovered = recoverSelectorLinks(state.parts, assembly)
+  state.parts = recovered.parts
+  assembly = recovered.assembly
   state.links = assembly.connections.map(connectionRecord)
   let mode = 'build'
   let selected
+  let selectorLinkage
   let isolation
   let hidden = hiddenSceneParts(layers, visibleParts)
   let moving
@@ -530,13 +534,14 @@ export async function mountEditor(root, { document, language, save, download, si
     scene.setParts(state.parts)
     scene.belts.travel(new Map())
     selected = id
+    selectorLinkage = linkedSelector(id, state.parts, assembly)
     if (tool === 'length' && !canResize(selectedPart())) tool = 'move'
     scene.select(mode === 'paint' ? undefined : id)
     updateHighlights()
     hinge = mode === 'kinematics' && id ? hingeMotion(id, state.parts, links) : undefined
     angle = hinge?.ok ? hinge.roll * 180 / Math.PI : 0
     lastPreview = angle
-    transmission = mode === 'kinematics' && !hinge ? rotationMotion(id, state.parts, assembly) : null
+    transmission = mode === 'kinematics' && !hinge ? rotationMotion(id, state.parts, assembly, selectorLinkage) : null
     showMotion()
     refreshPartsPanel()
     render()
@@ -638,7 +643,9 @@ export async function mountEditor(root, { document, language, save, download, si
     el('selection').textContent = additional.size ? t.selectedCount(selectionIds().length)
       : part ? parts[part.design][language] : transmission?.kind === 'engine' ? t.crankshaft : t.none
     const building = mode === 'build'
-    el('selector').hidden = !building || dragActive() || !selectedLinks.some(l => ['selector-guide', 'shift-groove'].includes(l.socket.port) && (l.socket.part === selected || l.socket.port === 'shift-groove'))
+    const ringSelected = selectedLinks.some(link => ['selector-guide', 'shift-groove'].includes(link.socket.port) &&
+      (link.socket.part === selected || link.socket.port === 'shift-groove'))
+    el('selector').hidden = !(building || mode === 'kinematics') || dragActive() || !(selectorLinkage || ringSelected)
     const painting = mode === 'paint'
     const selectingInBox = building && tool === 'box' && !moving && !pendingPart
     const addingBelt = building && tool === 'belt'
@@ -1176,7 +1183,7 @@ export async function mountEditor(root, { document, language, save, download, si
   on(el('selector'), 'click', event => {
     const button = event.target.closest('[data-shift]')
     if (!button) return
-    const edits = shiftSelector(selected, Number(button.dataset.shift), state.parts, assembly)
+    const edits = shiftSelector(selected, Number(button.dataset.shift), state.parts, assembly, selectorLinkage)
     if (!edits) return
     const placed = state.parts.map(part => edits.get(part.id) ?? part)
     const shifted = [...edits.values()]
