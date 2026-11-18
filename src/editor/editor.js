@@ -8,7 +8,7 @@ import { nearestDetent } from '../mechanics/axial.js?v=linkages'
 import { nearbyConnections, translationSnaps } from './snap.js?v=group-snap'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=catalog-page'
 import { mountLibrary } from './library.js?v=catalog-page'
-import { createScene } from './scene.js?v=catalog-page'
+import { createScene } from './scene.js?v=box-selection'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=belt-drive'
@@ -17,13 +17,14 @@ import { mountBeltPanel } from './belt-panel.js?v=belt-drive'
 import { upgradeInlineEngineFan } from './inline-engine.js'
 import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
-import { editorLabels } from './labels.js?v=paint-mode'
+import { editorLabels } from './labels.js?v=box-selection'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
 const rotationStep = Math.PI / 4
 const freeKeyboardStep = Math.PI / 36
 const modes = ['build', 'paint', 'kinematics', 'testDrive', 'physics']
+const buildTools = ['select', 'box', 'move', 'rotate', 'length', 'belt']
 const paintColors = ['#c91a09', '#0055bf', '#f2cd37', '#237841', '#f4f4f4', '#a0a5a9', '#1b2a34']
 const heldTurns = { ArrowUp: [X, -1], ArrowDown: [X, 1], ArrowLeft: [Y, -1], ArrowRight: [Y, 1] }
 const steps = { ArrowUp: [0, 0, -1], ArrowDown: [0, 0, 1], ArrowLeft: [-1, 0, 0], ArrowRight: [1, 0, 0] }
@@ -85,6 +86,7 @@ export async function mountEditor(root, { document, language, save, download, si
     </header>
     <div class="editor-workspace">
       <section class="editor-viewport" data-el="viewport">
+        <div class="editor-selection-frame" data-el="selectionFrame" aria-hidden="true" hidden></div>
         <div class="editor-axle-handles" data-el="axleHandles" hidden>
           ${[0, 1].map(end => `<button type="button" class="editor-axle-end" data-end="${end}" aria-label="${t.axleEnd(end + 1)}" title="${t.axleEnd(end + 1)}">↔</button>`).join('')}
         </div>
@@ -96,6 +98,7 @@ export async function mountEditor(root, { document, language, save, download, si
       <div class="editor-overlay" data-el="editorOverlay">
         <div class="editor-viewport-tools" data-el="buildTools">
           <button type="button" data-el="selectTool" title="${t.select} (V)" aria-label="${t.select}"><svg class="icon" viewBox="0 0 24 24"><path d="m5 3 13 10-6 1-3 6z"/></svg></button>
+          <button type="button" data-el="boxTool" title="${t.boxSelect} (B / И)" aria-label="${t.boxSelect}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/></svg></button>
           <button type="button" data-el="moveTool" title="${t.move} (G / П)" aria-label="${t.move}"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3m-6 12 3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/></svg></button>
           <button type="button" data-el="rotateTool" title="${t.rotate} (R / К)" aria-label="${t.rotate}"><svg class="icon" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 1-3-6m-2 3h5V3"/></svg></button>
           <button type="button" data-el="rotationSnap" aria-label="${t.rotationSnap}" aria-pressed="true">45°</button>
@@ -103,6 +106,7 @@ export async function mountEditor(root, { document, language, save, download, si
           <button type="button" data-el="beltTool" title="${t.beltAdd}" aria-label="${t.beltAdd}">${t.belt}</button>
           <button type="button" data-el="snap" aria-pressed="true">${t.snap}</button>
           <button type="button" data-el="frame">${t.reset}</button>
+          <button type="button" data-el="groupSelection" title="${t.createGroup}" hidden>${t.groupSelection}</button>
         </div>
         <div class="editor-paint-tools" data-el="paintTools" role="group" aria-label="${t.paint}" hidden>
           <div class="editor-paint-swatches">
@@ -177,6 +181,7 @@ export async function mountEditor(root, { document, language, save, download, si
     <footer class="editor-status"><span data-el="hint" role="status"></span><span data-el="loadNotice" role="status"></span><span data-el="count"></span></footer>`
   const el = name => root.querySelector(`[data-el="${name}"]`)
   const on = (target, event, callback, capture = false) => target.addEventListener(event, callback, { signal, capture })
+  const selectionFrame = el('selectionFrame')
   const paintColor = el('paintColor')
   const paintSwatches = [...el('paintTools').querySelectorAll('[data-paint]')]
   let scene
@@ -236,6 +241,7 @@ export async function mountEditor(root, { document, language, save, download, si
   let transmission
   let hinge
   let pointerDown
+  let boxSelection
   let directDrag
   let drag
   let links = assembly.connections
@@ -360,7 +366,7 @@ export async function mountEditor(root, { document, language, save, download, si
 
   const selectionIds = () => selected ? [selected, ...additional] : []
   const canResize = part => !additional.size && axleOptions(part).length > 1
-  const dragActive = () => Boolean(moving || gizmoPart || resize)
+  const dragActive = () => Boolean(moving || gizmoPart || resize || boxSelection)
   const snapAllowed = event => snapEnabled && !event?.ctrlKey && !event?.metaKey
 
   function selectClick(id, toggle = false) {
@@ -396,6 +402,30 @@ export async function mountEditor(root, { document, language, save, download, si
     additional.clear()
     for (const id of next) additional.add(id)
     setSelection(primary)
+  }
+
+  function cancelBoxSelection() {
+    boxSelection = undefined
+    selectionFrame.hidden = true
+  }
+
+  function updateSelectionFrame(event) {
+    if (selectionFrame.hidden && Math.hypot(event.clientX - boxSelection.x, event.clientY - boxSelection.y) < 5) return
+    const rect = scene.canvas.getBoundingClientRect()
+    const canvasWidth = rect.width
+    const canvasHeight = rect.height
+    const x = clientX => Math.max(0, Math.min(canvasWidth, clientX - rect.left))
+    const y = clientY => Math.max(0, Math.min(canvasHeight, clientY - rect.top))
+    const left = x(Math.min(boxSelection.x, event.clientX))
+    const right = x(Math.max(boxSelection.x, event.clientX))
+    const top = y(Math.min(boxSelection.y, event.clientY))
+    const bottom = y(Math.max(boxSelection.y, event.clientY))
+    Object.assign(selectionFrame.style, {
+      left: `${left}px`, top: `${top}px`,
+      width: `${Math.max(1, right - left)}px`, height: `${Math.max(1, bottom - top)}px`,
+    })
+    selectionFrame.hidden = false
+    return { left, top, right, bottom, canvasWidth, canvasHeight }
   }
 
   function refreshPartsPanel() {
@@ -521,10 +551,17 @@ export async function mountEditor(root, { document, language, save, download, si
     applyState({ belts: state.belts, layers: state.layers, ...next })
   }
 
-  function paintPart(id, color) {
+  function paintPart(id, color, allMatching = false) {
     const part = state.parts.find(item => item.id === id)
-    if (!part || String(part.color ?? parts[part.design].color).toLowerCase() === color) return
-    commit({ ...state, parts: state.parts.map(item => item === part ? { ...part, color } : item) })
+    if (!part) return
+    let changed = false
+    const painted = state.parts.map(item => {
+      const matches = allMatching ? item.design === part.design : item === part
+      if (!matches || String(item.color ?? parts[item.design].color).toLowerCase() === color) return item
+      changed = true
+      return { ...item, color }
+    })
+    if (changed) commit({ ...state, parts: painted })
   }
 
   function updatePaintSwatches() {
@@ -577,12 +614,13 @@ export async function mountEditor(root, { document, language, save, download, si
       : part ? parts[part.design][language] : transmission?.kind === 'engine' ? t.crankshaft : t.none
     const building = mode === 'build'
     const painting = mode === 'paint'
+    const selectingInBox = building && tool === 'box' && !moving && !pendingPart
     const addingBelt = building && tool === 'belt'
     partsPanel.setEditable(building && !dragActive(), Boolean(isolation), Boolean(isolation) || hasSavedHidden())
     el('selection').hidden = addingBelt
     el('partActions').hidden = !part || !building || addingBelt || dragActive()
     el('paste').hidden = !clipboard || !building || addingBelt || dragActive()
-    for (const name of ['select', 'move', 'rotate', 'length', 'belt']) {
+    for (const name of buildTools) {
       const control = el(`${name}Tool`)
       control.disabled = !building || (name === 'length' && !canResize(part)) || (name === 'belt' && dragActive())
       control.setAttribute('aria-pressed', String(tool === name))
@@ -634,6 +672,10 @@ export async function mountEditor(root, { document, language, save, download, si
     el('paintTools').hidden = !painting
     el('panelLayer').hidden = painting
     el('viewport').toggleAttribute('data-painting', painting)
+    el('viewport').toggleAttribute('data-box-select', selectingInBox)
+    el('groupSelection').hidden = !selectingInBox
+    el('groupSelection').disabled = !selected || dragActive()
+    scene.enableBoxSelect(selectingInBox)
     for (const name of modes) el(name).setAttribute('aria-pressed', String(mode === name))
     library.setPlacement(!movesExisting ? moving?.design : undefined, pendingPart?.part.design, building)
     el('snap').disabled = !building
@@ -647,7 +689,9 @@ export async function mountEditor(root, { document, language, save, download, si
     el('hint').textContent = simulating(mode) ? message : painting ? message || t.paintHint :
       resize ? t.lengthPreview(parts[resize.pose.design][language], resize.lost.length, resize.kept) :
       gizmoSnap?.mesh ? t.gearSnap : gizmoSnap?.fit ? t.snapPreview : moving ? `${cue} · ${t.place}`
-      : pendingPart ? t.loadingPart(pendingPart.part[language]) : message || (unknownPartCount ? t.unknown(unknownPartCount) : t.camera)
+      : pendingPart ? t.loadingPart(pendingPart.part[language]) : message ||
+        (selectingInBox ? selected ? `${t.selectedCount(selectionIds().length)} · ${t.boxActions}` : t.boxHint
+          : unknownPartCount ? t.unknown(unknownPartCount) : t.camera)
   }
 
   function updatePointer(event, cycle = false) {
@@ -704,6 +748,7 @@ export async function mountEditor(root, { document, language, save, download, si
   }
 
   function cancelPlacement() {
+    cancelBoxSelection()
     pendingPart = undefined
     if (movesExisting) {
       scene.setMoving(moving.id, false)
@@ -843,6 +888,7 @@ export async function mountEditor(root, { document, language, save, download, si
   function setTool(next) {
     if (mode !== 'build' || (next === 'length' && !canResize(selectedPart()))) return
     if (moving) return
+    cancelBoxSelection()
     cancelGizmo()
     cancelResize()
     message = ''
@@ -1033,7 +1079,8 @@ export async function mountEditor(root, { document, language, save, download, si
   })
   on(el('save'), 'click', () => persist(true))
   on(el('export'), 'click', () => download(currentDocument()))
-  for (const name of ['select', 'move', 'rotate', 'length', 'belt']) on(el(`${name}Tool`), 'click', () => setTool(name))
+  for (const name of buildTools) on(el(`${name}Tool`), 'click', () => setTool(name))
+  on(el('groupSelection'), 'click', () => { if (selected && !dragActive()) createGroup() })
   on(window, 'keyup', event => {
     if ((moving || gizmoPart) && pointer && ['Control', 'Meta'].includes(event.key)) {
       updatePointer({ clientX: pointer.clientX, clientY: pointer.clientY, ctrlKey: event.ctrlKey, metaKey: event.metaKey })
@@ -1117,12 +1164,21 @@ export async function mountEditor(root, { document, language, save, download, si
   on(scene.canvas, 'pointerdown', event => {
     if (simulating(mode)) return
     if (event.button === 2) {
+      cancelBoxSelection()
       rightDown = [event.clientX, event.clientY]
       return
     }
     if (event.button !== 0) return
     if (!gizmoPart) ignoreGizmoClick = false
     scene.canvas.focus({ preventScroll: true })
+    if (mode === 'build' && tool === 'box' && !moving && !pendingPart) {
+      pointerDown = null
+      if (event.isPrimary) {
+        boxSelection = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+        scene.canvas.setPointerCapture(event.pointerId)
+      } else cancelBoxSelection()
+      return
+    }
     pointerDown = [event.clientX, event.clientY]
     if (mode === 'paint') {
       if (!event.isPrimary) pointerDown = null
@@ -1151,6 +1207,10 @@ export async function mountEditor(root, { document, language, save, download, si
   })
   on(scene.canvas, 'pointermove', event => {
     if (simulating(mode)) return
+    if (boxSelection?.pointerId === event.pointerId) {
+      updateSelectionFrame(event)
+      return
+    }
     if (mode === 'paint') {
       if (pointerDown && Math.hypot(event.clientX - pointerDown[0], event.clientY - pointerDown[1]) >= 5) pointerDown = null
       return
@@ -1183,10 +1243,22 @@ export async function mountEditor(root, { document, language, save, download, si
       return
     }
     if (event.button !== 0) return
+    if (boxSelection?.pointerId === event.pointerId) {
+      const bounds = updateSelectionFrame(event)
+      cancelBoxSelection()
+      message = ''
+      if (bounds) {
+        const ids = scene.selectInRect(bounds)
+        selectParts(event.shiftKey ? [...selectionIds(), ...ids] : ids)
+      } else {
+        selectClick(scene.pointer(event).hit, event.shiftKey)
+      }
+      return
+    }
     const click = pointerDown && Math.hypot(event.clientX - pointerDown[0], event.clientY - pointerDown[1]) < 5
     pointerDown = null
     if (mode === 'paint') {
-      if (click && event.isPrimary) paintPart(scene.pointer(event).hit, paintColor.value)
+      if (click && event.isPrimary) paintPart(scene.pointer(event).hit, paintColor.value, event.ctrlKey || event.metaKey)
       return
     }
     if (ignoreGizmoClick) {
@@ -1218,6 +1290,9 @@ export async function mountEditor(root, { document, language, save, download, si
     cancelPlacement()
     cancelResize()
   })
+  on(scene.canvas, 'lostpointercapture', event => {
+    if (boxSelection?.pointerId === event.pointerId) cancelBoxSelection()
+  })
   on(window, 'keydown', event => {
     if (event.defaultPrevented) return
     if (simulating(mode)) {
@@ -1236,6 +1311,11 @@ export async function mountEditor(root, { document, language, save, download, si
     if (event.key === 'Escape' && mode === 'build' && tool === 'belt' && !dragActive()) {
       event.preventDefault()
       setTool('select')
+      return
+    }
+    if (event.key === 'Escape' && boxSelection) {
+      event.preventDefault()
+      cancelBoxSelection()
       return
     }
     if (event.key === 'Escape' && (dragActive() || pendingPart)) {
@@ -1324,6 +1404,7 @@ export async function mountEditor(root, { document, language, save, download, si
     const actions = {
       Escape: () => setTool('select'),
       KeyV: () => setTool('select'),
+      KeyB: () => setTool('box'),
       KeyG: () => setTool('move'),
       KeyH: () => { if (selected) setPartsHidden(selectionIds(), true) },
       KeyS: () => setTool('length'),

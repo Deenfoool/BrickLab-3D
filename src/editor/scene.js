@@ -299,6 +299,35 @@ export function createScene(host, models) {
     invalidate()
   }
 
+  function selectInRect({ left, top, right, bottom, canvasWidth, canvasHeight }) {
+    const width = Math.max(1, right - left)
+    const height = Math.max(1, bottom - top)
+    // Remap the requested region to the full clip volume, including the camera's depth limits.
+    const view = new THREE.Matrix4().set(
+      canvasWidth / width, 0, 0, (canvasWidth - left - right) / width,
+      0, canvasHeight / height, 0, (top + bottom - canvasHeight) / height,
+      0, 0, 1, 0,
+      0, 0, 0, 1,
+    )
+    camera.updateMatrixWorld()
+    view.multiply(camera.projectionMatrix).multiply(camera.matrixWorldInverse)
+    const localClip = new THREE.Matrix4()
+    const frustum = new THREE.Frustum()
+    const ids = []
+    for (const [id, object] of objects) {
+      if (!object.visible) continue
+      // Test the part's local bounds so rotated beams keep a tight selection volume.
+      localClip.multiplyMatrices(view, object.matrixWorld)
+      frustum.setFromProjectionMatrix(localClip, camera.coordinateSystem)
+      if (frustum.intersectsBox(models.get(object.userData.design).bounds)) ids.push(id)
+    }
+    return ids
+  }
+
+  function enableBoxSelect(enabled) {
+    controls.touches.ONE = enabled ? null : THREE.TOUCH.ROTATE
+  }
+
   function pointer(event, pick = true) {
     const rect = canvas.getBoundingClientRect()
     camera.updateMatrixWorld()
@@ -388,5 +417,5 @@ export function createScene(host, models) {
   }
 
   resetView()
-  return { canvas, camera, gizmo, belts, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, setGhost, setGroupGhost, setMoving, resetView, dispose }
+  return { canvas, camera, gizmo, belts, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, selectInRect, enableBoxSelect, setGhost, setGroupGhost, setMoving, resetView, dispose }
 }

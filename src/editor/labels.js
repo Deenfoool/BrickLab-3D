@@ -1,7 +1,7 @@
 export const editorLabels = {
   ru: {
     home: 'К сборкам', parts: 'Детали', search: 'Поиск по названию или ID', build: 'Сборка', kinematics: 'Кинематика',
-    paint: 'Покраска', paintCustom: 'Свой цвет', paintHint: 'Выберите цвет и нажмите на деталь. Esc — вернуться к сборке.',
+    paint: 'Покраска', paintCustom: 'Свой цвет', paintHint: 'Клик — покрасить деталь. Ctrl+клик — покрасить все детали с тем же ID.',
     save: 'Сохранить', download: 'Скачать', undo: 'Отменить', redo: 'Повторить', reset: 'По центру', info: 'Инспектор',
     sceneParts: 'Детали сцены', noSceneParts: 'На сцене пока нет деталей',
     createGroup: 'Создать группу (Ctrl+G / П)', groupName: number => `Группа ${number}`,
@@ -21,6 +21,8 @@ export const editorLabels = {
     name: 'Название сборки', empty: 'Выберите деталь из каталога', place: 'ЛКМ / пробел — поставить · Стрелки — повернуть · Esc — отменить',
     camera: 'ЛКМ — взять деталь · ПКМ — обзор · Shift+ПКМ — панорама · Колесо — масштаб', selected: 'Выбранная деталь', none: 'Выберите деталь на сцене',
     select: 'Выбрать', move: 'Переместить', rotate: 'Повернуть', snap: 'Привязка',
+    boxSelect: 'Выделение рамкой', boxHint: 'Обведите детали рамкой. Shift — добавить к выделению.',
+    boxActions: 'G — переместить · Ctrl+G — сгруппировать', groupSelection: 'Сгруппировать',
     rotationSnap: 'Шаг вращения 45°', freeRotation: 'Плавно',
     enableFreeRotation: 'Включить плавное вращение', enableRotationSnap: 'Включить шаг вращения 45°',
     length: 'Длина вала', axleEnd: end => `Изменить длину, конец ${end}`,
@@ -60,7 +62,7 @@ export const editorLabels = {
   },
   en: {
     home: 'Back to builds', parts: 'Parts', search: 'Search by name or ID', build: 'Build', kinematics: 'Kinematics',
-    paint: 'Paint', paintCustom: 'Custom color', paintHint: 'Choose a color and click a part. Esc returns to Build.',
+    paint: 'Paint', paintCustom: 'Custom color', paintHint: 'Click to paint a part. Ctrl+click paints every part with the same ID.',
     save: 'Save', download: 'Download', undo: 'Undo', redo: 'Redo', reset: 'Frame all', info: 'Inspector',
     sceneParts: 'Scene parts', noSceneParts: 'No parts in the scene yet',
     createGroup: 'Create group (Ctrl+G)', groupName: number => `Group ${number}`,
@@ -80,6 +82,8 @@ export const editorLabels = {
     name: 'Build name', empty: 'Choose a part from the catalog', place: 'LMB / Space place · Arrows rotate · Esc cancel',
     camera: 'LMB drag part · RMB orbit · Shift+RMB pan · Scroll zoom', selected: 'Selected part', none: 'Select a part in the scene',
     select: 'Select', move: 'Move', rotate: 'Rotate', snap: 'Snap',
+    boxSelect: 'Box select', boxHint: 'Drag around parts to select them. Hold Shift to add to the selection.',
+    boxActions: 'G to move · Ctrl+G to group', groupSelection: 'Group selection',
     rotationSnap: '45° rotation snap', freeRotation: 'Free',
     enableFreeRotation: 'Enable free rotation', enableRotationSnap: 'Enable 45° rotation snap',
     length: 'Axle length', axleEnd: end => `Resize axle, end ${end}`,

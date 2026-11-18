@@ -55,7 +55,9 @@
 .editor-viewport-tools [data-el="rotationSnap"]{min-width:56px}
 .editor-viewport-tools .icon{width:17px;height:17px}
 .editor-viewport-tools button[aria-pressed="true"]{background:#3b301c;color:#ffd376;border-color:#826631}
-.editor-viewport[data-painting] canvas{cursor:crosshair}
+.editor-viewport:is([data-painting],[data-box-select]) canvas{cursor:crosshair}
+.editor-selection-frame{position:absolute;z-index:1;pointer-events:none;border:1px dashed #ffcb64;background:#ffb01b24}
+.editor [data-el="groupSelection"]{padding-inline:10px}
 .editor-paint-tools{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;justify-self:start;max-width:100%;padding:7px;border:1px solid #41454e;border-radius:9px;background:#1b1d22;pointer-events:auto;font-size:13px}
 .editor-paint-swatches{display:flex;flex-wrap:wrap;gap:5px}
 .editor .editor-paint-swatches button,.editor .editor-paint-swatches button:hover{width:30px;height:32px;padding:0;border:1px solid #ffffff45;border-radius:6px;background:var(--paint-swatch)}
