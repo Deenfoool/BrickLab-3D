@@ -1,4 +1,4 @@
-import { compatibleSupply, controlPlusBodies, controlPlusHubs, hubSettings, motorSettings, motorSupply } from '../mechanics/motors.js'
+import { isPfSupply, compatibleSupply, controlPlusBodies, controlPlusHubs, hubSettings, motorSettings, motorSupply } from '../mechanics/motors.js'
 
 export function mountMotorPanel(root, { language, read, change, signal }) {
   const ru = language === 'ru'
@@ -35,7 +35,7 @@ export function mountMotorPanel(root, { language, read, change, signal }) {
   for (const input of bends) input.addEventListener('change', () => update({ bend: bends.map(item => Number(item.value)) }), { signal })
   el('power').addEventListener('input', event => { el('power-value').textContent = event.target.value + '%' }, { signal })
   el('on').addEventListener('change', event => update({ on: event.target.checked }), { signal })
-  el('hub-id').addEventListener('change', event => update({ hubId: event.target.value }), { signal })
+  el('hub-id').addEventListener('change', event => update({ hubId: event.target.value, port: 0 }), { signal })
   el('stop').addEventListener('change', event => update({ stop: event.target.value }), { signal })
   el('stop-now').addEventListener('click', () => update({ power: 0 }), { signal })
   return {
@@ -55,10 +55,10 @@ export function mountMotorPanel(root, { language, read, change, signal }) {
       const settings = motorSettings(part)
       const supply = motorSupply(part, parts)
       bends.forEach((input, i) => { input.value = part.electric?.bend?.[i] ?? 0 })
-      el('port').disabled = part.design === '10089c01'
+      el('port').disabled = isPfSupply(parts.find(hub => hub.id === settings.hubId)?.design)
       const options = [new Option(ru ? 'Не подключён' : 'Disconnected', ''),
         ...parts.filter(hub => compatibleSupply(part.design, hub.design)).map((hub, index) =>
-          new Option(`${part.design === '10089c01' ? 'PF' : 'Control+'} ${hub.design} · ${index + 1}`, hub.id))]
+          new Option(`${isPfSupply(hub.design) ? 'PF' : 'Control+'} ${hub.design} · ${index + 1}${part.design === '10089c01' && !isPfSupply(hub.design) ? (ru ? ' (переходник PF)' : ' (PF adapter)') : ''}`, hub.id))]
       el('hub-id').replaceChildren(...options)
       el('hub-id').value = settings.hubId
       el('port').value = settings.port

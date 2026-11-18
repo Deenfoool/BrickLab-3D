@@ -2,7 +2,7 @@ import { CatmullRomCurve3, CubicBezierCurve3, Group, Mesh, MeshStandardMaterial,
 import { portsFor } from '../mechanics/catalog.js?v=gear-selector'
 import { joinedPose } from './placement.js'
 import { loadPartModel, parts as catalog, partMesh } from './parts.js?v=catalog-page'
-import { compatibleSupply, controlPlusBodies, motorSettings } from '../mechanics/motors.js'
+import { isPfSupply, compatibleSupply, controlPlusBodies, motorSettings } from '../mechanics/motors.js'
 
 export function createMotorCables(parent, poseOf, invalidate = () => {}) {
   const group = new Group()
@@ -29,7 +29,7 @@ export function createMotorCables(parent, poseOf, invalidate = () => {}) {
       const hub = parts.find(part => part.id === settings.hubId && compatibleSupply(motor.design, part.design))
       const motorPose = poseOf(motor.id)
       const hubPose = hub && poseOf(hub.id)
-      const port = hub && portsFor(hub.design).filter(port => port.role === 'receptacle' && port.group === (motor.design === '10089c01' ? 'pfc' : 'pwrFnc2Plg'))[settings.port]
+      const port = hub && portsFor(hub.design).filter(port => port.role === 'receptacle' && port.group === (isPfSupply(hub.design) ? 'pfc' : 'pwrFnc2Plg'))[settings.port]
       if (!port || !motorPose || !hubPose) continue
       retained.add(motor.id)
       const pf = motor.design === '10089c01'
@@ -61,14 +61,14 @@ export function createMotorCables(parent, poseOf, invalidate = () => {}) {
         if (mesh) mesh.add(wire)
         else mesh = wire
       }
-      const design = pf ? '58124c01' : '23816a'
+      const design = isPfSupply(hub.design) ? '58124c01' : '23816a'
       if (!plugs.has(design)) plugs.set(design, loadPartModel(catalog[design]).catch(() => { plugs.delete(design); return null }))
       const plugPose = joinedPose({ position: [0,0,0], rotation: [0,0,0,1] },
         portsFor(design).find(port => port.role === 'plug'), hubPose, port,
         { offset: 0, direction: 1, roll: 0, keyStep: 2 * Math.PI })
       plugs.get(design).then(model => {
         if (!model || cables.get(motor.id)?.mesh !== mesh) return
-        const plug = partMesh(model, pf ? '#61625f' : '#bbc0bf')
+        const plug = partMesh(model, isPfSupply(hub.design) ? '#61625f' : '#bbc0bf')
         plug.position.fromArray(plugPose.position)
         plug.quaternion.fromArray(plugPose.rotation)
         mesh.add(plug)

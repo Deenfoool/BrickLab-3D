@@ -3,8 +3,9 @@ export const controlPlusHubs = new Set(['22127', '85824', '58119', '64228c01', '
 
 const clamp = (value, min, max, fallback) => Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback
 
-export const compatibleSupply = (body, hub) => controlPlusHubs.has(hub) &&
-  ((body === '10089c01') === ['58119', '64228c01', '84599'].includes(hub))
+export const isPfSupply = design => ['58119', '64228c01', '84599'].includes(design)
+export const compatibleSupply = (body, hub) => controlPlusBodies.has(body) && controlPlusHubs.has(hub) &&
+  (body === '10089c01' || !isPfSupply(hub))
 
 export function motorSettings(part) {
   const settings = part?.electric ?? {}
@@ -23,7 +24,7 @@ export function motorSupply(part, parts) {
   const hub = parts.find(candidate => candidate.id === settings.hubId && compatibleSupply(part.design, candidate.design))
   const pf = part.design === '10089c01'
   const freeRpm = pf ? 390 : 315
-  const occupied = (pf && settings.port !== 0) || parts.filter(candidate => controlPlusBodies.has(candidate.design) &&
+  const occupied = (isPfSupply(hub?.design) && settings.port !== 0) || parts.filter(candidate => controlPlusBodies.has(candidate.design) &&
     motorSettings(candidate).hubId === settings.hubId && motorSettings(candidate).port === settings.port).length > 1
   const supply = hubSettings(hub)
   const powered = Boolean(hub && supply.on && supply.battery > 0 && !occupied)
