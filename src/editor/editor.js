@@ -172,6 +172,7 @@ export async function mountEditor(root, { document, language, save, download, si
                 </div>
                 <small>${t.side}</small>
               </div>
+              <button type="button" data-el="stopRunningMotor" hidden>${language === 'ru' ? 'Остановить мотор' : 'Stop motor'}</button>
               <section data-el="motorPanel" class="editor-motor-panel" hidden></section>
               <div data-el="motion" class="editor-motion" hidden>
                 <label><span data-el="motionLabel">${t.drive}</span><input data-el="angle" type="range" min="-1080" max="1080" step="1" value="0"></label>
@@ -260,6 +261,7 @@ export async function mountEditor(root, { document, language, save, download, si
   let angle = 0
   let lastPreview = 0
   let frame
+  let runningMotor
   let transmission
   let hinge
   let pointerDown
@@ -373,7 +375,35 @@ export async function mountEditor(root, { document, language, save, download, si
     frame = undefined
   }
 
+  function releaseMotor() {
+    if (runningMotor) cancelAnimationFrame(runningMotor.frame)
+    runningMotor = undefined
+  }
+
+  function motorTick(time) {
+    const motor = runningMotor
+    if (!motor) return
+    const motion = motor.motion
+    const dt = Math.min(50, time - (motor.last ?? time)) / 1000
+    motor.last = time
+    if (motion?.ok && motion.playback) {
+      motor.degrees += motion.playback * dt
+      const radians = motor.degrees * Math.PI / 180
+      const poses = rotationPoses(state.parts, motion, radians)
+      if (poses) scene.previewParts(poses)
+      scene.belts.travel(new Map(motion.belts?.map(belt =>
+        [belt.record.id, beltTravel(belt, motion.spins, radians)])))
+      if (selected === motor.id) {
+        angle = ((motor.degrees % 360) + 360) % 360
+        el('angle').value = angle
+        el('degrees').textContent = Math.round(angle) + '°'
+      }
+    }
+    motor.frame = requestAnimationFrame(motorTick)
+  }
+
   signal.addEventListener('abort', () => {
+    releaseMotor()
     stopAnimation()
     scene.dispose()
   }, { once: true })
@@ -584,6 +614,11 @@ export async function mountEditor(root, { document, language, save, download, si
       links = assembly.connections
       state.links = links.map(connectionRecord)
     }
+    if (runningMotor) {
+      const motor = state.parts.find(part => part.id === runningMotor.id)
+      if (!motor || !motor.electric?.power) releaseMotor()
+      else runningMotor.motion = rotationMotion(motor.id, state.parts, assembly)
+    }
     refreshLayerVisibility()
     const ids = new Set(state.parts.map(part => part.id))
     for (const id of additional) if (!ids.has(id)) additional.delete(id)
@@ -712,6 +747,8 @@ export async function mountEditor(root, { document, language, save, download, si
     el('play').textContent = frame ? t.stop : t.play
     el('play').disabled = transmission?.kind === 'motor' && !transmission.playback
     motorPanel.render(part, state.parts)
+    el('stopRunningMotor').hidden = !runningMotor || selected === runningMotor.id
+    if (runningMotor && transmission?.kind === 'motor') el('play').hidden = true
     el('editCable').disabled = !building || el('wires').getAttribute('aria-pressed') === 'false'
     if (!building) cablePanel.close()
     else cablePanel.refresh()
@@ -1098,6 +1135,7 @@ export async function mountEditor(root, { document, language, save, download, si
     cancelResize()
     pointerDown = null
     if (next === 'paint' && message !== t.storage) message = ''
+    releaseMotor()
     mode = next
     additional.clear()
     setSelection(selected)
@@ -1201,6 +1239,7 @@ export async function mountEditor(root, { document, language, save, download, si
     showMotion()
   })
   on(el('angle'), 'input', event => {
+    if (runningMotor?.id === selected && runningMotor) runningMotor.degrees = Number(event.target.value)
     stopAnimation()
     angle = Number(event.target.value)
     showMotion(true)
@@ -1253,7 +1292,20 @@ export async function mountEditor(root, { document, language, save, download, si
     applySelector(choices[0])
   }
   on(el('angle'), 'change', finishSelectorDrag)
+  on(el('stopRunningMotor'), 'click', () => {
+    if (!runningMotor) return
+    const id = runningMotor.id
+    commit({ ...state, parts: state.parts.map(part => part.id === id
+      ? { ...part, electric: { ...part.electric, power: 0 } } : part) })
+  })
   on(el('play'), 'click', () => {
+    if (transmission?.kind === 'motor' && transmission.playback && !runningMotor) {
+      stopAnimation()
+      runningMotor = { id: selected, motion: transmission, degrees: angle }
+      runningMotor.frame = requestAnimationFrame(motorTick)
+      render()
+      return
+    }
     if (frame) stopAnimation()
     else {
       audio.unlock()
