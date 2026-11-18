@@ -1,4 +1,5 @@
 import { mountFloatingPanels } from './floating-panels.js?v=scene-parts'
+import { createEditorAudio } from './audio.js?v=editor-sound'
 import { Plane, Quaternion, Vector3 } from 'three'
 import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=selector-guide'
 import { baseRotation, samePose } from './placement.js?v=selector-guide'
@@ -17,7 +18,7 @@ import { mountBeltPanel } from './belt-panel.js?v=belt-drive'
 import { upgradeInlineEngineFan } from './inline-engine.js'
 import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
-import { editorLabels } from './labels.js?v=box-selection'
+import { editorLabels } from './labels.js?v=editor-sound'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
@@ -29,6 +30,11 @@ const paintColors = ['#c91a09', '#0055bf', '#f2cd37', '#237841', '#f4f4f4', '#a0
 const heldTurns = { ArrowUp: [X, -1], ArrowDown: [X, 1], ArrowLeft: [Y, -1], ArrowRight: [Y, 1] }
 const steps = { ArrowUp: [0, 0, -1], ArrowDown: [0, 0, 1], ArrowLeft: [-1, 0, 0], ArrowRight: [1, 0, 0] }
 const connectionRecord = ({ shaft, socket, fit }) => ({ shaft, socket, placement: fit.placement })
+const connectionKey = ({ shaft, socket }) => JSON.stringify([shaft.part, shaft.port, socket.part, socket.port])
+function hasNewConnection(before, after) {
+  const previous = new Set(before.map(connectionKey))
+  return after.some(link => !previous.has(connectionKey(link)))
+}
 const simulating = mode => mode === 'testDrive' || mode === 'physics'
 const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
@@ -78,6 +84,9 @@ export async function mountEditor(root, { document, language, save, download, si
         <button data-el="physics" type="button">${physicsTitle(language)}</button>
       </div>
       <div class="editor-actions">
+        <button data-el="sound" class="editor-square editor-sound" type="button" aria-label="${t.sound}">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3z"/><path class="sound-waves" d="M15 9a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12"/><path class="sound-muted" d="m16 9 5 6m0-6-5 6"/></svg>
+        </button>
         <button data-el="undo" class="editor-square" type="button" title="${t.undo}" aria-label="${t.undo}">↶</button>
         <button data-el="redo" class="editor-square" type="button" title="${t.redo}" aria-label="${t.redo}">↷</button>
         <button data-el="export" type="button">${t.download}</button>
@@ -247,6 +256,13 @@ export async function mountEditor(root, { document, language, save, download, si
   let links = assembly.connections
   let message = ''
   let pendingPart
+  const audio = createEditorAudio(signal)
+  function updateSoundControl() {
+    const button = el('sound')
+    button.setAttribute('aria-pressed', String(audio.enabled))
+    button.title = audio.enabled ? t.muteSound : t.enableSound
+  }
+  updateSoundControl()
   const library = mountLibrary(root.querySelector('#editor-library-body'), {
     sections, language, labels: t, selectPart: selectLibraryPart, hasConnectors, signal,
   })
@@ -288,6 +304,7 @@ export async function mountEditor(root, { document, language, save, download, si
       const motion = rotationMotion(record.a.part, state.parts, trial)
       if (!motion?.ok || !(motion.belts ?? motion.rotation?.belts)?.some(belt => belt.record.id === record.id)) return false
       commit({ ...state, belts })
+      audio.play('snap')
       return true
     },
     remove: id => commit({ ...state, belts: state.belts.filter(record => record.id !== id) }),
@@ -339,13 +356,16 @@ export async function mountEditor(root, { document, language, save, download, si
     scene.dispose()
   }, { once: true })
 
-  function showMotion() {
+  function showMotion(audible = false, wrappedAngle = 0) {
+    const previous = lastPreview
     if (hinge?.ok) {
       const target = nearestDetent(hinge.detents, angle * Math.PI / 180)
       angle = target * 180 / Math.PI
+      lastPreview = angle
       scene.previewParts(hingePoses(state.parts, hinge, target).filter(part => hinge.moving.has(part.id)))
       scene.select(selected)
       el('applyHinge').disabled = Math.abs(target - hinge.roll) < 1e-8
+      if (audible) audio.advanceRotation(angle - previous, true)
     } else if (transmission?.ok) {
       const value = transmission.unit === 'linear' ? angle : angle * Math.PI / 180
       const poses = rotationPoses(state.parts, transmission, value, Number(el('motionAxis').value))
@@ -357,6 +377,7 @@ export async function mountEditor(root, { document, language, save, download, si
         scene.belts.travel(new Map(transmission.belts?.map(belt =>
           [belt.record.id, beltTravel(belt, transmission.spins, value)])))
         scene.select(selected)
+        if (audible && transmission.unit !== 'linear') audio.advanceRotation(angle - previous + wrappedAngle)
       }
     }
     el('degrees').textContent = transmission?.unit === 'linear'
@@ -502,6 +523,7 @@ export async function mountEditor(root, { document, language, save, download, si
 
   function setSelection(id) {
     stopAnimation()
+    audio.resetRotation()
     scene.setParts(state.parts)
     scene.belts.travel(new Map())
     selected = id
@@ -784,6 +806,8 @@ export async function mountEditor(root, { document, language, save, download, si
     const placed = original ? state.parts.map(part => transformed.get(part.id) ?? part) : [...state.parts, pose, ...copied]
     const added = fit ? [{ shaft: candidate.shaft, socket: candidate.socket, placement: fit.placement }] : []
     const pastedBelts = pastedGroup?.belts
+    const previousLinks = state.links
+    const meshed = Boolean(candidate?.mesh?.ok)
     const nextLinks = transformLinks(placed, [id, ...copied.map(part => part.id)],
       [...(pastedGroup?.links ?? []), ...added], Boolean(candidate?.pose))
     cancelPlacement()
@@ -792,6 +816,7 @@ export async function mountEditor(root, { document, language, save, download, si
     selected = id
     if (isolation) isolation = new Set([...isolation, id, ...additional])
     commit({ parts: placed, links: nextLinks, belts: [...state.belts, ...(pastedBelts ?? [])] })
+    audio.play(meshed || hasNewConnection(previousLinks, state.links) ? 'snap' : 'place')
   }
 
   function turnPart([axis, direction]) {
@@ -847,8 +872,10 @@ export async function mountEditor(root, { document, language, save, download, si
     const edited = new Map([after, ...groupTransforms(state.parts.filter(item => additional.has(item.id)), before, after)].map(part => [part.id, part]))
     const placed = state.parts.map(part => edited.get(part.id) ?? part)
     selected = after.id
+    const previousLinks = state.links
     const added = snap?.fit ? [{ shaft: snap.shaft, socket: snap.socket, placement: snap.fit.placement }] : []
     commit({ parts: placed, links: transformLinks(placed, [...edited.keys()], added, Boolean(snap?.pose)) })
+    if (snap?.mesh?.ok || hasNewConnection(previousLinks, state.links)) audio.play('snap')
   }
 
   function clipboardSelection() {
@@ -892,8 +919,10 @@ export async function mountEditor(root, { document, language, save, download, si
     cancelGizmo()
     cancelResize()
     message = ''
+    const previous = tool
     tool = next === 'belt' && tool === 'belt' ? 'select' : next
     render()
+    if (previous !== tool) audio.play('tool')
   }
 
   function updateHighlights() {
@@ -1037,6 +1066,7 @@ export async function mountEditor(root, { document, language, save, download, si
     setSelection(selected)
     if (mode === 'testDrive') drivePanel.setActive(true)
     if (mode === 'physics') physicsPanel.setActive(true)
+    audio.play('tool')
   }
 
   function stepAnimation(time) {
@@ -1046,19 +1076,30 @@ export async function mountEditor(root, { document, language, save, download, si
     angle += Math.min(50, time - stepAnimation.previous) * speed / 1000
     stepAnimation.previous = time
     const limit = Number(el('angle').max)
-    if (transmission?.periodic && angle >= limit) angle %= limit
+    let wrappedAngle = 0
+    if (transmission?.periodic && angle >= limit) {
+      wrappedAngle = Math.floor(angle / limit) * limit
+      angle %= limit
+    }
     if (angle > limit) {
       angle = limit
       stopAnimation()
-      showMotion()
+      showMotion(true)
       render()
       return
     }
-    showMotion()
+    showMotion(true, wrappedAngle)
     frame = requestAnimationFrame(stepAnimation)
   }
 
   for (const name of modes) on(el(name), 'click', () => setMode(name))
+  on(root, 'pointerdown', audio.unlock, true)
+  on(root, 'pointerup', audio.unlock, true)
+  on(window, 'keydown', audio.unlock, true)
+  on(el('sound'), 'click', () => {
+    if (audio.toggle()) audio.play('tool')
+    updateSoundControl()
+  })
   on(el('undo'), 'click', () => restore(undo, redo))
   on(el('redo'), 'click', () => restore(redo, undo))
   on(el('frame'), 'click', scene.resetView)
@@ -1111,13 +1152,14 @@ export async function mountEditor(root, { document, language, save, download, si
   on(el('motionAxis'), 'change', () => {
     angle = 0
     lastPreview = 0
+    audio.resetRotation()
     scene.setParts(state.parts)
     showMotion()
   })
   on(el('angle'), 'input', event => {
     stopAnimation()
     angle = Number(event.target.value)
-    showMotion()
+    showMotion(true)
     render()
   })
   on(el('applyHinge'), 'click', () => {
@@ -1130,6 +1172,7 @@ export async function mountEditor(root, { document, language, save, download, si
   on(el('play'), 'click', () => {
     if (frame) stopAnimation()
     else {
+      audio.unlock()
       stepAnimation.previous = 0
       frame = requestAnimationFrame(stepAnimation)
     }
@@ -1220,7 +1263,7 @@ export async function mountEditor(root, { document, language, save, download, si
       const max = Number(el('angle').max)
       const sensitivity = transmission?.solve ? Math.min(2, (max - min) / 180) : 2
       angle = Math.max(min, Math.min(max, drag.angle + (event.clientX - drag.x) * sensitivity * drag.sign))
-      showMotion()
+      showMotion(true)
     } else if (directDrag && !moving && (event.buttons & 1) &&
         Math.hypot(event.clientX - directDrag.start.clientX, event.clientY - directDrag.start.clientY) >= 5) {
       const { part, start } = directDrag
@@ -1389,8 +1432,10 @@ export async function mountEditor(root, { document, language, save, download, si
       const ids = new Set(selectionIds())
       const next = [...state.links, ...connectAligned(createAssembly(state.parts, state.links),
         state.parts.filter(part => ids.has(part.id)), state.parts.filter(part => !ids.has(part.id)))]
-      if (next.length > state.links.length) commit({ ...state, links: next })
-      else { message = t.noAlignedPorts; render() }
+      if (next.length > state.links.length) {
+        commit({ ...state, links: next })
+        audio.play('snap')
+      } else { message = t.noAlignedPorts; render() }
       return
     }
     const step = steps[event.code]

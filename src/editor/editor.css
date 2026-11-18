@@ -12,6 +12,9 @@
 .editor button.editor-primary{background:#ffb01b;color:#171410;border-color:#ffb01b;font-weight:650}
 .editor button.editor-primary:hover{background:#ffbf40}
 .editor .editor-square{font-size:20px;padding:0;width:35px;line-height:1}
+.editor .editor-sound{display:grid;place-items:center}
+.editor-sound .icon{width:17px;height:17px}
+.editor-sound[aria-pressed="false"] .sound-waves,.editor-sound[aria-pressed="true"] .sound-muted{display:none}
 .editor-workspace{position:relative;min-height:0;isolation:isolate}
 .editor-overlay{position:absolute;inset:14px;display:grid;gap:10px;grid-template-rows:auto minmax(0,1fr);pointer-events:none}
 .editor-panel-layer{position:relative;min-width:0;min-height:0}
@@ -90,7 +93,7 @@
 .editor-loading{display:grid;place-content:center;justify-items:center;gap:16px;text-align:center;padding:20px;color:var(--muted)}
 .editor-loading a{color:var(--gold)}
 body:has(.editor:not([hidden])){overflow:hidden}
-@media(max-width:1150px){
+@media(max-width:1200px){
   .editor-bar{flex-wrap:wrap}
   .editor-name{max-width:none}
   .editor-modes{order:4;width:100%;margin:0}
