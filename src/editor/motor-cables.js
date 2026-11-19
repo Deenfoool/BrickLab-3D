@@ -1,7 +1,7 @@
 import { CatmullRomCurve3, CubicBezierCurve3, Group, Mesh, MeshStandardMaterial, Quaternion, SphereGeometry, TubeGeometry, Vector3 } from 'three'
 import { portsFor } from '../mechanics/catalog.js?v=gear-selector'
 import { joinedPose } from './placement.js'
-import { loadPartModel, parts as catalog, partMesh } from './parts.js?v=catalog-page'
+import { loadPartModel, parts as catalog, partMesh } from './parts.js?v=plate-3666'
 import { isPfSupply, compatibleSupply, controlPlusBodies, motorSettings } from '../mechanics/motors.js'
 
 export function createMotorCables(parent, poseOf, invalidate = () => {}) {

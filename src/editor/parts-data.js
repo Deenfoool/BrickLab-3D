@@ -1,4 +1,4 @@
-import library from '../../catalog/parts-library.json?v=parts-library' with { type: 'json' }
+import library from '../../catalog/parts-library.json?v=plate-3666' with { type: 'json' }
 import { sectionsFor } from './library-data.js?v=parts-library'
 import buggyParts from '../../catalog/dune-buggy-parts.json?v=8845' with { type: 'json' }
 import engineParts from '../../catalog/inline-engine-parts.json' with { type: 'json' }
@@ -10,6 +10,7 @@ export const curated = {
   6558: { ru: 'Длинный штифт 3L с трением', en: 'Long friction pin 3L', color: '#626975' },
   11214: { ru: 'Длинный штифт-ось 3L', en: 'Long axle pin 3L', color: '#626975' },
   30374: { ru: 'Стержень 4L', en: 'Bar 4L', color: '#aeb7c2' },
+  3666: { color: '#202124', previewRevision: `${library.source.release}-3666` },
   3700: { ru: 'Кирпич Technic 1×2', en: 'Technic brick 1×2', color: '#bfc5cc' },
   3737: { ru: 'Крестовая ось 10L', en: 'Cross axle 10L', color: '#6b7480' },
   3705: { ru: 'Крестовая ось 4L', en: 'Cross axle 4L', color: '#aeb7c2' },
@@ -44,7 +45,7 @@ for (const design of ['4254', '4255', '8845-spring']) {
   const part = parts[design]
   Object.assign(part, {
     group: 'joints', preview: technicSection.parts.length, previewAssetPath: technicSection.parts[0].assetPath,
-    previewRevision: `${library.source.release}-8845`,
+    previewRevision: `${library.source.release}-3666`,
   })
   technicSection.parts.push(part)
 }

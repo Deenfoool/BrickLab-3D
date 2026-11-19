@@ -233,7 +233,7 @@ async function openLibrary() {
   try {
     const [{ mountLibrary }, { sections }] = await Promise.all([
       import('../editor/library.js?v=catalog-page'),
-      import('../editor/parts-data.js?v=catalog-page'),
+      import('../editor/parts-data.js?v=plate-3666'),
     ])
     if (controller.signal.aborted) return
     librarySearch.placeholder = labels.search
@@ -270,7 +270,7 @@ async function openEditor(project) {
   editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=pin-seat-targets')
+    const { mountEditor } = await import('../editor/editor.js?v=plate-3666')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

@@ -24,6 +24,9 @@ GROUPS = [
 ]
 GROUP_PRIORITY = ['power', 'pneumatics', 'panels', 'gears', 'joints', 'wheels', 'axles', 'beams', 'pins', 'other']
 
+# System pieces used by Technic builds, kept at the end of the index.
+SUPPLEMENTARY_DESIGNS = {'3666'}
+
 TITLES = [
     ('Electric Control+ Hub', 'Хаб Control+'),
     ('Electric Mindstorms EV3', 'Электроника Mindstorms EV3'),
@@ -250,7 +253,8 @@ def build(archive_path):
         named_technic = re.search(r'\btechnic\b|power functions|mindstorms|powered up|control\+|control plus|spike prime', title, re.I)
         wheel = category in {'Wheel', 'Tyre'} and not re.search(r'\b(?:minifig|duplo|train|scala)\b', title, re.I)
         related = named_technic and category not in {'Sticker', 'Sticker Shortcut', 'Obsolete'}
-        if design not in core and (title.startswith(('~', '=', '_')) or not (category == 'Technic' or related or wheel)):
+        if design not in core and design not in SUPPLEMENTARY_DESIGNS and (
+                title.startswith(('~', '=', '_')) or not (category == 'Technic' or related or wheel)):
             continue
         if title.startswith('~Moved to '):
             target = title.removeprefix('~Moved to ').lower()
@@ -258,7 +262,7 @@ def build(archive_path):
         group = 'wheels' if wheel else next(key for key in GROUP_PRIORITY if GROUP_PATTERNS[key].search(title))
         en = title.removeprefix('Technic ')
         entries.append((design, group, en, localized_title(title), path))
-    entries.sort(key=lambda item: (GROUP_PRIORITY.index(item[1]), item[2].lower(), item[0]))
+    entries.sort(key=lambda item: (item[0] in SUPPLEMENTARY_DESIGNS, GROUP_PRIORITY.index(item[1]), item[2].lower(), item[0]))
 
     # Reuse shared primitives instead of copying them into dozens of packs.
     trees = {entry[4]: closure([entry[4]]) for entry in entries if entry[0] not in core}
@@ -295,7 +299,8 @@ def build(archive_path):
     for entry in entries:
         missing = trees.get(entry[4], set()) - common
         proposed = batch_paths | missing
-        if batch and (len(batch) == 24 or sum(len(read(path)) for path in proposed) > 1_400_000):
+        if batch and ((entry[0] in SUPPLEMENTARY_DESIGNS) != (batch[0][0] in SUPPLEMENTARY_DESIGNS)
+                      or len(batch) == 24 or sum(len(read(path)) for path in proposed) > 1_400_000):
             flush()
         batch.append(entry)
         batch_paths.update(missing)
