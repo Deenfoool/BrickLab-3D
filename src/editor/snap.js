@@ -1,3 +1,4 @@
+import { sprockets, treadCandidates } from '../mechanics/treads.js'
 import { Box3, Plane, Quaternion, Vector3 } from 'three'
 import { measureInsertion } from '../mechanics/assembly.js?v=turntable-parts'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
@@ -168,6 +169,7 @@ export function nearbyConnections(context) {
   let bearingSockets
   for (const fixed of parts) {
     if (fixed.id === moving.id) continue
+    if (sprockets[fixed.design] || sprockets[moving.design]) candidates.push(...treadCandidates(moving, fixed, parts, scene, event, acceptPose))
     const fixedGear = gearPort(fixed)
     if (ownGear && fixedGear) {
       const candidate = meshCandidate({ scene, moving, fixed, ownGear, fixedGear, event, ray, acceptPose })
@@ -376,7 +378,7 @@ const envelopes = new WeakMap()
 function connectorEnvelope(part) {
   if (envelopes.has(part)) return envelopes.get(part)
   const box = new Box3()
-  let margin = 0
+  let margin = sprockets[part.design] ? 51 : 0
   for (const port of portsFor(part.design)) {
     const { start, axis } = worldPort(part, port)
     box.expandByPoint(start)

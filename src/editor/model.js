@@ -1,6 +1,7 @@
+import { sprockets, trackDrives, trackLine, trackPoses } from '../mechanics/treads.js'
 import { Quaternion, Vector3 } from 'three'
 import { connectionMode } from '../mechanics/axial.js?v=turntable-parts'
-import { Assembly } from '../mechanics/assembly.js?v=turntable-parts'
+import { Assembly, measureInsertion } from '../mechanics/assembly.js?v=turntable-parts'
 import { rotationalDrive } from '../mechanics/rotation.js?v=belt-drive'
 import { assembleBelts } from '../mechanics/belts.js?v=belt-drive'
 import { engineDrive } from '../mechanics/engine.js?v=belt-drive'
@@ -245,7 +246,7 @@ export function rotationMotion(selected, parts, assembly, linkage = linkedSelect
   if (engine || !driver) return engine
   const ports = portsFor(driver.design)
   const rotor = ports.some(port => spinRoles.has(port.role)) ? rotationPort(ports) : ports.find(port => port.rotor)
-  const preferred = rotor && portLine(driver, rotor)
+  const preferred = sprockets[driver.design] ? trackLine(driver) : rotor && portLine(driver, rotor)
   const crosses = new Map()
   for (const joint of joints) {
     if (joint.group !== 'uniJnt') continue
@@ -268,7 +269,19 @@ export function rotationMotion(selected, parts, assembly, linkage = linkedSelect
     pivots.forEach(pivot => replaced.add(pivot))
   }
   const spinJoints = joints.filter(joint => !replaced.has(joint))
-  const rotation = rotationalDrive(selected, byId.keys(), spinJoints, gears, preferred, couplings, assembly.belts)
+  const tracks = trackDrives(parts, assembly.connections)
+  const trackEdges = tracks.flatMap(({ drives: [source, ...others] }) => others.map(({ wheel, sign }) => ({
+    a: source.wheel.id, b: wheel.id, lineA: trackLine(source.wheel), lineB: trackLine(wheel),
+    ratio: source.sign * sign * sprockets[source.wheel.design].teeth / sprockets[wheel.design].teeth,
+  })))
+  const rotation = rotationalDrive(selected, byId.keys(), spinJoints, gears, preferred, couplings, [...assembly.belts, ...trackEdges])
+  if (rotation?.ok && tracks.length) {
+    rotation.tracks = tracks.filter(track => {
+      const wheel = track.drives[0].wheel, spin = rotation.spins.get(wheel.id)
+      return spin && measureInsertion(spin, trackLine(wheel))
+    })
+    rotation.belts = rotation.belts.filter(belt => belt.record)
+  }
   const rotateGear = id => {
     const gear = gears.find(item => item.part === id)
     return rotationalDrive(id, byId.keys(), spinJoints, gears, { start: gear.center, axis: gear.axis }, couplings, assembly.belts)
@@ -294,7 +307,9 @@ export function rotationPoses(parts, motion, angle, axis) {
     const moved = new Set(driven.map(part => part.id))
     return [...base.filter(part => !moved.has(part.id)), ...driven]
   }
-  return parts.flatMap(part => {
+  const treads = (motion.tracks ?? []).flatMap(track =>
+    trackPoses(track, motion.spins.get(track.drives[0].wheel.id), angle))
+  return treads.concat(parts.flatMap(part => {
     const spin = motion.spins.get(part.id)
     const cross = motion.cardans?.get(part.id)
     if (!spin && !cross) return []
@@ -308,7 +323,7 @@ export function rotationPoses(parts, motion, angle, axis) {
       position: new Vector3().fromArray(part.position).sub(start).applyQuaternion(turn).add(start).toArray(),
       rotation: new Quaternion().fromArray(part.rotation).premultiply(turn).toArray(),
     }]
-  })
+  }))
 }
 
 export function hingeMotion(selected, parts, links, chosen) {

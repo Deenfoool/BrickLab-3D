@@ -1385,3 +1385,49 @@ test('five tread links retain four pivots through two independent bends and a re
   assert.ok(Math.abs(reopened.connections[0].fit.placement.roll - .22) < 1e-6)
   assert.ok(Math.abs(reopened.connections[2].fit.placement.roll + .4) < 1e-6)
 })
+
+test('wide tread seats on a 40.4 sprocket in either placement order and leaves both hinges free', () => {
+  const wheel = { ...part('w', '57519'), position: [16, 30, -42], rotation: [.5, .5, .5, .5] }
+  const tread = part('t', '88323')
+  const seats = options(tread, wheel).filter(s => s.mesh?.kind === 'tread')
+  assert.equal(new Set(seats.map(s => s.point.toArray().join(','))).size, 10)
+  const placed = { ...tread, ...seats[0].pose }
+  assert.ok(options(wheel, placed).some(s => s.mesh && s.pose.position.every((v,i) => Math.abs(v-wheel.position[i]) < .001) &&
+    new Quaternion().fromArray(s.pose.rotation).angleTo(new Quaternion().fromArray(wheel.rotation)) < .001))
+  const duplicate = part('duplicate', '57518')
+  const other = nearbyConnections({ scene, moving: duplicate, parts: [wheel, placed],
+    assembly: createAssembly([wheel, placed, duplicate], []), depth: 0, roll: 0 })
+  assert.ok(!other.some(s => s.mesh && s.point.distanceTo(seats[0].point) < .001))
+  const motion = rotationMotion('w', [wheel, placed], createAssembly([wheel, placed], []))
+  assert.equal(rotationPoses([wheel, placed], motion, .3).length, 2)
+})
+
+test('closed track advances in both directions and drives a second sprocket without opening hinges', async () => {
+  const { treadSeats } = await import('../src/mechanics/treads.js')
+  const wheels = [part('a', '57519'), { ...part('b', '57519'), position: [120, 0, 0] }]
+  const links = [], pitchRadius = 15 / Math.sin(Math.PI / 10)
+  for (let side = 0; side < 2; side++) {
+    const seats = treadSeats(wheels[side], part('blank', '57518')).filter(s => s.sign === 1)
+    for (const seat of seats.slice(side * 5, side * 5 + 5)) links.push({ ...part(String(links.length), '57518'), ...seat.pose })
+    const q = new Quaternion().fromArray(seats[(side * 5 + 5) % 10].pose.rotation)
+    q.premultiply(new Quaternion().setFromAxisAngle(new Vector3(0,0,1), -Math.PI / 10))
+    for (let i = 0; i < 4; i++) links.push({ ...part(String(links.length), '88323'),
+      position: [side ? 120 - 30*i : 30*i, side ? pitchRadius : -pitchRadius, 0], rotation: q.toArray() })
+  }
+  const parts = [...wheels, ...links]
+  const assembly = createAssembly(parts, [])
+  connectAligned(assembly, links, links)
+  assert.equal(assembly.connections.length, links.length)
+  const motion = rotationMotion('a', parts, assembly)
+  assert.ok(motion.tracks[0].closed)
+  for (const fraction of [-1, -.37, .5, 1, 18]) {
+    const poses = rotationPoses(parts, motion, fraction * Math.PI / 5)
+    assert.ok(poses.some(p => p.id === 'b'))
+    const moved = links.map(l => poses.find(p => p.id === l.id))
+    for (let i = 0; i < moved.length; i++) {
+      const end = worldPort(moved[i], { start: [0,0,-30], axis: [1,0,0] }).start
+      assert.ok(end.distanceTo(new Vector3().fromArray(moved[(i+1)%moved.length].position)) < .002)
+    }
+    if (fraction === 1) assert.ok(new Vector3().fromArray(moved[0].position).distanceTo(new Vector3().fromArray(links[1].position)) < .001)
+  }
+})

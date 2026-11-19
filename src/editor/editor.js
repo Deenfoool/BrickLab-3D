@@ -5,10 +5,10 @@ import { mountMotorPanel } from './motor-panel.js'
 import { Plane, Quaternion, Vector3 } from 'three'
 import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=tread-pivot'
 import { baseRotation, mirrorPose, samePose, worldPort } from './placement.js?v=turntable-parts'
-import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=tread-pivot'
+import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=sprocket-track'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
 import { nearestDetent } from '../mechanics/axial.js?v=turntable-parts'
-import { nearbyConnections, translationSnaps } from './snap.js?v=tread-pivot'
+import { nearbyConnections, translationSnaps } from './snap.js?v=sprocket-track'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=turntable-parts'
 import { mountLibrary } from './library.js?v=system-tiles'
 import { createScene } from './scene.js?v=tread-pivot'
@@ -20,7 +20,7 @@ import { mountBeltPanel } from './belt-panel.js?v=belt-drive'
 import { upgradeInlineEngineFan } from './inline-engine.js'
 import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
-import { editorLabels } from './labels.js?v=shift-linkage'
+import { editorLabels } from './labels.js?v=sprocket-track'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
@@ -747,8 +747,9 @@ export async function mountEditor(root, { document, language, save, download, si
     positionHandles()
     if (part) el('color').value = /^#[0-9a-f]{6}$/i.test(part.color) ? part.color : parts[part.design].color
     const engagedBelts = (transmission?.belts ?? transmission?.rotation?.belts)?.length
-    const drives = [transmission?.meshes?.length || !engagedBelts ? `${t.mesh}: ${transmission?.meshes?.length ?? 0}` : '',
-      engagedBelts ? t.beltCount(engagedBelts) : ''].filter(Boolean).join(' · ')
+    const engagedTracks = transmission?.tracks?.length
+    const drives = [transmission?.meshes?.length || (!engagedBelts && !engagedTracks) ? `${t.mesh}: ${transmission?.meshes?.length ?? 0}` : '',
+      engagedBelts ? t.beltCount(engagedBelts) : '', engagedTracks ? t.trackCount(engagedTracks) : ''].filter(Boolean).join(' · ')
     el('links').hidden = addingBelt
     el('links').textContent = mode === 'kinematics'
       ? hinge ? (hinge.ok ? t.detented : t.closedHinge)
@@ -806,11 +807,12 @@ export async function mountEditor(root, { document, language, save, download, si
   function renderHint(painting, selectingInBox) {
     const fit = candidate?.fit
     const rotationCue = { fixed: t.fixed, locked: t.locked, detented: t.detented, continuous: t.freely, ball: t.ballJoint, slider: t.travel, spring: t.mechanisms.suspension }
+    const meshCue = mesh => mesh.kind === 'tread' ? t.treadSnap : t.gearSnap
     const cue = fit ? rotationCue[fit.motion.rotation]
-      : candidate?.mesh ? t.gearSnap : candidate?.failure?.includes('occupied') ? t.occupied : candidate?.failure ? t.blocked : t.free
+      : candidate?.mesh ? meshCue(candidate.mesh) : candidate?.failure?.includes('occupied') ? t.occupied : candidate?.failure ? t.blocked : t.free
     el('hint').textContent = simulating(mode) ? message : painting ? message || t.paintHint :
       resize ? t.lengthPreview(parts[resize.pose.design][language], resize.lost.length, resize.kept) :
-      gizmoSnap?.mesh ? t.gearSnap : gizmoSnap?.fit ? t.snapPreview : moving ? `${cue} · ${t.place}${placingCopy ? (language === 'ru' ? ' · Ctrl+X/Y/Z — отразить' : ' · Ctrl+X/Y/Z — mirror') : ''}`
+      gizmoSnap?.mesh ? meshCue(gizmoSnap.mesh) : gizmoSnap?.fit ? t.snapPreview : moving ? `${cue} · ${t.place}${placingCopy ? (language === 'ru' ? ' · Ctrl+X/Y/Z — отразить' : ' · Ctrl+X/Y/Z — mirror') : ''}`
       : pendingPart ? t.loadingPart(pendingPart.part[language]) : message ||
         (selectingInBox ? selected ? `${t.selectedCount(selectionIds().length)} · ${t.boxActions}` : t.boxHint
           : unknownPartCount ? t.unknown(unknownPartCount) : t.camera)
@@ -1222,7 +1224,7 @@ export async function mountEditor(root, { document, language, save, download, si
   function stepAnimation(time) {
     if (!frame) return
     if (!stepAnimation.previous) stepAnimation.previous = time
-    const speed = transmission?.playback ?? (transmission?.belts?.length ? 90 : 1.5)
+    const speed = transmission?.playback ?? (transmission?.belts?.length || transmission?.tracks?.length ? 90 : 1.5)
     angle += Math.min(50, time - stepAnimation.previous) * speed / 1000
     stepAnimation.previous = time
     const limit = Number(el('angle').max)
