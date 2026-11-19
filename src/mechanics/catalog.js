@@ -38,6 +38,11 @@ const selectorGuides = {
   18947: { id: 'selector-guide', role: 'selector-guide', gender: 'F', length: 56 },
 }
 
+const turntables = {
+  18938: [60, 'M'], 88738: [60, 'M'], 18939: [60, 'F'],
+  99010: [28, 'M'], 99009: [28, 'F'],
+}
+
 const shockPort = (id, role, gender, start, axis, extra) => ({
   id, role, gender, start, axis, openings: ['start'], reference: [0, 0, 1],
   sections: [{ shape: 'Q', radius: 1, length: 1 }], ...extra,
@@ -66,20 +71,35 @@ const suspensionPorts = Object.fromEntries(shockFamilies.flatMap(({ group, rod, 
 ]))
 
 export function hasConnectors(design) {
-  return Object.hasOwn(technic, design) || Boolean(catalogFor(design) || support[design]?.ports?.length || suspensionPorts[design])
+  return Object.hasOwn(technic, design) || Object.hasOwn(turntables, design) ||
+    Boolean(catalogFor(design) || support[design]?.ports?.length || suspensionPorts[design])
 }
 
 export function portsFor(design) {
   if (Object.hasOwn(technic, design)) return technic[design]
   if (!imported.has(design)) {
-    const catalog = catalogFor(design)
-    const base = catalog?.parts[design].map(([key, type, point]) => ({
+    // BrickLab's 88738 body uses the same hole datums and pitch circle as 18938.
+    const profileDesign = design === '88738' && !catalogFor(design) ? '18938' : design
+    const catalog = catalogFor(profileDesign)
+    const base = catalog?.parts[profileDesign].map(([key, type, point]) => ({
       id: `shadow-${key}`, ...catalog.definitions[type], ...catalog.locations[point],
       ...(catalog.definitions[type].role === 'rim-seat' && { mates: profiles.rimMates[design] }),
       ...(catalog.definitions[type].role === 'tyre-seat' && { design }),
       ...(suspensionPorts[design] && /:(?:fake-)?spring-[01]$/.test(catalog.definitions[type].group ?? '') && { legacy: true }),
     })) ?? support[design]?.ports ?? noPorts
     const supported = suspensionPorts[design] ? [...base, ...suspensionPorts[design]] : base
+    if (design === '88738' && profileDesign === '18938') {
+      const gear = supported.find(port => port.role === 'gear')
+      gear.sections = gear.sections.map(section => ({ ...section, length: 15 }))
+    }
+    if (Object.hasOwn(turntables, design)) {
+      const [teeth, gender] = turntables[design]
+      supported.push({
+        id: 'turntable-bearing', role: gender === 'M' ? 'turntable-top' : 'turntable-base',
+        group: `turntable-${teeth}`, gender, openings: ['start'],
+        start: [0, 0, 0], axis: [0, -1, 0], sections: [{ shape: 'Q', radius: 1, length: 1 }],
+      })
+    }
     if (['u9479c01', '40940', '10089c01', '10095'].includes(design)) supported.push({
       id: 'control-plus-output', role: ['40940', '10095'].includes(design) ? 'clip' : 'pivot',
       gender: ['40940', '10095'].includes(design) ? 'F' : 'M', group: ['10095', '10089c01'].includes(design) ? 'pf-l-output' : 'control-plus-l-output',

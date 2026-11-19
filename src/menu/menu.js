@@ -237,7 +237,7 @@ async function openLibrary() {
   try {
     const [{ mountLibrary }, { sections }] = await Promise.all([
       import('../editor/library.js?v=system-tiles'),
-      import('../editor/parts-data.js?v=system-tiles'),
+      import('../editor/parts-data.js?v=turntable-parts'),
     ])
     if (controller.signal.aborted) return
     librarySearch.placeholder = labels.search
@@ -274,7 +274,7 @@ async function openEditor(project) {
   editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=half-pin-seats')
+    const { mountEditor } = await import('../editor/editor.js?v=turntable-parts')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

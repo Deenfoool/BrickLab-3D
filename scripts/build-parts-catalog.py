@@ -5,6 +5,7 @@ from functools import lru_cache
 import gzip
 from hashlib import sha256
 import json
+from math import cos, radians, sin
 from pathlib import Path
 import re
 from zipfile import ZipFile
@@ -201,9 +202,47 @@ def write_json(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, separators=(',', ':')) + '\n', encoding='utf-8')
 
 
+def straight_turntable():
+    # Approximate 88738 with Philippe Hurbain's LDraw 18938 body (CC BY 4.0)
+    # and a new spur rim on its axis. Keep the Technic hole and bearing datums.
+    lines = [
+        '0 Technic Turntable 60 Tooth Straight Top',
+        '0 Name: 88738.dat',
+        '0 !HISTORY BrickLab model based on 18938 by Philippe Hurbain [Philo]',
+        '0 !LICENSE Licensed under CC BY 4.0 : see CAreadme.txt',
+        '0 BFC CERTIFY CCW',
+        '1 16 40 -20 0 0 -1 0 0 0 -1 1 0 0 connhol3.dat',
+        '1 16 -40 -20 0 0 1 0 0 0 -1 -1 0 0 connhol3.dat',
+    ]
+    for x in (1, -1):
+        for z in (1, -1):
+            lines.append(f'1 16 0 0 0 {x} 0 0 0 1 0 0 0 {z} s\\18938s01.dat')
+
+    outline = [(radians(6 * tooth + angle), radius) for tooth in range(60)
+               for angle, radius in ((-2.1, 69), (-.9, 77.5), (.9, 77.5), (2.1, 69))]
+
+    def vertex(angle, radius, height):
+        return (radius * cos(angle), height, radius * sin(angle))
+
+    def face(*vertices):
+        lines.append('4 16 ' + ' '.join(f'{point:.5f}' for vertex in vertices for point in vertex))
+
+    for (a, ra), (b, rb) in zip(outline, outline[1:] + outline[:1]):
+        top_a, top_b = vertex(a, ra, -5), vertex(b, rb, -5)
+        bottom_a, bottom_b = vertex(a, ra, 10), vertex(b, rb, 10)
+        inner_top_a, inner_top_b = vertex(a, 67, -5), vertex(b, 67, -5)
+        inner_bottom_a, inner_bottom_b = vertex(a, 67, 10), vertex(b, 67, 10)
+        face(inner_top_a, top_a, top_b, inner_top_b)
+        face(top_a, bottom_a, bottom_b, top_b)
+        face(inner_bottom_a, inner_bottom_b, bottom_b, bottom_a)
+        face(inner_top_a, inner_top_b, inner_bottom_b, inner_bottom_a)
+    return '\n'.join(lines) + '\n'
+
+
 def build(archive_path):
     source = ZipFile(archive_path)
     files = {name.lower().split('/', 1)[1]: name for name in source.namelist() if name.lower().startswith('ldraw/')}
+    turntable = 'parts/88738.dat'
     notes = sorted(name for name in files if re.fullmatch(r'models/note\d{4}ca\.txt', name))
     # The archive has older notes too, so compare versions after 2000 in the same YYMM format.
     version = re.search(r'(\d{2})(\d{2})ca', notes[-1])
@@ -220,6 +259,8 @@ def build(archive_path):
 
     @lru_cache
     def read(path):
+        if path == turntable and path not in files:
+            return straight_turntable()
         data = source.read(files[path])
         try:
             return data.decode('utf-8-sig').replace('\r\n', '\n')
@@ -344,6 +385,11 @@ def build(archive_path):
         return index
 
     index = pack_library(models, entries, embedded=core)
+    if turntable not in files:
+        pack = 'turntable-88738'
+        write_pack(models / f'{pack}.json.gz', closure([turntable]))
+        index.append(['88738', 'joints', 'Turntable 60 Tooth Straight Top',
+                      'Поворотная платформа 60T, верх с прямыми зубьями', pack, pack])
     plate_index = pack_library(system_models, system_plates, extra_common=('ldconfig.ldr',))
     slope_index = pack_library(system_models, system_slopes, extra_common=('ldconfig.ldr',), prefix='slope-')
     tile_index = pack_library(system_models, system_tiles, extra_common=('ldconfig.ldr',), prefix='tile-')
@@ -362,7 +408,7 @@ def build(archive_path):
         'source': {'name': 'LDraw Parts Library', 'release': release, 'sha256': sha256(archive_path.read_bytes()).hexdigest()},
         'sections': [
             {'id': 'technic', 'ru': 'Technic', 'en': 'Technic', 'assetPath': 'technic',
-             'groups': [group[:3] for group in GROUPS], 'parts': index},
+             'revision': f'{release}-turntables', 'groups': [group[:3] for group in GROUPS], 'parts': index},
             {'id': 'system', 'ru': 'System', 'en': 'System', 'assetPath': 'system',
              'revision': f'{release}-tiles',
              'groups': SYSTEM_GROUPS, 'parts': system_index, 'aliases': aliases},

@@ -45,6 +45,7 @@ export function connectionMode(male, female) {
   }
   const family = `${male.role}:${female.role}`
   if (male.group && male.group === female.group) {
+    if (family === 'turntable-top:turntable-base') return { rotation: 'continuous', anchor: 'pivot', orientation: 1 }
     if (family === 'shift-tip:shift-groove') return { rotation: 'continuous', anchor: 'pivot' }
     if (family === 'piston:damper-cylinder') return { rotation: 'slider', anchor: 'slide', stroke: female.stroke }
     if (family === 'coil:coil-seat') return { rotation: 'spring', anchor: 'pivot' }
@@ -201,7 +202,8 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
     }
   }
   if (mode.anchor || mode.rimSeat) {
-    const [seat, orientation] = mode.rimSeat ?? [0, mode.anchor === 'pivot' && mode.rotation !== 'spring' ? direction : 1]
+    const [seat, orientation] = mode.rimSeat ?? [0, mode.orientation ??
+      (mode.anchor === 'pivot' && mode.rotation !== 'spring' ? direction : 1)]
     if (orientation !== direction || Math.abs(offset - seat) > .01) return { ok: false, reason: 'seat-alignment' }
     const keyStep = mode.anchor === 'keyed' ? Math.PI * 2 : null
     return {

@@ -1,9 +1,9 @@
 import { Box3, Plane, Quaternion, Vector3 } from 'three'
-import { measureInsertion } from '../mechanics/assembly.js?v=gear-selector'
+import { measureInsertion } from '../mechanics/assembly.js?v=turntable-parts'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
-import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=gear-selector'
-import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=half-pin-seats'
-import { candidateOffsets, joinedPose, samePose, worldPort } from './placement.js?v=mirror-menu'
+import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=turntable-parts'
+import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=turntable-parts'
+import { candidateOffsets, joinedPose, samePose, worldPort } from './placement.js?v=turntable-parts'
 
 const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')
 const canSlideOn = port => ['axle', 'duplo-axle', 'rod'].includes(port.role)
@@ -140,7 +140,7 @@ function anchorCandidate(context, fixed, fixedPort, own, start, mode) {
   const socket = { part: ownMale ? fixed.id : moving.id, port: (ownMale ? fixedPort : own).id }
   const key = JSON.stringify([fixed.id, fixedPort.id, own.id, 'anchor'])
   const sameDirection = worldPort(moving, own).axis.dot(worldPort(fixed, fixedPort).axis) >= 0
-  const direction = mode.anchor === 'pivot' && mode.rotation !== 'spring' && !sameDirection ? -1 : 1
+  const direction = mode.orientation ?? (mode.anchor === 'pivot' && mode.rotation !== 'spring' && !sameDirection ? -1 : 1)
   const offset = mode.stroke ? (mode.stroke[0] + mode.stroke[1]) / 2 : 0
   const fit = assembly.previewInsertion(shaft, socket, { offset, direction })
   if (!fit.ok) return { key, point: start, distance, failure: fit.reason }
@@ -181,7 +181,8 @@ export function nearbyConnections(context) {
       if (fixedPort.role === 'gear' || fixedPort.legacy) continue
       const { start, axis } = worldPort(fixed, fixedPort)
       const span = portLength(fixedPort)
-      if (['shift-tip', 'shift-groove', 'ball', 'ball-socket', 'pivot', 'clip', 'plug', 'receptacle', 'piston', 'damper-cylinder', 'coil', 'coil-seat'].includes(fixedPort.role)) {
+      if (['shift-tip', 'shift-groove', 'ball', 'ball-socket', 'pivot', 'clip', 'plug', 'receptacle',
+        'piston', 'damper-cylinder', 'coil', 'coil-seat', 'turntable-top', 'turntable-base'].includes(fixedPort.role)) {
         if (scene.pixelDistance(start, event) > 31) continue
         for (const own of ownConnectors) {
           const mode = own.gender === 'M' ? connectionMode(own, fixedPort) : connectionMode(fixedPort, own)

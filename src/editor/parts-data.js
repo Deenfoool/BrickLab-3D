@@ -1,4 +1,4 @@
-import library from '../../catalog/parts-library.json?v=system-tiles' with { type: 'json' }
+import library from '../../catalog/parts-library.json?v=turntable-parts' with { type: 'json' }
 import { sectionsFor } from './library-data.js?v=system-tiles'
 import buggyParts from '../../catalog/dune-buggy-parts.json?v=8845' with { type: 'json' }
 import engineParts from '../../catalog/inline-engine-parts.json' with { type: 'json' }
@@ -11,6 +11,8 @@ export const curated = {
   11214: { ru: 'Длинный штифт-ось 3L', en: 'Long axle pin 3L', color: '#626975' },
   30374: { ru: 'Стержень 4L', en: 'Bar 4L', color: '#aeb7c2' },
   3666: { color: '#202124' },
+  88738: { color: '#202124' },
+  99010: { color: '#202124', ru: 'Поворотная платформа 28T, верх' },
   3700: { ru: 'Кирпич Technic 1×2', en: 'Technic brick 1×2', color: '#bfc5cc' },
   3737: { ru: 'Крестовая ось 10L', en: 'Cross axle 10L', color: '#6b7480' },
   3705: { ru: 'Крестовая ось 4L', en: 'Cross axle 4L', color: '#aeb7c2' },
@@ -45,7 +47,7 @@ for (const design of ['4254', '4255', '8845-spring']) {
   const part = parts[design]
   Object.assign(part, {
     group: 'joints', preview: technicSection.parts.length, previewAssetPath: technicSection.parts[0].assetPath,
-    previewRevision: `${library.source.release}-system-family`,
+    previewRevision: technicSection.parts[0].revision,
   })
   technicSection.parts.push(part)
 }

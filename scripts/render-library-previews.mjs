@@ -25,7 +25,7 @@ try {
   await page.goto(values.url)
   const sections = await page.evaluate(async () => {
     const THREE = await import('three')
-    const { sections, loadPartModel, partMesh } = await import('./src/editor/parts.js?v=system-tiles')
+    const { sections, loadPartModel, partMesh } = await import('./src/editor/parts.js?v=turntable-parts')
     const { previewColumns, previewRows, previewPageSize } = await import('./src/editor/library-data.js?v=system-tiles')
     const width = 144
     const height = 92

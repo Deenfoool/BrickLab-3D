@@ -182,6 +182,44 @@ test('the 2432 System tile seats flush on both studs of a 1 × 2 plate', () => {
   assert.equal(createAssembly([plate, tile], links).connections.length, 2)
 })
 
+test('Technic turntables seat on their matching bases and turn independently', () => {
+  for (const [design, baseDesign, wrongBase, teeth] of [
+    ['88738', '18939', '99009', 60],
+    ['18938', '18939', '99009', 60],
+    ['99010', '99009', '18939', 28],
+  ]) {
+    assert.equal(availableParts[design]?.group, 'joints')
+    const gear = portsFor(design).find(port => port.role === 'gear')
+    assert.equal(gear?.sections[0].teeth, teeth)
+    const base = part('base', baseDesign)
+    const top = { ...part('top', design), rotation: [1, 0, 0, 0] }
+    const snap = options(top, base).find(candidate => candidate.fit)
+    assert.ok(snap, design)
+    assert.equal(snap.fit.motion.rotation, 'continuous')
+    assert.equal(snap.fit.placement.direction, 1)
+    assert.ok(!options(top, part('wrong', wrongBase)).some(candidate => candidate.fit), design)
+    const assembled = [{ ...top, ...snap.pose }, base]
+    const link = { shaft: snap.shaft, socket: snap.socket, placement: snap.fit.placement }
+    const assembly = createAssembly(assembled, [link])
+    assert.equal(assembly.connections.length, 1)
+    const motion = rotationMotion(top.id, assembled, assembly)
+    assert.ok(motion?.ok, design)
+    const rotated = rotationPoses(assembled, motion, Math.PI / 3)
+    assert.deepEqual(rotated.map(part => part.id), [top.id])
+    assert.deepEqual(rotated[0].position, base.position)
+    assert.notDeepEqual(rotated[0].rotation, assembled[0].rotation)
+    assert.equal(createAssembly([rotated[0], base], [link]).connections.length, 1)
+
+    const { radius, length } = gear.sections[0]
+    const pinion = { ...part('pinion', '10928'), position: [radius + 10, 10 - length / 2, 0],
+      rotation: new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI / 2).toArray() }
+    const train = [...assembled, pinion]
+    const driven = rotationMotion(top.id, train, createAssembly(train, [link]))
+    assert.ok(driven?.ok, design)
+    assert.equal(driven.spins.get(pinion.id)?.ratio, -teeth / 8)
+  }
+})
+
 test('a 1 × 4 tile snaps at all seven underside positions on the stud end of a half pin', () => {
   const tile = part('tile', '2431')
   const tilePorts = portsFor(tile.design)
