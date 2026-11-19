@@ -245,6 +245,7 @@ export async function mountEditor(root, { document, language, save, download, si
   let isolation
   let hidden = hiddenSceneParts(layers, visibleParts)
   let moving
+  let placingCopy = false
   let pastedGroup
   let tool = 'move'
   const additional = new Set()
@@ -795,7 +796,7 @@ export async function mountEditor(root, { document, language, save, download, si
       : candidate?.mesh ? t.gearSnap : candidate?.failure?.includes('occupied') ? t.occupied : candidate?.failure ? t.blocked : t.free
     el('hint').textContent = simulating(mode) ? message : painting ? message || t.paintHint :
       resize ? t.lengthPreview(parts[resize.pose.design][language], resize.lost.length, resize.kept) :
-      gizmoSnap?.mesh ? t.gearSnap : gizmoSnap?.fit ? t.snapPreview : moving ? `${cue} · ${t.place}`
+      gizmoSnap?.mesh ? t.gearSnap : gizmoSnap?.fit ? t.snapPreview : moving ? `${cue} · ${t.place}${placingCopy ? (language === 'ru' ? ' · Ctrl+X/Y/Z — отразить' : ' · Ctrl+X/Y/Z — mirror') : ''}`
       : pendingPart ? t.loadingPart(pendingPart.part[language]) : message ||
         (selectingInBox ? selected ? `${t.selectedCount(selectionIds().length)} · ${t.boxActions}` : t.boxHint
           : unknownPartCount ? t.unknown(unknownPartCount) : t.camera)
@@ -875,6 +876,7 @@ export async function mountEditor(root, { document, language, save, download, si
       if (pastedGroup) scene.setParts(state.parts)
     }
     moving = null
+    placingCopy = false
     pastedGroup = null
     directDrag = null
     movesExisting = false
@@ -915,6 +917,28 @@ export async function mountEditor(root, { document, language, save, download, si
     if (isolation) isolation = new Set([...isolation, id, ...additional])
     commit({ parts: placed, links: nextLinks, belts: [...state.belts, ...(pastedBelts ?? [])] })
     audio.play(meshed || hasNewConnection(previousLinks, state.links) ? 'snap' : 'place')
+  }
+
+  function mirrorCopy(axis) {
+    const anchor = pose ?? moving
+    const reflect = part => mirrorPose(part, axis, anchor.position)
+    const next = reflect(anchor)
+    if (pastedGroup) {
+      const items = groupTransforms(pastedGroup.items, pastedGroup.anchor, anchor).map(reflect)
+      const copied = [next, ...items]
+      const byId = new Map(copied.map(part => [part.id, part]))
+      const assembly = createAssembly([...state.parts, ...copied], state.links)
+      const links = []
+      for (const link of pastedGroup.links) {
+        const fit = connectPlaced(assembly, byId.get(link.shaft.part), byId.get(link.socket.part), link)
+        if (fit.ok) links.push(connectionRecord({ ...link, fit }))
+      }
+      placementAssembly = assembly
+      pastedGroup = { ...pastedGroup, anchor: next, items, links }
+    }
+    moving = next
+    candidate = null
+    if (pointer) updatePointer(pointer)
   }
 
   function turnPart([axis, direction]) {
@@ -1008,6 +1032,8 @@ export async function mountEditor(root, { document, language, save, download, si
     }))
     const [anchor, ...items] = copied
     startPlacement(anchor, false, undefined, items.length ? { anchor, items, links, belts } : undefined)
+    placingCopy = true
+    renderHint(false, false)
   }
 
   function setTool(next) {
@@ -1586,6 +1612,12 @@ export async function mountEditor(root, { document, language, save, download, si
     }
     if (event.target.closest?.('input, textarea, select, [contenteditable]') || event.altKey) return
     if (event.ctrlKey || event.metaKey) {
+      const mirrorAxis = ['KeyX', 'KeyY', 'KeyZ'].indexOf(event.code)
+      if (placingCopy && event.ctrlKey && !event.shiftKey && mirrorAxis >= 0) {
+        event.preventDefault()
+        if (!event.repeat) mirrorCopy(mirrorAxis)
+        return
+      }
       const layerActions = {
         KeyA: () => selectParts(state.parts.map(part => part.id)),
         KeyG: () => { if (selected) createGroup() },
