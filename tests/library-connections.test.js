@@ -241,29 +241,39 @@ test('the imported frames keep separate holes and allow round pin fits, includin
   assert.equal(connectAligned(createAssembly([beam, placed], []), [placed], [beam]).length, 1)
 })
 
-test('the 13x3 alternating-hole beam accepts pins and axles from both sides of all 29 bores', () => {
-  const beam = part('frame', '4526')
-  const holes = portsFor(beam.design).filter(port => port.role === 'bearing')
-  const centers = holes.map(port => port.start.map((value, index) => value + port.axis[index] * portLength(port) / 2).join(','))
-  const expected = [
-    ...[-20, 20].flatMap(x => [-120, -80, -40, 0, 40, 80, 120].map(z => [x, 0, z])),
-    ...[-20, 20].flatMap(x => [-100, -60, -20, 20, 60, 100].map(z => [x, 0, z])),
-    [0, 0, 0], [0, 0, -120], [0, 0, 120],
-  ]
-  assert.deepEqual(centers.sort(), expected.map(center => center.join(',')).sort())
-  for (const design of ['2780', '3705']) {
-    const moving = part('shaft', design)
-    const snaps = options(moving, beam).filter(snap => snap.fit)
-    for (const hole of holes) {
-      for (const side of ['start', 'end']) {
-        const snap = snaps.find(option => option.socket.port === hole.id && option.fit.placement.side === side)
-        assert.ok(snap, `No ${design} snap at ${hole.start} from ${side}`)
-        assert.equal(snap.fit.motion.rotation, 'continuous')
-        assert.equal(restore(snap, moving, beam).length, 1)
+for (const [design, expected] of [
+  ['4526', [
+    ...[-20, 20].flatMap(x => [-120, -80, -40, 0, 40, 80, 120].map(z => [x, -10, z, 0, 1, 0])),
+    ...[-30, 10].flatMap(x => [-100, -60, -20, 20, 60, 100].map(z => [x, 0, z, 1, 0, 0])),
+    [0, -10, 0, 0, 1, 0], [0, 0, -130, 0, 0, 1], [0, 0, 110, 0, 0, 1],
+  ]],
+  ['2477', [
+    ...[0, 40, 80].map(z => [0, -10, z, 0, 1, 0]),
+    [40, -10, 80, 0, 1, 0],
+    ...[20, 60].map(z => [-10, 0, z, 1, 0, 0]),
+    [20, 0, 70, 0, 0, 1],
+  ]],
+]) {
+  test(`alternating-hole beam ${design} accepts pins and axles from both sides of all ${expected.length} bores`, () => {
+    const beam = part('frame', design)
+    const holes = portsFor(beam.design).filter(port => port.role === 'bearing')
+    assert.deepEqual(holes.map(port => [...port.start, ...port.axis].join(',')).sort(),
+      expected.map(datum => datum.join(',')).sort())
+    for (const shaftDesign of ['2780', '3705']) {
+      const moving = part('shaft', shaftDesign)
+      const snaps = options(moving, beam).filter(snap => snap.fit)
+      for (const hole of holes) {
+        assert.equal(portLength(hole), 20)
+        for (const side of ['start', 'end']) {
+          const snap = snaps.find(option => option.socket.port === hole.id && option.fit.placement.side === side)
+          assert.ok(snap, `No ${shaftDesign} snap at ${hole.start} from ${side}`)
+          assert.equal(snap.fit.motion.rotation, 'continuous')
+          assert.equal(restore(snap, moving, beam).length, 1)
+        }
       }
     }
-  }
-})
+  })
+}
 
 test('thin Technic liftarms snap to an axle next to either end and keep the keyed fit on reload', () => {
   const axle = part('axle', '44294')
