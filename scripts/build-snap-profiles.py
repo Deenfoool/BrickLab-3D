@@ -342,6 +342,16 @@ def assembly_ports(archive):
 
 def geometry_ports(design, title, cylinders, archive):
     result = OVERRIDES.get(design, []).copy()
+    if design == '11609':
+        # The star's underside takes a stud up to the narrow center bore.
+        result.append(cylinder('F', 'one', [0, 0, 0], [0, -1, 0], 'R', 6, 5.5))
+    if design == '6901':
+        # The sunflower's open stud and its underside are offset by 8 LDU.
+        result.extend([
+            cylinder('F', 'one', [0, 8, 0], [0, -1, 0], 'R', 6, 5),
+            cylinder('M', 'one', [0, 0, 0], [0, -1, 0], 'R', 6, 4),
+            cylinder('F', 'one', [0, -4, 0], [0, 1, 0], 'R', 4, 4),
+        ])
     if title.startswith('Pneumatic Tube') and design.endswith('-f1'):
         geometry = archive.read(f'ldraw/parts/{design}.dat').decode(errors='replace')
         for name, transform in part_refs(geometry):
@@ -617,6 +627,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('upstream', type=Path)
     parser.add_argument('archive', type=Path, help='LDraw complete.zip used to build the parts index')
+    parser.add_argument('--system-plates', action='store_true', help='Write only the System plate connector catalog')
     args = parser.parse_args()
     upstream = read(args.upstream)
     index = read(ROOT / 'catalog/parts-library.json')
@@ -625,8 +636,14 @@ def main():
         parser.error('LDraw archive does not match the parts index')
     wheel_designs = {design: title for section in index['sections'] for design, _, title, *_ in section['parts']}
     wheel_ports, rim_mates = wheel_data(args.archive, upstream, wheel_designs)
-    parts = sorted(row for section in index['sections'] for row in section['parts'])
+    technic = sorted(row for section in index['sections'] if section['id'] == 'technic' for row in section['parts'])
+    system = sorted(row for section in index['sections'] if section['id'] == 'system' for row in section['parts'])
+    # Preserve existing endpoint IDs for System parts already used by complete examples.
+    example_ports = {design for name in ('dune-buggy-parts.json', 'inline-engine-parts.json')
+                     for design, entry in read(ROOT / 'catalog' / name).items() if entry.get('ports')}
+    parts = technic + [row for row in system if row[0] not in example_ports]
     groups = defaultdict(set)
+    technic_groups = defaultdict(set)
     by_design = {}
     measured_bores = {}
     with ZipFile(args.archive) as archive:
@@ -665,6 +682,8 @@ def main():
             for port in ports:
                 if signature := match_signature(port):
                     groups[signature].add(port[0][1])
+                    if group != 'plates':
+                        technic_groups[signature].add(port[0][1])
 
     specs = {}
     locations = {}
@@ -681,14 +700,14 @@ def main():
         key = sha256(json.dumps(identity, separators=(',', ':')).encode()).hexdigest()[:12]
         return [key, type_index, loc_index]
 
-    for design, group, _, _, _ in parts:
+    def record_design(design, group, signatures):
         if design in curated or design in registry:
             coverage[group] += 1
-            continue
+            return
         ports = [port for port in by_design[design]
-                 if not match_signature(port) or groups[match_signature(port)] == {'M', 'F'}]
+                 if not match_signature(port) or signatures[match_signature(port)] == {'M', 'F'}]
         if not ports:
-            continue
+            return
         coverage[group] += 1
         records = [record(port) for port in ports]
         if len({entry[0] for entry in records}) != len(records):
@@ -696,6 +715,24 @@ def main():
         registry[design] = records
         by_design[design] = ports
 
+    if args.system_plates:
+        for design, group, _, _, _ in system:
+            if design in example_ports:
+                coverage[group] += 1
+            else:
+                record_design(design, group, groups)
+        parts = ',\n'.join(json.dumps(design) + ':' + json.dumps(ports, separators=(',', ':'))
+                           for design, ports in registry.items())
+        output = {'source': SOURCE, 'shadow': SHADOW, 'ldraw': index['source']['release'],
+                  'types': list(specs), 'locations': list(locations)}
+        packed = json.dumps(output, separators=(',', ':'))
+        (ROOT / 'catalog/system-plate-connectors.json').write_text(
+            packed[:-1] + ',\n"parts":{\n' + parts + '\n}\n}\n', encoding='utf-8')
+        print(f'System: {coverage["plates"]} plate designs with connectors')
+        return
+
+    for design, group, _, _, _ in technic:
+        record_design(design, group, technic_groups)
     # Add verified geometry after encoding shadow data to keep its profile indexes stable.
     for design, measured in measured_bores.items():
         if design in registry:

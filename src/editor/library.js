@@ -1,4 +1,4 @@
-import { previewColumns, previewRows, previewPageSize, searchLibrary } from './library-data.js?v=parts-library'
+import { previewColumns, previewRows, previewPageSize, searchLibrary } from './library-data.js?v=system-plates'
 
 const batchSize = 48
 

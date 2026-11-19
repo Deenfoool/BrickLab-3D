@@ -139,6 +139,29 @@ function restore(snap, moving, fixed) {
     [{ shaft: snap.shaft, socket: snap.socket, placement: snap.fit.placement }]).connections
 }
 
+test('each System plate has connectors and the legacy Volvo plate keeps its endpoint IDs', () => {
+  const plates = library.sections.find(section => section.id === 'system').parts
+  for (const [design] of plates) assert.ok(portsFor(design).length, design)
+  for (const design of ['3024', '3023b', '3020', '3034', '11609', '6901']) {
+    assert.ok(plates.some(([id]) => id === design), design)
+  }
+  assert.ok(portsFor('3666').some(port => port.id === '8845-support-17'))
+
+  const bottom = part('bottom', '3023b')
+  const top = { ...part('top', '3023b'), position: [0, -8, 0] }
+  const links = connectAligned(createAssembly([bottom, top], []), [top], [bottom])
+  assert.equal(links.length, 2)
+  assert.equal(createAssembly([bottom, top], links).connections.length, 2)
+
+  for (const [design, height] of [['11609', 0], ['6901', 8]]) {
+    const support = part('support', '3024')
+    const decoration = { ...part('decoration', design), position: [0, -height, 0] }
+    const mates = connectAligned(createAssembly([support, decoration], []), [decoration], [support])
+    assert.equal(mates.length, 1, design)
+    assert.equal(createAssembly([support, decoration], mates).connections.length, 1, design)
+  }
+})
+
 test('each structural connector mates through its accessible ends and survives reopening', () => {
   const profiles = new Map()
   for (const [design] of technicParts) {

@@ -1,6 +1,6 @@
 """Generate BrickLab's parts index and local model packs from LDraw complete.zip."""
 import argparse
-from collections import Counter
+from collections import Counter, defaultdict
 from functools import lru_cache
 import gzip
 from hashlib import sha256
@@ -25,7 +25,6 @@ GROUPS = [
 GROUP_PRIORITY = ['power', 'pneumatics', 'panels', 'gears', 'joints', 'wheels', 'axles', 'beams', 'pins', 'other']
 
 SYSTEM_GROUPS = [('plates', 'Пластины', 'Plates')]
-SYSTEM_DESIGNS = {'3666': 'plates'}
 
 TITLES = [
     ('Electric Control+ Hub', 'Хаб Control+'),
@@ -242,7 +241,8 @@ def build(archive_path):
         return result
 
     entries = []
-    system_index = []
+    system_entries = []
+    redirects = {}
     for path in sorted(files):
         if not re.fullmatch(r'parts/[^/]+\.dat', path):
             continue
@@ -251,11 +251,16 @@ def build(archive_path):
             header = file.read(2048).decode('utf-8-sig', errors='replace')
         first = header.splitlines()[0][2:].strip()
         title = ' '.join(first.split())
-        if design in SYSTEM_DESIGNS:
-            system_index.append([design, SYSTEM_DESIGNS[design], title, localized_title(title), 'common'])
-            continue
+        if title.startswith(('=Plate ', '~Moved to ')):
+            target = re.search(r'^1 16 0 0 0 1 0 0 0 1 0 0 0 1 ([^\s/]+)\.dat\s*$', read(path), re.M | re.I)
+            if target:
+                redirects[design] = target[1].lower()
         category = re.search(r'^0 !CATEGORY ([^\r\n]+)', header, re.M)
         category = category[1].strip() if category else title.partition(' ')[0]
+        # Plate also includes Duplo and other product lines in the LDraw index.
+        if category == 'Plate' and title.startswith('Plate '):
+            system_entries.append((design, 'plates', title, localized_title(title), path))
+            continue
         named_technic = re.search(r'\btechnic\b|power functions|mindstorms|powered up|control\+|control plus|spike prime', title, re.I)
         wheel = category in {'Wheel', 'Tyre'} and not re.search(r'\b(?:minifig|duplo|train|scala)\b', title, re.I)
         related = named_technic and category not in {'Sticker', 'Sticker Shortcut', 'Obsolete'}
@@ -269,58 +274,76 @@ def build(archive_path):
         entries.append((design, group, en, localized_title(title), path))
     entries.sort(key=lambda item: (GROUP_PRIORITY.index(item[1]), item[2].lower(), item[0]))
 
-    # Reuse shared primitives instead of copying them into dozens of packs.
-    trees = {entry[4]: closure([entry[4]]) for entry in entries if entry[0] not in core}
-    common = {path for path, count in Counter(dep for tree in trees.values() for dep in tree).items() if count >= 30}
+    system_entries.sort(key=lambda item: (item[2].lower(), item[0]))
 
     def write_pack(output, paths):
         # Use the same names that Three.js derives for LDraw references.
         data = {}
         for path in sorted(paths):
-            file = path.split('/', 1)[1]
+            file = path.split('/', 1)[-1]
             key = path if file.startswith(('s/', '48/')) else file
             data[key] = read(path)
         payload = json.dumps(data, ensure_ascii=False, separators=(',', ':')).encode()
         output.write_bytes(gzip.compress(payload, compresslevel=9, mtime=0))
 
-    write_pack(models / 'common.json.gz', common)
-    index = []
-    batch = []
-    batch_paths = set()
-    pack_index = 0
+    def pack_library(directory, entries, embedded=(), extra_common=()):
+        trees = {entry[4]: closure([entry[4]]) for entry in entries if entry[0] not in embedded}
+        # Share common primitives while fetching only the models in the active pack.
+        counts = Counter(dep for tree in trees.values() for dep in tree)
+        common = {path for path, count in counts.items() if count >= 30}
+        write_pack(directory / 'common.json.gz', common.union(extra_common))
+        index = []
+        batch = []
+        batch_paths = set()
+        pack_index = 0
 
-    def flush():
-        nonlocal pack_index, batch_paths
-        if batch:
+        def flush():
+            nonlocal pack_index, batch_paths
+            if not batch:
+                return
             pack_index += 1
             pack = f'{pack_index:03}'
             if batch_paths:
-                write_pack(models / f'{pack}.json.gz', batch_paths)
-            index.extend([design, group, en, ru, None if design in core else pack if trees[path] - common else 'common']
-                         for design, group, en, ru, path in batch)
+                write_pack(directory / f'{pack}.json.gz', batch_paths)
+            for design, group, en, ru, path in batch:
+                asset = None if design in embedded else pack if trees[path] - common else 'common'
+                index.append([design, group, en, ru, asset])
             batch.clear()
             batch_paths = set()
 
-    for entry in entries:
-        missing = trees.get(entry[4], set()) - common
-        proposed = batch_paths | missing
-        if batch and (len(batch) == 24 or sum(len(read(path)) for path in proposed) > 1_400_000):
-            flush()
-        batch.append(entry)
-        batch_paths.update(missing)
-    flush()
-    system_index.sort(key=lambda row: (row[1], row[2].lower(), row[0]))
-    write_pack(system_models / 'common.json.gz', closure([f'parts/{row[0]}.dat' for row in system_index]))
+        for entry in entries:
+            missing = trees.get(entry[4], set()) - common
+            proposed = batch_paths | missing
+            if batch and (len(batch) == 24 or sum(len(read(path)) for path in proposed) > 1_400_000):
+                flush()
+            batch.append(entry)
+            batch_paths.update(missing)
+        flush()
+        return index
+
+    index = pack_library(models, entries, embedded=core)
+    system_index = pack_library(system_models, system_entries, extra_common=('ldconfig.ldr',))
+    system_designs = {design for design, *_ in system_index}
+    aliases = defaultdict(list)
+    for design, target in redirects.items():
+        visited = {design}
+        while target in redirects and target not in visited:
+            visited.add(target)
+            target = redirects[target]
+        if target in system_designs:
+            aliases[target].append(design)
+
     write_json(ROOT / 'catalog/parts-library.json', {
         'source': {'name': 'LDraw Parts Library', 'release': release, 'sha256': sha256(archive_path.read_bytes()).hexdigest()},
         'sections': [
             {'id': 'technic', 'ru': 'Technic', 'en': 'Technic', 'assetPath': 'technic',
              'groups': [group[:3] for group in GROUPS], 'parts': index},
             {'id': 'system', 'ru': 'System', 'en': 'System', 'assetPath': 'system',
-             'groups': SYSTEM_GROUPS, 'parts': system_index},
+             'revision': f'{release}-plates',
+             'groups': SYSTEM_GROUPS, 'parts': system_index, 'aliases': aliases},
         ],
     })
-    print(f'{release}: {len(index)} Technic parts in {pack_index} packs, {len(system_index)} System parts')
+    print(f'{release}: {len(index)} Technic parts, {len(system_index)} System parts')
 
 
 if __name__ == '__main__':

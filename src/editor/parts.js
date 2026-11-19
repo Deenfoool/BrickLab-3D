@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.js'
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js'
-import { curated, partOrder, parts, sections } from './parts-data.js?v=system-family'
+import { curated, partOrder, parts, sections } from './parts-data.js?v=system-plates'
 
 export { parts, sections }
 
@@ -35,7 +35,7 @@ function newLoader() {
   return new LDrawLoader().setConditionalLineMaterial(LDrawConditionalLineMaterial)
 }
 
-export function extractModel(group, preserveColors = false) {
+export function extractModel(group, preserveColors = false, preserveMaterials = false) {
   const meshes = []
   const bounds = new THREE.Box3()
   group.updateMatrixWorld(true)
@@ -55,9 +55,13 @@ export function extractModel(group, preserveColors = false) {
       }
       geometry.index.needsUpdate = true
     }
-    if (preserveColors) {
+    if (preserveColors || preserveMaterials) {
       const materials = Array.isArray(node.material) ? node.material : [node.material]
-      geometry.userData.codes = materials.map(mat => mat.userData.code)
+      if (preserveMaterials) {
+        geometry.userData.finishes = materials.map(mat => String(mat.userData.code) === '16' ? null : mat)
+      } else {
+        geometry.userData.codes = materials.map(mat => mat.userData.code)
+      }
     }
     geometry.computeBoundingBox()
     bounds.union(geometry.boundingBox)
@@ -119,11 +123,13 @@ export async function loadPartModel(part) {
   loader.addDefaultMaterials()
   const preserveColors = ['99499', '99499c01', '10089c01', '10095', '58124c01', '23816a',
     '58119', '64228c01', '84599', '22127', '85824'].includes(part.design)
-  const palette = preserveColors ? Object.entries(electricColors).map(([code, color]) =>
+  const system = part.assetPath === 'system'
+  const palette = system ? common['ldconfig.ldr'].split('\n').filter(line => line.startsWith('0 !COLOUR ')).join('\n')
+    : preserveColors ? Object.entries(electricColors).map(([code, color]) =>
     `0 !COLOUR Electric_${code} CODE ${code} VALUE ${color} EDGE #333333`).join('\n') : ''
   const content = `0 FILE bricklab-part.ldr\n${palette}\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 ${modelFile}\n${embedded.join('')}`
   const group = await new Promise((resolve, reject) => loader.parse(content, resolve, reject))
-  const model = extractModel(group, preserveColors)
+  const model = extractModel(group, preserveColors, system)
   if (!model) throw new Error(`LDraw part has no geometry: ${part.design}`)
   return model
 }
@@ -144,7 +150,8 @@ export function partMesh(model, color, ghost = false) {
     finish.depthWrite = false
   }
   for (const mesh of model.meshes) {
-    const colors = !ghost && mesh.userData.codes?.map(code => fixedFinishes.get(String(code)) ?? finish)
+    const colors = !ghost && (mesh.userData.finishes?.map(material => material ?? finish) ??
+      mesh.userData.codes?.map(code => fixedFinishes.get(String(code)) ?? finish))
     group.add(new THREE.Mesh(mesh, colors ? (colors.length === 1 ? colors[0] : colors) : finish))
   }
   group.userData.finish = finish
