@@ -9,7 +9,7 @@ function element(tag, className, value) {
   return node
 }
 
-export function mountLibrary(root, { sections, language, labels, selectPart, hasConnectors, initialGroup = '', signal }) {
+export function mountLibrary(root, { sections, language, labels, selectPart, hasConnectors, initialSection, initialGroup = '', signal }) {
   const controls = root.querySelector('[data-library-controls]')
   const scroll = root.querySelector('[data-library-scroll]')
   const cards = root.querySelector('[data-library-cards]')
@@ -29,7 +29,7 @@ export function mountLibrary(root, { sections, language, labels, selectPart, has
     const parts = [...section.parts].sort((a, b) => order.get(a.group) - order.get(b.group) || a.preview - b.preview)
     return { ...section, parts }
   }) : sections
-  let section = catalog[0]
+  let section = catalog.find(item => item.id === initialSection) ?? catalog[0]
   let matches = []
   let limit = 0
   let activeDesign
@@ -40,6 +40,7 @@ export function mountLibrary(root, { sections, language, labels, selectPart, has
   sectionSelect.setAttribute('aria-label', labels.librarySection)
   groupSelect.setAttribute('aria-label', labels.partFamily)
   for (const item of catalog) sectionSelect.add(new Option(item[language], item.id))
+  sectionSelect.value = section.id
   if (!browsing || catalog.length > 1) controls.prepend(sectionSelect)
   controls.append(groupSelect, total)
   scroll.append(empty, more)
@@ -158,6 +159,7 @@ export function mountLibrary(root, { sections, language, labels, selectPart, has
   filter()
 
   return {
+    get section() { return section.id },
     get group() { return groupSelect.value },
     setPlacement(design, pending, canPlace) {
       const previous = [activeDesign, pendingDesign]

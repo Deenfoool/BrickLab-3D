@@ -9,6 +9,7 @@ const { values } = parseArgs({ options: {
   url: { type: 'string', default: 'http://localhost:8032/' },
   chromium: { type: 'string' },
   start: { type: 'string', default: '0' },
+  section: { type: 'string' },
 } })
 const browser = await chromium.launch({
   executablePath: values.chromium,
@@ -24,7 +25,7 @@ try {
   await page.goto(values.url)
   const sections = await page.evaluate(async () => {
     const THREE = await import('three')
-    const { sections, loadPartModel, partMesh } = await import('./src/editor/parts.js?v=parts-library')
+    const { sections, loadPartModel, partMesh } = await import('./src/editor/parts.js?v=system-family')
     const { previewColumns, previewRows, previewPageSize } = await import('./src/editor/library-data.js?v=parts-library')
     const width = 144
     const height = 92
@@ -85,7 +86,9 @@ try {
       id, path: parts[0].assetPath, pages: Math.ceil(parts.length / previewPageSize),
     }))
   })
-  for (const { id, path, pages } of sections) {
+  const selected = values.section ? sections.filter(section => section.id === values.section) : sections
+  if (!selected.length) throw new Error(`Unknown library section: ${values.section}`)
+  for (const { id, path, pages } of selected) {
     const output = `assets/ldraw/${path}/previews`
     await mkdir(output, { recursive: true })
     for (let index = Number(values.start); index < pages; index += 1) {

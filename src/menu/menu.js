@@ -23,6 +23,7 @@ const libraryScroll = libraryRoot.querySelector('[data-library-scroll]')
 const librarySearch = libraryControls.querySelector('input')
 let editorSession
 let librarySession
+let librarySection
 let libraryGroup = ''
 let language = 'ru'
 
@@ -213,7 +214,10 @@ function render() {
 
 function closeLibrary() {
   if (!librarySession) return
-  if (librarySession.view) libraryGroup = librarySession.view.group
+  if (librarySession.view) {
+    librarySection = librarySession.view.section
+    libraryGroup = librarySession.view.group
+  }
   librarySession.controller.abort()
   librarySession = null
 }
@@ -232,14 +236,14 @@ async function openLibrary() {
   libraryRetry.hidden = true
   try {
     const [{ mountLibrary }, { sections }] = await Promise.all([
-      import('../editor/library.js?v=catalog-page'),
-      import('../editor/parts-data.js?v=plate-3666'),
+      import('../editor/library.js?v=system-family'),
+      import('../editor/parts-data.js?v=system-family'),
     ])
     if (controller.signal.aborted) return
     librarySearch.placeholder = labels.search
     librarySearch.setAttribute('aria-label', labels.search)
     session.view = mountLibrary(libraryRoot, {
-      sections, language: session.language, labels, initialGroup: libraryGroup, signal: controller.signal,
+      sections, language: session.language, labels, initialSection: librarySection, initialGroup: libraryGroup, signal: controller.signal,
     })
     libraryControls.hidden = false
     libraryScroll.hidden = false
@@ -270,7 +274,7 @@ async function openEditor(project) {
   editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=plate-3666')
+    const { mountEditor } = await import('../editor/editor.js?v=system-family')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

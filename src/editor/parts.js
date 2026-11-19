@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.js'
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js'
-import { curated, partOrder, parts, sections } from './parts-data.js?v=plate-3666'
+import { curated, partOrder, parts, sections } from './parts-data.js?v=system-family'
 
 export { parts, sections }
 
