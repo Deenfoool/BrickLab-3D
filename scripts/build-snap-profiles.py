@@ -462,7 +462,7 @@ def primitive_holes(archive):
     return as_ports
 
 
-def slope_stud_geometry(archive):
+def stud_primitives(archive):
     # Primitive datums are in LDraw coordinates. The open end of a stud tube is at -4.
     standard = {
         'stud.dat': [('M', 0, -4, 6)],
@@ -722,7 +722,12 @@ def main():
     with ZipFile(args.archive) as archive:
         contacts = assembly_ports(archive)
         fallback = primitive_holes(archive)
-        slope_studs = slope_stud_geometry(archive)
+        stud_geometry = stud_primitives(archive)
+        half_pin_studs = {
+            design: [port for source in stud_geometry(design)
+                     if (port := adapt(source, '')) and port[0][0] == 'stud']
+            for design in ('4274', '61184')
+        }
         for design, group, title, *_ in parts:
             if design in curated:
                 continue
@@ -749,7 +754,7 @@ def main():
             if not ports:
                 measured = fallback(design)
                 if group == 'slopes':
-                    measured += slope_fallback(design, cylinders, slope_studs)
+                    measured += slope_fallback(design, cylinders, stud_geometry)
                 ports = list(unique_ports(port for c in measured if (port := adapt(c, title))))
             by_design[design] = list(unique_ports([*ports, *legacy]))
             structural = group in {'beams', 'pins'} or title.startswith((
@@ -819,6 +824,9 @@ def main():
     for design, measured in measured_bores.items():
         if design in registry:
             registry[design] = [record(port) for port in merge_round_bores(by_design[design], measured)]
+    # The short end on each half pin is an open stud. Keep the original pin endpoint for saved connections.
+    for design, studs in half_pin_studs.items():
+        registry[design].extend(record(port) for port in studs)
     output = {'source': SOURCE, 'shadow': SHADOW, 'ldraw': index['source']['release'],
               'types': list(specs), 'locations': list(locations), 'rimMates': rim_mates}
     # Keep one location or profile per line for review.

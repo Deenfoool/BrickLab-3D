@@ -182,6 +182,43 @@ test('the 2432 System tile seats flush on both studs of a 1 × 2 plate', () => {
   assert.equal(createAssembly([plate, tile], links).connections.length, 2)
 })
 
+test('a 1 × 4 tile snaps at all four seats of its underside on the stud end of a half pin', () => {
+  const tile = part('tile', '2431')
+  for (const design of ['4274', '61184']) {
+    const pin = part('pin', design)
+    const stud = portsFor(design).find(port => port.role === 'stud')
+    assert.ok(stud, design)
+    const sockets = portsFor(tile.design).filter(port => port.role === 'anti-stud')
+    assert.equal(sockets.length, 4)
+    for (const [moving, fixed] of [[tile, pin], [pin, tile]]) {
+      const snaps = options(moving, fixed).filter(snap => snap.fit && snap.shaft.port === stud.id)
+      for (const socket of sockets) {
+        const snap = snaps.find(snap => snap.socket.port === socket.id)
+        assert.ok(snap, `${design}, moving ${moving.design}: ${socket.id}`)
+        assert.deepEqual(snap.fit.occupancy.shaft, [0, 4])
+        assert.equal(snap.fit.placement.offset, 0)
+        assert.equal(restore(snap, moving, fixed).length, 1)
+      }
+    }
+
+    const beam = part('beam', '32523')
+    const pinPort = portsFor(design).find(port => port.role === 'pin')
+    const pinSnap = options(pin, beam).find(snap => snap.fit && snap.shaft.port === pinPort.id &&
+      snap.fit.occupancy.shaft[0] === 0 && snap.fit.occupancy.shaft[1] === 20)
+    assert.ok(pinSnap, design)
+    const installed = { ...pin, ...pinSnap.pose }
+    const members = [beam, installed, tile]
+    const link = { shaft: pinSnap.shaft, socket: pinSnap.socket, placement: pinSnap.fit.placement }
+    const assembly = createAssembly(members, [link])
+    assert.equal(assembly.connections.length, 1)
+    const snap = nearbyConnections({ scene, moving: tile, parts: [beam, installed], assembly, depth: 0, roll: 0 })
+      .find(candidate => candidate.fit && candidate.shaft.part === pin.id && candidate.shaft.port === stud.id)
+    assert.ok(snap, design)
+    assert.equal(createAssembly([beam, installed, { ...tile, ...snap.pose }],
+      [link, { shaft: snap.shaft, socket: snap.socket, placement: snap.fit.placement }]).connections.length, 2)
+  }
+})
+
 test('each structural connector mates through its accessible ends and survives reopening', () => {
   const profiles = new Map()
   for (const [design] of technicParts) {
