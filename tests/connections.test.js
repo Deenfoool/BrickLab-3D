@@ -148,6 +148,60 @@ test('the translation gizmo seats a long pin flush across all three beams', () =
   assert.equal(createAssembly(parts, links).connections.length, 3)
 })
 
+test('the 13971 rim can target all three seats on both 3L friction pins', () => {
+  const rim = { ...part('rim', '13971'), rotation: [0, Math.SQRT1_2, 0, Math.SQRT1_2] }
+  for (const design of ['6558', '42924']) {
+    for (const reverse of [false, true]) {
+      const pin = { ...part('pin', design), rotation: reverse ? [0, 1, 0, 0] : [0, 0, 0, 1] }
+      const assembly = createAssembly([pin, rim], [])
+      for (const [index, center] of [-20, 0, 20].entries()) {
+        const x = reverse ? -center : center
+        const [snap] = nearbyConnections({ scene: { pixelDistance: point => Math.hypot(point.x - x, point.y) * 7 },
+          parts: [pin], moving: rim, assembly, ray: new Ray(new Vector3(x, 0, 100), new Vector3(0, 0, -1)),
+          depth: 0, roll: 0 })
+        assert.ok(snap?.fit, `No rim snap on ${design} at x=${x}`)
+        assert.ok(Math.abs(snap.pose.position[0] - x) < 1e-6)
+        assert.deepEqual(snap.fit.occupancy.shaft.map(value => Math.round(value) || 0), [20 * index, 20 * (index + 1)])
+      }
+    }
+  }
+})
+
+test('seven rims on the middle of their pins leave the outer seats available for a 15L beam', () => {
+  const beamRotation = [0, 0, Math.SQRT1_2, Math.SQRT1_2]
+  const rimRotation = [0, Math.SQRT1_2, 0, Math.SQRT1_2]
+  const span = [-120, -80, -40, 0, 40, 80, 120]
+  const support = { ...part('support', '32278', [-20, 0, 0]), rotation: beamRotation }
+  const beam = { ...part('beam', '32278', [20, 0, 0]), rotation: beamRotation }
+  const pins = span.map(z => part(`pin-${z}`, '6558', [0, 0, z]))
+  const rims = span.map(z => ({ ...part(`rim-${z}`, '13971', [0, 0, z]), rotation: rimRotation }))
+  const parts = [support, beam, ...pins, ...rims]
+  const assembly = createAssembly(parts, [])
+  const links = connectAligned(assembly, pins, [support])
+  assert.equal(links.length, 7)
+  for (const rim of rims) {
+    const z = rim.position[2]
+    const [snap] = nearbyConnections({ scene: { pixelDistance: point => Math.hypot(point.x, point.z - z) * 7 },
+      parts: pins, moving: rim, assembly, ray: new Ray(new Vector3(0, 100, z), new Vector3(0, -1, 0)),
+      depth: 0, roll: 0 })
+    assert.ok(snap?.fit)
+    assert.ok(Math.abs(snap.pose.position[0]) < 1e-6)
+    Object.assign(rim, snap.pose)
+    links.push(...connectAligned(assembly, [rim], pins))
+  }
+  assert.equal(links.length, 14)
+  const aim = new Vector3(30, 0, 0)
+  const snaps = nearbyConnections({ scene: { pixelDistance: point => point.distanceTo(aim) * 7 },
+    parts: pins, moving: beam, assembly, ray: new Ray(new Vector3(30, 100, 0), new Vector3(0, -1, 0)),
+    depth: 0, roll: 0 })
+  const snap = snaps.find(option => option.fit && Math.hypot(...option.pose.position.map((value, i) => value - beam.position[i])) < 1e-6)
+  assert.ok(snap)
+  Object.assign(beam, snap.pose)
+  links.push(...connectAligned(assembly, [beam], pins))
+  assert.equal(links.length, 21)
+  assert.equal(createAssembly(parts, links).connections.length, 21)
+})
+
 test('a hybrid pin transmits rotation at the cross axle end and turns freely in a beam', () => {
   const assembly = new Assembly(technic)
   assembly.addPart('hybrid', '43093')

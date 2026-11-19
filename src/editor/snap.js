@@ -99,6 +99,16 @@ function shaftTargets(port, start, axis, span, along) {
   return port.openings.map(side => ({ side, point, along }))
 }
 
+function longPinTargets(port, start, axis, span) {
+  const targets = []
+  for (let along = pinPitch / 2; along < span; along += pinPitch) {
+    for (const target of shaftTargets(port, start, axis, span, along)) {
+      targets.push({ ...target, targetKind: `pin-seat-${along}` })
+    }
+  }
+  return targets
+}
+
 function withinSnapRange(scene, event, targets) {
   return targets.map(target => ({ ...target, distance: scene.pixelDistance(target.point, event) }))
     .filter(({ distance }) => Number.isFinite(distance) && distance <= 31)
@@ -185,6 +195,7 @@ export function nearbyConnections(context) {
       const slidingShaft = canSlideOn(fixedPort)
       const gizmoShaft = acceptPose && slidingShaft
       const stops = slidingShaft && depth === 0 ? assembly.shaftEntryStops({ part: fixed.id, port: fixedPort.id }) : null
+      let pinTargets
       for (const own of ownConnectors) {
         const movingShaft = own.gender === 'M'
         const male = movingShaft ? own : fixedPort
@@ -194,6 +205,11 @@ export function nearbyConnections(context) {
         const ownWorld = acceptPose && worldPort(moving, own)
         const socketWidth = portLength(female)
         let points = targets
+        const fitsLongPin = longPinBore(male, female)
+        if (!movingShaft && fitsLongPin) {
+          pinTargets ??= withinSnapRange(scene, event, longPinTargets(fixedPort, start, axis, span))
+          points = [...targets, ...pinTargets]
+        }
         if (gizmoShaft && !movingShaft) {
           const center = ownWorld.start.clone().addScaledVector(ownWorld.axis, socketWidth / 2)
           const along = center.sub(start).dot(axis)
@@ -223,7 +239,7 @@ export function nearbyConnections(context) {
           points = [...points, ...withinSnapRange(scene, event, shoulders)]
         }
         if (!points.length) continue
-        const pin = depth === 0 && longPinBore(male, female)
+        const pin = depth === 0 && fitsLongPin
         let stack = []
         if (pin && movingShaft && !acceptPose) {
           bearingSockets ??= parts.filter(part => part.id !== moving.id).flatMap(part => portsFor(part.design)
@@ -289,6 +305,8 @@ export function nearbyConnections(context) {
                 const bounds = fit.occupancy.shaft
                 const endpoint = nearShoulder ? shoulder : along ?? (side === 'end' ? span : 0)
                 const reach = movingShaft ? 0 : Math.abs((bounds[0] + bounds[1]) / 2 - endpoint)
+                // At the tip of a molded pin, prefer the full seat to a shallower fit.
+                const partialPinSeat = pin && !coversPinBore(fit) ? span : 0
                 const turn = orientation.angleTo(new Quaternion().fromArray(pose.rotation))
                 const shift = acceptPose ? Math.hypot(...pose.position.map((value, i) => value - moving.position[i])) : 0
                 const pinSeat = Boolean(acceptPose && pin && shift <= pinSeatRadius + .01 &&
@@ -296,7 +314,7 @@ export function nearbyConnections(context) {
                 const seats = stack.length ? Number(coversPinBore(fit)) + seatedPinNeighbors(assembly, stack, shaft, pose, male) : 0
                 // An extra fully seated bore takes precedence over the pin's free roll.
                 const score = acceptPose ? shift - (pinSeat ? pinSeatRadius + .01 : 0)
-                  : movingShaft ? turn - seats * 2 * Math.PI : reach
+                  : movingShaft ? turn - seats * 2 * Math.PI : reach + partialPinSeat
                 if (!best || score <= best.score) {
                   if (!best || score < best.score || (!mode.axialRange && turn < best.turn)) {
                     best = { key, point, distance, fit, pose, shaft, socket, score, turn, pinSeat }
