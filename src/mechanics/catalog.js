@@ -136,6 +136,14 @@ export function portsFor(design) {
           { group: 'changeover', slot: 'shift-tip', shift, reference: [1, 0, 0] }))
       }
     }
+    if (/^(57518|88323)(c\d+)?$/.test(design)) {
+      // Both clips capture the same crossbar, forming one hinge across the tread.
+      for (const [role, gender, z] of [['pivot', 'M', 0], ['clip', 'F', -30]]) {
+        supported.push({ id: 'tread-' + role, role, gender, group: 'tread-5-wide',
+          openings: ['start'], start: [0, 0, z], axis: [1, 0, 0], reference: [0, 1, 0],
+          sections: [{ shape: 'R', radius: 4, length: 28 }] })
+      }
+    }
     imported.set(design, design === '4032a' ? [...supported, roundPlateAxleHole] : supported)
   }
   return imported.get(design)

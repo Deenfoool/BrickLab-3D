@@ -1355,3 +1355,33 @@ test('mirroring an assembly reflects its connectors and preserves its seated lin
     }
   }
 })
+
+test('five tread links retain four pivots through two independent bends and a reload', async () => {
+  const { hingeMotion, hingePoses } = await import('../src/editor/model.js')
+  const records = []
+  let chain = [part('0', '57518')]
+  for (let i = 1; i <= 4; i++) {
+    const link = part(String(i), i % 2 ? '57518' : '88323')
+    const snap = options(link, chain.at(-1)).find(s => s.shaft?.part === link.id && s.socket.port === 'tread-clip')
+    assert.ok(snap?.fit)
+    chain.push({ ...link, ...snap.pose })
+    records.push({ shaft: snap.shaft, socket: snap.socket, placement: snap.fit.placement })
+  }
+  for (const [i, angle] of [[1, .22], [3, -.4]]) {
+    const joints = createAssembly(chain, records).connections
+    const axis = hingeMotion(String(i), chain, joints, joints[i - 1])
+    assert.equal(axis.moving.size, 5 - i)
+    chain = hingePoses(chain, axis, axis.roll + angle)
+    const checked = createAssembly(chain, [])
+    records.length = 0
+    for (const j of joints) {
+      const fit = connectPlaced(checked, chain.find(p => p.id === j.shaft.part), chain.find(p => p.id === j.socket.part), j)
+      assert.ok(fit.ok)
+      records.push({shaft: j.shaft, socket: j.socket, placement: fit.placement})
+    }
+  }
+  const reopened = createAssembly(JSON.parse(JSON.stringify(chain)), JSON.parse(JSON.stringify(records)))
+  assert.equal(reopened.connections.length, 4)
+  assert.ok(Math.abs(reopened.connections[0].fit.placement.roll - .22) < 1e-6)
+  assert.ok(Math.abs(reopened.connections[2].fit.placement.roll + .4) < 1e-6)
+})

@@ -2,7 +2,7 @@ import { Box3, Plane, Quaternion, Vector3 } from 'three'
 import { measureInsertion } from '../mechanics/assembly.js?v=turntable-parts'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
 import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=turntable-parts'
-import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=turntable-parts'
+import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=tread-pivot'
 import { candidateOffsets, joinedPose, samePose, worldPort } from './placement.js?v=turntable-parts'
 
 const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')

@@ -236,7 +236,9 @@ export function createScene(host, models) {
     invalidate()
   }
 
-  function setTool(mode, part, ids = []) {
+  const jointFrame = new THREE.Quaternion()
+  let jointOrigin
+  function setTool(mode, part, ids = [], joint) {
     if (gizmo.dragging) return
     if (!mode || !part || hidden.has(part.id)) {
       gizmo.enabled = false
@@ -256,6 +258,14 @@ export function createScene(host, models) {
         .applyQuaternion(pivot.quaternion.clone().invert()))
     }
     pivot.position.fromArray(part.position).add(pivotOffset.clone().applyQuaternion(pivot.quaternion))
+    jointOrigin = joint?.start
+    gizmo.setSpace(joint ? 'local' : 'world')
+    gizmo.showY = gizmo.showZ = !joint
+    if (joint) {
+      jointFrame.setFromUnitVectors(new THREE.Vector3(1, 0, 0), joint.axis)
+      pivot.position.copy(joint.start)
+      pivot.quaternion.copy(jointFrame)
+    }
     gizmo.setMode(mode)
     gizmo.enabled = true
     gizmo.attach(pivot)
@@ -277,6 +287,11 @@ export function createScene(host, models) {
   }
 
   function gizmoPose(part) {
+    if (jointOrigin) {
+      const delta = pivot.quaternion.clone().multiply(jointFrame.clone().invert())
+      return { ...part, position: new THREE.Vector3(...part.position).sub(jointOrigin).applyQuaternion(delta).add(jointOrigin).toArray(),
+        rotation: delta.multiply(new THREE.Quaternion(...part.rotation)).toArray() }
+    }
     return { ...part, position: pivot.position.clone().sub(pivotOffset.clone().applyQuaternion(pivot.quaternion)).toArray(), rotation: pivot.quaternion.toArray() }
   }
 

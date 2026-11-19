@@ -6,7 +6,7 @@ import { assembleBelts } from '../mechanics/belts.js?v=belt-drive'
 import { engineDrive } from '../mechanics/engine.js?v=belt-drive'
 import { cardanCoupling } from '../mechanics/cardan.js'
 import { movePose, turnPose, articulationDrive, jointBodies, linkageDrive, mechanismPoses, motionRange, suspensionDrive } from '../mechanics/linkage.js'
-import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=turntable-parts'
+import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=tread-pivot'
 import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=turntable-parts'
 import { clutchTravel, selectorLinkages } from './selector-linkage.js?v=selector-drag'
 import { motorSupply } from '../mechanics/motors.js'
@@ -311,8 +311,8 @@ export function rotationPoses(parts, motion, angle, axis) {
   })
 }
 
-export function hingeMotion(selected, parts, links) {
-  const joint = links.find(({ shaft, socket, fit }) =>
+export function hingeMotion(selected, parts, links, chosen) {
+  const joint = chosen ?? links.find(({ shaft, socket, fit }) =>
     fit.motion.detents.length && (shaft.part === selected || socket.part === selected))
   if (!joint) return undefined
   const movingShaft = joint.shaft.part === selected

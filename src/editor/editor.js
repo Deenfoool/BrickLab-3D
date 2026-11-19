@@ -3,15 +3,15 @@ import { mountFloatingPanels } from './floating-panels.js?v=scene-parts'
 import { createEditorAudio } from './audio.js?v=editor-sound'
 import { mountMotorPanel } from './motor-panel.js'
 import { Plane, Quaternion, Vector3 } from 'three'
-import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=turntable-parts'
-import { baseRotation, mirrorPose, samePose } from './placement.js?v=turntable-parts'
-import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=turntable-parts'
+import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=tread-pivot'
+import { baseRotation, mirrorPose, samePose, worldPort } from './placement.js?v=turntable-parts'
+import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=tread-pivot'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
 import { nearestDetent } from '../mechanics/axial.js?v=turntable-parts'
-import { nearbyConnections, translationSnaps } from './snap.js?v=turntable-parts'
+import { nearbyConnections, translationSnaps } from './snap.js?v=tread-pivot'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=turntable-parts'
 import { mountLibrary } from './library.js?v=system-tiles'
-import { createScene } from './scene.js?v=turntable-parts'
+import { createScene } from './scene.js?v=tread-pivot'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=belt-drive'
@@ -115,6 +115,7 @@ export async function mountEditor(root, { document, language, save, download, si
           <button type="button" data-el="boxTool" title="${t.boxSelect} (B / И)" aria-label="${t.boxSelect}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/></svg></button>
           <button type="button" data-el="moveTool" title="${t.move} (G / П)" aria-label="${t.move}"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3m-6 12 3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/></svg></button>
           <button type="button" data-el="rotateTool" title="${t.rotate} (R / К)" aria-label="${t.rotate}"><svg class="icon" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 1-3-6m-2 3h5V3"/></svg></button>
+          <select data-el="pivotMode" aria-label="${language === 'ru' ? 'Центр вращения' : 'Rotation pivot'}"><option value="center">${language === 'ru' ? 'Центр выделения' : 'Selection center'}</option><option value="joint">${language === 'ru' ? 'Ось соединения' : 'Joint axis'}</option></select>
           <button type="button" data-el="rotationSnap" aria-label="${t.rotationSnap}" aria-pressed="true">45°</button>
           <button type="button" data-el="lengthTool" title="${t.length} (S / Ы)" aria-label="${t.length}"><svg class="icon" viewBox="0 0 24 24"><path d="M3 12h18M7 8l-4 4 4 4m10-8 4 4-4 4M12 7v10"/></svg></button>
           <button type="button" data-el="beltTool" title="${t.beltAdd}" aria-label="${t.beltAdd}">${t.belt}</button>
@@ -247,6 +248,8 @@ export async function mountEditor(root, { document, language, save, download, si
   let moving
   let placingCopy = false
   let pastedGroup
+  let jointMode = false
+  let chosenJoint, activeJoint
   let tool = 'move'
   const additional = new Set()
   let resize
@@ -728,8 +731,19 @@ export async function mountEditor(root, { document, language, save, download, si
     rotationSnap.setAttribute('aria-pressed', String(steppedRotation))
     rotationSnap.textContent = steppedRotation ? '45°' : t.freeRotation
     rotationSnap.title = steppedRotation ? t.enableFreeRotation : t.enableRotationSnap
-    scene.setTool(building && !moving && !resize && (tool === 'move' || tool === 'rotate')
-      ? tool === 'move' ? 'translate' : 'rotate' : null, part, selectionIds())
+    const jointTool = building && tool === 'rotate' && jointMode
+    rotationSnap.hidden = jointTool
+    el('pivotMode').hidden = !building || tool !== 'rotate'
+    if (!gizmoPart) {
+      const joints = jointTool ? rotationJoints(selected) : []
+      const joint = joints.includes(chosenJoint) ? chosenJoint : joints.at(-1)
+      activeJoint = joint && hingeMotion(selected, state.parts, links, joint)
+      if (!activeJoint?.ok) activeJoint = null
+      scene.gizmo.setRotationSnap(jointTool ? null : steppedRotation ? rotationStep : null)
+      if (!resize) updateHighlights()
+    }
+    scene.setTool(building && !moving && !resize && (!jointTool || activeJoint) && (tool === 'move' || tool === 'rotate')
+      ? tool === 'move' ? 'translate' : 'rotate' : null, part, selectionIds(), activeJoint)
     positionHandles()
     if (part) el('color').value = /^#[0-9a-f]{6}$/i.test(part.color) ? part.color : parts[part.design].color
     const engagedBelts = (transmission?.belts ?? transmission?.rotation?.belts)?.length
@@ -989,9 +1003,10 @@ export async function mountEditor(root, { document, language, save, download, si
   }
 
   function finishTransform(before, after, snap) {
+    const followers = activeJoint?.moving ?? additional
     cancelGizmo()
     if (!snap && before.design === after.design && samePose(before, after)) return
-    const edited = new Map([after, ...groupTransforms(state.parts.filter(item => additional.has(item.id)), before, after)].map(part => [part.id, part]))
+    const edited = new Map([after, ...groupTransforms(state.parts.filter(item => item.id !== before.id && followers.has(item.id)), before, after)].map(part => [part.id, part]))
     const placed = state.parts.map(part => edited.get(part.id) ?? part)
     selected = after.id
     const previousLinks = state.links
@@ -1049,8 +1064,12 @@ export async function mountEditor(root, { document, language, save, download, si
     if (previous !== tool) audio.play('tool')
   }
 
+  function rotationJoints(id) {
+    return links.filter(l => ['continuous', 'detented'].includes(l.fit.motion.rotation) && (l.shaft.part === id || l.socket.part === id))
+  }
+
   function updateHighlights() {
-    scene.highlight(additional, 0xffb01b, false)
+    scene.highlight(activeJoint?.moving ?? additional, 0xffb01b, false)
   }
 
   function positionHandles() {
@@ -1170,7 +1189,8 @@ export async function mountEditor(root, { document, language, save, download, si
     } else gizmoSnap = null
     const pose = gizmoSnap?.pose ? { ...gizmoRaw, ...gizmoSnap.pose } : gizmoRaw
     scene.setGhost(pose, gizmoSnap?.point)
-    if (additional.size) scene.previewParts(groupTransforms(state.parts.filter(item => additional.has(item.id)), gizmoPart, pose))
+    const followers = activeJoint?.moving ?? additional
+    if (followers.size) scene.previewParts(groupTransforms(state.parts.filter(item => item.id !== gizmoPart.id && followers.has(item.id)), gizmoPart, pose))
     render()
   }
 
@@ -1266,6 +1286,11 @@ export async function mountEditor(root, { document, language, save, download, si
     }
   })
   scene.gizmo.setRotationSnap(rotationStep)
+  on(el('pivotMode'), 'change', () => {
+    cancelGizmo()
+    jointMode = el('pivotMode').value === 'joint'
+    render()
+  })
   on(el('rotationSnap'), 'click', () => {
     steppedRotation = !steppedRotation
     scene.gizmo.setRotationSnap(steppedRotation ? rotationStep : null)
@@ -1420,6 +1445,12 @@ export async function mountEditor(root, { document, language, save, download, si
   scene.gizmo.addEventListener('objectChange', () => {
     if (!gizmoPart) return
     gizmoRaw = scene.gizmoPose(gizmoPart)
+    if (activeJoint?.detents.length) {
+      const delta = new Quaternion(...gizmoRaw.rotation).multiply(new Quaternion(...gizmoPart.rotation).invert())
+      const turn = 2 * Math.atan2(new Vector3(delta.x, delta.y, delta.z).dot(activeJoint.axis), delta.w)
+      const stop = nearestDetent(activeJoint.detents, activeJoint.roll + activeJoint.sign * turn)
+      gizmoRaw = hingePoses([gizmoPart], activeJoint, stop)[0]
+    }
     updateGizmo()
   })
   scene.gizmo.addEventListener('mouseUp', () => {
@@ -1562,7 +1593,18 @@ export async function mountEditor(root, { document, language, save, download, si
     } else if (click) {
       const hit = scene.pointer(event).hit
       if (mode === 'build' && tool === 'belt') beltPanel.pick(hit)
-      else selectClick(hit, event.shiftKey)
+      else {
+        if (jointMode && tool === 'rotate' && hit) {
+          const joints = rotationJoints(hit)
+          const distance = link => {
+            const socket = state.parts.find(p => p.id === link.socket.part)
+            const port = assembly.port(socket.id, link.socket.port)
+            return scene.pixelDistance(worldPort(socket, port).start, event)
+          }
+          chosenJoint = joints.sort((a, b) => distance(a) - distance(b))[0]
+        }
+        selectClick(hit, event.shiftKey)
+      }
     }
   })
   on(scene.canvas, 'pointercancel', () => {
