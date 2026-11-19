@@ -1,5 +1,5 @@
 import { Quaternion, Vector3 } from 'three'
-import { layoutTrack } from '../mechanics/track-layout.js?v=track-builder'
+import { layoutTrack } from '../mechanics/track-layout.js?v=level-treads'
 import { isTread, sprockets, trackDrives, trackLine } from '../mechanics/treads.js?v=track-builder'
 import { connectPlaced, createAssembly } from './model.js?v=track-builder'
 
@@ -87,7 +87,9 @@ export function planTrackAssembly(state, { wheelIds, reuse, design, count, adjus
     const rephased = { ...aligned, rotation: new Quaternion().setFromAxisAngle(vec(trackLine(aligned).axis), Math.PI / 2)
       .multiply(new Quaternion().fromArray(aligned.rotation)).toArray() }
     const alternative = layoutTrack([a, rephased], kept, { design, count })
-    if (!alternative.reason && (plan.reason || alternative.poses.length < plan.poses.length) &&
+    const flatter = alternative.groundFlat === true && plan.groundFlat === false
+    const sameShape = alternative.groundFlat === plan.groundFlat
+    if (!alternative.reason && (plan.reason || flatter || (sameShape && alternative.poses.length < plan.poses.length)) &&
         rebuild(byPose(rephased), links, state.belts)) {
       plan = alternative
       wheel = rephased
@@ -127,7 +129,7 @@ export function planTrackAssembly(state, { wheelIds, reuse, design, count, adjus
   return {
     scene, links: assembly.connections.map(record), layers, treads, preview, wheelIds,
     covered: new Set([...used, ...(wheel === b ? [] : [b.id])]),
-    shift: Math.abs(shift), phase, guides: plan.guides,
+    shift: Math.abs(shift), phase, guides: plan.guides, groundFlat: plan.groundFlat,
     added: Math.max(0, treads.length - existing.length), removed: removed.size,
   }
 }

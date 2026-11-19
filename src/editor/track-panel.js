@@ -1,5 +1,5 @@
 import { isTread, sprockets } from '../mechanics/treads.js?v=track-builder'
-import { oppositeSprockets, planTrackAssembly, treadChains } from './track-assembly.js?v=track-builder'
+import { oppositeSprockets, planTrackAssembly, treadChains } from './track-assembly.js?v=level-treads'
 
 export const trackLabels = {
   ru: {
@@ -10,6 +10,7 @@ export const trackLabels = {
     preparing: 'Загружаю звенья…', done: n => `Гусеница собрана · ${n} звеньев`,
     ready: (n, g) => `${n} звеньев · учтено катков: ${g}`,
     change: (a, r) => `Добавить ${a}, убрать ${r}`,
+    uneven: 'При этой геометрии нижняя ветвь остаётся изогнутой.',
     shift: value => `Сдвиг второй звёздочки: ${value} мм`, phase: 'Поворот второй звёздочки на 90°',
     chainName: (index, n) => `Цепочка ${index} · ${n} звеньев`,
     errors: {
@@ -34,6 +35,7 @@ export const trackLabels = {
     preparing: 'Loading treads…', done: n => `Track built · ${n} links`,
     ready: (n, g) => `${n} links · support rollers used: ${g}`,
     change: (a, r) => `Add ${a}, remove ${r}`,
+    uneven: 'This geometry leaves a curved lower run.',
     shift: value => `Second sprocket shift: ${value} mm`, phase: 'Second sprocket turned 90°',
     chainName: (index, n) => `Chain ${index} · ${n} links`,
     errors: {
@@ -134,7 +136,8 @@ export function mountTrackPanel(root, { language, nameOf, colorOf, prepare, prev
     fields.build.disabled = false
     fields.status.textContent = [t.ready(result.treads.length, result.guides),
       reuseMode && t.change(result.added, result.removed),
-      result.shift > .005 && t.shift(format.format(result.shift * .4)), result.phase && t.phase].filter(Boolean).join(' · ')
+      result.shift > .005 && t.shift(format.format(result.shift * .4)), result.phase && t.phase,
+      result.groundFlat === false && t.uneven].filter(Boolean).join(' · ')
     preview(result)
   }
 

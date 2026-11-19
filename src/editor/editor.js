@@ -17,7 +17,7 @@ import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-lay
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=belt-drive'
 import { mountPhysicsPanel, physicsTitle } from './physics-panel.js?v=belt-drive'
 import { mountBeltPanel } from './belt-panel.js?v=belt-drive'
-import { mountTrackPanel, trackLabels } from './track-panel.js?v=track-builder'
+import { mountTrackPanel, trackLabels } from './track-panel.js?v=level-treads'
 import { upgradeInlineEngineFan } from './inline-engine.js'
 import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'

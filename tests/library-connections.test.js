@@ -1458,6 +1458,13 @@ test('track builder reuses an open chain, fits rollers, and mirrors a closed 45-
   assert.equal(planTrackAssembly(state, request).reason, 'plane')
   const plan = planTrackAssembly(state, { ...request, adjust: true })
   assert.ok(!plan.reason, plan.reason)
+  const assertLevel = track => {
+    assert.equal(track.groundFlat, true)
+    const lower = track.treads.map(tread => tread.position).filter(([, y, z]) => y < 0 && z >= 80 && z <= 440)
+    assert.ok(lower.length >= 10)
+    for (const [, y] of lower) assert.ok(Math.abs(y - lower[0][1]) < .003)
+  }
+  assertLevel(plan)
   assert.equal(plan.treads.length, 45)
   assert.equal(plan.added, 0)
   assert.equal(plan.removed, 1)
@@ -1480,5 +1487,12 @@ test('track builder reuses an open chain, fits rollers, and mirrors a closed 45-
   const second = planTrackAssembly({ parts: plan.scene, links: plan.links, belts: [], layers: plan.layers },
     { ...request, wheelIds: opposite, reuse: undefined, adjust: true })
   assert.equal(second.added, 45, second.reason)
+  assertLevel(second)
   assert.equal(createAssembly(second.scene, second.links).connections.length, 90)
+  const relaid = planTrackAssembly({ parts: second.scene, links: second.links, belts: [], layers: second.layers },
+    { ...request, reuse: plan.treads[0].id, adjust: true })
+  assert.ok(!relaid.reason, relaid.reason)
+  assertLevel(relaid)
+  assert.equal(relaid.added + relaid.removed, 0)
+  assert.equal(createAssembly(relaid.scene, relaid.links).connections.length, 90)
 })
