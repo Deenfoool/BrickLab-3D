@@ -1,4 +1,5 @@
 import { Plane, Quaternion, Vector3 } from 'three'
+import { measureInsertion } from '../mechanics/assembly.js?v=gear-selector'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
 import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=gear-selector'
 import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=gear-selector'
@@ -6,6 +7,38 @@ import { candidateOffsets, joinedPose, samePose, worldPort } from './placement.j
 
 const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')
 const canSlideOn = port => ['axle', 'duplo-axle', 'rod'].includes(port.role)
+const pinPitch = 20
+const pinSeatRadius = 2
+const isPinBore = port => port.role === 'bearing' && port.openings.length === 2 && portLength(port) === pinPitch
+const longPinBore = (male, female) =>
+  ['pin', 'friction-pin'].includes(male.role) && portLength(male) >= 3 * pinPitch &&
+  portLength(male) % pinPitch === 0 && isPinBore(female)
+const line = ({ start, axis }) => ({ start: start.toArray(), axis: axis.toArray() })
+const coversPinBore = fit => fit.occupancy.socket[1] - fit.occupancy.socket[0] >= pinPitch - .01
+
+function pinStack(sockets, target, male) {
+  return sockets.filter(({ bore }) => {
+    const placement = measureInsertion(bore, target)
+    if (!placement) return false
+    const separation = Math.abs(placement.offset + (placement.direction - 1) * pinPitch / 2)
+    const step = Math.round(separation / pinPitch)
+    return step > 0 && step * pinPitch < portLength(male) && Math.abs(separation - step * pinPitch) <= .01
+  })
+}
+
+function seatedPinNeighbors(assembly, stack, shaft, pose, male) {
+  const axis = line(worldPort(pose, male))
+  const seats = new Set()
+  for (const { socket, bore } of stack) {
+    const placement = measureInsertion(axis, bore)
+    if (!placement) continue
+    const fit = assembly.previewInsertion(shaft, socket, placement, { seated: true })
+    if (fit.ok && coversPinBore(fit)) {
+      seats.add(Math.round(fit.occupancy.shaft[0] / pinPitch))
+    }
+  }
+  return seats.size
+}
 
 function gearCenter(part, port) {
   const { start, axis } = worldPort(part, port)
@@ -122,6 +155,7 @@ export function nearbyConnections(context) {
   if (!ownPorts.length) return candidates
   const ownConnectors = ownPorts.filter(port => port.role !== 'gear' && !port.legacy)
   const ownGear = gearPort(moving)
+  let bearingSockets
   for (const fixed of parts) {
     if (fixed.id === moving.id) continue
     const fixedGear = gearPort(fixed)
@@ -189,6 +223,14 @@ export function nearbyConnections(context) {
           points = [...points, ...withinSnapRange(scene, event, shoulders)]
         }
         if (!points.length) continue
+        const pin = depth === 0 && longPinBore(male, female)
+        let stack = []
+        if (pin && movingShaft && !acceptPose) {
+          bearingSockets ??= parts.filter(part => part.id !== moving.id).flatMap(part => portsFor(part.design)
+            .filter(port => !port.legacy && isPinBore(port))
+            .map(port => ({ socket: { part: part.id, port: port.id }, bore: line(worldPort(part, port)) })))
+          stack = pinStack(bearingSockets, line({ start, axis }), male)
+        }
         for (const { side, point, along, distance, targetKind = along === undefined ? 'end' : 'slide' } of points) {
           const shaft = { part: movingShaft ? moving.id : fixed.id, port: male.id }
           const socket = { part: movingShaft ? fixed.id : moving.id, port: female.id }
@@ -247,13 +289,20 @@ export function nearbyConnections(context) {
                 const bounds = fit.occupancy.shaft
                 const endpoint = nearShoulder ? shoulder : along ?? (side === 'end' ? span : 0)
                 const reach = movingShaft ? 0 : Math.abs((bounds[0] + bounds[1]) / 2 - endpoint)
-                const score = acceptPose ? pose.position.reduce((sum, value, index) =>
-                  sum + (value - moving.position[index]) ** 2, 0) : movingShaft ? orientation.angleTo(new Quaternion().fromArray(pose.rotation)) : reach
+                const turn = orientation.angleTo(new Quaternion().fromArray(pose.rotation))
+                const shift = acceptPose ? Math.hypot(...pose.position.map((value, i) => value - moving.position[i])) : 0
+                const pinSeat = Boolean(acceptPose && pin && shift <= pinSeatRadius + .01 &&
+                  Math.abs(offset - Math.round(offset / pinPitch) * pinPitch) < .01)
+                const seats = stack.length ? Number(coversPinBore(fit)) + seatedPinNeighbors(assembly, stack, shaft, pose, male) : 0
+                // An extra fully seated bore takes precedence over the pin's free roll.
+                const score = acceptPose ? shift - (pinSeat ? pinSeatRadius + .01 : 0)
+                  : movingShaft ? turn - seats * 2 * Math.PI : reach
                 if (!best || score <= best.score) {
-                  const turn = orientation.angleTo(new Quaternion().fromArray(pose.rotation))
-                  if (!best || score < best.score || (!mode.axialRange && turn < best.turn)) best = { key, point, distance, fit, pose, shaft, socket, score, turn }
+                  if (!best || score < best.score || (!mode.axialRange && turn < best.turn)) {
+                    best = { key, point, distance, fit, pose, shaft, socket, score, turn, pinSeat }
+                  }
                 }
-                if (movingShaft && !acceptPose) break
+                if (movingShaft && !acceptPose && !stack.length) break
               }
             }
           }
@@ -323,5 +372,6 @@ export function translationSnaps(members, parts, assembly, scene, axes, insertio
           rotation: members.length === 1 ? option.pose.rotation : members[0].rotation } }
     })
   })
-  return options.sort((a, b) => a.shift - b.shift || a.distance - b.distance)
+  return options.sort((a, b) => Number(b.pinSeat ?? false) - Number(a.pinSeat ?? false) ||
+    a.shift - b.shift || a.distance - b.distance)
 }

@@ -12,7 +12,7 @@ const { connectionMode } = await import('../src/mechanics/axial.js')
 const { gearAt, technic } = await import('../src/mechanics/catalog.js')
 const { evaluateSpurMesh } = await import('../src/mechanics/gears.js')
 const { connectAligned, createAssembly, gearPoses } = await import('../src/editor/model.js')
-const { nearbyConnections } = await import('../src/editor/snap.js')
+const { nearbyConnections, translationSnaps } = await import('../src/editor/snap.js')
 
 const part = (id, design, position = [0, 0, 0]) => ({ id, design, position, rotation: [0, 0, 0, 1] })
 const end = (part, port) => ({ part, port })
@@ -112,6 +112,40 @@ test('a long pin keeps three independent beam positions', () => {
     assert.equal(links[0].socket.port, 'bore-3')
     assert.equal(assembly.connections.length, index + 1)
   }
+})
+
+test('a long pin picks a reachable seat that joins both aligned beams', () => {
+  const moving = part('pin', '6558', [-10, 0, 0])
+  const beams = [-20, 0].map(x => ({ ...part(`beam-${x}`, '32316', [x, 0, 0]),
+    rotation: [0, 0, Math.SQRT1_2, Math.SQRT1_2] }))
+  for (const approach of [-1, 1]) {
+    const ray = new Ray(new Vector3(approach * 120, 0, 0), new Vector3(-approach, 0, 0))
+    const [snap] = nearbyConnections({ scene: { pixelDistance: p => Math.hypot(p.y, p.z) * 5 },
+      assembly: createAssembly([moving, ...beams], []), parts: beams, moving, ray, depth: 0, roll: 0 })
+    assert.ok(snap?.fit)
+    const placed = { ...moving, ...snap.pose }
+    const members = [placed, ...beams]
+    const links = connectAligned(createAssembly(members, []), [placed], beams)
+    assert.equal(links.length, 2)
+    assert.equal(createAssembly(members, links).connections.length, 2)
+  }
+})
+
+test('the translation gizmo seats a long pin flush across all three beams', () => {
+  const pin = part('pin', '6558', [-1.9, 0, 0])
+  const beams = [-20, 0, 20].map(x => ({ ...part(`beam-${x}`, '32316', [x, 0, 0]),
+    rotation: [0, 0, Math.SQRT1_2, Math.SQRT1_2] }))
+  const projection = { project: point => Object.assign(point.clone(), { visible: true }),
+    pixelDistance: (point, screen) => point.distanceTo(screen) * 2 }
+  const assembly = createAssembly([pin, ...beams], [])
+  const [snap] = translationSnaps([pin], beams, assembly, projection, 'X', 0)
+  assert.ok(snap?.fit)
+  assert.ok(Math.abs(snap.pose.position[0]) < 1e-6)
+  const placed = { ...pin, ...snap.pose }
+  const parts = [placed, ...beams]
+  const links = connectAligned(createAssembly(parts, []), [placed], beams)
+  assert.equal(links.length, 3)
+  assert.equal(createAssembly(parts, links).connections.length, 3)
 })
 
 test('a hybrid pin transmits rotation at the cross axle end and turns freely in a beam', () => {

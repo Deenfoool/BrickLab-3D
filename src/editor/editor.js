@@ -8,7 +8,7 @@ import { baseRotation, samePose } from './placement.js?v=gear-selector'
 import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=selector-drag'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
 import { nearestDetent } from '../mechanics/axial.js?v=gear-selector'
-import { nearbyConnections, translationSnaps } from './snap.js?v=gear-selector'
+import { nearbyConnections, translationSnaps } from './snap.js?v=pin-seating'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=catalog-page'
 import { mountLibrary } from './library.js?v=catalog-page'
 import { createScene } from './scene.js?v=box-selection'
@@ -1115,7 +1115,8 @@ export async function mountEditor(root, { document, language, save, download, si
       const first = options[0]
       const sticky = options[previous]
       if (cycle && first) gizmoSnap = options[(previous + 1) % options.length]
-      else gizmoSnap = sticky && sticky.shift <= first.shift + 1.5 ? sticky : first ?? null
+      else gizmoSnap = sticky && Boolean(sticky.pinSeat) === Boolean(first.pinSeat) &&
+        sticky.shift <= first.shift + 1.5 ? sticky : first ?? null
     } else gizmoSnap = null
     const pose = gizmoSnap?.pose ? { ...gizmoRaw, ...gizmoSnap.pose } : gizmoRaw
     scene.setGhost(pose, gizmoSnap?.point)
