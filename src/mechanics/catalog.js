@@ -1,6 +1,6 @@
 import technic from '../../catalog/technic.json?v=connector-coverage' with { type: 'json' }
 import profiles from '../../catalog/snap-profiles.json?v=technic-seats' with { type: 'json' }
-import designs from '../../catalog/snap-parts.json?v=half-pin-stud' with { type: 'json' }
+import designs from '../../catalog/snap-parts.json?v=half-pin-seats' with { type: 'json' }
 import plates from '../../catalog/system-plate-connectors.json' with { type: 'json' }
 import slopes from '../../catalog/system-slope-connectors.json' with { type: 'json' }
 import tiles from '../../catalog/system-tile-connectors.json' with { type: 'json' }

@@ -2,7 +2,7 @@ import { Box3, Plane, Quaternion, Vector3 } from 'three'
 import { measureInsertion } from '../mechanics/assembly.js?v=gear-selector'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
 import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=gear-selector'
-import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=half-pin-stud'
+import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=half-pin-seats'
 import { candidateOffsets, joinedPose, samePose, worldPort } from './placement.js?v=mirror-menu'
 
 const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')

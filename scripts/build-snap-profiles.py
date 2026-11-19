@@ -725,7 +725,7 @@ def main():
         stud_geometry = stud_primitives(archive)
         half_pin_studs = {
             design: [port for source in stud_geometry(design)
-                     if (port := adapt(source, '')) and port[0][0] == 'stud']
+                     if (port := adapt(source, '')) and port[0][0] in {'stud', 'hollow-stud'}]
             for design in ('4274', '61184')
         }
         for design, group, title, *_ in parts:
@@ -824,9 +824,14 @@ def main():
     for design, measured in measured_bores.items():
         if design in registry:
             registry[design] = [record(port) for port in merge_round_bores(by_design[design], measured)]
-    # The short end on each half pin is an open stud. Keep the original pin endpoint for saved connections.
+    # Keep the original pin endpoint and reuse any stud endpoints already present in the shadow data.
     for design, studs in half_pin_studs.items():
-        registry[design].extend(record(port) for port in studs)
+        known = {entry[0] for entry in registry[design]}
+        for stud in studs:
+            entry = record(stud)
+            if entry[0] not in known:
+                registry[design].append(entry)
+                known.add(entry[0])
     output = {'source': SOURCE, 'shadow': SHADOW, 'ldraw': index['source']['release'],
               'types': list(specs), 'locations': list(locations), 'rimMates': rim_mates}
     # Keep one location or profile per line for review.
