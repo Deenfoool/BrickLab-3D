@@ -1,4 +1,4 @@
-import { previewColumns, previewRows, previewPageSize, searchLibrary } from './library-data.js?v=system-slopes'
+import { previewColumns, previewRows, previewPageSize, searchLibrary } from './library-data.js?v=system-tiles'
 
 const batchSize = 48
 

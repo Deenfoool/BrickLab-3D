@@ -25,8 +25,8 @@ try {
   await page.goto(values.url)
   const sections = await page.evaluate(async () => {
     const THREE = await import('three')
-    const { sections, loadPartModel, partMesh } = await import('./src/editor/parts.js?v=system-slopes')
-    const { previewColumns, previewRows, previewPageSize } = await import('./src/editor/library-data.js?v=system-slopes')
+    const { sections, loadPartModel, partMesh } = await import('./src/editor/parts.js?v=system-tiles')
+    const { previewColumns, previewRows, previewPageSize } = await import('./src/editor/library-data.js?v=system-tiles')
     const width = 144
     const height = 92
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true })

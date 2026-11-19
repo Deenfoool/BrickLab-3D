@@ -1,9 +1,9 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
-import { partMesh, parts } from './parts.js?v=system-slopes'
+import { partMesh, parts } from './parts.js?v=system-tiles'
 import { createBeltScene } from './belt-scene.js?v=belt-drive'
-import { createMotorCables } from './motor-cables.js?v=system-slopes'
+import { createMotorCables } from './motor-cables.js?v=system-tiles'
 import { createPartOutlines } from './part-outlines.js?v=part-outlines'
 import { snapGrid } from './model.js?v=belt-drive'
 

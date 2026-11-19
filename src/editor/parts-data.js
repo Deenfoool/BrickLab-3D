@@ -1,5 +1,5 @@
-import library from '../../catalog/parts-library.json?v=system-slopes' with { type: 'json' }
-import { sectionsFor } from './library-data.js?v=system-slopes'
+import library from '../../catalog/parts-library.json?v=system-tiles' with { type: 'json' }
+import { sectionsFor } from './library-data.js?v=system-tiles'
 import buggyParts from '../../catalog/dune-buggy-parts.json?v=8845' with { type: 'json' }
 import engineParts from '../../catalog/inline-engine-parts.json' with { type: 'json' }
 
@@ -27,7 +27,7 @@ export const curated = {
 }
 export const partOrder = ['3700', '3705', '3706', '3707', '3737', '3673', '2780', '3713', '6538', '10928', '3648', '41679', '41680', '30374', '32316', '32278', '43093', '6558', '11214']
 export const sections = sectionsFor(library, curated, partOrder)
-export const parts = Object.assign(Object.create(null), ...sections.map(section =>
+export const parts = Object.assign(Object.create(null), ...sections.toReversed().map(section =>
   Object.fromEntries(section.parts.map(part => [part.design, part]))))
 // Supplementary designs needed to edit the complete downloadable examples.
 for (const [assetPath, registry, revision] of [

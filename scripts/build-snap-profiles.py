@@ -697,6 +697,8 @@ def main():
                                const='plates', help='Write only the System plate connector catalog')
     system_output.add_argument('--system-slopes', dest='system_group', action='store_const',
                                const='slopes', help='Write only the System slope connector catalog')
+    system_output.add_argument('--system-tiles', dest='system_group', action='store_const',
+                               const='tiles', help='Write only the System tile connector catalog')
     args = parser.parse_args()
     upstream = read(args.upstream)
     index = read(ROOT / 'catalog/parts-library.json')
@@ -710,7 +712,9 @@ def main():
     # Preserve existing endpoint IDs for System parts already used by complete examples.
     example_ports = {design for name in ('dune-buggy-parts.json', 'inline-engine-parts.json')
                      for design, entry in read(ROOT / 'catalog' / name).items() if entry.get('ports')}
-    parts = technic + [row for row in system if row[0] not in example_ports]
+    technic_designs = {row[0] for row in technic}
+    supplied = example_ports | technic_designs
+    parts = technic + [row for row in system if row[0] not in supplied]
     groups = defaultdict(set)
     technic_groups = defaultdict(set)
     by_design = {}
@@ -757,7 +761,7 @@ def main():
             for port in ports:
                 if signature := match_signature(port):
                     groups[signature].add(port[0][1])
-                    if group not in {'plates', 'slopes'}:
+                    if group not in {'plates', 'slopes', 'tiles'}:
                         technic_groups[signature].add(port[0][1])
 
     specs = {}
@@ -794,7 +798,7 @@ def main():
         for design, group, *_ in system:
             if group != args.system_group:
                 continue
-            if design in example_ports:
+            if design in supplied:
                 coverage[group] += 1
             else:
                 record_design(design, group, groups)

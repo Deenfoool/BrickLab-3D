@@ -172,6 +172,16 @@ test('the 85984 System slope seats flush on both studs of a 1 × 2 plate', () =>
   assert.equal(createAssembly([plate, slope], links).connections.length, 2)
 })
 
+test('the 2432 System tile seats flush on both studs of a 1 × 2 plate', () => {
+  const system = library.sections.find(section => section.id === 'system')
+  assert.equal(system.parts.find(([design]) => design === '2432')?.[1], 'tiles')
+  const tile = { ...part('tile', '2432'), position: [0, -32, 0] }
+  const plate = part('plate', '3023b')
+  const links = connectAligned(createAssembly([plate, tile], []), [tile], [plate])
+  assert.equal(links.length, 2)
+  assert.equal(createAssembly([plate, tile], links).connections.length, 2)
+})
+
 test('each structural connector mates through its accessible ends and survives reopening', () => {
   const profiles = new Map()
   for (const [design] of technicParts) {

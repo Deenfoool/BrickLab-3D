@@ -27,6 +27,7 @@ GROUP_PRIORITY = ['power', 'pneumatics', 'panels', 'gears', 'joints', 'wheels', 
 SYSTEM_GROUPS = [
     ('plates', 'Пластины', 'Plates'),
     ('slopes', 'Скосы', 'Slopes'),
+    ('tiles', 'Плитки', 'Tiles'),
 ]
 
 TITLES = [
@@ -99,6 +100,7 @@ TITLES = [
     ('Pin Long', 'Длинный штифт'),
     ('Pin', 'Штифт'),
     ('Plate', 'Пластина'),
+    ('Tile', 'Плитка'),
     ('Slope Brick Curved', 'Изогнутый скос'),
     ('Slope Curved', 'Изогнутый скос'),
     ('Slope Brick', 'Скос'),
@@ -251,6 +253,7 @@ def build(archive_path):
     entries = []
     system_plates = []
     system_slopes = []
+    system_tiles = []
     redirects = {}
     for path in sorted(files):
         if not re.fullmatch(r'parts/[^/]+\.dat', path):
@@ -260,7 +263,7 @@ def build(archive_path):
             header = file.read(2048).decode('utf-8-sig', errors='replace')
         first = header.splitlines()[0][2:].strip()
         title = ' '.join(first.split())
-        if title.startswith(('=Plate ', '=Slope ', '~Moved to ')):
+        if title.startswith(('=Plate ', '=Slope ', '=Tile ', '~Moved to ')):
             target = re.search(r'^1 16 0 0 0 1 0 0 0 1 0 0 0 1 ([^\s/]+)\.dat\s*$', read(path), re.M | re.I)
             if target:
                 redirects[design] = target[1].lower()
@@ -273,6 +276,8 @@ def build(archive_path):
         if category == 'Slope' and not title.startswith(('~', '=', '_', 'Duplo ', 'Fabuland ', 'Quatro ')):
             system_slopes.append((design, 'slopes', title, localized_title(title), path))
             continue
+        if category == 'Tile' and title.startswith('Tile '):
+            system_tiles.append((design, 'tiles', title, localized_title(title), path))
         named_technic = re.search(r'\btechnic\b|power functions|mindstorms|powered up|control\+|control plus|spike prime', title, re.I)
         wheel = category in {'Wheel', 'Tyre'} and not re.search(r'\b(?:minifig|duplo|train|scala)\b', title, re.I)
         related = named_technic and category not in {'Sticker', 'Sticker Shortcut', 'Obsolete'}
@@ -286,7 +291,7 @@ def build(archive_path):
         entries.append((design, group, en, localized_title(title), path))
     entries.sort(key=lambda item: (GROUP_PRIORITY.index(item[1]), item[2].lower(), item[0]))
 
-    for family in (system_plates, system_slopes):
+    for family in (system_plates, system_slopes, system_tiles):
         family.sort(key=lambda item: (item[2].lower(), item[0]))
 
     def write_pack(output, paths):
@@ -341,7 +346,8 @@ def build(archive_path):
     index = pack_library(models, entries, embedded=core)
     plate_index = pack_library(system_models, system_plates, extra_common=('ldconfig.ldr',))
     slope_index = pack_library(system_models, system_slopes, extra_common=('ldconfig.ldr',), prefix='slope-')
-    system_index = plate_index + slope_index
+    tile_index = pack_library(system_models, system_tiles, extra_common=('ldconfig.ldr',), prefix='tile-')
+    system_index = plate_index + slope_index + tile_index
     system_designs = {design for design, *_ in system_index}
     aliases = defaultdict(list)
     for design, target in redirects.items():
@@ -358,11 +364,11 @@ def build(archive_path):
             {'id': 'technic', 'ru': 'Technic', 'en': 'Technic', 'assetPath': 'technic',
              'groups': [group[:3] for group in GROUPS], 'parts': index},
             {'id': 'system', 'ru': 'System', 'en': 'System', 'assetPath': 'system',
-             'revision': f'{release}-slopes',
+             'revision': f'{release}-tiles',
              'groups': SYSTEM_GROUPS, 'parts': system_index, 'aliases': aliases},
         ],
     })
-    print(f'{release}: {len(index)} Technic parts, {len(plate_index)} System plates, {len(slope_index)} System slopes')
+    print(f'{release}: {len(index)} Technic parts, {len(plate_index)} System plates, {len(slope_index)} System slopes, {len(tile_index)} System tiles')
 
 
 if __name__ == '__main__':

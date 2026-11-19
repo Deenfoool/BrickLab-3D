@@ -3,6 +3,7 @@ import profiles from '../../catalog/snap-profiles.json?v=technic-seats' with { t
 import designs from '../../catalog/snap-parts.json?v=structural-bores' with { type: 'json' }
 import plates from '../../catalog/system-plate-connectors.json' with { type: 'json' }
 import slopes from '../../catalog/system-slope-connectors.json' with { type: 'json' }
+import tiles from '../../catalog/system-tile-connectors.json' with { type: 'json' }
 
 import buggyParts from '../../catalog/dune-buggy-parts.json?v=rotation' with { type: 'json' }
 import engineParts from '../../catalog/inline-engine-parts.json' with { type: 'json' }
@@ -20,7 +21,7 @@ const unpackTypes = types => types.map(([role, gender, ends, sections, group, sl
 const unpackLocations = locations => locations.map(([point, reference]) => ({
   start: point.slice(0, 3), axis: point.slice(3), ...(reference && { reference }),
 }))
-const catalogs = [{ ...profiles, parts: designs }, plates, slopes].map(({ parts, types, locations }) => ({
+const catalogs = [{ ...profiles, parts: designs }, plates, slopes, tiles].map(({ parts, types, locations }) => ({
   parts, definitions: unpackTypes(types), locations: unpackLocations(locations),
 }))
 const catalogFor = design => catalogs.find(catalog => Object.hasOwn(catalog.parts, design))
