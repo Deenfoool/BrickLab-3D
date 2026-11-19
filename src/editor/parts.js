@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.js'
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js'
-import { curated, partOrder, parts, sections } from './parts-data.js?v=system-plates'
+import { curated, partOrder, parts, sections } from './parts-data.js?v=system-slopes'
 
 export { parts, sections }
 
@@ -94,9 +94,10 @@ function getPack(assetPath, pack, revision) {
 
 export async function loadPartModel(part) {
   if (!part.pack) return (await loadCoreModels()).get(part.design)
-  const commonRequest = getPack(part.assetPath, 'common', part.revision)
+  const commonPack = part.commonPack ?? 'common'
+  const commonRequest = getPack(part.assetPath, commonPack, part.revision)
   const [common, pack] = await Promise.all([commonRequest,
-    part.pack === 'common' ? commonRequest : getPack(part.assetPath, part.pack, part.revision)])
+    part.pack === commonPack ? commonRequest : getPack(part.assetPath, part.pack, part.revision)])
   const fileMap = Object.create(null)
   const modelFile = `${part.design}.dat`
   const files = new Set()

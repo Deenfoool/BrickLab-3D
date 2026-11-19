@@ -24,7 +24,10 @@ GROUPS = [
 ]
 GROUP_PRIORITY = ['power', 'pneumatics', 'panels', 'gears', 'joints', 'wheels', 'axles', 'beams', 'pins', 'other']
 
-SYSTEM_GROUPS = [('plates', 'Пластины', 'Plates')]
+SYSTEM_GROUPS = [
+    ('plates', 'Пластины', 'Plates'),
+    ('slopes', 'Скосы', 'Slopes'),
+]
 
 TITLES = [
     ('Electric Control+ Hub', 'Хаб Control+'),
@@ -96,6 +99,11 @@ TITLES = [
     ('Pin Long', 'Длинный штифт'),
     ('Pin', 'Штифт'),
     ('Plate', 'Пластина'),
+    ('Slope Brick Curved', 'Изогнутый скос'),
+    ('Slope Curved', 'Изогнутый скос'),
+    ('Slope Brick', 'Скос'),
+    ('Slope', 'Скос'),
+    ('Roof', 'Крыша'),
     ('Pneumatic Cylinder', 'Пневмоцилиндр'),
     ('Pneumatic Pump', 'Пневмонасос'),
     ('Pneumatic T-Piece', 'Пневматический тройник'),
@@ -241,7 +249,8 @@ def build(archive_path):
         return result
 
     entries = []
-    system_entries = []
+    system_plates = []
+    system_slopes = []
     redirects = {}
     for path in sorted(files):
         if not re.fullmatch(r'parts/[^/]+\.dat', path):
@@ -251,7 +260,7 @@ def build(archive_path):
             header = file.read(2048).decode('utf-8-sig', errors='replace')
         first = header.splitlines()[0][2:].strip()
         title = ' '.join(first.split())
-        if title.startswith(('=Plate ', '~Moved to ')):
+        if title.startswith(('=Plate ', '=Slope ', '~Moved to ')):
             target = re.search(r'^1 16 0 0 0 1 0 0 0 1 0 0 0 1 ([^\s/]+)\.dat\s*$', read(path), re.M | re.I)
             if target:
                 redirects[design] = target[1].lower()
@@ -259,7 +268,10 @@ def build(archive_path):
         category = category[1].strip() if category else title.partition(' ')[0]
         # Plate also includes Duplo and other product lines in the LDraw index.
         if category == 'Plate' and title.startswith('Plate '):
-            system_entries.append((design, 'plates', title, localized_title(title), path))
+            system_plates.append((design, 'plates', title, localized_title(title), path))
+            continue
+        if category == 'Slope' and not title.startswith(('~', '=', '_', 'Duplo ', 'Fabuland ', 'Quatro ')):
+            system_slopes.append((design, 'slopes', title, localized_title(title), path))
             continue
         named_technic = re.search(r'\btechnic\b|power functions|mindstorms|powered up|control\+|control plus|spike prime', title, re.I)
         wheel = category in {'Wheel', 'Tyre'} and not re.search(r'\b(?:minifig|duplo|train|scala)\b', title, re.I)
@@ -274,7 +286,8 @@ def build(archive_path):
         entries.append((design, group, en, localized_title(title), path))
     entries.sort(key=lambda item: (GROUP_PRIORITY.index(item[1]), item[2].lower(), item[0]))
 
-    system_entries.sort(key=lambda item: (item[2].lower(), item[0]))
+    for family in (system_plates, system_slopes):
+        family.sort(key=lambda item: (item[2].lower(), item[0]))
 
     def write_pack(output, paths):
         # Use the same names that Three.js derives for LDraw references.
@@ -286,12 +299,13 @@ def build(archive_path):
         payload = json.dumps(data, ensure_ascii=False, separators=(',', ':')).encode()
         output.write_bytes(gzip.compress(payload, compresslevel=9, mtime=0))
 
-    def pack_library(directory, entries, embedded=(), extra_common=()):
+    def pack_library(directory, entries, embedded=(), extra_common=(), prefix=''):
         trees = {entry[4]: closure([entry[4]]) for entry in entries if entry[0] not in embedded}
         # Share common primitives while fetching only the models in the active pack.
         counts = Counter(dep for tree in trees.values() for dep in tree)
         common = {path for path, count in counts.items() if count >= 30}
-        write_pack(directory / 'common.json.gz', common.union(extra_common))
+        common_pack = f'{prefix}common'
+        write_pack(directory / f'{common_pack}.json.gz', common.union(extra_common))
         index = []
         batch = []
         batch_paths = set()
@@ -302,12 +316,15 @@ def build(archive_path):
             if not batch:
                 return
             pack_index += 1
-            pack = f'{pack_index:03}'
+            pack = f'{prefix}{pack_index:03}'
             if batch_paths:
                 write_pack(directory / f'{pack}.json.gz', batch_paths)
             for design, group, en, ru, path in batch:
-                asset = None if design in embedded else pack if trees[path] - common else 'common'
-                index.append([design, group, en, ru, asset])
+                asset = None if design in embedded else pack if trees[path] - common else common_pack
+                row = [design, group, en, ru, asset]
+                if prefix:
+                    row.append(common_pack)
+                index.append(row)
             batch.clear()
             batch_paths = set()
 
@@ -322,7 +339,9 @@ def build(archive_path):
         return index
 
     index = pack_library(models, entries, embedded=core)
-    system_index = pack_library(system_models, system_entries, extra_common=('ldconfig.ldr',))
+    plate_index = pack_library(system_models, system_plates, extra_common=('ldconfig.ldr',))
+    slope_index = pack_library(system_models, system_slopes, extra_common=('ldconfig.ldr',), prefix='slope-')
+    system_index = plate_index + slope_index
     system_designs = {design for design, *_ in system_index}
     aliases = defaultdict(list)
     for design, target in redirects.items():
@@ -339,11 +358,11 @@ def build(archive_path):
             {'id': 'technic', 'ru': 'Technic', 'en': 'Technic', 'assetPath': 'technic',
              'groups': [group[:3] for group in GROUPS], 'parts': index},
             {'id': 'system', 'ru': 'System', 'en': 'System', 'assetPath': 'system',
-             'revision': f'{release}-plates',
+             'revision': f'{release}-slopes',
              'groups': SYSTEM_GROUPS, 'parts': system_index, 'aliases': aliases},
         ],
     })
-    print(f'{release}: {len(index)} Technic parts, {len(system_index)} System parts')
+    print(f'{release}: {len(index)} Technic parts, {len(plate_index)} System plates, {len(slope_index)} System slopes')
 
 
 if __name__ == '__main__':

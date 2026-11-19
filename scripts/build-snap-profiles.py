@@ -462,6 +462,71 @@ def primitive_holes(archive):
     return as_ports
 
 
+def slope_stud_geometry(archive):
+    # Primitive datums are in LDraw coordinates. The open end of a stud tube is at -4.
+    standard = {
+        'stud.dat': [('M', 0, -4, 6)],
+        'stud2.dat': [('M', 0, -4, 6), ('F', -4, 0, 4)],
+        'stud2a.dat': [('M', 0, -4, 6), ('F', -4, 0, 4)],
+        'stud3.dat': [('M', 0, -4, 4)],
+        'stud3a.dat': [('M', 0, -4, 4)],
+        'stud4.dat': [('F', -4, 0, 6)],
+        'stud4a.dat': [('F', -4, 0, 6)],
+        'stud4f4n.dat': [('F', -4, 0, 6)],
+    }
+    names = set(archive.namelist())
+
+    @lru_cache
+    def collect(name):
+        if name in standard:
+            return [cylinder(gender, 'one', [0, start, 0], [0, -1 if end < start else 1, 0],
+                             'R', radius, abs(end - start)) for gender, start, end, radius in standard[name]]
+        path = f'ldraw/parts/{name}'
+        if path not in names:
+            return []
+        result = []
+        for child, transform in part_refs(archive.read(path).decode(errors='replace')):
+            x, z = [world_vector(transform, v) for v in ([1, 0, 0], [0, 0, 1])]
+            if any(abs(hypot(*radial) - 1) > .0001 for radial in (x, z)):
+                continue
+            for port in collect(child):
+                vector = world_vector(transform, port['dir'])
+                scale = hypot(*vector)
+                if scale < .001 or any(abs(sum(a * b for a, b in zip(vector, radial))) > .0001 for radial in (x, z)):
+                    continue
+                section = port['secs'][0]
+                result.append(cylinder(port['gender'], 'one', world_point(transform, port['start']),
+                                       normalize(vector), 'R', section['radius'], section['length'] * scale))
+        return result
+
+    return lambda design: collect(design + '.dat')
+
+
+# Underside seats checked against the complete LDraw mesh for 4 LDU stud clearance.
+SLOPE_STUD_SEATS = {
+    '4569': [(0, 24, -30), (0, 24, -10), (0, 24, 10), (0, 16, 30)],
+    '5654': [(0, 0, -10), (0, -8, 10), (0, -8, 30)],
+    '7826': [(0, 0, 0)],
+    '7827': [(0, 0, 0)],
+    '7825': [(x, 0, 0) for x in (-20, 0, 20)],
+    '7835': [(x, 0, 0) for x in (-30, -10, 10, 30)],
+    '3048a': [(-10, 24, 0), (10, 24, 0)],
+    '1942': [(x, 0, z) for x in (-30, -10, 10, 30) for z in (-10, 10)],
+}
+
+
+def slope_fallback(design, cylinders, stud_geometry):
+    sockets = [cylinder('F', 'one', start, [0, -1, 0], 'S', 6, 4)
+               for start in SLOPE_STUD_SEATS.get(design, ())]
+    for source in cylinders:
+        if source['gender'] != 'F' or source['caps'] != 'one' or len(source['secs']) != 1:
+            continue
+        section = source['secs'][0]
+        if section['shape'] in {'R', 'S'} and section['radius'] == 6 and section['length'] > 8:
+            sockets.append(cylinder('F', 'one', source['start'], source['dir'], section['shape'], 6, 8))
+    return sockets + stud_geometry(design)
+
+
 def overlapping_bores(measured, existing):
     spec, point, _ = existing
     if spec[0] not in {'bearing', 'key', 'blind-key', 'rod-bore', 'wheel-bearing', 'labeled-bore'}:
@@ -627,7 +692,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('upstream', type=Path)
     parser.add_argument('archive', type=Path, help='LDraw complete.zip used to build the parts index')
-    parser.add_argument('--system-plates', action='store_true', help='Write only the System plate connector catalog')
+    system_output = parser.add_mutually_exclusive_group()
+    system_output.add_argument('--system-plates', dest='system_group', action='store_const',
+                               const='plates', help='Write only the System plate connector catalog')
+    system_output.add_argument('--system-slopes', dest='system_group', action='store_const',
+                               const='slopes', help='Write only the System slope connector catalog')
     args = parser.parse_args()
     upstream = read(args.upstream)
     index = read(ROOT / 'catalog/parts-library.json')
@@ -649,10 +718,13 @@ def main():
     with ZipFile(args.archive) as archive:
         contacts = assembly_ports(archive)
         fallback = primitive_holes(archive)
-        for design, group, title, _, _ in parts:
+        slope_studs = slope_stud_geometry(archive)
+        for design, group, title, *_ in parts:
             if design in curated:
                 continue
-            cylinders = [upstream['cylinders'][i] for i in upstream['parts'].get(design + '.dat', [])]
+            # These printed variants retain the same mounting geometry as their plain bodies.
+            base = {'30602p01': '30602', '88930py0': '88930'}.get(design, design)
+            cylinders = [upstream['cylinders'][i] for i in upstream['parts'].get(base + '.dat', [])]
             cylinders += geometry_ports(design, title, cylinders, archive) + contacts.get(design, [])
             legacy = []
             for i, prior in enumerate(cylinders):
@@ -671,7 +743,10 @@ def main():
             if design in wheel_ports:
                 ports.append(wheel_ports[design])
             if not ports:
-                ports = list(unique_ports(port for c in fallback(design) if (port := adapt(c, title))))
+                measured = fallback(design)
+                if group == 'slopes':
+                    measured += slope_fallback(design, cylinders, slope_studs)
+                ports = list(unique_ports(port for c in measured if (port := adapt(c, title))))
             by_design[design] = list(unique_ports([*ports, *legacy]))
             structural = group in {'beams', 'pins'} or title.startswith((
                 'Beam ', 'Cross Block ', 'Connector ', 'Brick ', 'Steering Portal Axle Frame'))
@@ -682,7 +757,7 @@ def main():
             for port in ports:
                 if signature := match_signature(port):
                     groups[signature].add(port[0][1])
-                    if group != 'plates':
+                    if group not in {'plates', 'slopes'}:
                         technic_groups[signature].add(port[0][1])
 
     specs = {}
@@ -715,8 +790,10 @@ def main():
         registry[design] = records
         by_design[design] = ports
 
-    if args.system_plates:
-        for design, group, _, _, _ in system:
+    if args.system_group:
+        for design, group, *_ in system:
+            if group != args.system_group:
+                continue
             if design in example_ports:
                 coverage[group] += 1
             else:
@@ -726,9 +803,10 @@ def main():
         output = {'source': SOURCE, 'shadow': SHADOW, 'ldraw': index['source']['release'],
                   'types': list(specs), 'locations': list(locations)}
         packed = json.dumps(output, separators=(',', ':'))
-        (ROOT / 'catalog/system-plate-connectors.json').write_text(
+        family = args.system_group.removesuffix('s')
+        (ROOT / f'catalog/system-{family}-connectors.json').write_text(
             packed[:-1] + ',\n"parts":{\n' + parts + '\n}\n}\n', encoding='utf-8')
-        print(f'System: {coverage["plates"]} plate designs with connectors')
+        print(f'System: {coverage[args.system_group]} {family} designs with connectors')
         return
 
     for design, group, _, _, _ in technic:

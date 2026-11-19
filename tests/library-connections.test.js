@@ -140,7 +140,7 @@ function restore(snap, moving, fixed) {
 }
 
 test('each System plate has connectors and the legacy Volvo plate keeps its endpoint IDs', () => {
-  const plates = library.sections.find(section => section.id === 'system').parts
+  const plates = library.sections.find(section => section.id === 'system').parts.filter(([, group]) => group === 'plates')
   for (const [design] of plates) assert.ok(portsFor(design).length, design)
   for (const design of ['3024', '3023b', '3020', '3034', '11609', '6901']) {
     assert.ok(plates.some(([id]) => id === design), design)
@@ -160,6 +160,16 @@ test('each System plate has connectors and the legacy Volvo plate keeps its endp
     assert.equal(mates.length, 1, design)
     assert.equal(createAssembly([support, decoration], mates).connections.length, 1, design)
   }
+})
+
+test('the 85984 System slope seats flush on both studs of a 1 × 2 plate', () => {
+  const system = library.sections.find(section => section.id === 'system')
+  assert.equal(system.parts.find(([design]) => design === '85984')?.[1], 'slopes')
+  const slope = part('slope', '85984')
+  const plate = part('plate', '3023b')
+  const links = connectAligned(createAssembly([plate, slope], []), [slope], [plate])
+  assert.equal(links.length, 2)
+  assert.equal(createAssembly([plate, slope], links).connections.length, 2)
 })
 
 test('each structural connector mates through its accessible ends and survives reopening', () => {

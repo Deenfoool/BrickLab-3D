@@ -11,8 +11,8 @@ export const previewPageSize = previewColumns * previewRows
 export function sectionsFor(library, curated, coreOrder) {
   const order = new Map(coreOrder.map((design, index) => [design, index]))
   return library.sections.map(({ id, ru, en, assetPath, groups, parts, aliases = {}, revision = library.source.release }) => {
-    const entries = parts.map(([design, group, title, russianTitle, pack], preview) => ({
-      design, group, assetPath, pack, preview, revision,
+    const entries = parts.map(([design, group, title, russianTitle, pack, commonPack], preview) => ({
+      design, group, assetPath, pack, commonPack, preview, revision,
       ru: russianTitle || title, en: title, color: colors[group] ?? colors.other,
       ...curated[design],
       searchableTitle: title, aliases: aliases[design] ?? [],

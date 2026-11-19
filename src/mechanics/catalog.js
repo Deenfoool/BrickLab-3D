@@ -1,7 +1,8 @@
 import technic from '../../catalog/technic.json?v=connector-coverage' with { type: 'json' }
 import profiles from '../../catalog/snap-profiles.json?v=technic-seats' with { type: 'json' }
 import designs from '../../catalog/snap-parts.json?v=structural-bores' with { type: 'json' }
-import system from '../../catalog/system-plate-connectors.json' with { type: 'json' }
+import plates from '../../catalog/system-plate-connectors.json' with { type: 'json' }
+import slopes from '../../catalog/system-slope-connectors.json' with { type: 'json' }
 
 import buggyParts from '../../catalog/dune-buggy-parts.json?v=rotation' with { type: 'json' }
 import engineParts from '../../catalog/inline-engine-parts.json' with { type: 'json' }
@@ -19,10 +20,10 @@ const unpackTypes = types => types.map(([role, gender, ends, sections, group, sl
 const unpackLocations = locations => locations.map(([point, reference]) => ({
   start: point.slice(0, 3), axis: point.slice(3), ...(reference && { reference }),
 }))
-const technicTypes = unpackTypes(profiles.types)
-const technicLocations = unpackLocations(profiles.locations)
-const systemTypes = unpackTypes(system.types)
-const systemLocations = unpackLocations(system.locations)
+const catalogs = [{ ...profiles, parts: designs }, plates, slopes].map(({ parts, types, locations }) => ({
+  parts, definitions: unpackTypes(types), locations: unpackLocations(locations),
+}))
+const catalogFor = design => catalogs.find(catalog => Object.hasOwn(catalog.parts, design))
 const imported = new Map()
 const roundPlateAxleHole = {
   id: 'axle-hole', role: 'key', gender: 'F', openings: ['start', 'end'],
@@ -64,21 +65,18 @@ const suspensionPorts = Object.fromEntries(shockFamilies.flatMap(({ group, rod, 
 ]))
 
 export function hasConnectors(design) {
-  return Object.hasOwn(technic, design) || Object.hasOwn(designs, design) || Object.hasOwn(system.parts, design) || Boolean(support[design]?.ports?.length || suspensionPorts[design])
+  return Object.hasOwn(technic, design) || Boolean(catalogFor(design) || support[design]?.ports?.length || suspensionPorts[design])
 }
 
 export function portsFor(design) {
   if (Object.hasOwn(technic, design)) return technic[design]
   if (!imported.has(design)) {
-    const systemPlate = Object.hasOwn(system.parts, design)
-    const entries = systemPlate ? system.parts[design] : designs[design]
-    const definitions = systemPlate ? systemTypes : technicTypes
-    const locations = systemPlate ? systemLocations : technicLocations
-    const base = entries?.map(([key, type, point]) => ({
-      id: `shadow-${key}`, ...definitions[type], ...locations[point],
-      ...(definitions[type].role === 'rim-seat' && { mates: profiles.rimMates[design] }),
-      ...(definitions[type].role === 'tyre-seat' && { design }),
-      ...(suspensionPorts[design] && /:(?:fake-)?spring-[01]$/.test(definitions[type].group ?? '') && { legacy: true }),
+    const catalog = catalogFor(design)
+    const base = catalog?.parts[design].map(([key, type, point]) => ({
+      id: `shadow-${key}`, ...catalog.definitions[type], ...catalog.locations[point],
+      ...(catalog.definitions[type].role === 'rim-seat' && { mates: profiles.rimMates[design] }),
+      ...(catalog.definitions[type].role === 'tyre-seat' && { design }),
+      ...(suspensionPorts[design] && /:(?:fake-)?spring-[01]$/.test(catalog.definitions[type].group ?? '') && { legacy: true }),
     })) ?? support[design]?.ports ?? noPorts
     const supported = suspensionPorts[design] ? [...base, ...suspensionPorts[design]] : base
     if (['u9479c01', '40940', '10089c01', '10095'].includes(design)) supported.push({

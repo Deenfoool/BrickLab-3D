@@ -236,8 +236,8 @@ async function openLibrary() {
   libraryRetry.hidden = true
   try {
     const [{ mountLibrary }, { sections }] = await Promise.all([
-      import('../editor/library.js?v=system-plates'),
-      import('../editor/parts-data.js?v=system-plates'),
+      import('../editor/library.js?v=system-slopes'),
+      import('../editor/parts-data.js?v=system-slopes'),
     ])
     if (controller.signal.aborted) return
     librarySearch.placeholder = labels.search
@@ -274,7 +274,7 @@ async function openEditor(project) {
   editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=system-plates')
+    const { mountEditor } = await import('../editor/editor.js?v=system-slopes')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

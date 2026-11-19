@@ -1,5 +1,5 @@
-import library from '../../catalog/parts-library.json?v=system-plates' with { type: 'json' }
-import { sectionsFor } from './library-data.js?v=system-plates'
+import library from '../../catalog/parts-library.json?v=system-slopes' with { type: 'json' }
+import { sectionsFor } from './library-data.js?v=system-slopes'
 import buggyParts from '../../catalog/dune-buggy-parts.json?v=8845' with { type: 'json' }
 import engineParts from '../../catalog/inline-engine-parts.json' with { type: 'json' }
 
