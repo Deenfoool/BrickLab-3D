@@ -85,6 +85,9 @@
 .editor-belt-panel label{display:grid;gap:4px;font-size:12px}
 .editor-belt-panel select{width:100%;min-width:0;padding:6px;color:#e6e8ec;background:#15181d;border:1px solid #424650;border-radius:6px}
 .editor-belt-panel [data-belt="status"]{margin:0}
+.editor-track-panel [data-track="status"]{margin:0}
+.editor-track-panel input[type="number"]{width:100%;min-width:0;padding:6px;color:#e6e8ec;background:#15181d;border:1px solid #424650;border-radius:6px}
+.editor-track-panel .editor-track-adjust{grid-template-columns:auto 1fr;align-items:center}
 .editor-belt-panel [data-belt="list"]>div{display:grid;gap:5px;margin-top:8px;padding-top:8px;border-top:1px solid #41454e}
 .editor-status{display:flex;justify-content:space-between;gap:14px;padding:8px 15px;border-top:1px solid #343840;color:#c4c9d4;font-size:12px}
 .editor-status span:last-child{margin-inline-start:auto;white-space:nowrap}

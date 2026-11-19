@@ -1431,3 +1431,54 @@ test('closed track advances in both directions and drives a second sprocket with
     if (fraction === 1) assert.ok(new Vector3().fromArray(moved[0].position).distanceTo(new Vector3().fromArray(links[1].position)) < .001)
   }
 })
+
+test('track builder reuses an open chain, fits rollers, and mirrors a closed 45-link layout', async () => {
+  const { oppositeSprockets, planTrackAssembly } = await import('../src/editor/track-assembly.js')
+  const rotation = [.5, .5, -.5, -.5]
+  const wheels = [
+    { ...part('front', '57519'), rotation },
+    { ...part('rear', '57519'), position: [-2.3, 0, 520], rotation },
+    { ...part('opposite-front', '57519'), position: [484, 0, 0], rotation },
+    { ...part('opposite-rear', '57519'), position: [486.3, 0, 520], rotation },
+  ]
+  const frameWheels = wheels.flatMap((wheel, i) => i % 2 ? [] : [
+    ...Array.from({ length: 7 }, (_, j) => ({ ...part(`${wheel.id}-lower-${j}`, '13971'),
+      position: [wheel.position[0], -20, 80 + j * 60], rotation })),
+    ...[180, 340].map(z => ({ ...part(`${wheel.id}-upper-${z}`, '42610'),
+      position: [wheel.position[0], 40, z], rotation })),
+  ])
+  const treads = Array.from({ length: 46 }, (_, i) => ({ ...part(`tread-${i}`, '57518'),
+    position: [0, -46, -30 * i], color: '#303030' }))
+  const original = [...wheels, ...frameWheels, ...treads]
+  const initial = createAssembly(original, [])
+  const links = connectAligned(initial, treads, treads)
+  assert.equal(links.length, 45)
+  const state = { parts: original, links, belts: [], layers: { groups: [], hiddenPartIds: [] } }
+  const request = { wheelIds: ['front', 'rear'], reuse: 'tread-10', design: '57518', count: 45, color: '#202124' }
+  assert.equal(planTrackAssembly(state, request).reason, 'plane')
+  const plan = planTrackAssembly(state, { ...request, adjust: true })
+  assert.ok(!plan.reason, plan.reason)
+  assert.equal(plan.treads.length, 45)
+  assert.equal(plan.added, 0)
+  assert.equal(plan.removed, 1)
+  assert.equal(plan.guides, 9)
+  assert.ok(plan.phase)
+  assert.ok(plan.treads.every(tread => tread.color === '#303030'))
+  assert.equal(state.parts.length, original.length)
+  assert.equal(wheels[1].position[0], -2.3)
+  const assembly = createAssembly(plan.scene, plan.links)
+  assert.equal(assembly.connections.length, 45)
+  const motion = rotationMotion('front', plan.scene, assembly)
+  assert.ok(motion?.ok && motion.tracks[0].closed)
+  for (const angle of [-.44, .1, .26, .65]) {
+    const rotated = new Map(rotationPoses(plan.scene, motion, angle).map(p => [p.id, p]))
+    const placed = plan.scene.map(p => rotated.get(p.id) ?? p)
+    assert.equal(createAssembly(placed, plan.links).connections.length, 45)
+  }
+  const opposite = oppositeSprockets(plan.scene, wheels.slice(0, 2))
+  assert.deepEqual(opposite, ['opposite-front', 'opposite-rear'])
+  const second = planTrackAssembly({ parts: plan.scene, links: plan.links, belts: [], layers: plan.layers },
+    { ...request, wheelIds: opposite, reuse: undefined, adjust: true })
+  assert.equal(second.added, 45, second.reason)
+  assert.equal(createAssembly(second.scene, second.links).connections.length, 90)
+})

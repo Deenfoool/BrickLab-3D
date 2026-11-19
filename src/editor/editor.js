@@ -5,10 +5,10 @@ import { mountMotorPanel } from './motor-panel.js'
 import { Plane, Quaternion, Vector3 } from 'three'
 import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=tread-pivot'
 import { baseRotation, mirrorPose, samePose, worldPort } from './placement.js?v=turntable-parts'
-import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=sprocket-track'
+import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=track-builder'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
 import { nearestDetent } from '../mechanics/axial.js?v=turntable-parts'
-import { nearbyConnections, translationSnaps } from './snap.js?v=sprocket-track'
+import { nearbyConnections, translationSnaps } from './snap.js?v=track-builder'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=turntable-parts'
 import { mountLibrary } from './library.js?v=system-tiles'
 import { createScene } from './scene.js?v=tread-pivot'
@@ -17,6 +17,7 @@ import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-lay
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=belt-drive'
 import { mountPhysicsPanel, physicsTitle } from './physics-panel.js?v=belt-drive'
 import { mountBeltPanel } from './belt-panel.js?v=belt-drive'
+import { mountTrackPanel, trackLabels } from './track-panel.js?v=track-builder'
 import { upgradeInlineEngineFan } from './inline-engine.js'
 import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
@@ -27,7 +28,7 @@ const Y = new Vector3(0, 1, 0)
 const rotationStep = Math.PI / 4
 const freeKeyboardStep = Math.PI / 36
 const modes = ['build', 'paint', 'kinematics', 'testDrive', 'physics']
-const buildTools = ['select', 'box', 'move', 'rotate', 'length', 'belt']
+const buildTools = ['select', 'box', 'move', 'rotate', 'length', 'belt', 'track']
 const paintColors = ['#c91a09', '#0055bf', '#f2cd37', '#237841', '#f4f4f4', '#a0a5a9', '#1b2a34']
 const heldTurns = { ArrowUp: [X, -1], ArrowDown: [X, 1], ArrowLeft: [Y, -1], ArrowRight: [Y, 1] }
 const steps = { ArrowUp: [0, 0, -1], ArrowDown: [0, 0, 1], ArrowLeft: [-1, 0, 0], ArrowRight: [1, 0, 0] }
@@ -44,6 +45,7 @@ let clipboard
 export async function mountEditor(root, { document, language, save, download, signal }) {
   const source = upgradeInlineEngineFan(promoteLegacyBelts(expandComponents(document, parts)))
   const t = editorLabels[language]
+  const trackText = trackLabels[language]
   const models = new Map()
   const requests = new Map()
 
@@ -119,6 +121,7 @@ export async function mountEditor(root, { document, language, save, download, si
           <button type="button" data-el="rotationSnap" aria-label="${t.rotationSnap}" aria-pressed="true">45°</button>
           <button type="button" data-el="lengthTool" title="${t.length} (S / Ы)" aria-label="${t.length}"><svg class="icon" viewBox="0 0 24 24"><path d="M3 12h18M7 8l-4 4 4 4m10-8 4 4-4 4M12 7v10"/></svg></button>
           <button type="button" data-el="beltTool" title="${t.beltAdd}" aria-label="${t.beltAdd}">${t.belt}</button>
+          <button type="button" data-el="trackTool" title="${trackText.name}" aria-label="${trackText.name}">${trackText.tool}</button>
           <button type="button" data-el="snap" aria-pressed="true">${t.snap}</button>
           <button type="button" data-el="frame">${t.reset}</button>
           <button type="button" data-el="groupSelection" title="${t.createGroup}" hidden>${t.groupSelection}</button>
@@ -185,6 +188,7 @@ export async function mountEditor(root, { document, language, save, download, si
                 <button type="button" data-el="applyHinge" hidden>${t.applyHinge}</button>
               </div>
               <section class="editor-belt-panel" data-el="beltPanel" aria-label="${t.beltAdd}" hidden></section>
+              <section class="editor-belt-panel editor-track-panel" data-el="trackPanel" aria-label="${trackText.name}" hidden></section>
               <p class="editor-links" data-el="links"></p>
             </div>
           </aside>
@@ -334,6 +338,28 @@ export async function mountEditor(root, { document, language, save, download, si
       return true
     },
     remove: id => commit({ ...state, belts: state.belts.filter(record => record.id !== id) }),
+  })
+  let focusedTrack
+  const trackPanel = mountTrackPanel(el('trackPanel'), {
+    language, signal,
+    nameOf: design => parts[design][language].split(' · ')[0],
+    colorOf: () => '#202124',
+    prepare: design => prepareModel(parts[design]),
+    preview: plan => {
+      const preview = plan?.preview.map(part => ({ ...part, color: '#ffd16a' })) ?? []
+      const key = plan?.wheelIds.join(',')
+      if (key && key !== focusedTrack) {
+        scene.setHidden(hidden)
+        scene.focus(plan.wheelIds)
+        focusedTrack = key
+      }
+      scene.setHidden(plan ? new Set([...hidden, ...plan.covered]) : hidden)
+      scene.setGroupGhost(preview, preview[0], preview[0])
+    },
+    apply: plan => {
+      commit({ ...state, parts: plan.scene, links: plan.links, layers: plan.layers })
+      audio.play('snap')
+    },
   })
   let driveConfig = source.testDrive
   const drivePanel = mountDrivePanel(el('drivePanel'), {
@@ -682,6 +708,7 @@ export async function mountEditor(root, { document, language, save, download, si
 
   async function selectLibraryPart(part) {
     if (mode !== 'build') return
+    if (tool === 'track') setTool('move')
     cancelPlacement()
     const request = { part }
     pendingPart = request
@@ -716,16 +743,20 @@ export async function mountEditor(root, { document, language, save, download, si
     const painting = mode === 'paint'
     const selectingInBox = building && tool === 'box' && !moving && !pendingPart
     const addingBelt = building && tool === 'belt'
+    const addingTrack = building && tool === 'track'
+    const addingConnection = addingBelt || addingTrack
     partsPanel.setEditable(building && !dragActive(), Boolean(isolation), Boolean(isolation) || hasSavedHidden())
-    el('selection').hidden = addingBelt
-    el('partActions').hidden = !part || !building || addingBelt || dragActive()
-    el('paste').hidden = !clipboard || !building || addingBelt || dragActive()
+    el('selection').hidden = addingConnection
+    el('partActions').hidden = !part || !building || addingConnection || dragActive()
+    el('paste').hidden = !clipboard || !building || addingConnection || dragActive()
     for (const name of buildTools) {
       const control = el(`${name}Tool`)
-      control.disabled = !building || (name === 'length' && !canResize(part)) || (name === 'belt' && dragActive())
+      control.disabled = !building || (name === 'length' && !canResize(part)) ||
+        (['belt', 'track'].includes(name) && dragActive())
       control.setAttribute('aria-pressed', String(tool === name))
     }
     beltPanel.render(addingBelt, state.parts, assembly.belts)
+    trackPanel.render(addingTrack, state, hidden, selectionIds())
     const rotationSnap = el('rotationSnap')
     rotationSnap.disabled = !building || Boolean(gizmoPart || resize)
     rotationSnap.setAttribute('aria-pressed', String(steppedRotation))
@@ -1061,8 +1092,15 @@ export async function mountEditor(root, { document, language, save, download, si
     cancelResize()
     message = ''
     const previous = tool
-    tool = next === 'belt' && tool === 'belt' ? 'select' : next
+    tool = ['belt', 'track'].includes(next) && tool === next ? 'select' : next
+    if (tool === 'track' && root.querySelector('#editor-inspector-body').hidden) {
+      root.querySelector('[data-panel="inspector"] [data-panel-toggle]').click()
+    }
     render()
+    if (tool === 'track' && previous !== tool) {
+      focusedTrack = undefined
+      el('trackPanel').querySelector('[data-track="mode"]').focus({ preventScroll: true })
+    }
     if (previous !== tool) audio.play('tool')
   }
 
@@ -1595,6 +1633,7 @@ export async function mountEditor(root, { document, language, save, download, si
     } else if (click) {
       const hit = scene.pointer(event).hit
       if (mode === 'build' && tool === 'belt') beltPanel.pick(hit)
+      else if (mode === 'build' && tool === 'track') trackPanel.pick(hit)
       else {
         if (jointMode && tool === 'rotate' && hit) {
           const joints = rotationJoints(hit)

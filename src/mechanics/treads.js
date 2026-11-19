@@ -129,6 +129,50 @@ export function trackDrives(parts, connections) {
 const axle = wheel => vec([0, 0, 1]).applyQuaternion(quat(wheel.rotation))
 export const trackLine = wheel => ({ start: wheel.position, axis: axle(wheel).toArray() })
 
+function fitTreadRun(points, reference, first, last, pitch, axis, center) {
+  const n = points.length
+  const count = (last - first + n) % n
+  if (count < 2) return
+  const start = points[first], end = points[last]
+  const chord = end.clone().sub(start)
+  const distance = chord.length()
+  if (distance > count * pitch + .001) return
+  const original = reference[last].clone().sub(reference[first]).normalize()
+  let bends = Array.from({ length: count }, (_, i) => {
+    const a = reference[(first + i) % n], b = reference[(first + i + 1) % n]
+    const tangent = b.clone().sub(a).normalize()
+    return Math.atan2(axis.dot(original.clone().cross(tangent)), original.dot(tangent))
+  })
+  if (Math.max(...bends.map(Math.abs)) < .001) {
+    const outward = Math.sign(axis.dot(chord.clone().cross(start.clone().sub(center)))) || 1
+    bends = bends.map((_, i) => outward * .2 * Math.cos(Math.PI * (i + .5) / count))
+  }
+  const resultant = scale => {
+    let x = 0, y = 0
+    for (const bend of bends) {
+      x += pitch * Math.cos(scale * bend)
+      y += pitch * Math.sin(scale * bend)
+    }
+    return { x, y, length: Math.hypot(x, y) }
+  }
+  let low = 0, high = 1
+  while (high < 16 && resultant(high).length > distance) high *= 2
+  if (resultant(high).length > distance + .001) return
+  for (let i = 0; i < 25; i++) {
+    const scale = (low + high) / 2
+    if (resultant(scale).length > distance) low = scale
+    else high = scale
+  }
+  const { x, y } = resultant(high)
+  const correction = Math.atan2(y, x)
+  const direction = chord.normalize()
+  let at = start.clone()
+  for (let i = 0; i < count - 1; i++) {
+    at = at.clone().addScaledVector(direction.clone().applyAxisAngle(axis, high * bends[i] - correction), pitch)
+    points[(first + i + 1) % n] = at
+  }
+}
+
 function linkPoses(track, spin, angle) {
   const { links, seats, drives, closed } = track
   const { wheel, sign } = drives[0]
@@ -150,16 +194,15 @@ function linkPoses(track, spin, angle) {
     return seat ? around(p, seat.wheel, fraction * seat.sign * step(sprockets[seat.wheel.design]))
       : p.lerp(vec(links[(j + 1) % n].position), fraction)
   })
-  // Between equal, in-phase wheels the entire straight run translates together.
-  // Seed its pivots from the next engaged gap, including the small radial lift.
-  const anchor = indices.findIndex(j => seats[j])
-  let carry
-  for (let offset = 0; offset < n; offset++) {
-    const i = (anchor - offset + n) % n, j = indices[i]
-    if (seats[j]) carry = points[i].clone().sub(vec(links[j].position))
-    else points[i].copy(vec(links[j].position)).add(carry)
-  }
   const pitch = sprockets[wheel.design].pitch
+  const reference = indices.map(j => vec(links[j].position).lerp(vec(links[(j + 1) % n].position), fraction))
+  const anchors = indices.flatMap((j, i) => seats[j] ? [i] : [])
+  const center = drives.reduce((sum, drive) => sum.add(vec(drive.wheel.position)), new Vector3())
+    .multiplyScalar(1 / drives.length)
+  for (const [i, first] of anchors.entries()) {
+    fitTreadRun(points, reference, first, anchors[(i + 1) % anchors.length], pitch, axis, center)
+  }
+  // Fall back to relaxing free pivots for older layouts whose moving anchors are overconstrained.
   for (let pass = 0; pass < 100; pass++) {
     let error = 0
     for (let i = 0; i < n; i++) {

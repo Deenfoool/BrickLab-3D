@@ -1,4 +1,4 @@
-import { sprockets, treadCandidates } from '../mechanics/treads.js'
+import { sprockets, treadCandidates } from '../mechanics/treads.js?v=track-builder'
 import { Box3, Plane, Quaternion, Vector3 } from 'three'
 import { measureInsertion } from '../mechanics/assembly.js?v=turntable-parts'
 import { evaluateSpurMesh } from '../mechanics/gears.js'

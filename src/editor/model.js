@@ -1,4 +1,4 @@
-import { sprockets, trackDrives, trackLine, trackPoses } from '../mechanics/treads.js'
+import { sprockets, trackDrives, trackLine, trackPoses } from '../mechanics/treads.js?v=track-builder'
 import { Quaternion, Vector3 } from 'three'
 import { connectionMode } from '../mechanics/axial.js?v=turntable-parts'
 import { Assembly, measureInsertion } from '../mechanics/assembly.js?v=turntable-parts'
