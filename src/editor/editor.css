@@ -222,14 +222,28 @@ body:has(.editor:not([hidden])){overflow:hidden}
   position: fixed;
   z-index: 100;
   display: grid;
-  gap: 3px;
-  min-width: 150px;
+  min-width: 190px;
   padding: 5px;
-  border: 1px solid #434953;
-  border-radius: 6px;
-  background: #202329;
-  box-shadow: 0 5px 16px #0006;
+  gap: 2px;
+  border: 1px solid #555b66;
+  border-radius: 11px;
+  background: #22252c;
+  box-shadow: 0 10px 32px #0007, inset 0 1px #ffffff0d;
 }
 .part-context[hidden], .part-context [hidden] { display: none; }
-.part-context > button { text-align: left; }
-.part-context [data-axis] { width: 30%; }
+.editor .part-context button { border: 0; background: transparent; }
+.editor .part-context > button {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 6px; font-size: 13px;
+}
+.part-context svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linejoin: round; stroke-linecap: round; }
+.part-context .context-chevron { margin-left: auto; color: #bbbfc8; }
+.part-context [aria-expanded="true"] .context-chevron { transform: rotate(90deg); }
+.editor .part-context button:hover, .editor .part-context button:focus-visible { background: #373c45; }
+.editor .part-context button:focus-visible { outline: 1px solid #edb04c; outline-offset: -1px; }
+.editor .part-context [data-action="delete"] { color: #ffa6a8; border-top: 1px solid #3b404a; margin-top: 2px; }
+.part-context [data-el="mirrorAxes"]:not([hidden]) { display: flex; gap: 4px; padding: 0 7px 5px 34px; }
+.editor .part-context [data-axis] { flex: 1; padding: 4px; background: #30343d; font-weight: 650; }
+.part-context [data-axis="0"] { color: #ffaaae; }
+.part-context [data-axis="1"] { color: #a5dbaf; }
+.part-context [data-axis="2"] { color: #9dc5ff; }

@@ -84,7 +84,6 @@ export function createScene(host, models) {
   const ray = new THREE.Raycaster()
   let driveMap
   let ghost
-  const groupGhosts = new Map()
   let frame = null
   let active = true
   let selectedId
@@ -203,24 +202,28 @@ export function createScene(host, models) {
     invalidate()
   }
 
-  function setGroupGhost(partsToPreview) {
-    const current = new Set(partsToPreview.map(part => part.id))
-    for (const [id, mesh] of groupGhosts) {
-      if (current.has(id)) continue
-      world.remove(mesh)
-      mesh.userData.finish.dispose()
-      groupGhosts.delete(id)
-    }
-    for (const part of partsToPreview) {
-      let mesh = groupGhosts.get(part.id)
-      if (!mesh) {
-        mesh = partMesh(models.get(part.design), part.color ?? parts[part.design].color, true)
-        groupGhosts.set(part.id, mesh)
-        world.add(mesh)
+  const ghostRoot = new THREE.Group()
+  let ghostItems
+  function setGroupGhost(items, anchor, pose) {
+    if (ghostItems !== items) {
+      for (const mesh of ghostRoot.children) mesh.userData.finish.dispose()
+      ghostRoot.clear()
+      ghostItems = items
+      for (const part of items) {
+        const mesh = partMesh(models.get(part.design), part.color ?? parts[part.design].color, true)
+        mesh.position.fromArray(part.position)
+        mesh.quaternion.fromArray(part.rotation)
+        mesh.scale.x = part.mirrored ? -1 : 1
+        mesh.updateMatrix()
+        mesh.matrixAutoUpdate = false
+        ghostRoot.add(mesh)
       }
-      mesh.position.fromArray(part.position)
-      mesh.quaternion.fromArray(part.rotation)
-      mesh.scale.x = part.mirrored ? -1 : 1
+      if (items.length) world.add(ghostRoot)
+      else world.remove(ghostRoot)
+    }
+    if (items.length) {
+      ghostRoot.quaternion.fromArray(pose.rotation).multiply(new THREE.Quaternion().fromArray(anchor.rotation).invert())
+      ghostRoot.position.fromArray(anchor.position).applyQuaternion(ghostRoot.quaternion).negate().add(new THREE.Vector3(...pose.position))
     }
     invalidate()
   }
@@ -280,6 +283,17 @@ export function createScene(host, models) {
   function cancelGizmo() {
     gizmo.axis = null
     gizmo.dragging = false
+  }
+
+  function snapProjector() {
+    const rect = canvas.getBoundingClientRect()
+    camera.updateMatrixWorld()
+    const clip = new THREE.Vector3()
+    return point => {
+      clip.copy(point).project(camera)
+      return { clientX: rect.left + (clip.x + 1) * rect.width / 2,
+        clientY: rect.top + (1 - clip.y) * rect.height / 2, visible: clip.z >= -1 && clip.z <= 1 }
+    }
   }
 
   function project(point) {
@@ -434,5 +448,5 @@ export function createScene(host, models) {
     const bounds = new THREE.Box3()
     for (const id of ids) if (objects.has(id)) bounds.expandByObject(objects.get(id), true)
     return bounds.getCenter(new THREE.Vector3()).toArray()
-  }, motorCables, setWiresVisible(value) { motorCables.visible(value); invalidate() }, canvas, camera, gizmo, belts, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, selectInRect, enableBoxSelect, setGhost, setGroupGhost, setMoving, resetView, dispose }
+  }, motorCables, setWiresVisible(value) { motorCables.visible(value); invalidate() }, canvas, camera, gizmo, belts, snapProjector, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, selectInRect, enableBoxSelect, setGhost, setGroupGhost, setMoving, resetView, dispose }
 }

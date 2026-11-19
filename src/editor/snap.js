@@ -1,4 +1,4 @@
-import { Plane, Quaternion, Vector3 } from 'three'
+import { Box3, Plane, Quaternion, Vector3 } from 'three'
 import { measureInsertion } from '../mechanics/assembly.js?v=gear-selector'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
 import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=gear-selector'
@@ -203,6 +203,13 @@ export function nearbyConnections(context) {
         const mode = connectionMode(male, female)
         if (!mode || mode.anchor) continue
         const ownWorld = acceptPose && worldPort(moving, own)
+        // A rigid selection can only translate. Discard impossible port pairs
+        // before enumerating insertion depths or checking occupied intervals.
+        const displacement = context.translationOnly && ownWorld.start.clone().sub(start)
+        const axial = displacement && displacement.dot(axis)
+        const alignment = displacement && ownWorld.axis.dot(axis)
+        if (displacement && (Math.abs(alignment) < .999999 ||
+            displacement.lengthSq() - axial * axial > 12.01 ** 2)) continue
         const socketWidth = portLength(female)
         let points = targets
         const fitsLongPin = longPinBore(male, female)
@@ -262,6 +269,7 @@ export function nearbyConnections(context) {
           let best
           let failure
           for (const direction of directions) {
+            if (displacement && direction * alignment < 0) continue
             for (const entry of entries) {
               const entersAtShaftEnd = (entry === 'start') === (direction > 0)
               if (!movingShaft && entersAtShaftEnd !== (side === 'end')) continue
@@ -284,6 +292,7 @@ export function nearbyConnections(context) {
                 } else offsets.push(offset)
               }
               for (const offset of offsets) {
+                if (displacement && Math.abs(offset - (movingShaft ? axial : -direction * axial)) > 12.01) continue
                 const placement = { direction, side: entry, offset, roll }
                 const fit = assembly.previewInsertion(shaft, socket, placement)
                 if (!fit.ok) {
@@ -360,10 +369,40 @@ export function nearbyConnections(context) {
   })
 }
 
+// Placement records are replaced on transform. Cache the world-space connector
+// envelope for stationary parts across pointer events.
+const envelopes = new WeakMap()
+function connectorEnvelope(part) {
+  if (envelopes.has(part)) return envelopes.get(part)
+  const box = new Box3()
+  let margin = 0
+  for (const port of portsFor(part.design)) {
+    const { start, axis } = worldPort(part, port)
+    box.expandByPoint(start)
+    for (const offset of port.stroke ?? []) box.expandByPoint(start.clone().addScaledVector(axis, offset))
+    box.expandByPoint(start.addScaledVector(axis, portLength(port)))
+    if (port.role === 'gear') margin = Math.max(margin, port.sections[0].radius)
+  }
+  const rack = gearRacks[part.design]
+  if (rack) {
+    const { start, axis } = worldPort(part, rack)
+    box.expandByPoint(start)
+    box.expandByPoint(start.addScaledVector(axis, rack.length))
+  }
+  box.expandByScalar(margin)
+  envelopes.set(part, box)
+  return box
+}
+
 export function translationSnaps(members, parts, assembly, scene, axes, insertionDepth) {
   const ids = new Set(members.map(member => member.id))
   const targets = parts.filter(part => !ids.has(part.id))
+  const project = scene.snapProjector?.()
   const options = members.flatMap(member => {
+    const envelope = members.length > 1 && connectorEnvelope(member).clone().expandByScalar(12.01)
+    const nearby = envelope ? targets.filter(target => envelope.intersectsBox(connectorEnvelope(target))) : targets
+    if (!nearby.length) return []
+
     const ownPorts = portsFor(member.design)
     const points = ownPorts.flatMap(port => {
       const { start, axis } = worldPort(member, port)
@@ -371,8 +410,18 @@ export function translationSnaps(members, parts, assembly, scene, axes, insertio
       const end = start.clone().addScaledVector(axis, length)
       return port.gender === 'F' || port.role === 'selector-spline'
         ? [start, start.clone().addScaledVector(axis, length / 2), end] : [start, end]
-    }).map(scene.project).filter(point => point.visible)
-    const snapScene = { pixelDistance: point => Math.min(...points.map(screen => scene.pixelDistance(point, screen))) }
+    }).map(project ?? scene.project).filter(point => point.visible)
+    const snapScene = { pixelDistance(point) {
+      if (!project) return Math.min(...points.map(screen => scene.pixelDistance(point, screen)))
+      const screen = project(point)
+      if (!screen.visible) return Infinity
+      let nearest = Infinity
+      for (const target of points) {
+        const dx = target.clientX - screen.clientX, dy = target.clientY - screen.clientY
+        nearest = Math.min(nearest, dx * dx + dy * dy)
+      }
+      return Math.sqrt(nearest)
+    } }
     const acceptPose = pose => {
       const delta = pose.position.map((value, i) => value - member.position[i])
       const aligned = samePose(member, { ...pose, position: member.position }) ||
@@ -382,7 +431,7 @@ export function translationSnaps(members, parts, assembly, scene, axes, insertio
         delta.every((value, i) => axes.includes('XYZ'[i]) || Math.abs(value) < (members.length > 1 ? 3 : .01)) &&
         Math.hypot(...delta) <= 12
     }
-    return nearbyConnections({ scene: snapScene, assembly, parts: targets,
+    return nearbyConnections({ scene: snapScene, assembly, parts: nearby, translationOnly: members.length > 1,
       moving: member, depth: insertionDepth, roll: 0, acceptPose }).filter(option => option.pose).map(option => {
       const delta = option.pose.position.map((value, i) => value - member.position[i])
       return { ...option, key: JSON.stringify([member.id, option.key]), shift: Math.hypot(...delta),

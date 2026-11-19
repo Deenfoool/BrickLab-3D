@@ -8,10 +8,10 @@ import { baseRotation, mirrorPose, samePose } from './placement.js?v=mirror-menu
 import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=mirror-menu'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
 import { nearestDetent } from '../mechanics/axial.js?v=gear-selector'
-import { nearbyConnections, translationSnaps } from './snap.js?v=mirror-menu'
+import { nearbyConnections, translationSnaps } from './snap.js?v=group-preview'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=system-slopes'
 import { mountLibrary } from './library.js?v=system-slopes'
-import { createScene } from './scene.js?v=mirror-menu'
+import { createScene } from './scene.js?v=group-preview'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=belt-drive'
@@ -198,11 +198,12 @@ export async function mountEditor(root, { document, language, save, download, si
       </div>
     </div>
     <footer class="editor-status"><span data-el="hint" role="status"></span><span data-el="loadNotice" role="status"></span><span data-el="count"></span></footer>`
+  const menuIcon = path => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`
   root.insertAdjacentHTML('beforeend', `<div class="part-context" data-el="partContext" hidden>
-    <button type="button" data-action="mirror" aria-expanded="false">${language === 'ru' ? 'Отразить' : 'Mirror'} ▸</button>
+    <button type="button" data-action="mirror" aria-expanded="false">${menuIcon('M12 2v3m0 3v3m0 3v3m0 3v2M3 18l6-12v12zM21 18L15 6v12z')}${language === 'ru' ? 'Отразить' : 'Mirror'}<span class="context-chevron" aria-hidden="true">›</span></button>
     <div data-el="mirrorAxes" hidden>${['X','Y','Z'].map((axis, i) => `<button type="button" data-axis="${i}">${axis}</button>`).join('')}</div>
-    <button type="button" data-action="copy">${t.duplicate}</button>
-    <button type="button" data-action="delete">${t.remove}</button>
+    <button type="button" data-action="copy">${menuIcon('M9 9h11v12H9zM15 6V3H3v12h3')}${t.duplicate}</button>
+    <button type="button" data-action="delete">${menuIcon('M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7')}${t.remove}</button>
   </div>`)
   const el = name => root.querySelector(`[data-el="${name}"]`)
   const on = (target, event, callback, capture = false) => target.addEventListener(event, callback, { signal, capture })
@@ -784,6 +785,10 @@ export async function mountEditor(root, { document, language, save, download, si
     el('snap').setAttribute('aria-pressed', String(snapEnabled))
     el('undo').disabled = simulating(mode) || !undo.length
     el('redo').disabled = simulating(mode) || !redo.length
+    renderHint(painting, selectingInBox)
+  }
+
+  function renderHint(painting, selectingInBox) {
     const fit = candidate?.fit
     const rotationCue = { fixed: t.fixed, locked: t.locked, detented: t.detented, continuous: t.freely, ball: t.ballJoint, slider: t.travel, spring: t.mechanisms.suspension }
     const cue = fit ? rotationCue[fit.motion.rotation]
@@ -796,7 +801,18 @@ export async function mountEditor(root, { document, language, save, download, si
           : unknownPartCount ? t.unknown(unknownPartCount) : t.camera)
   }
 
+  let previewFrame = 0
+  function queueGroupPreview(event) {
+    pointer = event
+    if (!previewFrame) previewFrame = requestAnimationFrame(() => {
+      previewFrame = 0
+      if (!signal.aborted) updatePointer(pointer)
+    })
+  }
+
   function updatePointer(event, cycle = false) {
+    cancelAnimationFrame(previewFrame)
+    previewFrame = 0
     pointer = event
     if (!moving) return
     const { ground, ray } = scene.pointer(event, false)
@@ -822,8 +838,8 @@ export async function mountEditor(root, { document, language, save, download, si
     pose = candidate?.pose ? { ...moving, ...candidate.pose } : freePosition
     scene.setGhost(pose, candidate?.point, Boolean(candidate?.failure))
     if (movesExisting && pastedGroup && pose) scene.previewParts(groupTransforms(pastedGroup.items, pastedGroup.anchor, pose))
-    else scene.setGroupGhost(pose && pastedGroup ? groupTransforms(pastedGroup.items, pastedGroup.anchor, pose) : [])
-    render()
+    else scene.setGroupGhost(pose && pastedGroup ? pastedGroup.items : [], pastedGroup?.anchor, pose)
+    renderHint(false, false)
   }
 
   function startPlacement(part, existing = false, origin, group) {
@@ -850,6 +866,8 @@ export async function mountEditor(root, { document, language, save, download, si
   }
 
   function cancelPlacement() {
+    cancelAnimationFrame(previewFrame)
+    previewFrame = 0
     cancelBoxSelection()
     pendingPart = undefined
     if (movesExisting) {
@@ -1132,6 +1150,7 @@ export async function mountEditor(root, { document, language, save, download, si
 
   function changeDepth(step) {
     depth += step
+    el('depth').value = String(depth)
     if (pointer) updatePointer(pointer)
     else render()
   }
@@ -1457,7 +1476,8 @@ export async function mountEditor(root, { document, language, save, download, si
       startPlacement(part, true, start, items.length ? { anchor: part, items } : undefined)
       directDrag = { part, start }
     } else if ((moving && directDrag && (event.buttons & 1)) || !event.buttons) {
-      updatePointer(event)
+      if (moving && pastedGroup?.items.length) queueGroupPreview(event)
+      else updatePointer(event)
     }
   })
   on(scene.canvas, 'pointerup', event => {
