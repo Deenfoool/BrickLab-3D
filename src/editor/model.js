@@ -7,7 +7,7 @@ import { engineDrive } from '../mechanics/engine.js?v=belt-drive'
 import { cardanCoupling } from '../mechanics/cardan.js'
 import { movePose, turnPose, articulationDrive, jointBodies, linkageDrive, mechanismPoses, motionRange, suspensionDrive } from '../mechanics/linkage.js'
 import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=system-slopes'
-import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=gear-selector'
+import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=mirror-menu'
 import { clutchTravel, selectorLinkages } from './selector-linkage.js?v=selector-drag'
 import { motorSupply } from '../mechanics/motors.js'
 
@@ -358,7 +358,7 @@ export function raisedPose(part, model, point) {
   for (const x of [bounds.min.x, bounds.max.x]) {
     for (const y of [bounds.min.y, bounds.max.y]) {
       for (const z of [bounds.min.z, bounds.max.z]) {
-        min = Math.min(min, new Vector3(x, y, z).applyQuaternion(matrix).y)
+        min = Math.min(min, new Vector3(part.mirrored ? -x : x, y, z).applyQuaternion(matrix).y)
       }
     }
   }

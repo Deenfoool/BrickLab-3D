@@ -8,11 +8,27 @@ export const baseRotation = base.toArray()
 const vector = value => new Vector3().fromArray(value)
 const rotation = value => new Quaternion().fromArray(value).normalize()
 
+function handed(point, pose) {
+  if (pose.mirrored) point.x *= -1
+  return point
+}
+
+export function mirrorPose(part, axis, center) {
+  const position = [...part.position]
+  position[axis] = 2 * center[axis] - position[axis]
+  const [x, y, z, w] = part.rotation
+  // S_axis R S_x is a proper rotation. Local X scale carries the reflection.
+  const q = new Quaternion(x, -y, -z, w)
+  if (axis === 1) q.premultiply(new Quaternion(0, 0, 1, 0))
+  if (axis === 2) q.premultiply(new Quaternion(0, 1, 0, 0))
+  return { ...part, position, rotation: q.toArray(), mirrored: !part.mirrored }
+}
+
 export function worldPort(pose, port) {
   const q = rotation(pose.rotation)
   return {
-    start: vector(port.start).applyQuaternion(q).add(vector(pose.position)),
-    axis: vector(port.axis).applyQuaternion(q).normalize(),
+    start: handed(vector(port.start), pose).applyQuaternion(q).add(vector(pose.position)),
+    axis: handed(vector(port.axis), pose).applyQuaternion(q).normalize(),
   }
 }
 
@@ -31,8 +47,8 @@ export function joinedPose(movingPose, movingPort, fixedPose, fixedPort, placeme
   }
   const movingShaft = movingPort.gender === 'M'
   const axis = fixed.axis.clone().multiplyScalar(placement.direction)
-  const from = reference(movingPort)
-  const fixedReference = reference(fixedPort).applyQuaternion(rotation(fixedPose.rotation))
+  const from = handed(reference(movingPort), movingPose)
+  const fixedReference = handed(reference(fixedPort), fixedPose).applyQuaternion(rotation(fixedPose.rotation))
   const to = fixedReference.applyAxisAngle(fixed.axis, movingShaft ? placement.roll : -placement.roll * placement.direction)
   const q = rotation(movingPose.rotation)
   q.premultiply(new Quaternion().setFromUnitVectors(moving.axis, axis))
@@ -42,7 +58,7 @@ export function joinedPose(movingPose, movingPort, fixedPose, fixedPort, placeme
   else if (placement.roll) q.premultiply(new Quaternion().setFromAxisAngle(axis, placement.roll))
   const socketAxis = movingShaft ? fixed.axis : axis
   const position = fixed.start.clone().addScaledVector(socketAxis, (movingShaft ? 1 : -1) * placement.offset)
-    .sub(vector(movingPort.start).applyQuaternion(q))
+    .sub(handed(vector(movingPort.start), movingPose).applyQuaternion(q))
   return { position: position.toArray(), rotation: q.toArray() }
 }
 
@@ -83,8 +99,8 @@ export function retainedPlacement(shaft, male, socket, female, previous) {
   }
   const measured = measureInsertion(world.shaft, world.socket, connectionMode(male, female)?.anchor)
   if (!measured) return null
-  const aRef = reference(male).applyQuaternion(rotation(shaft.rotation))
-  const bRef = reference(female).applyQuaternion(rotation(socket.rotation))
+  const aRef = handed(reference(male), shaft).applyQuaternion(rotation(shaft.rotation))
+  const bRef = handed(reference(female), socket).applyQuaternion(rotation(socket.rotation))
   const roll = Math.atan2(b.axis.dot(bRef.clone().cross(aRef)), bRef.dot(aRef))
   return { placement: { ...previous, ...measured, roll }, world }
 }

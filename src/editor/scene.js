@@ -149,7 +149,7 @@ export function createScene(host, models) {
       }
       object.position.fromArray(part.position)
       object.quaternion.fromArray(part.rotation)
-      object.scale.fromArray(unitScale)
+      object.scale.set(part.mirrored ? -1 : 1, 1, 1)
       object.userData.finish.color.set(part.color ?? parts[part.design].color)
       object.updateMatrixWorld(true)
       syncVisibility(part.id, object)
@@ -192,6 +192,7 @@ export function createScene(host, models) {
       }
       ghost.position.fromArray(part.position)
       ghost.quaternion.fromArray(part.rotation)
+      ghost.scale.x = part.mirrored ? -1 : 1
       ghost.userData.finish.color.set(blocked ? '#ef6161' : candidate ? '#ffd16a' : (part.color ?? parts[part.design].color))
     }
     marker.visible = Boolean(candidate)
@@ -219,6 +220,7 @@ export function createScene(host, models) {
       }
       mesh.position.fromArray(part.position)
       mesh.quaternion.fromArray(part.rotation)
+      mesh.scale.x = part.mirrored ? -1 : 1
     }
     invalidate()
   }
@@ -239,6 +241,7 @@ export function createScene(host, models) {
       return
     }
     pivotOffset.copy(models.get(part.design).bounds.getCenter(new THREE.Vector3()))
+    if (part.mirrored) pivotOffset.x *= -1
     pivot.quaternion.fromArray(part.rotation)
     if (ids.length > 1) {
       const bounds = new THREE.Box3()
@@ -262,6 +265,7 @@ export function createScene(host, models) {
       object.position.fromArray(part.position)
       object.quaternion.fromArray(part.rotation)
       object.scale.fromArray(part.previewScale ?? unitScale)
+      if (part.mirrored) object.scale.x *= -1
       object.updateMatrixWorld(true)
     }
     motorCables.update()
@@ -426,5 +430,9 @@ export function createScene(host, models) {
   }
 
   resetView()
-  return { motorCables, setWiresVisible(value) { motorCables.visible(value); invalidate() }, canvas, camera, gizmo, belts, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, selectInRect, enableBoxSelect, setGhost, setGroupGhost, setMoving, resetView, dispose }
+  return { selectionCenter(ids) {
+    const bounds = new THREE.Box3()
+    for (const id of ids) if (objects.has(id)) bounds.expandByObject(objects.get(id), true)
+    return bounds.getCenter(new THREE.Vector3()).toArray()
+  }, motorCables, setWiresVisible(value) { motorCables.visible(value); invalidate() }, canvas, camera, gizmo, belts, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, selectInRect, enableBoxSelect, setGhost, setGroupGhost, setMoving, resetView, dispose }
 }

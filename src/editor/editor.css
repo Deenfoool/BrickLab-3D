@@ -217,3 +217,19 @@ body:has(.editor:not([hidden])){overflow:hidden}
 }
 
 .editor .cable-route-panel { left: 50%; right: auto; transform: translateX(-50%); z-index: 6; }
+
+.part-context {
+  position: fixed;
+  z-index: 100;
+  display: grid;
+  gap: 3px;
+  min-width: 150px;
+  padding: 5px;
+  border: 1px solid #434953;
+  border-radius: 6px;
+  background: #202329;
+  box-shadow: 0 5px 16px #0006;
+}
+.part-context[hidden], .part-context [hidden] { display: none; }
+.part-context > button { text-align: left; }
+.part-context [data-axis] { width: 30%; }

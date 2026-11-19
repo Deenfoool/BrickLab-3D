@@ -4,14 +4,14 @@ import { createEditorAudio } from './audio.js?v=editor-sound'
 import { mountMotorPanel } from './motor-panel.js'
 import { Plane, Quaternion, Vector3 } from 'three'
 import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=system-slopes'
-import { baseRotation, samePose } from './placement.js?v=gear-selector'
-import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=system-slopes'
+import { baseRotation, mirrorPose, samePose } from './placement.js?v=mirror-menu'
+import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=mirror-menu'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
 import { nearestDetent } from '../mechanics/axial.js?v=gear-selector'
-import { nearbyConnections, translationSnaps } from './snap.js?v=system-slopes'
+import { nearbyConnections, translationSnaps } from './snap.js?v=mirror-menu'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=system-slopes'
 import { mountLibrary } from './library.js?v=system-slopes'
-import { createScene } from './scene.js?v=system-slopes'
+import { createScene } from './scene.js?v=mirror-menu'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=belt-drive'
@@ -198,6 +198,12 @@ export async function mountEditor(root, { document, language, save, download, si
       </div>
     </div>
     <footer class="editor-status"><span data-el="hint" role="status"></span><span data-el="loadNotice" role="status"></span><span data-el="count"></span></footer>`
+  root.insertAdjacentHTML('beforeend', `<div class="part-context" data-el="partContext" hidden>
+    <button type="button" data-action="mirror" aria-expanded="false">${language === 'ru' ? 'Отразить' : 'Mirror'} ▸</button>
+    <div data-el="mirrorAxes" hidden>${['X','Y','Z'].map((axis, i) => `<button type="button" data-axis="${i}">${axis}</button>`).join('')}</div>
+    <button type="button" data-action="copy">${t.duplicate}</button>
+    <button type="button" data-action="delete">${t.remove}</button>
+  </div>`)
   const el = name => root.querySelector(`[data-el="${name}"]`)
   const on = (target, event, callback, capture = false) => target.addEventListener(event, callback, { signal, capture })
   const selectionFrame = el('selectionFrame')
@@ -1227,6 +1233,42 @@ export async function mountEditor(root, { document, language, save, download, si
   })
   on(el('copy'), 'click', copyPart)
   on(el('paste'), 'click', () => insertCopy(clipboard))
+  const context = el('partContext')
+  const mirrorAxes = el('mirrorAxes')
+  function positionContext(x, y) {
+    context.style.left = Math.max(0, Math.min(x, window.innerWidth - context.offsetWidth)) + 'px'
+    context.style.top = Math.max(0, Math.min(y, window.innerHeight - context.offsetHeight)) + 'px'
+  }
+  on(window, 'pointerdown', event => { if (!context.contains(event.target)) context.hidden = true }, true)
+  on(window, 'keydown', event => {
+    if (!context.hidden && !['Tab', 'Enter', ' ', 'Escape'].includes(event.key)) context.hidden = true
+    if (!context.hidden && event.key === 'Escape') {
+      context.hidden = true
+      scene.canvas.focus()
+      event.stopImmediatePropagation()
+    }
+  }, true)
+  on(scene.canvas, 'contextmenu', event => event.preventDefault())
+  on(context, 'click', event => {
+    const button = event.target.closest('button')
+    if (!button) return
+    if (button.dataset.action === 'mirror') {
+      mirrorAxes.hidden = !mirrorAxes.hidden
+      button.setAttribute('aria-expanded', String(!mirrorAxes.hidden))
+      positionContext(context.offsetLeft, context.offsetTop)
+      return
+    }
+    context.hidden = true
+    if (button.dataset.action === 'copy') insertCopy(clipboardSelection())
+    else if (button.dataset.action === 'delete') removeParts()
+    else if (button.hasAttribute('data-axis')) {
+      const ids = selectionIds()
+      const center = scene.selectionCenter(ids)
+      const selectedIds = new Set(ids)
+      const placed = state.parts.map(p => selectedIds.has(p.id) ? mirrorPose(p, Number(button.dataset.axis), center) : p)
+      commit({ ...state, parts: placed, links: transformLinks(placed, ids, [], true) })
+    }
+  })
   on(el('duplicate'), 'click', () => insertCopy(clipboardSelection()))
   on(el('remove'), 'click', () => removeParts())
   on(el('color'), 'change', event => {
@@ -1343,7 +1385,10 @@ export async function mountEditor(root, { document, language, save, download, si
     // TransformControls clears its own dragging flag after this event.
     queueMicrotask(() => { if (gizmoPart === part) finishTransform(part, pose, snap) })
   })
-  on(scene.canvas, 'pointermove', event => { if (!simulating(mode)) pointer = event }, true)
+  on(scene.canvas, 'pointermove', event => {
+    if (!simulating(mode)) pointer = event
+    if (rightDown && Math.hypot(event.clientX - rightDown[0], event.clientY - rightDown[1]) >= 5) rightDown = null
+  }, true)
   on(scene.canvas, 'pointerdown', event => {
     if (simulating(mode)) return
     if (event.button === 2) {
@@ -1419,6 +1464,16 @@ export async function mountEditor(root, { document, language, save, download, si
     if (simulating(mode)) return
     if (event.button === 2) {
       if (rightDown && Math.hypot(event.clientX - rightDown[0], event.clientY - rightDown[1]) < 5) {
+        const hit = scene.pointer(event).hit
+        if (mode === 'build' && !dragActive() && !pendingPart && selectionIds().includes(hit)) {
+          context.hidden = false
+          mirrorAxes.hidden = true
+          context.firstElementChild.setAttribute('aria-expanded', 'false')
+          positionContext(event.clientX, event.clientY)
+          context.firstElementChild.focus()
+          rightDown = null
+          return
+        }
         cancelGizmo()
         cancelPlacement()
       } else if (moving) updatePointer(event)

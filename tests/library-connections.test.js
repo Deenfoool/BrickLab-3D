@@ -1242,3 +1242,23 @@ test('a towball linkage pushes and pulls the changeover catch with an unchanged 
     assembly = next
   }
 })
+
+test('mirroring an assembly reflects its connectors and preserves its seated links on all three axes', async () => {
+  const { mirrorPose } = await import('../src/editor/placement.js')
+  const axle = part('axle', '3707'), bush = part('bush', '3713')
+  const snap = options(bush, axle).find(option => option.fit)
+  const link = { shaft: snap.shaft, socket: snap.socket, placement: snap.fit.placement }
+  const original = [axle, { ...bush, ...snap.pose }]
+  const center = [12, -7, 41]
+  for (const axis of [0, 1, 2]) {
+    const reflected = original.map(p => mirrorPose(p, axis, center))
+    assert.equal(createAssembly(reflected, [link]).connections.length, 1)
+    for (const [i, p] of original.entries()) for (const port of portsFor(p.design)) {
+      const start = worldPort(p, port).start
+      start.setComponent(axis, 2 * center[axis] - start.getComponent(axis))
+      assert.ok(start.distanceTo(worldPort(reflected[i], port).start) < 1e-8)
+      const restored = mirrorPose(reflected[i], axis, center)
+      assert.ok(worldPort(restored, port).start.distanceTo(worldPort(p, port).start) < 1e-8)
+    }
+  }
+})
