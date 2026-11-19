@@ -393,7 +393,13 @@ def geometry_ports(design, title, cylinders, archive):
 def primitive_holes(archive):
     """Read explicit LDraw Technic bore primitives and paired mouths."""
     names = set(archive.namelist())
-    standard = {'peghole.dat', 'connhole.dat', 'connhol3.dat'}
+    peg_mouths = {'peghole.dat', 'peghole5.dat'}
+    standard = peg_mouths | {'connhole.dat', 'connhol3.dat'}
+    bore_widths = {
+        ('peghole.dat', 'peghole.dat'): (10, 20),
+        ('connhol3.dat', 'connhol3.dat'): (40,),
+        ('peghole.dat', 'peghole5.dat'): (20,),
+    }
 
     @lru_cache
     def collect(name):
@@ -413,7 +419,9 @@ def primitive_holes(archive):
 
     def as_ports(design, include_split=False):
         declared = collect(design + '.dat')
-        mouths = [(kind, start, axis) for kind, start, axis in declared if kind == 'peghole.dat']
+        # 4526 was checked against the full cylinder between its two mouth primitives.
+        allowed = peg_mouths if design == '4526' else {'peghole.dat'}
+        mouths = [(kind, start, axis) for kind, start, axis in declared if kind in allowed]
         spans = [(list(a - 10 * b for a, b in zip(start, axis)), axis, 20)
                  for kind, start, axis in declared if kind == 'connhole.dat']
         if include_split:
@@ -421,13 +429,15 @@ def primitive_holes(archive):
                        for kind, start, axis in declared if kind == 'connhol3.dat']
         for index, (kind, start, axis) in enumerate(mouths):
             for other_kind, other, direction in mouths[index + 1:]:
-                if kind != other_kind or dist(axis, [-n for n in direction]) > .001:
+                # An extended mouth lines up with a standard mouth on 1L bores
+                # opening into the windows of alternate-hole frames.
+                widths = bore_widths.get(tuple(sorted((kind, other_kind))), ())
+                if not widths or dist(axis, [-n for n in direction]) > .001:
                     continue
                 delta = [b - a for a, b in zip(start, other)]
                 span = sum(a * b for a, b in zip(delta, axis))
                 if dist(delta, [span * n for n in axis]) > .01:
                     continue
-                widths = (40,) if kind == 'connhol3.dat' else (10, 20)
                 width = next((value for value in widths if abs(span - value) <= .01), None)
                 if width:
                     spans.append((start, axis, width))
