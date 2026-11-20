@@ -88,13 +88,16 @@ export function createInstructionPdfReader(load = loadPdfJs) {
     const viewport = page.getViewport({ scale: 1 })
     const { items, styles } = await page.getTextContent()
     signal.throwIfAborted()
-    const words = pdfWords(items, styles, viewport)
+    const { words, dimensions } = pdfWords(items, styles, viewport)
     const list = await page.getOperatorList()
     signal.throwIfAborted()
-    const images = pdfImages(list, session.ops, viewport)
+    const { images, badgeShapes } = pdfArtwork(list, session.ops, viewport)
     const wideScan = images.some(([x, y, right, bottom]) =>
       right - x >= viewport.width * .7 && bottom - y >= viewport.height * .7)
-    return { words, images, wideScan, width: viewport.width, height: viewport.height }
+    return {
+      words, images, wideScan, width: viewport.width, height: viewport.height,
+      badges: dimensionBadges(dimensions, badgeShapes),
+    }
   }
 
   return { render, fingerprint, inspect, close }
@@ -102,12 +105,15 @@ export function createInstructionPdfReader(load = loadPdfJs) {
 
 const quantity = /^[1-9]\d{0,2}[x×]$/i
 const element = /^\d{6,8}$/
+const dimension = /^[1-9]\d?(?:[,.]\d)?$/
 
 function pdfWords(items, styles, viewport) {
   const words = new Map()
+  const dimensions = new Map()
   for (const item of items) {
     const text = item.str?.trim()
-    if (!text || !(quantity.test(text) || element.test(text))) continue
+    const isDimension = dimension.test(text) && item.height >= 5 && item.height <= 12
+    if (!isDimension && !quantity.test(text) && !element.test(text)) continue
     const [a, b, c, d, x, y] = item.transform
     const length = Math.hypot(a, b)
     if (!length || item.width <= 0) continue
@@ -120,9 +126,10 @@ function pdfWords(items, styles, viewport) {
       Math.min(top[0], bottom[0]), Math.min(top[1], bottom[1]),
       Math.max(top[0], bottom[0]), Math.max(top[1], bottom[1]),
     ]
-    words.set(JSON.stringify([text, ...box.map(Math.round)]), { text, box })
+    const destination = isDimension ? dimensions : words
+    destination.set(JSON.stringify([text, ...box.map(Math.round)]), { text, box })
   }
-  return [...words.values()]
+  return { words: [...words.values()], dimensions: [...dimensions.values()] }
 }
 
 function multiply([a, b, c, d, x, y], [e, f, g, h, u, v]) {
@@ -130,13 +137,17 @@ function multiply([a, b, c, d, x, y], [e, f, g, h, u, v]) {
     a * u + c * v + x, b * u + d * v + y]
 }
 
-function pdfImages({ fnArray, argsArray }, ops, viewport) {
-  const images = new Map(), stack = []
+function bounds([a, b, c, d, x, y]) {
+  const xs = [x, x + a, x + c, x + a + c]
+  const ys = [y, y + b, y + d, y + b + d]
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
+}
+
+function pdfArtwork({ fnArray, argsArray }, ops, viewport) {
+  const images = new Map(), badgeShapes = [], stack = []
   let matrix = viewport.transform
-  function place([a, b, c, d, x, y]) {
-    const xs = [x, x + a, x + c, x + a + c]
-    const ys = [y, y + b, y + d, y + b + d]
-    const box = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
+  function place(placement) {
+    const box = bounds(placement)
     images.set(box.map(value => value.toFixed(1)).join('/'), box)
   }
   for (const [index, op] of fnArray.entries()) {
@@ -157,7 +168,48 @@ function pdfImages({ fnArray, argsArray }, ops, viewport) {
       }
     } else if (op === ops.paintInlineImageXObjectGroup) {
       for (const image of args[1]) place(multiply(matrix, image.transform))
+    } else if (op === ops.constructPath && args[0] === ops.fill) {
+      const pathBounds = args[2]
+      if (pathBounds?.length !== 4) continue
+      const [left, top, right, bottom] = pathBounds
+      const box = bounds(multiply(matrix, [right - left, 0, 0, bottom - top, left, top]))
+      const width = box[2] - box[0], height = box[3] - box[1]
+      if (width >= 10.5 && width <= 14 && height >= 10.5 && height <= 14 &&
+          Math.abs(width - height) <= .7) {
+        const shape = badgeShape(args[1]?.[0], pathBounds)
+        if (shape) badgeShapes.push({ shape, box })
+      }
     }
   }
-  return [...images.values()]
+  return { images: [...images.values()], badgeShapes }
+}
+
+// PDF.js 6 packs path commands as move/line/cubic/quadratic/close (0 through 4).
+function badgeShape(path, [left, top, right, bottom]) {
+  if (!path?.length) return
+  let curves = 0, corners = 0
+  for (let i = 0; i < path.length;) {
+    const command = path[i++]
+    if (command === 0 || command === 1) {
+      const x = path[i++], y = path[i++]
+      if (Math.min(Math.abs(x - left), Math.abs(x - right)) <= .2 &&
+          Math.min(Math.abs(y - top), Math.abs(y - bottom)) <= .2) corners++
+    } else if (command === 2) {
+      curves++
+      i += 6
+    } else if (command !== 4) return
+  }
+  if (curves === 4 && !corners) return 'round'
+  if (!curves && corners >= 4 && corners <= 5) return 'square'
+}
+
+function dimensionBadges(numbers, shapes) {
+  return numbers.flatMap(({ text, box: [x, y, right, bottom] }) => {
+    const centered = shapes.filter(({ box: [a, b, c, d] }) => x >= a && right <= c &&
+      Math.abs(x + right - a - c) <= 3.5 && Math.abs(y + bottom - b - d) <= 5.2)
+    if (!centered.length || centered.some(candidate => candidate.shape !== centered[0].shape)) return []
+    const smallest = centered.reduce((best, match) =>
+      match.box[2] - match.box[0] < best.box[2] - best.box[0] ? match : best)
+    return [{ box: smallest.box, key: `${smallest.shape}/${text.replace(',', '.')}` }]
+  })
 }

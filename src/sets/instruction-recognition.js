@@ -99,7 +99,7 @@ export function createInstructionRecognition(reader, set, signal) {
   function analyze(action, input, transfer = []) {
     signal.throwIfAborted()
     if (!worker) {
-      worker = new Worker(new URL('./instruction-recognition-worker.js?v=browser-recognition', import.meta.url), { type: 'module' })
+      worker = new Worker(new URL('./instruction-recognition-worker.js?v=instruction-artwork-v2', import.meta.url), { type: 'module' })
       worker.onmessage = ({ data }) => {
         const job = jobs.get(data.id)
         jobs.delete(data.id)
@@ -123,7 +123,7 @@ export function createInstructionRecognition(reader, set, signal) {
     const key = Promise.all([reader.fingerprint(source), version]).then(([fingerprint, hash]) => {
       if (!fingerprint || !hash) return
       const file = typeof source === 'string' ? source : [source.name, source.size, source.lastModified]
-      return JSON.stringify(['regions-v1', set.number, hash, fingerprint, file])
+      return JSON.stringify(['regions-v2', set.number, hash, fingerprint, file])
     })
     active = { source, controller, signal: bookSignal, key, pages }
     return active
@@ -219,6 +219,11 @@ export function createInstructionRecognition(reader, set, signal) {
     const samples = await extract(source, page, canvas, false, request)
     request.throwIfAborted()
     if (!samples.length) return []
+    if (samples.every(sample => sample.item)) {
+      const regions = samples.map(({ region, item }) => [...region, ...item])
+      void cache(pageKey, regions)
+      return regions
+    }
     book.inventoryPromise ??= illustratedInventory(book).catch(error => {
       book.inventoryPromise = undefined
       throw error

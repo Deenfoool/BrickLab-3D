@@ -6,7 +6,7 @@ import {
   instructionSources,
 } from './instruction-sources.js?v=browser-recognition'
 import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=browser-recognition'
-import { createInstructionPdfReader } from './instruction-pdf.js?v=browser-recognition'
+import { createInstructionPdfReader } from './instruction-pdf.js?v=instruction-artwork-v2'
 
 const maxUnknownPages = 5000
 const pageWait = 6000
@@ -338,7 +338,7 @@ export function mountInstructions(
     recognitionStatus.textContent = ru ? 'Распознаём детали…' : 'Recognizing parts…'
     recognitionStatus.hidden = false
     try {
-      recognition ??= import('./instruction-recognition.js?v=browser-recognition').then(module => {
+      recognition ??= import('./instruction-recognition.js?v=instruction-artwork-v2').then(module => {
         recognitionEngine = module.createInstructionRecognition(pdf, progress.set, signal)
         return recognitionEngine
       })

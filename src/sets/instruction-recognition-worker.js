@@ -13,6 +13,9 @@ function anchors(captions, images, inventory) {
   for (const [i, caption] of captions.entries()) {
     for (const [j, box] of images.entries()) {
       const dx = Math.abs(caption.box[0] - box[0]), dy = caption.box[1] - box[3]
+      // Some PDFs paint a caption as an image and place searchable text over it.
+      if (dy < 0 && heightOf(box) <= heightOf(caption.box) + 2 &&
+          widthOf(box) <= widthOf(caption.box) + 3) continue
       if (dx <= 5 && dy >= -4 && dy <= (inventory ? 20 : 5)) {
         matches.push({ i, j, score: dx * 2 + Math.abs(dy) })
       }
@@ -38,8 +41,42 @@ function anchors(captions, images, inventory) {
         box[2] = Math.max(box[2], fragment[2])
       }
     }
-    return { caption: captions[i], box }
+    return { caption: captions[i], box, embedded: true }
   })
+}
+
+function inventoryCaptions(elements, quantities) {
+  return elements.map(element => {
+    const [x, y] = element.box
+    let closest, distance = Infinity
+    for (const quantity of quantities) {
+      const dx = Math.abs(quantity.box[0] - x), dy = y - quantity.box[1]
+      if (dx > 3 || dy < 3 || dy > 15 || quantity.box[3] > y + 2) continue
+      const score = dx * 2 + dy
+      if (score < distance) {
+        closest = quantity
+        distance = score
+      }
+    }
+    return closest ? { ...element, box: closest.box } : element
+  })
+}
+
+function assignBadges(candidates, badges) {
+  const pairs = []
+  for (const [index, badge] of badges.entries()) {
+    for (const part of candidates) {
+      const dx = badge.box[0] - part.box[2], dy = badge.box[1] - part.box[1]
+      if (dx >= -3 && dx <= 7 && Math.abs(dy) <= 8)
+        pairs.push({ index, part, key: badge.key, distance: Math.abs(dx) + Math.abs(dy) })
+    }
+  }
+  const used = new Set()
+  for (const pair of pairs.sort((a, b) => a.distance - b.distance)) {
+    if (used.has(pair.index) || pair.part.badge) continue
+    pair.part.badge = pair.key
+    used.add(pair.index)
+  }
 }
 
 function pixelBox(box, raster) {
@@ -183,50 +220,109 @@ function extract({ bitmap, geometry, labels, inventory }) {
   const { width, height, words } = geometry
   const raster = { data: pixels.data, width: surface.width, height: surface.height,
     x: surface.width / width, y: surface.height / height }
-  const captions = words.filter(({ text }) => inventory ? element.test(text) && labels[text] : quantity.test(text))
-  if (inventory && (captions.length < 2 || words.filter(word => quantity.test(word.text)).length < 2)) return []
+  const elements = words.filter(({ text }) => element.test(text) && labels[text])
+  const quantities = words.filter(({ text }) => quantity.test(text))
+  const inventoryPage = elements.length >= 8 && quantities.length >= 8
+  const readInventory = inventory || inventoryPage
+  const captions = readInventory ? inventoryCaptions(elements, quantities) : quantities
+  if (readInventory && (elements.length < 2 || quantities.length < 2)) return []
   const images = geometry.images.filter(box => widthOf(box) >= 5 && heightOf(box) >= 3 &&
     widthOf(box) < .45 * width && heightOf(box) < .35 * height)
-  const candidates = anchors(captions, images, inventory)
+  const candidates = anchors(captions, images, readInventory)
   const assigned = new Set(candidates.map(candidate => candidate.caption))
   if (geometry.wideScan || !images.length) {
     const missing = captions.filter(caption => !assigned.has(caption))
-    candidates.push(...anchors(missing, scanArt(missing, words, raster, inventory), inventory))
+    const fallback = scanArt(missing, words, raster, readInventory)
+    candidates.push(...anchors(missing, fallback, readInventory).map(part => ({ ...part, embedded: false })))
   }
-  return candidates.flatMap(({ box, caption }) => {
+  assignBadges(candidates, geometry.badges ?? [])
+  return candidates.flatMap(({ box, caption, embedded, badge }) => {
     const neighbors = candidates.map(part => part.box).filter(other => other !== box &&
       widthOf(other) * heightOf(other) < .65 * widthOf(box) * heightOf(box) && overlaps(other, box))
     const sample = feature(raster, box, neighbors)
     if (!sample) return []
-    if (inventory) return [{ ...sample, item: labels[caption.text] }]
+    const item = readInventory ? labels[caption.text] : undefined
+    if (inventory) return [{ ...sample, item, embedded, badge }]
     const coordinates = [box[0] - 1.5, box[1] - 1.5, box[2] + 1.5, box[3] + 1.5]
     const [x, y, right, bottom] = coordinates.map((value, index) =>
       Math.max(0, Math.min(10000, Math.round(value * 10000 / (index % 2 ? height : width)))))
-    return [{ ...sample, region: [x, y, right - x, bottom - y] }]
+    return [{ ...sample, item, embedded, badge, region: [x, y, right - x, bottom - y] }]
   })
+}
+
+function pixelDistance(a, b) {
+  let delta = 0
+  for (let i = 0; i < a.length; i += 4) {
+    delta += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2])
+  }
+  return delta / (size * size * 3 * 255)
+}
+
+function shiftedViews(pixels) {
+  const views = []
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue
+      const shifted = new Uint8ClampedArray(pixels.length).fill(255)
+      const column = Math.max(0, -dx), stride = (size - Math.abs(dx)) * 4
+      for (let y = Math.max(0, -dy); y < Math.min(size, size - dy); y++) {
+        const start = (y * size + column) * 4
+        shifted.set(pixels.subarray(start, start + stride), start + (dy * size + dx) * 4)
+      }
+      views.push({ pixels: shifted, penalty: dx && dy ? .013 : .01 })
+    }
+  }
+  return views
+}
+
+function bestByItem(scores) {
+  const items = new Map()
+  for (const result of scores.sort((a, b) => a.score - b.score)) {
+    const key = result.reference.item.join('/')
+    if (!items.has(key)) items.set(key, result)
+  }
+  return [...items.values()]
+}
+
+function confident(scores, sample) {
+  const [first, second] = bestByItem([...scores])
+  if (!first) return
+  const gap = (second?.score ?? Infinity) - first.score
+  if (first.score <= (second ? .045 : .028) && gap >= .022) return first.reference.item
+  // Larger rendering differences need stronger evidence against the runner-up.
+  // Scans and crops recovered from pixels keep the original, stricter limit.
+  if (second && sample.embedded && first.reference.embedded && first.score <= .085 &&
+      gap >= Math.max(.022, first.score * .55)) return first.reference.item
+}
+
+function badgeMatch(scores, sample) {
+  if (!sample.badge || !scores.length) return
+  const [first, second] = bestByItem(scores.filter(({ reference }) => reference.badge === sample.badge))
+  const best = Math.min(...scores.map(({ score }) => score))
+  if (first && first.score <= .095 && first.score - best <= .03 &&
+      (!second || second.score - first.score >= .022)) return first.reference.item
 }
 
 function rank({ samples, templates }) {
   return samples.flatMap(sample => {
-    const scores = new Map()
+    if (sample.item) return [[...sample.region, ...sample.item]]
+    const scores = []
     for (const reference of templates) {
-      const shape = .18 * Math.abs(sample.aspect - reference.aspect)
-      if (shape > .09) continue
-      let delta = 0
-      for (let i = 0; i < sample.pixels.length; i += 4) {
-        delta += Math.abs(sample.pixels[i] - reference.pixels[i]) +
-          Math.abs(sample.pixels[i + 1] - reference.pixels[i + 1]) +
-          Math.abs(sample.pixels[i + 2] - reference.pixels[i + 2])
-      }
-      const score = shape + delta / (size * size * 3 * 255)
-      const key = reference.item.join('/')
-      if (score < (scores.get(key)?.score ?? Infinity)) scores.set(key, { score, item: reference.item })
+      const aspect = .18 * Math.abs(sample.aspect - reference.aspect)
+      if (aspect > .17) continue
+      scores.push({ reference, aspect, score: aspect + pixelDistance(sample.pixels, reference.pixels) })
     }
-    const [first, second] = [...scores.values()].sort((a, b) => a.score - b.score)
-    if (!first || first.score > .045 || (second && second.score - first.score < .022)) return []
-    // With no competing view, only accept a near-identical drawing.
-    if (!second && first.score > .028) return []
-    return [[...sample.region, ...first.item]]
+    let item = badgeMatch(scores, sample) ?? confident(scores, sample)
+    if (!item && sample.embedded && scores.some(({ score }) => score <= .13)) {
+      const views = shiftedViews(sample.pixels)
+      for (const entry of scores) {
+        if (!entry.reference.embedded || entry.aspect > .13) continue
+        for (const view of views) entry.score = Math.min(entry.score,
+          entry.aspect + view.penalty + pixelDistance(view.pixels, entry.reference.pixels))
+      }
+      item = badgeMatch(scores, sample) ?? confident(scores, sample)
+    }
+    return item ? [[...sample.region, ...item]] : []
   })
 }
 

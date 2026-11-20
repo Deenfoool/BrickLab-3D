@@ -76,8 +76,10 @@ test('leaving a page cancels the active PDF render', async () => {
 })
 
 test('PDF inspection projects captions and layered image placements to page coordinates', async () => {
-  const ops = { save: 1, restore: 2, transform: 3, paintImageXObject: 4, paintImageXObjectRepeat: 5 }
+  const ops = { save: 1, restore: 2, transform: 3, paintImageXObject: 4, paintImageXObjectRepeat: 5,
+    constructPath: 6, fill: 7 }
   const caption = { str: '2x', width: 8, transform: [8, 0, 0, 8, 20, 30], fontName: 'font' }
+  const size = { str: '5', width: 4, height: 8, transform: [8, 0, 0, 8, 45, 43], fontName: 'font' }
   const reader = createInstructionPdfReader(async () => ({
     OPS: ops,
     getDocument: () => ({
@@ -90,12 +92,16 @@ test('PDF inspection projects captions and layered image placements to page coor
               convertToViewportPoint: (x, y) => [x, 120 - y],
             }),
             async getTextContent() {
-              return { items: [caption, caption, { str: 'Step 16' }], styles: { font: { ascent: .75 } } }
+              return { items: [caption, caption, size, { ...size, str: '8', transform: [8, 0, 0, 8, 85, 19] }],
+                styles: { font: { ascent: .75 } } }
             },
             async getOperatorList() {
               return {
-                fnArray: [ops.save, ops.transform, ops.paintImageXObject, ops.restore, ops.paintImageXObjectRepeat],
-                argsArray: [null, [20, 0, 0, 15, 20, 37], ['image'], null, ['tile', 3, 4, [7, 8, 9, 10]]],
+                fnArray: [ops.save, ops.transform, ops.paintImageXObject, ops.restore,
+                  ops.paintImageXObjectRepeat, ops.constructPath],
+                argsArray: [null, [20, 0, 0, 15, 20, 37], ['image'], null,
+                  ['tile', 3, 4, [7, 8, 9, 10]],
+                  [ops.fill, [[0, 41, 40, 1, 53, 40, 1, 53, 52, 1, 41, 52, 4]], [41, 40, 53, 52]]],
               }
             },
           }
@@ -113,6 +119,7 @@ test('PDF inspection projects captions and layered image placements to page coor
     wideScan: false,
     width: 100,
     height: 120,
+    badges: [{ box: [41, 68, 53, 80], key: 'square/5' }],
   })
   reader.close()
 })

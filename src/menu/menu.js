@@ -356,7 +356,7 @@ async function openEditor(project) {
   if (!transition) editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=browser-recognition')
+    const { mountEditor } = await import('../editor/editor.js?v=instruction-artwork-v2')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
