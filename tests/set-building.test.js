@@ -378,3 +378,20 @@ test('Volvo book-local pages retrieve part regions from the correct volume', asy
   assert.ok(secondParts.some((region) => region[4] === '3167' && region[5] === '72'))
   assert.deepEqual(await instructionPartRegions('42215-1', second.pdfId, 1), [])
 })
+
+test('Ferrari part regions are available for both verified instruction volumes', async () => {
+  const { instructionPartRegions } = await import('../src/sets/instruction-parts.js')
+  const { discoverBooks, instructionPagePreview } = await import('../src/sets/instruction-sources.js')
+  const set = '42143-1'
+  const [first, second] = await discoverBooks(set, new AbortController().signal)
+  for (const [book, page, previewPage, part, color] of [
+    [first, 41, '041', '32526', '71'],
+    [second, 58, '462', '32523', '0'],
+  ]) {
+    const { image, pdfId } = instructionPagePreview(set, book.url, page)
+    assert.ok(image.endsWith(`/${previewPage}.jpg`))
+    const regions = await instructionPartRegions(set, pdfId, page)
+    assert.ok(regions.some((region) => region[4] === part && region[5] === color))
+    assert.deepEqual(await instructionPartRegions(set, pdfId, 1), [])
+  }
+})

@@ -11,7 +11,6 @@ import gzip
 import json
 import re
 from collections import defaultdict
-from functools import lru_cache
 from pathlib import Path
 
 import fitz
@@ -29,19 +28,41 @@ def text_boxes(words, pattern):
                   key=lambda box: (box[1], box[0]))
 
 
-def artwork(words, images, max_dx, min_dy, max_dy):
+def artwork(words, images, max_dx, min_dy, max_dy, corrections=None):
+    anchors = []
     for x, y, _, _, value in words:
         # Both caption types are left-aligned to the underlying part drawing.
         candidates = [
-            (abs(x - box[0]) * 2 + abs(y - box[3]), xref, box)
-            for xref, box in images
-            if xref and abs(x - box[0]) <= max_dx and min_dy <= y - box[3] <= max_dy
+            (abs(x - box[0]) * 2 + abs(y - box[3]), index)
+            for index, (_, box) in enumerate(images)
+            if abs(x - box[0]) <= max_dx and min_dy <= y - box[3] <= max_dy
+            and box[2] - box[0] >= 6 and box[3] - box[1] >= 4
         ]
-        if not candidates:
-            continue
-        _, xref, box = min(candidates)
-        if box[2] - box[0] >= 6 and box[3] - box[1] >= 4:
-            yield xref, box, value
+        if candidates:
+            anchors.append((min(candidates)[1], value))
+
+    assigned = {index for index, _ in anchors}
+    for index, value in anchors:
+        xref, bounds = images[index]
+        anchor = fitz.Rect(bounds)
+        box = fitz.Rect(anchor)
+        joins = (corrections or {}).get(str(xref), {}).get("join", ())
+        for other_index, (other_ref, other_bounds) in enumerate(images):
+            if other_index in assigned and other_ref not in joins:
+                continue
+            fragment = fitz.Rect(other_bounds)
+            if other_ref in joins:
+                nearby = fitz.Rect(anchor.x0 - 2, anchor.y0 - 2, anchor.x1 + 2, anchor.y1 + 2)
+                if fragment.intersects(nearby):
+                    box |= fragment
+            elif fragment.intersects(anchor) and not fragment.contains(anchor):
+                # A tile can extend above or to the right. Keep the crop clear of
+                # the caption and do not absorb artwork from other callouts.
+                same_left = abs(fragment.x0 - anchor.x0) <= 2
+                same_bottom = abs(fragment.y1 - anchor.y1) <= 2 and fragment.x0 >= anchor.x0
+                if (same_left or same_bottom) and fragment.y1 <= anchor.y1 + 1:
+                    box |= fragment
+        yield xref, box, value
 
 
 def read_book(path, cache=None):
@@ -58,12 +79,13 @@ def read_book(path, cache=None):
     return pdf, pages
 
 
-def template(pdf, xref):
-    pixmap = fitz.Pixmap(pdf, xref)
-    if not pixmap.colorspace:
+def template(display, box):
+    # Render the actual page so inline images, masks and layered tiles are composited.
+    clip = fitz.Rect(box.x0 - 1, box.y0 - 1, box.x1 + 1, box.y1 + .25) & display.rect
+    scale = min(3, 240 / max(clip.width, clip.height)) if not clip.is_empty else 0
+    if not scale:
         return None
-    if pixmap.colorspace.n != 3:
-        pixmap = fitz.Pixmap(fitz.csRGB, pixmap)
+    pixmap = display.get_pixmap(matrix=fitz.Matrix(scale, scale), colorspace=fitz.csRGB, clip=clip)
     pixels = np.frombuffer(pixmap.samples, dtype=np.uint8).reshape(pixmap.height, pixmap.width, 3)
     rgb = pixels.astype(np.float32) / 255
     background = np.median(np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]]), axis=0)
@@ -73,8 +95,10 @@ def template(pdf, xref):
     ys, xs = np.where(foreground)
     if len(ys) < 6:
         return None
+    # The inventory and the steps can use different paper colors. Remove the
+    # background without changing the actual color of the part.
+    rgb[~foreground] = 1
     crop = rgb[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
-    crop = np.clip(crop + (1 - background), 0, 1)
     thumbnail = Image.fromarray(np.uint8(crop * 255)).resize((SIZE, SIZE), Image.Resampling.BILINEAR)
     return np.asarray(thumbnail, dtype=np.float32) / 255, np.log(crop.shape[1] / crop.shape[0])
 
@@ -115,8 +139,9 @@ def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.
             if len(labels) < 10 or len(text_boxes(words, QUANTITY)) < 10:
                 continue
             inventory_pages.add((book_id, page_no))
-            for xref, _, element in artwork(labels, images, max_dx=4, min_dy=-2, max_dy=11):
-                sample = template(pdf, xref)
+            display = pdf[page_no].get_displaylist(annots=False)
+            for _, box, element in artwork(labels, images, max_dx=4, min_dy=-2, max_dy=11):
+                sample = template(display, box)
                 if sample is not None:
                     inventory.append((*sample, elements[element]))
     if not inventory:
@@ -125,35 +150,30 @@ def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.
     corrections = corrections or {}
     maps, audit = {}, {}
     for book_id, (pdf, pages) in books.items():
-        cached = lru_cache(maxsize=None)(lambda xref: rank(template(pdf, xref))[:4])
         result, review = {}, {}
+        book_corrections = corrections.get(book_id, {})
         for page_no, (words, images) in enumerate(pages):
             if (book_id, page_no) in inventory_pages:
                 continue
+            parts = list(artwork(text_boxes(words, QUANTITY), images, max_dx=3,
+                                 min_dy=-2.5, max_dy=2, corrections=book_corrections))
+            if not parts:
+                continue
+            page = pdf[page_no]
+            display = page.get_displaylist(annots=False)
             regions = []
-            for xref, box, quantity in artwork(text_boxes(words, QUANTITY), images, max_dx=3, min_dy=-2.5, max_dy=.3):
-                matches = cached(xref)
-                checked = corrections.get(book_id, {}).get(str(xref))
+            for xref, box, quantity in parts:
+                matches = rank(template(display, box))[:4]
+                checked = book_corrections.get(str(xref))
                 override = checked and checked["part"]
-                if override and checked.get("join"):
-                    extended = fitz.Rect(box)
-                    for ref in checked["join"]:
-                        fragments = [candidate for other, candidate in images if other == ref]
-                        if fragments:
-                            nearest = min(fragments, key=lambda candidate: abs(candidate[0] - box[0]) + abs(candidate[3] - box[3]))
-                            horizontal = nearest[0] <= box[2] + 2 and nearest[2] >= box[0] - 2
-                            vertical = nearest[1] <= box[3] + 2 and nearest[3] >= box[1] - 2
-                            if horizontal and vertical:
-                                extended |= fitz.Rect(nearest)
-                    box = tuple(extended)
                 if checked is None and len(matches) >= 2:
                     (difference, suggested), (alternative, _) = matches[:2]
                     if difference <= max_difference and alternative - difference >= min_margin:
                         override = suggested
                 review.setdefault(xref, {"matches": matches, "pages": [], "selected": override})
-                review[xref]["pages"].append((page_no + 1, box, quantity))
+                review[xref]["pages"].append((page_no + 1, tuple(box), quantity))
                 if override:
-                    regions.append([*normalized_box(box, pdf[page_no].rect), *override])
+                    regions.append([*normalized_box(box, page.rect), *override])
             if regions:
                 result[str(page_no + 1)] = regions
         maps[book_id], audit[book_id] = result, review
