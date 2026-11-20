@@ -11,6 +11,7 @@ import gzip
 import json
 import math
 import re
+import shutil
 from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
@@ -181,7 +182,7 @@ def artwork(words, images, max_dx, min_dy, max_dy, corrections=None):
         yield xref, box, words[caption][4], isolated and box == anchor
 
 
-def read_book(path, cache=None):
+def read_book(path, cache=None, *, scanner=None):
     pdf = fitz.open(path)
     if cache is not None:
         return pdf, cache
@@ -189,9 +190,12 @@ def read_book(path, cache=None):
     for page in pdf:
         words = page.get_text("words")
         images = []
+        scan = None
         if any(QUANTITY.fullmatch(word[4]) for word in words):
             images = [(image["xref"], image["bbox"]) for image in page.get_image_info(xrefs=True)]
-        pages.append((words, images))
+        elif scanner and not words:
+            scan = scanner(page)
+        pages.append((words, images, scan))
     return pdf, pages
 
 
@@ -307,15 +311,22 @@ def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.
     inventory_badges = defaultdict(set)
     inventory_pages = set()
     for book_id, (pdf, pages) in books.items():
-        for page_no, (words, images) in enumerate(pages):
-            labels = [box for box in text_boxes(words, ELEMENT) if box[4] in elements]
-            if len(labels) < 10 or len(text_boxes(words, QUANTITY)) < 10:
-                continue
-            inventory_pages.add((book_id, page_no))
+        for page_no, (words, images, *scanned) in enumerate(pages):
+            scan = scanned[0] if scanned else None
             page = pdf[page_no]
+            if scan is not None:
+                items = [(0, box, element, False) for box, element in scan.inventory if element in elements]
+                if not items:
+                    continue
+                badges = {}
+            else:
+                labels = [box for box in text_boxes(words, ELEMENT) if box[4] in elements]
+                if len(labels) < 10 or len(text_boxes(words, QUANTITY)) < 10:
+                    continue
+                items = list(artwork(labels, images, max_dx=4, min_dy=-2, max_dy=11))
+                badges = artwork_badges(items, list(numbered_badges(words, page.get_drawings())))
+            inventory_pages.add((book_id, page_no))
             display = page.get_displaylist(annots=False)
-            items = list(artwork(labels, images, max_dx=4, min_dy=-2, max_dy=11))
-            badges = artwork_badges(items, list(numbered_badges(words, page.get_drawings())))
             for index, (xref, box, element, isolated) in enumerate(items):
                 identifier = elements[element]
                 sample = template(display, box)
@@ -339,23 +350,25 @@ def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.
         cached_embedded = lru_cache(maxsize=None)(embedded_matches)
         result, review = {}, {}
         book_corrections = corrections.get(book_id, {})
-        for page_no, (words, images) in enumerate(pages):
+        for page_no, (words, images, *scanned) in enumerate(pages):
             if (book_id, page_no) in inventory_pages:
                 continue
-            if not images:
-                continue
+            scan = scanned[0] if scanned else None
             page = pdf[page_no]
-            parts = list(step_artwork(page, words, images, book_corrections))
+            if scan is not None:
+                parts = [(0, box, quantity, False, (), None) for box, quantity in scan.steps]
+            else:
+                parts = list(step_artwork(page, words, images, book_corrections)) if images else []
             if not parts:
                 continue
             display = page.get_displaylist(annots=False)
             regions = []
-            for xref, box, quantity, isolated, neighbors, badge in parts:
+            for index, (xref, box, quantity, isolated, neighbors, badge) in enumerate(parts):
                 sample = template(display, box)
                 ranking = rank(sample)
                 matches = ranking[:4]
                 views = [(sample, ranking)]
-                checked = book_corrections.get(str(xref))
+                checked = book_corrections.get(str(xref)) if scan is None else None
                 override = checked and checked["part"]
                 if checked is None:
                     override = confident_match(matches, max_difference, min_margin)
@@ -393,8 +406,9 @@ def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.
                                 override = candidate
                                 matches = ranked[:4]
                                 break
-                review.setdefault(xref, {"matches": matches, "pages": [], "selected": override})
-                review[xref]["pages"].append((page_no + 1, tuple(box), quantity))
+                key = xref if scan is None else f"scan:{page_no + 1}:{index + 1}"
+                review.setdefault(key, {"matches": matches, "pages": [], "selected": override})
+                review[key]["pages"].append((page_no + 1, tuple(box), quantity))
                 if override:
                     regions.append([*normalized_box(box, page.rect), *override])
             if regions:
@@ -422,6 +436,7 @@ def main():
     parser.add_argument("--output", type=Path, default=Path("catalog/sets"))
     parser.add_argument("--corrections", type=Path, help="Reviewed matches and joined image fragments keyed by PDF ID and image reference")
     parser.add_argument("--review", type=Path, help="Save candidate matches and locations for manual review")
+    parser.add_argument("--ocr", action="store_true", help="Read raster-only pages with Tesseract and SciPy")
     args = parser.parse_args()
     if not re.fullmatch(r"\d+(?:-\d+)?", args.set_number):
         parser.error("--set expects a LEGO set number, for example 42215 or 42215-1")
@@ -430,7 +445,16 @@ def main():
     book_paths = dict(entry.split("=", 1) for entry in args.books)
     if not all(book.isdigit() for book in book_paths):
         parser.error("book identifiers must be numeric LEGO PDF IDs")
-    books = {book: read_book(path) for book, path in book_paths.items()}
+    scanner = None
+    if args.ocr:
+        if not shutil.which("tesseract"):
+            parser.error("--ocr requires Tesseract with English language data.")
+        try:
+            from instruction_pdf_ocr import read_scan
+        except ModuleNotFoundError as error:
+            parser.error(f"--ocr requires SciPy: {error}")
+        scanner = read_scan
+    books = {book: read_book(path, scanner=scanner) for book, path in book_paths.items()}
     corrections = json.loads(args.corrections.read_text()) if args.corrections else None
     limits = {"max_difference": .060, "min_margin": .022} if corrections else {}
     maps, audit = analyze(books, read_elements(args.elements), corrections, **limits)

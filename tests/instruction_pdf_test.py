@@ -1,4 +1,10 @@
+import importlib.util
+import json
 import runpy
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -7,9 +13,50 @@ import numpy as np
 
 
 generator = runpy.run_path(Path(__file__).resolve().parents[1] / "scripts/build-instruction-part-maps.py")
+builder = Path(__file__).resolve().parents[1] / "scripts/build-instruction-part-maps.py"
 
 
 class InstructionPdfTest(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("tesseract") and importlib.util.find_spec("scipy"), "OCR dependencies unavailable")
+    def test_cli_matches_a_raster_step_to_a_raster_inventory(self):
+        languages = subprocess.run(["tesseract", "--list-langs"], capture_output=True, text=True, timeout=10)
+        if "eng" not in languages.stdout.splitlines():
+            self.skipTest("Tesseract English language data unavailable")
+        colors = [(1, 0, 0), (0, .4, .8), (0, .5, .1), (.7, .4, 0), (.3, 0, .6),
+                  (.1, .1, .1), (.4, .1, 0), (0, .5, .5), (.7, .1, .4), (.4, .4, .5)]
+        with tempfile.TemporaryDirectory() as directory, fitz.open() as drawings, fitz.open() as scans:
+            folder = Path(directory)
+            step = drawings.new_page(width=440, height=300)
+            step.draw_rect(fitz.Rect(20, 21, 178, 96), color=(0, 0, 0), fill=(1, 1, 1))
+            step.draw_rect(fitz.Rect(30, 30, 65, 49), color=None, fill=colors[0])
+            step.insert_text((30, 59), "2x", fontsize=9)
+            inventory = drawings.new_page(width=440, height=300)
+            for i, color in enumerate(colors):
+                x, y = 20 + 80 * (i % 5), 22 + 95 * (i // 5)
+                inventory.draw_rect(fitz.Rect(x, y, x + 35, y + 19), color=None, fill=color)
+                inventory.insert_text((x, y + 29), "2x", fontsize=9)
+                inventory.insert_text((x, y + 40), str(5826413 + i), fontsize=9)
+            for original in drawings:
+                image = original.get_pixmap(dpi=216, annots=False)
+                page = scans.new_page(width=original.rect.width, height=original.rect.height)
+                page.insert_image(page.rect, stream=image.tobytes("png"))
+                self.assertEqual(page.get_text("words"), [])
+            pdf = folder / "scan.pdf"
+            scans.save(pdf)
+            elements = folder / "elements.csv"
+            elements.write_text("element_id,part_num,color_id\n" + "".join(
+                f"{5826413 + i},part{i},{i}\n" for i in range(len(colors))
+            ))
+            run = subprocess.run(
+                [sys.executable, str(builder), "--ocr", "--set", "12345", "--elements", str(elements),
+                 "--output", str(folder), f"58421={pdf}"],
+                capture_output=True, text=True, timeout=30,
+            )
+            self.assertEqual(run.returncode, 0, run.stderr)
+            regions = json.loads((folder / "12345-58421-parts-by-page.json").read_text())
+            self.assertEqual(set(regions), {"1"})
+            self.assertEqual([row[4:] for row in regions["1"]], [["part0", "0"]])
+
     def test_numbered_badges_keep_shape_and_ignore_unmarked_numbers(self):
         with fitz.open() as pdf:
             page = pdf.new_page(width=230, height=140)
