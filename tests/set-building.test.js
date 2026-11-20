@@ -401,6 +401,7 @@ test('Ferrari part regions are available for both verified instruction volumes',
   const [first, second] = await discoverBooks(set, new AbortController().signal)
   for (const [book, page, previewPage, part, color] of [
     [first, 41, '041', '32526', '71'],
+    [first, 58, '058', '41239', '71'],
     [second, 58, '462', '32523', '0'],
   ]) {
     const { image, pdfId } = instructionPagePreview(set, book.url, page)

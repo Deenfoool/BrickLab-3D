@@ -10,6 +10,29 @@ generator = runpy.run_path(Path(__file__).resolve().parents[1] / "scripts/build-
 
 
 class InstructionPdfTest(unittest.TestCase):
+    def test_numbered_badges_keep_shape_and_ignore_unmarked_numbers(self):
+        with fitz.open() as pdf:
+            page = pdf.new_page(width=230, height=140)
+            page.draw_rect(fitz.Rect(89, 24, 101, 36), color=None, fill=(0, 0, 0))
+            page.draw_circle(fitz.Point(165, 30), 6, color=None, fill=(0, 0, 0))
+            words = [(92, 25, 98, 35, "9"), (162, 25, 168, 35, "9"), (200, 25, 206, 35, "9")]
+            parts = [(11, fitz.Rect(27, 25, 87, 49)), (22, fitz.Rect(106, 25, 157, 49))]
+            badges = list(generator["numbered_badges"](words, page.get_drawings()))
+
+            self.assertEqual(len(badges), 2)
+            self.assertEqual(generator["artwork_badges"](parts, badges), {0: ("square", 9), 1: ("round", 9)})
+
+    def test_badge_resolves_only_visually_close_candidates(self):
+        shorter, longer, similar = ("short", "0"), ("long", "0"), ("similar", "0")
+        matches = [(.015, shorter), (.024, longer), (.035, similar)]
+        by_badge = generator["badge_match"]
+
+        self.assertIsNone(generator["confident_match"](matches, .043, .028))
+        self.assertEqual(by_badge(matches, {longer}, .043, .028), longer)
+        self.assertIsNone(by_badge(matches, {longer, similar}, .043, .028))
+        self.assertIsNone(by_badge([(.002, shorter), (.040, longer)], {longer}, .043, .028))
+        self.assertIsNone(by_badge([(.025, shorter), (.046, longer)], {longer}, .043, .028))
+
     def test_caption_uses_art_inside_its_frame_once(self):
         with fitz.open() as pdf:
             page = pdf.new_page(width=230, height=180)

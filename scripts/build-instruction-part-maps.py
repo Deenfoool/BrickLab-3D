@@ -22,6 +22,7 @@ from PIL import Image
 
 QUANTITY = re.compile(r"[1-9]\d*x")
 ELEMENT = re.compile(r"\d{6,8}")
+BADGE_NUMBER = re.compile(r"[1-9]\d?")
 SIZE = 40
 
 
@@ -50,9 +51,51 @@ def is_rectangular_path(items, rect):
     ))
 
 
+def numbered_badges(words, drawings):
+    shapes = []
+    for path in drawings:
+        rect = path["rect"]
+        fill = path.get("fill")
+        if not (fill and (max(fill) < .14 or min(fill) > .86)
+                and 10.8 < rect.width < 13.4 and 10.8 < rect.height < 13.4
+                and abs(rect.width - rect.height) < .65):
+            continue
+        items = path["items"]
+        if sum(item[0] == "c" for item in items) >= 4:
+            shapes.append((rect, "round"))
+        elif is_rectangular_path(items, rect):
+            shapes.append((rect, "square"))
+
+    for x0, y0, x1, y1, value in text_boxes(words, BADGE_NUMBER):
+        candidates = [(rect, shape) for rect, shape in shapes
+                      if rect.x0 <= x0 and x1 <= rect.x1 and y1 - y0 < 13
+                      and abs(x0 + x1 - rect.x0 - rect.x1) < 3.4
+                      and abs(y0 + y1 - rect.y0 - rect.y1) < 5.2]
+        if candidates and len({shape for _, shape in candidates}) == 1:
+            rect, shape = min(candidates, key=lambda candidate: candidate[0].get_area())
+            yield rect, (shape, int(value))
+
+
+def artwork_badges(parts, badges):
+    candidates = []
+    for i, (rect, _) in enumerate(badges):
+        for j, (_, box, *_) in enumerate(parts):
+            dx, dy = rect.x0 - box.x1, rect.y0 - box.y0
+            if -3 <= dx <= 7 and -8 <= dy <= 8:
+                candidates.append((abs(dx) + abs(dy), i, j))
+    assigned = {}
+    used = set()
+    for _, i, j in sorted(candidates):
+        if i not in used and j not in assigned:
+            assigned[j] = badges[i][1]
+            used.add(i)
+    return assigned
+
+
 def step_artwork(page, captions, images, corrections=None):
     frames = set()
-    for path in page.get_drawings():
+    drawings = page.get_drawings()
+    for path in drawings:
         rect = path["rect"]
         fill = path.get("fill")
         if (fill and min(fill) >= .8 and max(fill) - min(fill) < .08
@@ -61,6 +104,7 @@ def step_artwork(page, captions, images, corrections=None):
                 and page.rect.contains(rect) and is_rectangular_path(path["items"], rect)):
             frames.add(tuple(rect))
     frames = sorted((fitz.Rect(frame) for frame in frames), key=lambda rect: (rect.get_area(), tuple(rect)))
+    badges = list(numbered_badges(page.get_text("words"), drawings)) if frames else []
 
     groups = defaultdict(list)
     for caption in captions:
@@ -70,18 +114,19 @@ def step_artwork(page, captions, images, corrections=None):
     for frame, words in groups.items():
         if frame is None:
             for part in artwork(words, images, max_dx=3, min_dy=-2.5, max_dy=2, corrections=corrections):
-                yield (*part, ())
+                yield (*part, (), None)
             continue
         bounds = fitz.Rect(frame)
         local = [(xref, box) for xref, box in images if bounds.contains(fitz.Rect(box))]
         parts = list(artwork(words, local, max_dx=4.5, min_dy=-2.5, max_dy=3.5, corrections=corrections))
-        for part in parts:
+        dimensions = artwork_badges(parts, [badge for badge in badges if bounds.contains(badge[0])])
+        for index, part in enumerate(parts):
             _, box, _, _ = part
             # A long diagonal part can have smaller, independently captioned
             # drawings in the blank corners of its bounding box.
             neighbors = tuple(other_box for _, other_box, _, _ in parts
                               if other_box.get_area() < .65 * box.get_area() and box.intersects(other_box))
-            yield (*part, neighbors)
+            yield (*part, neighbors, dimensions.get(index))
 
 
 def artwork(words, images, max_dx, min_dy, max_dy, corrections=None):
@@ -235,6 +280,16 @@ def confident_match(matches, max_difference, min_margin):
     return None
 
 
+def badge_match(matches, candidates, max_difference, min_margin):
+    eligible = [(score, part) for score, part in matches if part in candidates]
+    if not eligible or eligible[0][0] - matches[0][0] > min_margin:
+        return None
+    if len(eligible) == 1:
+        score, part = eligible[0]
+        return part if score <= max_difference else None
+    return confident_match(eligible, max_difference, min_margin)
+
+
 def visible_chroma(image):
     ink = image[image.min(axis=2) < .87]
     colored = ink[np.ptp(ink, axis=1) > .16]
@@ -246,6 +301,7 @@ def visible_chroma(image):
 def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.028):
     inventory, embedded_inventory = [], []
     inventory_chroma = defaultdict(list)
+    inventory_badges = defaultdict(set)
     inventory_pages = set()
     for book_id, (pdf, pages) in books.items():
         for page_no, (words, images) in enumerate(pages):
@@ -253,13 +309,18 @@ def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.
             if len(labels) < 10 or len(text_boxes(words, QUANTITY)) < 10:
                 continue
             inventory_pages.add((book_id, page_no))
-            display = pdf[page_no].get_displaylist(annots=False)
-            for xref, box, element, isolated in artwork(labels, images, max_dx=4, min_dy=-2, max_dy=11):
+            page = pdf[page_no]
+            display = page.get_displaylist(annots=False)
+            items = list(artwork(labels, images, max_dx=4, min_dy=-2, max_dy=11))
+            badges = artwork_badges(items, list(numbered_badges(words, page.get_drawings())))
+            for index, (xref, box, element, isolated) in enumerate(items):
                 identifier = elements[element]
                 sample = template(display, box)
                 if sample is not None:
                     inventory.append((*sample, identifier))
                     inventory_chroma[identifier].append(visible_chroma(sample[0]))
+                    if index in badges:
+                        inventory_badges[badges[index]].add(identifier)
                 if isolated and (embedded := embedded_template(pdf, xref)) is not None:
                     embedded_inventory.append((*embedded, identifier))
     if not inventory:
@@ -287,9 +348,11 @@ def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.
                 continue
             display = page.get_displaylist(annots=False)
             regions = []
-            for xref, box, quantity, isolated, neighbors in parts:
+            for xref, box, quantity, isolated, neighbors, badge in parts:
                 sample = template(display, box)
-                matches = rank(sample)[:4]
+                ranking = rank(sample)
+                matches = ranking[:4]
+                views = [(sample, ranking)]
                 checked = book_corrections.get(str(xref))
                 override = checked and checked["part"]
                 if checked is None:
@@ -300,6 +363,7 @@ def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.
                         if override and embedded and override != embedded:
                             override = None
                             neighbors = ()
+                            badge = None
                         elif embedded and not override and matches and matches[0][1] == embedded:
                             # A placed image can be recolored or marked up. The
                             # paper around thin parts can dominate the image score.
@@ -309,10 +373,24 @@ def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.
                                 override = embedded
                                 matches = raster_ranking
                     if not override and neighbors:
-                        cleaned = rank(template(display, box, neighbors))[:4]
+                        cleaned_sample = template(display, box, neighbors)
+                        cleaned = rank(cleaned_sample)
+                        views.append((cleaned_sample, cleaned))
                         override = confident_match(cleaned, max_difference, min_margin)
                         if override:
-                            matches = cleaned
+                            matches = cleaned[:4]
+                    if not override and badge in inventory_badges:
+                        compatible = inventory_badges[badge]
+                        for pixels, ranked in views:
+                            candidate = badge_match(ranked, compatible, max_difference, min_margin)
+                            if not candidate:
+                                continue
+                            chroma = visible_chroma(pixels[0])
+                            if any(np.max(np.abs(chroma - reference)) <= .15
+                                   for reference in inventory_chroma[candidate]):
+                                override = candidate
+                                matches = ranked[:4]
+                                break
                 review.setdefault(xref, {"matches": matches, "pages": [], "selected": override})
                 review[xref]["pages"].append((page_no + 1, tuple(box), quantity))
                 if override:
