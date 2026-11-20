@@ -1,4 +1,5 @@
 // Set inventories are portable project data. Credentials never belong here.
+// Checked against the sequence on LEGO's set-specific instruction pages.
 export const knownBooks = {
   '42215-1': [
     {
@@ -29,14 +30,36 @@ export function safeBook(value) {
   try {
     const url = new URL(value)
     url.hash = ''
-    return url.protocol === 'https:' &&
-      url.hostname === 'www.lego.com' &&
-      url.pathname.endsWith('.pdf')
-      ? url.href
-      : null
+    if (url.protocol !== 'https:' || url.port || url.username || url.password)
+      return null
+    if (url.hostname === 'www.lego.com' && url.pathname.endsWith('.pdf'))
+      return url.href
+    if (
+      url.hostname === 'bdpinstructions.download.bricklink.info' &&
+      /^\/910\d{3}\.pdf$/.test(url.pathname)
+    )
+      return url.href
+    return null
   } catch {
     return null
   }
+}
+export function normalizeBooks(books) {
+  const result = []
+  for (const book of Array.isArray(books) ? books : []) {
+    const url = safeBook(book?.url)
+    if (!url) continue
+    const pages = Math.trunc(Number(book.pages))
+    result.push({
+      title: String(book.title ?? result.length + 1).slice(0, 40),
+      pages: pages >= 1 && pages <= 5000 ? pages : null,
+      url,
+      ...(['BrickDB', 'BrickLink'].includes(book.source) && {
+        source: book.source,
+      }),
+    })
+  }
+  return result
 }
 export function mapInventory(inventory, catalog) {
   return inventory.map((item) => {
@@ -85,13 +108,7 @@ export function validateSet(value) {
     themeId: Number(value.themeId) || (value.number === '42215-1' ? 1 : null),
     image: safeImage(value.image),
     source: 'Rebrickable',
-    books: (value.books ?? knownBooks[value.number] ?? [])
-      .filter((b) => safeBook(b.url))
-      .map((b) => ({
-        title: String(b.title).slice(0, 40),
-        pages: Math.max(1, Math.min(5000, Number(b.pages) || 1)),
-        url: safeBook(b.url),
-      })),
+    books: normalizeBooks(value.books ?? knownBooks[value.number]),
     inventory: value.inventory.map((item) => {
       if (
         !item ||

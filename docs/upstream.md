@@ -63,3 +63,7 @@
 Редактор переводит две исходные петли LDCad в редактируемые ременные передачи по совпадению осей и канавок. Пакет `assets/ldraw/inline-engine/common.json.gz` хранит резервную геометрию ремней для старых сохранений и недостающие модели из официального архива LDraw с сохранёнными заголовками. Профили в `catalog/inline-engine-parts.json` адаптированы из [таблицы Kinebrick](https://github.com/erik-larsen/kinebrick/blob/24366c8f0782a65d6138f41d593300b079859cb1/data/library-connections.json) и распространяются по CC BY-SA 4.0.
 
 `python3 scripts/build-inline-engine.py "<858-Auto Engines-Inline Engine.mpd>" <complete.zip> <library-connections.json>` пересобирает пример.
+
+## PDF-инструкции наборов
+
+BrickLab обращается к [публичному индексу BrickDB](https://bricks.party/) при первом поиске инструкции. В индексе есть номера наборов, ссылки на PDF LEGO и число страниц там, где оно известно. Файл `catalog/sets/instruction-sequences.json` хранит порядок книг, сверенный со [страницами инструкций LEGO](https://www.lego.com/en-us/service/building-instructions). Сами PDF загружаются с сайтов-источников. Для наборов 910xxx BrickLab проверяет наличие PDF на сервере [BrickLink Designer Program](https://www.bricklink.com/v3/designer-program/instructions.page).

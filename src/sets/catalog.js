@@ -7,7 +7,11 @@ import {
   loadSetPage,
   importSet,
 } from './rebrickable.js?v=set-filters'
-import { safeImage, validateSet } from './data.js?v=set-filters'
+import { safeImage, validateSet } from './data.js?v=auto-pdf'
+import {
+  discoverBooks,
+  instructionSources,
+} from './instruction-sources.js?v=auto-pdf'
 const storageKey = 'bricklab.sets.v1'
 export const setStrings = (language) =>
   language === 'ru'
@@ -31,12 +35,15 @@ export const setStrings = (language) =>
         error:
           'Не удалось загрузить данные. Проверьте ключ и соединение. При ограничении API попробуйте позже.',
         source: 'Данные Rebrickable',
-        noBooks: 'Добавьте ссылку на PDF-инструкцию LEGO.',
-        books: 'PDF-инструкция LEGO',
+        noBooks: 'PDF для этого набора не найден.',
+        findingBooks: 'Ищем инструкцию…',
+        booksUnavailable: 'Не удалось проверить источники инструкций.',
+        retryBooks: 'Повторить поиск инструкции',
+        books: 'PDF-инструкция',
         pages: 'Страниц в книге',
         addBook: 'Добавить книгу',
         invalidBook:
-          'Укажите HTTPS-ссылку на PDF с www.lego.com и количество страниц.',
+          'Укажите ссылку на PDF LEGO или BrickLink и количество страниц.',
         unavailable: 'Модель пока отсутствует в библиотеке',
         missing: 'Позиций без модели',
       }
@@ -59,11 +66,14 @@ export const setStrings = (language) =>
         error:
           'Could not load data. Check the key and connection. If rate limited, try again later.',
         source: 'Data by Rebrickable',
-        noBooks: 'Add a LEGO PDF instruction URL.',
-        books: 'LEGO PDF instructions',
+        noBooks: 'No PDF found for this set.',
+        findingBooks: 'Looking for instructions…',
+        booksUnavailable: 'Could not check the instruction sources.',
+        retryBooks: 'Retry instruction search',
+        books: 'PDF instructions',
         pages: 'Pages in book',
         addBook: 'Add book',
-        invalidBook: 'Enter a www.lego.com HTTPS PDF URL and page count.',
+        invalidBook: 'Enter a LEGO or BrickLink PDF URL and the page count.',
         unavailable: 'Model unavailable in the library',
         missing: 'Lots without models',
       }
@@ -200,16 +210,23 @@ export async function mountSetCatalog(
     }
   }
   function showDetails(set) {
+    const describe = () => {
+      const count = set.inventory
+        .filter((item) => !item.spare)
+        .reduce((sum, item) => sum + item.quantity, 0)
+      return `${set.year} · ${count} ${t.pieces}`
+    }
     const dialog = node('dialog', undefined, 'set-dialog')
     dialogs.add(dialog)
+    const lookupController = new AbortController()
+    const lookupSignal = AbortSignal.any([signal, lookupController.signal])
+    const booksStatus = node('p')
+    booksStatus.setAttribute('role', 'status')
     const image = node('img')
     image.src = safeImage(set.image)
     image.alt = set.name
     const title = node('h2', `${set.number} · ${set.name}`)
-    const count = set.inventory
-      .filter((item) => !item.spare)
-      .reduce((sum, item) => sum + item.quantity, 0)
-    const description = node('p', `${set.year} · ${count} ${t.pieces}`)
+    const description = node('p', describe())
     const last = projects().find(
       (project) => project.document.buildingSet?.set?.number === set.number,
     )
@@ -243,14 +260,18 @@ export async function mountSetCatalog(
             const button = event.currentTarget
             button.disabled = true
             try {
-              const updated = await importSet(set.number, signal)
-              if (signal.aborted) return
-              sets.set(updated.number, updated)
+              const updated = await importSet(set.number, lookupSignal)
+              if (lookupSignal.aborted) return
+              set = {
+                ...updated,
+                books: set.books.length ? set.books : updated.books,
+              }
+              sets.set(set.number, set)
               saveCache()
-              dialog.close()
-              showDetails(updated)
+              description.textContent = describe()
+              lookupBooks()
             } catch {
-              if (!signal.aborted) status.textContent = t.error
+              if (!lookupSignal.aborted) status.textContent = t.error
             } finally {
               button.disabled = false
             }
@@ -259,19 +280,47 @@ export async function mountSetCatalog(
         ),
       )
     actions.append(control(t.close, () => dialog.close(), signal))
-    dialog.append(
-      image,
-      title,
-      description,
-      node(
-        'p',
-        set.books.length ? `${t.books} · ${set.books.length}` : t.noBooks,
-      ),
-      actions,
-    )
+    const retryBooks = control(t.retryBooks, lookupBooks, lookupSignal)
+    dialog.append(image, title, description, booksStatus, retryBooks, actions)
+    function lookupBooks() {
+      retryBooks.hidden = true
+      if (set.books.length) {
+        booksStatus.textContent = `${t.books} · ${set.books.length}`
+        const source = set.books.find(
+          (book) => instructionSources[book.source],
+        )?.source
+        if (source) {
+          const link = node('a', source)
+          link.href = instructionSources[source]
+          link.target = '_blank'
+          link.rel = 'noopener'
+          booksStatus.append(' · ', link)
+        }
+        return
+      }
+      booksStatus.textContent = t.findingBooks
+      discoverBooks(set.number, lookupSignal)
+        .then((books) => {
+          if (lookupSignal.aborted) return
+          if (!books.length) {
+            booksStatus.textContent = t.noBooks
+            return
+          }
+          set = { ...set, books }
+          sets.set(set.number, set)
+          saveCache()
+          lookupBooks()
+        })
+        .catch(() => {
+          if (lookupSignal.aborted) return
+          booksStatus.textContent = t.booksUnavailable
+          retryBooks.hidden = false
+        })
+    }
     dialog.addEventListener(
       'close',
       () => {
+        lookupController.abort()
         dialogs.delete(dialog)
         dialog.remove()
       },
@@ -279,6 +328,7 @@ export async function mountSetCatalog(
     )
     document.body.append(dialog)
     dialog.showModal()
+    lookupBooks()
   }
   function appendItems(items) {
     for (const item of items) {

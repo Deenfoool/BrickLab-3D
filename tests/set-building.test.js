@@ -223,3 +223,103 @@ test('set filter requests use server parameters and preserve continuation query 
     connectRebrickable('')
   }
 })
+
+test('instruction discovery shares the archive, retries failed downloads and supports BrickLink PDFs', async () => {
+  const { discoverBooks } = await import('../src/sets/instruction-sources.js')
+  const { instructionState } = await import('../src/sets/instructions.js')
+  const original = globalThis.fetch
+  const signal = new AbortController().signal
+  const pdf = (id) => `https://www.lego.com/biassets/bi/${id}.pdf`
+  let archiveCalls = 0
+  globalThis.fetch = async (url, options) => {
+    if (
+      String(url).startsWith('https://bdpinstructions.download.bricklink.info/')
+    ) {
+      assert.equal(options.headers.Range, 'bytes=0-1023')
+      return new Response('%PDF-1.7\n1 0 obj<</Linearized 1/N 431>>', {
+        status: 206,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Length': '1024',
+        },
+      })
+    }
+    assert.equal(url, 'https://bricks.party/brickdb.json')
+    assert.equal(options.credentials, 'omit')
+    if (++archiveCalls === 1) return new Response(null, { status: 503 })
+    return Response.json({
+      sets: [
+        {
+          set_num: '100-1',
+          instructions: [
+            {
+              pdf_type: 'Instruction',
+              pdf_id: '2',
+              pdf_url: pdf(2),
+              page_count: 20,
+            },
+            {
+              pdf_type: 'Instruction',
+              pdf_id: '1',
+              pdf_url: pdf(1),
+              page_count: 0,
+            },
+            {
+              pdf_type: 'Alternative Build',
+              pdf_id: '3',
+              pdf_url: pdf(3),
+              page_count: 10,
+            },
+          ],
+        },
+      ],
+    })
+  }
+  try {
+    const official = await discoverBooks('10307-1', signal)
+    assert.match(official[1].url, /6501712\.pdf$/)
+    assert.equal(archiveCalls, 0)
+    await assert.rejects(
+      discoverBooks('100-1', signal),
+      /instruction-index-unavailable/,
+    )
+    const [archive, missing] = await Promise.all([
+      discoverBooks('100-1', signal),
+      discoverBooks('100-2', signal),
+    ])
+    assert.equal(archiveCalls, 2)
+    assert.deepEqual(
+      archive.map((book) => [book.url, book.pages, book.source]),
+      [
+        [pdf(1), null, 'BrickDB'],
+        [pdf(2), 20, 'BrickDB'],
+      ],
+    )
+    assert.deepEqual(missing, [])
+    assert.equal(
+      instructionState({
+        set: { ...inventory, books: archive },
+        book: 0,
+        page: 113,
+      }).page,
+      113,
+    )
+    assert.equal(
+      instructionState({
+        set: { ...inventory, books: archive },
+        book: 1,
+        page: 113,
+      }).page,
+      20,
+    )
+    const [designer] = await discoverBooks('910045-1', signal)
+    assert.equal(designer.pages, 431)
+    assert.equal(designer.source, 'BrickLink')
+    assert.equal(
+      safeBook('https://bdpinstructions.download.bricklink.info/other.pdf'),
+      null,
+    )
+  } finally {
+    globalThis.fetch = original
+  }
+})

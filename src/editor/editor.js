@@ -1,4 +1,4 @@
-import { instructionState, mountInstructions } from '../sets/instructions.js'
+import { instructionState, mountInstructions } from '../sets/instructions.js?v=auto-pdf'
 import { mountSetPalette } from '../sets/palette.js'
 import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'

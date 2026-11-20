@@ -1,5 +1,12 @@
-import { node, control, setStrings } from './catalog.js'
-import { safeBook, validateSet } from './data.js'
+import { node, control, setStrings } from './catalog.js?v=auto-pdf'
+import { safeBook, validateSet } from './data.js?v=auto-pdf'
+import {
+  discoverBooks,
+  instructionSources,
+} from './instruction-sources.js?v=auto-pdf'
+
+const maxUnknownPages = 5000
+
 export function instructionState(value) {
   if (!value?.set) return null
   try {
@@ -11,7 +18,7 @@ export function instructionState(value) {
     const page = Math.max(
       1,
       Math.min(
-        set.books[book]?.pages ?? 1,
+        set.books[book] ? (set.books[book].pages ?? maxUnknownPages) : 1,
         Math.trunc(Number(value.page)) || 1,
       ),
     )
@@ -72,6 +79,13 @@ export function mountInstructions(
       ? 'Листайте кнопками панели, чтобы сохранить страницу. Масштаб — в просмотрщике PDF.'
       : 'Use panel buttons to save the page. Zoom inside the PDF viewer.',
   )
+  const status = node('p')
+  status.setAttribute('role', 'status')
+  const credit = node('a')
+  credit.target = '_blank'
+  credit.rel = 'noopener'
+  const retry = control(t.retryBooks, lookupBooks, signal)
+  retry.hidden = true
   const add = node('details')
   add.append(node('summary', t.addBook))
   const form = node('form'),
@@ -129,7 +143,7 @@ export function mountInstructions(
     },
     { signal },
   )
-  body.append(name, tools, frame, external, hint, add)
+  body.append(name, status, retry, tools, frame, external, credit, hint, add)
   panel.append(header, body)
   layer.append(panel)
   function render() {
@@ -145,18 +159,48 @@ export function mountInstructions(
     frame.hidden = !entry
     external.hidden = !entry
     hint.hidden = !entry
-    add.open = !entry
+    credit.hidden = !instructionSources[entry?.source]
+    status.hidden = Boolean(entry)
+    retry.hidden = true
     if (entry) {
-      page.max = String(entry.pages)
-      total.textContent = `/ ${entry.pages}`
+      page.max = String(entry.pages ?? maxUnknownPages)
+      total.textContent = entry.pages ? `/ ${entry.pages}` : ''
+      if (!credit.hidden) {
+        credit.href = instructionSources[entry.source]
+        credit.textContent = entry.source
+      }
       previous.disabled = progress.page <= 1
-      next.disabled = progress.page >= entry.pages
-      frame.src = `${entry.url}#page=${progress.page}&view=FitH`
-      external.href = frame.src
+      next.disabled = progress.page >= (entry.pages ?? maxUnknownPages)
+      const url = `${entry.url}#page=${progress.page}&view=FitH`
+      if (frame.src !== url) frame.src = url
+      external.href = url
+    }
+  }
+  async function lookupBooks() {
+    if (progress.set.books.length) return
+    status.textContent = t.findingBooks
+    retry.hidden = true
+    try {
+      const books = await discoverBooks(progress.set.number, signal)
+      if (signal.aborted || progress.set.books.length) return
+      if (!books.length) {
+        status.textContent = t.noBooks
+        return
+      }
+      progress = instructionState({
+        ...progress,
+        set: { ...progress.set, books },
+      })
+      render()
+      change(progress)
+    } catch {
+      if (signal.aborted || progress.set.books.length) return
+      status.textContent = t.booksUnavailable
+      retry.hidden = false
     }
   }
   function turn(value) {
-    const limit = progress.set.books[progress.book]?.pages ?? 1
+    const limit = progress.set.books[progress.book]?.pages ?? maxUnknownPages
     progress = {
       ...progress,
       page: Math.max(1, Math.min(limit, Math.trunc(Number(value)) || 1)),
@@ -183,6 +227,7 @@ export function mountInstructions(
     { once: true },
   )
   render()
+  lookupBooks()
   return {
     get value() {
       return progress
