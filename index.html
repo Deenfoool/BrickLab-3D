@@ -9,17 +9,17 @@
   <link rel="stylesheet" href="./src/menu/menu.css?v=project-home-layout">
   <link rel="stylesheet" href="./src/editor/editor.css?v=editor-feedback">
   <link rel="stylesheet" href="./src/sets/sets.css?v=brick-intros">
-  <link rel="stylesheet" href="./src/menu/startup.css?v=brick-intros">
+  <link rel="stylesheet" href="./src/menu/startup.css?v=ldraw-brand">
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=wrangler"></script>
+  <script type="module" src="./src/menu/menu.js?v=ldraw-brand"></script>
 </head>
 <body>
   <section class="startup" id="startup" aria-label="Подготовка BrickLab 3D">
     <div class="startup-stage">
-      <div class="startup-brand" data-startup="brand"><img src="./assets/bricklab.svg" alt="" width="48" height="48"><span>BrickLab 3D</span></div>
-      <div class="startup-vehicle" data-startup="stage" aria-hidden="true"></div>
+      <div class="startup-brand" data-startup="brand" hidden><img src="./assets/bricklab.svg" alt="" width="48" height="48"><span>BrickLab 3D</span></div>
+      <div class="startup-canvas" data-startup="stage" role="img" aria-label="BrickLab 3D" aria-hidden="true"></div>
     </div>
     <footer class="startup-footer">
       <div class="startup-model" data-startup="model" hidden>

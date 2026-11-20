@@ -1,7 +1,7 @@
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=editor-feedback'
 import { locales } from './locale.js?v=project-home-layout'
-import { revealMenu, showEditorLoading, startStartup } from './startup.js?v=wrangler'
+import { revealMenu, showEditorLoading, startStartup } from './startup.js?v=ldraw-brand'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
 const byId = id => document.getElementById(id)

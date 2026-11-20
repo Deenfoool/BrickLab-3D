@@ -1,5 +1,3 @@
-import { assembleStartupBrand } from './startup-brand.js?v=brick-intros'
-
 const copy = {
   ru: {
     title: 'Подготовка BrickLab 3D', download: 'Загружаем карту', prepare: 'Подготавливаем карту',
@@ -74,9 +72,21 @@ function loadingScreen(root, language, intro, onClose) {
   let visual
   let tipIndex = 0
   root.hidden = false
-  root.style.setProperty('--intro-duration', `${intro}ms`)
   tip.textContent = text.tips[tipIndex]
-  assembleStartupBrand(field('brand'))
+  const stage = import('./startup-stage.js?v=ldraw-brand').then(async ({ mountStartupStage }) => {
+    const view = await mountStartupStage(field('stage'), { signal, motion, intro, started })
+    if (!signal.aborted) {
+      if (view) field('stage').removeAttribute('aria-hidden')
+      else field('brand').hidden = false
+    }
+    return view
+  }).catch(error => {
+    if (!signal.aborted) {
+      field('brand').hidden = false
+      console.warn('Startup bricks unavailable', error)
+    }
+    return null
+  })
 
   const tipTimer = setInterval(() => {
     if (!motion.matches) tip.textContent = text.tips[++tipIndex % text.tips.length]
@@ -87,18 +97,21 @@ function loadingScreen(root, language, intro, onClose) {
     visual = new AbortController()
     const visualSignal = visual.signal
     try {
-      const { mountStartupCar } = await import('./startup-car.js?v=wrangler')
+      const view = await stage
+      if (!view || visualSignal.aborted) return
+      const { createStartupCar } = await import('./startup-car.js?v=ldraw-brand')
       if (visualSignal.aborted) return
       const variant = nextVariant()
-      await mountStartupCar(field('stage'), {
-        signal: visualSignal, motion, variant,
-        show() {
-          root.dataset.vehicle = variant.action
-          field('modelName').textContent = variant.title
-          field('modelTag').textContent = variant.tag
-          field('model').hidden = false
-        },
-      })
+      const car = await createStartupCar(variant, visualSignal)
+      if (!car || visualSignal.aborted || motion.matches) {
+        car?.dispose()
+        return
+      }
+      view.setVehicle(car)
+      root.dataset.vehicle = variant.action
+      field('modelName').textContent = variant.title
+      field('modelTag').textContent = variant.tag
+      field('model').hidden = false
     } catch (error) {
       if (!visualSignal.aborted) console.warn('Startup vehicle unavailable', error)
     }

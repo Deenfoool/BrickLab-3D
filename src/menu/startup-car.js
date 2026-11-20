@@ -1,6 +1,6 @@
 import {
-  ACESFilmicToneMapping, Box3, DirectionalLight, Euler, Group, HemisphereLight, MathUtils, Mesh,
-  PerspectiveCamera, PlaneGeometry, Scene, ShaderMaterial, Vector3, WebGLRenderer,
+  Box3, DirectionalLight, Euler, Group, HemisphereLight, MathUtils, Mesh,
+  PerspectiveCamera, PlaneGeometry, Scene, ShaderMaterial, Vector3,
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from '../../vendor/meshoptimizer/meshopt_decoder.js'
@@ -189,15 +189,8 @@ function updateAssembly(piece, time) {
   }
 }
 
-export async function mountStartupCar(host, { signal, motion, variant, show }) {
-  if (signal.aborted || motion.matches) return false
-  let renderer
-  try {
-    renderer = new WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'low-power' })
-  } catch {
-    return false
-  }
-
+export async function createStartupCar(variant, signal) {
+  const model = await loadCar(variant.id, signal)
   const materials = new Set(), geometries = new Set()
   function collect(object) {
     object.traverse(node => {
@@ -212,34 +205,12 @@ export async function mountStartupCar(host, { signal, motion, variant, show }) {
     geometries.clear()
     materials.clear()
   }
-  let observer
-  let frame
-  function dispose() {
-    observer?.disconnect()
-    cancelAnimationFrame(frame)
-    disposeResources()
-    renderer.dispose()
-    renderer.forceContextLoss()
-    renderer.domElement.remove()
-  }
-  signal.addEventListener('abort', dispose, { once: true })
-  let model
-  try {
-    model = await loadCar(variant.id, signal)
-  } catch (error) {
-    signal.removeEventListener('abort', dispose)
-    if (!signal.aborted) dispose()
-    throw error
-  }
   collect(model)
   if (signal.aborted) {
     disposeResources()
-    return false
+    return null
   }
 
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.35))
-  renderer.toneMapping = ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.06
   const scene = new Scene()
   const camera = new PerspectiveCamera(35, 1, .1, 80)
   scene.add(new HemisphereLight('#e8f1ff', '#6480a2', 1.95))
@@ -263,11 +234,7 @@ export async function mountStartupCar(host, { signal, motion, variant, show }) {
   }
   const target = new Vector3()
   const height = variant.id === 'buggy' ? .52 : variant.id === 'wrangler' ? .38 : 0
-  host.append(renderer.domElement)
-  let elapsedTime = -.37
-  let lastFrame
-  function render() {
-    const still = motion.matches
+  function update(elapsedTime, still) {
     const elapsed = still ? (assembling ? 4 : 0) : elapsedTime
     const { entry, drift, turn, lift, x, y, z, yaw, roll, pitch } = carPose(assembling || still ? 1.62 : elapsed, variant.id)
     model.visible = still || elapsed >= -.05
@@ -307,35 +274,12 @@ export async function mountStartupCar(host, { signal, motion, variant, show }) {
     camera.position.set(radius * Math.sin(theta), (2.95 + height + .55 * opening) * fit, radius * Math.cos(theta))
     target.set(0, .63 + height + .47 * opening, assembling ? 0 : -.30 * (1 - entry))
     camera.lookAt(target)
-    renderer.render(scene, camera)
   }
-  function tick(time) {
-    if (lastFrame === undefined || time - lastFrame >= 28) {
-      elapsedTime += Math.min(.1, (time - (lastFrame ?? time)) / 1000)
-      lastFrame = time
-      render()
-    }
-    if (!motion.matches) frame = requestAnimationFrame(tick)
-  }
-  function resize() {
-    const { clientWidth, clientHeight } = host
-    camera.aspect = Math.max(1, clientWidth) / Math.max(1, clientHeight)
+  function resize(width, height, pixelRatio) {
+    camera.aspect = width / height
     camera.updateProjectionMatrix()
-    renderer.setSize(Math.max(1, clientWidth), Math.max(1, clientHeight), false)
-    if (effects) effects.material.uniforms.pointScale.value = Math.max(1, clientHeight) * renderer.getPixelRatio() /
+    if (effects) effects.material.uniforms.pointScale.value = height * pixelRatio /
       (2 * Math.tan(MathUtils.degToRad(camera.fov) / 2))
-    render()
   }
-  function updateMotion() {
-    cancelAnimationFrame(frame)
-    lastFrame = undefined
-    tick(performance.now())
-  }
-  observer = new ResizeObserver(resize)
-  observer.observe(host)
-  motion.addEventListener('change', updateMotion, { signal })
-  resize()
-  show()
-  updateMotion()
-  return true
+  return { scene, camera, update, resize, dispose: disposeResources }
 }

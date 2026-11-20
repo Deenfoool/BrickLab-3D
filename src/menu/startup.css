@@ -15,8 +15,6 @@ body:has(.startup:not([hidden])) { overflow: hidden; }
   position: absolute;
   inset: 0 0 clamp(145px, 23vh, 220px);
   overflow: hidden;
-  --brand-recess: translate3d(0,-33%,-180px) rotateX(11deg) scale(1.13);
-  perspective: 1000px;
   pointer-events: none;
 }
 .startup-stage::before {
@@ -40,62 +38,9 @@ body:has(.startup:not([hidden])) { overflow: hidden; }
   font-size: clamp(22px, 5vw, 48px);
   font-weight: 740;
   letter-spacing: -.05em;
-  transform-origin: 50% 48%;
-  transition: transform .65s cubic-bezier(.22,.68,.2,1), opacity .58s ease;
 }
-.startup-brick-brand {
-  --brick: clamp(4px, 1.45vw, 14px);
-  display: flex;
-  align-items: center;
-  gap: calc(1.5 * var(--brick));
-  filter: drop-shadow(0 9px 16px #0008);
-}
-.startup-brick-brand > div {
-  position: relative;
-  width: calc(var(--columns) * var(--brick));
-  height: calc(var(--rows) * var(--brick));
-}
-.startup-brick-brand i {
-  --brick-color: #e8eef5;
-  --brick-dark: #99a9bd;
-  position: absolute;
-  top: calc(var(--y) * var(--brick));
-  left: calc(var(--x) * var(--brick));
-  width: calc(var(--studs) * var(--brick) - .45px);
-  height: calc(var(--brick) - .45px);
-  border-radius: calc(.10 * var(--brick));
-  background:
-    radial-gradient(ellipse at 50% 42%, var(--brick-color) 0 16%, #fff4 20%, #0005 25%, transparent 29%) 0 0 / var(--brick) 100%,
-    linear-gradient(150deg, var(--brick-color) 36%, var(--brick-dark));
-  box-shadow: 0 calc(.17 * var(--brick)) 0 var(--brick-dark), inset 0 1px 0 #fff4;
-  animation: startup-brick-arrive calc(.29 * var(--intro-duration, 2250ms)) cubic-bezier(.14,.64,.23,1)
-    calc(var(--arrival) * var(--intro-duration, 2250ms)) both;
-}
-.startup-brick-brand i[data-color="gold"] { --brick-color: #ffc64f; --brick-dark: #be6f17; }
-.startup-brick-brand i[data-color="black"] { --brick-color: #303a49; --brick-dark: #10141a; }
-@keyframes startup-brick-arrive {
-  from { opacity: 0; transform: translate(calc(var(--side) * (42px + 4vw)), -95px) rotate(calc(var(--side) * 82deg)) scale(.72); }
-  23% { opacity: 1; }
-  88% { transform: translateY(2px); }
-  to { opacity: 1; transform: none; }
-}
-.startup[data-vehicle] .startup-brand {
-  transform: var(--brand-recess);
-  opacity: .43;
-}
-.startup[data-vehicle]:not([data-leaving]) .startup-brand {
-  animation: startup-brand-recede .69s cubic-bezier(.22,.68,.2,1) both;
-}
-@keyframes startup-brand-recede {
-  from { transform: none; opacity: 1; }
-  23% { transform: scale(1.12); opacity: .94; }
-  to { transform: var(--brand-recess); opacity: .43; }
-}
-.startup[data-leaving] .startup-brand { transform: translate3d(0,-12%,-120px) scale(1.09); opacity: .20; }
-.startup[data-leaving][data-vehicle] .startup-brand { transform: translate3d(0,-35%,-250px) scale(1.1); }
-.startup-vehicle { position: absolute; inset: 0; opacity: 0; transition: opacity .27s ease; }
-.startup[data-vehicle] .startup-vehicle { opacity: 1; }
-.startup-vehicle canvas { display: block; width: 100%; height: 100%; }
+.startup-canvas { position: absolute; inset: 0; }
+.startup-canvas canvas { display: block; width: 100%; height: 100%; }
 .startup-footer {
   position: relative;
   z-index: 1;
@@ -176,15 +121,11 @@ body:has(.startup:not([hidden])) { overflow: hidden; }
 .startup button:hover, .startup-actions a:hover { background: #293c54; }
 .startup button:focus-visible, .startup-actions a:focus-visible { outline: 2px solid #8dc0ff; outline-offset: 2px; }
 @media (max-width: 520px) {
-  .startup-stage { inset: 0 0 158px; --brand-recess: translate3d(0,-32%,-175px) scale(.94); }
-  .startup-brick-brand { --brick: clamp(4px, 1.9vw, 9px); flex-direction: column; gap: calc(2 * var(--brick)); }
-  .startup[data-leaving][data-vehicle] .startup-brand { transform: translate3d(0,-33%,-230px) scale(.94); }
+  .startup-stage { inset: 0 0 158px; }
   .startup-tools { flex-wrap: wrap; justify-content: flex-start; gap: 8px; }
   .startup-tools p { width: 100%; padding-top: 4px; }
   .startup-actions { margin-left: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .startup progress:indeterminate, .startup-brick-brand i, .startup[data-leaving],
-  .startup[data-vehicle]:not([data-leaving]) .startup-brand { animation: none; }
-  .startup-brand, .startup-vehicle { transition: none; }
+  .startup progress:indeterminate, .startup[data-leaving] { animation: none; }
 }
