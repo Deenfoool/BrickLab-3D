@@ -1,5 +1,5 @@
 import { editorLabels } from '../editor/labels.js?v=editor-sound'
-import { locales } from './locale.js?v=set-building'
+import { locales } from './locale.js?v=example-tiles'
 import { startStartup } from './startup.js?v=ford-drift'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
@@ -430,22 +430,22 @@ byId('import-file').addEventListener('change', async event => {
     setStatus('invalidFile')
   }
 })
-byId('example-open').addEventListener('click', async () => {
-  try {
+async function loadExample(file) {
+  if (!file) {
     const { drivetrain } = await import('../projects/drivetrain.js')
-    addProject(newProject(strings().exampleTitle, drivetrain))
-  } catch {
-    setStatus('invalidFile')
+    return newProject(strings().exampleTitle, drivetrain)
   }
-})
+  const url = new URL(`../../examples/${file}`, import.meta.url)
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`Example ${url.pathname}: HTTP ${response.status}`)
+  return parseProject(await response.text())
+}
+
 async function openExample(event) {
   const control = event.currentTarget
-  const url = new URL(`../../examples/${control.dataset.exampleFile}`, import.meta.url)
   control.disabled = true
   try {
-    const response = await fetch(url)
-    if (!response.ok) throw new Error(`Example ${url.pathname}: HTTP ${response.status}`)
-    const example = parseProject(await response.text())
+    const example = await loadExample(control.dataset.exampleFile)
     if (currentPage() === 'examples') addProject(example)
   } catch {
     if (currentPage() === 'examples') setStatus('exampleUnavailable')

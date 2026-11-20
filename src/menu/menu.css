@@ -83,7 +83,16 @@ time{font-size:clamp(14px,1.38vw,21px);color:var(--muted);white-space:nowrap}
 .open:hover{background:var(--hover)}
 .open .icon{width:33px;height:33px}
 .open .icon:last-child{margin-left:auto;width:26px;height:26px}
-#example-panel{display:grid;gap:12px}
+#example-panel{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:18px}
+.content:has(#example-panel:not([hidden]))>h1{margin-bottom:28px}
+.example-card{display:flex;flex-direction:column;min-width:0;border:1px solid #3d4149;border-radius:12px;background:#202226}
+.example-card:hover,.example-card:focus-within{border-color:#79705d}
+.example-image{display:block;width:100%;height:auto;aspect-ratio:8/5;object-fit:contain;border-radius:11px 11px 0 0;background:radial-gradient(ellipse at 50% 42%,#353c4a,#22262f 77%)}
+.example-body{display:flex;flex:1;flex-direction:column;align-items:flex-start;gap:10px;padding:17px 16px 16px}
+.example-body h2{font-size:21px;letter-spacing:-.025em;overflow-wrap:anywhere}
+.example-body p{margin-bottom:6px;color:var(--muted);font-size:14px}
+.example-body button{margin-top:auto;min-height:44px;font-size:14px}
+.example-body button:disabled{cursor:wait;opacity:.7}
 .content:has(#library-panel:not([hidden]))>h1{margin-bottom:24px}
 .menu-library-controls{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px}
 .menu-library-family{font-weight:650;white-space:nowrap}
@@ -99,10 +108,7 @@ time{font-size:clamp(14px,1.38vw,21px);color:var(--muted);white-space:nowrap}
 .menu-library .editor-part-id{font-size:12px}
 .menu-library .editor-library-more,.menu-library #library-retry{display:block;width:max-content;margin:16px auto 0;padding:8px 16px;border:1px solid var(--line);border-radius:8px;background:#24272c}
 .menu-library .editor-library-more:hover,.menu-library #library-retry:hover{background:#303339}
-.example-card,dialog{border:1px solid var(--line);border-radius:12px;background:#202226;padding:26px}
-.example-card{display:flex;align-items:center;gap:20px}
-.example-card p{margin:13px 0;color:var(--muted)}
-.example-card button{margin-left:auto}
+dialog{border:1px solid var(--line);border-radius:12px;background:#202226;padding:26px}
 .setting select{padding:9px 12px;border:1px solid var(--line);border-radius:7px;background:var(--side)}
 .secondary{border:1px solid var(--line);border-radius:7px;padding:8px 14px;background:#2b2e33}
 .secondary:hover{background:#373a40}
@@ -169,7 +175,6 @@ dialog p,.setting{margin:18px 0}
   .file-icon .icon{width:19px;height:19px}
   .more{width:36px}
   .row-menu{top:49px}
-  .example-card{flex-wrap:wrap}
   .menu-library-grid{grid-template-columns:repeat(auto-fill,minmax(117px,1fr));gap:8px}
   .menu-library-controls .search{order:-1;flex-basis:100%}
   .menu-library-controls select{width:auto;max-width:100%}

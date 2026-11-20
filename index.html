@@ -6,14 +6,14 @@
   <meta name="theme-color" content="#181a1d">
   <title>BrickLab 3D</title>
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./src/menu/menu.css?v=catalog-page">
+  <link rel="stylesheet" href="./src/menu/menu.css?v=example-tiles">
   <link rel="stylesheet" href="./src/editor/editor.css?v=track-builder">
   <link rel="stylesheet" href="./src/sets/sets.css?v=compact-instructions">
   <link rel="stylesheet" href="./src/menu/startup.css?v=ford-startup">
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=compact-instructions"></script>
+  <script type="module" src="./src/menu/menu.js?v=example-tiles"></script>
 </head>
 <body>
   <section class="startup" id="startup" aria-label="Подготовка BrickLab 3D">
@@ -121,22 +121,39 @@
           </section>
         </div>
         <section id="sets-panel" hidden></section>
-        <section id="example-panel" hidden>
-          <div class="example-card">
-            <span class="file-icon"><svg class="icon"><use href="#layers"/></svg></span>
-            <div><h2 data-text="exampleTitle">Редуктор 8T / 24T</h2><p data-text="exampleDescription">Передача вращения между двумя осями.</p></div>
-            <button type="button" class="secondary" id="example-open" data-text="exampleOpen">Создать копию</button>
-          </div>
-          <div class="example-card">
-            <span class="file-icon"><svg class="icon"><use href="#layers"/></svg></span>
-            <div><h2>8845 Dune Buggy</h2><p data-text="buggyDescription">Готовая сборка LEGO Technic из 178 элементов.</p></div>
-            <button type="button" class="secondary" id="buggy-open" data-example-file="dune-buggy.json?v=test-drive" data-text="exampleOpen">Создать копию</button>
-          </div>
-          <div class="example-card">
-            <span class="file-icon"><svg class="icon"><use href="#layers"/></svg></span>
-            <div><h2>858 Inline Engine</h2><p data-text="engineDescription">Рядный трёхцилиндровый двигатель LEGO Technic. 185 деталей и два приводных ремня.</p></div>
-            <button type="button" class="secondary" id="engine-open" data-example-file="inline-engine.json?v=belt-drive" data-text="exampleOpen">Создать копию</button>
-          </div>
+        <section id="example-panel" aria-labelledby="page-title" hidden>
+          <article class="example-card">
+            <img class="example-image" src="./assets/examples/drivetrain.webp" alt="" width="720" height="450" loading="lazy" decoding="async">
+            <div class="example-body">
+              <h2 id="example-drivetrain-title" data-text="exampleTitle">Редуктор 8T / 24T</h2>
+              <p data-text="exampleDescription">Передача вращения между двумя осями.</p>
+              <button type="button" class="secondary" data-example-file="" aria-labelledby="example-open example-drivetrain-title" id="example-open" data-text="exampleOpen">Создать копию</button>
+            </div>
+          </article>
+          <article class="example-card">
+            <img class="example-image" src="./assets/examples/dune-buggy.webp" alt="" width="720" height="450" loading="lazy" decoding="async">
+            <div class="example-body">
+              <h2 id="example-buggy-title">8845 Dune Buggy</h2>
+              <p data-text="buggyDescription">Готовая сборка LEGO Technic из 178 элементов.</p>
+              <button type="button" class="secondary" data-example-file="dune-buggy.json?v=test-drive" aria-labelledby="buggy-open example-buggy-title" id="buggy-open" data-text="exampleOpen">Создать копию</button>
+            </div>
+          </article>
+          <article class="example-card">
+            <img class="example-image" src="./assets/examples/inline-engine.webp" alt="" width="720" height="450" loading="lazy" decoding="async">
+            <div class="example-body">
+              <h2 id="example-engine-title">858 Inline Engine</h2>
+              <p data-text="engineDescription">Рядный трёхцилиндровый двигатель LEGO Technic. 185 деталей и два приводных ремня.</p>
+              <button type="button" class="secondary" data-example-file="inline-engine.json?v=belt-drive" aria-labelledby="engine-open example-engine-title" id="engine-open" data-text="exampleOpen">Создать копию</button>
+            </div>
+          </article>
+          <article class="example-card">
+            <img class="example-image" src="./assets/examples/5-plus-r-gearbox.webp" alt="" width="720" height="450" loading="lazy" decoding="async">
+            <div class="example-body">
+              <h2 id="example-gearbox-title">5+R Gearbox</h2>
+              <p data-text="gearboxDescription">Коробка передач с пятью передачами вперёд и одной назад. 171 деталь.</p>
+              <button type="button" class="secondary" data-example-file="5-plus-r-gearbox.bricklab" aria-labelledby="gearbox-open example-gearbox-title" id="gearbox-open" data-text="exampleOpen">Создать копию</button>
+            </div>
+          </article>
         </section>
         <section id="library-panel" class="menu-library" aria-labelledby="page-title" hidden>
           <div class="menu-library-controls" data-library-controls hidden>
