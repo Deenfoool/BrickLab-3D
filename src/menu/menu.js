@@ -1,5 +1,5 @@
 import { safeImage } from '../sets/data.js?v=browser-recognition'
-import { editorLabels } from '../editor/labels.js?v=cad-dock'
+import { editorLabels } from '../editor/labels.js?v=editor-feedback'
 import { locales } from './locale.js?v=project-home-layout'
 import { startStartup } from './startup.js?v=ford-drift'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
@@ -477,7 +477,7 @@ async function openEditor(project) {
   if (!transition) editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=cad-dock')
+    const { mountEditor } = await import('../editor/editor.js?v=editor-feedback')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

@@ -25,7 +25,7 @@ import { mountTrackPanel, trackLabels } from './track-panel.js?v=level-treads'
 import { upgradeInlineEngineFan } from './inline-engine.js'
 import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
-import { editorLabels } from './labels.js?v=cad-dock'
+import { editorLabels } from './labels.js?v=editor-feedback'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
@@ -120,7 +120,11 @@ export async function mountEditor(root, { document, language, save, download, si
       </section>
       <aside class="editor-test-drive cable-route-panel" data-el="cablePanel" hidden></aside>
       <aside class="editor-test-drive" data-el="drivePanel" hidden></aside>
-      <div class="editor-overlay" data-el="editorOverlay">
+      <div class="editor-load-notice" data-el="loadNotice" hidden>
+        <span data-el="loadNoticeText" role="status"></span>
+        <button type="button" data-el="dismissLoadNotice" aria-label="${t.dismissNotice}" title="${t.dismissNotice}">×</button>
+      </div>
+      <div class="editor-overlay">
         <div class="editor-panel-layer" data-el="panelLayer">
           <aside class="editor-panel editor-catalog" data-panel="library" aria-labelledby="editor-library-heading">
             <header class="editor-panel-header">
@@ -182,10 +186,13 @@ export async function mountEditor(root, { document, language, save, download, si
               <h2 id="editor-scene-parts-heading" data-panel-grip tabindex="0" title="${t.movePanel}">${t.sceneParts}</h2>
               <button type="button" data-panel-toggle aria-controls="editor-scene-parts-body"></button>
             </header>
-            <div class="editor-panel-body editor-scene-parts-body" id="editor-scene-parts-body" data-el="sceneParts"></div>
+            <div class="editor-panel-body editor-scene-parts-body" id="editor-scene-parts-body" data-el="sceneParts">
+              <p class="editor-scene-count" data-el="count"></p>
+            </div>
           </aside>
         </div>
         <div class="editor-dock">
+          <p class="editor-hint" data-el="hint" role="status"></p>
           <div class="editor-viewport-tools" data-el="buildTools" role="group" aria-label="${t.buildTools}">
             <button type="button" data-el="selectTool" title="${t.select} (V)" aria-label="${t.select}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 3 13 10-6 1-3 6z"/></svg></button>
             <button type="button" data-el="boxTool" title="${t.boxSelect} (B / И)" aria-label="${t.boxSelect}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/></svg></button>
@@ -221,8 +228,7 @@ export async function mountEditor(root, { document, language, save, download, si
           </div>
         </div>
       </div>
-    </div>
-    <footer class="editor-status"><span data-el="hint" role="status"></span><span data-el="loadNotice" role="status"></span><span data-el="count"></span></footer>`
+    </div>`
   const menuIcon = path => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`
   root.insertAdjacentHTML('beforeend', `<div class="part-context" data-el="partContext" hidden>
     <button type="button" data-action="mirror" aria-expanded="false">${menuIcon('M12 2v3m0 3v3m0 3v3m0 3v2M3 18l6-12v12zM21 18L15 6v12z')}${language === 'ru' ? 'Отразить' : 'Mirror'}<span class="context-chevron" aria-hidden="true">›</span></button>
@@ -232,6 +238,7 @@ export async function mountEditor(root, { document, language, save, download, si
   </div>`)
   const el = name => root.querySelector(`[data-el="${name}"]`)
   const on = (target, event, callback, capture = false) => target.addEventListener(event, callback, { signal, capture })
+  const hint = el('hint')
   const selectionFrame = el('selectionFrame')
   const paintColor = el('paintColor')
   const paintSwatches = [...el('paintTools').querySelectorAll('[data-paint]')]
@@ -267,6 +274,20 @@ export async function mountEditor(root, { document, language, save, download, si
   state.belts = assembly.belts.map(({ record }) => record)
   const discardedBelts = beltRecords.length - state.belts.length - hiddenBelts.length
   const discardedLinks = source.connections.length - assembly.connections.length - unknownLinks.length
+  const loadNotice = [
+    failedModels.size ? t.modelsUnavailable(failedModels.size) : '',
+    discardedLinks ? t.discarded(discardedLinks) : '',
+    discardedBelts ? t.beltsDiscarded(discardedBelts) : '',
+    unknownPartCount ? t.unknown(unknownPartCount) : '',
+  ].filter(Boolean).join(' · ')
+  if (loadNotice) {
+    el('loadNotice').hidden = false
+    el('loadNoticeText').textContent = loadNotice
+    on(el('dismissLoadNotice'), 'click', () => {
+      el('loadNotice').hidden = true
+      scene.canvas.focus({ preventScroll: true })
+    })
+  }
   const recovered = recoverSelectorLinks(state.parts, assembly)
   state.parts = recovered.parts
   assembly = recovered.assembly
@@ -312,6 +333,7 @@ export async function mountEditor(root, { document, language, save, download, si
   let drag
   let links = assembly.connections
   let message = ''
+  let messageTimer
   let snappingScene = false
   let pendingPart
   const audio = createEditorAudio(signal)
@@ -454,7 +476,7 @@ export async function mountEditor(root, { document, language, save, download, si
 
   function persist(showMessage = false) {
     const successful = save(currentDocument())
-    message = successful ? (showMessage ? t.ready : '') : t.storage
+    setMessage(successful ? (showMessage ? t.ready : '') : t.storage, !successful)
     render()
   }
 
@@ -497,6 +519,7 @@ export async function mountEditor(root, { document, language, save, download, si
   signal.addEventListener('abort', () => {
     releaseMotor()
     stopAnimation()
+    clearTimeout(messageTimer)
     scene.dispose()
   }, { once: true })
 
@@ -768,7 +791,7 @@ export async function mountEditor(root, { document, language, save, download, si
     cancelPlacement()
     const request = { part }
     pendingPart = request
-    message = ''
+    setMessage()
     render()
     try {
       const initial = { id: crypto.randomUUID(), design: part.design, position: [0, 0, 0],
@@ -781,10 +804,23 @@ export async function mountEditor(root, { document, language, save, download, si
     } catch (error) {
       if (pendingPart !== request || signal.aborted) return
       pendingPart = undefined
-      message = t.partLoadError(part[language])
+      setMessage(t.partLoadError(part[language]))
       console.error(error)
       render()
     }
+  }
+
+  function selectingByBox() {
+    return mode === 'build' && tool === 'box' && !moving && !pendingPart
+  }
+
+  function setMessage(text = '', persistent = false) {
+    clearTimeout(messageTimer)
+    message = text
+    if (text && !persistent) messageTimer = setTimeout(() => {
+      message = ''
+      renderHint()
+    }, 5000)
   }
 
   function render() {
@@ -797,7 +833,7 @@ export async function mountEditor(root, { document, language, save, download, si
       (link.socket.part === selected || link.socket.port === 'shift-groove'))
     el('selector').hidden = !(building || mode === 'kinematics') || dragActive() || !(selectorLinkage || ringSelected)
     const painting = mode === 'paint'
-    const selectingInBox = building && tool === 'box' && !moving && !pendingPart
+    const selectingInBox = selectingByBox()
     const addingBelt = building && tool === 'belt'
     const addingTrack = building && tool === 'track'
     const addingConnection = addingBelt || addingTrack
@@ -871,16 +907,10 @@ export async function mountEditor(root, { document, language, save, download, si
     el('empty').hidden = Boolean(state.parts.length || moving)
     el('count').textContent = `${t.count}: ${state.parts.length} · ${t.linkCount}: ${links.length}` +
       (state.belts.length ? ` · ${t.beltCount(state.belts.length)}` : '')
-    el('loadNotice').textContent = [
-      failedModels.size ? t.modelsUnavailable(failedModels.size) : '',
-      discardedLinks ? t.discarded(discardedLinks) : '',
-      discardedBelts ? t.beltsDiscarded(discardedBelts) : '',
-    ].filter(Boolean).join(' · ')
-    el('editorOverlay').hidden = simulating(mode)
-    el('buildTools').hidden = painting
+    el('buildTools').hidden = painting || simulating(mode)
     el('buildTools').toggleAttribute('data-view-only', !building)
     el('paintTools').hidden = !painting
-    el('panelLayer').hidden = painting
+    el('panelLayer').hidden = painting || simulating(mode)
     el('viewport').toggleAttribute('data-painting', painting)
     el('viewport').toggleAttribute('data-box-select', selectingInBox)
     el('groupSelection').hidden = !selectingInBox
@@ -895,21 +925,21 @@ export async function mountEditor(root, { document, language, save, download, si
     el('snap').setAttribute('aria-pressed', String(snapEnabled))
     el('undo').disabled = simulating(mode) || !undo.length
     el('redo').disabled = simulating(mode) || !redo.length
-    renderHint(painting, selectingInBox)
+    renderHint()
   }
 
-  function renderHint(painting, selectingInBox) {
+  function renderHint() {
     const fit = candidate?.fit
     const rotationCue = { fixed: t.fixed, locked: t.locked, detented: t.detented, continuous: t.freely, ball: t.ballJoint, slider: t.travel, spring: t.mechanisms.suspension }
     const meshCue = mesh => mesh.kind === 'tread' ? t.treadSnap : t.gearSnap
     const cue = fit ? rotationCue[fit.motion.rotation]
       : candidate?.mesh ? meshCue(candidate.mesh) : candidate?.failure?.includes('occupied') ? t.occupied : candidate?.failure ? t.blocked : t.free
-    el('hint').textContent = simulating(mode) ? message : painting ? message || t.paintHint :
+    const nextHint = simulating(mode) ? message : mode === 'paint' ? message || t.paintHint :
       resize ? t.lengthPreview(parts[resize.pose.design][language], resize.lost.length, resize.kept) :
       gizmoSnap?.mesh ? meshCue(gizmoSnap.mesh) : gizmoSnap?.fit ? t.snapPreview : moving ? `${cue} · ${t.place}${placingCopy ? (language === 'ru' ? ' · Ctrl+X/Y/Z — отразить' : ' · Ctrl+X/Y/Z — mirror') : ''}`
       : pendingPart ? t.loadingPart(pendingPart.part[language]) : message ||
-        (selectingInBox ? selected ? `${t.selectedCount(selectionIds().length)} · ${t.boxActions}` : t.boxHint
-          : unknownPartCount ? t.unknown(unknownPartCount) : t.camera)
+        (selectingByBox() ? selected ? `${t.selectedCount(selectionIds().length)} · ${t.boxActions}` : t.boxHint : '')
+    if (hint.textContent !== nextHint) hint.textContent = nextHint
   }
 
   let previewFrame = 0
@@ -950,14 +980,14 @@ export async function mountEditor(root, { document, language, save, download, si
     scene.setGhost(pose, candidate?.point, Boolean(candidate?.failure))
     if (movesExisting && pastedGroup && pose) scene.previewParts(groupTransforms(pastedGroup.items, pastedGroup.anchor, pose))
     else scene.setGroupGhost(pose && pastedGroup ? pastedGroup.items : [], pastedGroup?.anchor, pose)
-    renderHint(false, false)
+    renderHint()
   }
 
   function startPlacement(part, existing = false, origin, group) {
     cancelGizmo()
     cancelPlacement()
     cancelResize()
-    message = ''
+    setMessage()
     moving = part
     pastedGroup = group
     movesExisting = existing
@@ -1116,13 +1146,13 @@ export async function mountEditor(root, { document, language, save, download, si
     const before = state
     const hiddenBefore = hidden
     snappingScene = true
-    message = t.snapAllWorking
+    setMessage(t.snapAllWorking, true)
     render()
     try {
       const { snapScene } = await import('./scene-snap.js?v=scene-snap')
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
       if (signal.aborted || state !== before || mode !== 'build' || hidden !== hiddenBefore || dragActive() || pendingPart) {
-        if (message === t.snapAllWorking) message = ''
+        if (message === t.snapAllWorking) setMessage()
         return
       }
       const fixed = new Set([
@@ -1133,14 +1163,14 @@ export async function mountEditor(root, { document, language, save, download, si
       if (result.added) {
         commit({ ...state, parts: result.parts, links: result.links })
         audio.play('snap')
-        if (message !== t.storage) message = t.snapAllResult(result.added, result.adjusted)
+        if (message !== t.storage) setMessage(t.snapAllResult(result.added, result.adjusted))
       } else {
-        message = t.snapAllNoMatch
+        setMessage(t.snapAllNoMatch)
       }
     } catch (error) {
       if (signal.aborted) return
       console.error(error)
-      message = t.snapAllError
+      setMessage(t.snapAllError)
     } finally {
       snappingScene = false
       if (!signal.aborted) render()
@@ -1161,7 +1191,7 @@ export async function mountEditor(root, { document, language, save, download, si
     const copy = clipboardSelection()
     if (!copy) return
     clipboard = copy
-    message = t.copied
+    setMessage(t.copied)
     render()
   }
 
@@ -1180,7 +1210,7 @@ export async function mountEditor(root, { document, language, save, download, si
     const [anchor, ...items] = copied
     startPlacement(anchor, false, undefined, items.length ? { anchor, items, links, belts } : undefined)
     placingCopy = true
-    renderHint(false, false)
+    renderHint()
   }
 
   function setTool(next) {
@@ -1189,7 +1219,7 @@ export async function mountEditor(root, { document, language, save, download, si
     cancelBoxSelection()
     cancelGizmo()
     cancelResize()
-    message = ''
+    setMessage()
     const previous = tool
     tool = ['belt', 'track'].includes(next) && tool === next ? 'select' : next
     if (['belt', 'track'].includes(tool) && root.querySelector('#editor-inspector-body').hidden) {
@@ -1347,7 +1377,7 @@ export async function mountEditor(root, { document, language, save, download, si
     cancelPlacement()
     cancelResize()
     pointerDown = null
-    if (next === 'paint' && message !== t.storage) message = ''
+    if (next === 'paint' && message !== t.storage) setMessage()
     releaseMotor()
     mode = next
     additional.clear()
@@ -1537,7 +1567,7 @@ export async function mountEditor(root, { document, language, save, download, si
       (link.shaft.port === old.shaft.port || old.socket.port === 'shift-groove'))
     if (assembly.connections.some(link => !kept(link) &&
         assembly.port(link.shaft.part, link.shaft.port).role !== 'clutch-driver')) {
-      message = language === 'ru' ? 'Переключению мешает установленное соединение.' : 'An installed connection blocks the shift.'
+      setMessage(language === 'ru' ? 'Переключению мешает установленное соединение.' : 'An installed connection blocks the shift.')
       render()
       return
     }
@@ -1710,7 +1740,7 @@ export async function mountEditor(root, { document, language, save, download, si
     if (boxSelection?.pointerId === event.pointerId) {
       const bounds = updateSelectionFrame(event)
       cancelBoxSelection()
-      message = ''
+      setMessage()
       if (bounds) {
         const ids = scene.selectInRect(bounds)
         selectParts(event.shiftKey ? [...selectionIds(), ...ids] : ids)
@@ -1885,7 +1915,7 @@ export async function mountEditor(root, { document, language, save, download, si
       if (next.length > state.links.length) {
         commit({ ...state, links: next })
         audio.play('snap')
-      } else { message = t.noAlignedPorts; render() }
+      } else { setMessage(t.noAlignedPorts); render() }
       return
     }
     const step = steps[event.code]
