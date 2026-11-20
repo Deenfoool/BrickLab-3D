@@ -6,14 +6,14 @@
   <meta name="theme-color" content="#181a1d">
   <title>BrickLab 3D</title>
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./src/menu/menu.css?v=example-tiles">
+  <link rel="stylesheet" href="./src/menu/menu.css?v=project-home">
   <link rel="stylesheet" href="./src/editor/editor.css?v=track-builder">
   <link rel="stylesheet" href="./src/sets/sets.css?v=browser-recognition">
   <link rel="stylesheet" href="./src/menu/startup.css?v=ford-startup">
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=element-search"></script>
+  <script type="module" src="./src/menu/menu.js?v=project-home"></script>
 </head>
 <body>
   <section class="startup" id="startup" aria-label="Подготовка BrickLab 3D">
@@ -46,6 +46,8 @@
     <symbol id="settings" viewBox="0 0 24 24"><path d="M12 2h2l.6 2.6 1.8 1 2.6-.8 2 3.4-2 1.8v2l2 1.8-2 3.4-2.6-.8-1.8 1L14 21h-4l-.6-2.6-1.8-1-2.6.8-2-3.4 2-1.8v-2l-2-1.8 2-3.4 2.6.8 1.8-1L10 2Z"/><circle cx="12" cy="11.5" r="3"/></symbol>
     <symbol id="search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
     <symbol id="file" viewBox="0 0 24 24"><path d="M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm7 0v6h6"/></symbol>
+    <symbol id="book" viewBox="0 0 24 24"><path d="M12 6C9 3 5 4 2 4v15c4 0 7 0 10 2 3-2 6-2 10-2V4c-3 0-7-1-10 2Zm0 0v15"/></symbol>
+    <symbol id="play" viewBox="0 0 24 24"><path d="M7 4v16l13-8Z"/></symbol>
     <symbol id="plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
     <symbol id="right" viewBox="0 0 24 24"><path d="M3 12h17m-7-7 7 7-7 7"/></symbol>
     <symbol id="diagonal" viewBox="0 0 24 24"><path d="M4 20 20 4M8 4h12v12"/></symbol>
@@ -72,6 +74,13 @@
 
     <main class="main">
       <header class="topbar">
+        <h1 id="home-title" data-text="workspace" hidden>Рабочая область</h1>
+        <div class="home-actions" id="home-actions" hidden>
+          <button class="workspace-action primary" id="create" type="button"><svg class="icon" aria-hidden="true"><use href="#plus"/></svg><span data-text="create">Новая сборка</span></button>
+          <a class="workspace-action" id="home-sets" href="#sets"><svg class="icon" aria-hidden="true"><use href="#book"/></svg><span data-text="sets">Сборка по инструкции</span></a>
+          <button class="workspace-action workspace-action-quiet" id="open" type="button"><svg class="icon" aria-hidden="true"><use href="#folder"/></svg><span data-text="open">Открыть файл</span></button>
+          <input type="file" id="import-file" accept=".bricklab,.json" hidden>
+        </div>
         <a class="topbar-link" href="https://github.com/Deenfoool/BrickLab-3D" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub">
           <svg class="icon" aria-hidden="true"><use href="#icon-github"/></svg>
         </a>
@@ -88,10 +97,29 @@
       </header>
       <div class="content">
         <h1 id="page-title">Рабочая область</h1>
-        <div class="dashboard" id="dashboard">
+        <div class="home-overview" id="home-overview" hidden>
+          <section class="home-feature" aria-labelledby="home-project-name">
+            <div class="home-feature-details">
+              <p class="home-feature-label" data-text="latest">Последняя сборка</p>
+              <h2 id="home-project-name"></h2>
+              <p class="home-feature-meta" id="home-project-meta"></p>
+              <div class="home-instruction" id="home-instruction" hidden>
+                <span class="home-instruction-art" id="home-instruction-art"><svg class="icon" aria-hidden="true"><use href="#book"/></svg></span>
+                <div><strong data-text="instruction">Инструкция</strong><p id="home-instruction-page"></p></div>
+              </div>
+              <button class="workspace-action primary" id="continue-project" type="button"><svg class="icon" aria-hidden="true"><use href="#play"/></svg><span data-text="continueBuild">Продолжить сборку</span></button>
+            </div>
+            <div class="home-feature-art" id="home-project-art" aria-hidden="true"></div>
+          </section>
+          <section class="home-recent" id="home-recent" aria-labelledby="home-recent-title" hidden>
+            <div class="home-section-head"><h2 id="home-recent-title" data-text="recent">Недавние сборки</h2><a href="#projects" data-text="all">Все сборки</a></div>
+            <ul class="home-recent-list" id="home-recent-list"></ul>
+          </section>
+        </div>
+        <div id="dashboard" hidden>
           <section class="project-list" aria-labelledby="list-title">
             <div class="section-head">
-              <h2 id="list-title">Недавние сборки</h2>
+              <h2 id="list-title" class="sr-only" data-text="projects">Мои сборки</h2>
               <label class="search"><svg class="icon"><use href="#search"/></svg><input id="query" type="search" placeholder="Найти сборку" aria-label="Найти сборку"></label>
             </div>
             <div class="table-frame">
@@ -101,59 +129,48 @@
               </table>
               <div class="empty" id="empty-state" hidden></div>
             </div>
-            <a class="all-projects" id="all-projects" href="#projects"><span data-text="all">Все сборки</span><svg class="icon"><use href="#right"/></svg></a>
-          </section>
-          <section class="commands">
-            <button class="create" id="create" type="button">
-              <svg class="blueprint" viewBox="0 0 300 250" fill="none" aria-hidden="true">
-                <defs><pattern id="draft-grid" width="23" height="23" patternUnits="userSpaceOnUse"><path d="M23 0H0v23" stroke="currentColor" stroke-opacity=".23"/></pattern></defs>
-                <path d="M28 30h250v180H28z" fill="url(#draft-grid)"/>
-                <path d="M90 75h108v110H90zM173 147h60v60h-60z" stroke="currentColor" stroke-width="2"/>
-                <path d="M90 17v57m108-57v57M5 91h85M5 182h85m108-35h96m-61 60h61m-61 0v29m-60-29v29" stroke="currentColor" stroke-dasharray="5 5"/>
-                <path d="M90 25h108m-108-8v16m108-16v16M15 91v91m-7-91h14m-14 91h14M271 10h18v18m0 192v18h-18" stroke="currentColor" stroke-width="1.6"/>
-              </svg>
-              <span class="create-icon"><svg class="icon"><use href="#plus"/></svg></span>
-              <span class="create-title" data-text="create">Новая сборка</span>
-              <svg class="icon create-arrow"><use href="#diagonal"/></svg>
-            </button>
-            <button class="open" id="open" type="button"><svg class="icon"><use href="#folder"/></svg><span data-text="open">Открыть файл</span><svg class="icon"><use href="#right"/></svg></button>
-            <input type="file" id="import-file" accept=".bricklab,.json" hidden>
           </section>
         </div>
         <section id="sets-panel" hidden></section>
+        <div class="home-section-head home-example-heading" id="home-example-heading" hidden>
+          <h2 id="home-example-title" data-text="featuredExamples">Готовые примеры</h2>
+          <a href="#examples" data-text="allExamples">Все примеры</a>
+        </div>
         <section id="example-panel" aria-labelledby="page-title" hidden>
-          <article class="example-card">
-            <img class="example-image" src="./assets/examples/drivetrain.webp" alt="" width="720" height="450" loading="lazy" decoding="async">
-            <div class="example-body">
-              <h2 id="example-drivetrain-title" data-text="exampleTitle">Редуктор 8T / 24T</h2>
-              <p data-text="exampleDescription">Передача вращения между двумя осями.</p>
-              <button type="button" class="secondary" data-example-file="" aria-labelledby="example-open example-drivetrain-title" id="example-open" data-text="exampleOpen">Открыть в редакторе</button>
-            </div>
-          </article>
-          <article class="example-card">
-            <img class="example-image" src="./assets/examples/dune-buggy.webp" alt="" width="720" height="450" loading="lazy" decoding="async">
-            <div class="example-body">
-              <h2 id="example-buggy-title">8845 Dune Buggy</h2>
-              <p data-text="buggyDescription">Готовая сборка LEGO Technic из 178 элементов.</p>
-              <button type="button" class="secondary" data-example-file="dune-buggy.json?v=test-drive" aria-labelledby="buggy-open example-buggy-title" id="buggy-open" data-text="exampleOpen">Открыть в редакторе</button>
-            </div>
-          </article>
-          <article class="example-card">
-            <img class="example-image" src="./assets/examples/inline-engine.webp" alt="" width="720" height="450" loading="lazy" decoding="async">
-            <div class="example-body">
-              <h2 id="example-engine-title">858 Inline Engine</h2>
-              <p data-text="engineDescription">Рядный трёхцилиндровый двигатель LEGO Technic. 185 деталей и два приводных ремня.</p>
-              <button type="button" class="secondary" data-example-file="inline-engine.json?v=belt-drive" aria-labelledby="engine-open example-engine-title" id="engine-open" data-text="exampleOpen">Открыть в редакторе</button>
-            </div>
-          </article>
-          <article class="example-card">
-            <img class="example-image" src="./assets/examples/5-plus-r-gearbox.webp" alt="" width="720" height="450" loading="lazy" decoding="async">
-            <div class="example-body">
-              <h2 id="example-gearbox-title">5+R Gearbox</h2>
-              <p data-text="gearboxDescription">Коробка передач с пятью передачами вперёд и одной назад. 171 деталь.</p>
-              <button type="button" class="secondary" data-example-file="5-plus-r-gearbox.bricklab" aria-labelledby="gearbox-open example-gearbox-title" id="gearbox-open" data-text="exampleOpen">Открыть в редакторе</button>
-            </div>
-          </article>
+          <div class="example-grid">
+            <article class="example-card">
+              <img class="example-image" src="./assets/examples/drivetrain.webp" alt="" width="720" height="450" loading="lazy" decoding="async">
+              <div class="example-body">
+                <h2 id="example-drivetrain-title" data-text="exampleTitle">Редуктор 8T / 24T</h2>
+                <p data-text="exampleDescription">Передача вращения между двумя осями.</p>
+                <button type="button" class="secondary" data-example-file="" aria-labelledby="example-open example-drivetrain-title" id="example-open" data-text="exampleOpen">Открыть в редакторе</button>
+              </div>
+            </article>
+            <article class="example-card">
+              <img class="example-image" src="./assets/examples/dune-buggy.webp" alt="" width="720" height="450" loading="lazy" decoding="async">
+              <div class="example-body">
+                <h2 id="example-buggy-title">8845 Dune Buggy</h2>
+                <p data-text="buggyDescription">Готовая сборка LEGO Technic из 178 элементов.</p>
+                <button type="button" class="secondary" data-example-file="dune-buggy.json?v=test-drive" aria-labelledby="buggy-open example-buggy-title" id="buggy-open" data-text="exampleOpen">Открыть в редакторе</button>
+              </div>
+            </article>
+            <article class="example-card">
+              <img class="example-image" src="./assets/examples/inline-engine.webp" alt="" width="720" height="450" loading="lazy" decoding="async">
+              <div class="example-body">
+                <h2 id="example-engine-title">858 Inline Engine</h2>
+                <p data-text="engineDescription">Рядный трёхцилиндровый двигатель LEGO Technic. 185 деталей и два приводных ремня.</p>
+                <button type="button" class="secondary" data-example-file="inline-engine.json?v=belt-drive" aria-labelledby="engine-open example-engine-title" id="engine-open" data-text="exampleOpen">Открыть в редакторе</button>
+              </div>
+            </article>
+            <article class="example-card example-card-featured">
+              <img class="example-image" src="./assets/examples/5-plus-r-gearbox.webp" alt="" width="720" height="450" loading="lazy" decoding="async">
+              <div class="example-body">
+                <h2 id="example-gearbox-title">5+R Gearbox</h2>
+                <p data-text="gearboxDescription">Коробка передач с пятью передачами вперёд и одной назад. 171 деталь.</p>
+                <button type="button" class="secondary" data-example-file="5-plus-r-gearbox.bricklab" aria-labelledby="gearbox-open example-gearbox-title" id="gearbox-open" data-text="exampleOpen">Открыть в редакторе</button>
+              </div>
+            </article>
+          </div>
         </section>
         <section id="library-panel" class="menu-library" aria-labelledby="page-title" hidden>
           <div class="menu-library-controls" data-library-controls hidden>

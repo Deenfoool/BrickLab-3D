@@ -1,11 +1,14 @@
 import { editorLabels } from '../editor/labels.js?v=editor-sound'
-import { locales } from './locale.js?v=example-editor-label'
+import { locales } from './locale.js?v=project-home'
 import { startStartup } from './startup.js?v=ford-drift'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
 const byId = id => document.getElementById(id)
 const rows = byId('project-rows')
 const query = byId('query')
+const examplePanel = byId('example-panel')
+const exampleGrid = examplePanel.querySelector('.example-grid')
+const featuredExample = exampleGrid.querySelector('.example-card-featured')
 const status = byId('status')
 const removeDialog = byId('remove-dialog')
 const settingsDialog = byId('settings-dialog')
@@ -25,6 +28,7 @@ const librarySearch = libraryControls.querySelector('input')
 let setSession
 let editorSession
 let librarySession
+let homePreviewSession
 let librarySection
 let libraryGroup = ''
 let language = 'ru'
@@ -149,17 +153,114 @@ function projectRow(project, formatter) {
   return tr
 }
 
-function renderList(page) {
+const sortByModified = records => [...records].sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt))
+
+function renderList() {
   closeMenu()
   const keyword = query.value.trim().toLocaleLowerCase(language)
-  const filtered = projects.filter(project => project.document.name.toLocaleLowerCase(language).includes(keyword))
-    .sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt))
-  const visible = page === 'home' ? filtered.slice(0, 4) : filtered
+  const visible = sortByModified(projects.filter(
+    project => project.document.name.toLocaleLowerCase(language).includes(keyword),
+  ))
   const formatter = new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric' })
   rows.replaceChildren(...visible.map(project => projectRow(project, formatter)))
   const empty = byId('empty-state')
   empty.hidden = visible.length > 0
   empty.textContent = strings()[keyword ? 'noResults' : 'empty']
+}
+
+function recentBuild(project, formatter) {
+  const item = element('li')
+  const open = button('home-recent-open')
+  open.title = project.document.name
+  const art = element('span', 'home-recent-art')
+  art.setAttribute('aria-hidden', 'true')
+  art.append(icon('layers'))
+  const details = element('span', 'home-recent-detail')
+  const date = element('time', null, formatter.format(new Date(project.modifiedAt)))
+  date.dateTime = project.modifiedAt
+  details.append(element('strong', null, project.document.name), date)
+  open.append(art, details)
+  open.addEventListener('click', () => openProject(project.id))
+  item.append(open)
+  return { item, art }
+}
+
+function showPreview(target, source, signal) {
+  const image = element('img')
+  image.alt = ''
+  image.decoding = 'async'
+  const removable = source instanceof Blob
+  const url = removable ? URL.createObjectURL(source) : source
+  if (removable) signal.addEventListener('abort', () => URL.revokeObjectURL(url), { once: true })
+  image.addEventListener('load', () => {
+    if (!signal.aborted) target.replaceChildren(image)
+  }, { once: true, signal })
+  image.src = url
+}
+
+function homeInstruction(project, signal) {
+  const section = byId('home-instruction')
+  const { set, book: bookIndex, page } = project.document.buildingSet ?? {}
+  section.hidden = typeof set?.number !== 'string' || !Number.isSafeInteger(page) || page < 1
+  if (section.hidden) return
+  const book = Array.isArray(set.books) ? set.books[bookIndex] : undefined
+  const total = Number.isSafeInteger(book?.pages) && book.pages >= page ? book.pages : undefined
+  byId('home-instruction-page').textContent = strings().instructionPage(page, total)
+  const preview = byId('home-instruction-art')
+  preview.replaceChildren(icon('book'))
+  if (!book?.url) return
+  import('../sets/instruction-sources.js?v=browser-recognition').then(({ instructionPagePreview }) => {
+    if (signal.aborted) return
+    const image = instructionPagePreview(set.number, book.url, page)?.image
+    if (image) showPreview(preview, image, signal)
+  }).catch(() => {})
+}
+
+function renderHome(visible) {
+  homePreviewSession?.abort()
+  homePreviewSession = undefined
+  const overview = byId('home-overview')
+  overview.hidden = !visible || projects.length === 0
+  if (overview.hidden) return
+
+  const [latest, ...recent] = sortByModified(projects).slice(0, 4)
+  const t = strings()
+  const formatter = new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric' })
+  const latestArt = byId('home-project-art')
+  const fallback = element('div', 'home-fallback')
+  const hint = element('span', null, t.emptyModel)
+  hint.hidden = latest.document.parts.length > 0
+  fallback.append(icon('layers'), hint)
+  latestArt.replaceChildren(fallback)
+  byId('home-project-name').textContent = latest.document.name
+  byId('home-project-meta').textContent = t.partCount(latest.document.parts.length)
+  byId('continue-project').onclick = () => openProject(latest.id)
+  byId('home-recent').hidden = recent.length === 0
+
+  homePreviewSession = new AbortController()
+  const { signal } = homePreviewSession
+  homeInstruction(latest, signal)
+
+  const recentList = recent.map(project => ({ project, ...recentBuild(project, formatter) }))
+  byId('home-recent-list').replaceChildren(...recentList.map(({ item }) => item))
+  const entries = [{
+    project: latest,
+    show(preview) {
+      if (preview) showPreview(latestArt, preview, signal)
+      else {
+        hint.textContent = t.previewUnavailable
+        hint.hidden = false
+      }
+    },
+  }, ...recentList.map(({ project, art }) => ({
+    project,
+    show(preview) { if (preview) showPreview(art, preview, signal) },
+  }))]
+  if (entries.some(({ project }) => project.document.parts.length)) {
+    import('./home-previews.js?v=project-home')
+      .then(({ loadHomePreviews }) => loadHomePreviews(entries, signal))
+      .catch(() => { if (!signal.aborted && latest.document.parts.length) entries[0].show(null) })
+  }
 }
 
 function currentPage() {
@@ -172,7 +273,8 @@ function render() {
   closeMenu()
   const t = strings()
   const page = currentPage()
-  const listVisible = page === 'home' || page === 'projects'
+  const home = page === 'home'
+  const listVisible = page === 'projects'
   const requestedId = page === 'project' ? location.hash.slice('#project/'.length) : null
   const activeProject = requestedId ? projects.find(project => project.id === requestedId) : null
   shell.hidden = Boolean(activeProject)
@@ -199,18 +301,24 @@ function render() {
   query.placeholder = t.search
   query.setAttribute('aria-label', t.search)
   byId('dashboard').hidden = !listVisible
-  byId('example-panel').hidden = page !== 'examples'
+  byId('home-title').hidden = !home
+  byId('home-actions').hidden = !home && !listVisible
+  byId('home-sets').hidden = !home
+  byId('home-example-heading').hidden = !home
+  examplePanel.hidden = !home && page !== 'examples'
+  examplePanel.classList.toggle('home-examples', home)
+  examplePanel.setAttribute('aria-labelledby', home ? 'home-example-title' : 'page-title')
+  if (home && exampleGrid.firstElementChild !== featuredExample) exampleGrid.prepend(featuredExample)
+  if (!home && exampleGrid.lastElementChild !== featuredExample) exampleGrid.append(featuredExample)
+  renderHome(home)
   libraryRoot.hidden = page !== 'library'
   byId('sets-panel').hidden = page !== 'sets'
   if (page === 'sets') openSets()
   else closeSets()
-  byId('all-projects').hidden = page !== 'home'
+  byId('page-title').hidden = home
   byId('page-title').textContent = page === 'home' ? t.workspace :
     page === 'project' ? activeProject?.document.name ?? t.projects : t[page]
-  if (listVisible) {
-    byId('list-title').textContent = page === 'home' ? t.recent : t.projects
-    renderList(page)
-  }
+  if (listVisible) renderList()
   if (activeProject) openEditor(activeProject)
   if (page === 'library') openLibrary()
   else closeLibrary()
@@ -413,7 +521,7 @@ function setLanguage(value) {
   render()
 }
 
-query.addEventListener('input', () => renderList(currentPage()))
+query.addEventListener('input', renderList)
 libraryRetry.addEventListener('click', () => location.reload())
 byId('language').addEventListener('change', event => setLanguage(event.target.value))
 byId('settings-language').addEventListener('change', event => setLanguage(event.target.value))
@@ -443,12 +551,13 @@ async function loadExample(file) {
 
 async function openExample(event) {
   const control = event.currentTarget
+  const page = currentPage()
   control.disabled = true
   try {
     const example = await loadExample(control.dataset.exampleFile)
-    if (currentPage() === 'examples') addProject(example)
+    if (currentPage() === page) addProject(example)
   } catch {
-    if (currentPage() === 'examples') setStatus('exampleUnavailable')
+    if (currentPage() === page) setStatus('exampleUnavailable')
   } finally {
     control.disabled = false
   }
@@ -458,7 +567,9 @@ for (const control of document.querySelectorAll('[data-example-file]')) {
 }
 removeDialog.addEventListener('close', () => {
   if (removeDialog.returnValue === 'remove' && pendingRemoval) {
-    updateProjects(projects.filter(project => project.id !== pendingRemoval))
+    const id = pendingRemoval
+    updateProjects(projects.filter(project => project.id !== id))
+    import('./home-previews.js?v=project-home').then(({ removeHomePreview }) => removeHomePreview(id)).catch(() => {})
     render()
     query.focus()
   }
