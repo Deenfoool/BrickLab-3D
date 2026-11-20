@@ -6,14 +6,14 @@
   <meta name="theme-color" content="#181a1d">
   <title>BrickLab 3D</title>
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./src/menu/menu.css?v=project-home">
+  <link rel="stylesheet" href="./src/menu/menu.css?v=project-home-layout">
   <link rel="stylesheet" href="./src/editor/editor.css?v=track-builder">
   <link rel="stylesheet" href="./src/sets/sets.css?v=browser-recognition">
   <link rel="stylesheet" href="./src/menu/startup.css?v=ford-startup">
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=project-home"></script>
+  <script type="module" src="./src/menu/menu.js?v=project-home-layout"></script>
 </head>
 <body>
   <section class="startup" id="startup" aria-label="Подготовка BrickLab 3D">
@@ -81,19 +81,21 @@
           <button class="workspace-action workspace-action-quiet" id="open" type="button"><svg class="icon" aria-hidden="true"><use href="#folder"/></svg><span data-text="open">Открыть файл</span></button>
           <input type="file" id="import-file" accept=".bricklab,.json" hidden>
         </div>
-        <a class="topbar-link" href="https://github.com/Deenfoool/BrickLab-3D" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub">
-          <svg class="icon" aria-hidden="true"><use href="#icon-github"/></svg>
-        </a>
-        <a class="topbar-link" href="https://deenfoool.github.io/portfolio/" target="_blank" rel="noopener" data-link-label="portfolio" aria-label="Портфолио" title="Портфолио">
-          <svg class="icon" aria-hidden="true"><use href="#icon-portfolio"/></svg>
-        </a>
-        <a class="topbar-link" href="https://tips.tips/000482810" target="_blank" rel="noopener" data-link-label="donate" aria-label="Поддержать проект" title="Поддержать проект">
-          <svg class="icon" aria-hidden="true"><use href="#icon-donate"/></svg>
-        </a>
-        <label class="language">
-          <select id="language" aria-label="Язык / Language"><option value="ru">RU</option><option value="en">EN</option></select>
-          <svg class="icon"><use href="#down"/></svg>
-        </label>
+        <div class="topbar-tools">
+          <a class="topbar-link" href="https://github.com/Deenfoool/BrickLab-3D" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub">
+            <svg class="icon" aria-hidden="true"><use href="#icon-github"/></svg>
+          </a>
+          <a class="topbar-link" href="https://deenfoool.github.io/portfolio/" target="_blank" rel="noopener" data-link-label="portfolio" aria-label="Портфолио" title="Портфолио">
+            <svg class="icon" aria-hidden="true"><use href="#icon-portfolio"/></svg>
+          </a>
+          <a class="topbar-link" href="https://tips.tips/000482810" target="_blank" rel="noopener" data-link-label="donate" aria-label="Поддержать проект" title="Поддержать проект">
+            <svg class="icon" aria-hidden="true"><use href="#icon-donate"/></svg>
+          </a>
+          <label class="language">
+            <select id="language" aria-label="Язык / Language"><option value="ru">RU</option><option value="en">EN</option></select>
+            <svg class="icon"><use href="#down"/></svg>
+          </label>
+        </div>
       </header>
       <div class="content">
         <h1 id="page-title">Рабочая область</h1>

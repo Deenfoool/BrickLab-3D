@@ -1,5 +1,6 @@
+import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=editor-sound'
-import { locales } from './locale.js?v=project-home'
+import { locales } from './locale.js?v=project-home-layout'
 import { startStartup } from './startup.js?v=ford-drift'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
@@ -185,20 +186,26 @@ function recentBuild(project, formatter) {
   return { item, art }
 }
 
-function showPreview(target, source, signal) {
+function showPreview(target, source, signal, caption) {
   const image = element('img')
   image.alt = ''
   image.decoding = 'async'
+  image.referrerPolicy = 'no-referrer'
   const removable = source instanceof Blob
   const url = removable ? URL.createObjectURL(source) : source
   if (removable) signal.addEventListener('abort', () => URL.revokeObjectURL(url), { once: true })
   image.addEventListener('load', () => {
-    if (!signal.aborted) target.replaceChildren(image)
+    if (signal.aborted) return
+    if (caption) {
+      const figure = element('figure', 'home-feature-cover')
+      figure.append(image, element('figcaption', null, caption))
+      target.replaceChildren(figure)
+    } else target.replaceChildren(image)
   }, { once: true, signal })
   image.src = url
 }
 
-function homeInstruction(project, signal) {
+function homeInstruction(project, signal, emptyModelArt) {
   const section = byId('home-instruction')
   const { set, book: bookIndex, page } = project.document.buildingSet ?? {}
   section.hidden = typeof set?.number !== 'string' || !Number.isSafeInteger(page) || page < 1
@@ -212,7 +219,10 @@ function homeInstruction(project, signal) {
   import('../sets/instruction-sources.js?v=browser-recognition').then(({ instructionPagePreview }) => {
     if (signal.aborted) return
     const image = instructionPagePreview(set.number, book.url, page)?.image
-    if (image) showPreview(preview, image, signal)
+    if (image) {
+      showPreview(preview, image, signal)
+      if (emptyModelArt) showPreview(emptyModelArt, image, signal, strings().instruction)
+    }
   }).catch(() => {})
 }
 
@@ -239,7 +249,10 @@ function renderHome(visible) {
 
   homePreviewSession = new AbortController()
   const { signal } = homePreviewSession
-  homeInstruction(latest, signal)
+  const setCover = safeImage(latest.document.buildingSet?.set?.image)
+  const emptyModel = latest.document.parts.length === 0
+  homeInstruction(latest, signal, emptyModel && !setCover ? latestArt : null)
+  if (emptyModel && setCover) showPreview(latestArt, setCover, signal, t.setCover)
 
   const recentList = recent.map(project => ({ project, ...recentBuild(project, formatter) }))
   byId('home-recent-list').replaceChildren(...recentList.map(({ item }) => item))
