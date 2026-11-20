@@ -1,12 +1,30 @@
 import {
-  ACESFilmicToneMapping, Box3, DirectionalLight, Group, HemisphereLight, MathUtils, Mesh,
+  ACESFilmicToneMapping, Box3, DirectionalLight, Euler, Group, HemisphereLight, MathUtils, Mesh,
   PerspectiveCamera, PlaneGeometry, Scene, ShaderMaterial, Vector3, WebGLRenderer,
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from '../../vendor/meshoptimizer/meshopt_decoder.js'
+import { createCarEffects } from './startup-car-effects.js'
 
-const asset = new URL('../../assets/startup/ford-gt.glb.gz?v=1', import.meta.url)
+const asset = new URL('../../assets/startup/ford-gt.glb.gz?v=2', import.meta.url)
 const smooth = (start, end, time) => MathUtils.smootherstep(time, start, end)
+
+function carPose(time, still = false) {
+  const entry = still ? 1 : 1 - (1 - MathUtils.clamp(time / 1.62, 0, 1)) ** 2.3
+  const approach = smooth(.14, 1.18, time)
+  const settle = smooth(1.05, 1.69, time)
+  const drift = approach * (1 - settle)
+  const turn = approach * 1.14 - settle * .14
+  const lift = smooth(1.68, 3.10, time)
+  return {
+    entry, drift, turn, lift,
+    x: still ? 0 : .62 * (1 - entry) - .78 * drift,
+    y: .04 + .30 * lift,
+    z: 5.35 * (entry - 1),
+    yaw: MathUtils.lerp(.27, -.87, turn),
+    roll: -.083 * drift,
+  }
+}
 
 async function loadCar(signal) {
   const response = await fetch(asset, { signal })
@@ -29,47 +47,63 @@ function collectGroups(model) {
   const groups = new Map()
   model.updateWorldMatrix(true, true)
   for (const [name, nodes] of members) {
+    if (name.endsWith('-rim')) continue
     const group = new Group()
     const bounds = new Box3()
+    const wheel = name.startsWith('wheel-')
     for (const node of nodes) bounds.expandByObject(node)
-    if (name.startsWith('wheel-')) nodes[0].getWorldPosition(group.position)
+    if (wheel) nodes[0].getWorldPosition(group.position)
     else bounds.getCenter(group.position)
     model.add(group)
     for (const node of nodes) group.attach(node)
     const base = group.position.clone()
     const direction = name.endsWith('-left') ? 1 : -1
-    const front = name.includes('-front-') ? 1 : -1
-    let move = [0, 0, 0], turn = [0, 0, 0], timing = [1.58, 2.96]
-    if (name.startsWith('wheel-')) {
-      move = [direction * 1.04, .14, front * .35]
-      timing = [1.7, 2.98]
+    const front = name.includes('-front-')
+    let rim
+    let rimTiming
+    let move = [0, 0, 0], turn = [0, 0, 0], timing = [1.79, 3.15]
+    if (wheel) {
+      move = [direction * 1.03, .14, front ? .35 : -.35]
+      timing = [1.90, 3.20]
+      rim = new Group()
+      group.add(rim)
+      for (const node of members.get(`${name}-rim`) ?? []) rim.attach(node)
+      const delay = (front ? 0 : .17) + (direction > 0 ? 0 : .08)
+      rimTiming = [2.37 + delay, 3.30 + delay]
     } else if (name.startsWith('suspension-')) {
-      move = [direction * .55, .35, front * .32]
+      move = [direction * .55, .35, front ? .32 : -.32]
       turn = [0, 0, direction * -.22]
-      timing = [1.82, 3.04]
+      timing = [2.02, 3.23]
     } else if (name.startsWith('door-')) {
       move = [direction * .91, .66, .07]
       turn = [.07, direction * .12, direction * .23]
-      timing = [1.55, 2.8]
+      timing = [1.75, 3.02]
     } else if (name.startsWith('side-')) {
       move = [direction * .75, .18, -.12]
     } else if (name === 'roof') {
       move = [0, 1.16, -.12]
-      timing = [1.4, 2.77]
+      timing = [1.65, 2.98]
     } else if (name === 'bonnet') {
       move = [0, .78, .55]
       turn = [-.13, 0, 0]
     } else if (name === 'rear-body') {
       move = [0, .83, -.62]
       turn = [.09, 0, 0]
-      timing = [1.62, 2.94]
+      timing = [1.82, 3.14]
     } else if (name === 'engine') {
       move = [0, .44, -.32]
-      timing = [1.86, 3.08]
+      timing = [2.06, 3.28]
     }
-    groups.set(name, { group, base, move: new Vector3(...move), turn, timing })
+    groups.set(name, { group, base, move: new Vector3(...move), turn, timing, rim, rimTiming, direction, front })
   }
   return groups
+}
+
+function wheelPosition(wheel, time, atRim = false) {
+  const { x, y, z, yaw, roll } = carPose(time)
+  const point = wheel.base.clone().addScaledVector(wheel.move, smooth(...wheel.timing, time))
+  if (atRim) point.x += wheel.direction * .68 * smooth(...wheel.rimTiming, time)
+  return point.applyEuler(new Euler(0, yaw, roll, 'YXZ')).add(new Vector3(x, y, z))
 }
 
 function groundShadow() {
@@ -138,6 +172,10 @@ export async function mountStartupCar(host, { signal, reducedMotion }) {
   materials.add(shadow.material)
   scene.add(shadow, model)
   const groups = collectGroups(model)
+  const effects = createCarEffects([...groups.values()].filter(({ rim }) => rim), wheelPosition)
+  scene.add(effects)
+  geometries.add(effects.geometry)
+  materials.add(effects.material)
   const target = new Vector3()
   host.append(renderer.domElement)
   let elapsedTime = 0
@@ -146,25 +184,30 @@ export async function mountStartupCar(host, { signal, reducedMotion }) {
   function render() {
     const still = reducedMotion.matches
     const elapsed = still ? 0 : elapsedTime
-    const entry = still ? 1 : 1 - (1 - MathUtils.clamp(elapsed / 1.12, 0, 1)) ** 3
-    const distance = 4.6 * entry
-    const turn = still ? 0 : smooth(.82, 1.63, elapsed)
-    const lift = smooth(1.45, 2.95, elapsed)
-    model.position.set(0, .04 + lift * .30, distance - 4.6)
-    model.rotation.y = MathUtils.lerp(.27, -.87, turn)
-    shadow.position.z = model.position.z
-    shadow.rotation.z = -model.rotation.y
+    const { entry, drift, turn, lift, x, y, z, yaw, roll } = carPose(elapsed, still)
+    model.position.set(x, y, z)
+    model.rotation.set(0, yaw, roll, 'YXZ')
+    shadow.position.set(x, 0, z)
+    shadow.rotation.z = -yaw
     shadow.material.uniforms.opacity.value = .69 - .20 * lift
-    for (const [name, { group, base, move, turn, timing }] of groups) {
+    for (const { group, base, move, turn, timing, rim, rimTiming, direction, front } of groups.values()) {
       const spread = smooth(...timing, elapsed)
       group.position.copy(base).addScaledVector(move, spread)
-      if (name.startsWith('wheel-')) group.rotation.x = still ? 0 : distance / .39
-      else group.rotation.set(...turn.map(angle => angle * spread))
+      if (rim) {
+        const spin = still ? 0 : 5.35 * entry / .34 + 1.7 * smooth(.35, 1.64, elapsed)
+        group.rotation.set(spin, front ? .34 * drift : 0, 0, 'YXZ')
+        const eject = smooth(...rimTiming, elapsed)
+        const tip = smooth(.24, 1, eject)
+        rim.position.set(direction * .68 * eject, .11 * tip, -.10 * tip)
+        rim.rotation.set(.32 * tip, direction * .65 * tip, -direction * .24 * tip)
+      } else group.rotation.set(turn[0] * spread, turn[1] * spread, turn[2] * spread)
     }
-    const orbit = Math.max(0, elapsed - 2.45)
+    effects.visible = !still && elapsed >= .36 && elapsed < 5.1
+    effects.material.uniforms.elapsed.value = elapsed
+    const orbit = Math.max(0, elapsed - 2.8)
     const theta = .71 + .25 * turn - .30 * (orbit - (1 - Math.exp(-orbit)))
     const fit = Math.max(1, 1.21 / camera.aspect)
-    const radius = (7.9 + lift * .9) * fit
+    const radius = (7.9 + lift * 1.36) * fit
     camera.position.set(radius * Math.sin(theta), (2.95 + .55 * lift) * fit, radius * Math.cos(theta))
     target.set(0, .63 + .47 * lift, -.30 * (1 - entry))
     camera.lookAt(target)
@@ -181,6 +224,8 @@ export async function mountStartupCar(host, { signal, reducedMotion }) {
     camera.aspect = Math.max(1, clientWidth) / Math.max(1, clientHeight)
     camera.updateProjectionMatrix()
     renderer.setSize(Math.max(1, clientWidth), Math.max(1, clientHeight), false)
+    effects.material.uniforms.pointScale.value = Math.max(1, clientHeight) * renderer.getPixelRatio() /
+      (2 * Math.tan(MathUtils.degToRad(camera.fov) / 2))
     render()
   }
   function updateMotion() {

@@ -83,7 +83,7 @@ export function startStartup(root, language, background) {
   retry.addEventListener('click', preload, { signal })
   skip.addEventListener('click', () => finish(true), { signal })
   preload()
-  import('./startup-car.js?v=ford-startup').then(async ({ mountStartupCar }) => {
+  import('./startup-car.js?v=ford-drift').then(async ({ mountStartupCar }) => {
     if (!signal.aborted && await mountStartupCar(field('stage'), { signal, reducedMotion })) field('model').hidden = false
   }).catch(error => {
     if (!signal.aborted) console.warn('Ford GT animation unavailable', error)

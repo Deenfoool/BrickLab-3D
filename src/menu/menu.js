@@ -1,6 +1,6 @@
 import { editorLabels } from '../editor/labels.js?v=editor-sound'
 import { locales } from './locale.js?v=catalog-page'
-import { startStartup } from './startup.js?v=ford-startup'
+import { startStartup } from './startup.js?v=ford-drift'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
 const byId = id => document.getElementById(id)

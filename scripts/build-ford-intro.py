@@ -37,7 +37,8 @@ SUBSTITUTION_POSES = {
     "me20a3429_2023519_114920.dat": ((0, 1, 2), (1, 1, 1), (20.5, -9, 39.5)),
 }
 PANEL_COLORS = {"272", "15"}
-WHEEL_PARTS = {"41897.dat", "56908.dat"}
+TIRE_PART = "41897.dat"
+RIM_PART = "56908.dat"
 ENGINE_PARTS = {"2850a.dat", "2850b.dat", "2851.dat", "2852.dat", "2853.dat", "2854.dat"}
 
 
@@ -115,8 +116,9 @@ def assembly_group(name, color, point):
     x, y, z = point
     side = "left" if x > 20 else "right"
     end = "front" if z < -370 else "rear"
-    if name in WHEEL_PARTS:
-        return f"wheel-{end}-{side}"
+    if name in {TIRE_PART, RIM_PART}:
+        wheel = f"wheel-{end}-{side}"
+        return f"{wheel}-rim" if name == RIM_PART else wheel
     if name in {"76537.dat", "me20a3429_2023521_065226.dat"}:
         return f"suspension-{end}-{side}"
     if name in ENGINE_PARTS:
@@ -180,7 +182,7 @@ def create_scene(root, read):
             local = np.eye(3)[list(axes)] * np.array(scales)[:, None]
             origin = origin + transform @ offset
             transform = transform @ local
-        if name == "41897.dat":
+        if name == TIRE_PART:
             pivots[group] = origin
         for local_color, triangles in mesh(name).items():
             world = triangles @ transform.T + origin
@@ -196,7 +198,8 @@ def create_scene(root, read):
 
     materials = ldraw_materials(read, {color for batch in groups.values() for color in batch})
     for group, batch in groups.items():
-        pivot = to_blender(pivots[group]) if group in pivots else np.zeros(3)
+        wheel = group.removesuffix("-rim")
+        pivot = to_blender(pivots[wheel]) if wheel in pivots else np.zeros(3)
         name = group
         for color, batches in batch.items():
             triangles = to_blender(np.concatenate(batches)) - pivot
