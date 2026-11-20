@@ -1,36 +1,43 @@
 import {
-  DirectionalLight, Group, HemisphereLight, InstancedMesh, MathUtils, MeshStandardMaterial,
+  Color, DirectionalLight, Group, HemisphereLight, InstancedMesh, MathUtils, MeshStandardMaterial,
   Object3D, PerspectiveCamera, Scene,
 } from 'three'
 import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.js'
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js'
 
-const brickSource = new URL('../../assets/startup/brand-bricks.mpd?v=1', import.meta.url)
-const plateDesign = [null, '3024', '3023b', '3623', '3710']
-const brickDesign = [null, '3005', '3004', '3622', '3010']
-const badge = [
-  '........', '...xxxx.', '......x.', '.xxxx.x.',
-  '....x.x.', '....x...', '....x...', '........',
+const brickSource = new URL('../../assets/startup/brand-bricks.mpd?v=2', import.meta.url)
+// Each entry is an LDraw part followed by its dimensions in studs, along X and Z.
+const bricks = [
+  ['3007', 8, 2], ['2456', 6, 2], ['3001', 4, 2], ['3002', 3, 2], ['3003', 2, 2],
+  ['3010', 4, 1], ['3622', 3, 1], ['3004', 2, 1], ['3005', 1, 1],
 ]
-const letters = {
-  B: ['1110', '1001', '1001', '1110', '1001', '1001', '1110'],
-  R: ['1110', '1001', '1001', '1110', '1010', '1001', '1001'],
-  I: ['111', '010', '010', '010', '010', '010', '111'],
-  C: ['0111', '1000', '1000', '1000', '1000', '1000', '0111'],
-  K: ['1001', '1010', '1100', '1100', '1010', '1001', '1001'],
-  L: ['1000', '1000', '1000', '1000', '1000', '1000', '1111'],
-  A: ['0110', '1001', '1001', '1111', '1001', '1001', '1001'],
-  3: ['1110', '0001', '0001', '0110', '0001', '0001', '1110'],
-  D: ['1110', '1001', '1001', '1001', '1001', '1001', '1110'],
+const plates = [['3710', 4, 1], ['3623', 3, 1], ['3023b', 2, 1], ['3024', 1, 1]]
+const badge = [
+  '0111111110', '1111111111', '1111111111', '1111111111', '1111111111',
+  '1111111111', '1111111111', '1111111111', '1111111111', '0111111110',
+]
+const symbol = [
+  '0000000000', '0001111110', '0001111110', '0000000110', '0111110110',
+  '0111110110', '0000110110', '0000110000', '0000110000', '0000000000',
+]
+const glyphs = {
+  B: ['111110', '111111', '110011', '110011', '111110', '111111', '110011', '111111', '111110'],
+  R: ['111110', '111111', '110011', '110011', '111110', '111100', '110110', '110011', '110011'],
+  I: ['1111', '1111', '0110', '0110', '0110', '0110', '0110', '1111', '1111'],
+  C: ['011111', '111111', '110000', '110000', '110000', '110000', '110000', '111111', '011111'],
+  K: ['110011', '110110', '111100', '111000', '111000', '111100', '110110', '110011', '110011'],
+  L: ['11000', '11000', '11000', '11000', '11000', '11000', '11000', '11111', '11111'],
+  A: ['011110', '111111', '110011', '110011', '111111', '111111', '110011', '110011', '110011'],
+  3: ['111110', '111111', '000011', '000011', '011110', '011111', '000011', '111111', '111110'],
+  D: ['111110', '111111', '110011', '110011', '110011', '110011', '110011', '111111', '111110'],
 }
-const color = { gold: '#fac80a', white: '#f4f4f4', black: '#1b2a34' }
-const word = Array.from({ length: 7 }, (_, row) =>
-  [...'BRICKLAB 3D'].map((letter, index) => {
-    if (letter === ' ') return '00'
-    return index >= 5 && index <= 7 ? letters[letter][row].replaceAll('1', '2') : letters[letter][row]
-  }).join('0'))
+const word = Array.from({ length: 9 }, (_, row) =>
+  [...'BRICKLAB 3D'].map(letter => letter === ' ' ? '00' : glyphs[letter][row]).join('0'))
 const wordWidth = word[0].length
-const gap = 2.5
+const gap = 3
+const brickHeight = 1.2
+const grayCourses = ['#3e444d', '#545c66', '#68717c', '#818996', '#a0a8b2', '#c2c7cf']
+const yellowCourses = ['#bc7908', '#e9a514', '#ffca29']
 let partText
 
 async function loadBrickGeometries() {
@@ -65,53 +72,70 @@ async function loadBrickGeometries() {
   return parts
 }
 
+function cover(pattern, designs, vertical, place) {
+  const grid = vertical
+    ? Array.from({ length: pattern[0].length }, (_, x) => pattern.map(row => row[x] === '1'))
+    : pattern.map(row => [...row].map(cell => cell === '1'))
+  for (let y = 0; y < grid.length; y++) {
+    for (let x = 0; x < grid[y].length; x++) {
+      if (!grid[y][x]) continue
+      const [design, width, height] = designs.find(([, w, h]) => {
+        for (let dy = 0; dy < h; dy++) {
+          for (let dx = 0; dx < w; dx++) if (!grid[y + dy]?.[x + dx]) return false
+        }
+        return true
+      })
+      for (let dy = 0; dy < height; dy++) grid[y + dy].fill(false, x, x + width)
+      const cx = x + width / 2, cy = y + height / 2
+      place(design, vertical ? cy : cx, vertical ? cx : cy, vertical ? Math.PI / 2 : 0)
+    }
+  }
+}
+
 function brandLayout() {
-  const bricks = new Map()
-  function add(design, section, finish, x, y, z, angle, arrival) {
-    const key = `${design}:${finish}`
-    if (!bricks.has(key)) bricks.set(key, { design, finish, pieces: [] })
+  const batches = new Map()
+  function add(design, section, tint, x, y, z, angle, arrival) {
+    if (!batches.has(design)) batches.set(design, [])
     const sign = (Math.floor(x) + Math.floor(y * 2)) % 2 === 0 ? 1 : -1
-    bricks.get(key).pieces.push({ section, x, y, z, angle, arrival, sign })
+    batches.get(design).push({ section, tint, x, y, z, angle, arrival, sign })
   }
-  add('41539', 'badge', color.gold, 0, 0, 0, 0, .05)
-  badge.forEach((row, y) => {
-    for (const match of row.matchAll(/x{1,4}/g)) {
-      const width = match[0].length
-      add(plateDesign[width], 'badge', color.black, match.index + width / 2 - 4, 3.5 - y, .4, 0, .18 + y * .038)
-    }
+  grayCourses.forEach((shade, layer) => {
+    // Cross the courses to keep the glyphs solid across adjacent bricks.
+    cover(word, bricks, layer % 2 === 0, (design, x, y, angle) => {
+      const tint = layer === grayCourses.length - 1
+        ? y < 3 ? '#d6dbe1' : y > 6 ? '#acb3be' : shade
+        : shade
+      add(design, 'word', tint, x - wordWidth / 2, word.length / 2 - y,
+        brickHeight * (layer + 1 - grayCourses.length / 2), angle, .08 + .045 * layer + .37 * x / wordWidth + .045 * y / word.length)
+    })
   })
-  // Vertical backing plates join the horizontal bricks on the face of each letter.
-  for (let x = 0; x < wordWidth; x++) {
-    const column = word.map(row => row[x]).join('')
-    for (const match of column.matchAll(/([12])\1{0,3}/g)) {
-      const height = match[0].length
-      add(plateDesign[height], 'word', match[1] === '1' ? color.white : color.gold,
-        x + .5 - wordWidth / 2, 3.5 - match.index - height / 2, 0, Math.PI / 2, .14 + .43 * x / wordWidth)
-    }
-  }
-  word.forEach((row, y) => {
-    for (const match of row.matchAll(/([12])\1{0,3}/g)) {
-      const width = match[0].length
-      add(brickDesign[width], 'word', match[1] === '1' ? color.white : color.gold,
-        match.index + width / 2 - wordWidth / 2, 3 - y, 1.2, 0, .30 + .43 * match.index / wordWidth + .025 * y / 6)
-    }
+  yellowCourses.forEach((shade, layer) => {
+    cover(badge, bricks, layer % 2 === 0, (design, x, y, angle) => {
+      const tint = layer === yellowCourses.length - 1 && y < 4 ? '#ffe063' : shade
+      add(design, 'badge', tint, x - badge[0].length / 2, badge.length / 2 - y,
+        brickHeight * (layer + 1 - yellowCourses.length / 2), angle, .025 + .095 * layer + .018 * y)
+    })
   })
-  return [...bricks.values()]
+  cover(symbol, plates, false, (design, x, y, angle) => {
+    add(design, 'badge', '#333943', x - badge[0].length / 2, badge.length / 2 - y,
+      brickHeight * yellowCourses.length / 2 + .4, angle, .29 + .021 * y)
+  })
+  return batches
 }
 
 export async function createStartupBrand(signal) {
   const geometry = await loadBrickGeometries()
   const layout = brandLayout()
-  const materials = []
+  const material = new MeshStandardMaterial({ roughness: .38 })
   const dispose = () => {
     for (const parts of geometry.values()) for (const part of parts) part.dispose()
-    for (const material of materials) material.dispose()
+    material.dispose()
   }
   if (signal.aborted) {
     dispose()
     return null
   }
-  if (layout.some(({ design }) => !geometry.get(design)?.length)) {
+  if ([...layout.keys()].some(design => !geometry.get(design)?.length)) {
     dispose()
     throw new Error('Missing LDraw startup part')
   }
@@ -125,12 +149,12 @@ export async function createStartupBrand(signal) {
   scene.add(ambient, key, rim, logo)
   const camera = new PerspectiveCamera(32, 1, .1, 320)
   const transform = new Object3D()
-  const batches = layout.map(({ design, finish, pieces }) => {
-    const material = new MeshStandardMaterial({ color: finish, roughness: .38 })
-    materials.push(material)
+  const instanceColor = new Color()
+  const batches = [...layout].map(([design, pieces]) => {
     const meshes = geometry.get(design).map(part => {
       const mesh = new InstancedMesh(part, material, pieces.length)
       mesh.frustumCulled = false
+      pieces.forEach(({ tint }, index) => mesh.setColorAt(index, instanceColor.set(tint)))
       logo.add(mesh)
       return mesh
     })
@@ -141,11 +165,11 @@ export async function createStartupBrand(signal) {
   let visibleHeight
   function resize(width, height) {
     stacked = width <= 560
-    const contentWidth = stacked ? wordWidth : wordWidth + gap + 8
-    const contentHeight = stacked ? 8 + gap + 7 : 8
+    const contentWidth = stacked ? wordWidth : wordWidth + gap + badge[0].length
+    const contentHeight = stacked ? badge.length + gap + word.length : Math.max(badge.length, word.length)
     camera.aspect = width / height
     const field = 2 * Math.tan(MathUtils.degToRad(camera.fov) / 2)
-    visibleHeight = Math.max(contentWidth / camera.aspect / (stacked ? .80 : .71), contentHeight / .60)
+    visibleHeight = Math.max(contentWidth / camera.aspect / (stacked ? .78 : .76), contentHeight / .60)
     camera.position.z = visibleHeight / field
     camera.updateProjectionMatrix()
   }
@@ -154,7 +178,9 @@ export async function createStartupBrand(signal) {
     const scale = 1 + .16 * Math.sin(Math.PI * recess) + depth * .04
     logo.position.y = visibleHeight * depth * .27
     logo.position.z = -camera.position.z * depth * .23
-    logo.rotation.set(.24 - depth * .05, -.17 * (1 - depth), -.018 * (1 - depth))
+    const settle = MathUtils.smootherstep(progress, .35, 1)
+    logo.rotation.set(.19 - settle * .055 + depth * .04,
+      (-.32 + settle * .10) * (1 - depth), -.014 * (1 - depth))
     logo.scale.setScalar(scale)
     ambient.intensity = MathUtils.lerp(1.22, .56, depth)
     key.intensity = MathUtils.lerp(2.25, .68, depth)
@@ -162,12 +188,12 @@ export async function createStartupBrand(signal) {
 
     for (const { meshes, pieces } of batches) {
       pieces.forEach(({ section, x, y, z, angle, arrival, sign }, index) => {
-        const badge = section === 'badge'
-        const offsetX = stacked ? 0 : badge ? -(wordWidth + gap) / 2 : (8 + gap) / 2
-        const offsetY = stacked ? badge ? (7 + gap) / 2 : -(8 + gap) / 2 : 0
+        const isBadge = section === 'badge'
+        const offsetX = stacked ? 0 : isBadge ? -(wordWidth + gap) / 2 : (badge[0].length + gap) / 2
+        const offsetY = stacked ? isBadge ? (word.length + gap) / 2 : -(badge.length + gap) / 2 : 0
         const travel = 1 - MathUtils.smootherstep(progress, arrival, arrival + .24)
         transform.position.set(x + offsetX + travel * sign * (5 + Math.abs(x) * .22),
-          y + offsetY + travel * (badge ? 12 : sign * 10), z + travel * (badge ? -18 : 16))
+          y + offsetY + travel * (isBadge ? 12 : sign * 10), z + travel * (isBadge ? -18 : 16))
         transform.rotation.set(-Math.PI / 2 + travel * sign * .82, travel * .53, angle + travel * sign * 1.40, 'ZXY')
         transform.scale.setScalar(progress < arrival ? 0 : 1)
         transform.updateMatrix()

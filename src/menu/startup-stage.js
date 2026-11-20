@@ -1,5 +1,5 @@
 import { ACESFilmicToneMapping, MathUtils, WebGLRenderer } from 'three'
-import { createStartupBrand } from './startup-brand.js?v=ldraw-brand'
+import { createStartupBrand } from './startup-brand.js?v=bold-brand'
 
 export async function mountStartupStage(host, { signal, motion, intro, started }) {
   if (signal.aborted) return null

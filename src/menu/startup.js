@@ -73,7 +73,7 @@ function loadingScreen(root, language, intro, onClose) {
   let tipIndex = 0
   root.hidden = false
   tip.textContent = text.tips[tipIndex]
-  const stage = import('./startup-stage.js?v=ldraw-brand').then(async ({ mountStartupStage }) => {
+  const stage = import('./startup-stage.js?v=bold-brand').then(async ({ mountStartupStage }) => {
     const view = await mountStartupStage(field('stage'), { signal, motion, intro, started })
     if (!signal.aborted) {
       if (view) field('stage').removeAttribute('aria-hidden')

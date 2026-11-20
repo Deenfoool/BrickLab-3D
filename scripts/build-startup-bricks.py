@@ -8,7 +8,7 @@ from zipfile import ZipFile
 
 from ldraw_example import LDrawLibrary
 
-PARTS = ("3024", "3023b", "3623", "3710", "41539", "3005", "3004", "3622", "3010")
+PARTS = ("3024", "3023b", "3623", "3710", "3005", "3004", "3622", "3010", "3003", "3002", "3001", "2456", "3007")
 OUTPUT = Path(__file__).resolve().parents[1] / "assets/startup/brand-bricks.mpd"
 
 

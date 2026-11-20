@@ -54,7 +54,7 @@
 
 ## Эмблема и надпись BrickLab 3D
 
-Заставка использует геометрию пластин LDraw 3024, 3023b, 3623, 3710, 41539 и кирпичиков 3005, 3004, 3622, 3010. В `assets/startup/brand-bricks.mpd` сохранены заголовки с авторами и лицензиями. Пакет собирается командой `python3 scripts/build-startup-bricks.py complete.zip` из [архива LDraw](https://library.ldraw.org/updates).
+Заставка использует геометрию пластин LDraw 3024, 3023b, 3623, 3710 и кирпичиков 3005, 3004, 3622, 3010, 3003, 3002, 3001, 2456, 3007. В `assets/startup/brand-bricks.mpd` сохранены заголовки с авторами и лицензиями. Пакет собирается командой `python3 scripts/build-startup-bricks.py complete.zip` из [архива LDraw](https://library.ldraw.org/updates).
 
 ## Jeep Wrangler 42122
 
