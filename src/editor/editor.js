@@ -20,7 +20,6 @@ import { createScene } from './scene.js?v=tread-pivot'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=ford-startup'
-import { mountPhysicsPanel, physicsTitle } from './physics-panel.js?v=belt-drive'
 import { mountBeltPanel } from './belt-panel.js?v=belt-drive'
 import { mountTrackPanel, trackLabels } from './track-panel.js?v=level-treads'
 import { upgradeInlineEngineFan } from './inline-engine.js'
@@ -32,7 +31,7 @@ const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
 const rotationStep = Math.PI / 4
 const freeKeyboardStep = Math.PI / 36
-const modes = ['build', 'paint', 'kinematics', 'testDrive', 'physics']
+const modes = ['build', 'paint', 'kinematics', 'testDrive']
 const buildTools = ['select', 'box', 'move', 'rotate', 'length', 'belt', 'track']
 const paintColors = ['#c91a09', '#0055bf', '#f2cd37', '#237841', '#f4f4f4', '#a0a5a9', '#1b2a34']
 const heldTurns = { ArrowUp: [X, -1], ArrowDown: [X, 1], ArrowLeft: [Y, -1], ArrowRight: [Y, 1] }
@@ -43,7 +42,7 @@ function hasNewConnection(before, after) {
   const previous = new Set(before.map(connectionKey))
   return after.some(link => !previous.has(connectionKey(link)))
 }
-const simulating = mode => mode === 'testDrive' || mode === 'physics'
+const simulating = mode => mode === 'testDrive'
 const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
@@ -97,7 +96,6 @@ export async function mountEditor(root, { document, language, save, download, si
         <button data-el="paint" type="button">${t.paint}</button>
         <button data-el="kinematics" type="button">${t.kinematics}</button>
         <button data-el="testDrive" type="button">${driveTitle(language)}</button>
-        <button data-el="physics" type="button">${physicsTitle(language)}</button>
       </div>
       <div class="editor-actions">
         <button data-el="editCable" type="button" aria-pressed="false">${language === 'ru' ? 'Укладка' : 'Route cables'}</button>
@@ -122,7 +120,6 @@ export async function mountEditor(root, { document, language, save, download, si
       </section>
       <aside class="editor-test-drive cable-route-panel" data-el="cablePanel" hidden></aside>
       <aside class="editor-test-drive" data-el="drivePanel" hidden></aside>
-      <aside class="editor-test-drive" data-el="physicsPanel" hidden></aside>
       <div class="editor-overlay" data-el="editorOverlay">
         <div class="editor-viewport-tools" data-el="buildTools">
           <button type="button" data-el="selectTool" title="${t.select} (V)" aria-label="${t.select}"><svg class="icon" viewBox="0 0 24 24"><path d="m5 3 13 10-6 1-3 6z"/></svg></button>
@@ -417,9 +414,6 @@ export async function mountEditor(root, { document, language, save, download, si
     read: () => ({ parts: state.parts, assembly, config: driveConfig }),
     write: config => { driveConfig = config; persist() },
     nameOf: id => parts[state.parts.find(part => part.id === id)?.design]?.[language] ?? id,
-  })
-  const physicsPanel = mountPhysicsPanel(el('physicsPanel'), {
-    language, scene, models, signal, read: () => ({ parts: state.parts, assembly }),
   })
   const undo = []
   const redo = []
@@ -1335,7 +1329,6 @@ export async function mountEditor(root, { document, language, save, download, si
   function setMode(next) {
     if (next === mode) return
     if (mode === 'testDrive') drivePanel.setActive(false)
-    if (mode === 'physics') physicsPanel.setActive(false)
     cancelGizmo()
     cancelPlacement()
     cancelResize()
@@ -1346,7 +1339,6 @@ export async function mountEditor(root, { document, language, save, download, si
     additional.clear()
     setSelection(selected)
     if (mode === 'testDrive') drivePanel.setActive(true)
-    if (mode === 'physics') physicsPanel.setActive(true)
     audio.play('tool')
   }
 
