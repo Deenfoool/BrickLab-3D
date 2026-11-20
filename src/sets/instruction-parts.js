@@ -14,12 +14,17 @@ export async function instructionPartRegions(set, pdfId, page) {
 
 export function addInstructionParts(preview, regions, { language, describe, find }) {
   if (!regions.length) return
+  const byArea = [...regions].sort((a, b) => b[2] * b[3] - a[2] * a[3])
+  const paintOrder = new Map(byArea.map((region, index) => [region, index]))
+  preview.style.isolation = 'isolate'
   const tooltip = document.createElement('span')
   tooltip.className = 'instruction-part-label'
+  tooltip.style.zIndex = String(regions.length)
   tooltip.hidden = true
   tooltip.setAttribute('aria-hidden', 'true')
   preview.append(tooltip)
-  for (const [x, y, width, height, partNum, colorId] of regions) {
+  for (const region of regions) {
+    const [x, y, width, height, partNum, colorId] = region
     const button = document.createElement('button')
     const name = describe?.(partNum, colorId)
     const label = name ? `${partNum} · ${name}` : partNum
@@ -31,6 +36,7 @@ export function addInstructionParts(preview, regions, { language, describe, find
     button.style.top = `${y / 100}%`
     button.style.width = `${width / 100}%`
     button.style.height = `${height / 100}%`
+    button.style.zIndex = String(paintOrder.get(region))
     function showLabel() {
       tooltip.textContent = label
       tooltip.style.left = `clamp(6.5rem, ${(x + width / 2) / 100}%, calc(100% - 6.5rem))`

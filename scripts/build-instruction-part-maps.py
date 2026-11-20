@@ -9,6 +9,7 @@ import argparse
 import csv
 import gzip
 import json
+import math
 import re
 from collections import defaultdict
 from functools import lru_cache
@@ -29,21 +30,78 @@ def text_boxes(words, pattern):
                   key=lambda box: (box[1], box[0]))
 
 
+def is_rectangular_path(items, rect):
+    if len(items) == 1:
+        return items[0][0] == "re"
+    # Some booklets draw a filled rectangle as a chain of perimeter segments.
+    if len(items) < 4 or any(item[0] != "l" for item in items):
+        return False
+    edges = ((0, rect.x0), (0, rect.x1), (1, rect.y0), (1, rect.y1))
+    lengths = [0.] * len(edges)
+    for _, start, end in items:
+        for i, (axis, value) in enumerate(edges):
+            if abs(start[axis] - value) <= .05 and abs(end[axis] - value) <= .05:
+                lengths[i] += abs(start[1 - axis] - end[1 - axis])
+                break
+        else:
+            return False
+    return all(abs(actual - expected) < 1 for actual, expected in zip(
+        lengths, (rect.height, rect.height, rect.width, rect.width),
+    ))
+
+
+def step_artwork(page, captions, images, corrections=None):
+    frames = set()
+    for path in page.get_drawings():
+        rect = path["rect"]
+        fill = path.get("fill")
+        if (fill and min(fill) >= .8 and max(fill) - min(fill) < .08
+                and 25 <= rect.width <= .7 * page.rect.width
+                and 18 <= rect.height <= .55 * page.rect.height
+                and page.rect.contains(rect) and is_rectangular_path(path["items"], rect)):
+            frames.add(tuple(rect))
+    frames = sorted((fitz.Rect(frame) for frame in frames), key=lambda rect: (rect.get_area(), tuple(rect)))
+
+    groups = defaultdict(list)
+    for caption in captions:
+        bounds = fitz.Rect(caption[:4])
+        frame = next((rect for rect in frames if rect.contains(bounds)), None)
+        groups[tuple(frame) if frame is not None else None].append(caption)
+    for frame, words in groups.items():
+        if frame is None:
+            for part in artwork(words, images, max_dx=3, min_dy=-2.5, max_dy=2, corrections=corrections):
+                yield (*part, ())
+            continue
+        bounds = fitz.Rect(frame)
+        local = [(xref, box) for xref, box in images if bounds.contains(fitz.Rect(box))]
+        parts = list(artwork(words, local, max_dx=4.5, min_dy=-2.5, max_dy=3.5, corrections=corrections))
+        for part in parts:
+            _, box, _, _ = part
+            # A long diagonal part can have smaller, independently captioned
+            # drawings in the blank corners of its bounding box.
+            neighbors = tuple(other_box for _, other_box, _, _ in parts
+                              if other_box.get_area() < .65 * box.get_area() and box.intersects(other_box))
+            yield (*part, neighbors)
+
+
 def artwork(words, images, max_dx, min_dy, max_dy, corrections=None):
-    anchors = []
-    for x, y, _, _, value in words:
+    candidates = []
+    for caption, (x, y, _, _, _) in enumerate(words):
         # Both caption types are left-aligned to the underlying part drawing.
-        candidates = [
-            (abs(x - box[0]) * 2 + abs(y - box[3]), index)
+        candidates.extend(
+            (abs(x - box[0]) * 2 + abs(y - box[3]), caption, index)
             for index, (_, box) in enumerate(images)
             if abs(x - box[0]) <= max_dx and min_dy <= y - box[3] <= max_dy
             and box[2] - box[0] >= 6 and box[3] - box[1] >= 4
-        ]
-        if candidates:
-            anchors.append((min(candidates)[1], value))
+        )
 
-    assigned = {index for index, _ in anchors}
-    for index, value in anchors:
+    anchors = {}
+    assigned = set()
+    for _, caption, index in sorted(candidates):
+        if caption not in anchors and index not in assigned:
+            anchors[caption] = index
+            assigned.add(index)
+    for caption, index in sorted(anchors.items()):
         xref, bounds = images[index]
         anchor = fitz.Rect(bounds)
         box = fitz.Rect(anchor)
@@ -72,7 +130,7 @@ def artwork(words, images, max_dx, min_dy, max_dy, corrections=None):
                 same_bottom = abs(fragment.y1 - anchor.y1) <= 2 and fragment.x0 >= anchor.x0
                 if (same_left or same_bottom) and fragment.y1 <= anchor.y1 + 1:
                     box |= fragment
-        yield xref, box, value, isolated and box == anchor
+        yield xref, box, words[caption][4], isolated and box == anchor
 
 
 def read_book(path, cache=None):
@@ -89,14 +147,21 @@ def read_book(path, cache=None):
     return pdf, pages
 
 
-def template(display, box):
+def template(display, box, neighbors=()):
     # Render the actual page so inline images, masks and layered tiles are composited.
     clip = fitz.Rect(box.x0 - 1, box.y0 - 1, box.x1 + 1, box.y1 + .25) & display.rect
     scale = min(3, 240 / max(clip.width, clip.height)) if not clip.is_empty else 0
     if not scale:
         return None
     pixmap = display.get_pixmap(matrix=fitz.Matrix(scale, scale), colorspace=fitz.csRGB, clip=clip)
-    return thumbnail(pixmap)
+    excluded = [
+        (max(0, math.floor(neighbor.x0 * scale) - pixmap.x),
+         max(0, math.floor(neighbor.y0 * scale) - pixmap.y),
+         math.ceil(neighbor.x1 * scale) - pixmap.x,
+         math.ceil(neighbor.y1 * scale) - pixmap.y)
+        for neighbor in neighbors
+    ]
+    return thumbnail(pixmap, excluded=excluded)
 
 
 def embedded_template(pdf, xref):
@@ -111,12 +176,14 @@ def embedded_template(pdf, xref):
     return thumbnail(pixmap, normalize_paper=True)
 
 
-def thumbnail(pixmap, normalize_paper=False):
+def thumbnail(pixmap, normalize_paper=False, excluded=()):
     pixels = np.frombuffer(pixmap.samples, dtype=np.uint8).reshape(pixmap.height, pixmap.width, 3)
     rgb = pixels.astype(np.float32) / 255
     background = np.median(np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]]), axis=0)
     if min(background) < .5:
         return None
+    for left, top, right, bottom in excluded:
+        rgb[top:bottom, left:right] = background
     foreground = np.linalg.norm(rgb - background, axis=2) > .18
     ys, xs = np.where(foreground)
     if len(ys) < 6:
@@ -211,14 +278,16 @@ def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.
         for page_no, (words, images) in enumerate(pages):
             if (book_id, page_no) in inventory_pages:
                 continue
-            parts = list(artwork(text_boxes(words, QUANTITY), images, max_dx=3,
-                                 min_dy=-2.5, max_dy=2, corrections=book_corrections))
-            if not parts:
+            captions = text_boxes(words, QUANTITY)
+            if not captions:
                 continue
             page = pdf[page_no]
+            parts = list(step_artwork(page, captions, images, book_corrections))
+            if not parts:
+                continue
             display = page.get_displaylist(annots=False)
             regions = []
-            for xref, box, quantity, isolated in parts:
+            for xref, box, quantity, isolated, neighbors in parts:
                 sample = template(display, box)
                 matches = rank(sample)[:4]
                 checked = book_corrections.get(str(xref))
@@ -230,6 +299,7 @@ def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.
                         embedded = confident_match(raster_ranking, max_difference, min_margin)
                         if override and embedded and override != embedded:
                             override = None
+                            neighbors = ()
                         elif embedded and not override and matches and matches[0][1] == embedded:
                             # A placed image can be recolored or marked up. The
                             # paper around thin parts can dominate the image score.
@@ -238,6 +308,11 @@ def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.
                                    for reference in inventory_chroma[embedded]):
                                 override = embedded
                                 matches = raster_ranking
+                    if not override and neighbors:
+                        cleaned = rank(template(display, box, neighbors))[:4]
+                        override = confident_match(cleaned, max_difference, min_margin)
+                        if override:
+                            matches = cleaned
                 review.setdefault(xref, {"matches": matches, "pages": [], "selected": override})
                 review[xref]["pages"].append((page_no + 1, tuple(box), quantity))
                 if override:

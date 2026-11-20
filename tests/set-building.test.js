@@ -374,6 +374,9 @@ test('Ford GT 42154 loads earlier and newly recognized details on the same page'
   const regions = await instructionPartRegions(set, preview.pdfId, 80)
   assert.ok(regions.some((region) => region[4] === '87761' && region[5] === '0'))
   assert.ok(regions.some((region) => region[4] === '2736' && region[5] === '71'))
+  const overlapping = await instructionPartRegions(set, preview.pdfId, 196)
+  assert.ok(overlapping.some((region) => region[4] === '6629' && region[5] === '272'))
+  assert.ok(overlapping.some((region) => region[4] === '3743' && region[5] === '0'))
 })
 
 test('Volvo book-local pages retrieve part regions from the correct volume', async () => {
