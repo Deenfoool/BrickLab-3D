@@ -356,7 +356,7 @@ async function openEditor(project) {
   if (!transition) editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=guided-transition')
+    const { mountEditor } = await import('../editor/editor.js?v=compact-instructions')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

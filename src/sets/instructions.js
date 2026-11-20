@@ -69,16 +69,17 @@ export function mountInstructions(
     ru = language === 'ru'
   const panel = node('aside', undefined, 'editor-panel instruction-panel')
   panel.dataset.panel = 'instruction'
+  panel.setAttribute('aria-labelledby', 'editor-instruction-heading')
   const header = node('header', undefined, 'editor-panel-header')
-  const title = node('h2', ru ? 'Инструкция' : 'Instructions')
+  const title = node('h2')
+  title.id = 'editor-instruction-heading'
+  title.append(node('span', ru ? 'Инструкция' : 'Instructions'))
   title.setAttribute('data-panel-grip', '')
   title.tabIndex = 0
   const toggle = node('button')
   toggle.type = 'button'
   toggle.setAttribute('data-panel-toggle', '')
-  header.append(title, toggle)
   const body = node('div', undefined, 'editor-panel-body')
-  const name = node('p', `${progress.set.number} · ${progress.set.name}`)
   const tools = node('div', undefined, 'instruction-tools')
   const book = node('select')
   book.setAttribute('aria-label', ru ? 'Книга' : 'Book')
@@ -95,29 +96,30 @@ export function mountInstructions(
   )
   next.setAttribute('aria-label', ru ? 'Следующая страница' : 'Next page')
   tools.append(book, previous, page, total, next)
+  const more = control('⋯', () => setMoreOpen(actions.hidden), signal)
+  more.className = 'instruction-more-toggle'
+  more.title = ru ? 'Действия с инструкцией' : 'Instruction actions'
+  more.setAttribute('aria-label', more.title)
+  more.setAttribute('aria-controls', 'editor-instruction-actions')
+  header.append(title, tools, more, toggle)
+  const actions = node('div', undefined, 'instruction-actions')
+  actions.id = 'editor-instruction-actions'
   const frame = node('iframe')
   frame.title = ru ? 'Страница инструкции LEGO' : 'LEGO instructions page'
   frame.referrerPolicy = 'no-referrer'
   const preview = node('div', undefined, 'instruction-preview')
   const previewStatus = node('p')
   previewStatus.setAttribute('role', 'status')
-  const external = node(
-    'a',
-    ru ? 'Открыть PDF отдельно' : 'Open PDF in a new tab',
-  )
-  external.target = '_blank'
-  external.rel = 'noopener'
-  const hint = node(
-    'small',
-    ru
-      ? 'Листайте кнопками панели, чтобы сохранить страницу.'
-      : 'Use panel buttons to save the current page.',
-  )
+  const pdfLabel = ru ? 'Открыть PDF ↗' : 'Open PDF ↗'
+  const external = node('a', pdfLabel)
+  const fallback = node('a', pdfLabel, 'instruction-pdf-fallback')
   const status = node('p')
   status.setAttribute('role', 'status')
   const credit = node('a')
-  credit.target = '_blank'
-  credit.rel = 'noopener'
+  for (const link of [external, fallback, credit]) {
+    link.target = '_blank'
+    link.rel = 'noopener'
+  }
   const retry = control(t.retryBooks, lookupBooks, signal)
   retry.hidden = true
   const add = node('details')
@@ -177,30 +179,33 @@ export function mountInstructions(
     },
     { signal },
   )
-  body.append(name, status, retry, tools, previewStatus, preview, frame, external, credit, hint, add)
+  actions.append(external, credit, add)
+  body.append(actions, status, retry, previewStatus, fallback, preview, frame)
   panel.append(header, body)
   layer.append(panel)
+  function setMoreOpen(open) {
+    actions.hidden = !open
+    more.setAttribute('aria-expanded', String(open))
+  }
   function render() {
-    book.replaceChildren(
-      ...progress.set.books.map(
-        (entry, i) => new Option(entry.title, String(i)),
-      ),
-    )
-    book.value = String(progress.book)
-    page.value = String(progress.page)
+    setMoreOpen(false)
     const entry = progress.set.books[progress.book]
     tools.hidden = !entry
+    book.hidden = progress.set.books.length < 2
     external.hidden = !entry
-    hint.hidden = !entry
     credit.hidden = true
     status.hidden = Boolean(entry)
     retry.hidden = true
     if (entry) {
+      book.replaceChildren(...progress.set.books.map((volume, i) => new Option(volume.title, String(i))))
+      book.value = String(progress.book)
+      page.value = String(progress.page)
       page.max = String(entry.pages ?? maxUnknownPages)
       total.textContent = entry.pages ? `/ ${entry.pages}` : ''
       previous.disabled = progress.page <= 1
       next.disabled = progress.page >= (entry.pages ?? maxUnknownPages)
       external.href = `${entry.url}#page=${progress.page}&view=FitH`
+      fallback.href = external.href
     }
     renderPreview(entry)
   }
@@ -208,6 +213,7 @@ export function mountInstructions(
     preview.replaceChildren()
     preview.hidden = true
     previewStatus.hidden = true
+    fallback.hidden = true
     frame.hidden = true
     const display = entry && instructionPagePreview(progress.set.number, entry.url, progress.page)
     if (display?.frame) {
@@ -221,13 +227,11 @@ export function mountInstructions(
       credit.textContent = display?.source ? 'BrickInstructions' : entry.source
     }
     if (!entry || display?.frame) return
-    previewStatus.hidden = false
     if (!display?.image) {
-      previewStatus.textContent = ru
-        ? 'Для этой книги доступен просмотр PDF в отдельной вкладке.'
-        : 'This book is available as a PDF in a new tab.'
+      fallback.hidden = false
       return
     }
+    previewStatus.hidden = false
     previewStatus.textContent = ru ? 'Загружаем страницу…' : 'Loading page…'
     const prepared = firstPage ?? prepareInstructionPage(progress)
     firstPage = null
@@ -245,8 +249,9 @@ export function mountInstructions(
       if (!image.isConnected) return
       if (!ready) {
         previewStatus.textContent = ru
-          ? 'Страница не загрузилась. Откройте её в оригинальном PDF.'
-          : 'The page could not be loaded. Open it in the original PDF.'
+          ? 'Страница не загрузилась.'
+          : 'The page could not be loaded.'
+        fallback.hidden = false
         return
       }
       preview.style.setProperty('--page-ratio', image.naturalWidth / image.naturalHeight)
@@ -309,6 +314,12 @@ export function mountInstructions(
     { signal },
   )
   page.addEventListener('change', () => turn(page.value), { signal })
+  panel.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || actions.hidden) return
+    event.stopPropagation()
+    setMoreOpen(false)
+    more.focus()
+  }, { signal })
   signal.addEventListener(
     'abort',
     () => {
