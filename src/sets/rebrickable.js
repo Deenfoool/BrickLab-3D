@@ -1,4 +1,5 @@
-import { knownBooks, validateSet } from './data.js'
+import { setSearchParams } from './filters.js'
+import { knownBooks, validateSet } from './data.js?v=set-filters'
 const endpoint = 'https://rebrickable.com/api/v3/'
 let apiKey = ''
 export function connectRebrickable(key) {
@@ -21,8 +22,8 @@ async function request(path, signal) {
   if (!response.ok) throw Error(`api-${response.status}`)
   return response.json()
 }
-export async function loadSetPage(query, signal, next) {
-  const params = new URLSearchParams({ search: query, page_size: '24' })
+export async function loadSetPage(query, signal, next, filters) {
+  const params = setSearchParams(query, filters)
   const data = await request(next ?? `lego/sets/?${params}`, signal)
   return {
     next: data.next ?? null,
@@ -31,6 +32,7 @@ export async function loadSetPage(query, signal, next) {
       name: set.name,
       year: set.year,
       numParts: set.num_parts,
+      themeId: set.theme_id,
       image: set.set_img_url,
     })),
   }
@@ -63,6 +65,7 @@ export async function importSet(number, signal) {
     number: info.set_num,
     name: info.name,
     year: info.year,
+    themeId: info.theme_id,
     image: info.set_img_url,
     inventory,
     books: knownBooks[info.set_num] ?? [],

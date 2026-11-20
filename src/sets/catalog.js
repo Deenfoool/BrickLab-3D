@@ -1,10 +1,13 @@
+import themes from '../../catalog/sets/themes.json' with { type: 'json' }
+import { mountSetFilters } from './filter-panel.js'
+import { filterSetItems } from './filters.js'
 import {
   connectRebrickable,
   hasRebrickable,
   loadSetPage,
   importSet,
-} from './rebrickable.js?v=lazy-sets'
-import { safeImage, validateSet } from './data.js'
+} from './rebrickable.js?v=set-filters'
+import { safeImage, validateSet } from './data.js?v=set-filters'
 const storageKey = 'bricklab.sets.v1'
 export const setStrings = (language) =>
   language === 'ru'
@@ -105,6 +108,11 @@ export async function mountSetCatalog(
   const submit = node('button', t.find, 'secondary')
   submit.type = 'submit'
   form.append(query, submit)
+  const filters = mountSetFilters(form, themes, {
+    language,
+    signal,
+    change: scheduleSearch,
+  })
   const connect = node('details', undefined, 'set-connect')
   connect.append(node('summary', t.connect))
   const key = node('input')
@@ -159,6 +167,7 @@ export async function mountSetCatalog(
   let listController
   let searchTimer
   let activeQuery = ''
+  let activeFilters = filters.read()
   const displayed = new Set()
   const pages = new Set()
   const observer = new IntersectionObserver(
@@ -334,6 +343,7 @@ export async function mountSetCatalog(
           activeQuery,
           listController.signal,
           cursor,
+          activeFilters,
         )
         if (signal.aborted || generation !== listGeneration) return
         appendItems(page.items)
@@ -365,11 +375,11 @@ export async function mountSetCatalog(
     requestId++
     loading = false
     activeQuery = query.value.trim()
-    localItems = [...sets.values()].filter((set) =>
-      `${set.number} ${set.name}`
-        .toLowerCase()
-        .includes(activeQuery.toLowerCase()),
-    )
+    activeFilters = filters.read()
+    // Let the server order the full catalog, without a locally cached prefix.
+    localItems = hasRebrickable()
+      ? []
+      : filterSetItems([...sets.values()], activeQuery, activeFilters)
     localOffset = 0
     nextPage = undefined
     remoteStarted = false
@@ -387,19 +397,16 @@ export async function mountSetCatalog(
     },
     { signal },
   )
-  query.addEventListener(
-    'input',
-    () => {
-      // Invalidate immediately so a prior page cannot append during the debounce.
-      listController?.abort()
-      listGeneration++
-      requestId++
-      observer.unobserve(more)
-      more.disabled = true
-      clearTimeout(searchTimer)
-      searchTimer = setTimeout(resetList, 250)
-    },
-    { signal },
-  )
+  function scheduleSearch() {
+    // Invalidate immediately so a prior page cannot append during the debounce.
+    listController?.abort()
+    listGeneration++
+    requestId++
+    observer.unobserve(more)
+    more.disabled = true
+    clearTimeout(searchTimer)
+    searchTimer = setTimeout(resetList, 250)
+  }
+  query.addEventListener('input', scheduleSearch, { signal })
   resetList()
 }

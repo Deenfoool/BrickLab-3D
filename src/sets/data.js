@@ -82,6 +82,7 @@ export function validateSet(value) {
     number: value.number,
     name: value.name.slice(0, 160),
     year: Number(value.year) || 0,
+    themeId: Number(value.themeId) || (value.number === '42215-1' ? 1 : null),
     image: safeImage(value.image),
     source: 'Rebrickable',
     books: (value.books ?? knownBooks[value.number] ?? [])

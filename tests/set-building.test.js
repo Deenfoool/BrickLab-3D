@@ -151,3 +151,75 @@ test('set catalog loads one page at a time and preserves the API continuation an
     connectRebrickable('')
   }
 })
+
+test('set filters apply inclusive limits and numeric ordering to cached catalogs', async () => {
+  const { filterSetItems, normalizeFilters } = await import(
+    '../src/sets/filters.js'
+  )
+  const items = [
+    { number: '10-1', name: 'Ten', year: 2020, themeId: 1, numParts: 500 },
+    { number: '2-1', name: 'Two', year: 2025, themeId: 1, numParts: 150 },
+    { number: '3-1', name: 'Three', year: 2025, themeId: 2, numParts: 300 },
+  ]
+  assert.deepEqual(
+    filterSetItems(items, '', {
+      themeId: 1,
+      minYear: 2020,
+      maxYear: 2025,
+      minParts: 150,
+      maxParts: 500,
+      ordering: '-num_parts',
+    }).map((i) => i.number),
+    ['10-1', '2-1'],
+  )
+  assert.deepEqual(
+    filterSetItems(items, '', { ordering: 'set_num' }).map((i) => i.number),
+    ['2-1', '3-1', '10-1'],
+  )
+  assert.equal(
+    filterSetItems(items, '', { minParts: 0, maxParts: 0 }).length,
+    0,
+  )
+  assert.equal(
+    filterSetItems(items, 'ten', { themeId: 1, maxParts: null }).length,
+    1,
+  )
+  assert.equal(normalizeFilters({ minYear: 2025, maxYear: 2020 }).maxYear, 2025)
+  assert.equal(validateSet(inventory).themeId, 1)
+})
+
+test('set filter requests use server parameters and preserve continuation query parameters', async () => {
+  const original = globalThis.fetch
+  const urls = []
+  connectRebrickable('filter-test')
+  globalThis.fetch = async (url) => {
+    urls.push(new URL(url))
+    return { ok: true, json: async () => ({ next: null, results: [] }) }
+  }
+  try {
+    await loadSetPage('truck', undefined, undefined, {
+      themeId: 1,
+      minYear: 2000,
+      maxYear: 2025,
+      minParts: 100,
+      maxParts: 500,
+      ordering: '-num_parts',
+    })
+    assert.equal(urls[0].searchParams.get('theme_id'), '1')
+    assert.equal(urls[0].searchParams.get('min_year'), '2000')
+    assert.equal(urls[0].searchParams.get('max_year'), '2025')
+    assert.equal(urls[0].searchParams.get('min_parts'), '100')
+    assert.equal(urls[0].searchParams.get('max_parts'), '500')
+    assert.equal(urls[0].searchParams.get('ordering'), '-num_parts,set_num')
+    const next = new URL(urls[0])
+    next.searchParams.set('page', '2')
+    await loadSetPage('truck', undefined, next.href, {})
+    assert.equal(urls[1].searchParams.get('max_parts'), '500')
+    assert.equal(urls[1].searchParams.get('page'), '2')
+    await loadSetPage('', undefined, undefined, { maxParts: null })
+    assert.equal(urls[2].searchParams.has('max_parts'), false)
+  } finally {
+    globalThis.fetch = original
+    connectRebrickable('')
+  }
+})
