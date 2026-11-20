@@ -1,5 +1,5 @@
 import { editorLabels } from '../editor/labels.js?v=editor-sound'
-import { locales } from './locale.js?v=example-tiles'
+import { locales } from './locale.js?v=example-editor-label'
 import { startStartup } from './startup.js?v=ford-drift'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
