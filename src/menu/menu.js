@@ -1,7 +1,7 @@
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=editor-feedback'
 import { locales } from './locale.js?v=project-home-layout'
-import { startStartup } from './startup.js?v=ford-drift'
+import { revealMenu, showEditorLoading, startStartup } from './startup.js?v=brick-intros'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
 const byId = id => document.getElementById(id)
@@ -19,6 +19,9 @@ let storageWarning = false
 let activeMenu = null
 let pendingRemoval = null
 const editorRoot = byId('editor')
+const startupRoot = byId('startup')
+const loadingTemplate = startupRoot.cloneNode(true)
+loadingTemplate.removeAttribute('id')
 const shell = document.querySelector('.shell')
 const libraryRoot = byId('library-panel')
 const libraryStatus = byId('library-status')
@@ -282,7 +285,7 @@ function currentPage() {
   return pages.includes(hash) ? hash : 'home'
 }
 
-function render() {
+function render(initial = false) {
   closeMenu()
   const t = strings()
   const page = currentPage()
@@ -290,6 +293,7 @@ function render() {
   const listVisible = page === 'projects'
   const requestedId = page === 'project' ? location.hash.slice('#project/'.length) : null
   const activeProject = requestedId ? projects.find(project => project.id === requestedId) : null
+  const returning = shell.hidden && !activeProject
   shell.hidden = Boolean(activeProject)
   editorRoot.hidden = !activeProject
   if (!activeProject) closeEditor()
@@ -332,10 +336,12 @@ function render() {
   byId('page-title').textContent = page === 'home' ? t.workspace :
     page === 'project' ? activeProject?.document.name ?? t.projects : t[page]
   if (listVisible) renderList()
-  if (activeProject) openEditor(activeProject)
+  const editorReady = activeProject ? openEditor(activeProject, !initial && startupRoot.hidden) : undefined
   if (page === 'library') openLibrary()
   else closeLibrary()
   setStatus(requestedId && !activeProject ? 'missing' : storageWarning ? 'storageError' : null)
+  if (returning && startupRoot.hidden) revealMenu(shell)
+  return editorReady
 }
 
 function closeSets() {
@@ -420,51 +426,7 @@ function closeEditor() {
   editorRoot.replaceChildren()
 }
 
-function showBuildTransition(set, signal) {
-  const ru = language === 'ru'
-  const screen = element('section', 'guided-loading')
-  screen.setAttribute('aria-labelledby', 'guided-loading-title')
-  const content = element('div', 'guided-loading-card')
-  const title = element('h1', null, ru ? 'Готовим сборку' : 'Preparing your build')
-  title.id = 'guided-loading-title'
-  const subtitle = element('p', null, `${set.number} · ${set.name}`)
-  const progress = element('progress')
-  progress.max = 3
-  progress.value = 0
-  progress.setAttribute('aria-label', title.textContent)
-  const tasks = element('ul', 'guided-loading-steps')
-  const stages = new Map([
-    ['scene', element('li', null, ru ? '3D-сцена' : '3D scene')],
-    ['inventory', element('li', null, ru ? 'Детали набора' : 'Set inventory')],
-    ['instruction', element('li', null, ru ? 'Текущая страница' : 'Current instruction page')],
-  ])
-  tasks.append(...stages.values())
-  const back = element('a', null, ru ? 'К наборам' : 'Back to sets')
-  back.href = '#sets'
-  content.append(title, subtitle, progress, tasks, back)
-  screen.append(content)
-  editorRoot.setAttribute('data-preparing-set', '')
-  editorRoot.before(screen)
-  function close() {
-    screen.remove()
-    editorRoot.removeAttribute('data-preparing-set')
-    signal.removeEventListener('abort', close)
-  }
-  signal.addEventListener('abort', close, { once: true })
-  return {
-    close,
-    report(stage, ready) {
-      const row = stages.get(stage)
-      if (signal.aborted || !row || row.dataset.state) return
-      row.dataset.state = ready ? 'ready' : 'available'
-      if (!ready && stage === 'instruction')
-        row.textContent = ru ? 'Инструкция откроется в панели' : 'Instructions available in the panel'
-      progress.value++
-    },
-  }
-}
-
-async function openEditor(project) {
+async function openEditor(project, showLoading = startupRoot.hidden) {
   if (editorSession?.id === project.id && editorSession.language === language) return
   closeEditor()
   const controller = new AbortController()
@@ -472,9 +434,10 @@ async function openEditor(project) {
   editorSession = session
   const t = editorLabels[language]
   const set = project.document.buildingSet?.set
-  const transition = typeof set?.name === 'string' && typeof set.number === 'string'
-    ? showBuildTransition(set, controller.signal) : null
-  if (!transition) editorRoot.append(element('div', 'editor-loading', t.loading))
+  const guidedSet = typeof set?.name === 'string' && typeof set.number === 'string' ? set : undefined
+  const transition = showLoading ? showEditorLoading(loadingTemplate.cloneNode(true), editorRoot, {
+    language, set: guidedSet, signal: controller.signal,
+  }) : null
   let phase = 'loadEditorError'
   try {
     const { mountEditor } = await import('../editor/editor.js?v=editor-feedback')
@@ -483,7 +446,8 @@ async function openEditor(project) {
     await mountEditor(editorRoot, {
       document: project.document, language, signal: controller.signal,
       download: downloadProject,
-      reportLoad: transition?.report,
+      // An initial deep link uses the main loader and still waits for the first instruction page.
+      reportLoad: guidedSet ? transition?.report ?? (() => {}) : undefined,
       save(document) {
         if (controller.signal.aborted) return false
         const record = makeRecord(document, project.id)
@@ -492,11 +456,7 @@ async function openEditor(project) {
         return !storageWarning
       },
     })
-    if (!controller.signal.aborted) {
-      transition?.close()
-      if (transition && !matchMedia('(prefers-reduced-motion: reduce)').matches)
-        editorRoot.animate([{ opacity: .5 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' })
-    }
+    if (!controller.signal.aborted) await transition?.finish()
   } catch (error) {
     if (controller.signal.aborted) return
     console.error(error)
@@ -518,9 +478,10 @@ async function openEditor(project) {
       closeEditor()
       openEditor(project)
     })
-    controller.abort()
     panel.append(message, retry, back)
     editorRoot.replaceChildren(panel)
+    await transition?.finish(true)
+    controller.abort()
   }
 }
 
@@ -605,5 +566,4 @@ window.addEventListener('storage', event => {
     render()
   }
 })
-startStartup(byId('startup'), language, [shell, editorRoot])
-render()
+startStartup(startupRoot, language, [shell, editorRoot], () => render(true))

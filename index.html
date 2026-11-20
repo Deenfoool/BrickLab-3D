@@ -8,21 +8,24 @@
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./src/menu/menu.css?v=project-home-layout">
   <link rel="stylesheet" href="./src/editor/editor.css?v=editor-feedback">
-  <link rel="stylesheet" href="./src/sets/sets.css?v=cad-dock">
-  <link rel="stylesheet" href="./src/menu/startup.css?v=ford-startup">
+  <link rel="stylesheet" href="./src/sets/sets.css?v=brick-intros">
+  <link rel="stylesheet" href="./src/menu/startup.css?v=brick-intros">
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=editor-feedback"></script>
+  <script type="module" src="./src/menu/menu.js?v=brick-intros"></script>
 </head>
 <body>
   <section class="startup" id="startup" aria-label="Подготовка BrickLab 3D">
-    <header class="startup-brand"><img src="./assets/bricklab.svg" alt="" width="38" height="38"><span>BrickLab 3D</span></header>
-    <div class="startup-stage" data-startup="stage" aria-hidden="true"></div>
+    <div class="startup-stage">
+      <div class="startup-brand" data-startup="brand"><img src="./assets/bricklab.svg" alt="" width="48" height="48"><span>BrickLab 3D</span></div>
+      <div class="startup-vehicle" data-startup="stage" aria-hidden="true"></div>
+    </div>
     <footer class="startup-footer">
       <div class="startup-model" data-startup="model" hidden>
-        <span>Ford GT</span><span class="startup-set">42154</span>
+        <span data-startup="modelName"></span><span class="startup-set" data-startup="modelTag"></span>
       </div>
+      <p class="startup-context" data-startup="context" hidden></p>
       <div class="startup-details">
         <p data-startup="status" role="status">Загружаем карту</p>
         <span data-startup="amount" aria-hidden="true"></span>
@@ -33,6 +36,7 @@
         <div class="startup-actions">
           <button type="button" data-startup="retry" hidden>Повторить</button>
           <button type="button" data-startup="skip" hidden>В меню</button>
+          <a data-startup="back" href="#projects" hidden></a>
         </div>
       </div>
     </footer>

@@ -6,29 +6,40 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from '../../vendor/meshoptimizer/meshopt_decoder.js'
 import { createCarEffects } from './startup-car-effects.js'
 
-const asset = new URL('../../assets/startup/ford-gt.glb.gz?v=2', import.meta.url)
+const assets = {
+  ford: new URL('../../assets/startup/ford-gt.glb.gz?v=2', import.meta.url),
+  buggy: new URL('../../assets/startup/dune-buggy.glb.gz?v=1', import.meta.url),
+}
 const smooth = (start, end, time) => MathUtils.smootherstep(time, start, end)
 
-function carPose(time, still = false) {
-  const entry = still ? 1 : 1 - (1 - MathUtils.clamp(time / 1.62, 0, 1)) ** 2.3
+function carPose(time, id) {
+  const entry = 1 - (1 - MathUtils.clamp(time / 1.62, 0, 1)) ** 2.3
   const approach = smooth(.14, 1.18, time)
   const settle = smooth(1.05, 1.69, time)
   const drift = approach * (1 - settle)
   const turn = approach * 1.14 - settle * .14
   const lift = smooth(1.68, 3.10, time)
+  const jump = id === 'buggy' ? .56 * Math.sin(Math.PI * smooth(.28, 1.27, time)) : 0
+  const brake = id === 'pickup' ? .095 * (smooth(.87, 1.19, time) - smooth(1.19, 1.55, time)) : 0
   return {
     entry, drift, turn, lift,
-    x: still ? 0 : .62 * (1 - entry) - .78 * drift,
-    y: .04 + .30 * lift,
+    x: .62 * (1 - entry) - (id === 'ford' ? .78 : .42) * drift,
+    y: .04 + .30 * lift + jump,
     z: 5.35 * (entry - 1),
-    yaw: MathUtils.lerp(.27, -.87, turn),
+    yaw: MathUtils.lerp(.27, id === 'pickup' ? -.64 : -.87, turn),
     roll: -.083 * drift,
+    pitch: jump * -.26 + brake,
   }
 }
 
-async function loadCar(signal) {
+async function loadCar(id, signal) {
+  if (id === 'pickup') {
+    const { createStartupPickup } = await import('./startup-pickup.js?v=brick-intros')
+    return signal.aborted ? null : createStartupPickup()
+  }
+  const asset = assets[id]
   const response = await fetch(asset, { signal })
-  if (!response.ok) throw new Error(`Ford GT: HTTP ${response.status}`)
+  if (!response.ok) throw new Error(`${id}: HTTP ${response.status}`)
   const bytes = new Uint8Array(await response.arrayBuffer())
   const buffer = bytes[0] === 0x1f && bytes[1] === 0x8b
     ? await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()
@@ -90,20 +101,34 @@ function collectGroups(model) {
       move = [0, .83, -.62]
       turn = [.09, 0, 0]
       timing = [1.82, 3.14]
+    } else if (name.startsWith('cage-') || name.startsWith('window-')) {
+      move = [0, .69, front || name.endsWith('-front') ? .55 : -.58]
+      turn = [.14, 0, .17]
+      timing = [1.88, 3.10]
+    } else if (name === 'seats') {
+      move = [0, .62, .16]
+      timing = [2.07, 3.24]
+    } else if (name === 'bumper' || name === 'rear-axle') {
+      move = [0, .25, name === 'bumper' ? .77 : -.73]
+      timing = [1.97, 3.16]
     } else if (name === 'engine') {
       move = [0, .44, -.32]
       timing = [2.06, 3.28]
     }
-    groups.set(name, { group, base, move: new Vector3(...move), turn, timing, rim, rimTiming, direction, front })
+    const order = name === 'chassis' ? 0
+      : name === 'engine' || name.startsWith('suspension-') || name === 'rear-axle' ? 1
+      : wheel ? 2 : name === 'roof' || name.startsWith('cage-') ? 4 : 3
+    const arrival = .16 + order * .51 + (order ? (groups.size % 4) * .09 : 0)
+    groups.set(name, { group, base, move: new Vector3(...move), turn, timing, rim, rimTiming, direction, front, order, arrival })
   }
   return groups
 }
 
-function wheelPosition(wheel, time, atRim = false) {
-  const { x, y, z, yaw, roll } = carPose(time)
+function wheelPosition(id, wheel, time, atRim = false) {
+  const { x, y, z, yaw, roll, pitch } = carPose(time, id)
   const point = wheel.base.clone().addScaledVector(wheel.move, smooth(...wheel.timing, time))
   if (atRim) point.x += wheel.direction * .68 * smooth(...wheel.rimTiming, time)
-  return point.applyEuler(new Euler(0, yaw, roll, 'YXZ')).add(new Vector3(x, y, z))
+  return point.applyEuler(new Euler(pitch, yaw, roll, 'YXZ')).add(new Vector3(x, y, z))
 }
 
 function groundShadow() {
@@ -131,29 +156,71 @@ function groundShadow() {
   return shadow
 }
 
-export async function mountStartupCar(host, { signal, reducedMotion }) {
-  const model = await loadCar(signal)
-  const materials = new Set(), geometries = new Set()
-  model.traverse(node => {
-    if (!node.isMesh) return
-    geometries.add(node.geometry)
-    for (const material of [node.material].flat()) materials.add(material)
-  })
-  const dispose = () => {
-    for (const geometry of geometries) geometry.dispose()
-    for (const material of materials) material.dispose()
+function updateAssembly(piece, time) {
+  const { group, arrival, base, move, rim, direction, order } = piece
+  const travel = 1 - smooth(arrival, arrival + .73, time)
+  group.visible = time >= arrival
+  group.position.copy(base).addScaledVector(move, travel * 2.2)
+  group.position.y += travel * (order === 0 ? 1.75 : .55)
+  group.position.z += order === 0 ? travel * -2.2 : 0
+  group.rotation.set(travel * .36, travel * .59 * direction, travel * .25 * direction, 'YXZ')
+  if (rim) {
+    const rimTravel = 1 - smooth(arrival + .32, arrival + .99, time)
+    rim.visible = time >= arrival + .32
+    rim.position.set(direction * 1.18 * rimTravel, .36 * rimTravel, 0)
+    rim.rotation.set(0, .52 * rimTravel, .28 * rimTravel)
   }
-  if (signal.aborted) {
-    dispose()
-    return false
-  }
+}
+
+export async function mountStartupCar(host, { signal, motion, variant, show }) {
+  if (signal.aborted || motion.matches) return false
   let renderer
   try {
     renderer = new WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'low-power' })
   } catch {
-    dispose()
     return false
   }
+
+  const materials = new Set(), geometries = new Set()
+  function collect(object) {
+    object.traverse(node => {
+      if (!node.geometry || !node.material) return
+      geometries.add(node.geometry)
+      for (const material of [node.material].flat()) materials.add(material)
+    })
+  }
+  function disposeResources() {
+    for (const geometry of geometries) geometry.dispose()
+    for (const material of materials) material.dispose()
+    geometries.clear()
+    materials.clear()
+  }
+  let observer
+  let frame
+  function dispose() {
+    observer?.disconnect()
+    cancelAnimationFrame(frame)
+    disposeResources()
+    renderer.dispose()
+    renderer.forceContextLoss()
+    renderer.domElement.remove()
+  }
+  signal.addEventListener('abort', dispose, { once: true })
+  let model
+  try {
+    model = await loadCar(variant.id, signal)
+  } catch (error) {
+    signal.removeEventListener('abort', dispose)
+    if (!signal.aborted) dispose()
+    throw error
+  }
+  if (!model) return false
+  collect(model)
+  if (signal.aborted) {
+    disposeResources()
+    return false
+  }
+
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.35))
   renderer.toneMapping = ACESFilmicToneMapping
   renderer.toneMappingExposure = 1.06
@@ -168,29 +235,39 @@ export async function mountStartupCar(host, { signal, reducedMotion }) {
     scene.add(light)
   }
   const shadow = groundShadow()
-  geometries.add(shadow.geometry)
-  materials.add(shadow.material)
+  collect(shadow)
   scene.add(shadow, model)
-  const groups = collectGroups(model)
-  const effects = createCarEffects([...groups.values()].filter(({ rim }) => rim), wheelPosition)
-  scene.add(effects)
-  geometries.add(effects.geometry)
-  materials.add(effects.material)
+  const pieces = [...collectGroups(model).values()]
+  const assembling = variant.action === 'assemble'
+  const effects = assembling ? null : createCarEffects(pieces.filter(({ rim }) => rim),
+    (wheel, time, rim) => wheelPosition(variant.id, wheel, time, rim))
+  if (effects) {
+    scene.add(effects)
+    collect(effects)
+  }
   const target = new Vector3()
+  const height = variant.id === 'buggy' ? .52 : variant.id === 'pickup' ? .14 : 0
   host.append(renderer.domElement)
-  let elapsedTime = 0
+  let elapsedTime = -.37
   let lastFrame
-  let frame
   function render() {
-    const still = reducedMotion.matches
-    const elapsed = still ? 0 : elapsedTime
-    const { entry, drift, turn, lift, x, y, z, yaw, roll } = carPose(elapsed, still)
-    model.position.set(x, y, z)
-    model.rotation.set(0, yaw, roll, 'YXZ')
-    shadow.position.set(x, 0, z)
-    shadow.rotation.z = -yaw
-    shadow.material.uniforms.opacity.value = .69 - .20 * lift
-    for (const { group, base, move, turn, timing, rim, rimTiming, direction, front } of groups.values()) {
+    const still = motion.matches
+    const elapsed = still ? (assembling ? 4 : 0) : elapsedTime
+    const { entry, drift, turn, lift, x, y, z, yaw, roll, pitch } = carPose(assembling || still ? 1.62 : elapsed, variant.id)
+    model.visible = still || elapsed >= -.05
+    model.position.set(assembling || still ? 0 : x, assembling || still ? .04 : y, assembling || still ? 0 : z)
+    model.rotation.set(assembling || still ? 0 : pitch, assembling ? -.17 : yaw, assembling || still ? 0 : roll, 'YXZ')
+    shadow.position.copy(model.position)
+    shadow.position.y = 0
+    shadow.rotation.z = -model.rotation.y
+    shadow.material.uniforms.opacity.value = assembling ? .62 * smooth(.25, 2.3, elapsed) : .69 - .20 * lift
+    shadow.visible = model.visible
+    for (const piece of pieces) {
+      if (assembling) {
+        updateAssembly(piece, elapsed)
+        continue
+      }
+      const { group, base, move, turn, timing, rim, rimTiming, direction, front } = piece
       const spread = smooth(...timing, elapsed)
       group.position.copy(base).addScaledVector(move, spread)
       if (rim) {
@@ -202,29 +279,34 @@ export async function mountStartupCar(host, { signal, reducedMotion }) {
         rim.rotation.set(.32 * tip, direction * .65 * tip, -direction * .24 * tip)
       } else group.rotation.set(turn[0] * spread, turn[1] * spread, turn[2] * spread)
     }
-    effects.visible = !still && elapsed >= .36 && elapsed < 5.1
-    effects.material.uniforms.elapsed.value = elapsed
-    const orbit = Math.max(0, elapsed - 2.8)
-    const theta = .71 + .25 * turn - .30 * (orbit - (1 - Math.exp(-orbit)))
+    if (effects) {
+      effects.visible = !still && elapsed >= .36 && elapsed < 5.1
+      effects.material.uniforms.elapsed.value = elapsed
+    }
+    const orbit = Math.max(0, elapsed - (assembling ? 3.15 : 2.8))
+    const theta = .71 + (assembling ? .05 : .25 * turn) - .24 * (orbit - (1 - Math.exp(-orbit)))
     const fit = Math.max(1, 1.21 / camera.aspect)
-    const radius = (7.9 + lift * 1.36) * fit
-    camera.position.set(radius * Math.sin(theta), (2.95 + .55 * lift) * fit, radius * Math.cos(theta))
-    target.set(0, .63 + .47 * lift, -.30 * (1 - entry))
+    const opening = assembling ? 1 - smooth(.10, 3.1, elapsed) : lift
+    const radius = (7.9 + height + opening * 1.36) * fit
+    camera.position.set(radius * Math.sin(theta), (2.95 + height + .55 * opening) * fit, radius * Math.cos(theta))
+    target.set(0, .63 + height + .47 * opening, assembling ? 0 : -.30 * (1 - entry))
     camera.lookAt(target)
     renderer.render(scene, camera)
   }
   function tick(time) {
-    elapsedTime += Math.min(.1, (time - (lastFrame ?? time)) / 1000)
-    lastFrame = time
-    render()
-    if (!reducedMotion.matches) frame = requestAnimationFrame(tick)
+    if (lastFrame === undefined || time - lastFrame >= 28) {
+      elapsedTime += Math.min(.1, (time - (lastFrame ?? time)) / 1000)
+      lastFrame = time
+      render()
+    }
+    if (!motion.matches) frame = requestAnimationFrame(tick)
   }
   function resize() {
     const { clientWidth, clientHeight } = host
     camera.aspect = Math.max(1, clientWidth) / Math.max(1, clientHeight)
     camera.updateProjectionMatrix()
     renderer.setSize(Math.max(1, clientWidth), Math.max(1, clientHeight), false)
-    effects.material.uniforms.pointScale.value = Math.max(1, clientHeight) * renderer.getPixelRatio() /
+    if (effects) effects.material.uniforms.pointScale.value = Math.max(1, clientHeight) * renderer.getPixelRatio() /
       (2 * Math.tan(MathUtils.degToRad(camera.fov) / 2))
     render()
   }
@@ -233,18 +315,11 @@ export async function mountStartupCar(host, { signal, reducedMotion }) {
     lastFrame = undefined
     tick(performance.now())
   }
-  const observer = new ResizeObserver(resize)
+  observer = new ResizeObserver(resize)
   observer.observe(host)
-  reducedMotion.addEventListener('change', updateMotion, { signal })
-  signal.addEventListener('abort', () => {
-    observer.disconnect()
-    cancelAnimationFrame(frame)
-    dispose()
-    renderer.dispose()
-    renderer.forceContextLoss()
-    renderer.domElement.remove()
-  }, { once: true })
+  motion.addEventListener('change', updateMotion, { signal })
   resize()
+  show()
   updateMotion()
   return true
 }
