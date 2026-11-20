@@ -52,6 +52,10 @@
 
 Заставка Ford GT 42154 использует расположение деталей из [сборки Studio от efferman](https://www.eurobricks.com/forum/forums/topic/193141-42154-2022-ford-gt/page/9/) и геометрию из [библиотеки LDraw](https://library.ldraw.org/). В `assets/startup/ford-gt.glb.gz` сохранена облегчённая модель с отдельными кузовными группами, колёсами, амортизаторами и двигателем. Команда для пересборки указана в `scripts/build-ford-intro.py`. Для сжатия модели используется [meshoptimizer 1.3.0](https://github.com/zeux/meshoptimizer), лицензия MIT находится в `vendor/meshoptimizer/LICENSE.md`.
 
+## Jeep Wrangler 42122
+
+Модель для заставок в `assets/startup/jeep-wrangler.glb.gz` основана на [цифровой сборке Philippe Hurbain (Philo)](https://library.ldraw.org/omr/sets/1361), опубликованной под [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/), и [геометрии LDraw Parts Library](https://library.ldraw.org/). BrickLab объединяет детали в подвижные группы, преобразует материалы и упрощает сетки для показа в браузере. Команда пересборки указана в `scripts/build-wrangler-intro.py`.
+
 ## Динамика
 
 Тест-драйв и физика сборки используют [Rapier 3D 0.19.3](https://www.npmjs.com/package/@dimforge/rapier3d-compat/v/0.19.3) под Apache 2.0. Браузер загружает выпущенный пакет при первом запуске симуляции. Для тестов та же версия закреплена в `package-lock.json`. Коллизии полигона строятся по коробкам и треугольным поверхностям из узлов `physics` Sketchbook.

@@ -9,6 +9,7 @@ import { createCarEffects } from './startup-car-effects.js'
 const assets = {
   ford: new URL('../../assets/startup/ford-gt.glb.gz?v=2', import.meta.url),
   buggy: new URL('../../assets/startup/dune-buggy.glb.gz?v=1', import.meta.url),
+  wrangler: new URL('../../assets/startup/jeep-wrangler.glb.gz?v=1', import.meta.url),
 }
 const smooth = (start, end, time) => MathUtils.smootherstep(time, start, end)
 
@@ -20,23 +21,19 @@ function carPose(time, id) {
   const turn = approach * 1.14 - settle * .14
   const lift = smooth(1.68, 3.10, time)
   const jump = id === 'buggy' ? .56 * Math.sin(Math.PI * smooth(.28, 1.27, time)) : 0
-  const brake = id === 'pickup' ? .095 * (smooth(.87, 1.19, time) - smooth(1.19, 1.55, time)) : 0
+  const brake = id === 'wrangler' ? .095 * (smooth(.87, 1.19, time) - smooth(1.19, 1.55, time)) : 0
   return {
     entry, drift, turn, lift,
     x: .62 * (1 - entry) - (id === 'ford' ? .78 : .42) * drift,
     y: .04 + .30 * lift + jump,
     z: 5.35 * (entry - 1),
-    yaw: MathUtils.lerp(.27, id === 'pickup' ? -.64 : -.87, turn),
+    yaw: MathUtils.lerp(.27, id === 'wrangler' ? -.64 : -.87, turn),
     roll: -.083 * drift,
     pitch: jump * -.26 + brake,
   }
 }
 
 async function loadCar(id, signal) {
-  if (id === 'pickup') {
-    const { createStartupPickup } = await import('./startup-pickup.js?v=brick-intros')
-    return signal.aborted ? null : createStartupPickup()
-  }
   const asset = assets[id]
   const response = await fetch(asset, { signal })
   if (!response.ok) throw new Error(`${id}: HTTP ${response.status}`)
@@ -91,6 +88,10 @@ function collectGroups(model) {
       timing = [1.75, 3.02]
     } else if (name.startsWith('side-')) {
       move = [direction * .75, .18, -.12]
+    } else if (name.startsWith('fender-')) {
+      move = [direction * .87, .30, front ? .38 : -.38]
+      turn = [.12, direction * .15, direction * .20]
+      timing = front ? [1.77, 3.14] : [1.88, 3.17]
     } else if (name === 'roof') {
       move = [0, 1.16, -.12]
       timing = [1.65, 2.98]
@@ -111,13 +112,29 @@ function collectGroups(model) {
     } else if (name === 'bumper' || name === 'rear-axle') {
       move = [0, .25, name === 'bumper' ? .77 : -.73]
       timing = [1.97, 3.16]
-    } else if (name === 'engine') {
+    } else if (name.startsWith('chassis-') || name === 'front-axle') {
+      move = [0, -.10, name.endsWith('-rear') ? -.74 : .71]
+      timing = [2.04, 3.14]
+    } else if (name === 'spare' || name === 'rear-bumper') {
+      move = [0, name === 'spare' ? .72 : .12, -.97]
+      turn = [.22, -.10, 0]
+      timing = [1.92, 3.23]
+    } else if (name === 'grille' || name === 'winch' || name === 'steering') {
+      move = [name === 'winch' ? -.35 : 0, name === 'grille' ? .49 : .14, name === 'steering' ? .58 : .95]
+      turn = [-.14, 0, 0]
+      timing = [1.89, 3.15]
+    } else if (name === 'dashboard' || name === 'rear-seats') {
+      move = [0, .61, name === 'dashboard' ? .46 : -.38]
+      timing = [2.11, 3.22]
+    } else if (name === 'engine' || name === 'drivetrain') {
       move = [0, .44, -.32]
       timing = [2.06, 3.28]
     }
+    const mechanical = ['engine', 'drivetrain', 'steering', 'winch', 'front-axle', 'rear-axle'].includes(name) ||
+      name.startsWith('suspension-') || name.startsWith('chassis-')
     const order = name === 'chassis' ? 0
-      : name === 'engine' || name.startsWith('suspension-') || name === 'rear-axle' ? 1
-      : wheel ? 2 : name === 'roof' || name.startsWith('cage-') ? 4 : 3
+      : mechanical ? 1 : wheel ? 2
+      : name === 'roof' || name === 'spare' || name.startsWith('cage-') ? 4 : 3
     const arrival = .16 + order * .51 + (order ? (groups.size % 4) * .09 : 0)
     groups.set(name, { group, base, move: new Vector3(...move), turn, timing, rim, rimTiming, direction, front, order, arrival })
   }
@@ -214,7 +231,6 @@ export async function mountStartupCar(host, { signal, motion, variant, show }) {
     if (!signal.aborted) dispose()
     throw error
   }
-  if (!model) return false
   collect(model)
   if (signal.aborted) {
     disposeResources()
@@ -246,7 +262,7 @@ export async function mountStartupCar(host, { signal, motion, variant, show }) {
     collect(effects)
   }
   const target = new Vector3()
-  const height = variant.id === 'buggy' ? .52 : variant.id === 'pickup' ? .14 : 0
+  const height = variant.id === 'buggy' ? .52 : variant.id === 'wrangler' ? .38 : 0
   host.append(renderer.domElement)
   let elapsedTime = -.37
   let lastFrame

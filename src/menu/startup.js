@@ -22,10 +22,10 @@ const copy = {
 const variants = [
   { id: 'ford', title: 'Ford GT', tag: '42154', action: 'explode' },
   { id: 'buggy', title: 'Dune Buggy', tag: '8845', action: 'assemble' },
-  { id: 'pickup', title: 'Rally Pickup', tag: 'BrickLab', action: 'explode' },
+  { id: 'wrangler', title: 'Jeep Wrangler', tag: '42122', action: 'explode' },
   { id: 'ford', title: 'Ford GT', tag: '42154', action: 'assemble' },
   { id: 'buggy', title: 'Dune Buggy', tag: '8845', action: 'explode' },
-  { id: 'pickup', title: 'Rally Pickup', tag: 'BrickLab', action: 'assemble' },
+  { id: 'wrangler', title: 'Jeep Wrangler', tag: '42122', action: 'assemble' },
 ]
 const variantKey = 'bricklab.intro.variant'
 const revealDuration = 360
@@ -87,7 +87,7 @@ function loadingScreen(root, language, intro, onClose) {
     visual = new AbortController()
     const visualSignal = visual.signal
     try {
-      const { mountStartupCar } = await import('./startup-car.js?v=brick-intros')
+      const { mountStartupCar } = await import('./startup-car.js?v=wrangler')
       if (visualSignal.aborted) return
       const variant = nextVariant()
       await mountStartupCar(field('stage'), {
