@@ -8,11 +8,12 @@
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./src/menu/menu.css?v=catalog-page">
   <link rel="stylesheet" href="./src/editor/editor.css?v=track-builder">
+  <link rel="stylesheet" href="./src/sets/sets.css?v=set-building">
   <link rel="stylesheet" href="./src/menu/startup.css?v=ford-startup">
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=ford-drift"></script>
+  <script type="module" src="./src/menu/menu.js?v=set-building"></script>
 </head>
 <body>
   <section class="startup" id="startup" aria-label="Подготовка BrickLab 3D">
@@ -60,6 +61,7 @@
       <nav class="navigation" aria-label="Разделы">
         <a href="#home" data-page="home"><svg class="icon"><use href="#icon-home"/></svg><span data-text="home">Главная</span></a>
         <a href="#projects" data-page="projects"><svg class="icon"><use href="#folder"/></svg><span data-text="projects">Мои сборки</span></a>
+        <a href="#sets" data-page="sets"><svg class="icon"><use href="#layers"/></svg><span data-text="sets">Сборка по инструкции</span></a>
         <a href="#examples" data-page="examples"><svg class="icon"><use href="#layers"/></svg><span data-text="examples">Примеры</span></a>
         <a href="#library" data-page="library"><svg class="icon" aria-hidden="true"><use href="#icon-library"/></svg><span data-text="library">Библиотека</span></a>
       </nav>
@@ -118,6 +120,7 @@
             <input type="file" id="import-file" accept=".bricklab,.json" hidden>
           </section>
         </div>
+        <section id="sets-panel" hidden></section>
         <section id="example-panel" hidden>
           <div class="example-card">
             <span class="file-icon"><svg class="icon"><use href="#layers"/></svg></span>

@@ -1,3 +1,7 @@
+import { instructionState, mountInstructions } from '../sets/instructions.js'
+import { mountSetPalette } from '../sets/palette.js'
+import { inspectSetPart } from '../sets/inspect.js'
+import { node, control } from '../sets/catalog.js'
 import { mountCablePanel } from './cable-panel.js'
 import { mountFloatingPanels } from './floating-panels.js?v=scene-parts'
 import { createEditorAudio } from './audio.js?v=editor-sound'
@@ -222,6 +226,10 @@ export async function mountEditor(root, { document, language, save, download, si
     root.replaceChildren()
     throw error
   }
+  let buildingSet = instructionState(source.buildingSet)
+  mountInstructions(el('panelLayer'), buildingSet, { language, signal,
+    change(value) { buildingSet = value; persist() },
+  })
   mountFloatingPanels(el('panelLayer'), t, signal)
   const visibleParts = loadParts(source, models)
   const shown = new Set(visibleParts.map(part => part.id))
@@ -296,6 +304,30 @@ export async function mountEditor(root, { document, language, save, download, si
   const library = mountLibrary(root.querySelector('#editor-library-body'), {
     sections, language, labels: t, selectPart: selectLibraryPart, hasConnectors, signal,
   })
+  let setPalette
+  if (buildingSet) {
+    const libraryBody = root.querySelector('#editor-library-body')
+    const full = node('div')
+    full.append(...libraryBody.childNodes)
+    const paletteRoot = node('div', undefined, 'set-palette')
+    const tabs = node('div', undefined, 'set-tabs')
+    const all = control(language === 'ru' ? 'Все детали' : 'All parts', () => showSet(false), signal)
+    const set = control(language === 'ru' ? 'Детали набора' : 'Set parts', () => showSet(true), signal)
+    function showSet(active) {
+      full.hidden = active; paletteRoot.hidden = !active
+      all.setAttribute('aria-pressed', String(!active)); set.setAttribute('aria-pressed', String(active))
+    }
+    tabs.append(all, set); libraryBody.append(tabs, full, paletteRoot)
+    setPalette = mountSetPalette(paletteRoot, buildingSet.set, { language, catalog: parts, groups: sections.flatMap(section => section.groups), signal,
+      select: selectLibraryPart, readParts: () => [...state.parts, ...hiddenParts],
+      focus(item) {
+        const ids = state.parts.filter(part => part.design === item.design && part.color?.toLowerCase() === item.color.toLowerCase()).map(part => part.id)
+        if (ids.length) { selectParts(ids); scene.focus(ids) }
+      },
+      inspect: item => inspectSetPart(item, { language, signal, prepare: prepareModel, model: design => models.get(design) }),
+    })
+    showSet(true)
+  }
   const partsPanel = mountScenePartsPanel(el('sceneParts'), t, {
     nameOf: part => parts[part.design][language],
     colorOf: part => part.color ?? parts[part.design].color,
@@ -387,6 +419,7 @@ export async function mountEditor(root, { document, language, save, download, si
   function currentDocument() {
     return {
       ...source,
+      ...(buildingSet && { buildingSet }),
       ...(driveConfig && { testDrive: driveConfig }),
       name: el('name').value.trim() || source.name,
       parts: [...state.parts, ...hiddenParts],
@@ -644,6 +677,7 @@ export async function mountEditor(root, { document, language, save, download, si
       }))
     const mechanicalChange = geometryChanged || state.links !== next.links || state.belts !== next.belts
     state = next
+    setPalette?.update([...state.parts, ...hiddenParts])
     if (mechanicalChange) {
       assembly = createAssembly(state.parts, state.links, { belts: state.belts })
       state.belts = assembly.belts.map(({ record }) => record)
@@ -827,6 +861,7 @@ export async function mountEditor(root, { document, language, save, download, si
     el('groupSelection').disabled = !selected || dragActive()
     scene.enableBoxSelect(selectingInBox)
     for (const name of modes) el(name).setAttribute('aria-pressed', String(mode === name))
+    setPalette?.setEnabled(mode === 'build')
     library.setPlacement(!movesExisting ? moving?.design : undefined, pendingPart?.part.design, building)
     el('snap').disabled = !building
     el('snap').setAttribute('aria-pressed', String(snapEnabled))
@@ -1662,7 +1697,11 @@ export async function mountEditor(root, { document, language, save, download, si
     if (boxSelection?.pointerId === event.pointerId) cancelBoxSelection()
   })
   on(window, 'keydown', event => {
-    if (event.defaultPrevented) return
+    if (event.defaultPrevented || root.ownerDocument.querySelector('dialog[open]')) return
+    if (event.code === 'Slash' && !event.ctrlKey && !event.metaKey && !event.target.closest?.('input, textarea, select')) {
+      const search = [...root.querySelectorAll('input[type=search]')].find(input => input.getClientRects().length)
+      if (search) { event.preventDefault(); search.focus(); search.select(); return }
+    }
     if (simulating(mode)) {
       if ((event.ctrlKey || event.metaKey) && event.code === 'KeyS' && !event.target.closest?.('input, textarea, select')) {
         event.preventDefault()

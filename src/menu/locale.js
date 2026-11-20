@@ -1,5 +1,6 @@
 export const locales = {
   ru: {
+    sets: 'Сборка по инструкции',
     sections: 'Разделы', home: 'Главная', projects: 'Мои сборки', examples: 'Примеры', library: 'Библиотека',
     loadingLibrary: 'Загрузка библиотеки…',
     workspace: 'Рабочая область', recent: 'Недавние сборки', search: 'Найти сборку',
@@ -19,6 +20,7 @@ export const locales = {
     saved: 'Сборка сохранена.', partCount: count => `Деталей в сборке: ${count}`,
   },
   en: {
+    sets: 'Build with instructions',
     sections: 'Sections', home: 'Home', projects: 'My builds', examples: 'Examples', library: 'Library',
     loadingLibrary: 'Loading the library…',
     workspace: 'Workspace', recent: 'Recent builds', search: 'Find a build',

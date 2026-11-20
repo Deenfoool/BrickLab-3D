@@ -1,5 +1,5 @@
 import { editorLabels } from '../editor/labels.js?v=editor-sound'
-import { locales } from './locale.js?v=catalog-page'
+import { locales } from './locale.js?v=set-building'
 import { startStartup } from './startup.js?v=ford-drift'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
@@ -9,7 +9,7 @@ const query = byId('query')
 const status = byId('status')
 const removeDialog = byId('remove-dialog')
 const settingsDialog = byId('settings-dialog')
-const pages = ['home', 'projects', 'examples', 'library']
+const pages = ['home', 'projects', 'examples', 'library', 'sets']
 let projects = readProjects()
 let storageWarning = false
 let activeMenu = null
@@ -22,6 +22,7 @@ const libraryRetry = byId('library-retry')
 const libraryControls = libraryRoot.querySelector('[data-library-controls]')
 const libraryScroll = libraryRoot.querySelector('[data-library-scroll]')
 const librarySearch = libraryControls.querySelector('input')
+let setSession
 let editorSession
 let librarySession
 let librarySection
@@ -200,6 +201,9 @@ function render() {
   byId('dashboard').hidden = !listVisible
   byId('example-panel').hidden = page !== 'examples'
   libraryRoot.hidden = page !== 'library'
+  byId('sets-panel').hidden = page !== 'sets'
+  if (page === 'sets') openSets()
+  else closeSets()
   byId('all-projects').hidden = page !== 'home'
   byId('page-title').textContent = page === 'home' ? t.workspace :
     page === 'project' ? activeProject?.document.name ?? t.projects : t[page]
@@ -211,6 +215,36 @@ function render() {
   if (page === 'library') openLibrary()
   else closeLibrary()
   setStatus(requestedId && !activeProject ? 'missing' : storageWarning ? 'storageError' : null)
+}
+
+function closeSets() {
+  setSession?.controller.abort()
+  setSession = null
+}
+async function openSets() {
+  if (setSession?.language === language) return
+  closeSets()
+  const controller = new AbortController()
+  setSession = { controller, language }
+  const root = byId('sets-panel')
+  root.textContent = strings().loadingLibrary
+  try {
+    const { mountSetCatalog } = await import('../sets/catalog.js')
+    if (controller.signal.aborted) return
+    await mountSetCatalog(root, { language, signal: controller.signal, projects: () => projects,
+      resume: openProject,
+      begin(set) {
+        const data = newProject(set.name)
+        data.buildingSet = { set, book: 0, page: 1 }
+        addProject(data)
+      },
+    })
+  } catch (error) {
+    if (controller.signal.aborted) return
+    root.textContent = strings().exampleUnavailable
+    root.append(button('secondary', editorLabels[language].retry))
+    root.lastElementChild.addEventListener('click', () => { closeSets(); openSets() }, { signal: controller.signal })
+  }
 }
 
 function closeLibrary() {
@@ -275,7 +309,7 @@ async function openEditor(project) {
   editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=ford-startup')
+    const { mountEditor } = await import('../editor/editor.js?v=set-building')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
