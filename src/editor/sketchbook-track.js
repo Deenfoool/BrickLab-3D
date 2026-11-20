@@ -5,6 +5,13 @@ const mapURL = 'https://raw.githubusercontent.com/swift502/Sketchbook/62f4b7986f
 const scale = 90 // LDU per Sketchbook unit for the test-drive diorama.
 const down = new Vector3(0, -1, 0)
 let trackRequest
+let trackProgress
+const progressListeners = new Set()
+
+function reportProgress(progress) {
+  trackProgress = progress
+  for (const listener of progressListeners) listener(progress)
+}
 
 export function sketchbookTrack(group) {
   group.scale.setScalar(scale)
@@ -83,9 +90,32 @@ function disposeMap(group) {
 }
 
 async function fetchSketchbookTrack() {
-  const response = await fetch(mapURL)
+  reportProgress({ stage: 'download', loaded: 0 })
+  const response = await fetch(mapURL, { signal: AbortSignal.timeout(45000) })
   if (!response.ok) throw new Error(`Sketchbook: HTTP ${response.status}`)
-  const { scene } = await new GLTFLoader().parseAsync(await response.arrayBuffer(), mapURL)
+  const length = Number(response.headers.get('content-length'))
+  const total = length > 0 && !response.headers.get('content-encoding') ? length : undefined
+  const reader = response.body?.getReader()
+  let buffer
+  if (reader) {
+    const chunks = []
+    let loaded = 0
+    reportProgress({ stage: 'download', loaded, total })
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        chunks.push(value)
+        loaded += value.byteLength
+        reportProgress({ stage: 'download', loaded, total: loaded <= total ? total : undefined })
+      }
+    } finally {
+      reader.releaseLock()
+    }
+    buffer = await new Blob(chunks).arrayBuffer()
+  } else buffer = await response.arrayBuffer()
+  reportProgress({ stage: 'prepare' })
+  const { scene } = await new GLTFLoader().parseAsync(buffer, mapURL)
   try {
     return sketchbookTrack(scene)
   } catch (error) {
@@ -94,11 +124,24 @@ async function fetchSketchbookTrack() {
   }
 }
 
-export function loadSketchbookTrack() {
+export function loadSketchbookTrack({ onProgress, signal } = {}) {
   // Editor scenes attach the map when needed. Its data belongs to the page.
-  trackRequest ??= fetchSketchbookTrack().catch(error => {
-    trackRequest = undefined
+  trackRequest ??= fetchSketchbookTrack().then(track => {
+    reportProgress({ stage: 'ready' })
+    return track
+  }, error => {
+    trackRequest = trackProgress = undefined
     throw error
   })
+  if (onProgress && !signal?.aborted) {
+    progressListeners.add(onProgress)
+    if (trackProgress) onProgress(trackProgress)
+    const stop = () => {
+      progressListeners.delete(onProgress)
+      signal?.removeEventListener('abort', stop)
+    }
+    signal?.addEventListener('abort', stop, { once: true })
+    trackRequest.then(stop, stop)
+  }
   return trackRequest
 }

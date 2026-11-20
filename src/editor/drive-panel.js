@@ -289,7 +289,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
       let stage = 'trackError'
       try {
         if (needsTrack) {
-          const { loadSketchbookTrack } = await import('./sketchbook-track.js?v=drive-physics')
+          const { loadSketchbookTrack } = await import('./sketchbook-track.js?v=ford-startup')
           const loaded = await loadSketchbookTrack()
           if (loadingTrack !== request) return
           sketchbook = loaded

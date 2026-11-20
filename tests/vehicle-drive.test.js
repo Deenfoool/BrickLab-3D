@@ -216,18 +216,32 @@ test('Sketchbook shares in-flight and successful loads for the page and can retr
   let requests = 0
   globalThis.fetch = async () => {
     if (++requests === 1) return new Response(null, { status: 503 })
-    return new Response(glb)
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(glb.subarray(0, 12))
+        controller.enqueue(glb.subarray(12))
+        controller.close()
+      },
+    })
+    return new Response(body, { headers: { 'content-length': String(glb.length) } })
   }
   try {
     const failed = loadSketchbookTrack()
     assert.equal(loadSketchbookTrack(), failed)
     await assert.rejects(failed, /503/)
-    const retry = loadSketchbookTrack()
+    const updates = []
+    const retry = loadSketchbookTrack({ onProgress: next => updates.push(next) })
     assert.equal(loadSketchbookTrack(), retry)
     const track = await retry
     assert.deepEqual(track.start.toArray(), [0, 0, 0])
     assert.equal(await loadSketchbookTrack(), track)
     assert.equal(requests, 2)
+    assert.deepEqual(updates.slice(-4), [
+      { stage: 'download', loaded: 12, total: glb.length },
+      { stage: 'download', loaded: glb.length, total: glb.length },
+      { stage: 'prepare' },
+      { stage: 'ready' },
+    ])
   } finally {
     globalThis.fetch = originalFetch
   }

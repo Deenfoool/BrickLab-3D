@@ -8,12 +8,35 @@
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./src/menu/menu.css?v=catalog-page">
   <link rel="stylesheet" href="./src/editor/editor.css?v=track-builder">
+  <link rel="stylesheet" href="./src/menu/startup.css?v=ford-startup">
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=level-treads"></script>
+  <script type="module" src="./src/menu/menu.js?v=ford-startup"></script>
 </head>
 <body>
+  <section class="startup" id="startup" aria-label="Подготовка BrickLab 3D">
+    <header class="startup-brand"><img src="./assets/bricklab.svg" alt="" width="38" height="38"><span>BrickLab 3D</span></header>
+    <div class="startup-stage" data-startup="stage" aria-hidden="true"></div>
+    <footer class="startup-footer">
+      <div class="startup-model" data-startup="model" hidden>
+        <span>Ford GT</span><span class="startup-set">42154</span>
+      </div>
+      <div class="startup-details">
+        <p data-startup="status" role="status">Загружаем карту</p>
+        <span data-startup="amount" aria-hidden="true"></span>
+      </div>
+      <progress data-startup="progress" aria-label="Загрузка карты" max="1"></progress>
+      <div class="startup-tools">
+        <p data-startup="tip"></p>
+        <div class="startup-actions">
+          <button type="button" data-startup="retry" hidden>Повторить</button>
+          <button type="button" data-startup="skip" hidden>В меню</button>
+        </div>
+      </div>
+    </footer>
+  </section>
+  <noscript><style>#startup{display:none}</style></noscript>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7M5 9v12h5v-7h4v7h5V9"/></symbol>
     <symbol id="folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l3 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
