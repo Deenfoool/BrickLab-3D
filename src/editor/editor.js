@@ -4,7 +4,7 @@ import { mountSetPalette } from '../sets/palette.js?v=element-search'
 import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'
 import { mountCablePanel } from './cable-panel.js'
-import { mountFloatingPanels } from './floating-panels.js?v=scene-parts'
+import { mountFloatingPanels } from './floating-panels.js?v=cad-dock'
 import { createEditorAudio } from './audio.js?v=editor-sound'
 import { mountMotorPanel } from './motor-panel.js'
 import { Plane, Quaternion, Vector3 } from 'three'
@@ -25,7 +25,7 @@ import { mountTrackPanel, trackLabels } from './track-panel.js?v=level-treads'
 import { upgradeInlineEngineFan } from './inline-engine.js'
 import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
-import { editorLabels } from './labels.js?v=scene-snap'
+import { editorLabels } from './labels.js?v=cad-dock'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
@@ -121,31 +121,6 @@ export async function mountEditor(root, { document, language, save, download, si
       <aside class="editor-test-drive cable-route-panel" data-el="cablePanel" hidden></aside>
       <aside class="editor-test-drive" data-el="drivePanel" hidden></aside>
       <div class="editor-overlay" data-el="editorOverlay">
-        <div class="editor-viewport-tools" data-el="buildTools">
-          <button type="button" data-el="selectTool" title="${t.select} (V)" aria-label="${t.select}"><svg class="icon" viewBox="0 0 24 24"><path d="m5 3 13 10-6 1-3 6z"/></svg></button>
-          <button type="button" data-el="boxTool" title="${t.boxSelect} (B / И)" aria-label="${t.boxSelect}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/></svg></button>
-          <button type="button" data-el="moveTool" title="${t.move} (G / П)" aria-label="${t.move}"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3m-6 12 3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/></svg></button>
-          <button type="button" data-el="rotateTool" title="${t.rotate} (R / К)" aria-label="${t.rotate}"><svg class="icon" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 1-3-6m-2 3h5V3"/></svg></button>
-          <select data-el="pivotMode" aria-label="${language === 'ru' ? 'Центр вращения' : 'Rotation pivot'}"><option value="center">${language === 'ru' ? 'Центр выделения' : 'Selection center'}</option><option value="joint">${language === 'ru' ? 'Ось соединения' : 'Joint axis'}</option></select>
-          <button type="button" data-el="rotationSnap" aria-label="${t.rotationSnap}" aria-pressed="true">45°</button>
-          <button type="button" data-el="lengthTool" title="${t.length} (S / Ы)" aria-label="${t.length}"><svg class="icon" viewBox="0 0 24 24"><path d="M3 12h18M7 8l-4 4 4 4m10-8 4 4-4 4M12 7v10"/></svg></button>
-          <button type="button" data-el="beltTool" title="${t.beltAdd}" aria-label="${t.beltAdd}">${t.belt}</button>
-          <button type="button" data-el="trackTool" title="${trackText.name}" aria-label="${trackText.name}">${trackText.tool}</button>
-          <button type="button" data-el="snap" aria-pressed="true">${t.snap}</button>
-          <button type="button" data-el="snapAll" title="${t.snapAllTitle}">${t.snapAll}</button>
-          <button type="button" data-el="frame">${t.reset}</button>
-          <button type="button" data-el="groupSelection" title="${t.createGroup}" hidden>${t.groupSelection}</button>
-        </div>
-        <div class="editor-paint-tools" data-el="paintTools" role="group" aria-label="${t.paint}" hidden>
-          <div class="editor-paint-swatches">
-            ${paintColors.map(color => {
-              const label = `${t.color} ${color.toUpperCase()}`
-              return `<button type="button" data-paint="${color}" style="--paint-swatch:${color}" title="${label}" aria-label="${label}" aria-pressed="${color === paintColors[0]}"></button>`
-            }).join('')}
-          </div>
-          <label class="editor-paint-custom"><input type="color" data-el="paintColor" value="${paintColors[0]}">${t.paintCustom}</label>
-          <button type="button" data-el="paintFrame">${t.reset}</button>
-        </div>
         <div class="editor-panel-layer" data-el="panelLayer">
           <aside class="editor-panel editor-catalog" data-panel="library" aria-labelledby="editor-library-heading">
             <header class="editor-panel-header">
@@ -209,6 +184,41 @@ export async function mountEditor(root, { document, language, save, download, si
             </header>
             <div class="editor-panel-body editor-scene-parts-body" id="editor-scene-parts-body" data-el="sceneParts"></div>
           </aside>
+        </div>
+        <div class="editor-dock">
+          <div class="editor-viewport-tools" data-el="buildTools" role="group" aria-label="${t.buildTools}">
+            <button type="button" data-el="selectTool" title="${t.select} (V)" aria-label="${t.select}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 3 13 10-6 1-3 6z"/></svg></button>
+            <button type="button" data-el="boxTool" title="${t.boxSelect} (B / И)" aria-label="${t.boxSelect}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 3"/></svg></button>
+            <button type="button" data-el="moveTool" title="${t.move} (G / П)" aria-label="${t.move}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M9 6l3-3 3 3m-6 12 3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/></svg></button>
+            <button type="button" data-el="rotateTool" title="${t.rotate} (R / К)" aria-label="${t.rotate}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 1-3-6m-2 3h5V3"/></svg></button>
+            <select data-el="pivotMode" aria-label="${language === 'ru' ? 'Центр вращения' : 'Rotation pivot'}"><option value="center">${language === 'ru' ? 'Центр выделения' : 'Selection center'}</option><option value="joint">${language === 'ru' ? 'Ось соединения' : 'Joint axis'}</option></select>
+            <button type="button" data-el="rotationSnap" aria-label="${t.rotationSnap}" aria-pressed="true">45°</button>
+            <button type="button" data-el="lengthTool" title="${t.length} (S / Ы)" aria-label="${t.length}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18M7 8l-4 4 4 4m10-8 4 4-4 4M12 7v10"/></svg></button>
+            <details class="editor-connection-tools" data-el="connectionTools">
+              <summary title="${t.joints}" aria-label="${t.joints}">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m10 13 4-4m-6 6-1 1a3 3 0 0 1-4-4l4-4a3 3 0 0 1 4 0m2 2a3 3 0 0 0 4 0l4-4a3 3 0 0 0-4-4l-1 1" transform="translate(0 3)"/></svg>
+                <svg class="editor-dock-chevron icon" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 7 3-3 3 3"/></svg>
+              </summary>
+              <div class="editor-connection-menu">
+                <button type="button" data-el="beltTool" title="${t.beltAdd}">${t.belt}</button>
+                <button type="button" data-el="trackTool" title="${trackText.name}">${trackText.tool}</button>
+              </div>
+            </details>
+            <button type="button" data-el="snap" title="${t.snap}" aria-label="${t.snap}" aria-pressed="true"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h5v9a3 3 0 0 0 6 0V4h5v9a8 8 0 0 1-16 0zM4 8h5m6 0h5"/></svg></button>
+            <button type="button" data-el="groupSelection" title="${t.createGroup}" hidden>${t.groupSelection}</button>
+            <button type="button" class="editor-dock-snap-all" data-el="snapAll" title="${t.snapAllTitle}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6m-8 10 2 2 7-7"/></svg>${t.snapAll}</button>
+            <button type="button" data-el="frame" title="${t.reset}" aria-label="${t.reset}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5m11-5h5v5m0 6v5h-5m-6 0H4v-5m5-3h6m-3-3v6"/></svg></button>
+          </div>
+          <div class="editor-paint-tools" data-el="paintTools" role="group" aria-label="${t.paint}" hidden>
+            <div class="editor-paint-swatches">
+              ${paintColors.map(color => {
+                const label = `${t.color} ${color.toUpperCase()}`
+                return `<button type="button" data-paint="${color}" style="--paint-swatch:${color}" title="${label}" aria-label="${label}" aria-pressed="${color === paintColors[0]}"></button>`
+              }).join('')}
+            </div>
+            <label class="editor-paint-custom"><input type="color" data-el="paintColor" value="${paintColors[0]}">${t.paintCustom}</label>
+            <button type="button" data-el="paintFrame">${t.reset}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -809,7 +819,10 @@ export async function mountEditor(root, { document, language, save, download, si
     rotationSnap.textContent = steppedRotation ? '45°' : t.freeRotation
     rotationSnap.title = steppedRotation ? t.enableFreeRotation : t.enableRotationSnap
     const jointTool = building && tool === 'rotate' && jointMode
-    rotationSnap.hidden = jointTool
+    rotationSnap.hidden = !building || tool !== 'rotate' || jointTool
+    el('lengthTool').hidden = !canResize(part)
+    el('connectionTools').toggleAttribute('data-active', addingConnection)
+    if (!building) el('connectionTools').open = false
     el('pivotMode').hidden = !building || tool !== 'rotate'
     if (!gizmoPart) {
       const joints = jointTool ? rotationJoints(selected) : []
@@ -865,6 +878,7 @@ export async function mountEditor(root, { document, language, save, download, si
     ].filter(Boolean).join(' · ')
     el('editorOverlay').hidden = simulating(mode)
     el('buildTools').hidden = painting
+    el('buildTools').toggleAttribute('data-view-only', !building)
     el('paintTools').hidden = !painting
     el('panelLayer').hidden = painting
     el('viewport').toggleAttribute('data-painting', painting)
@@ -1178,7 +1192,7 @@ export async function mountEditor(root, { document, language, save, download, si
     message = ''
     const previous = tool
     tool = ['belt', 'track'].includes(next) && tool === next ? 'select' : next
-    if (tool === 'track' && root.querySelector('#editor-inspector-body').hidden) {
+    if (['belt', 'track'].includes(tool) && root.querySelector('#editor-inspector-body').hidden) {
       root.querySelector('[data-panel="inspector"] [data-panel-toggle]').click()
     }
     render()
@@ -1401,7 +1415,18 @@ export async function mountEditor(root, { document, language, save, download, si
   })
   on(el('save'), 'click', () => persist(true))
   on(el('export'), 'click', () => download(currentDocument()))
-  for (const name of buildTools) on(el(`${name}Tool`), 'click', () => setTool(name))
+  const connectionTools = el('connectionTools')
+  const connectionToggle = connectionTools.querySelector('summary')
+  for (const name of buildTools) on(el(`${name}Tool`), 'click', () => {
+    if (connectionTools.open) {
+      connectionTools.open = false
+      if (['belt', 'track'].includes(name)) connectionToggle.focus({ preventScroll: true })
+    }
+    setTool(name)
+  })
+  on(window, 'pointerdown', event => {
+    if (!connectionTools.contains(event.target)) connectionTools.open = false
+  }, true)
   on(el('groupSelection'), 'click', () => { if (selected && !dragActive()) createGroup() })
   on(window, 'keyup', event => {
     if ((moving || gizmoPart) && pointer && ['Control', 'Meta'].includes(event.key)) {
@@ -1747,6 +1772,12 @@ export async function mountEditor(root, { document, language, save, download, si
   })
   on(window, 'keydown', event => {
     if (event.defaultPrevented || root.ownerDocument.querySelector('dialog[open]')) return
+    if (event.key === 'Escape' && connectionTools.open) {
+      event.preventDefault()
+      connectionTools.open = false
+      connectionToggle.focus({ preventScroll: true })
+      return
+    }
     if (event.code === 'Slash' && !event.ctrlKey && !event.metaKey && !event.target.closest?.('input, textarea, select')) {
       const search = [...root.querySelectorAll('input[type=search]')].find(input => input.getClientRects().length)
       if (search) { event.preventDefault(); search.focus(); search.select(); return }
