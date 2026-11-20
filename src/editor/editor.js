@@ -1,6 +1,6 @@
-import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=instruction-artwork-v3'
+import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=element-search'
 import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=instruction-artwork-v3'
-import { mountSetPalette } from '../sets/palette.js?v=instruction-parts'
+import { mountSetPalette } from '../sets/palette.js?v=element-search'
 import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'
 import { mountCablePanel } from './cable-panel.js'
@@ -15,7 +15,7 @@ import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive
 import { nearestDetent } from '../mechanics/axial.js?v=turntable-parts'
 import { nearbyConnections, translationSnaps } from './snap.js?v=track-builder'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=turntable-parts'
-import { mountLibrary } from './library.js?v=system-tiles'
+import { mountLibrary } from './library.js?v=element-search'
 import { createScene } from './scene.js?v=tread-pivot'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
@@ -238,7 +238,7 @@ export async function mountEditor(root, { document, language, save, download, si
   let setPalette
   mountInstructions(el('panelLayer'), buildingSet, { language, signal, firstPage, pdf,
     change(value) { buildingSet = value; persist() },
-    findPart: (partNum, colorId) => findSetPart?.(partNum, colorId),
+    findPart: (...ids) => findSetPart?.(...ids),
     describePart: (partNum, colorId) => setPalette?.describe(partNum, colorId),
   })
   mountFloatingPanels(el('panelLayer'), t, signal)
@@ -313,7 +313,7 @@ export async function mountEditor(root, { document, language, save, download, si
   }
   updateSoundControl()
   const library = mountLibrary(root.querySelector('#editor-library-body'), {
-    sections, language, labels: t, selectPart: selectLibraryPart, hasConnectors, signal,
+    sections, models: parts, language, labels: t, selectPart: selectLibraryPart, hasConnectors, signal,
   })
   if (buildingSet) {
     const libraryBody = root.querySelector('#editor-library-body')
@@ -336,10 +336,10 @@ export async function mountEditor(root, { document, language, save, download, si
       },
       inspect: item => inspectSetPart(item, { language, signal, prepare: prepareModel, model: design => models.get(design) }),
     })
-    findSetPart = (partNum, colorId) => {
+    findSetPart = (...ids) => {
       libraryBody.closest('[data-panel]').querySelector('[data-panel-toggle][aria-expanded="false"]')?.click()
       showSet(true)
-      setPalette.find(partNum, colorId)
+      setPalette.find(...ids)
     }
     showSet(true)
   }

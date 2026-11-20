@@ -270,15 +270,15 @@ async function openLibrary() {
   libraryStatus.textContent = strings().loadingLibrary
   libraryRetry.hidden = true
   try {
-    const [{ mountLibrary }, { sections }] = await Promise.all([
-      import('../editor/library.js?v=system-tiles'),
+    const [{ mountLibrary }, { sections, parts }] = await Promise.all([
+      import('../editor/library.js?v=element-search'),
       import('../editor/parts-data.js?v=turntable-parts'),
     ])
     if (controller.signal.aborted) return
     librarySearch.placeholder = labels.search
     librarySearch.setAttribute('aria-label', labels.search)
     session.view = mountLibrary(libraryRoot, {
-      sections, language: session.language, labels, initialSection: librarySection, initialGroup: libraryGroup, signal: controller.signal,
+      sections, models: parts, language: session.language, labels, initialSection: librarySection, initialGroup: libraryGroup, signal: controller.signal,
     })
     libraryControls.hidden = false
     libraryScroll.hidden = false
@@ -356,7 +356,7 @@ async function openEditor(project) {
   if (!transition) editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=instruction-artwork-v3')
+    const { mountEditor } = await import('../editor/editor.js?v=element-search')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

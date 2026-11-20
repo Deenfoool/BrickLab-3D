@@ -22,7 +22,7 @@ export async function inspectSetPart(
   )
   dialog.append(
     title,
-    node('p', `${item.partNum} · ${item.colorName} · ×${item.quantity}`),
+    node('p', `${item.partNum} · ${item.colorName}${item.quantity ? ` · ×${item.quantity}` : ''}`),
     host,
     status,
     control(ru ? 'Закрыть' : 'Close', close, controller.signal),

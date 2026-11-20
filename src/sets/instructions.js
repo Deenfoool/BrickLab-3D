@@ -5,7 +5,7 @@ import {
   instructionPagePreview,
   instructionSources,
 } from './instruction-sources.js?v=browser-recognition'
-import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=instruction-artwork-v3'
+import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=element-search'
 import { createInstructionPdfReader } from './instruction-pdf.js?v=instruction-artwork-v3'
 
 const maxUnknownPages = 5000

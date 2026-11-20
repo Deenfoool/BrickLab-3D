@@ -1,3 +1,4 @@
+import { elementNumber, lookupElement } from './element-index.js'
 import { previewColumns, previewRows, previewPageSize, searchLibrary } from './library-data.js?v=system-tiles'
 
 const batchSize = 48
@@ -9,7 +10,7 @@ function element(tag, className, value) {
   return node
 }
 
-export function mountLibrary(root, { sections, language, labels, selectPart, hasConnectors, initialSection, initialGroup = '', signal }) {
+export function mountLibrary(root, { sections, models, language, labels, selectPart, hasConnectors, initialSection, initialGroup = '', signal }) {
   const controls = root.querySelector('[data-library-controls]')
   const scroll = root.querySelector('[data-library-scroll]')
   const cards = root.querySelector('[data-library-cards]')
@@ -29,10 +30,12 @@ export function mountLibrary(root, { sections, language, labels, selectPart, has
     const parts = [...section.parts].sort((a, b) => order.get(a.group) - order.get(b.group) || a.preview - b.preview)
     return { ...section, parts }
   }) : sections
+  const byDesign = models ?? Object.fromEntries(catalog.flatMap(family => family.parts.map(part => [part.design, part])))
   let section = catalog.find(item => item.id === initialSection) ?? catalog[0]
   let matches = []
   let limit = 0
   let activeDesign
+  let elementMatch
   let pendingDesign
   let enabled = true
   more.type = 'button'
@@ -105,7 +108,7 @@ export function mountLibrary(root, { sections, language, labels, selectPart, has
       preview.dataset.design = part.design
       preview.setAttribute('aria-hidden', 'true')
       name.title = part[language]
-      info.append(element('span', 'editor-part-id', part.design))
+      info.append(element('span', 'editor-part-id', elementMatch ? `${part.design} · LEGO ${elementMatch.elementId} · ${elementMatch.colorName}` : part.design))
       if (hasConnectors?.(part.design)) {
         const mechanics = element('span', 'editor-part-mechanics', labels.connectorsReady)
         info.append(mechanics)
@@ -132,9 +135,24 @@ export function mountLibrary(root, { sections, language, labels, selectPart, has
     rendered.clear()
     cards.replaceChildren()
     scroll.scrollTop = 0
-    matches = searchLibrary(section, groupSelect.value, search.value)
-    total.textContent = labels.libraryCount(matches.length)
-    empty.hidden = matches.length > 0
+    const query = search.value.trim()
+    matches = searchLibrary(section, groupSelect.value, query)
+    if (Object.hasOwn(byDesign, query)) matches = [byDesign[query]]
+    if (elementMatch) {
+      const designs = [elementMatch.partNum, ...elementMatch.ldraw]
+      const model = designs.filter(id => Object.hasOwn(byDesign, id)).map(id => byDesign[id])[0]
+      if (model) matches = [{ ...model, color: elementMatch.color }]
+      else {
+        matches = []
+        const reference = element('article', 'editor-part-card')
+        reference.append(element('span', 'editor-part-name', elementMatch.name),
+          element('span', 'editor-part-meta', `${elementMatch.partNum} · LEGO ${elementMatch.elementId} · ${elementMatch.colorName}`),
+          element('small', '', language === 'ru' ? '3D-модель пока отсутствует' : '3D model unavailable'))
+        cards.append(reference)
+      }
+    }
+    total.textContent = labels.libraryCount(matches.length || Number(Boolean(elementMatch)))
+    empty.hidden = matches.length > 0 || Boolean(elementMatch)
     limit = 0
     appendBatch()
   }
@@ -145,7 +163,17 @@ export function mountLibrary(root, { sections, language, labels, selectPart, has
     filter()
   }, options)
   groupSelect.addEventListener('change', filter, options)
-  search.addEventListener('input', filter, options)
+  search.addEventListener('input', () => {
+    elementMatch = undefined
+    filter()
+    const id = elementNumber(search.value)
+    if (id) lookupElement(id).then(record => {
+      if (!signal.aborted && elementNumber(search.value) === id && record) {
+        elementMatch = record
+        filter()
+      }
+    }).catch(() => {})
+  }, options)
   more.addEventListener('click', appendBatch, options)
   if (!browsing) {
     cards.addEventListener('click', event => {

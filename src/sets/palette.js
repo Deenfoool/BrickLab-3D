@@ -1,3 +1,4 @@
+import { elementNumber, lookupElement } from '../editor/element-index.js'
 import {
   previewColumns,
   previewRows,
@@ -18,7 +19,7 @@ export function mountSetPalette(
   const t = setStrings(language),
     ru = language === 'ru'
   const items = mapInventory(
-    set.inventory.filter((item) => !item.spare),
+    [...set.inventory].sort((a, b) => Number(a.spare) - Number(b.spare)),
     catalog,
   )
   const tools = node('div', undefined, 'set-palette-tools'),
@@ -61,21 +62,40 @@ export function mountSetPalette(
     limit = 48,
     enabled = true
   let scrollPosition = 0
-  let exactPart
+  let exactPart, exactColor
   const byKey = new Map(items.map((item) => [inventoryKey(item), item]))
+  const printed = new Set()
+  let resolved
+  function resolveSearch() {
+    const id = elementNumber(search.value)
+    resolved = undefined
+    if (!id) return
+    lookupElement(id).then(record => {
+      if (signal.aborted || elementNumber(search.value) !== id) return
+      resolved = record
+      render()
+    }).catch(() => {})
+  }
   function render() {
     scrollPosition = root.scrollTop
     const terms = normalizeQuery(search.value).split(/\s+/).filter(Boolean)
-    const filtered = used.filter(
-      (item) =>
-        (!color.value || item.colorId === color.value) &&
-        (!group.value || item.model?.group === group.value) &&
-        (exactPart ? item.partNum === exactPart : terms.every((term) =>
-          normalizeQuery(
-            `${item.name} ${item.partNum} ${item.design ?? ''} ${item.model?.ru ?? ''} ${item.colorName}`,
-          ).includes(term),
-        )),
-    )
+    const element = elementNumber(search.value)
+    const filtered = used.filter(item => {
+      if (color.value && item.colorId !== color.value || group.value && item.model?.group !== group.value) return false
+      if (exactPart) return item.partNum === exactPart && (!exactColor || item.colorId === exactColor)
+      if (element && (item.elementId === element || item.image.endsWith('/' + element + '.jpg') ||
+          (resolved?.partNum === item.partNum && resolved.colorId === item.colorId))) return true
+      const text = normalizeQuery([item.name, item.partNum, item.elementId, item.design, ...item.ldraw,
+        item.model?.ru, item.colorName].join(' '))
+      return terms.every(term => text.includes(term))
+    })
+    if (!filtered.length && !color.value && !group.value && (resolved || exactPart || printed.has(element))) {
+      const record = resolved ?? { elementId: element, partNum: exactPart || '', name: exactPart || `LEGO ${element}`,
+        colorId: exactColor || '', colorName: '', color: '', ldraw: [], image: '' }
+      const [reference] = mapInventory([record], catalog)
+      if (!reference.color) reference.color = reference.model?.color ?? '#999999'
+      filtered.push(reference)
+    }
     grid.replaceChildren()
     const missing = items.filter((item) => !item.model).length
     status.textContent = `${filtered.length} · ${t.missing}: ${missing}`
@@ -90,9 +110,11 @@ export function mountSetPalette(
         }),
       )
       take.className = 'set-part-take'
+      take.dataset.placeable = String(Boolean(item.model))
       take.disabled = !enabled || !item.model
       const image = node('img')
-      image.src = item.image
+      if (item.image) image.src = item.image
+      else image.hidden = true
       image.alt = item.name
       image.loading = 'lazy'
       const fallback = node('span', undefined, 'set-image-fallback')
@@ -125,7 +147,8 @@ export function mountSetPalette(
         image,
         fallback,
         node('span', name),
-        node('small', `${item.partNum} · ${item.colorName}`),
+        node('small', [item.partNum, (item.elementId || element) && `LEGO ${item.elementId || element}`, item.colorName,
+          item.spare && (ru ? 'Запасная' : 'Spare')].filter(Boolean).join(' · ')),
         swatch,
       )
       card.append(take)
@@ -139,7 +162,8 @@ export function mountSetPalette(
       const detail = control(ru ? 'Рассмотреть' : 'Inspect', () =>
         inspect(item),
       )
-      card.append(count, detail)
+      if (item.quantity) card.append(count)
+      if (item.partNum && (item.image || item.model)) card.append(detail)
       grid.append(card)
     }
     more.hidden = filtered.length <= limit
@@ -149,7 +173,8 @@ export function mountSetPalette(
     input.addEventListener(
       input === search ? 'input' : 'change',
       () => {
-        if (input === search) exactPart = undefined
+        if (input === search) { exactPart = exactColor = undefined; resolveSearch() }
+        if (input === color) exactColor = undefined
         limit = 48
         render()
       },
@@ -162,8 +187,12 @@ export function mountSetPalette(
   root.append(help)
   render()
   return {
-    find(partNum, colorId) {
-      exactPart = search.value = partNum
+    find(partNum, colorId, elementId) {
+      if (elementId) printed.add(elementId)
+      exactPart = partNum
+      exactColor = colorId
+      search.value = elementId || partNum
+      resolveSearch()
       group.value = ''
       color.value = byKey.has(`${partNum}/${colorId}`) ? colorId : ''
       limit = 48
@@ -184,9 +213,7 @@ export function mountSetPalette(
       if (enabled === value) return
       enabled = value
       for (const button of grid.querySelectorAll('.set-part-take'))
-        button.disabled =
-          !enabled ||
-          !byKey.get(button.closest('article').dataset.inventory)?.model
+        button.disabled = !enabled || button.dataset.placeable !== 'true'
     },
   }
 }
