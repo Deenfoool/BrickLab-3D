@@ -339,6 +339,12 @@ test('instruction previews map verified book pages and never frame official LEGO
   assert.equal(instructionPagePreview('42223-1', ford.url, 185), null)
   assert.equal(instructionPagePreview('42223-1', first.url, 1), null)
   assert.equal(instructionPagePreview('100-1', ford.url, 1), null)
+  const tower = await discoverBooks('10307-1', signal)
+  assert.deepEqual(tower.map(book => book.pages), [92, 200, 252])
+  assert.match(instructionPagePreview('10307-1', tower[1].url, 1).image, /\/093\.jpg$/)
+  assert.match(instructionPagePreview('10307-1', tower[2].url, 252).image, /\/544\.jpg$/)
+  const walker = await discoverBooks('75313-1', signal)
+  assert.match(instructionPagePreview('75313-1', walker[3].url, 1).image, /\/473\.jpg$/)
   const designer = 'https://bdpinstructions.download.bricklink.info/910037.pdf'
   assert.equal(instructionPagePreview('910037-1', designer, 3).frame, `${designer}#page=3&view=FitH`)
 })

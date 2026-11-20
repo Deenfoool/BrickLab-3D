@@ -22,12 +22,9 @@
 .instruction-tools span{font-size:11px;white-space:nowrap;color:#c0c8d5}
 .instruction-panel .editor-panel-body{min-height:0;padding:3px}
 .instruction-panel .instruction-preview{position:relative;width:min(100%,calc(max(180px,100dvh - 150px) * var(--page-ratio,1.4)));margin-inline:auto}
-.instruction-image-link{display:block}
 .instruction-panel iframe{display:block;width:100%;height:52dvh;min-height:220px;border:0;border-radius:3px;background:#ddd}
-.instruction-panel p,.instruction-actions,.instruction-pdf-fallback{padding:6px;margin:0;font-size:12px;color:#bfc8d7}
+.instruction-panel p,.instruction-actions{padding:6px;margin:0;font-size:12px;color:#bfc8d7}
 .instruction-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
-.instruction-actions a,.instruction-pdf-fallback{color:#e5b458}
-.instruction-pdf-fallback{display:block}
 .instruction-panel details[open]{flex-basis:100%}
 .instruction-panel summary{cursor:pointer}
 .instruction-panel form{display:grid;gap:6px;margin-top:6px}
@@ -35,7 +32,7 @@
 .instruction-panel [hidden],.instruction-panel:has(.editor-panel-body[hidden]) :is(.instruction-tools,.instruction-more-toggle){display:none}
 .instruction-panel:has(.editor-panel-body[hidden]){width:max-content!important;min-width:0;height:auto!important;resize:none}
 @media(max-width:720px){.instruction-panel{left:4px;top:56px;width:360px;max-height:calc(100% - 56px)}.set-grid{grid-template-columns:1fr}}
-.instruction-preview img{display:block;width:100%;height:auto;border-radius:3px;background:#fff}
+.instruction-preview :is(img,canvas){display:block;width:100%;height:auto;border-radius:3px;background:#fff}
 .instruction-preview .instruction-part-region{position:absolute;min-width:0;min-height:0;padding:0;background:transparent;border:1px solid transparent;border-radius:3px}
 .instruction-panel .instruction-part-region:hover:not(:disabled),.instruction-panel .instruction-part-region:focus-visible{background:#ffd47944;border-color:#98681a;outline:2px solid #ffbf56;outline-offset:0;z-index:1}
 .instruction-part-label{position:absolute;z-index:2;transform:translate(-50%,4px);box-sizing:border-box;max-width:min(13rem,95%);width:max-content;padding:4px 7px;background:#171b22;color:#f8e3ba;border:1px solid #ba873d;border-radius:4px;font-size:11px;line-height:1.35;pointer-events:none}

@@ -11,7 +11,7 @@ import { safeImage, validateSet } from './data.js?v=auto-pdf'
 import {
   discoverBooks,
   instructionSources,
-} from './instruction-sources.js?v=instruction-parts'
+} from './instruction-sources.js?v=inline-pdf-instructions'
 const storageKey = 'bricklab.sets.v1'
 export const setStrings = (language) =>
   language === 'ru'
@@ -289,13 +289,7 @@ export async function mountSetCatalog(
         const source = set.books.find(
           (book) => instructionSources[book.source],
         )?.source
-        if (source) {
-          const link = node('a', source)
-          link.href = instructionSources[source]
-          link.target = '_blank'
-          link.rel = 'noopener'
-          booksStatus.append(' · ', link)
-        }
+        if (source) booksStatus.append(` · ${source}`)
         return
       }
       booksStatus.textContent = t.findingBooks

@@ -1,4 +1,4 @@
-import sequences from '../../catalog/sets/instruction-sequences.json?v=instruction-preview' with { type: 'json' }
+import sequences from '../../catalog/sets/instruction-sequences.json?v=inline-pdf-instructions' with { type: 'json' }
 import { knownBooks, normalizeBooks, safeBook } from './data.js?v=auto-pdf'
 
 const brickDbUrl = 'https://bricks.party/brickdb.json'
@@ -6,8 +6,8 @@ const brickInstructions = 'https://lego.brickinstructions.com'
 // BrickInstructions joins volumes into one image sequence. Use it only where
 // the sequence matches the official PDFs and their page counts.
 const previewSets = new Set([
-  '42143-1', '42154-1', '42159-1', '42171-1', '42172-1', '42206-1',
-  '42210-1', '42212-1', '42213-1', '42215-1', '42223-1', '76419-1',
+  '10300-1', '10307-1', '10316-1', '42143-1', '42154-1', '42159-1', '42171-1', '42172-1',
+  '42206-1', '42210-1', '42212-1', '42213-1', '42215-1', '42222-1', '42223-1', '75313-1', '76419-1',
 ])
 export const instructionSources = {
   BrickDB: 'https://bricks.party/',
