@@ -11,6 +11,7 @@ import gzip
 import json
 import re
 from collections import defaultdict
+from functools import lru_cache
 from pathlib import Path
 
 import fitz
@@ -46,15 +47,24 @@ def artwork(words, images, max_dx, min_dy, max_dy, corrections=None):
         xref, bounds = images[index]
         anchor = fitz.Rect(bounds)
         box = fitz.Rect(anchor)
+        isolated = bool(xref)
         joins = (corrections or {}).get(str(xref), {}).get("join", ())
         for other_index, (other_ref, other_bounds) in enumerate(images):
+            if other_index == index or (other_ref == xref and other_bounds == bounds):
+                continue
             if other_index in assigned and other_ref not in joins:
                 continue
             fragment = fitz.Rect(other_bounds)
+            overlap = fragment & anchor
+            # Ignore page-wide backgrounds and contacts along tile edges.
+            background = fragment.contains(anchor) and fragment.get_area() > 4 * anchor.get_area()
+            if not background and overlap.width > .5 and overlap.height > .5:
+                isolated = False
             if other_ref in joins:
                 nearby = fitz.Rect(anchor.x0 - 2, anchor.y0 - 2, anchor.x1 + 2, anchor.y1 + 2)
                 if fragment.intersects(nearby):
                     box |= fragment
+                    isolated = False
             elif fragment.intersects(anchor) and not fragment.contains(anchor):
                 # A tile can extend above or to the right. Keep the crop clear of
                 # the caption and do not absorb artwork from other callouts.
@@ -62,7 +72,7 @@ def artwork(words, images, max_dx, min_dy, max_dy, corrections=None):
                 same_bottom = abs(fragment.y1 - anchor.y1) <= 2 and fragment.x0 >= anchor.x0
                 if (same_left or same_bottom) and fragment.y1 <= anchor.y1 + 1:
                     box |= fragment
-        yield xref, box, value
+        yield xref, box, value, isolated and box == anchor
 
 
 def read_book(path, cache=None):
@@ -86,6 +96,22 @@ def template(display, box):
     if not scale:
         return None
     pixmap = display.get_pixmap(matrix=fitz.Matrix(scale, scale), colorspace=fitz.csRGB, clip=clip)
+    return thumbnail(pixmap)
+
+
+def embedded_template(pdf, xref):
+    try:
+        pixmap = fitz.Pixmap(pdf, xref)
+    except (RuntimeError, ValueError):
+        return None
+    if not pixmap.colorspace or pixmap.alpha:
+        return None
+    if pixmap.colorspace.n != 3:
+        pixmap = fitz.Pixmap(fitz.csRGB, pixmap)
+    return thumbnail(pixmap, normalize_paper=True)
+
+
+def thumbnail(pixmap, normalize_paper=False):
     pixels = np.frombuffer(pixmap.samples, dtype=np.uint8).reshape(pixmap.height, pixmap.width, 3)
     rgb = pixels.astype(np.float32) / 255
     background = np.median(np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]]), axis=0)
@@ -95,9 +121,12 @@ def template(display, box):
     ys, xs = np.where(foreground)
     if len(ys) < 6:
         return None
-    # The inventory and the steps can use different paper colors. Remove the
-    # background without changing the actual color of the part.
-    rgb[~foreground] = 1
+    if normalize_paper:
+        # The embedded artwork uses the original white point of its raster tile.
+        rgb = np.clip(rgb + (1 - background), 0, 1)
+    else:
+        # In a rendered crop the paper can be gray while the part keeps its color.
+        rgb[~foreground] = 1
     crop = rgb[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
     thumbnail = Image.fromarray(np.uint8(crop * 255)).resize((SIZE, SIZE), Image.Resampling.BILINEAR)
     return np.asarray(thumbnail, dtype=np.float32) / 255, np.log(crop.shape[1] / crop.shape[0])
@@ -130,8 +159,26 @@ def normalized_box(box, page):
     return [x, y, x1 - x, y1 - y]
 
 
+def confident_match(matches, max_difference, min_margin):
+    if len(matches) < 2:
+        return None
+    (difference, identifier), (alternative, _) = matches[:2]
+    if difference <= max_difference and alternative - difference >= min_margin:
+        return identifier
+    return None
+
+
+def visible_chroma(image):
+    ink = image[image.min(axis=2) < .87]
+    colored = ink[np.ptp(ink, axis=1) > .16]
+    if len(colored) < max(3, .2 * len(ink)):
+        return np.zeros(3)
+    return np.median(colored - colored.mean(axis=1, keepdims=True), axis=0)
+
+
 def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.028):
-    inventory = []
+    inventory, embedded_inventory = [], []
+    inventory_chroma = defaultdict(list)
     inventory_pages = set()
     for book_id, (pdf, pages) in books.items():
         for page_no, (words, images) in enumerate(pages):
@@ -140,16 +187,25 @@ def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.
                 continue
             inventory_pages.add((book_id, page_no))
             display = pdf[page_no].get_displaylist(annots=False)
-            for _, box, element in artwork(labels, images, max_dx=4, min_dy=-2, max_dy=11):
+            for xref, box, element, isolated in artwork(labels, images, max_dx=4, min_dy=-2, max_dy=11):
+                identifier = elements[element]
                 sample = template(display, box)
                 if sample is not None:
-                    inventory.append((*sample, elements[element]))
+                    inventory.append((*sample, identifier))
+                    inventory_chroma[identifier].append(visible_chroma(sample[0]))
+                if isolated and (embedded := embedded_template(pdf, xref)) is not None:
+                    embedded_inventory.append((*embedded, identifier))
     if not inventory:
         raise ValueError("No illustrated inventory found. Include the PDF containing the inventory.")
     rank = make_matcher(inventory)
+    rank_embedded = make_matcher(embedded_inventory) if embedded_inventory else None
     corrections = corrections or {}
     maps, audit = {}, {}
     for book_id, (pdf, pages) in books.items():
+        def embedded_matches(xref):
+            return rank_embedded(embedded_template(pdf, xref))[:4]
+
+        cached_embedded = lru_cache(maxsize=None)(embedded_matches)
         result, review = {}, {}
         book_corrections = corrections.get(book_id, {})
         for page_no, (words, images) in enumerate(pages):
@@ -162,14 +218,26 @@ def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.
             page = pdf[page_no]
             display = page.get_displaylist(annots=False)
             regions = []
-            for xref, box, quantity in parts:
-                matches = rank(template(display, box))[:4]
+            for xref, box, quantity, isolated in parts:
+                sample = template(display, box)
+                matches = rank(sample)[:4]
                 checked = book_corrections.get(str(xref))
                 override = checked and checked["part"]
-                if checked is None and len(matches) >= 2:
-                    (difference, suggested), (alternative, _) = matches[:2]
-                    if difference <= max_difference and alternative - difference >= min_margin:
-                        override = suggested
+                if checked is None:
+                    override = confident_match(matches, max_difference, min_margin)
+                    if isolated and rank_embedded is not None:
+                        raster_ranking = cached_embedded(xref)
+                        embedded = confident_match(raster_ranking, max_difference, min_margin)
+                        if override and embedded and override != embedded:
+                            override = None
+                        elif embedded and not override and matches and matches[0][1] == embedded:
+                            # A placed image can be recolored or marked up. The
+                            # paper around thin parts can dominate the image score.
+                            chroma = visible_chroma(sample[0])
+                            if any(np.max(np.abs(chroma - reference)) <= .15
+                                   for reference in inventory_chroma[embedded]):
+                                override = embedded
+                                matches = raster_ranking
                 review.setdefault(xref, {"matches": matches, "pages": [], "selected": override})
                 review[xref]["pages"].append((page_no + 1, tuple(box), quantity))
                 if override:

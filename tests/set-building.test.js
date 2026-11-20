@@ -364,6 +364,18 @@ test('Ford parts are tied to their verified book and normalized page locations',
   assert.deepEqual(await instructionPartRegions('42215-1', display.pdfId, 34), [])
 })
 
+test('Ford GT 42154 loads earlier and newly recognized details on the same page', async () => {
+  const { instructionPartRegions } = await import('../src/sets/instruction-parts.js')
+  const { instructionPagePreview } = await import('../src/sets/instruction-sources.js')
+  const set = '42154-1'
+  const pdf = 'https://www.lego.com/cdn/product-assets/product.bi.core.pdf/6456541.pdf'
+  const preview = instructionPagePreview(set, pdf, 80)
+  assert.match(preview.image, /080\.jpg$/)
+  const regions = await instructionPartRegions(set, preview.pdfId, 80)
+  assert.ok(regions.some((region) => region[4] === '87761' && region[5] === '0'))
+  assert.ok(regions.some((region) => region[4] === '2736' && region[5] === '71'))
+})
+
 test('Volvo book-local pages retrieve part regions from the correct volume', async () => {
   const { instructionPartRegions } = await import('../src/sets/instruction-parts.js')
   const { instructionPagePreview } = await import('../src/sets/instruction-sources.js')
