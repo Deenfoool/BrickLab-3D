@@ -35,6 +35,7 @@ export function instructionPagePreview(setNumber, bookUrl, page) {
       return {
         image: `${brickInstructions}/instructions/${folder}/${number}/${imagePage}.jpg`,
         source: `${brickInstructions}/lego_instructions/set/${number}`,
+        pdfId,
       }
     }
     offset += pages

@@ -229,7 +229,7 @@ async function openSets() {
   const root = byId('sets-panel')
   root.textContent = strings().loadingLibrary
   try {
-    const { mountSetCatalog } = await import('../sets/catalog.js?v=instruction-preview')
+    const { mountSetCatalog } = await import('../sets/catalog.js?v=instruction-parts')
     if (controller.signal.aborted) return
     await mountSetCatalog(root, { language, signal: controller.signal, projects: () => projects,
       resume: openProject,
@@ -309,7 +309,7 @@ async function openEditor(project) {
   editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=instruction-preview')
+    const { mountEditor } = await import('../editor/editor.js?v=instruction-parts')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

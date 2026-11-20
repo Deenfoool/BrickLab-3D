@@ -1,10 +1,11 @@
-import { node, control, setStrings } from './catalog.js?v=instruction-preview'
+import { node, control, setStrings } from './catalog.js?v=instruction-parts'
 import { safeBook, validateSet } from './data.js?v=auto-pdf'
 import {
   discoverBooks,
   instructionPagePreview,
   instructionSources,
-} from './instruction-sources.js?v=instruction-preview'
+} from './instruction-sources.js?v=instruction-parts'
+import { addInstructionParts, instructionPartRegions } from './instruction-parts.js'
 
 const maxUnknownPages = 5000
 
@@ -31,7 +32,7 @@ export function instructionState(value) {
 export function mountInstructions(
   layer,
   initial,
-  { language, signal, change },
+  { language, signal, change, findPart, describePart },
 ) {
   let progress = instructionState(initial)
   if (!progress) return null
@@ -68,9 +69,7 @@ export function mountInstructions(
   const frame = node('iframe')
   frame.title = ru ? 'Страница инструкции LEGO' : 'LEGO instructions page'
   frame.referrerPolicy = 'no-referrer'
-  const preview = node('a', undefined, 'instruction-preview')
-  preview.target = '_blank'
-  preview.rel = 'noopener'
+  const preview = node('div', undefined, 'instruction-preview')
   const previewStatus = node('p')
   previewStatus.setAttribute('role', 'status')
   const external = node(
@@ -202,14 +201,28 @@ export function mountInstructions(
     }
     previewStatus.textContent = ru ? 'Загружаем страницу…' : 'Loading page…'
     const image = node('img')
-    image.alt = ru ? `Страница ${progress.page} инструкции` : `Instruction page ${progress.page}`
-    preview.title = ru ? 'Открыть страницу крупнее' : 'Open full-size page'
-    preview.href = display.image
-    preview.append(image)
+    const pageNumber = progress.page
+    const setNumber = progress.set.number
+    image.alt = ru ? `Страница ${pageNumber} инструкции` : `Instruction page ${pageNumber}`
+    const enlarged = node('a', undefined, 'instruction-image-link')
+    enlarged.target = '_blank'
+    enlarged.rel = 'noopener'
+    enlarged.title = ru ? 'Открыть страницу крупнее' : 'Open full-size page'
+    enlarged.href = display.image
+    enlarged.append(image)
+    preview.append(enlarged)
     image.addEventListener('load', () => {
       if (!image.isConnected) return
+      preview.style.setProperty('--page-ratio', image.naturalWidth / image.naturalHeight)
       preview.hidden = false
       previewStatus.hidden = true
+      if (findPart) instructionPartRegions(setNumber, display.pdfId, pageNumber)
+        .then(regions => {
+          if (image.isConnected) addInstructionParts(preview, regions, {
+            language, describe: describePart, find: findPart,
+          })
+        })
+        .catch(() => {}) // The image remains usable if the annotations fail to load.
     }, { once: true })
     image.addEventListener('error', () => {
       if (!image.isConnected) return

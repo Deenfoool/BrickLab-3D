@@ -61,6 +61,7 @@ export function mountSetPalette(
     limit = 48,
     enabled = true
   let scrollPosition = 0
+  let exactPart
   const byKey = new Map(items.map((item) => [inventoryKey(item), item]))
   function render() {
     scrollPosition = root.scrollTop
@@ -69,11 +70,11 @@ export function mountSetPalette(
       (item) =>
         (!color.value || item.colorId === color.value) &&
         (!group.value || item.model?.group === group.value) &&
-        terms.every((term) =>
+        (exactPart ? item.partNum === exactPart : terms.every((term) =>
           normalizeQuery(
             `${item.name} ${item.partNum} ${item.design ?? ''} ${item.model?.ru ?? ''} ${item.colorName}`,
           ).includes(term),
-        ),
+        )),
     )
     grid.replaceChildren()
     const missing = items.filter((item) => !item.model).length
@@ -148,6 +149,7 @@ export function mountSetPalette(
     input.addEventListener(
       input === search ? 'input' : 'change',
       () => {
+        if (input === search) exactPart = undefined
         limit = 48
         render()
       },
@@ -160,6 +162,20 @@ export function mountSetPalette(
   root.append(help)
   render()
   return {
+    find(partNum, colorId) {
+      exactPart = search.value = partNum
+      group.value = ''
+      color.value = byKey.has(`${partNum}/${colorId}`) ? colorId : ''
+      limit = 48
+      root.scrollTop = 0
+      render()
+      search.focus({ preventScroll: true })
+    },
+    describe(partNum, colorId) {
+      const item = byKey.get(`${partNum}/${colorId}`)
+      const name = item?.model?.[language] ?? item?.name ?? catalog[partNum]?.[language]
+      return ru ? name?.split(' · ', 1)[0] : name
+    },
     update(parts) {
       used = inventoryUsage(items, parts)
       render()

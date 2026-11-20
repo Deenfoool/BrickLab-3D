@@ -1,5 +1,5 @@
-import { instructionState, mountInstructions } from '../sets/instructions.js?v=instruction-preview'
-import { mountSetPalette } from '../sets/palette.js'
+import { instructionState, mountInstructions } from '../sets/instructions.js?v=instruction-parts'
+import { mountSetPalette } from '../sets/palette.js?v=instruction-parts'
 import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'
 import { mountCablePanel } from './cable-panel.js'
@@ -227,8 +227,12 @@ export async function mountEditor(root, { document, language, save, download, si
     throw error
   }
   let buildingSet = instructionState(source.buildingSet)
+  let findSetPart
+  let setPalette
   mountInstructions(el('panelLayer'), buildingSet, { language, signal,
     change(value) { buildingSet = value; persist() },
+    findPart: (partNum, colorId) => findSetPart?.(partNum, colorId),
+    describePart: (partNum, colorId) => setPalette?.describe(partNum, colorId),
   })
   mountFloatingPanels(el('panelLayer'), t, signal)
   const visibleParts = loadParts(source, models)
@@ -304,7 +308,6 @@ export async function mountEditor(root, { document, language, save, download, si
   const library = mountLibrary(root.querySelector('#editor-library-body'), {
     sections, language, labels: t, selectPart: selectLibraryPart, hasConnectors, signal,
   })
-  let setPalette
   if (buildingSet) {
     const libraryBody = root.querySelector('#editor-library-body')
     const full = node('div')
@@ -326,6 +329,11 @@ export async function mountEditor(root, { document, language, save, download, si
       },
       inspect: item => inspectSetPart(item, { language, signal, prepare: prepareModel, model: design => models.get(design) }),
     })
+    findSetPart = (partNum, colorId) => {
+      libraryBody.closest('[data-panel]').querySelector('[data-panel-toggle][aria-expanded="false"]')?.click()
+      showSet(true)
+      setPalette.find(partNum, colorId)
+    }
     showSet(true)
   }
   const partsPanel = mountScenePartsPanel(el('sceneParts'), t, {

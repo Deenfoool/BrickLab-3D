@@ -342,3 +342,24 @@ test('instruction previews map verified book pages and never frame official LEGO
   const designer = 'https://bdpinstructions.download.bricklink.info/910037.pdf'
   assert.equal(instructionPagePreview('910037-1', designer, 3).frame, `${designer}#page=3&view=FitH`)
 })
+
+test('Ford parts are tied to their verified book and normalized page locations', async () => {
+  const { instructionPartRegions } = await import('../src/sets/instruction-parts.js')
+  const [ford] = await (await import('../src/sets/instruction-sources.js'))
+    .discoverBooks('42223-1', new AbortController().signal)
+  const { instructionPagePreview } = await import('../src/sets/instruction-sources.js')
+  const display = instructionPagePreview('42223-1', ford.url, 34)
+  const regions = await instructionPartRegions('42223-1', display.pdfId, 34)
+  assert.equal(regions.length, 6)
+  assert.deepEqual(regions.map((region) => region.slice(4)), [
+    ['3705', '4'], ['32034', '15'], ['32056', '0'],
+    ['61332', '0'], ['32034', '15'], ['18651', '0'],
+  ])
+  for (const [left, top, width, height] of regions) {
+    assert.ok(left >= 0 && width > 0 && left + width <= 10000)
+    assert.ok(top >= 0 && height > 0 && top + height <= 10000)
+  }
+  assert.deepEqual(await instructionPartRegions('42223-1', display.pdfId, 1), [])
+  assert.deepEqual(await instructionPartRegions('42223-1', 'wrong', 34), [])
+  assert.deepEqual(await instructionPartRegions('42215-1', display.pdfId, 34), [])
+})
