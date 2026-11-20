@@ -13,7 +13,7 @@ import { baseRotation, mirrorPose, samePose, worldPort } from './placement.js?v=
 import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=track-builder'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
 import { nearestDetent } from '../mechanics/axial.js?v=turntable-parts'
-import { nearbyConnections, translationSnaps } from './snap.js?v=track-builder'
+import { nearbyConnections, translationSnaps } from './snap.js?v=scene-snap'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=turntable-parts'
 import { mountLibrary } from './library.js?v=element-search'
 import { createScene } from './scene.js?v=tread-pivot'
@@ -26,7 +26,7 @@ import { mountTrackPanel, trackLabels } from './track-panel.js?v=level-treads'
 import { upgradeInlineEngineFan } from './inline-engine.js'
 import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
-import { editorLabels } from './labels.js?v=sprocket-track'
+import { editorLabels } from './labels.js?v=scene-snap'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
@@ -135,6 +135,7 @@ export async function mountEditor(root, { document, language, save, download, si
           <button type="button" data-el="beltTool" title="${t.beltAdd}" aria-label="${t.beltAdd}">${t.belt}</button>
           <button type="button" data-el="trackTool" title="${trackText.name}" aria-label="${trackText.name}">${trackText.tool}</button>
           <button type="button" data-el="snap" aria-pressed="true">${t.snap}</button>
+          <button type="button" data-el="snapAll" title="${t.snapAllTitle}">${t.snapAll}</button>
           <button type="button" data-el="frame">${t.reset}</button>
           <button type="button" data-el="groupSelection" title="${t.createGroup}" hidden>${t.groupSelection}</button>
         </div>
@@ -304,6 +305,7 @@ export async function mountEditor(root, { document, language, save, download, si
   let drag
   let links = assembly.connections
   let message = ''
+  let snappingScene = false
   let pendingPart
   const audio = createEditorAudio(signal)
   function updateSoundControl() {
@@ -879,6 +881,8 @@ export async function mountEditor(root, { document, language, save, download, si
     for (const name of modes) el(name).setAttribute('aria-pressed', String(mode === name))
     setPalette?.setEnabled(mode === 'build')
     library.setPlacement(!movesExisting ? moving?.design : undefined, pendingPart?.part.design, building)
+    el('snapAll').disabled = !building || snappingScene || dragActive() || Boolean(pendingPart) ||
+      state.parts.filter(part => !hidden.has(part.id)).length < 2
     el('snap').disabled = !building
     el('snap').setAttribute('aria-pressed', String(snapEnabled))
     el('undo').disabled = simulating(mode) || !undo.length
@@ -1097,6 +1101,42 @@ export async function mountEditor(root, { document, language, save, download, si
     const added = snap?.fit ? [{ shaft: snap.shaft, socket: snap.socket, placement: snap.fit.placement }] : []
     commit({ parts: placed, links: transformLinks(placed, [...edited.keys()], added, Boolean(snap?.pose)) })
     if (snap?.mesh?.ok || hasNewConnection(previousLinks, state.links)) audio.play('snap')
+  }
+
+  async function snapAllParts() {
+    if (el('snapAll').disabled) return
+    const before = state
+    const hiddenBefore = hidden
+    snappingScene = true
+    message = t.snapAllWorking
+    render()
+    try {
+      const { snapScene } = await import('./scene-snap.js?v=scene-snap')
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      if (signal.aborted || state !== before || mode !== 'build' || hidden !== hiddenBefore || dragActive() || pendingPart) {
+        if (message === t.snapAllWorking) message = ''
+        return
+      }
+      const fixed = new Set([
+        ...unknownLinks.flatMap(link => [link.shaft?.part, link.socket?.part]),
+        ...hiddenBelts.flatMap(record => [record.a?.part, record.b?.part]),
+      ])
+      const result = snapScene(state.parts, state.links, { belts: state.belts, hidden, fixed })
+      if (result.added) {
+        commit({ ...state, parts: result.parts, links: result.links })
+        audio.play('snap')
+        if (message !== t.storage) message = t.snapAllResult(result.added, result.adjusted)
+      } else {
+        message = t.snapAllNoMatch
+      }
+    } catch (error) {
+      if (signal.aborted) return
+      console.error(error)
+      message = t.snapAllError
+    } finally {
+      snappingScene = false
+      if (!signal.aborted) render()
+    }
   }
 
   function clipboardSelection() {
@@ -1348,6 +1388,7 @@ export async function mountEditor(root, { document, language, save, download, si
     if (audio.toggle()) audio.play('tool')
     updateSoundControl()
   })
+  on(el('snapAll'), 'click', snapAllParts)
   on(el('undo'), 'click', () => restore(undo, redo))
   on(el('redo'), 'click', () => restore(redo, undo))
   on(el('frame'), 'click', scene.resetView)

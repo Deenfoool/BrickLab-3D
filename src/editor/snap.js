@@ -375,7 +375,7 @@ export function nearbyConnections(context) {
 // Placement records are replaced on transform. Cache the world-space connector
 // envelope for stationary parts across pointer events.
 const envelopes = new WeakMap()
-function connectorEnvelope(part) {
+export function connectorEnvelope(part) {
   if (envelopes.has(part)) return envelopes.get(part)
   const box = new Box3()
   let margin = sprockets[part.design] ? 51 : 0
