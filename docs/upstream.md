@@ -69,3 +69,15 @@
 BrickLab обращается к [публичному индексу BrickDB](https://bricks.party/) при первом поиске инструкции. В индексе есть номера наборов, ссылки на PDF LEGO и число страниц там, где оно известно. Файл `catalog/sets/instruction-sequences.json` хранит порядок книг, сверенный со [страницами инструкций LEGO](https://www.lego.com/en-us/service/building-instructions). Сами PDF загружаются с сайтов-источников. Для наборов 910xxx BrickLab проверяет наличие PDF на сервере [BrickLink Designer Program](https://www.bricklink.com/v3/designer-program/instructions.page).
 
 Координаты деталей в `catalog/sets/42223-parts-by-page.json` получены из [инструкции LEGO 42223, PDF 6651409](https://www.lego.com/en-us/service/building-instructions/42223) и нормализованы до 10 000 по каждой оси. Изображения в рамках шагов сопоставлены с изображениями и кодами элементов на страницах 181–182. Артикулы и идентификаторы цветов взяты из таблицы `elements.csv.gz` на [Rebrickable](https://rebrickable.com/downloads/). Запись хранит `[x, y, ширина, высота, артикул, цвет]`. Изображения страниц загружаются с [BrickInstructions](https://lego.brickinstructions.com/lego_instructions/set/42223).
+
+`scripts/build-instruction-part-maps.py` готовит такие карты для других наборов. Передайте все тома вместе с таблицей `elements.csv.gz`. Генератор сопоставляет изображения над количеством деталей с иллюстрированной описью и сохраняет результаты с достаточным отрывом от ближайшего альтернативного совпадения. Аргумент `--review` сохраняет оценки кандидатов для проверки, а `--corrections` принимает проверенные артикулы и цвета, при необходимости объединяя фрагменты изображения по их ссылкам в PDF.
+
+Для [Volvo EC500 42215](https://www.lego.com/en-us/service/building-instructions/42215) запуск выглядит так.
+
+```sh
+python3 scripts/build-instruction-part-maps.py --set 42215 --elements /path/to/elements.csv.gz \
+  --corrections catalog/sets/42215-instruction-corrections.json \
+  6592888=/path/to/6592888.pdf 6595793=/path/to/6595793.pdf
+```
+
+Генератор обновляет `catalog/sets/instruction-part-index.json`. Перед добавлением нового набора проверьте порядок книг и совпадение страниц с изображениями BrickInstructions в `src/sets/instruction-sources.js`. Карты загружаются по PDF ID конкретного тома и содержат координаты зон, артикулы и идентификаторы цветов.

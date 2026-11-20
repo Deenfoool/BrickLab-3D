@@ -363,3 +363,18 @@ test('Ford parts are tied to their verified book and normalized page locations',
   assert.deepEqual(await instructionPartRegions('42223-1', 'wrong', 34), [])
   assert.deepEqual(await instructionPartRegions('42215-1', display.pdfId, 34), [])
 })
+
+test('Volvo book-local pages retrieve part regions from the correct volume', async () => {
+  const { instructionPartRegions } = await import('../src/sets/instruction-parts.js')
+  const { instructionPagePreview } = await import('../src/sets/instruction-sources.js')
+  const { books } = validateSet(inventory)
+  const first = instructionPagePreview('42215-1', books[0].url, 14)
+  const second = instructionPagePreview('42215-1', books[1].url, 5)
+  assert.match(first.image, /014\.jpg$/)
+  assert.match(second.image, /297\.jpg$/)
+  const firstParts = await instructionPartRegions('42215-1', first.pdfId, 14)
+  const secondParts = await instructionPartRegions('42215-1', second.pdfId, 5)
+  assert.ok(firstParts.some((region) => region[4] === '61332' && region[5] === '0'))
+  assert.ok(secondParts.some((region) => region[4] === '3167' && region[5] === '72'))
+  assert.deepEqual(await instructionPartRegions('42215-1', second.pdfId, 1), [])
+})

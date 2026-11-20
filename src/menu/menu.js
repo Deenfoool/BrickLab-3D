@@ -299,6 +299,50 @@ function closeEditor() {
   editorRoot.replaceChildren()
 }
 
+function showBuildTransition(set, signal) {
+  const ru = language === 'ru'
+  const screen = element('section', 'guided-loading')
+  screen.setAttribute('aria-labelledby', 'guided-loading-title')
+  const content = element('div', 'guided-loading-card')
+  const title = element('h1', null, ru ? 'Готовим сборку' : 'Preparing your build')
+  title.id = 'guided-loading-title'
+  const subtitle = element('p', null, `${set.number} · ${set.name}`)
+  const progress = element('progress')
+  progress.max = 3
+  progress.value = 0
+  progress.setAttribute('aria-label', title.textContent)
+  const tasks = element('ul', 'guided-loading-steps')
+  const stages = new Map([
+    ['scene', element('li', null, ru ? '3D-сцена' : '3D scene')],
+    ['inventory', element('li', null, ru ? 'Детали набора' : 'Set inventory')],
+    ['instruction', element('li', null, ru ? 'Текущая страница' : 'Current instruction page')],
+  ])
+  tasks.append(...stages.values())
+  const back = element('a', null, ru ? 'К наборам' : 'Back to sets')
+  back.href = '#sets'
+  content.append(title, subtitle, progress, tasks, back)
+  screen.append(content)
+  editorRoot.setAttribute('data-preparing-set', '')
+  editorRoot.before(screen)
+  function close() {
+    screen.remove()
+    editorRoot.removeAttribute('data-preparing-set')
+    signal.removeEventListener('abort', close)
+  }
+  signal.addEventListener('abort', close, { once: true })
+  return {
+    close,
+    report(stage, ready) {
+      const row = stages.get(stage)
+      if (signal.aborted || !row || row.dataset.state) return
+      row.dataset.state = ready ? 'ready' : 'available'
+      if (!ready && stage === 'instruction')
+        row.textContent = ru ? 'Инструкция откроется в панели' : 'Instructions available in the panel'
+      progress.value++
+    },
+  }
+}
+
 async function openEditor(project) {
   if (editorSession?.id === project.id && editorSession.language === language) return
   closeEditor()
@@ -306,15 +350,19 @@ async function openEditor(project) {
   const session = { id: project.id, language, controller }
   editorSession = session
   const t = editorLabels[language]
-  editorRoot.append(element('div', 'editor-loading', t.loading))
+  const set = project.document.buildingSet?.set
+  const transition = typeof set?.name === 'string' && typeof set.number === 'string'
+    ? showBuildTransition(set, controller.signal) : null
+  if (!transition) editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=instruction-parts')
+    const { mountEditor } = await import('../editor/editor.js?v=guided-transition')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
       document: project.document, language, signal: controller.signal,
       download: downloadProject,
+      reportLoad: transition?.report,
       save(document) {
         if (controller.signal.aborted) return false
         const record = makeRecord(document, project.id)
@@ -323,6 +371,11 @@ async function openEditor(project) {
         return !storageWarning
       },
     })
+    if (!controller.signal.aborted) {
+      transition?.close()
+      if (transition && !matchMedia('(prefers-reduced-motion: reduce)').matches)
+        editorRoot.animate([{ opacity: .5 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' })
+    }
   } catch (error) {
     if (controller.signal.aborted) return
     console.error(error)

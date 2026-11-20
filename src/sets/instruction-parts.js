@@ -1,7 +1,12 @@
 export async function instructionPartRegions(set, pdfId, page) {
-  if (set !== '42223-1' || pdfId !== '6651409') return []
+  const { default: sources } = await import(
+    '../../catalog/sets/instruction-part-index.json?v=guided-transition',
+    { with: { type: 'json' } }
+  )
+  if (!Object.hasOwn(sources, `${set}/${pdfId}`)) return []
+  const name = sources[`${set}/${pdfId}`]
   const { default: regions } = await import(
-    '../../catalog/sets/42223-parts-by-page.json?v=1',
+    new URL(`../../catalog/sets/${name}?v=guided-transition`, import.meta.url).href,
     { with: { type: 'json' } }
   )
   return regions[page] ?? []

@@ -5,9 +5,38 @@ import {
   instructionPagePreview,
   instructionSources,
 } from './instruction-sources.js?v=instruction-parts'
-import { addInstructionParts, instructionPartRegions } from './instruction-parts.js'
+import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=guided-transition'
 
 const maxUnknownPages = 5000
+const pageWait = 6000
+
+export function prepareInstructionPage(progress) {
+  const entry = progress?.set.books[progress.book]
+  if (!entry) return null
+  const display = instructionPagePreview(progress.set.number, entry.url, progress.page)
+  if (!display?.image) return null
+  const image = new Image()
+  image.src = display.image
+  const decoded = image.decode().then(() => true, () => false)
+  const regions = instructionPartRegions(progress.set.number, display.pdfId, progress.page)
+    .catch(() => []) // Image viewing remains available if annotations fail to load.
+  return { image, decoded, regions }
+}
+
+export async function waitForInstruction(prepared, signal) {
+  if (signal.aborted || !prepared) return false
+  return new Promise(resolve => {
+    const timer = setTimeout(() => finish(false), pageWait)
+    function finish(ready) {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', cancel)
+      resolve(ready)
+    }
+    function cancel() { finish(false) }
+    signal.addEventListener('abort', cancel, { once: true })
+    Promise.all([prepared.decoded, prepared.regions]).then(([ready]) => finish(ready))
+  })
+}
 
 export function instructionState(value) {
   if (!value?.set) return null
@@ -32,7 +61,7 @@ export function instructionState(value) {
 export function mountInstructions(
   layer,
   initial,
-  { language, signal, change, findPart, describePart },
+  { language, signal, change, findPart, describePart, firstPage },
 ) {
   let progress = instructionState(initial)
   if (!progress) return null
@@ -200,9 +229,10 @@ export function mountInstructions(
       return
     }
     previewStatus.textContent = ru ? 'Загружаем страницу…' : 'Loading page…'
-    const image = node('img')
+    const prepared = firstPage ?? prepareInstructionPage(progress)
+    firstPage = null
+    const { image, decoded, regions } = prepared
     const pageNumber = progress.page
-    const setNumber = progress.set.number
     image.alt = ru ? `Страница ${pageNumber} инструкции` : `Instruction page ${pageNumber}`
     const enlarged = node('a', undefined, 'instruction-image-link')
     enlarged.target = '_blank'
@@ -211,26 +241,31 @@ export function mountInstructions(
     enlarged.href = display.image
     enlarged.append(image)
     preview.append(enlarged)
-    image.addEventListener('load', () => {
+    decoded.then(ready => {
       if (!image.isConnected) return
+      if (!ready) {
+        previewStatus.textContent = ru
+          ? 'Страница не загрузилась. Откройте её в оригинальном PDF.'
+          : 'The page could not be loaded. Open it in the original PDF.'
+        return
+      }
       preview.style.setProperty('--page-ratio', image.naturalWidth / image.naturalHeight)
       preview.hidden = false
       previewStatus.hidden = true
-      if (findPart) instructionPartRegions(setNumber, display.pdfId, pageNumber)
-        .then(regions => {
-          if (image.isConnected) addInstructionParts(preview, regions, {
+      if (findPart) regions.then(parts => {
+          if (image.isConnected) addInstructionParts(preview, parts, {
             language, describe: describePart, find: findPart,
           })
         })
-        .catch(() => {}) // The image remains usable if the annotations fail to load.
-    }, { once: true })
-    image.addEventListener('error', () => {
-      if (!image.isConnected) return
-      previewStatus.textContent = ru
-        ? 'Страница не загрузилась. Откройте её в оригинальном PDF.'
-        : 'The page could not be loaded. Open it in the original PDF.'
-    }, { once: true })
-    image.src = display.image
+      if (entry.pages && pageNumber < entry.pages && !navigator.connection?.saveData) {
+        const following = instructionPagePreview(progress.set.number, entry.url, pageNumber + 1)
+        if (following?.image) {
+          const ahead = new Image()
+          ahead.fetchPriority = 'low'
+          ahead.src = following.image
+        }
+      }
+    })
   }
   async function lookupBooks() {
     if (progress.set.books.length) return

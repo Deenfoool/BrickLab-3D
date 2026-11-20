@@ -1,4 +1,4 @@
-import { instructionState, mountInstructions } from '../sets/instructions.js?v=instruction-parts'
+import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=guided-transition'
 import { mountSetPalette } from '../sets/palette.js?v=instruction-parts'
 import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'
@@ -46,8 +46,13 @@ const simulating = mode => mode === 'testDrive' || mode === 'physics'
 const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
-export async function mountEditor(root, { document, language, save, download, signal }) {
+export async function mountEditor(root, { document, language, save, download, signal, reportLoad }) {
   const source = upgradeInlineEngineFan(promoteLegacyBelts(expandComponents(document, parts)))
+  let buildingSet = instructionState(source.buildingSet)
+  const firstPage = prepareInstructionPage(buildingSet)
+  const instructionReady = reportLoad && waitForInstruction(firstPage, signal).then(ready => {
+    if (!signal.aborted) reportLoad('instruction', ready)
+  })
   const t = editorLabels[language]
   const trackText = trackLabels[language]
   const models = new Map()
@@ -226,10 +231,9 @@ export async function mountEditor(root, { document, language, save, download, si
     root.replaceChildren()
     throw error
   }
-  let buildingSet = instructionState(source.buildingSet)
   let findSetPart
   let setPalette
-  mountInstructions(el('panelLayer'), buildingSet, { language, signal,
+  mountInstructions(el('panelLayer'), buildingSet, { language, signal, firstPage,
     change(value) { buildingSet = value; persist() },
     findPart: (partNum, colorId) => findSetPart?.(partNum, colorId),
     describePart: (partNum, colorId) => setPalette?.describe(partNum, colorId),
@@ -336,6 +340,7 @@ export async function mountEditor(root, { document, language, save, download, si
     }
     showSet(true)
   }
+  reportLoad?.('inventory', Boolean(buildingSet))
   const partsPanel = mountScenePartsPanel(el('sceneParts'), t, {
     nameOf: part => parts[part.design][language],
     colorOf: part => part.color ?? parts[part.design].color,
@@ -1848,4 +1853,6 @@ export async function mountEditor(root, { document, language, save, download, si
   scene.belts.set(state.belts)
   setSelection(undefined)
   scene.resetView()
+  reportLoad?.('scene', true)
+  if (instructionReady) await instructionReady
 }
