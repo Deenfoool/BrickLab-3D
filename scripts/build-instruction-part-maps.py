@@ -92,7 +92,10 @@ def artwork_badges(parts, badges):
     return assigned
 
 
-def step_artwork(page, captions, images, corrections=None):
+def step_artwork(page, words, images, corrections=None):
+    captions = text_boxes(words, QUANTITY)
+    if not captions:
+        return
     frames = set()
     drawings = page.get_drawings()
     for path in drawings:
@@ -104,21 +107,21 @@ def step_artwork(page, captions, images, corrections=None):
                 and page.rect.contains(rect) and is_rectangular_path(path["items"], rect)):
             frames.add(tuple(rect))
     frames = sorted((fitz.Rect(frame) for frame in frames), key=lambda rect: (rect.get_area(), tuple(rect)))
-    badges = list(numbered_badges(page.get_text("words"), drawings)) if frames else []
+    badges = list(numbered_badges(words, drawings)) if frames else []
 
     groups = defaultdict(list)
     for caption in captions:
         bounds = fitz.Rect(caption[:4])
         frame = next((rect for rect in frames if rect.contains(bounds)), None)
         groups[tuple(frame) if frame is not None else None].append(caption)
-    for frame, words in groups.items():
+    for frame, group in groups.items():
         if frame is None:
-            for part in artwork(words, images, max_dx=3, min_dy=-2.5, max_dy=2, corrections=corrections):
+            for part in artwork(group, images, max_dx=3, min_dy=-2.5, max_dy=2, corrections=corrections):
                 yield (*part, (), None)
             continue
         bounds = fitz.Rect(frame)
         local = [(xref, box) for xref, box in images if bounds.contains(fitz.Rect(box))]
-        parts = list(artwork(words, local, max_dx=4.5, min_dy=-2.5, max_dy=3.5, corrections=corrections))
+        parts = list(artwork(group, local, max_dx=4.5, min_dy=-2.5, max_dy=3.5, corrections=corrections))
         dimensions = artwork_badges(parts, [badge for badge in badges if bounds.contains(badge[0])])
         for index, part in enumerate(parts):
             _, box, _, _ = part
@@ -339,11 +342,10 @@ def analyze(books, elements, corrections=None, max_difference=.043, min_margin=.
         for page_no, (words, images) in enumerate(pages):
             if (book_id, page_no) in inventory_pages:
                 continue
-            captions = text_boxes(words, QUANTITY)
-            if not captions:
+            if not images:
                 continue
             page = pdf[page_no]
-            parts = list(step_artwork(page, captions, images, book_corrections))
+            parts = list(step_artwork(page, words, images, book_corrections))
             if not parts:
                 continue
             display = page.get_displaylist(annots=False)
