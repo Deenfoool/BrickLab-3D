@@ -229,7 +229,7 @@ async function openSets() {
   const root = byId('sets-panel')
   root.textContent = strings().loadingLibrary
   try {
-    const { mountSetCatalog } = await import('../sets/catalog.js')
+    const { mountSetCatalog } = await import('../sets/catalog.js?v=lazy-sets')
     if (controller.signal.aborted) return
     await mountSetCatalog(root, { language, signal: controller.signal, projects: () => projects,
       resume: openProject,

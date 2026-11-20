@@ -1,9 +1,9 @@
 import {
   connectRebrickable,
   hasRebrickable,
-  searchSets,
+  loadSetPage,
   importSet,
-} from './rebrickable.js'
+} from './rebrickable.js?v=lazy-sets'
 import { safeImage, validateSet } from './data.js'
 const storageKey = 'bricklab.sets.v1'
 export const setStrings = (language) =>
@@ -20,6 +20,10 @@ export const setStrings = (language) =>
         close: 'Закрыть',
         loading: 'Загрузка…',
         empty: 'Наборы не найдены.',
+        more: 'Показать ещё',
+        retry: 'Повторить загрузку',
+        connectHint:
+          'Подключите Rebrickable, чтобы увидеть полный каталог наборов.',
         pieces: 'деталей',
         error:
           'Не удалось загрузить данные. Проверьте ключ и соединение. При ограничении API попробуйте позже.',
@@ -45,6 +49,9 @@ export const setStrings = (language) =>
         close: 'Close',
         loading: 'Loading…',
         empty: 'No sets found.',
+        more: 'Show more',
+        retry: 'Retry loading',
+        connectHint: 'Connect Rebrickable to browse the full set catalog.',
         pieces: 'parts',
         error:
           'Could not load data. Check the key and connection. If rate limited, try again later.',
@@ -115,6 +122,7 @@ export async function mountSetCatalog(
         connectRebrickable(key.value)
         key.value = ''
         authStatus.textContent = hasRebrickable() ? '✓' : ''
+        resetList()
       },
       signal,
     ),
@@ -124,6 +132,7 @@ export async function mountSetCatalog(
         connectRebrickable('')
         key.value = ''
         authStatus.textContent = ''
+        resetList()
       },
       signal,
     ),
@@ -137,12 +146,35 @@ export async function mountSetCatalog(
   credit.href = 'https://rebrickable.com/'
   credit.target = '_blank'
   credit.rel = 'noopener'
-  root.replaceChildren(form, connect, status, grid, credit)
+  const more = control(t.more, () => loadMore(), signal)
+  more.classList.add('set-load-more')
+  root.replaceChildren(form, connect, status, grid, more, credit)
+  const pageSize = 24
+  let localItems = []
+  let localOffset = 0
+  let nextPage
+  let remoteStarted = false
+  let loading = false
+  let listGeneration = 0
+  let listController
+  let searchTimer
+  let activeQuery = ''
+  const displayed = new Set()
+  const pages = new Set()
+  const observer = new IntersectionObserver(
+    ([entry]) => {
+      if (entry.isIntersecting && !more.hidden) loadMore()
+    },
+    { rootMargin: '300px 0px' },
+  )
   let requestId = 0
   const dialogs = new Set()
   signal.addEventListener(
     'abort',
     () => {
+      clearTimeout(searchTimer)
+      listController?.abort()
+      observer.disconnect()
       for (const dialog of dialogs) dialog.remove()
       root.replaceChildren()
     },
@@ -239,11 +271,13 @@ export async function mountSetCatalog(
     document.body.append(dialog)
     dialog.showModal()
   }
-  function render(items) {
-    grid.replaceChildren()
+  function appendItems(items) {
     for (const item of items) {
+      if (displayed.has(item.number)) continue
+      displayed.add(item.number)
       const card = node('button', undefined, 'set-card')
       card.type = 'button'
+      card.dataset.set = item.number
       const image = node('img')
       image.src = safeImage(item.image)
       image.alt = item.name
@@ -253,60 +287,119 @@ export async function mountSetCatalog(
         node('strong', item.name),
         node('span', `${item.number} · ${item.year}`),
       )
-      card.addEventListener(
-        'click',
-        async () => {
-          const id = ++requestId
-          card.disabled = true
-          status.textContent = t.loading
-          try {
-            const set =
-              sets.get(item.number) ?? (await importSet(item.number, signal))
-            if (signal.aborted || id !== requestId) return
-            sets.set(set.number, set)
-            status.textContent = ''
-            saveCache()
-            showDetails(set)
-          } catch (error) {
-            if (!signal.aborted && id === requestId)
-              status.textContent = t.error
-          } finally {
-            card.disabled = false
-          }
-        },
-        { signal },
-      )
+      card.addEventListener('click', async () => {
+        const id = ++requestId
+        card.disabled = true
+        status.textContent = t.loading
+        try {
+          const set =
+            sets.get(item.number) ?? (await importSet(item.number, signal))
+          if (signal.aborted || id !== requestId) return
+          sets.set(set.number, set)
+          status.textContent = ''
+          saveCache()
+          showDetails(set)
+        } catch (error) {
+          if (!signal.aborted && id === requestId) status.textContent = t.error
+        } finally {
+          card.disabled = false
+        }
+      })
       grid.append(card)
     }
-    if (!items.length) status.textContent = t.empty
+  }
+  function updateMore(retry = false) {
+    observer.unobserve(more)
+    more.hidden =
+      localOffset >= localItems.length &&
+      (!hasRebrickable() || (remoteStarted && !nextPage))
+    more.disabled = loading
+    more.textContent = loading ? t.loading : retry ? t.retry : t.more
+    if (!more.hidden && !loading && !retry) observer.observe(more)
+  }
+  async function loadMore() {
+    if (loading || signal.aborted || more.hidden) return
+    const generation = listGeneration
+    loading = true
+    status.textContent = t.loading
+    updateMore()
+    let failed = false
+    try {
+      if (localOffset < localItems.length) {
+        appendItems(localItems.slice(localOffset, localOffset + pageSize))
+        localOffset += pageSize
+      } else if (hasRebrickable() && (!remoteStarted || nextPage)) {
+        const cursor = nextPage
+        const page = await loadSetPage(
+          activeQuery,
+          listController.signal,
+          cursor,
+        )
+        if (signal.aborted || generation !== listGeneration) return
+        appendItems(page.items)
+        if (cursor) pages.add(cursor)
+        nextPage = page.next && !pages.has(page.next) ? page.next : null
+        remoteStarted = true
+      }
+      status.textContent = displayed.size
+        ? !hasRebrickable()
+          ? t.connectHint
+          : ''
+        : t.empty
+    } catch (error) {
+      if (signal.aborted || generation !== listGeneration) return
+      failed = true
+      status.textContent = t.error
+    } finally {
+      if (!signal.aborted && generation === listGeneration) {
+        loading = false
+        updateMore(failed)
+      }
+    }
+  }
+  function resetList() {
+    clearTimeout(searchTimer)
+    listController?.abort()
+    listController = new AbortController()
+    listGeneration++
+    requestId++
+    loading = false
+    activeQuery = query.value.trim()
+    localItems = [...sets.values()].filter((set) =>
+      `${set.number} ${set.name}`
+        .toLowerCase()
+        .includes(activeQuery.toLowerCase()),
+    )
+    localOffset = 0
+    nextPage = undefined
+    remoteStarted = false
+    displayed.clear()
+    pages.clear()
+    grid.replaceChildren()
+    more.hidden = false
+    loadMore()
   }
   form.addEventListener(
     'submit',
-    async (event) => {
+    (event) => {
       event.preventDefault()
-      const id = ++requestId,
-        term = query.value.trim()
-      status.textContent = t.loading
-      try {
-        const local = [...sets.values()].filter((set) =>
-          `${set.number} ${set.name}`
-            .toLowerCase()
-            .includes(term.toLowerCase()),
-        )
-        const found =
-          term && hasRebrickable() ? await searchSets(term, signal) : []
-        if (signal.aborted || id !== requestId) return
-        status.textContent = ''
-        render([
-          ...new Map(
-            [...found, ...local].map((set) => [set.number, set]),
-          ).values(),
-        ])
-      } catch (error) {
-        if (!signal.aborted && id === requestId) status.textContent = t.error
-      }
+      resetList()
     },
     { signal },
   )
-  render([...sets.values()])
+  query.addEventListener(
+    'input',
+    () => {
+      // Invalidate immediately so a prior page cannot append during the debounce.
+      listController?.abort()
+      listGeneration++
+      requestId++
+      observer.unobserve(more)
+      more.disabled = true
+      clearTimeout(searchTimer)
+      searchTimer = setTimeout(resetList, 250)
+    },
+    { signal },
+  )
+  resetList()
 }

@@ -6,7 +6,12 @@ import {
   mapInventory,
   safeBook,
 } from '../src/sets/data.js'
-import { connectRebrickable, importSet } from '../src/sets/rebrickable.js'
+import {
+  connectRebrickable,
+  importSet,
+  loadSetPage,
+  searchSets,
+} from '../src/sets/rebrickable.js'
 import inventory from '../catalog/sets/42215-1.json' with { type: 'json' }
 
 test('42215 inventory retains 2359 regular pieces, spares and the two instruction books', () => {
@@ -100,6 +105,47 @@ test('Rebrickable import follows inventory pagination and sends its key only in 
       ),
     )
     assert.ok(!JSON.stringify(set).includes('test-key'))
+  } finally {
+    globalThis.fetch = original
+    connectRebrickable('')
+  }
+})
+
+test('set catalog loads one page at a time and preserves the API continuation and abort signal', async () => {
+  const original = globalThis.fetch
+  const calls = []
+  const controller = new AbortController()
+  connectRebrickable('pagination-test')
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url: new URL(url), options })
+    return {
+      ok: true,
+      json: async () => ({
+        next:
+          calls.length === 1
+            ? 'https://rebrickable.com/api/v3/lego/sets/?search=technic&page=2'
+            : null,
+        results: [{ set_num: `${calls.length}-1`, name: 'Set', year: 2025 }],
+      }),
+    }
+  }
+  try {
+    const first = await loadSetPage('technic', controller.signal)
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].url.searchParams.get('page_size'), '24')
+    assert.equal(calls[0].url.searchParams.get('search'), 'technic')
+    assert.equal(calls[0].options.signal, controller.signal)
+    const second = await loadSetPage('technic', controller.signal, first.next)
+    assert.equal(calls.length, 2)
+    assert.equal(calls[1].url.searchParams.get('page'), '2')
+    assert.equal(second.next, null)
+    assert.equal(second.items[0].number, '2-1')
+    assert.ok(Array.isArray(await searchSets('technic', controller.signal)))
+    await assert.rejects(
+      loadSetPage('', controller.signal, 'https://example.com/parts/'),
+      /invalid-page/,
+    )
+    assert.equal(calls.length, 3)
   } finally {
     globalThis.fetch = original
     connectRebrickable('')

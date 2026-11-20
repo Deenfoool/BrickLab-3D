@@ -21,16 +21,23 @@ async function request(path, signal) {
   if (!response.ok) throw Error(`api-${response.status}`)
   return response.json()
 }
-export async function searchSets(query, signal) {
+export async function loadSetPage(query, signal, next) {
   const params = new URLSearchParams({ search: query, page_size: '24' })
-  const data = await request(`lego/sets/?${params}`, signal)
-  return data.results.map((set) => ({
-    number: set.set_num,
-    name: set.name,
-    year: set.year,
-    numParts: set.num_parts,
-    image: set.set_img_url,
-  }))
+  const data = await request(next ?? `lego/sets/?${params}`, signal)
+  return {
+    next: data.next ?? null,
+    items: data.results.map((set) => ({
+      number: set.set_num,
+      name: set.name,
+      year: set.year,
+      numParts: set.num_parts,
+      image: set.set_img_url,
+    })),
+  }
+}
+export async function searchSets(query, signal) {
+  const page = await loadSetPage(query, signal)
+  return page.items
 }
 export async function importSet(number, signal) {
   const info = await request(`lego/sets/${encodeURIComponent(number)}/`, signal)
