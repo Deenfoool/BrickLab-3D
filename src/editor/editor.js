@@ -1,5 +1,5 @@
-import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=instruction-artwork-v2'
-import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=instruction-artwork-v2'
+import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=instruction-artwork-v3'
+import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=instruction-artwork-v3'
 import { mountSetPalette } from '../sets/palette.js?v=instruction-parts'
 import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'

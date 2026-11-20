@@ -5,8 +5,8 @@ import {
   instructionPagePreview,
   instructionSources,
 } from './instruction-sources.js?v=browser-recognition'
-import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=browser-recognition'
-import { createInstructionPdfReader } from './instruction-pdf.js?v=instruction-artwork-v2'
+import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=instruction-artwork-v3'
+import { createInstructionPdfReader } from './instruction-pdf.js?v=instruction-artwork-v3'
 
 const maxUnknownPages = 5000
 const pageWait = 6000
@@ -274,11 +274,10 @@ export function mountInstructions(
       const ready = await decoded
       if (signal.aborted) return
       if (ready) {
-        recognitionEngine?.closeBook()
-        pdf.close()
         image.alt = pageLabel(pageNumber)
         preview.append(image)
-        showPage(image.naturalWidth / image.naturalHeight, regions, signal)
+        showPage(image.naturalWidth / image.naturalHeight, findPart &&
+          resolvePdfRegions(display.pdfId, source, pageNumber, entry.pages, null, signal, regions), signal)
         if (entry.pages && pageNumber < entry.pages && !navigator.connection?.saveData) {
           const following = instructionPagePreview(progress.set.number, entry.url, pageNumber + 1)
           if (following?.image) {
@@ -330,20 +329,24 @@ export function mountInstructions(
       recovery.hidden = false
     }
   }
-  async function resolvePdfRegions(pdfId, source, page, pages, canvas, request) {
-    const ready = pdfId
+  async function resolvePdfRegions(pdfId, source, page, pages, canvas, request, preparedRegions) {
+    const ready = preparedRegions ? await preparedRegions : pdfId
       ? await instructionPartRegions(progress.set.number, pdfId, page).catch(() => [])
       : []
-    if (ready.length || request.aborted || !progress.set.inventory.length) return ready
+    if (request.aborted) return []
+    if (ready.length) addInstructionParts(preview, ready, { language, describe: describePart, find: findPart })
     recognitionStatus.textContent = ru ? 'Распознаём детали…' : 'Recognizing parts…'
     recognitionStatus.hidden = false
     try {
-      recognition ??= import('./instruction-recognition.js?v=instruction-artwork-v2').then(module => {
+      recognition ??= import('./instruction-recognition.js?v=instruction-artwork-v3').then(module => {
         recognitionEngine = module.createInstructionRecognition(pdf, progress.set, signal)
         return recognitionEngine
       })
       const engine = await recognition
-      return await engine.pageRegions(source, page, pages, canvas, request)
+      const detected = await engine.pageRegions(source, page, pages, canvas, request)
+      return detected.filter(([x, y, w, h]) => !ready.some(([a, b, aw, ah]) =>
+        Math.min(x + w, a + aw) - Math.max(x, a) > .5 * Math.min(w, aw) &&
+        Math.min(y + h, b + ah) - Math.max(y, b) > .5 * Math.min(h, ah)))
     } catch {
       return []
     } finally {

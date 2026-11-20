@@ -99,7 +99,7 @@ export function createInstructionRecognition(reader, set, signal) {
   function analyze(action, input, transfer = []) {
     signal.throwIfAborted()
     if (!worker) {
-      worker = new Worker(new URL('./instruction-recognition-worker.js?v=instruction-artwork-v2', import.meta.url), { type: 'module' })
+      worker = new Worker(new URL('./instruction-recognition-worker.js?v=instruction-artwork-v3', import.meta.url), { type: 'module' })
       worker.onmessage = ({ data }) => {
         const job = jobs.get(data.id)
         jobs.delete(data.id)
@@ -122,8 +122,7 @@ export function createInstructionRecognition(reader, set, signal) {
     const bookSignal = AbortSignal.any([controller.signal, signal])
     const key = Promise.all([reader.fingerprint(source), version]).then(([fingerprint, hash]) => {
       if (!fingerprint || !hash) return
-      const file = typeof source === 'string' ? source : [source.name, source.size, source.lastModified]
-      return JSON.stringify(['regions-v2', set.number, hash, fingerprint, file])
+      return JSON.stringify(['regions-v3', set.number, hash, fingerprint])
     })
     active = { source, controller, signal: bookSignal, key, pages }
     return active
@@ -167,7 +166,7 @@ export function createInstructionRecognition(reader, set, signal) {
   async function extract(source, page, canvas, mode, request) {
     const geometry = await reader.inspect(source, page, request)
     let surface = canvas
-    const hasWords = () => geometry.words.some(({ text }) => mode ? labels[text] : quantity.test(text))
+    const hasWords = () => geometry.words.some(({ text }) => mode ? element.test(text) : quantity.test(text))
     if (!hasWords() && !geometry.wideScan) return []
     if (!surface) {
       surface = document.createElement('canvas')
@@ -208,7 +207,6 @@ export function createInstructionRecognition(reader, set, signal) {
   }
 
   async function pageRegions(source, page, pages, canvas, request) {
-    if (!Object.keys(labels).length) return []
     request.throwIfAborted()
     const book = currentBook(source, pages)
     const key = await book.key
@@ -230,7 +228,10 @@ export function createInstructionRecognition(reader, set, signal) {
     })
     await book.inventoryPromise
     request.throwIfAborted()
-    const templates = [...books.values()].flat()
+    // A personal PDF can belong to a different edition or set.
+    const templates = typeof source === 'string'
+      ? [...books].filter(([volume]) => typeof volume === 'string').flatMap(([, items]) => items)
+      : books.get(source)
     if (!templates.length) return []
     const regions = await analyze('rank', { samples, templates })
     if (regions.length) void cache(pageKey, regions)

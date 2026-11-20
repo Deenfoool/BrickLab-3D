@@ -24,14 +24,19 @@ export function addInstructionParts(preview, regions, { language, describe, find
   tooltip.setAttribute('aria-hidden', 'true')
   preview.append(tooltip)
   for (const region of regions) {
-    const [x, y, width, height, partNum, colorId] = region
-    const button = document.createElement('button')
-    const name = describe?.(partNum, colorId)
-    const label = name ? `${partNum} · ${name}` : partNum
+    const [x, y, width, height, partNum, colorId, elementId] = region
+    const button = document.createElement(partNum ? 'button' : 'span')
+    const name = partNum && describe?.(partNum, colorId)
+    const label = [partNum, elementId && `LEGO ${elementId}`, name].filter(Boolean).join(' · ')
     button.className = 'instruction-part-region'
-    button.type = 'button'
-    button.setAttribute('aria-label', `${language === 'ru' ? 'Найти деталь' : 'Find part'} ${label}`)
-    button.dataset.partNum = partNum
+    if (partNum) button.type = 'button'
+    else {
+      button.tabIndex = 0
+      button.setAttribute('role', 'img')
+    }
+    button.setAttribute('aria-label', partNum ? `${language === 'ru' ? 'Найти деталь' : 'Find part'} ${label}` : label)
+    if (partNum) button.dataset.partNum = partNum
+    if (elementId) button.dataset.elementId = elementId
     button.style.left = `${x / 100}%`
     button.style.top = `${y / 100}%`
     button.style.width = `${width / 100}%`
@@ -51,7 +56,7 @@ export function addInstructionParts(preview, regions, { language, describe, find
     })
     button.addEventListener('focus', showLabel)
     button.addEventListener('blur', hideLabel)
-    button.addEventListener('click', () => find(partNum, colorId))
+    if (partNum) button.addEventListener('click', () => find(partNum, colorId))
     preview.append(button)
   }
 }

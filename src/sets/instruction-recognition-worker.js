@@ -34,6 +34,8 @@ function anchors(captions, images, inventory) {
     for (const [index, fragment] of images.entries()) {
       if (used.has(index) || !overlaps(anchor, fragment) || fragment[3] > anchor[3] + 1 ||
           widthOf(fragment) * heightOf(fragment) > 2 * widthOf(anchor) * heightOf(anchor)) continue
+      // Consecutive rows sometimes overlap by one raster pixel.
+      if (fragment[1] < anchor[1] && fragment[3] - anchor[1] < .15 * heightOf(fragment)) continue
       if (Math.abs(fragment[0] - anchor[0]) <= 2 ||
           (Math.abs(fragment[3] - anchor[3]) <= 2 && fragment[0] >= anchor[0])) {
         box[0] = Math.min(box[0], fragment[0])
@@ -176,6 +178,32 @@ function scanArt(captions, words, raster, inventory) {
   return [...boxes.values()]
 }
 
+// A bounding rectangle can also contain the previous row's caption or drawing.
+function largestDrawing(pixels, width, height) {
+  const seen = new Uint8Array(width * height)
+  const queue = new Int32Array(seen.length)
+  let largest = []
+  for (let start = 0; start < seen.length; start++) {
+    if (seen[start] || pixels[start * 4 + 3] === 0) continue
+    let tail = 1
+    queue[0] = start
+    seen[start] = 1
+    for (let head = 0; head < tail; head++) {
+      const pos = queue[head], x = pos % width, y = Math.floor(pos / width)
+      for (let row = Math.max(0, y - 1); row <= Math.min(height - 1, y + 1); row++) {
+        for (let col = Math.max(0, x - 1); col <= Math.min(width - 1, x + 1); col++) {
+          const index = row * width + col
+          if (seen[index] || !pixels[index * 4 + 3]) continue
+          seen[index] = 1
+          queue[tail++] = index
+        }
+      }
+    }
+    if (tail > largest.length) largest = queue.slice(0, tail)
+  }
+  return largest
+}
+
 function feature(raster, box, neighbors) {
   const area = pixelBox([box[0] - .75, box[1] - .75, box[2] + .75, box[3] + .2], raster)
   const [left, top, right, bottom] = area
@@ -187,7 +215,7 @@ function feature(raster, box, neighbors) {
   const image = new OffscreenCanvas(width, height)
   const ctx = image.getContext('2d')
   const pixels = ctx.createImageData(width, height)
-  pixels.data.fill(255)
+  pixels.data.fill(0)
   let x0 = width, y0 = height, x1 = -1, y1 = -1, count = 0
   for (let y = top; y < bottom; y++) {
     for (let x = left; x < right; x++) {
@@ -199,16 +227,33 @@ function feature(raster, box, neighbors) {
       y0 = Math.min(y0, row); y1 = Math.max(y1, row)
       count++
       const destination = (row * width + col) * 4
-      pixels.data.set(raster.data.subarray(source, source + 3), destination)
+      pixels.data.set(raster.data.subarray(source, source + 4), destination)
     }
   }
   if (count < 12) return
   ctx.putImageData(pixels, 0, 0)
   const thumb = new OffscreenCanvas(size, size).getContext('2d')
   thumb.imageSmoothingQuality = 'high'
+  thumb.fillStyle = 'white'
+  thumb.fillRect(0, 0, size, size)
   const w = x1 - x0 + 1, h = y1 - y0 + 1
   thumb.drawImage(image, x0, y0, w, h, 0, 0, size, size)
-  return { pixels: thumb.getImageData(0, 0, size, size).data, aspect: Math.log(w / h) }
+  const sample = { pixels: thumb.getImageData(0, 0, size, size).data, aspect: Math.log(w / h) }
+  const component = largestDrawing(pixels.data, width, height)
+  if (component.length < count * .5 || component.length >= count * .995) return sample
+  const isolated = ctx.createImageData(width, height)
+  x0 = width; y0 = height; x1 = -1; y1 = -1
+  for (const pos of component) {
+    const x = pos % width, y = Math.floor(pos / width)
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x)
+    y0 = Math.min(y0, y); y1 = Math.max(y1, y)
+    isolated.data.set(pixels.data.subarray(pos * 4, pos * 4 + 4), pos * 4)
+  }
+  ctx.putImageData(isolated, 0, 0)
+  thumb.fillRect(0, 0, size, size)
+  thumb.drawImage(image, x0, y0, x1 - x0 + 1, y1 - y0 + 1, 0, 0, size, size)
+  sample.drawing = { pixels: thumb.getImageData(0, 0, size, size).data, aspect: Math.log((x1 - x0 + 1) / (y1 - y0 + 1)) }
+  return sample
 }
 
 function extract({ bitmap, geometry, labels, inventory }) {
@@ -220,17 +265,18 @@ function extract({ bitmap, geometry, labels, inventory }) {
   const { width, height, words } = geometry
   const raster = { data: pixels.data, width: surface.width, height: surface.height,
     x: surface.width / width, y: surface.height / height }
-  const elements = words.filter(({ text }) => element.test(text) && labels[text])
+  const elements = words.filter(({ text }) => element.test(text))
   const quantities = words.filter(({ text }) => quantity.test(text))
-  const inventoryPage = elements.length >= 8 && quantities.length >= 8
+  const labeled = inventoryCaptions(elements, quantities)
+  const inventoryPage = labeled.filter((entry, i) => entry !== elements[i]).length >= 2
   const readInventory = inventory || inventoryPage
-  const captions = readInventory ? inventoryCaptions(elements, quantities) : quantities
-  if (readInventory && (elements.length < 2 || quantities.length < 2)) return []
+  const captions = readInventory ? labeled : quantities
+  if (inventory && !inventoryPage) return []
   const images = geometry.images.filter(box => widthOf(box) >= 5 && heightOf(box) >= 3 &&
     widthOf(box) < .45 * width && heightOf(box) < .35 * height)
   const candidates = anchors(captions, images, readInventory)
   const assigned = new Set(candidates.map(candidate => candidate.caption))
-  if (geometry.wideScan || !images.length) {
+  if (assigned.size < captions.length) {
     const missing = captions.filter(caption => !assigned.has(caption))
     const fallback = scanArt(missing, words, raster, readInventory)
     candidates.push(...anchors(missing, fallback, readInventory).map(part => ({ ...part, embedded: false })))
@@ -240,8 +286,8 @@ function extract({ bitmap, geometry, labels, inventory }) {
     const neighbors = candidates.map(part => part.box).filter(other => other !== box &&
       widthOf(other) * heightOf(other) < .65 * widthOf(box) * heightOf(box) && overlaps(other, box))
     const sample = feature(raster, box, neighbors)
-    if (!sample) return []
-    const item = readInventory ? labels[caption.text] : undefined
+    if (!sample && (inventory || !readInventory)) return []
+    const item = readInventory ? [...(labels[caption.text] ?? [null, null]), caption.text] : undefined
     if (inventory) return [{ ...sample, item, embedded, badge }]
     const coordinates = [box[0] - 1.5, box[1] - 1.5, box[2] + 1.5, box[3] + 1.5]
     const [x, y, right, bottom] = coordinates.map((value, index) =>
@@ -321,6 +367,16 @@ function rank({ samples, templates }) {
           entry.aspect + view.penalty + pixelDistance(view.pixels, entry.reference.pixels))
       }
       item = badgeMatch(scores, sample) ?? confident(scores, sample)
+    }
+    if (!item && sample.embedded) {
+      const drawing = sample.drawing ?? sample
+      const scores = templates.map(reference => {
+        const other = reference.drawing ?? reference
+        return { reference, score: .18 * Math.abs(drawing.aspect - other.aspect) +
+          pixelDistance(drawing.pixels, other.pixels) }
+      })
+      const [first, second] = bestByItem(scores)
+      if (first?.score <= .065 && (second?.score ?? Infinity) - first.score >= .035) item = first.reference.item
     }
     return item ? [[...sample.region, ...item]] : []
   })
