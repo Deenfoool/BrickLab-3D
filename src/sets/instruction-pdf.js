@@ -28,6 +28,7 @@ export function createInstructionPdfReader(load = loadPdfJs) {
     active = session
     session.promise = (async () => {
       const pdf = await load()
+      session.ops = pdf.OPS
       const input = typeof source === 'string'
         ? { url: source, withCredentials: false }
         : { data: new Uint8Array(await source.arrayBuffer()) }
@@ -72,5 +73,91 @@ export function createInstructionPdfReader(load = loadPdfJs) {
     }
   }
 
-  return { render, close }
+  async function fingerprint(source) {
+    const ids = (await documentFor(source)).fingerprints
+    return ids?.[0] && ids.filter(Boolean).join('/')
+  }
+
+  async function inspect(source, number, signal) {
+    signal.throwIfAborted()
+    const pending = documentFor(source)
+    const session = active
+    const pdf = await pending
+    signal.throwIfAborted()
+    const page = await pdf.getPage(number)
+    const viewport = page.getViewport({ scale: 1 })
+    const { items, styles } = await page.getTextContent()
+    signal.throwIfAborted()
+    const words = pdfWords(items, styles, viewport)
+    const list = await page.getOperatorList()
+    signal.throwIfAborted()
+    const images = pdfImages(list, session.ops, viewport)
+    const wideScan = images.some(([x, y, right, bottom]) =>
+      right - x >= viewport.width * .7 && bottom - y >= viewport.height * .7)
+    return { words, images, wideScan, width: viewport.width, height: viewport.height }
+  }
+
+  return { render, fingerprint, inspect, close }
+}
+
+const quantity = /^[1-9]\d{0,2}[x×]$/i
+const element = /^\d{6,8}$/
+
+function pdfWords(items, styles, viewport) {
+  const words = new Map()
+  for (const item of items) {
+    const text = item.str?.trim()
+    if (!text || !(quantity.test(text) || element.test(text))) continue
+    const [a, b, c, d, x, y] = item.transform
+    const length = Math.hypot(a, b)
+    if (!length || item.width <= 0) continue
+    const ascent = styles[item.fontName]?.ascent ?? .8
+    const top = viewport.convertToViewportPoint(x + c * ascent, y + d * ascent)
+    const bottom = viewport.convertToViewportPoint(
+      x + a / length * item.width, y + b / length * item.width,
+    )
+    const box = [
+      Math.min(top[0], bottom[0]), Math.min(top[1], bottom[1]),
+      Math.max(top[0], bottom[0]), Math.max(top[1], bottom[1]),
+    ]
+    words.set(JSON.stringify([text, ...box.map(Math.round)]), { text, box })
+  }
+  return [...words.values()]
+}
+
+function multiply([a, b, c, d, x, y], [e, f, g, h, u, v]) {
+  return [a * e + c * f, b * e + d * f, a * g + c * h, b * g + d * h,
+    a * u + c * v + x, b * u + d * v + y]
+}
+
+function pdfImages({ fnArray, argsArray }, ops, viewport) {
+  const images = new Map(), stack = []
+  let matrix = viewport.transform
+  function place([a, b, c, d, x, y]) {
+    const xs = [x, x + a, x + c, x + a + c]
+    const ys = [y, y + b, y + d, y + b + d]
+    const box = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
+    images.set(box.map(value => value.toFixed(1)).join('/'), box)
+  }
+  for (const [index, op] of fnArray.entries()) {
+    const args = argsArray[index]
+    if (op === ops.save || op === ops.paintFormXObjectBegin) {
+      stack.push(matrix)
+      if (op === ops.paintFormXObjectBegin && args[0]) matrix = multiply(matrix, args[0])
+    } else if (op === ops.restore || op === ops.paintFormXObjectEnd) {
+      matrix = stack.pop() ?? viewport.transform
+    } else if (op === ops.transform) {
+      matrix = multiply(matrix, args)
+    } else if (op === ops.paintImageXObject || op === ops.paintInlineImageXObject || op === ops.paintImageMaskXObject) {
+      place(matrix)
+    } else if (op === ops.paintImageXObjectRepeat) {
+      const [, xScale, yScale, positions] = args
+      for (let i = 0; positions && i + 1 < positions.length; i += 2) {
+        place(multiply(matrix, [xScale, 0, 0, yScale, positions[i], positions[i + 1]]))
+      }
+    } else if (op === ops.paintInlineImageXObjectGroup) {
+      for (const image of args[1]) place(multiply(matrix, image.transform))
+    }
+  }
+  return [...images.values()]
 }

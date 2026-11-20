@@ -229,7 +229,7 @@ async function openSets() {
   const root = byId('sets-panel')
   root.textContent = strings().loadingLibrary
   try {
-    const { mountSetCatalog } = await import('../sets/catalog.js?v=inline-pdf-instructions')
+    const { mountSetCatalog } = await import('../sets/catalog.js?v=browser-recognition')
     if (controller.signal.aborted) return
     await mountSetCatalog(root, { language, signal: controller.signal, projects: () => projects,
       resume: openProject,
@@ -356,7 +356,7 @@ async function openEditor(project) {
   if (!transition) editorRoot.append(element('div', 'editor-loading', t.loading))
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=inline-pdf-instructions')
+    const { mountEditor } = await import('../editor/editor.js?v=browser-recognition')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

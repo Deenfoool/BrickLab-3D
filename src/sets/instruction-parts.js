@@ -1,6 +1,6 @@
 export async function instructionPartRegions(set, pdfId, page) {
   const { default: sources } = await import(
-    '../../catalog/sets/instruction-part-index.json?v=guided-transition',
+    '../../catalog/sets/instruction-part-index.json?v=browser-recognition',
     { with: { type: 'json' } }
   )
   if (!Object.hasOwn(sources, `${set}/${pdfId}`)) return []

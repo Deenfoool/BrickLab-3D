@@ -1,4 +1,5 @@
-import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=inline-pdf-instructions'
+import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=browser-recognition'
+import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=browser-recognition'
 import { mountSetPalette } from '../sets/palette.js?v=instruction-parts'
 import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'
@@ -49,7 +50,9 @@ let clipboard
 export async function mountEditor(root, { document, language, save, download, signal, reportLoad }) {
   const source = upgradeInlineEngineFan(promoteLegacyBelts(expandComponents(document, parts)))
   let buildingSet = instructionState(source.buildingSet)
-  const firstPage = prepareInstructionPage(buildingSet)
+  const pdf = buildingSet ? createInstructionPdfReader() : undefined
+  if (pdf) signal.addEventListener('abort', pdf.close, { once: true })
+  const firstPage = prepareInstructionPage(buildingSet, signal, pdf)
   const instructionReady = reportLoad && waitForInstruction(firstPage, signal).then(ready => {
     if (!signal.aborted) reportLoad('instruction', ready)
   })
@@ -233,7 +236,7 @@ export async function mountEditor(root, { document, language, save, download, si
   }
   let findSetPart
   let setPalette
-  mountInstructions(el('panelLayer'), buildingSet, { language, signal, firstPage,
+  mountInstructions(el('panelLayer'), buildingSet, { language, signal, firstPage, pdf,
     change(value) { buildingSet = value; persist() },
     findPart: (partNum, colorId) => findSetPart?.(partNum, colorId),
     describePart: (partNum, colorId) => setPalette?.describe(partNum, colorId),

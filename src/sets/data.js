@@ -127,6 +127,7 @@ export function validateSet(value) {
         quantity: item.quantity,
         spare: Boolean(item.spare),
         image: safeImage(item.image),
+        ...(/^\d{6,8}$/.test(String(item.elementId ?? '')) && { elementId: String(item.elementId) }),
         ldraw: Array.isArray(item.ldraw)
           ? item.ldraw.filter((id) => typeof id === 'string')
           : [],

@@ -1,22 +1,32 @@
-import { node, control, setStrings } from './catalog.js?v=inline-pdf-instructions'
-import { safeBook, validateSet } from './data.js?v=auto-pdf'
+import { node, control, setStrings } from './catalog.js?v=browser-recognition'
+import { safeBook, validateSet } from './data.js?v=browser-recognition'
 import {
   discoverBooks,
   instructionPagePreview,
   instructionSources,
-} from './instruction-sources.js?v=inline-pdf-instructions'
-import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=guided-transition'
-import { createInstructionPdfReader } from './instruction-pdf.js'
+} from './instruction-sources.js?v=browser-recognition'
+import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=browser-recognition'
+import { createInstructionPdfReader } from './instruction-pdf.js?v=browser-recognition'
 
 const maxUnknownPages = 5000
 const pageWait = 6000
 const personalPdfs = new Map()
+const localBookKey = set => `local:${set.number}`
 
-export function prepareInstructionPage(progress) {
+export function prepareInstructionPage(progress, signal, reader) {
   const entry = progress?.set.books[progress.book]
-  if (!entry) return null
-  const display = instructionPagePreview(progress.set.number, entry.url, progress.page)
-  if (!display?.image) return null
+  if (!progress) return null
+  const local = personalPdfs.get(entry?.url ?? localBookKey(progress.set))
+  const display = entry && instructionPagePreview(progress.set.number, entry.url, progress.page)
+  if (local || !display?.image) {
+    const source = local ?? entry?.url
+    if (!reader || !signal || !source) return null
+    const canvas = node('canvas')
+    const result = reader.render(source, progress.page, canvas, signal).then(
+      value => ({ value }), error => ({ error }),
+    )
+    return { canvas, result, source, page: progress.page, decoded: result.then(({ value }) => Boolean(value)) }
+  }
   const image = new Image()
   image.src = display.image
   const decoded = image.decode().then(() => true, () => false)
@@ -51,7 +61,8 @@ export function instructionState(value) {
     const page = Math.max(
       1,
       Math.min(
-        set.books[book] ? (set.books[book].pages ?? maxUnknownPages) : 1,
+        personalPdfs.has(set.books[book]?.url ?? localBookKey(set))
+          ? maxUnknownPages : set.books[book]?.pages ?? (set.books.length ? maxUnknownPages : 1),
         Math.trunc(Number(value.page)) || 1,
       ),
     )
@@ -63,14 +74,18 @@ export function instructionState(value) {
 export function mountInstructions(
   layer,
   initial,
-  { language, signal, change, findPart, describePart, firstPage },
+  { language, signal, change, findPart, describePart, firstPage, pdf = createInstructionPdfReader() },
 ) {
   let progress = instructionState(initial)
   if (!progress) return null
   const t = setStrings(language),
     ru = language === 'ru'
-  const pdf = createInstructionPdfReader()
   const localPageCounts = new Map()
+  const localOnly = { url: localBookKey(progress.set), pages: null }
+  const currentEntry = () => progress.set.books[progress.book] ?? (personalPdfs.has(localOnly.url) ? localOnly : null)
+  let recognition
+  let recognitionEngine
+  let recognitionSource
   let previewRequest
   const panel = node('aside', undefined, 'editor-panel instruction-panel')
   panel.dataset.panel = 'instruction'
@@ -115,6 +130,9 @@ export function mountInstructions(
   const preview = node('div', undefined, 'instruction-preview')
   const previewStatus = node('p')
   previewStatus.setAttribute('role', 'status')
+  const recognitionStatus = node('p', undefined, 'instruction-recognition-status')
+  recognitionStatus.setAttribute('role', 'status')
+  recognitionStatus.hidden = true
   const file = node('input')
   file.type = 'file'
   file.accept = '.pdf,application/pdf'
@@ -122,7 +140,7 @@ export function mountInstructions(
   const pdfLabel = ru ? 'Выбрать PDF' : 'Choose PDF'
   const choosePdf = control(pdfLabel, () => file.click(), signal)
   const fallback = control(pdfLabel, () => file.click(), signal)
-  const retryPage = control(ru ? 'Повторить' : 'Retry', () => renderPreview(progress.set.books[progress.book]), signal)
+  const retryPage = control(ru ? 'Повторить' : 'Retry', () => renderPreview(currentEntry()), signal)
   const recovery = node('div', undefined, 'instruction-actions')
   recovery.append(retryPage, fallback)
   const status = node('p')
@@ -188,7 +206,7 @@ export function mountInstructions(
     { signal },
   )
   actions.append(choosePdf, credit, add)
-  body.append(actions, status, retry, previewStatus, recovery, file, preview, frame)
+  body.append(actions, status, retry, previewStatus, recovery, file, preview, frame, recognitionStatus)
   panel.append(header, body)
   layer.append(panel)
   function setMoreOpen(open) {
@@ -197,15 +215,14 @@ export function mountInstructions(
   }
   function render() {
     setMoreOpen(false)
-    const entry = progress.set.books[progress.book]
+    const entry = currentEntry()
     tools.hidden = !entry
     book.hidden = progress.set.books.length < 2
-    choosePdf.hidden = !entry
     credit.hidden = true
     status.hidden = Boolean(entry)
     retry.hidden = true
     if (entry) {
-      book.replaceChildren(...progress.set.books.map((volume, i) => new Option(volume.title, String(i))))
+      if (progress.set.books.length) book.replaceChildren(...progress.set.books.map((volume, i) => new Option(volume.title, String(i))))
       book.value = String(progress.book)
       renderNavigation(entry)
     }
@@ -226,12 +243,22 @@ export function mountInstructions(
     preview.replaceChildren()
     preview.hidden = true
     previewStatus.hidden = true
+    recognitionStatus.hidden = true
     recovery.hidden = true
     frame.hidden = true
     frame.removeAttribute('src')
     const prepared = firstPage
     firstPage = null
-    if (!entry) return
+    const local = personalPdfs.get(entry?.url)
+    const source = local ?? entry?.url
+    if (source !== recognitionSource) {
+      recognitionSource = source
+      recognitionEngine?.closeBook(source)
+    }
+    if (!entry) {
+      pdf.close()
+      return
+    }
     const display = instructionPagePreview(progress.set.number, entry.url, progress.page)
     const creditUrl = display?.source ?? instructionSources[entry?.source]
     if (creditUrl) {
@@ -242,13 +269,13 @@ export function mountInstructions(
     previewStatus.textContent = ru ? 'Загружаем страницу…' : 'Loading page…'
     const pageNumber = progress.page
     const pageLabel = number => ru ? `Страница ${number} инструкции` : `Instruction page ${number}`
-    const local = personalPdfs.get(entry.url)
     if (!local && display?.image) {
-      pdf.close()
-      const { image, decoded, regions } = prepared ?? prepareInstructionPage(progress)
+      const { image, decoded, regions } = prepared?.image ? prepared : prepareInstructionPage(progress)
       const ready = await decoded
       if (signal.aborted) return
       if (ready) {
+        recognitionEngine?.closeBook()
+        pdf.close()
         image.alt = pageLabel(pageNumber)
         preview.append(image)
         showPage(image.naturalWidth / image.naturalHeight, regions, signal)
@@ -263,10 +290,13 @@ export function mountInstructions(
         return
       }
     }
-    const canvas = node('canvas')
+    const warm = prepared?.result && prepared.source === source && prepared.page === pageNumber
+    const canvas = warm ? prepared.canvas : node('canvas')
     canvas.setAttribute('role', 'img')
     try {
-      const { pages, pageNumber: shown } = await pdf.render(local ?? entry.url, pageNumber, canvas, signal)
+      const { value, error } = warm ? await prepared.result : { value: await pdf.render(source, pageNumber, canvas, signal) }
+      if (error) throw error
+      const { pages, pageNumber: shown } = value
       if (signal.aborted) return
       const books = local || pages === entry.pages ? progress.set.books
         : progress.set.books.map((volume, index) => index === progress.book ? { ...volume, pages } : volume)
@@ -275,19 +305,18 @@ export function mountInstructions(
         progress = { ...progress, page: shown, set: { ...progress.set, books } }
         change(progress)
       }
-      renderNavigation(books[progress.book])
+      renderNavigation(books[progress.book] ?? entry)
       canvas.setAttribute('aria-label', pageLabel(shown))
       preview.append(canvas)
-      const regions = !local && display?.pdfId
-        ? instructionPartRegions(progress.set.number, display.pdfId, shown).catch(() => [])
-        : null
+      const regions = findPart && resolvePdfRegions(local ? null : display?.pdfId, source, shown, pages, canvas, signal)
       showPage(canvas.width / canvas.height, regions, signal)
     } catch {
       if (signal.aborted) return
       if (local) {
         personalPdfs.delete(entry.url)
         localPageCounts.delete(entry.url)
-        renderNavigation(entry)
+        if (entry === localOnly) tools.hidden = true
+        else renderNavigation(entry)
       }
       if (!local && display?.frame) {
         frame.src = display.frame
@@ -299,6 +328,26 @@ export function mountInstructions(
         ? 'Страница недоступна. Можно выбрать PDF с устройства и открыть его здесь.'
         : 'Page unavailable. Choose a PDF from your device to open it here.'
       recovery.hidden = false
+    }
+  }
+  async function resolvePdfRegions(pdfId, source, page, pages, canvas, request) {
+    const ready = pdfId
+      ? await instructionPartRegions(progress.set.number, pdfId, page).catch(() => [])
+      : []
+    if (ready.length || request.aborted || !progress.set.inventory.length) return ready
+    recognitionStatus.textContent = ru ? 'Распознаём детали…' : 'Recognizing parts…'
+    recognitionStatus.hidden = false
+    try {
+      recognition ??= import('./instruction-recognition.js?v=browser-recognition').then(module => {
+        recognitionEngine = module.createInstructionRecognition(pdf, progress.set, signal)
+        return recognitionEngine
+      })
+      const engine = await recognition
+      return await engine.pageRegions(source, page, pages, canvas, request)
+    } catch {
+      return []
+    } finally {
+      if (!request.aborted) recognitionStatus.hidden = true
     }
   }
   function showPage(ratio, regions, signal) {
@@ -315,7 +364,7 @@ export function mountInstructions(
     retry.hidden = true
     try {
       const books = await discoverBooks(progress.set.number, signal)
-      if (signal.aborted || progress.set.books.length) return
+      if (signal.aborted || currentEntry()) return
       if (!books.length) {
         status.textContent = t.noBooks
         return
@@ -327,13 +376,13 @@ export function mountInstructions(
       render()
       change(progress)
     } catch {
-      if (signal.aborted || progress.set.books.length) return
+      if (signal.aborted || currentEntry()) return
       status.textContent = t.booksUnavailable
       retry.hidden = false
     }
   }
   function turn(value) {
-    const entry = progress.set.books[progress.book]
+    const entry = currentEntry()
     const limit = localPageCounts.get(entry?.url) ?? entry?.pages ?? maxUnknownPages
     progress = {
       ...progress,
@@ -353,14 +402,13 @@ export function mountInstructions(
   )
   page.addEventListener('change', () => turn(page.value), { signal })
   file.addEventListener('change', () => {
-    const entry = progress.set.books[progress.book]
+    const entry = currentEntry() ?? localOnly
     const selected = file.files[0]
     file.value = ''
-    if (!entry || !selected) return
+    if (!selected) return
     personalPdfs.set(entry.url, selected)
     localPageCounts.delete(entry.url)
-    setMoreOpen(false)
-    renderPreview(entry)
+    render()
   }, { signal })
   panel.addEventListener('keydown', event => {
     if (event.key !== 'Escape' || actions.hidden) return

@@ -1,5 +1,5 @@
 import { setSearchParams } from './filters.js'
-import { knownBooks, validateSet } from './data.js?v=set-filters'
+import { knownBooks, validateSet } from './data.js?v=browser-recognition'
 const endpoint = 'https://rebrickable.com/api/v3/'
 let apiKey = ''
 export function connectRebrickable(key) {
@@ -57,6 +57,7 @@ export async function importSet(number, signal) {
         quantity: row.quantity,
         spare: row.is_spare,
         image: row.part.part_img_url,
+        elementId: row.element_id,
         ldraw: row.part.external_ids?.LDraw ?? [],
       })
     next = page.next

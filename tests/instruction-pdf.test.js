@@ -74,3 +74,45 @@ test('leaving a page cancels the active PDF render', async () => {
   assert.equal(cleaned, true)
   reader.close()
 })
+
+test('PDF inspection projects captions and layered image placements to page coordinates', async () => {
+  const ops = { save: 1, restore: 2, transform: 3, paintImageXObject: 4, paintImageXObjectRepeat: 5 }
+  const caption = { str: '2x', width: 8, transform: [8, 0, 0, 8, 20, 30], fontName: 'font' }
+  const reader = createInstructionPdfReader(async () => ({
+    OPS: ops,
+    getDocument: () => ({
+      promise: Promise.resolve({
+        fingerprints: ['original', 'revision'],
+        async getPage() {
+          return {
+            getViewport: () => ({
+              width: 100, height: 120, transform: [1, 0, 0, -1, 0, 120],
+              convertToViewportPoint: (x, y) => [x, 120 - y],
+            }),
+            async getTextContent() {
+              return { items: [caption, caption, { str: 'Step 16' }], styles: { font: { ascent: .75 } } }
+            },
+            async getOperatorList() {
+              return {
+                fnArray: [ops.save, ops.transform, ops.paintImageXObject, ops.restore, ops.paintImageXObjectRepeat],
+                argsArray: [null, [20, 0, 0, 15, 20, 37], ['image'], null, ['tile', 3, 4, [7, 8, 9, 10]]],
+              }
+            },
+          }
+        },
+      }),
+      async destroy() {},
+    }),
+  }))
+  const source = new Blob(['local PDF'])
+  const { signal } = new AbortController()
+  assert.equal(await reader.fingerprint(source), 'original/revision')
+  assert.deepEqual(await reader.inspect(source, 1, signal), {
+    words: [{ text: '2x', box: [20, 84, 28, 90] }],
+    images: [[20, 68, 40, 83], [7, 108, 10, 112], [9, 106, 12, 110]],
+    wideScan: false,
+    width: 100,
+    height: 120,
+  })
+  reader.close()
+})

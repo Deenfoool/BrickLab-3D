@@ -6,12 +6,12 @@ import {
   hasRebrickable,
   loadSetPage,
   importSet,
-} from './rebrickable.js?v=set-filters'
-import { safeImage, validateSet } from './data.js?v=auto-pdf'
+} from './rebrickable.js?v=browser-recognition'
+import { safeImage, validateSet } from './data.js?v=browser-recognition'
 import {
   discoverBooks,
   instructionSources,
-} from './instruction-sources.js?v=inline-pdf-instructions'
+} from './instruction-sources.js?v=browser-recognition'
 const storageKey = 'bricklab.sets.v1'
 export const setStrings = (language) =>
   language === 'ru'

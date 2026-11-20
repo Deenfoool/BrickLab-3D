@@ -1,5 +1,5 @@
-import sequences from '../../catalog/sets/instruction-sequences.json?v=inline-pdf-instructions' with { type: 'json' }
-import { knownBooks, normalizeBooks, safeBook } from './data.js?v=auto-pdf'
+import sequences from '../../catalog/sets/instruction-sequences.json?v=browser-recognition' with { type: 'json' }
+import { knownBooks, normalizeBooks, safeBook } from './data.js?v=browser-recognition'
 
 const brickDbUrl = 'https://bricks.party/brickdb.json'
 const brickInstructions = 'https://lego.brickinstructions.com'
