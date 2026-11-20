@@ -323,3 +323,22 @@ test('instruction discovery shares the archive, retries failed downloads and sup
     globalThis.fetch = original
   }
 })
+
+test('instruction previews map verified book pages and never frame official LEGO PDFs', async () => {
+  const { discoverBooks, instructionPagePreview } = await import('../src/sets/instruction-sources.js')
+  const signal = new AbortController().signal
+  const [ford] = await discoverBooks('42223-1', signal)
+  for (const [page, file] of [[1, '001.jpg'], [34, '034.jpg'], [184, '184.jpg']]) {
+    const preview = instructionPagePreview('42223-1', ford.url, page)
+    assert.equal(preview.image, `https://lego.brickinstructions.com/instructions/42000/42223/${file}`)
+    assert.equal(preview.source, 'https://lego.brickinstructions.com/lego_instructions/set/42223')
+  }
+  const [first, second] = await discoverBooks('42215-1', signal)
+  assert.match(instructionPagePreview('42215-1', first.url, 292).image, /\/292\.jpg$/)
+  assert.match(instructionPagePreview('42215-1', second.url, 1).image, /\/293\.jpg$/)
+  assert.equal(instructionPagePreview('42223-1', ford.url, 185), null)
+  assert.equal(instructionPagePreview('42223-1', first.url, 1), null)
+  assert.equal(instructionPagePreview('100-1', ford.url, 1), null)
+  const designer = 'https://bdpinstructions.download.bricklink.info/910037.pdf'
+  assert.equal(instructionPagePreview('910037-1', designer, 3).frame, `${designer}#page=3&view=FitH`)
+})

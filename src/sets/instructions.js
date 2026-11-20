@@ -1,9 +1,10 @@
-import { node, control, setStrings } from './catalog.js?v=auto-pdf'
+import { node, control, setStrings } from './catalog.js?v=instruction-preview'
 import { safeBook, validateSet } from './data.js?v=auto-pdf'
 import {
   discoverBooks,
+  instructionPagePreview,
   instructionSources,
-} from './instruction-sources.js?v=auto-pdf'
+} from './instruction-sources.js?v=instruction-preview'
 
 const maxUnknownPages = 5000
 
@@ -67,6 +68,11 @@ export function mountInstructions(
   const frame = node('iframe')
   frame.title = ru ? 'Страница инструкции LEGO' : 'LEGO instructions page'
   frame.referrerPolicy = 'no-referrer'
+  const preview = node('a', undefined, 'instruction-preview')
+  preview.target = '_blank'
+  preview.rel = 'noopener'
+  const previewStatus = node('p')
+  previewStatus.setAttribute('role', 'status')
   const external = node(
     'a',
     ru ? 'Открыть PDF отдельно' : 'Open PDF in a new tab',
@@ -76,8 +82,8 @@ export function mountInstructions(
   const hint = node(
     'small',
     ru
-      ? 'Листайте кнопками панели, чтобы сохранить страницу. Масштаб — в просмотрщике PDF.'
-      : 'Use panel buttons to save the page. Zoom inside the PDF viewer.',
+      ? 'Листайте кнопками панели, чтобы сохранить страницу.'
+      : 'Use panel buttons to save the current page.',
   )
   const status = node('p')
   status.setAttribute('role', 'status')
@@ -143,7 +149,7 @@ export function mountInstructions(
     },
     { signal },
   )
-  body.append(name, status, retry, tools, frame, external, credit, hint, add)
+  body.append(name, status, retry, tools, previewStatus, preview, frame, external, credit, hint, add)
   panel.append(header, body)
   layer.append(panel)
   function render() {
@@ -156,25 +162,62 @@ export function mountInstructions(
     page.value = String(progress.page)
     const entry = progress.set.books[progress.book]
     tools.hidden = !entry
-    frame.hidden = !entry
     external.hidden = !entry
     hint.hidden = !entry
-    credit.hidden = !instructionSources[entry?.source]
+    credit.hidden = true
     status.hidden = Boolean(entry)
     retry.hidden = true
     if (entry) {
       page.max = String(entry.pages ?? maxUnknownPages)
       total.textContent = entry.pages ? `/ ${entry.pages}` : ''
-      if (!credit.hidden) {
-        credit.href = instructionSources[entry.source]
-        credit.textContent = entry.source
-      }
       previous.disabled = progress.page <= 1
       next.disabled = progress.page >= (entry.pages ?? maxUnknownPages)
-      const url = `${entry.url}#page=${progress.page}&view=FitH`
-      if (frame.src !== url) frame.src = url
-      external.href = url
+      external.href = `${entry.url}#page=${progress.page}&view=FitH`
     }
+    renderPreview(entry)
+  }
+  function renderPreview(entry) {
+    preview.replaceChildren()
+    preview.hidden = true
+    previewStatus.hidden = true
+    frame.hidden = true
+    const display = entry && instructionPagePreview(progress.set.number, entry.url, progress.page)
+    if (display?.frame) {
+      frame.hidden = false
+      if (frame.src !== display.frame) frame.src = display.frame
+    } else if (frame.hasAttribute('src')) frame.removeAttribute('src')
+    const creditUrl = display?.source ?? instructionSources[entry?.source]
+    if (creditUrl) {
+      credit.hidden = false
+      credit.href = creditUrl
+      credit.textContent = display?.source ? 'BrickInstructions' : entry.source
+    }
+    if (!entry || display?.frame) return
+    previewStatus.hidden = false
+    if (!display?.image) {
+      previewStatus.textContent = ru
+        ? 'Для этой книги доступен просмотр PDF в отдельной вкладке.'
+        : 'This book is available as a PDF in a new tab.'
+      return
+    }
+    previewStatus.textContent = ru ? 'Загружаем страницу…' : 'Loading page…'
+    const image = node('img')
+    image.alt = ru ? `Страница ${progress.page} инструкции` : `Instruction page ${progress.page}`
+    preview.title = ru ? 'Открыть страницу крупнее' : 'Open full-size page'
+    preview.href = display.image
+    preview.append(image)
+    image.addEventListener('load', () => {
+      if (!image.isConnected) return
+      preview.hidden = false
+      previewStatus.hidden = true
+    }, { once: true })
+    image.addEventListener('error', () => {
+      if (!image.isConnected) return
+      previewStatus.textContent = ru
+        ? 'Страница не загрузилась. Откройте её в оригинальном PDF.'
+        : 'The page could not be loaded. Open it in the original PDF.'
+    }, { once: true })
+    image.src = display.image
   }
   async function lookupBooks() {
     if (progress.set.books.length) return

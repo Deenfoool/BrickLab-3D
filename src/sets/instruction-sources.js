@@ -1,12 +1,50 @@
-import sequences from '../../catalog/sets/instruction-sequences.json' with { type: 'json' }
+import sequences from '../../catalog/sets/instruction-sequences.json?v=instruction-preview' with { type: 'json' }
 import { knownBooks, normalizeBooks, safeBook } from './data.js?v=auto-pdf'
 
 const brickDbUrl = 'https://bricks.party/brickdb.json'
+const brickInstructions = 'https://lego.brickinstructions.com'
+// BrickInstructions joins volumes into one image sequence. Use it only where
+// the sequence matches the official PDFs and their page counts.
+const previewSets = new Set([
+  '42143-1', '42154-1', '42159-1', '42171-1', '42172-1', '42206-1',
+  '42210-1', '42212-1', '42213-1', '42215-1', '42223-1', '76419-1',
+])
 export const instructionSources = {
   BrickDB: 'https://bricks.party/',
   BrickLink: 'https://www.bricklink.com/v3/designer-program/instructions.page',
 }
 let archiveRequest
+
+export function instructionPagePreview(setNumber, bookUrl, page) {
+  const url = safeBook(bookUrl)
+  if (!url || !Number.isInteger(page) || page < 1) return null
+  const { hostname, pathname } = new URL(url)
+  if (hostname === 'bdpinstructions.download.bricklink.info')
+    return { frame: `${url}#page=${page}&view=FitH` }
+  if (!previewSets.has(setNumber)) return null
+  const pdfId = pathPdfId(pathname)
+  const books = sequences[setNumber] ?? (knownBooks[setNumber] ?? []).map(
+    ({ title, url, pages }) => [title, pathPdfId(new URL(url).pathname), pages],
+  )
+  let offset = 0
+  for (const [, id, pages] of books) {
+    if (id === pdfId && page <= pages) {
+      const number = setNumber.split('-')[0]
+      const folder = String(Math.floor(Number(number) / 1000) * 1000).padStart(5, '0')
+      const imagePage = String(offset + page).padStart(3, '0')
+      return {
+        image: `${brickInstructions}/instructions/${folder}/${number}/${imagePage}.jpg`,
+        source: `${brickInstructions}/lego_instructions/set/${number}`,
+      }
+    }
+    offset += pages
+  }
+  return null
+}
+
+function pathPdfId(pathname) {
+  return /^\/(?:biassets\/bi|cdn\/product-assets\/product\.bi\.core\.pdf)\/(\d+)\.pdf$/.exec(pathname)?.[1]
+}
 
 export function archiveBooks(instructions) {
   const books = (Array.isArray(instructions) ? instructions : [])

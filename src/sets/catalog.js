@@ -11,7 +11,7 @@ import { safeImage, validateSet } from './data.js?v=auto-pdf'
 import {
   discoverBooks,
   instructionSources,
-} from './instruction-sources.js?v=auto-pdf'
+} from './instruction-sources.js?v=instruction-preview'
 const storageKey = 'bricklab.sets.v1'
 export const setStrings = (language) =>
   language === 'ru'
