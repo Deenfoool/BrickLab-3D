@@ -92,6 +92,11 @@ export function portsFor(design) {
       const gear = supported.find(port => port.role === 'gear')
       gear.sections = gear.sections.map(section => ({ ...section, length: 15 }))
     }
+    if (design === '69779') {
+      // LDraw 69779s01.dat places the teeth at Z = -4.75…4.75, around the existing axle bore.
+      supported.push({ id: 'spur-teeth', role: 'gear', gender: 'M', openings: [],
+        start: [0, 0, -4.75], axis: [0, 0, 1], sections: [{ shape: 'G', radius: 25, length: 9.5, teeth: 20 }] })
+    }
     if (Object.hasOwn(turntables, design)) {
       const [teeth, gender] = turntables[design]
       supported.push({

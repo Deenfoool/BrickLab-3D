@@ -8,18 +8,18 @@ import { mountFloatingPanels } from './floating-panels.js?v=cad-dock'
 import { createEditorAudio } from './audio.js?v=editor-sound'
 import { mountMotorPanel } from './motor-panel.js'
 import { Plane, Quaternion, Vector3 } from 'three'
-import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=tread-pivot'
+import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=gear-69779'
 import { baseRotation, mirrorPose, samePose, worldPort } from './placement.js?v=turntable-parts'
-import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=track-builder'
+import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=gear-69779'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
 import { nearestDetent } from '../mechanics/axial.js?v=turntable-parts'
-import { nearbyConnections, translationSnaps } from './snap.js?v=scene-snap'
+import { nearbyConnections, translationSnaps } from './snap.js?v=gear-69779'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=turntable-parts'
 import { mountLibrary } from './library.js?v=element-search'
 import { createScene } from './scene.js?v=tread-pivot'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
-import { driveTitle, mountDrivePanel } from './drive-panel.js?v=ford-startup'
+import { driveTitle, mountDrivePanel } from './drive-panel.js?v=gear-69779'
 import { mountBeltPanel } from './belt-panel.js?v=belt-drive'
 import { mountTrackPanel, trackLabels } from './track-panel.js?v=level-treads'
 import { upgradeInlineEngineFan } from './inline-engine.js'
@@ -1149,7 +1149,7 @@ export async function mountEditor(root, { document, language, save, download, si
     setMessage(t.snapAllWorking, true)
     render()
     try {
-      const { snapScene } = await import('./scene-snap.js?v=scene-snap')
+      const { snapScene } = await import('./scene-snap.js?v=gear-69779')
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
       if (signal.aborted || state !== before || mode !== 'build' || hidden !== hiddenBefore || dragActive() || pendingPart) {
         if (message === t.snapAllWorking) setMessage()

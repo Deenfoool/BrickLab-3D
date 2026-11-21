@@ -1,4 +1,4 @@
-import { rotationMotion, rotationPoses } from './model.js?v=belt-drive'
+import { rotationMotion, rotationPoses } from './model.js?v=gear-69779'
 import { wheelContact } from './vehicle-drive.js?v=belt-drive'
 
 function readTravel(vehicle, motion, wheel, spring, restLength, angle) {

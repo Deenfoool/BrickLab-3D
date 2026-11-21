@@ -1,9 +1,9 @@
 import { Quaternion, Vector3 } from 'three'
 import { candidateOffsets, joinedPose, retainedPlacement, samePose, worldPort } from './placement.js?v=turntable-parts'
-import { connectorEnvelope } from './snap.js?v=scene-snap'
-import { connectAligned, connectPlaced, createAssembly, gearPoses } from './model.js?v=track-builder'
+import { connectorEnvelope } from './snap.js?v=gear-69779'
+import { connectAligned, connectPlaced, createAssembly, gearPoses } from './model.js?v=gear-69779'
 import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=turntable-parts'
-import { portsFor } from '../mechanics/catalog.js?v=tread-pivot'
+import { portsFor } from '../mechanics/catalog.js?v=gear-69779'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
 import { movePose } from '../mechanics/linkage.js'
 

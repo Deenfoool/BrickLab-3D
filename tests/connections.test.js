@@ -11,7 +11,7 @@ const { Assembly } = await import('../src/mechanics/assembly.js')
 const { connectionMode } = await import('../src/mechanics/axial.js')
 const { gearAt, technic } = await import('../src/mechanics/catalog.js')
 const { evaluateSpurMesh } = await import('../src/mechanics/gears.js')
-const { connectAligned, createAssembly, gearPoses } = await import('../src/editor/model.js')
+const { connectAligned, createAssembly, gearPoses, rotationMotion } = await import('../src/editor/model.js')
 const { nearbyConnections, translationSnaps } = await import('../src/editor/snap.js')
 
 const part = (id, design, position = [0, 0, 0]) => ({ id, design, position, rotation: [0, 0, 0, 1] })
@@ -82,6 +82,32 @@ test('gear snap moves to the pitch circle and gives a 3:1 transmission', () => {
   assert.equal(assembly.rotationFrom('small', gears).ratios.large, -1 / 3)
   const offset = gearAt('large', '3648', [38, 0, 0], [0, 0, 1])
   assert.equal(evaluateSpurMesh(gears[0], offset).ok, false)
+})
+
+test('the Volvo 20T gear meshes with the clutch 16T at a diagonal Technic grid position', () => {
+  // Relative poses from the saved Volvo 42215 build, including the opposite local axes.
+  const clutch = { ...part('clutch', '18946'), rotation: [1, 0, 0, 0] }
+  const driver = part('driver', '69779', [-40, -20, -.104])
+  const parts = [clutch, driver]
+  const assembly = createAssembly(parts, [])
+  const [gear16, gear20] = gearPoses(parts)
+  assert.equal(gear20.teeth, 20)
+  assert.equal(gear20.width, 9.5)
+  assert.deepEqual(evaluateSpurMesh(gear20, gear16), { ok: true, ratio: 1.25 })
+  assert.equal(evaluateSpurMesh({ ...gear20, center: [-40, -20, 10] }, gear16).reason, 'no-tooth-overlap')
+  assert.equal(evaluateSpurMesh({ ...gear20, center: [-45, -20, 0] }, gear16).reason, 'pitch-distance')
+
+  const motion = rotationMotion(driver.id, parts, assembly)
+  assert.equal(motion.ok, true)
+  assert.deepEqual(motion.meshes, [{ a: driver.id, b: clutch.id, ratio: 1.25 }])
+
+  for (const [moving, fixed] of [parts, [...parts].reverse()]) {
+    const snap = nearbyConnections({ scene, assembly, parts: [fixed], moving, depth: 0, roll: 0 })
+      .find(option => option.mesh?.ok)
+    assert.ok(snap, `Moving ${moving.design} towards ${fixed.design}`)
+    assert.ok(Math.abs(new Vector3().fromArray(snap.pose.position).distanceTo(
+      new Vector3().fromArray(fixed.position)) - 45) < 1e-6)
+  }
 })
 
 test('a bore can snap in the middle of a long axle without pulling it toward an end', () => {

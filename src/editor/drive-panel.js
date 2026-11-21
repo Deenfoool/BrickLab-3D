@@ -1,5 +1,5 @@
 import { Quaternion, Vector3 } from 'three'
-import { driveScale, driveScaleLimits, driveSettings, forwardVector, newDriveState, prepareTestDrive, resizeKinematicDrive, stepTestDrive } from './vehicle-drive.js?v=belt-drive'
+import { driveScale, driveScaleLimits, driveSettings, forwardVector, newDriveState, prepareTestDrive, resizeKinematicDrive, stepTestDrive } from './vehicle-drive.js?v=gear-69779'
 
 const labels = {
   ru: {
@@ -299,7 +299,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
           request.message = 'loadingPhysics'
           sync()
           const [{ createPhysicalDrive }, { loadRapier }] = await Promise.all([
-            import('./physical-drive.js?v=belt-drive'), import('../mechanics/physics-world.js'),
+            import('./physical-drive.js?v=gear-69779'), import('../mechanics/physics-world.js'),
           ])
           const rapier = await loadRapier()
           if (loadingTrack !== request) return
