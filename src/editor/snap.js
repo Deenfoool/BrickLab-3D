@@ -3,7 +3,7 @@ import { Box3, Plane, Quaternion, Vector3 } from 'three'
 import { measureInsertion } from '../mechanics/assembly.js?v=torque-clutch'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
 import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=torque-clutch'
-import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=torque-clutch'
+import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=volvo-spur-gears'
 import { candidateOffsets, joinedPose, samePose, worldPort } from './placement.js?v=torque-clutch'
 
 const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')
@@ -46,7 +46,26 @@ function gearCenter(part, port) {
   return { center: start.addScaledVector(axis, portLength(port) / 2), axis }
 }
 
-function meshCandidate({ scene, moving, fixed, ownGear, fixedGear, event, ray, acceptPose }) {
+function axisMeshPoint(center, radial, normal, radius, axes) {
+  let nearest
+  let distance = Infinity
+  for (const axis of axes) {
+    const direction = new Vector3().setComponent('XYZ'.indexOf(axis), 1)
+    const projected = direction.clone().addScaledVector(normal, -direction.dot(normal))
+    const lengthSq = projected.lengthSq()
+    if (lengthSq < 1e-8) continue
+    const along = radial.dot(projected)
+    const discriminant = along ** 2 - lengthSq * (radial.lengthSq() - radius ** 2)
+    if (discriminant < 0) continue
+    const offset = (-along + (Math.sign(along) || 1) * Math.sqrt(discriminant)) / lengthSq
+    if (Math.abs(offset) >= distance) continue
+    distance = Math.abs(offset)
+    nearest = center.clone().addScaledVector(direction, offset)
+  }
+  return nearest
+}
+
+function meshCandidate({ scene, moving, fixed, ownGear, fixedGear, event, ray, acceptPose, translationAxes }) {
   const a = gearCenter(moving, ownGear)
   const b = gearCenter(fixed, fixedGear)
   if (1 - Math.abs(a.axis.dot(b.axis)) > 0.00005) return
@@ -59,9 +78,16 @@ function meshCandidate({ scene, moving, fixed, ownGear, fixedGear, event, ray, a
   const radial = aim.clone().sub(b.center)
   radial.addScaledVector(b.axis, -radial.dot(b.axis))
   if (radial.lengthSq() < 1e-6) return
-  const point = b.center.clone().add(radial.setLength(ownGear.sections[0].radius + fixedGear.sections[0].radius))
+  const radius = ownGear.sections[0].radius + fixedGear.sections[0].radius
+  let point = b.center.clone().add(radial.clone().setLength(radius))
   // Keep an already overlapping tooth face at its current depth during an axial gizmo drag.
   if (acceptPose) point.addScaledVector(b.axis, a.center.clone().sub(b.center).dot(b.axis))
+  if (translationAxes && !ray && point.clone().sub(a.center).toArray()
+    .some((value, i) => !translationAxes.includes('XYZ'[i]) && Math.abs(value) > .01)) {
+    // On a diagonal mesh, the shortest radial correction can leave the active gizmo axis.
+    point = axisMeshPoint(a.center, radial, b.axis, radius, translationAxes)
+    if (!point) return
+  }
   const distance = scene.pixelDistance(point, event)
   if (!Number.isFinite(distance) || distance > 25) return
   const pose = { position: new Vector3().fromArray(moving.position).add(point.clone().sub(a.center)).toArray(), rotation: moving.rotation }
@@ -159,7 +185,7 @@ function anchorCandidate(context, fixed, fixedPort, own, start, mode) {
 }
 
 export function nearbyConnections(context) {
-  const { scene, assembly, parts, moving, event, depth, roll, acceptPose, ray } = context
+  const { scene, assembly, parts, moving, event, depth, roll, acceptPose, ray, translationAxes } = context
   const candidates = []
   const orientation = new Quaternion().fromArray(moving.rotation)
   const ownPorts = portsFor(moving.design)
@@ -172,7 +198,7 @@ export function nearbyConnections(context) {
     if (sprockets[fixed.design] || sprockets[moving.design]) candidates.push(...treadCandidates(moving, fixed, parts, scene, event, acceptPose))
     const fixedGear = gearPort(fixed)
     if (ownGear && fixedGear) {
-      const candidate = meshCandidate({ scene, moving, fixed, ownGear, fixedGear, event, ray, acceptPose })
+      const candidate = meshCandidate({ scene, moving, fixed, ownGear, fixedGear, event, ray, acceptPose, translationAxes })
       if (candidate) candidates.push(candidate)
     }
     if (ownGear && gearRacks[fixed.design] || fixedGear && gearRacks[moving.design]) {
@@ -435,7 +461,7 @@ export function translationSnaps(members, parts, assembly, scene, axes, insertio
         delta.every((value, i) => axes.includes('XYZ'[i]) || Math.abs(value) < (members.length > 1 ? 3 : .01)) &&
         Math.hypot(...delta) <= 12
     }
-    return nearbyConnections({ scene: snapScene, assembly, parts: nearby, translationOnly: members.length > 1,
+    return nearbyConnections({ scene: snapScene, assembly, parts: nearby, translationOnly: members.length > 1, translationAxes: axes,
       moving: member, depth: insertionDepth, roll: 0, acceptPose }).filter(option => option.pose).map(option => {
       const delta = option.pose.position.map((value, i) => value - member.position[i])
       return { ...option, key: JSON.stringify([member.id, option.key]), shift: Math.hypot(...delta),

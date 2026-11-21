@@ -110,6 +110,51 @@ test('the Volvo 20T gear meshes with the clutch 16T at a diagonal Technic grid p
   }
 })
 
+test('the Volvo red 20T and 12T spur gears mesh at their saved axle spacing', () => {
+  const gear20 = part('red-20', '69779')
+  const gear12 = { ...part('red-12', '69778', [0, 41.264, -.23]),
+    rotation: [Math.SQRT1_2, -Math.SQRT1_2, 0, 0] }
+  const [large, small] = gearPoses([gear20, gear12])
+  assert.equal(small.teeth, 12)
+  assert.equal(small.width, 9.5)
+  assert.deepEqual(evaluateSpurMesh(large, small), { ok: true, ratio: 5 / 3 })
+  assert.equal(evaluateSpurMesh(large, { ...small, center: [0, 42, 0] }).reason, 'pitch-distance')
+  assert.equal(evaluateSpurMesh(large, { ...small, center: [0, 40, 10] }).reason, 'no-tooth-overlap')
+
+  const parts = [gear20, gear12]
+  const assembly = createAssembly(parts, [])
+  assert.equal(rotationMotion(gear20.id, parts, assembly).spins.get(gear12.id).ratio, 5 / 3)
+  for (const [moving, fixed] of [parts, [...parts].reverse()]) {
+    const snap = nearbyConnections({ scene, assembly, parts: [fixed], moving, depth: 0, roll: 0 })
+      .find(option => option.mesh?.ok)
+    assert.ok(snap)
+    assert.equal(Math.abs(snap.pose.position[1] - fixed.position[1]), 40)
+  }
+})
+
+test('the Volvo black 24T and 12T gear snap can correct a diagonal mesh along the gizmo axis', () => {
+  const fixed = part('black-24', '3648b')
+  const moving = { ...part('black-12', '69778', [40, -18.687, -.373]),
+    rotation: [Math.SQRT1_2, -Math.SQRT1_2, 0, 0] }
+  const parts = [fixed, moving]
+  const assembly = createAssembly(parts, [])
+  assert.equal(evaluateSpurMesh(...gearPoses(parts)).reason, 'pitch-distance')
+  const projection = { project: p => ({ visible: true, clientX: p.x, clientY: p.y }),
+    pixelDistance: (p, event) => Math.hypot(p.x - event.clientX, p.y - event.clientY) }
+
+  for (const [member, target] of [[moving, fixed], [fixed, moving]]) {
+    const snap = translationSnaps([member], [target], assembly, projection, 'Y', 0)
+      .find(option => option.mesh?.ok)
+    assert.ok(snap)
+    assert.equal(snap.pose.position[0], member.position[0])
+    assert.equal(snap.pose.position[2], member.position[2])
+    assert.ok(Math.abs(Math.abs(snap.pose.position[1] - target.position[1]) - Math.sqrt(45 ** 2 - 40 ** 2)) < 1e-6)
+    const placed = [target, { ...member, ...snap.pose }]
+    assert.equal(rotationMotion(fixed.id, placed, assembly).spins.get(moving.id).ratio, 2)
+  }
+  assert.deepEqual(translationSnaps([moving], [fixed], assembly, projection, 'Z', 0), [])
+})
+
 test('the two torque-clutch halves snap together and transmit rotation through separate axles', () => {
   const inner = part('inner', '46835')
   const outer = part('outer', '46834')

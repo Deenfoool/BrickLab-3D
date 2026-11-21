@@ -92,10 +92,11 @@ export function portsFor(design) {
       const gear = supported.find(port => port.role === 'gear')
       gear.sections = gear.sections.map(section => ({ ...section, length: 15 }))
     }
-    if (design === '69779') {
-      // LDraw 69779s01.dat places the teeth at Z = -4.75…4.75, around the existing axle bore.
+    if (design === '69778' || design === '69779') {
+      // Both LDraw tooth subparts span Z=-4.75…4.75 around the existing axle bore.
+      const teeth = design === '69778' ? 12 : 20
       supported.push({ id: 'spur-teeth', role: 'gear', gender: 'M', openings: [],
-        start: [0, 0, -4.75], axis: [0, 0, 1], sections: [{ shape: 'G', radius: 25, length: 9.5, teeth: 20 }] })
+        start: [0, 0, -4.75], axis: [0, 0, 1], sections: [{ shape: 'G', radius: 1.25 * teeth, length: 9.5, teeth }] })
     }
     if (Object.hasOwn(turntables, design)) {
       const [teeth, gender] = turntables[design]
@@ -173,7 +174,7 @@ export function gearAt(part, design, center, axis) {
   const section = portsFor(design).find(port => port.role === 'gear')?.sections[0]
   if (!section) throw new Error(`Design has no supported spur gear: ${design}`)
   return { part, center, axis, teeth: section.teeth, radius: section.radius, width: section.length,
-    ...(['94925', '18946'].includes(design) && { pressureAngle: Math.PI / 9 }) }
+    ...(['94925', '18946', '69778', '69779'].includes(design) && { pressureAngle: Math.PI / 9 }) }
 }
 
 // Local engagement datum and tooth span of the original Technic rack.

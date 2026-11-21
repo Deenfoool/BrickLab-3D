@@ -1,9 +1,9 @@
 import { Quaternion, Vector3 } from 'three'
 import { candidateOffsets, joinedPose, retainedPlacement, samePose, worldPort } from './placement.js?v=torque-clutch'
-import { connectorEnvelope } from './snap.js?v=torque-clutch'
-import { connectAligned, connectPlaced, createAssembly, gearPoses } from './model.js?v=torque-clutch'
+import { connectorEnvelope } from './snap.js?v=volvo-spur-gears'
+import { connectAligned, connectPlaced, createAssembly, gearPoses } from './model.js?v=volvo-spur-gears'
 import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=torque-clutch'
-import { portsFor } from '../mechanics/catalog.js?v=torque-clutch'
+import { portsFor } from '../mechanics/catalog.js?v=volvo-spur-gears'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
 import { movePose } from '../mechanics/linkage.js'
 

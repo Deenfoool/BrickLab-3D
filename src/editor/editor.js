@@ -8,18 +8,18 @@ import { mountFloatingPanels } from './floating-panels.js?v=cad-dock'
 import { createEditorAudio } from './audio.js?v=editor-sound'
 import { mountMotorPanel } from './motor-panel.js'
 import { Plane, Quaternion, Vector3 } from 'three'
-import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=torque-clutch'
+import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=volvo-spur-gears'
 import { baseRotation, mirrorPose, samePose, worldPort } from './placement.js?v=torque-clutch'
-import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, assemblyJoints, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=torque-clutch'
+import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, assemblyJoints, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=volvo-spur-gears'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
 import { nearestDetent } from '../mechanics/axial.js?v=torque-clutch'
-import { nearbyConnections, translationSnaps } from './snap.js?v=torque-clutch'
+import { nearbyConnections, translationSnaps } from './snap.js?v=volvo-spur-gears'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=turntable-parts'
 import { mountLibrary } from './library.js?v=element-search'
 import { createScene } from './scene.js?v=tread-pivot'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
-import { driveTitle, mountDrivePanel } from './drive-panel.js?v=torque-clutch'
+import { driveTitle, mountDrivePanel } from './drive-panel.js?v=volvo-spur-gears'
 import { mountBeltPanel } from './belt-panel.js?v=belt-drive'
 import { mountTrackPanel, trackLabels } from './track-panel.js?v=level-treads'
 import { upgradeInlineEngineFan } from './inline-engine.js'
@@ -1221,7 +1221,7 @@ export async function mountEditor(root, { document, language, save, download, si
     setMessage(t.snapAllWorking, true)
     render()
     try {
-      const { snapScene } = await import('./scene-snap.js?v=torque-clutch')
+      const { snapScene } = await import('./scene-snap.js?v=volvo-spur-gears')
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
       if (signal.aborted || state !== before || mode !== 'build' || hidden !== hiddenBefore || dragActive() || pendingPart) {
         if (message === t.snapAllWorking) setMessage()
