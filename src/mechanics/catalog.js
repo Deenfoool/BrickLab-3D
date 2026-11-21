@@ -112,6 +112,15 @@ export function portsFor(design) {
       openings: ['start', 'end'], reference: [1, 0, 0],
       sections: [{ shape: 'Q', radius: 1, length: 1 }],
     })
+    if (design === '46834' || design === '46835') {
+      const inner = design === '46835'
+      const bore = supported.find(port => port.role === 'key')
+      // The inner walls close the axle bores at Z=6 and Z=-7 in the two LDraw files.
+      Object.assign(bore, { role: 'blind-key', openings: [inner ? 'end' : 'start'] })
+      supported.push({ id: 'torque-clutch-seat', role: inner ? 'torque-clutch-inner' : 'torque-clutch-outer',
+        gender: inner ? 'M' : 'F', group: 'torque-limiter-46835', openings: ['start'],
+        start: [0, 0, 0], axis: [0, 0, 1], sections: [{ shape: 'Q', radius: 1, length: 1 }] })
+    }
     if (design === '2909') supported.push({
       id: 'damper-eye', role: 'bearing', gender: 'F', openings: ['start', 'end'],
       start: [0, -50, -10], axis: [0, 0, 1], sections: [{ shape: 'R', radius: 8, length: 2 },

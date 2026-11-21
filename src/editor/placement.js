@@ -1,6 +1,6 @@
 import { Quaternion, Vector3 } from 'three'
-import { measureInsertion } from '../mechanics/assembly.js?v=turntable-parts'
-import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=turntable-parts'
+import { measureInsertion } from '../mechanics/assembly.js?v=torque-clutch'
+import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=torque-clutch'
 
 const Y = new Vector3(0, 1, 0)
 const base = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI)

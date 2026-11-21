@@ -1,5 +1,5 @@
 import { safeImage } from '../sets/data.js?v=browser-recognition'
-import { editorLabels } from '../editor/labels.js?v=editor-feedback'
+import { editorLabels } from '../editor/labels.js?v=torque-clutch'
 import { locales } from './locale.js?v=project-home-layout'
 import { revealMenu, showEditorLoading, startStartup } from './startup.js?v=bold-brand'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
@@ -440,7 +440,7 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=gear-69779')
+    const { mountEditor } = await import('../editor/editor.js?v=torque-clutch')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

@@ -1,4 +1,4 @@
-import { connectionMode, evaluateInsertion, overlap, portLength } from './axial.js?v=turntable-parts'
+import { connectionMode, evaluateInsertion, overlap, portLength } from './axial.js?v=torque-clutch'
 import { evaluateSpurMesh } from './gears.js'
 import { rotationPort } from './catalog.js?v=gear-selector'
 import { cross, dot, isVector, length, subtract, unit } from './vector.js?v=connector-coverage'

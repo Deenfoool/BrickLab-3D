@@ -8,24 +8,24 @@ import { mountFloatingPanels } from './floating-panels.js?v=cad-dock'
 import { createEditorAudio } from './audio.js?v=editor-sound'
 import { mountMotorPanel } from './motor-panel.js'
 import { Plane, Quaternion, Vector3 } from 'three'
-import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=gear-69779'
-import { baseRotation, mirrorPose, samePose, worldPort } from './placement.js?v=turntable-parts'
-import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=gear-69779'
+import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=torque-clutch'
+import { baseRotation, mirrorPose, samePose, worldPort } from './placement.js?v=torque-clutch'
+import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, assemblyJoints, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=torque-clutch'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
-import { nearestDetent } from '../mechanics/axial.js?v=turntable-parts'
-import { nearbyConnections, translationSnaps } from './snap.js?v=gear-69779'
+import { nearestDetent } from '../mechanics/axial.js?v=torque-clutch'
+import { nearbyConnections, translationSnaps } from './snap.js?v=torque-clutch'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=turntable-parts'
 import { mountLibrary } from './library.js?v=element-search'
 import { createScene } from './scene.js?v=tread-pivot'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
-import { driveTitle, mountDrivePanel } from './drive-panel.js?v=gear-69779'
+import { driveTitle, mountDrivePanel } from './drive-panel.js?v=torque-clutch'
 import { mountBeltPanel } from './belt-panel.js?v=belt-drive'
 import { mountTrackPanel, trackLabels } from './track-panel.js?v=level-treads'
 import { upgradeInlineEngineFan } from './inline-engine.js'
 import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
-import { editorLabels } from './labels.js?v=editor-feedback'
+import { editorLabels } from './labels.js?v=torque-clutch'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
@@ -176,7 +176,9 @@ export async function mountEditor(root, { document, language, save, download, si
                 <button type="button" data-el="play">${t.play}</button>
                 <button type="button" data-el="applyHinge" hidden>${t.applyHinge}</button>
               </div>
-              <section class="editor-belt-panel" data-el="beltPanel" aria-label="${t.beltAdd}" hidden></section>
+              <button type="button" data-el="clutchTest" hidden></button>
+              <p role="status" data-el="clutchStatus" hidden></p>
+              <section class="editor-belt-panel" data-el="beltPanel"  aria-label="${t.beltAdd}" hidden></section>
               <section class="editor-belt-panel editor-track-panel" data-el="trackPanel" aria-label="${trackText.name}" hidden></section>
               <p class="editor-links" data-el="links"></p>
             </div>
@@ -324,6 +326,7 @@ export async function mountEditor(root, { document, language, save, download, si
   let angle = 0
   let lastPreview = 0
   let frame
+  let clutchTest
   let runningMotor
   let transmission
   let hinge
@@ -485,8 +488,72 @@ export async function mountEditor(root, { document, language, save, download, si
   }
 
   function stopAnimation() {
+    stopClutchTest()
     if (frame) cancelAnimationFrame(frame)
     frame = undefined
+  }
+
+  function stopClutchTest() {
+    if (!clutchTest) return
+    cancelAnimationFrame(clutchTest.frame)
+    clutchTest.simulation?.dispose()
+    clutchTest = undefined
+    if (!signal.aborted) scene.setParts(state.parts)
+  }
+
+  function selectedClutch() {
+    return mode === 'kinematics' && links.find(link => link.fit.motion.torqueLimit &&
+      !hidden.has(link.shaft.part) && !hidden.has(link.socket.part) &&
+      [link.shaft.part, link.socket.part].includes(selected))
+  }
+
+  async function testClutch() {
+    if (clutchTest) {
+      stopClutchTest()
+      render()
+      return
+    }
+    const link = selectedClutch()
+    if (!link) return
+    stopAnimation()
+    releaseMotor()
+    const test = clutchTest = {}
+    render()
+    try {
+      const [{ createPhysicalAssembly }, { loadRapier }] = await Promise.all([
+        import('../mechanics/physical-assembly.js?v=torque-clutch'), import('../mechanics/physics-world.js'),
+      ])
+      const rapier = await loadRapier()
+      if (signal.aborted || clutchTest !== test) return
+      const { shaft, socket } = link
+      const halves = [shaft.part, socket.part]
+      const axleLinks = links.filter(item => !item.fit.motion.torqueLimit && item.fit.motion.rotation === 'locked' &&
+        halves.includes(item.socket.part) && !hidden.has(item.shaft.part))
+      const ids = new Set([...halves, ...axleLinks.map(item => item.shaft.part)])
+      const pieces = state.parts.filter(part => ids.has(part.id))
+      const paired = createAssembly(pieces, [link, ...axleLinks].map(connectionRecord))
+      const joints = assemblyJoints(pieces, paired)
+      const joint = joints.find(item => item.torqueLimit)
+      const simulation = test.simulation = createPhysicalAssembly(rapier, pieces, joints, models, {
+        pinned: [socket.part], gravityEnabled: false,
+      })
+      scene.setParts(state.parts)
+      const drive = { part: shaft.part, torque: new Vector3().fromArray(joint.shaftLine.axis).multiplyScalar(joint.torqueLimit * 1.4) }
+      let last
+      function advance(time) {
+        scene.previewParts(simulation.advance((time - (last ?? time)) / 1000, drive))
+        last = time
+        test.frame = requestAnimationFrame(advance)
+      }
+      test.frame = requestAnimationFrame(advance)
+      render()
+    } catch (error) {
+      if (signal.aborted || clutchTest !== test) return
+      stopClutchTest()
+      console.error(error)
+      setMessage(t.clutchTestError)
+      render()
+    }
   }
 
   function releaseMotor() {
@@ -894,7 +961,12 @@ export async function mountEditor(root, { document, language, save, download, si
     range.step = hinge?.ok || transmission?.solve ? 'any' : '1'
     range.value = angle
     el('play').textContent = frame ? t.stop : t.play
-    el('play').disabled = transmission?.kind === 'motor' && !transmission.playback
+    el('play').disabled = Boolean(clutchTest) || (transmission?.kind === 'motor' && !transmission.playback)
+    range.disabled = Boolean(clutchTest)
+    el('clutchTest').hidden = !selectedClutch()
+    el('clutchTest').textContent = clutchTest ? t.stop : t.clutchTest
+    el('clutchStatus').hidden = !clutchTest?.simulation
+    el('clutchStatus').textContent = clutchTest?.simulation ? t.clutchTesting : ''
     motorPanel.render(part, state.parts)
     el('stopRunningMotor').hidden = !runningMotor || selected === runningMotor.id
     if (runningMotor && transmission?.kind === 'motor') el('play').hidden = true
@@ -1149,7 +1221,7 @@ export async function mountEditor(root, { document, language, save, download, si
     setMessage(t.snapAllWorking, true)
     render()
     try {
-      const { snapScene } = await import('./scene-snap.js?v=gear-69779')
+      const { snapScene } = await import('./scene-snap.js?v=torque-clutch')
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
       if (signal.aborted || state !== before || mode !== 'build' || hidden !== hiddenBefore || dragActive() || pendingPart) {
         if (message === t.snapAllWorking) setMessage()
@@ -1593,6 +1665,7 @@ export async function mountEditor(root, { document, language, save, download, si
     commit({ ...state, parts: state.parts.map(part => part.id === id
       ? { ...part, electric: { ...part.electric, power: 0 } } : part) })
   })
+  on(el('clutchTest'), 'click', testClutch)
   on(el('play'), 'click', () => {
     if (transmission?.kind === 'motor' && transmission.playback && !runningMotor) {
       stopAnimation()

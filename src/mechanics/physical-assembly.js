@@ -58,22 +58,42 @@ function addJoint(rapier, world, edge, a, b, spring) {
   return true
 }
 
-export function createPhysicalAssembly(rapier, parts, joints, models, { pinned = [] } = {}) {
-  const world = physicsWorld(rapier)
+function inverseInertia(body, axis) {
+  if (body.isFixed()) return 0
+  const { m11, m12, m13, m22, m23, m33 } = body.effectiveWorldInvInertia()
+  const { x, y, z } = axis
+  return m11 * x * x + m22 * y * y + m33 * z * z + 2 * (m12 * x * y + m13 * x * z + m23 * y * z)
+}
+
+function driveClutch({ a, b, axis, limit }) {
+  const worldAxis = axis.clone().applyQuaternion(a.rotation())
+  const inverse = inverseInertia(a, worldAxis) + inverseInertia(b, worldAxis)
+  if (inverse <= 0) return
+  const relativeSpeed = vectorFrom(a.angvel()).sub(vectorFrom(b.angvel())).dot(worldAxis)
+  const maximum = limit * physicsStep
+  const impulse = worldAxis.multiplyScalar(Math.max(-maximum, Math.min(maximum, relativeSpeed / inverse)))
+  if (!b.isFixed()) b.applyTorqueImpulse(impulse, true)
+  if (!a.isFixed()) a.applyTorqueImpulse(impulse.negate(), true)
+}
+
+export function createPhysicalAssembly(rapier, parts, joints, models, { pinned = [], gravityEnabled = true } = {}) {
+  const world = gravityEnabled ? physicsWorld(rapier) : new rapier.World({ x: 0, y: 0, z: 0 })
+  world.timestep = physicsStep
   try {
-    return simulateAssembly(rapier, world, parts, joints, models, new Set(pinned))
+    return simulateAssembly(rapier, world, parts, joints, models, new Set(pinned), gravityEnabled)
   } catch (error) {
     world.free()
     throw error
   }
 }
 
-function simulateAssembly(rapier, world, parts, joints, models, pinned) {
+function simulateAssembly(rapier, world, parts, joints, models, pinned, gravityEnabled) {
   const partById = new Map(parts.map(part => [part.id, part]))
   const springs = springVisuals(joints)
   const springByJoint = new Map(springs.map(spring => [spring.joint, spring]))
   // Each coil follows its cylinder. The native spring acts on the two damper endpoints.
-  const graph = jointBodies(partById.keys(), joints.map(joint => joint.motion === 'spring' ? { ...joint, motion: 'fixed' } : joint))
+  const graph = jointBodies(partById.keys(), joints.map(joint => joint.motion === 'spring' ? { ...joint, motion: 'fixed' }
+    : joint.torqueLimit ? { ...joint, motion: 'continuous' } : joint))
   const groups = [...new Set(graph.byPart.values())]
   const bodies = new Map()
   const components = new Map()
@@ -93,7 +113,7 @@ function simulateAssembly(rapier, world, parts, joints, models, pinned) {
   const byHandle = new Map()
   const identity = new Quaternion()
   const lowest = assemblyBounds(parts, models, new Vector3(), identity).min.y
-  const lift = Number.isFinite(lowest) && lowest < 2 ? (2 - lowest) * units : 0
+  const lift = gravityEnabled && Number.isFinite(lowest) && lowest < 2 ? (2 - lowest) * units : 0
   for (const group of groups) {
     const members = group.ids.map(id => partById.get(id))
     const bounds = assemblyBounds(members, models, new Vector3(), identity)
@@ -118,13 +138,16 @@ function simulateAssembly(rapier, world, parts, joints, models, pinned) {
     byHandle.set(body.handle, components.get(group))
   }
 
+  const clutches = []
   let constraints = 0
   let unsupported = 0
   for (const edge of graph.edges) {
     const a = bodies.get(edge.a)
     const b = bodies.get(edge.b)
-    if (a && b && addJoint(rapier, world, edge, a, b, springByJoint.get(edge.joint))) constraints++
-    else unsupported++
+    if (a && b && addJoint(rapier, world, edge, a, b, springByJoint.get(edge.joint))) {
+      constraints++
+      if (edge.joint.torqueLimit) clutches.push({ a: a.body, b: b.body, axis: edge.axis, limit: edge.joint.torqueLimit })
+    } else unsupported++
   }
   const hooks = {
     filterContactPair(_, __, a, b) {
@@ -205,10 +228,13 @@ function simulateAssembly(rapier, world, parts, joints, models, pinned) {
       electricParts = electricParts.map(part => part.id === id
         ? { ...part, electric: { ...motorSettings(part), power, stop } } : part)
     },
-    advance(dt) {
+    advance(dt, drive) {
+      const body = drive && bodies.get(graph.byPart.get(drive.part))?.body
       elapsed += Math.min(.05, Math.max(0, dt))
       for (; elapsed >= physicsStep; elapsed -= physicsStep) {
         driveMotors()
+        if (body && !body.isFixed()) body.applyTorqueImpulse(drive.torque.clone().multiplyScalar(physicsStep), true)
+        for (const clutch of clutches) driveClutch(clutch)
         world.step(undefined, hooks)
       }
       return preview()

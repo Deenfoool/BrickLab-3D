@@ -1,6 +1,6 @@
 import { Quaternion, Vector3 } from 'three'
 import { portsFor } from '../mechanics/catalog.js?v=belt-drive'
-import { rotationMotion, rotationPoses } from './model.js?v=gear-69779'
+import { rotationMotion, rotationPoses } from './model.js?v=torque-clutch'
 import { worldPort } from './placement.js?v=belt-drive'
 import { terrainPose } from './drive-terrain.js?v=drive-scale'
 

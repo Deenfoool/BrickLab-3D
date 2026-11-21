@@ -1,10 +1,10 @@
 import { sprockets, treadCandidates } from '../mechanics/treads.js?v=track-builder'
 import { Box3, Plane, Quaternion, Vector3 } from 'three'
-import { measureInsertion } from '../mechanics/assembly.js?v=turntable-parts'
+import { measureInsertion } from '../mechanics/assembly.js?v=torque-clutch'
 import { evaluateSpurMesh } from '../mechanics/gears.js'
-import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=turntable-parts'
-import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=gear-69779'
-import { candidateOffsets, joinedPose, samePose, worldPort } from './placement.js?v=turntable-parts'
+import { centeredOffset, connectionMode, portLength } from '../mechanics/axial.js?v=torque-clutch'
+import { gearAt, gearRacks, portsFor } from '../mechanics/catalog.js?v=torque-clutch'
+import { candidateOffsets, joinedPose, samePose, worldPort } from './placement.js?v=torque-clutch'
 
 const gearPort = part => portsFor(part.design).find(port => port.role === 'gear')
 const canSlideOn = port => ['axle', 'duplo-axle', 'rod'].includes(port.role)
@@ -184,7 +184,8 @@ export function nearbyConnections(context) {
       const { start, axis } = worldPort(fixed, fixedPort)
       const span = portLength(fixedPort)
       if (['shift-tip', 'shift-groove', 'ball', 'ball-socket', 'pivot', 'clip', 'plug', 'receptacle',
-        'piston', 'damper-cylinder', 'coil', 'coil-seat', 'turntable-top', 'turntable-base'].includes(fixedPort.role)) {
+        'piston', 'damper-cylinder', 'coil', 'coil-seat', 'turntable-top', 'turntable-base',
+        'torque-clutch-inner', 'torque-clutch-outer'].includes(fixedPort.role)) {
         if (scene.pixelDistance(start, event) > 31) continue
         for (const own of ownConnectors) {
           const mode = own.gender === 'M' ? connectionMode(own, fixedPort) : connectionMode(fixedPort, own)

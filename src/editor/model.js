@@ -1,14 +1,14 @@
 import { sprockets, trackDrives, trackLine, trackPoses } from '../mechanics/treads.js?v=track-builder'
 import { Quaternion, Vector3 } from 'three'
-import { connectionMode } from '../mechanics/axial.js?v=turntable-parts'
-import { Assembly, measureInsertion } from '../mechanics/assembly.js?v=turntable-parts'
+import { connectionMode } from '../mechanics/axial.js?v=torque-clutch'
+import { Assembly, measureInsertion } from '../mechanics/assembly.js?v=torque-clutch'
 import { rotationalDrive } from '../mechanics/rotation.js?v=belt-drive'
 import { assembleBelts } from '../mechanics/belts.js?v=belt-drive'
 import { engineDrive } from '../mechanics/engine.js?v=belt-drive'
 import { cardanCoupling } from '../mechanics/cardan.js'
 import { movePose, turnPose, articulationDrive, jointBodies, linkageDrive, mechanismPoses, motionRange, suspensionDrive } from '../mechanics/linkage.js'
-import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=gear-69779'
-import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=turntable-parts'
+import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=torque-clutch'
+import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=torque-clutch'
 import { clutchTravel, selectorLinkages } from './selector-linkage.js?v=selector-drag'
 import { motorSupply } from '../mechanics/motors.js'
 
@@ -201,6 +201,7 @@ export function gearPoses(parts) {
 
 const spinRoles = new Set([
   'axle', 'axle-pin', 'friction-axle-pin', 'duplo-axle', 'gear', 'rim-seat', 'tyre-seat', 'selector-spline',
+  'torque-clutch-inner', 'torque-clutch-outer',
 ])
 
 function portLine(part, port) {
@@ -216,6 +217,7 @@ export function assemblyJoints(parts, assembly) {
     return {
       a: shaft.part, b: socket.part, motion: fit.motion.rotation, group: male.group, restLength: male.restLength,
       socketPort: socket.port,
+      ...(fit.motion.torqueLimit && { torqueLimit: fit.motion.torqueLimit }),
       detents: fit.motion.detents, roll: fit.placement.roll,
       shaftLine: portLine(byId.get(shaft.part), male),
       socketLine: portLine(byId.get(socket.part), female),

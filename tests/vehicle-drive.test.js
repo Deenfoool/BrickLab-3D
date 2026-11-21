@@ -420,6 +420,37 @@ test('powered Control+ L applies bounded torque to its rotor while the mounted h
   assert.equal(blocked.stalled, true)
 })
 
+test('the torque limiter holds below its threshold, slips above it and drives an unloaded output', async () => {
+  await rapier.init()
+  const inner = { ...partWithPose('input', [0, 100, 0]), design: '46835' }
+  const outer = { ...partWithPose('output', [0, 100, 0]), design: '46834' }
+  const parts = [inner, outer]
+  const assembly = createAssembly(parts, [])
+  assert.equal(connectAligned(assembly, [inner], [outer]).length, 1)
+  const joints = assemblyJoints(parts, assembly)
+  const limit = joints[0].torqueLimit
+  const bounds = new Box3(new Vector3(-10, -10, -15), new Vector3(10, 10, 15))
+  const meshes = new Map(parts.map(part => [part.design, { bounds }]))
+  function run(torque, pinned = []) {
+    const sim = createPhysicalAssembly(rapier, parts, joints, meshes, { pinned, gravityEnabled: false })
+    try {
+      assert.equal(sim.bodies, 2)
+      assert.equal(sim.constraints, 1)
+      const drive = { part: inner.id, torque: new Vector3(0, 0, torque) }
+      let poses
+      for (let i = 0; i < 90; i++) poses = sim.advance(1 / 120, drive)
+      return poses.map(part => new Quaternion().fromArray(part.rotation))
+    } finally { sim.dispose() }
+  }
+  const held = run(limit * .7, [outer.id])
+  assert.ok(held[0].angleTo(held[1]) < .01)
+  const slipping = run(limit * 1.5, [outer.id])
+  assert.ok(slipping[0].angleTo(slipping[1]) > .15)
+  const free = run(limit * .7)
+  assert.ok(free[0].angleTo(new Quaternion()) > .15)
+  assert.ok(free[0].angleTo(free[1]) < .02)
+})
+
 test('a vehicle keeps its momentum in the air and falls when none of its wheels has contact', async () => {
   await rapier.init()
   const geometry = new BoxGeometry(2200, 60, 1900)

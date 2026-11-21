@@ -110,6 +110,33 @@ test('the Volvo 20T gear meshes with the clutch 16T at a diagonal Technic grid p
   }
 })
 
+test('the two torque-clutch halves snap together and transmit rotation through separate axles', () => {
+  const inner = part('inner', '46835')
+  const outer = part('outer', '46834')
+  const input = { ...part('input', '32062', [0, 0, 32]), rotation: [0, -Math.SQRT1_2, 0, Math.SQRT1_2] }
+  const output = { ...input, ...part('output', '32062', [0, 0, -33]), rotation: input.rotation }
+  for (const [moving, fixed] of [[inner, outer], [outer, inner]]) {
+    const options = nearbyConnections({ scene, assembly: createAssembly([inner, outer], []),
+      parts: [fixed], moving, depth: 0, roll: 0 })
+    const snap = options.find(option => option.fit?.motion.torqueLimit)
+    assert.ok(snap)
+    assert.deepEqual(snap.pose.position, [0, 0, 0])
+  }
+
+  const parts = [inner, outer, input, output]
+  const assembly = createAssembly(parts, [])
+  const links = connectAligned(assembly, [inner, outer], [input, output])
+  links.push(...connectAligned(assembly, [inner], [outer]))
+  assert.equal(links.length, 3)
+  const restored = createAssembly(parts, links)
+  assert.equal(restored.connections.length, 3)
+  const motion = rotationMotion(input.id, parts, restored)
+  assert(motion.ok)
+  assert.equal(motion.spins.get(output.id).ratio, 1)
+  const through = { ...input, id: 'through', position: [0, 0, 0] }
+  assert.equal(connectAligned(createAssembly([inner, outer, through], []), [through], [inner, outer]).length, 0)
+})
+
 test('a bore can snap in the middle of a long axle without pulling it toward an end', () => {
   const shaft = part('axle', '3737')
   const moving = part('bush', '3713')

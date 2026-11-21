@@ -45,6 +45,10 @@ export function connectionMode(male, female) {
   }
   const family = `${male.role}:${female.role}`
   if (male.group && male.group === female.group) {
+    if (family === 'torque-clutch-inner:torque-clutch-outer') {
+      // Provisional simulation value in N·m until the physical part is measured.
+      return { rotation: 'locked', anchor: 'pivot', orientation: 1, torqueLimit: .09 }
+    }
     if (family === 'turntable-top:turntable-base') return { rotation: 'continuous', anchor: 'pivot', orientation: 1 }
     if (family === 'shift-tip:shift-groove') return { rotation: 'continuous', anchor: 'pivot' }
     if (family === 'piston:damper-cylinder') return { rotation: 'slider', anchor: 'slide', stroke: female.stroke }
@@ -209,7 +213,8 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
     return {
       ok: true,
       occupancy: { shaft: [0, portLength(male)], socket: [0, portLength(female)] },
-      motion: { rotation: mode.rotation, friction: false, detents: [], travel: [0, 0] },
+      motion: { rotation: mode.rotation, friction: false, detents: [], travel: [0, 0],
+        ...(mode.torqueLimit && { torqueLimit: mode.torqueLimit }) },
       placement: { offset, direction, side, roll: keyStep ? 0 : roll, keyStep, ...(mode.anchor && { anchor: mode.anchor }) },
     }
   }
