@@ -80,6 +80,8 @@ export function mountLibrary(root, { sections, models, language, labels, selectP
   }, { once: true })
 
   function configureGroups() {
+    const family = root.querySelector('.menu-library-family')
+    if (family) family.textContent = `LEGO ${section.en}`
     groupSelect.replaceChildren(new Option(labels.allParts, ''))
     for (const [id, ru, en] of section.groups) {
       groupSelect.add(new Option(language === 'ru' ? ru : en, id))

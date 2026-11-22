@@ -162,6 +162,16 @@ test('each System plate has connectors and the legacy Volvo plate keeps its endp
   }
 })
 
+test('System bricks snap on every stud and survive restoring the assembly', () => {
+  const system = library.sections.find(section => section.id === 'system')
+  assert.equal(system.parts.find(([id]) => id === '3001')?.[1], 'bricks')
+  const bottom = part('bottom', '3001')
+  const top = { ...part('top', '3001'), position: [0, -24, 0] }
+  const links = connectAligned(createAssembly([bottom, top], []), [top], [bottom])
+  assert.equal(links.length, 8)
+  assert.equal(createAssembly([bottom, top], links).connections.length, 8)
+})
+
 test('the 85984 System slope seats flush on both studs of a 1 × 2 plate', () => {
   const system = library.sections.find(section => section.id === 'system')
   assert.equal(system.parts.find(([design]) => design === '85984')?.[1], 'slopes')

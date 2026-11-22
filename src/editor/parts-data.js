@@ -1,4 +1,4 @@
-import library from '../../catalog/parts-library.json?v=turntable-parts' with { type: 'json' }
+import library from '../../catalog/parts-library.json?v=system-complete' with { type: 'json' }
 import { sectionsFor } from './library-data.js?v=system-tiles'
 import buggyParts from '../../catalog/dune-buggy-parts.json?v=8845' with { type: 'json' }
 import engineParts from '../../catalog/inline-engine-parts.json' with { type: 'json' }

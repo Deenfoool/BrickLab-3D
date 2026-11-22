@@ -9,6 +9,7 @@ const { values } = parseArgs({ options: {
   url: { type: 'string', default: 'http://localhost:8032/' },
   chromium: { type: 'string' },
   start: { type: 'string', default: '0' },
+  end: { type: 'string' },
   section: { type: 'string' },
 } })
 const browser = await chromium.launch({
@@ -25,7 +26,7 @@ try {
   await page.goto(values.url)
   const sections = await page.evaluate(async () => {
     const THREE = await import('three')
-    const { sections, loadPartModel, partMesh } = await import('./src/editor/parts.js?v=turntable-parts')
+    const { sections, loadPartModel, partMesh } = await import('./src/editor/parts.js?v=system-complete')
     const { previewColumns, previewRows, previewPageSize } = await import('./src/editor/library-data.js?v=system-tiles')
     const width = 144
     const height = 92
@@ -91,7 +92,7 @@ try {
   for (const { id, path, pages } of selected) {
     const output = `assets/ldraw/${path}/previews`
     await mkdir(output, { recursive: true })
-    for (let index = Number(values.start); index < pages; index += 1) {
+    for (let index = Number(values.start); index < Math.min(pages, Number(values.end ?? pages)); index += 1) {
       const image = await page.evaluate(({ id, index }) => globalThis.renderAtlas(id, index), { id, index })
       await writeFile(`${output}/${index}.webp`, Buffer.from(image, 'base64'))
       console.log(`${id}: preview atlas ${index + 1}/${pages}`)

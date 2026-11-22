@@ -398,8 +398,8 @@ async function openLibrary() {
   libraryRetry.hidden = true
   try {
     const [{ mountLibrary }, { sections, parts }] = await Promise.all([
-      import('../editor/library.js?v=element-search'),
-      import('../editor/parts-data.js?v=turntable-parts'),
+      import('../editor/library.js?v=system-complete'),
+      import('../editor/parts-data.js?v=system-complete'),
     ])
     if (controller.signal.aborted) return
     librarySearch.placeholder = labels.search
@@ -440,7 +440,7 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=volvo-spur-gears')
+    const { mountEditor } = await import('../editor/editor.js?v=system-complete')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

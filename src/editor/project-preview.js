@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { partMesh, parts, loadPartModel } from './parts.js?v=turntable-parts'
+import { partMesh, parts, loadPartModel } from './parts.js?v=system-complete'
 import { loadParts } from './model.js?v=track-builder'
 import { expandComponents } from './components.js?v=belt-drive'
 import { upgradeInlineEngineFan } from './inline-engine.js'

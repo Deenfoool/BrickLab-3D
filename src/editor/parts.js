@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.js'
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js'
-import { curated, partOrder, parts, sections } from './parts-data.js?v=turntable-parts'
+import { curated, partOrder, parts, sections } from './parts-data.js?v=system-complete'
 
 export { parts, sections }
 
@@ -92,7 +92,7 @@ function getPack(assetPath, pack, revision) {
   return request
 }
 
-export async function loadPartModel(part) {
+export async function loadPartModel(part, { smoothNormals = part.group !== 'baseplates' } = {}) {
   if (!part.pack) return (await loadCoreModels()).get(part.design)
   const commonPack = part.commonPack ?? 'common'
   const commonRequest = getPack(part.assetPath, commonPack, part.revision)
@@ -121,6 +121,8 @@ export async function loadPartModel(part) {
     }
   }
   const loader = newLoader().setFileMap(fileMap)
+  // Repeated baseplate studs make edge smoothing expensive; flat faces keep their normals.
+  loader.smoothNormals = smoothNormals
   loader.addDefaultMaterials()
   const preserveColors = ['99499', '99499c01', '10089c01', '10095', '58124c01', '23816a',
     '58119', '64228c01', '84599', '22127', '85824'].includes(part.design)

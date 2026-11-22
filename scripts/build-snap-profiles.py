@@ -699,6 +699,8 @@ def main():
                                const='slopes', help='Write only the System slope connector catalog')
     system_output.add_argument('--system-tiles', dest='system_group', action='store_const',
                                const='tiles', help='Write only the System tile connector catalog')
+    system_output.add_argument('--system-remaining', dest='system_group', action='store_const',
+                               const='remaining', help='Write connectors for the remaining System categories')
     args = parser.parse_args()
     upstream = read(args.upstream)
     index = read(ROOT / 'catalog/parts-library.json')
@@ -735,6 +737,10 @@ def main():
             base = {'30602p01': '30602', '88930py0': '88930'}.get(design, design)
             cylinders = [upstream['cylinders'][i] for i in upstream['parts'].get(base + '.dat', [])]
             cylinders += geometry_ports(design, title, cylinders, archive) + contacts.get(design, [])
+            if design not in supplied and group not in {'plates', 'slopes', 'tiles'}:
+                # Deep brick cavities still accept only the first stud-length at the mouth.
+                # Keep explicit mouth datums instead of treating the full cavity as a bore.
+                cylinders += slope_fallback(design, cylinders, stud_geometry)
             legacy = []
             for i, prior in enumerate(cylinders):
                 if prior.get('group') != 'uniJnt' or prior['gender'] != 'F' or prior['caps'] != 'none':
@@ -766,7 +772,7 @@ def main():
             for port in ports:
                 if signature := match_signature(port):
                     groups[signature].add(port[0][1])
-                    if group not in {'plates', 'slopes', 'tiles'}:
+                    if design in technic_designs:
                         technic_groups[signature].add(port[0][1])
 
     specs = {}
@@ -801,7 +807,8 @@ def main():
 
     if args.system_group:
         for design, group, *_ in system:
-            if group != args.system_group:
+            if (group in {'plates', 'slopes', 'tiles'} if args.system_group == 'remaining'
+                    else group != args.system_group):
                 continue
             if design in supplied:
                 coverage[group] += 1
@@ -815,7 +822,7 @@ def main():
         family = args.system_group.removesuffix('s')
         (ROOT / f'catalog/system-{family}-connectors.json').write_text(
             packed[:-1] + ',\n"parts":{\n' + parts + '\n}\n}\n', encoding='utf-8')
-        print(f'System: {coverage[args.system_group]} {family} designs with connectors')
+        print(f'System: {sum(coverage.values())} {family} designs with connectors')
         return
 
     for design, group, _, _, _ in technic:

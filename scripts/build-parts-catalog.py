@@ -29,9 +29,75 @@ SYSTEM_GROUPS = [
     ('plates', 'Пластины', 'Plates'),
     ('slopes', 'Скосы', 'Slopes'),
     ('tiles', 'Плитки', 'Tiles'),
+    ('bricks', 'Кирпичи', 'Bricks'),
+    ('baseplates', 'Базовые пластины', 'Baseplates'),
+    ('wedges', 'Клинья и крылья', 'Wedges & wings'),
+    ('round', 'Круглые детали и конусы', 'Round parts & cones'),
+    ('arches', 'Арки', 'Arches'),
+    ('brackets', 'Кронштейны', 'Brackets'),
+    ('hinges', 'Шарниры и поворотные платформы', 'Hinges & turntables'),
+    ('bars', 'Стержни, антенны и лестницы', 'Bars, antennas & ladders'),
+    ('doors', 'Двери и окна', 'Doors & windows'),
+    ('panels', 'Панели и ограждения', 'Panels & fences'),
+    ('windscreens', 'Стёкла и кабины', 'Windscreens & cockpits'),
+    ('containers', 'Контейнеры', 'Containers'),
+    ('supports', 'Опоры, лестницы и платформы', 'Supports, stairs & platforms'),
+    ('vehicles', 'Детали транспорта', 'Vehicle parts'),
+    ('trains', 'Поезда и монорельс', 'Trains & monorail'),
+    ('plants', 'Растения', 'Plants'),
+    ('animals', 'Животные', 'Animals'),
+    ('rocks', 'Камни', 'Rocks'),
+    ('minifigs', 'Минифигурки', 'Minifigures'),
+    ('accessories', 'Аксессуары минифигурок', 'Minifigure accessories'),
+    ('decorations', 'Флаги и знаки', 'Flags & signs'),
+    ('flexible', 'Трубки, ткань и гибкие детали', 'Hoses, fabric & flexible parts'),
+    ('other', 'Прочие детали System', 'Other System parts'),
 ]
 
+SYSTEM_CATEGORIES = {
+    'Brick': 'bricks', 'Baseplate': 'baseplates', 'Wedge': 'wedges', 'Wing': 'wedges',
+    'Cylinder': 'round', 'Cone': 'round', 'Dish': 'round', 'Sphere': 'round',
+    'Arch': 'arches', 'Bracket': 'brackets', 'Hinge': 'hinges', 'Turntable': 'hinges',
+    'Bar': 'bars', 'Antenna': 'bars', 'Ladder': 'bars', 'Door': 'doors', 'Window': 'doors',
+    'Garage': 'doors', 'Panel': 'panels', 'Fence': 'panels', 'Glass': 'windscreens',
+    'Windscreen': 'windscreens', 'Cockpit': 'windscreens', 'Container': 'containers',
+    'Support': 'supports', 'Staircase': 'supports', 'Platform': 'supports',
+    'Vehicle': 'vehicles', 'Car': 'vehicles', 'Boat': 'vehicles', 'Plane': 'vehicles',
+    'Tail': 'vehicles', 'Propeller': 'vehicles', 'Crane': 'vehicles', 'Tipper': 'vehicles',
+    'Tractor': 'vehicles', 'Trailer': 'vehicles', 'Exhaust': 'vehicles',
+    'Train': 'trains', 'Monorail': 'trains', 'Plant': 'plants', 'Animal': 'animals',
+    'Rock': 'rocks', 'Minifig': 'minifigs', 'Minifig Head': 'minifigs',
+    'Minifig Torso': 'minifigs', 'Minifig Hips': 'minifigs', 'Minifig Leg': 'minifigs',
+    'Minifig Upper': 'minifigs', 'Minifig Lower': 'minifigs',
+    'Minifig Accessory': 'accessories', 'Minifig Headwear': 'accessories',
+    'Minifig Neckwear': 'accessories', 'Minifig Hipwear': 'accessories',
+    'Minifig Footwear': 'accessories', 'Flag': 'decorations', 'Roadsign': 'decorations',
+    'Hose': 'flexible', 'String': 'flexible', 'Sheet Fabric': 'flexible',
+    'Sheet Plastic': 'flexible', 'Sheet Cardboard': 'flexible',
+    'Tap': 'other', 'Magnet': 'other', 'Winch': 'other', 'Conveyor': 'other',
+    'Arm': 'other', 'Rack': 'other', 'Electric': 'other',
+}
+OTHER_FAMILIES = re.compile(r'\b(?:Duplo|Fabuland|Quatro|Scala|Belville|Modulex|Znap|Clikits|Primo|Homemaker|Maxifig|Friends|Technic|Bionicle|Hero Factory)\b', re.I)
+
 TITLES = [
+    ('Baseplate', 'Базовая пластина'), ('Wedge', 'Клин'), ('Wing', 'Крыло'),
+    ('Arch', 'Арка'), ('Bracket', 'Кронштейн'), ('Cone', 'Конус'),
+    ('Dome', 'Купол'), ('Decoration', 'Украшение'), ('Dish', 'Тарелка'),
+    ('Bar', 'Стержень'), ('Antenna', 'Антенна'), ('Ladder', 'Лестница'),
+    ('Door', 'Дверь'), ('Window', 'Окно'), ('Garage', 'Гараж'), ('Fence', 'Ограждение'),
+    ('Glass', 'Стекло'), ('Windscreen', 'Лобовое стекло'), ('Cockpit', 'Кабина'),
+    ('Container', 'Контейнер'), ('Support', 'Опора'), ('Staircase', 'Лестница'),
+    ('Slide', 'Горка'), ('Platform', 'Платформа'), ('Vehicle', 'Деталь транспорта'),
+    ('Car', 'Деталь автомобиля'), ('Boat', 'Деталь лодки'), ('Plane', 'Деталь самолёта'),
+    ('Tail', 'Хвост'), ('Crane', 'Деталь крана'), ('Tipper', 'Кузов самосвала'),
+    ('Tractor', 'Деталь трактора'), ('Trailer', 'Прицеп'), ('Exhaust', 'Выхлопная труба'),
+    ('Train', 'Деталь поезда'), ('Monorail', 'Монорельс'), ('Plant', 'Растение'),
+    ('Animal', 'Животное'), ('Rock', 'Камень'), ('Minifig', 'Минифигурка'),
+    ('Flag', 'Флаг'), ('Roadsign', 'Дорожный знак'), ('Signpost', 'Указатель'),
+    ('Sheet Fabric', 'Ткань'), ('Sheet Plastic', 'Пластиковый лист'),
+    ('Sheet Cardboard', 'Картон'), ('String', 'Нить'), ('Tap', 'Кран'),
+    ('Magnet', 'Магнит'), ('Conveyor', 'Конвейер'), ('Arm', 'Рычаг'),
+    ('Ripcord', 'Пусковая рейка'), ('Claw', 'Коготь'), ('Electric', 'Электроника'),
     ('Electric Control+ Hub', 'Хаб Control+'),
     ('Electric Mindstorms EV3', 'Электроника Mindstorms EV3'),
     ('Electric Mindstorms NXT', 'Электроника Mindstorms NXT'),
@@ -239,7 +305,11 @@ def straight_turntable():
     return '\n'.join(lines) + '\n'
 
 
-def build(archive_path):
+def build(archive_path, system_only=False):
+    if system_only:
+        current = json.loads((ROOT / 'catalog/parts-library.json').read_text())
+        if current['source']['sha256'] != sha256(archive_path.read_bytes()).hexdigest():
+            raise ValueError('System-only update requires the archive used by the existing Technic catalog')
     source = ZipFile(archive_path)
     files = {name.lower().split('/', 1)[1]: name for name in source.namelist() if name.lower().startswith('ldraw/')}
     turntable = 'parts/88738.dat'
@@ -252,7 +322,7 @@ def build(archive_path):
     core = set(re.findall(r'^1 .+ ([^\s]+)\.dat$', starter_model, re.M))
     models = ldraw / 'technic'
     system_models = ldraw / 'system'
-    for directory in (models, system_models):
+    for directory in ((system_models,) if system_only else (models, system_models)):
         directory.mkdir(exist_ok=True)
         for old in directory.glob('*.json.gz'):
             old.unlink()
@@ -295,6 +365,7 @@ def build(archive_path):
     system_plates = []
     system_slopes = []
     system_tiles = []
+    system_extra = defaultdict(list)
     redirects = {}
     for path in sorted(files):
         if not re.fullmatch(r'parts/[^/]+\.dat', path):
@@ -304,7 +375,7 @@ def build(archive_path):
             header = file.read(2048).decode('utf-8-sig', errors='replace')
         first = header.splitlines()[0][2:].strip()
         title = ' '.join(first.split())
-        if title.startswith(('=Plate ', '=Slope ', '=Tile ', '~Moved to ')):
+        if title.startswith(('=', '~Moved to ')):
             target = re.search(r'^1 16 0 0 0 1 0 0 0 1 0 0 0 1 ([^\s/]+)\.dat\s*$', read(path), re.M | re.I)
             if target:
                 redirects[design] = target[1].lower()
@@ -319,6 +390,10 @@ def build(archive_path):
             continue
         if category == 'Tile' and title.startswith('Tile '):
             system_tiles.append((design, 'tiles', title, localized_title(title), path))
+        if (category in SYSTEM_CATEGORIES and not title.startswith(('~', '=', '_'))
+                and not OTHER_FAMILIES.search(title)):
+            group = SYSTEM_CATEGORIES[category]
+            system_extra[group].append((design, group, title, localized_title(title), path))
         named_technic = re.search(r'\btechnic\b|power functions|mindstorms|powered up|control\+|control plus|spike prime', title, re.I)
         wheel = category in {'Wheel', 'Tyre'} and not re.search(r'\b(?:minifig|duplo|train|scala)\b', title, re.I)
         related = named_technic and category not in {'Sticker', 'Sticker Shortcut', 'Obsolete'}
@@ -332,7 +407,7 @@ def build(archive_path):
         entries.append((design, group, en, localized_title(title), path))
     entries.sort(key=lambda item: (GROUP_PRIORITY.index(item[1]), item[2].lower(), item[0]))
 
-    for family in (system_plates, system_slopes, system_tiles):
+    for family in (system_plates, system_slopes, system_tiles, *system_extra.values()):
         family.sort(key=lambda item: (item[2].lower(), item[0]))
 
     def write_pack(output, paths):
@@ -384,8 +459,9 @@ def build(archive_path):
         flush()
         return index
 
-    index = pack_library(models, entries, embedded=core)
-    if turntable not in files:
+    index = (next(section['parts'] for section in current['sections'] if section['id'] == 'technic')
+             if system_only else pack_library(models, entries, embedded=core))
+    if turntable not in files and not system_only:
         pack = 'turntable-88738'
         write_pack(models / f'{pack}.json.gz', closure([turntable]))
         index.append(['88738', 'joints', 'Turntable 60 Tooth Straight Top',
@@ -393,7 +469,11 @@ def build(archive_path):
     plate_index = pack_library(system_models, system_plates, extra_common=('ldconfig.ldr',))
     slope_index = pack_library(system_models, system_slopes, extra_common=('ldconfig.ldr',), prefix='slope-')
     tile_index = pack_library(system_models, system_tiles, extra_common=('ldconfig.ldr',), prefix='tile-')
+    # Append categories so existing saved atlas positions remain stable.
     system_index = plate_index + slope_index + tile_index
+    for group, *_ in SYSTEM_GROUPS[3:]:
+        system_index += pack_library(system_models, system_extra[group],
+                                     extra_common=('ldconfig.ldr',), prefix=group + '-')
     system_designs = {design for design, *_ in system_index}
     aliases = defaultdict(list)
     for design, target in redirects.items():
@@ -410,14 +490,16 @@ def build(archive_path):
             {'id': 'technic', 'ru': 'Technic', 'en': 'Technic', 'assetPath': 'technic',
              'revision': f'{release}-turntables', 'groups': [group[:3] for group in GROUPS], 'parts': index},
             {'id': 'system', 'ru': 'System', 'en': 'System', 'assetPath': 'system',
-             'revision': f'{release}-tiles',
+             'revision': f'{release}-system-complete',
              'groups': SYSTEM_GROUPS, 'parts': system_index, 'aliases': aliases},
         ],
     })
-    print(f'{release}: {len(index)} Technic parts, {len(plate_index)} System plates, {len(slope_index)} System slopes, {len(tile_index)} System tiles')
+    print(f'{release}: {len(index)} Technic parts, {len(plate_index)} System plates, {len(slope_index)} System slopes, {len(tile_index)} System tiles, {len(system_index)} System parts total')
 
 
 if __name__ == '__main__':
     cli = argparse.ArgumentParser(description=__doc__)
     cli.add_argument('archive', type=Path, help='Official LDraw complete.zip')
-    build(cli.parse_args().archive)
+    cli.add_argument('--system-only', action='store_true', help='Preserve existing Technic geometry and index')
+    args = cli.parse_args()
+    build(args.archive, args.system_only)
