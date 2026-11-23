@@ -2055,6 +2055,16 @@ export async function mountEditor(root, { document, projectId, language, save, d
   setSelection(undefined)
   scene.resetView()
   tutorial = mountTutorial(root, { projectId, language, signal })
+  // A resumed mechanics lesson needs kinematics mode and a selectable gear.
+  // Without this, reloading during the lesson returns to Build mode and
+  // the remaining steps can no longer be completed.
+  if (tutorial?.mode === 'mechanics' && ['gearSelected', 'motion'].includes(tutorial.step)) {
+    setMode('kinematics')
+    if (tutorial.step === 'motion') {
+      const gear = state.parts.find(part => ['10928', '3648'].includes(part.design))
+      if (gear) setSelection(gear.id)
+    }
+  }
   reportLoad?.('scene', true)
   if (instructionReady) await instructionReady
 }
