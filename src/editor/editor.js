@@ -27,7 +27,7 @@ import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-dri
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
 import { editorLabels } from './labels.js?v=torque-clutch'
 import { readPreference, writePreference } from '../menu/preferences.js?v=full-settings'
-import { mountTutorial } from './tutorial.js?v=academy-v2'
+import { mountTutorial, showEditorTip } from './tutorial.js?v=academy-v3'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
@@ -864,6 +864,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
 
   async function selectLibraryPart(part) {
     if (mode !== 'build') return
+    if (/spring|пружин/i.test(`${part.en ?? ''} ${part.ru ?? ''}`)) showEditorTip(root, 'spring', language, signal)
     if (tool === 'track') setTool('move')
     cancelPlacement()
     const request = { part }
@@ -1319,7 +1320,10 @@ export async function mountEditor(root, { document, projectId, language, save, d
       focusedTrack = undefined
       el('trackPanel').querySelector('[data-track="mode"]').focus({ preventScroll: true })
     }
-    if (previous !== tool) audio.play('tool')
+    if (previous !== tool) {
+      audio.play('tool')
+      if (tool === 'belt' || tool === 'track') showEditorTip(root, tool, language, signal)
+    }
   }
 
   function rotationJoints(id) {
@@ -1474,6 +1478,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     if (mode === 'testDrive') drivePanel.setActive(true)
     audio.play('tool')
     if (mode === 'kinematics') tutorial?.handle('kinematics')
+    if (mode === 'kinematics' || mode === 'testDrive') showEditorTip(root, mode, language, signal)
   }
 
   function stepAnimation(time) {
