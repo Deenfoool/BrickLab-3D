@@ -13,6 +13,13 @@ const pageWait = 6000
 const personalPdfs = new Map()
 const localBookKey = set => `local:${set.number}`
 
+// LEGO does not expose these PDFs to cross-origin JavaScript on GitHub Pages.
+// A native browser PDF viewer can display them without asking PDF.js to fetch
+// their bytes. Users can still upload a local PDF for page/part recognition.
+const needsNativePdfViewer = source => typeof source === 'string' &&
+  /^https:\/\/www\.lego\.com\/(?:biassets\/bi|cdn\/product-assets\/product\.bi\.core\.pdf)\/\d+\.pdf(?:[?#]|$)/i.test(source) &&
+  new URL(source).origin !== location.origin
+
 export function prepareInstructionPage(progress, signal, reader) {
   const entry = progress?.set.books[progress.book]
   if (!progress) return null
@@ -20,7 +27,7 @@ export function prepareInstructionPage(progress, signal, reader) {
   const display = entry && instructionPagePreview(progress.set.number, entry.url, progress.page)
   if (local || !display?.image) {
     const source = local ?? entry?.url
-    if (!reader || !signal || !source) return null
+    if (!reader || !signal || !source || needsNativePdfViewer(source)) return null
     const canvas = node('canvas')
     const result = reader.render(source, progress.page, canvas, signal).then(
       value => ({ value }), error => ({ error }),
@@ -142,7 +149,11 @@ export function mountInstructions(
   const fallback = control(pdfLabel, () => file.click(), signal)
   const retryPage = control(ru ? 'Повторить' : 'Retry', () => renderPreview(currentEntry()), signal)
   const recovery = node('div', undefined, 'instruction-actions')
-  recovery.append(retryPage, fallback)
+  const officialPdf = node('a', ru ? 'Открыть оригинал PDF' : 'Open original PDF')
+  officialPdf.target = '_blank'
+  officialPdf.rel = 'noopener noreferrer'
+  officialPdf.hidden = true
+  recovery.append(retryPage, fallback, officialPdf)
   const status = node('p')
   status.setAttribute('role', 'status')
   const credit = node('span')
@@ -245,6 +256,8 @@ export function mountInstructions(
     previewStatus.hidden = true
     recognitionStatus.hidden = true
     recovery.hidden = true
+    retryPage.hidden = false
+    officialPdf.hidden = true
     frame.hidden = true
     frame.removeAttribute('src')
     const prepared = firstPage
@@ -288,6 +301,21 @@ export function mountInstructions(
         }
         return
       }
+    }
+    if (!local && needsNativePdfViewer(source)) {
+      // Browser-native rendering does not require CORS. If the remote site
+      // disallows embedding, offer the official PDF link or a local upload.
+      frame.src = `${source}#page=${pageNumber}&view=FitH`
+      frame.hidden = false
+      previewStatus.textContent = ru
+        ? 'PDF открыт во встроенном просмотрщике. Для распознавания деталей загрузите PDF с устройства.'
+        : 'PDF is displayed in the browser viewer. Upload the PDF for part recognition.'
+      previewStatus.hidden = false
+      retryPage.hidden = true
+      officialPdf.href = source
+      officialPdf.hidden = false
+      recovery.hidden = false
+      return
     }
     const warm = prepared?.result && prepared.source === source && prepared.page === pageNumber
     const canvas = warm ? prepared.canvas : node('canvas')
@@ -335,6 +363,9 @@ export function mountInstructions(
       : []
     if (request.aborted) return []
     if (ready.length) addInstructionParts(preview, ready, { language, describe: describePart, find: findPart })
+    // Pre-indexed clickable part regions still work on the image. Avoid a
+    // guaranteed CORS failure from background PDF inspection on LEGO CDN.
+    if (needsNativePdfViewer(source)) return []
     recognitionStatus.textContent = ru ? 'Распознаём детали…' : 'Recognizing parts…'
     recognitionStatus.hidden = false
     try {
