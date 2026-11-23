@@ -1,6 +1,6 @@
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
-import { locales } from './locale.js?v=project-home-layout'
+import { locales } from './locale.js?v=project-cards'
 import { revealMenu, showEditorLoading, startStartup } from './startup.js?v=bold-brand'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
@@ -33,6 +33,8 @@ let setSession
 let editorSession
 let librarySession
 let homePreviewSession
+let projectPreviewSession
+let projectPreviewObserver
 let librarySection
 let libraryGroup = ''
 let language = 'ru'
@@ -104,72 +106,125 @@ function closeMenu(restoreFocus = false) {
   if (restoreFocus) toggle.focus()
 }
 
-function projectRow(project, formatter) {
+function projectCard(project, formatter) {
   const t = strings()
-  const tr = element('tr')
-  const title = element('td')
-  const open = button('project-open')
-  const fileIcon = element('span', 'file-icon')
-  fileIcon.append(icon('file'))
-  open.append(fileIcon, element('span', null, project.document.name))
-  open.title = project.document.name
-  open.addEventListener('click', () => openProject(project.id))
-  title.append(open)
-  const modified = element('td')
+  const card = element('article', 'project-card')
+  const art = element('div', 'project-card-image')
+  art.setAttribute('aria-hidden', 'true')
+  const placeholder = element('div', 'project-card-placeholder')
+  placeholder.append(icon('layers'))
+  if (!project.document.parts.length) placeholder.append(element('span', null, t.emptyModel))
+  art.append(placeholder)
+
+  const body = element('div', 'project-card-body')
+  const title = element('h2', 'project-card-title', project.document.name)
+  title.title = project.document.name
+  const setNumber = project.document.buildingSet?.set?.number
+  const customDescription = typeof project.document.description === 'string' ? project.document.description.trim() : ''
+  const description = customDescription ||
+    (typeof setNumber === 'string' && setNumber
+      ? t.projectSetDescription(setNumber) : t.projectDescription(project.document.parts.length))
+  const summary = element('p', 'project-card-description', description)
+  const meta = element('div', 'project-card-meta')
   const date = element('time', null, formatter.format(new Date(project.modifiedAt)))
   date.dateTime = project.modifiedAt
-  modified.append(date)
-  const actions = element('td', 'row-actions')
-  const toggle = button('more')
-  toggle.append(icon('more'))
-  toggle.setAttribute('aria-label', `${t.actions}: ${project.document.name}`)
-  toggle.setAttribute('aria-expanded', 'false')
-  const menu = element('div', 'row-menu')
-  menu.id = `actions-${project.id}`
-  toggle.setAttribute('aria-controls', menu.id)
-  menu.hidden = true
-  const download = button(null, t.export)
-  download.addEventListener('click', () => {
-    downloadProject(project.document)
-    closeMenu(true)
-  })
-  const remove = button('danger', t.remove)
+  meta.append(element('span', null, t.projectParts(project.document.parts.length)), date)
+
+  const actions = element('div', 'project-card-actions')
+  const open = button('workspace-action primary project-card-open', t.projectOpen)
+  open.addEventListener('click', () => openProject(project.id))
+  const download = button('workspace-action project-card-download', t.projectDownload)
+  download.addEventListener('click', () => downloadProject(project.document))
+  const remove = button('project-card-remove')
+  remove.append(icon('trash'))
+  remove.title = t.remove
+  remove.setAttribute('aria-label', `${t.remove}: ${project.document.name}`)
   remove.addEventListener('click', () => {
     pendingRemoval = project.id
     byId('remove-name').textContent = project.document.name
-    closeMenu(true)
     removeDialog.returnValue = 'cancel'
     removeDialog.showModal()
   })
-  menu.append(download, remove)
-  toggle.addEventListener('click', () => {
-    if (activeMenu?.toggle === toggle) {
-      closeMenu()
-      return
-    }
-    closeMenu()
-    activeMenu = { toggle, menu }
-    menu.hidden = false
-    toggle.setAttribute('aria-expanded', 'true')
-  })
-  actions.append(toggle, menu)
-  tr.append(title, modified, actions)
-  return tr
+  actions.append(open, download, remove)
+  body.append(title, summary, meta, actions)
+  card.append(art, body)
+  return { card, art, project }
+}
+
+function stopProjectPreviews() {
+  projectPreviewSession?.abort()
+  projectPreviewSession = undefined
+  projectPreviewObserver?.disconnect()
+  projectPreviewObserver = undefined
 }
 
 const sortByModified = records => [...records].sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt))
 
 function renderList() {
   closeMenu()
+  stopProjectPreviews()
   const keyword = query.value.trim().toLocaleLowerCase(language)
   const visible = sortByModified(projects.filter(
     project => project.document.name.toLocaleLowerCase(language).includes(keyword),
   ))
   const formatter = new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric' })
-  rows.replaceChildren(...visible.map(project => projectRow(project, formatter)))
+  const cards = visible.map(project => projectCard(project, formatter))
+  rows.replaceChildren(...cards.map(({ card }) => card))
   const empty = byId('empty-state')
   empty.hidden = visible.length > 0
   empty.textContent = strings()[keyword ? 'noResults' : 'empty']
+  if (!cards.length) return
+
+  const controller = new AbortController()
+  projectPreviewSession = controller
+  const { signal } = controller
+  const queue = []
+  let loading = false
+
+  async function loadQueuedPreviews() {
+    if (loading || signal.aborted) return
+    loading = true
+    try {
+      const { loadHomePreviews } = await import('./home-previews.js?v=project-home')
+      while (!signal.aborted && queue.length) {
+        await loadHomePreviews(queue.splice(0, 12), signal)
+      }
+    } catch {
+      // The saved builds and their actions remain available without WebGL or cache.
+    } finally {
+      loading = false
+    }
+  }
+
+  const pending = new Map()
+  for (const entry of cards) {
+    const cover = safeImage(entry.project.document.buildingSet?.set?.image)
+    if (cover) showPreview(entry.art, cover, signal)
+    if (!entry.project.document.parts.length) continue
+    pending.set(entry.card, entry)
+  }
+  const enqueue = entry => {
+    queue.push({
+      project: entry.project,
+      show(preview) { if (preview && !signal.aborted) showPreview(entry.art, preview, signal) },
+    })
+  }
+  if (typeof IntersectionObserver === 'function') {
+    const observer = new IntersectionObserver(entries => {
+      for (const item of entries) {
+        if (!item.isIntersecting) continue
+        observer.unobserve(item.target)
+        const entry = pending.get(item.target)
+        if (entry) enqueue(entry)
+      }
+      if (queue.length) void loadQueuedPreviews()
+    }, { rootMargin: '250px 0px' })
+    projectPreviewObserver = observer
+    for (const card of pending.keys()) observer.observe(card)
+  } else {
+    for (const entry of pending.values()) enqueue(entry)
+    void loadQueuedPreviews()
+  }
 }
 
 function recentBuild(project, formatter) {
@@ -318,6 +373,7 @@ function render(initial = false) {
   query.placeholder = t.search
   query.setAttribute('aria-label', t.search)
   byId('dashboard').hidden = !listVisible
+  if (!listVisible) stopProjectPreviews()
   byId('home-title').hidden = !home
   byId('home-actions').hidden = !home && !listVisible
   byId('home-sets').hidden = !home
