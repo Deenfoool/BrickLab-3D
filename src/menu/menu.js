@@ -1,6 +1,6 @@
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
-import { locales } from './locale.js?v=project-cards'
+import { locales } from './locale.js?v=project-cards-fix'
 import { revealMenu, showEditorLoading, startStartup } from './startup.js?v=bold-brand'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
@@ -108,6 +108,16 @@ function closeMenu(restoreFocus = false) {
 
 function projectCard(project, formatter) {
   const t = strings()
+  // Older cached locale modules must not break the entire saved-builds page.
+  const projectParts = count => typeof t.projectParts === 'function'
+    ? t.projectParts(count) : language === 'ru' ? `${count} дет.` : `${count} parts`
+  const projectDescription = count => typeof t.projectDescription === 'function'
+    ? t.projectDescription(count) : language === 'ru'
+      ? (count ? `Модель из ${count} деталей.` : 'Начните сборку с первых деталей.')
+      : (count ? `A model with ${count} parts.` : 'Start adding parts to this build.')
+  const projectSetDescription = number => typeof t.projectSetDescription === 'function'
+    ? t.projectSetDescription(number) : language === 'ru'
+      ? `Сборка по инструкции · набор №${number}` : `Building from instructions · set #${number}`
   const card = element('article', 'project-card')
   const art = element('div', 'project-card-image')
   art.setAttribute('aria-hidden', 'true')
@@ -123,17 +133,17 @@ function projectCard(project, formatter) {
   const customDescription = typeof project.document.description === 'string' ? project.document.description.trim() : ''
   const description = customDescription ||
     (typeof setNumber === 'string' && setNumber
-      ? t.projectSetDescription(setNumber) : t.projectDescription(project.document.parts.length))
+      ? projectSetDescription(setNumber) : projectDescription(project.document.parts.length))
   const summary = element('p', 'project-card-description', description)
   const meta = element('div', 'project-card-meta')
   const date = element('time', null, formatter.format(new Date(project.modifiedAt)))
   date.dateTime = project.modifiedAt
-  meta.append(element('span', null, t.projectParts(project.document.parts.length)), date)
+  meta.append(element('span', null, projectParts(project.document.parts.length)), date)
 
   const actions = element('div', 'project-card-actions')
-  const open = button('workspace-action primary project-card-open', t.projectOpen)
+  const open = button('workspace-action primary project-card-open', t.projectOpen || t.open || (language === 'ru' ? 'Открыть' : 'Open'))
   open.addEventListener('click', () => openProject(project.id))
-  const download = button('workspace-action project-card-download', t.projectDownload)
+  const download = button('workspace-action project-card-download', t.projectDownload || t.export || (language === 'ru' ? 'Скачать' : 'Download'))
   download.addEventListener('click', () => downloadProject(project.document))
   const remove = button('project-card-remove')
   remove.append(icon('trash'))
