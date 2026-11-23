@@ -6,14 +6,14 @@
   <meta name="theme-color" content="#181a1d">
   <title>BrickLab 3D</title>
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./src/menu/menu.css?v=project-shadows">
+  <link rel="stylesheet" href="./src/menu/menu.css?v=full-settings">
   <link rel="stylesheet" href="./src/editor/editor.css?v=editor-feedback">
   <link rel="stylesheet" href="./src/sets/sets.css?v=brick-intros">
   <link rel="stylesheet" href="./src/menu/startup.css?v=ldraw-brand">
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=project-shadows"></script>
+  <script type="module" src="./src/menu/menu.js?v=full-settings"></script>
 </head>
 <body>
   <section class="startup" id="startup" aria-label="Подготовка BrickLab 3D">
@@ -191,11 +191,66 @@
     </main>
   </div>
   <main id="editor" class="editor" hidden></main>
-  <dialog id="settings-dialog">
+  <dialog id="settings-dialog" class="settings-modal" aria-labelledby="settings-title">
     <form method="dialog">
-      <h2 data-text="settings">Настройки</h2>
-      <label class="setting"><span data-text="language">Язык интерфейса</span><select id="settings-language"><option value="ru">Русский</option><option value="en">English</option></select></label>
-      <button class="secondary" value="close" data-text="done">Готово</button>
+      <header class="settings-heading">
+        <h2 id="settings-title" data-text="settings">Настройки</h2>
+        <p data-text="settingsIntro">Персонализируйте редактор под себя. Выбор сохраняется в браузере.</p>
+      </header>
+      <section class="settings-section" aria-labelledby="settings-general">
+        <h3 id="settings-general" data-text="settingsGeneral">Интерфейс</h3>
+        <label class="settings-row">
+          <span class="settings-copy"><strong data-text="language">Язык интерфейса</strong><small data-text="settingsLanguageHint">Язык меню и редактора</small></span>
+          <select id="settings-language"><option value="ru">Русский</option><option value="en">English</option></select>
+        </label>
+        <label class="settings-row">
+          <span class="settings-copy"><strong data-text="settingsPreviews">3D-превью сборок</strong><small data-text="settingsPreviewsHint">Создавать миниатюры сохранённых моделей</small></span>
+          <input type="checkbox" data-pref="previews">
+        </label>
+      </section>
+      <section class="settings-section" aria-labelledby="settings-editor">
+        <h3 id="settings-editor" data-text="settingsEditor">Редактор</h3>
+        <label class="settings-row">
+          <span class="settings-copy"><strong data-text="settingsSnap">Автоматическая стыковка</strong><small data-text="settingsSnapHint">Соединять совместимые детали при перемещении</small></span>
+          <input type="checkbox" data-pref="snap">
+        </label>
+        <label class="settings-row">
+          <span class="settings-copy"><strong data-text="settingsRotation">Поворот с шагом 45°</strong><small data-text="settingsRotationHint">Включать дискретный поворот при открытии редактора</small></span>
+          <input type="checkbox" data-pref="rotationSnap">
+        </label>
+        <label class="settings-row">
+          <span class="settings-copy"><strong data-text="settingsGrid">Сетка</strong><small data-text="settingsGridHint">Показывать разметку рабочей области</small></span>
+          <input type="checkbox" data-pref="grid">
+        </label>
+        <label class="settings-row">
+          <span class="settings-copy"><strong data-text="settingsAxes">Оси координат</strong><small data-text="settingsAxesHint">Показывать направления X, Y и Z</small></span>
+          <input type="checkbox" data-pref="axes">
+        </label>
+        <label class="settings-row">
+          <span class="settings-copy"><strong data-text="settingsSound">Звуковые эффекты</strong><small data-text="settingsSoundHint">Щелчки деталей, соединений и вращения</small></span>
+          <input type="checkbox" data-pref="sound">
+        </label>
+      </section>
+      <section class="settings-section" aria-labelledby="settings-performance">
+        <h3 id="settings-performance" data-text="settingsPerformance">Производительность</h3>
+        <label class="settings-row">
+          <span class="settings-copy"><strong data-text="settingsQuality">Качество 3D-графики</strong><small data-text="settingsQualityHint">Применяется при следующем открытии редактора</small></span>
+          <select data-pref="quality">
+            <option value="low" data-text="settingsQualityLow">Экономное</option>
+            <option value="balanced" data-text="settingsQualityBalanced">Среднее</option>
+            <option value="high" data-text="settingsQualityHigh">Высокое</option>
+          </select>
+        </label>
+        <div class="settings-row">
+          <span class="settings-copy"><strong data-text="settingsPreviewCache">Кеш миниатюр</strong><small data-text="settingsPreviewCacheHint">Освободить место и создать превью заново</small></span>
+          <button type="button" class="settings-action" id="settings-clear-previews" data-text="settingsClearPreviews">Очистить</button>
+        </div>
+      </section>
+      <p class="settings-status" id="settings-status" role="status" aria-live="polite" hidden></p>
+      <footer class="settings-footer">
+        <button type="button" class="settings-reset" id="settings-reset" data-text="settingsReset">По умолчанию</button>
+        <button type="submit" class="workspace-action primary" value="close" data-text="done">Готово</button>
+      </footer>
     </form>
   </dialog>
   <dialog id="remove-dialog">
