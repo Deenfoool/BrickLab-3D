@@ -56,6 +56,7 @@ export function mountTutorial(root, { projectId, language, signal }) {
   let step = Math.max(0, Math.min(flow.length - 1, active.step))
   let highlighted
   let finished = false
+  let failedAttempts = 0
 
   const card = document.createElement('aside')
   card.className = 'tutorial-coach'
@@ -101,6 +102,7 @@ export function mountTutorial(root, { projectId, language, signal }) {
     highlighted?.classList.add('tutorial-highlight')
   }
   function render() {
+    failedAttempts = 0
     hint.hidden = true
     help.textContent = t.hint
     const [title, details] = t.steps[flow[step]]
@@ -167,6 +169,13 @@ export function mountTutorial(root, { projectId, language, signal }) {
   signal.addEventListener('abort', () => { clearHighlight(); card.remove() }, { once: true })
   render()
   return {
+    nudge(action) {
+      if (finished || signal.aborted || flow[step] !== action) return
+      if (++failedAttempts < 2) return
+      hint.hidden = false
+      hint.textContent = t.steps[flow[step]][2]
+      help.textContent = t.hideHint
+    },
     handle(action, detail = {}) {
       if (finished || signal.aborted || action !== flow[step]) return
       if (action === 'placed' && (!detail.newPart || !['2780', '6558'].includes(String(detail.design)))) return
