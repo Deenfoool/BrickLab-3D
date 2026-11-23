@@ -35,6 +35,7 @@ export function writePreference(name, value) {
 export function resetPreferences() {
   try {
     for (const definition of Object.values(preferences)) localStorage.removeItem(definition.storage)
+    localStorage.removeItem('bricklab.language')
     return true
   } catch {
     return false
