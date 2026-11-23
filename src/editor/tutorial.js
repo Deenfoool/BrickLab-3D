@@ -189,6 +189,7 @@ export function mountTutorial(root, { projectId, language, signal }) {
       }
     },
     get step() { return flow[step] },
+    get mode() { return active.mode },
   }
 }
 
