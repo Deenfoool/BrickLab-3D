@@ -332,6 +332,10 @@ dialog p,.setting{margin:18px 0}
 .tutorial-link{background:none;color:#ffd284;padding:6px 0}
 .tutorial-link:hover{text-decoration:underline}
 .tutorial-next{padding:9px 11px!important;border-radius:7px;background:#ffb01b;color:#17130c;font-weight:750}
+.tutorial-context-tip{position:fixed;z-index:54;left:20px;bottom:22px;width:min(320px,calc(100vw - 40px));padding:15px 38px 15px 16px;border:1px solid #645338;border-radius:11px;background:#25262beF;box-shadow:0 12px 38px #0008;color:#edf0f6;font-size:13px;pointer-events:auto}
+.tutorial-context-tip strong{color:#ffcf77;font-size:14px}
+.tutorial-context-tip p{margin:6px 0 0;color:#c8ced8;font-size:12px;line-height:1.5}
+.tutorial-context-tip button{position:absolute;right:10px;top:8px;border:0;background:none;color:#c6ccd6;font-size:22px}
 .tutorial-highlight{outline:2px solid #ffbd4e!important;outline-offset:3px;box-shadow:0 0 0 6px #ffc05233!important;animation:tutorial-spotlight 1.9s ease-in-out infinite}
 @keyframes tutorial-spotlight{0%,100%{outline-color:#ffbd4e;box-shadow:0 0 0 5px #ffc05233}50%{outline-color:#fff0b1;box-shadow:0 0 0 9px #ffc05222}}
 @media(prefers-reduced-motion:reduce){.tutorial-highlight{animation:none}}
