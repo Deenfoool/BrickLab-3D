@@ -191,3 +191,50 @@ export function mountTutorial(root, { projectId, language, signal }) {
     get step() { return flow[step] },
   }
 }
+
+const advancedTips = {
+  ru: {
+    belt: ['Ременная передача', 'Выбери два совместимых шкива или колеса и соедини их ремнём. Они смогут передавать вращение.'],
+    track: ['Гусеничная цепь', 'Выбери ведущую звёздочку и протяни цепь по колёсам, затем проверь натяжение.'],
+    spring: ['Подвеска', 'У пружины есть механические точки соединения. Прикрепляй её к подвижным рычагам, а не просто размещай рядом.'],
+    kinematics: ['Режим кинематики', 'Выбери вал или шестерню и вращай её мышью или ползунком. Связанные детали будут двигаться вместе.'],
+    testDrive: ['Испытательный полигон', 'Для управления нужны рабочие приводы и рулевой механизм. Проверяй модель на подготовленной трассе.'],
+  },
+  en: {
+    belt: ['Belt drive', 'Choose compatible pulleys or wheels and link them with a belt to transfer rotation.'],
+    track: ['Tracks', 'Choose a driving sprocket and route the track around wheels, then check its tension.'],
+    spring: ['Suspension', 'Springs have mechanical connection points. Attach them to moving arms rather than placing them nearby.'],
+    kinematics: ['Kinematics mode', 'Select a gear or axle and rotate it with the mouse or slider. Linked parts will move together.'],
+    testDrive: ['Test track', 'You need working drive and steering components. Try the mechanism on the test track.'],
+  },
+}
+const tipPrefix = 'bricklab.tutorial.tip.'
+
+export function showEditorTip(root, kind, language, signal) {
+  if (signal.aborted || root.querySelector('.tutorial-coach') || root.querySelector('.tutorial-context-tip')) return
+  const entry = advancedTips[language === 'en' ? 'en' : 'ru']?.[kind]
+  if (!entry) return
+  try {
+    if (localStorage.getItem(tipPrefix + kind)) return
+    localStorage.setItem(tipPrefix + kind, '1')
+  } catch {
+    // Hints still work when storage is unavailable.
+  }
+  const toast = document.createElement('aside')
+  toast.className = 'tutorial-context-tip'
+  toast.setAttribute('role', 'status')
+  const heading = document.createElement('strong')
+  heading.textContent = entry[0]
+  const paragraph = document.createElement('p')
+  paragraph.textContent = entry[1]
+  const close = document.createElement('button')
+  close.type = 'button'
+  close.textContent = '×'
+  close.setAttribute('aria-label', language === 'en' ? 'Close tip' : 'Закрыть подсказку')
+  toast.append(heading, paragraph, close)
+  root.append(toast)
+  const timer = setTimeout(() => toast.remove(), 11000)
+  const cleanup = () => { clearTimeout(timer); toast.remove() }
+  close.addEventListener('click', cleanup, { signal, once: true })
+  signal.addEventListener('abort', cleanup, { once: true })
+}
