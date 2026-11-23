@@ -1,4 +1,4 @@
-import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=element-search'
+import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=pdf-cors-fix'
 import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=instruction-artwork-v3'
 import { mountSetPalette } from '../sets/palette.js?v=element-search'
 import { inspectSetPart } from '../sets/inspect.js'
