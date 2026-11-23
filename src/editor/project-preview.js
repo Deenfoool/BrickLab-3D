@@ -11,6 +11,29 @@ const width = 768
 const height = 448
 const view = new THREE.Vector3(1.35, .92, 1.6).normalize()
 
+// Soft contact shadow rendered into the transparent model thumbnail. Unlike
+// card box-shadows, it follows the model and gives it a grounded appearance.
+function makeContactShadow() {
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = 128
+  const context = canvas.getContext('2d')
+  const gradient = context.createRadialGradient(64, 64, 4, 64, 64, 62)
+  gradient.addColorStop(0, 'rgba(0,0,0,0.64)')
+  gradient.addColorStop(.38, 'rgba(0,0,0,0.4)')
+  gradient.addColorStop(.76, 'rgba(0,0,0,0.12)')
+  gradient.addColorStop(1, 'rgba(0,0,0,0)')
+  context.fillStyle = gradient
+  context.fillRect(0, 0, 128, 128)
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  const geometry = new THREE.PlaneGeometry(1, 1)
+  const material = new THREE.MeshBasicMaterial({
+    map: texture, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    toneMapped: false,
+  })
+  return { geometry, material, texture }
+}
+
 function fitCamera(camera, bounds) {
   const size = bounds.getSize(new THREE.Vector3())
   const center = bounds.getCenter(new THREE.Vector3())
@@ -47,6 +70,7 @@ export function createProjectPreviewRenderer() {
     world.add(light)
   }
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, .01, 100)
+  const contactShadow = makeContactShadow()
   const models = new Map()
 
   return {
@@ -84,8 +108,21 @@ export function createProjectPreviewRenderer() {
         const bounds = new THREE.Box3().setFromObject(solids)
         if (bounds.isEmpty()) return null
         fitCamera(camera, bounds)
-        renderer.render(world, camera)
-        return await new Promise(resolve => renderer.domElement.toBlob(resolve, 'image/webp', .87))
+        const size = bounds.getSize(new THREE.Vector3())
+        const center = bounds.getCenter(new THREE.Vector3())
+        const shadow = new THREE.Mesh(contactShadow.geometry, contactShadow.material)
+        shadow.rotation.x = -Math.PI / 2
+        shadow.scale.set(Math.max(size.x, size.z, .5) * 1.24, Math.max(size.z, size.x * .55, .5) * 1.16, 1)
+        shadow.position.set(center.x, bounds.min.y - Math.max(size.y, .5) * .035, center.z)
+        shadow.renderOrder = -1
+        shadow.name = 'preview-contact-shadow'
+        world.add(shadow)
+        try {
+          renderer.render(world, camera)
+          return await new Promise(resolve => renderer.domElement.toBlob(resolve, 'image/webp', .87))
+        } finally {
+          world.remove(shadow)
+        }
       } finally {
         belts.dispose()
         for (const object of solids.children) object.userData.finish.dispose()
@@ -98,6 +135,9 @@ export function createProjectPreviewRenderer() {
           for (const geometry of model.meshes) geometry.dispose()
         }
       }
+      contactShadow.geometry.dispose()
+      contactShadow.material.dispose()
+      contactShadow.texture.dispose()
       renderer.dispose()
       renderer.forceContextLoss()
     },
