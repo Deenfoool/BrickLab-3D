@@ -108,12 +108,16 @@ export function createScene(host, models) {
   resize.observe(host)
   controls.addEventListener('change', invalidate)
   // Only real user camera interactions count towards onboarding.
-  let userCameraAction = false
-  controls.addEventListener('start', () => { userCameraAction = true })
+  let userCameraStart
+  controls.addEventListener('start', () => {
+    userCameraStart = { camera: camera.position.clone(), target: controls.target.clone() }
+  })
   controls.addEventListener('end', () => {
-    if (!userCameraAction) return
-    userCameraAction = false
-    canvas.dispatchEvent(new Event('bricklab-camera-interaction'))
+    if (!userCameraStart) return
+    const moved = userCameraStart.camera.distanceTo(camera.position) > .05 ||
+      userCameraStart.target.distanceTo(controls.target) > .05
+    userCameraStart = undefined
+    if (moved) canvas.dispatchEvent(new Event('bricklab-camera-interaction'))
   })
   canvas.addEventListener('wheel', () => {
     canvas.dispatchEvent(new Event('bricklab-camera-interaction'))
