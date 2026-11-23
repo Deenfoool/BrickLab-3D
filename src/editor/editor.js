@@ -27,7 +27,7 @@ import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-dri
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
 import { editorLabels } from './labels.js?v=torque-clutch'
 import { readPreference, writePreference } from '../menu/preferences.js?v=full-settings'
-import { mountTutorial, showEditorTip } from './tutorial.js?v=academy-v3'
+import { mountTutorial, showEditorTip } from './tutorial.js?v=audit-resume-1'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
