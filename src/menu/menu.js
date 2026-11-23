@@ -1,6 +1,8 @@
+import { sessionDiagnostics } from '../feedback/diagnostics.js?v=bug-report-v1'
+import { mountBugReport } from '../feedback/dialog.js?v=bug-report-v1'
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
-import { locales } from './locale.js?v=full-settings'
+import { locales } from './locale.js?v=bug-report-v1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
 import { revealMenu, showEditorLoading, startStartup } from './startup.js?v=bold-brand'
@@ -618,6 +620,8 @@ query.addEventListener('input', renderList)
 libraryRetry.addEventListener('click', () => location.reload())
 byId('language').addEventListener('change', event => setLanguage(event.target.value))
 byId('settings-language').addEventListener('change', event => setLanguage(event.target.value))
+const bugReport = mountBugReport({ getLanguage: () => language, diagnostics: sessionDiagnostics, version: new URL(import.meta.url).searchParams.get('v') ?? 'dev' })
+byId('bug-report-button').addEventListener('click', () => bugReport.open())
 byId('settings-button').addEventListener('click', () => {
   syncSettingsControls()
   settingsNotice(null)
