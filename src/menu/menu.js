@@ -2,6 +2,7 @@ import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
 import { locales } from './locale.js?v=full-settings'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
+import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
 import { revealMenu, showEditorLoading, startStartup } from './startup.js?v=bold-brand'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
@@ -14,6 +15,7 @@ const featuredExample = exampleGrid.querySelector('.example-card-featured')
 const status = byId('status')
 const removeDialog = byId('remove-dialog')
 const settingsDialog = byId('settings-dialog')
+const tutorialPicker = byId('tutorial-picker')
 const pages = ['home', 'projects', 'examples', 'library', 'sets']
 let projects = readProjects()
 let storageWarning = false
@@ -92,10 +94,36 @@ function openProject(id) {
   else location.hash = hash
 }
 
-function addProject(data) {
+function addProject(data, tutorialMode = null) {
   const record = makeRecord(data)
   updateProjects([record, ...projects])
+  if (tutorialMode) startTutorial(record.id, tutorialMode)
   openProject(record.id)
+  return record.id
+}
+
+async function beginTutorial(mode) {
+  if (!['quick', 'first', 'mechanics'].includes(mode)) return
+  const t = strings()
+  let document
+  try {
+    if (mode === 'mechanics') {
+      document = await loadExample('')
+      document.name = t.tutorialMechanicsProject
+    } else {
+      // A real core Technic beam, displayed in a separate practice project.
+      document = newProject(t.tutorialProjectName, {
+        parts: [{ id: crypto.randomUUID(), design: '32316' }],
+      })
+    }
+  } catch {
+    tutorialPicker.close()
+    setStatus('exampleUnavailable')
+    return
+  }
+  if (settingsDialog.open) settingsDialog.close()
+  if (tutorialPicker.open) tutorialPicker.close()
+  addProject(document, mode)
 }
 
 function closeMenu(restoreFocus = false) {
@@ -387,6 +415,7 @@ function render(initial = false) {
   syncSettingsControls()
   query.placeholder = t.search
   query.setAttribute('aria-label', t.search)
+  byId('tutorial-offer').hidden = !home || projects.length > 0 || readTutorial().seen
   byId('dashboard').hidden = !listVisible
   if (!listVisible) stopProjectPreviews()
   byId('home-title').hidden = !home
@@ -511,11 +540,11 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=full-settings')
+    const { mountEditor } = await import('../editor/editor.js?v=academy-v1')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
-      document: project.document, language, signal: controller.signal,
+      document: project.document, projectId: project.id, language, signal: controller.signal,
       download: downloadProject,
       // An initial deep link uses the main loader and still waits for the first instruction page.
       reportLoad: guidedSet ? transition?.report ?? (() => {}) : undefined,
@@ -607,6 +636,28 @@ for (const input of settingsDialog.querySelectorAll('[data-pref]')) {
     if (name === 'previews') refreshSettingsPreviews()
   })
 }
+byId('settings-tutorial').addEventListener('click', () => {
+  settingsDialog.close()
+  tutorialPicker.showModal()
+})
+byId('tutorial-offer-start').addEventListener('click', () => tutorialPicker.showModal())
+byId('tutorial-offer-later').addEventListener('click', () => {
+  dismissTutorialOffer()
+  byId('tutorial-offer').hidden = true
+})
+for (const choice of tutorialPicker.querySelectorAll('[data-tutorial-mode]')) {
+  choice.addEventListener('click', async () => {
+    for (const control of tutorialPicker.querySelectorAll('[data-tutorial-mode]')) control.disabled = true
+    try { await beginTutorial(choice.dataset.tutorialMode) }
+    finally {
+      for (const control of tutorialPicker.querySelectorAll('[data-tutorial-mode]')) control.disabled = false
+    }
+  })
+}
+document.addEventListener('bricklab-tutorial-next', event => {
+  const mode = event.detail?.mode
+  if (['first', 'mechanics'].includes(mode)) void beginTutorial(mode)
+})
 byId('settings-reset').addEventListener('click', () => {
   if (!resetPreferences()) {
     settingsNotice('settingsResetError')
