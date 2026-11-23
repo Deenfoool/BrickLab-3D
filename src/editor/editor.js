@@ -16,7 +16,7 @@ import { nearestDetent } from '../mechanics/axial.js?v=torque-clutch'
 import { nearbyConnections, translationSnaps } from './snap.js?v=volvo-spur-gears'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=system-complete'
 import { mountLibrary } from './library.js?v=system-complete'
-import { createScene } from './scene.js?v=full-settings'
+import { createScene } from './scene.js?v=academy-v1'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=volvo-spur-gears'
@@ -27,7 +27,7 @@ import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-dri
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
 import { editorLabels } from './labels.js?v=torque-clutch'
 import { readPreference, writePreference } from '../menu/preferences.js?v=full-settings'
-import { mountTutorial } from './tutorial.js?v=academy-v1'
+import { mountTutorial } from './tutorial.js?v=academy-v2'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
@@ -1113,7 +1113,10 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }
 
   function place() {
-    if (!pose || candidate?.failure) return
+    if (!pose || candidate?.failure) {
+      if (candidate?.failure) tutorial?.nudge('connected')
+      return
+    }
     const original = movesExisting ? state.parts.find(part => part.id === moving.id) : null
     if (original && samePose(original, pose) && !candidate) {
       cancelPlacement()
@@ -1141,6 +1144,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     const snapped = hasNewConnection(previousLinks, state.links)
     tutorial?.handle('placed', { newPart: !original, design: pose.design })
     if (snapped) tutorial?.handle('connected')
+    else tutorial?.nudge('connected')
     audio.play(meshed || snapped ? 'snap' : 'place')
   }
 
