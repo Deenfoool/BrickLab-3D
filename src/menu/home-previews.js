@@ -1,4 +1,4 @@
-const cacheName = 'bricklab-project-previews-v1'
+const cacheName = 'bricklab-project-previews-v2'
 const cacheKey = id => new URL(`./project-preview/${encodeURIComponent(id)}`, import.meta.url).href
 
 export async function loadHomePreviews(entries, signal) {
@@ -18,7 +18,7 @@ export async function loadHomePreviews(entries, signal) {
         } else if (webglAvailable) {
           if (!renderer) {
             try {
-              const { createProjectPreviewRenderer } = await import('../editor/project-preview.js?v=project-home')
+              const { createProjectPreviewRenderer } = await import('../editor/project-preview.js?v=contact-shadow')
               if (signal.aborted) break
               renderer = createProjectPreviewRenderer()
             } catch {
