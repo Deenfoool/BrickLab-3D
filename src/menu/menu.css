@@ -190,6 +190,36 @@ dialog p,.setting{margin:18px 0}
 .setting,.dialog-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .dialog-actions{justify-content:flex-end}
 .danger{color:#ffaaaa}
+
+/* Settings dialog — interactive preferences rather than a one-field popup. */
+.settings-modal{width:min(590px,calc(100% - 28px));max-height:min(90dvh,840px);padding:0;overflow:auto;border-color:#494d57;border-radius:16px;box-shadow:0 28px 90px #000a}
+.settings-modal>form{display:flex;flex-direction:column}
+.settings-heading{padding:23px 25px 16px;background:linear-gradient(125deg,#272932,#1e2027);border-bottom:1px solid #3d424b}
+.settings-heading h2{font-size:25px;letter-spacing:-.03em}
+.settings-modal .settings-heading p{margin:7px 0 0;color:#aeb5c3;font-size:13px;line-height:1.5}
+.settings-section{padding:18px 25px 0}
+.settings-section h3{margin:0 0 10px;font-size:12px;font-weight:750;letter-spacing:.09em;text-transform:uppercase;color:#f2bd54}
+.settings-row{display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:66px;padding:11px 0;border-bottom:1px solid #393d46;cursor:pointer}
+.settings-section .settings-row:last-child{border-bottom:none}
+.settings-copy{display:grid;gap:4px;min-width:0}
+.settings-copy strong{font-size:14px;line-height:1.25;font-weight:650}
+.settings-copy small{font-size:12px;line-height:1.38;color:#adb4c2}
+.settings-modal select{flex:none;max-width:45%;min-width:115px;border:1px solid #555a66;border-radius:8px;background:#2a2e36;color:#fff;padding:9px 10px;font-size:13px;cursor:pointer}
+.settings-modal input[type=checkbox]{appearance:none;position:relative;flex:none;width:43px;height:25px;margin:0;border:1px solid #626a77;border-radius:999px;background:#474b56;cursor:pointer;transition:background .2s,border-color .2s}
+.settings-modal input[type=checkbox]::after{content:"";position:absolute;top:3px;left:3px;width:17px;height:17px;border-radius:50%;background:#e2e5eb;box-shadow:0 1px 3px #0007;transition:transform .2s}
+.settings-modal input[type=checkbox]:checked{background:#ffb01b;border-color:#ffbd47}
+.settings-modal input[type=checkbox]:checked::after{transform:translateX(18px);background:#1c1a16}
+.settings-modal :is(input,select,button):focus-visible{outline:2px solid #ffbf45;outline-offset:3px}
+.settings-modal .settings-action{flex:none;padding:8px 12px;border:1px solid #555a66;border-radius:8px;background:#2b2e36;font-size:13px}
+.settings-modal .settings-action:hover{background:#373b45}
+.settings-modal .settings-status{margin:10px 25px 0;padding:9px 12px;border-radius:7px;background:#303438;color:#ffcf7c;font-size:12px}
+.settings-footer{position:sticky;bottom:0;display:flex;justify-content:space-between;align-items:center;gap:14px;margin-top:18px;padding:14px 25px;background:#22252b;border-top:1px solid #484c55}
+.settings-footer button{font-size:13px}
+.settings-footer .workspace-action{min-width:95px}
+.settings-reset{padding:8px 0;border:0;background:none;color:#c4cad4;text-align:left}
+.settings-reset:hover{color:#ffce7a}
+@media(max-width:620px){.settings-heading{padding:19px 17px 14px}.settings-section{padding:16px 17px 0}.settings-row{gap:12px}.settings-copy strong{font-size:13px}.settings-copy small{font-size:11px}.settings-footer{padding:12px 17px}.settings-modal .settings-status{margin-inline:17px}}
+
 @media(min-width:951px){
   .shell:has(#home-title:not([hidden])){grid-template-columns:clamp(195px,15.5vw,230px) minmax(0,1fr)}
   .shell:has(#home-title:not([hidden])) .brand{padding-inline:20px;gap:12px;font-size:clamp(18px,1.65vw,23px)}
