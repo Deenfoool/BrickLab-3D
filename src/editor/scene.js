@@ -6,6 +6,7 @@ import { createBeltScene } from './belt-scene.js?v=belt-drive'
 import { createMotorCables } from './motor-cables.js?v=system-complete'
 import { createPartOutlines } from './part-outlines.js?v=part-outlines'
 import { snapGrid } from './model.js?v=belt-drive'
+import { readPreference } from '../menu/preferences.js?v=full-settings'
 
 const unitScale = [1, 1, 1]
 const axesUp = new THREE.Vector3(0, 1, 0)
@@ -25,7 +26,8 @@ export function createScene(host, models) {
   } catch (cause) {
     throw Object.assign(new Error('Failed to initialize WebGL', { cause }), { code: 'webgl-init' })
   }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75))
+  const qualityCaps = { low: .75, balanced: 1.25, high: 1.75 }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, qualityCaps[readPreference('quality')] ?? 1.75))
   renderer.setClearColor('#16191f')
   renderer.outputColorSpace = THREE.SRGBColorSpace
   const canvas = renderer.domElement
@@ -48,11 +50,15 @@ export function createScene(host, models) {
   controls.maxDistance = 1800
   const gridSize = 1600
   const floor = new THREE.GridHelper(gridSize, gridSize / snapGrid, 0x475267, 0x2b3039)
+  const showGrid = readPreference('grid') !== 'off'
+  const showAxes = readPreference('axes') !== 'off'
+  floor.visible = showGrid
   const frontArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 50, 0xffb01b, 15, 10)
   frontArrow.visible = false
   const driveOffset = new THREE.Vector3()
   const axes = new THREE.AxesHelper(52)
   axes.position.y = .08
+  axes.visible = showAxes
   world.add(floor, axes, frontArrow, new THREE.HemisphereLight(0xddeaff, 0x424956, 2.05))
   for (const [color, power, position] of [[0xffe5c3, 2.4, [100, 190, 95]], [0xc6d8ff, 1.55, [-110, 80, -155]]]) {
     const light = new THREE.DirectionalLight(color, power)
@@ -404,7 +410,8 @@ export function createScene(host, models) {
     if (driveMap) world.remove(driveMap)
     driveMap = group
     if (group) world.add(group)
-    floor.visible = axes.visible = !group
+    floor.visible = !group && showGrid
+    axes.visible = !group && showAxes
     world.background = group ? trackSky : editorSky
     world.fog = group ? trackFog : editorFog
     camera.near = group ? 5 : 1
