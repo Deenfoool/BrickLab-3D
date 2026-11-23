@@ -69,10 +69,11 @@ time{font-size:clamp(14px,1.38vw,21px);color:var(--muted);white-space:nowrap}
 .row-menu button:hover{background:#363940}
 .empty{border-top:1px solid #44464b;padding:34px 28px;color:var(--muted)}
 .project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,255px),1fr));align-items:stretch;gap:20px}
-.project-card{display:flex;flex-direction:column;min-width:0;overflow:hidden;border:1px solid #3d4149;border-radius:13px;background:#202226;box-shadow:0 12px 28px #0003;transition:border-color .18s,box-shadow .18s,transform .18s}
-.project-card:hover,.project-card:focus-within{border-color:#82745d;box-shadow:0 16px 32px #0006;transform:translateY(-2px)}
-.project-card-image{display:grid;place-items:center;width:100%;aspect-ratio:8/5;overflow:hidden;background:radial-gradient(ellipse at 50% 40%,#39404d,#242830 74%);position:relative}
-.project-card-image>img{position:relative;z-index:1;display:block;width:100%;height:100%;padding:8px 13px;object-fit:contain;filter:drop-shadow(0 14px 10px #0008)}
+.project-card{display:flex;flex-direction:column;min-width:0;overflow:hidden;border:1px solid #3d4149;border-radius:13px;background:#202226;box-shadow:0 9px 18px #0006,0 24px 40px #0005;transition:border-color .18s,box-shadow .18s,transform .18s}
+.project-card:hover,.project-card:focus-within{border-color:#82745d;box-shadow:0 14px 26px #0008,0 30px 50px #0006;transform:translateY(-2px)}
+.project-card-image{display:grid;place-items:center;width:100%;aspect-ratio:8/5;overflow:hidden;background:radial-gradient(ellipse at 50% 35%,#3b424f,#23262f 77%);position:relative;isolation:isolate}
+.project-card-image::after{content:"";position:absolute;z-index:0;left:13%;right:13%;height:24%;bottom:9%;border-radius:50%;background:radial-gradient(ellipse at center,#0009 0%,#0005 38%,transparent 76%);filter:blur(12px);pointer-events:none}
+.project-card-image>img{position:relative;z-index:1;display:block;width:100%;height:100%;padding:8px 13px;object-fit:contain;filter:drop-shadow(0 12px 7px #0009) drop-shadow(0 24px 18px #0008)}
 .project-card-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;color:#8c96a6;text-align:center;font-size:12px}
 .project-card-placeholder .icon{width:52px;height:52px;opacity:.55}
 .project-card-body{display:flex;flex:1;flex-direction:column;min-height:178px;gap:8px;padding:16px}
