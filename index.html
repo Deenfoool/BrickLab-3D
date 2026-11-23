@@ -6,14 +6,14 @@
   <meta name="theme-color" content="#181a1d">
   <title>BrickLab 3D</title>
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./src/menu/menu.css?v=full-settings">
+  <link rel="stylesheet" href="./src/menu/menu.css?v=academy-v1">
   <link rel="stylesheet" href="./src/editor/editor.css?v=editor-feedback">
   <link rel="stylesheet" href="./src/sets/sets.css?v=brick-intros">
   <link rel="stylesheet" href="./src/menu/startup.css?v=ldraw-brand">
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=full-settings"></script>
+  <script type="module" src="./src/menu/menu.js?v=academy-v1"></script>
 </head>
 <body>
   <section class="startup" id="startup" aria-label="Подготовка BrickLab 3D">
@@ -104,6 +104,17 @@
       </header>
       <div class="content">
         <h1 id="page-title">Рабочая область</h1>
+        <section id="tutorial-offer" class="tutorial-offer" hidden aria-labelledby="tutorial-offer-title">
+          <div class="tutorial-offer-icon"><svg class="icon" aria-hidden="true"><use href="#layers"/></svg></div>
+          <div class="tutorial-offer-copy">
+            <h2 id="tutorial-offer-title" data-text="tutorialOfferTitle">Первый раз в BrickLab 3D?</h2>
+            <p data-text="tutorialOfferDescription">Освой основы на настоящих деталях Technic. Можно пропустить в любой момент.</p>
+          </div>
+          <div class="tutorial-offer-actions">
+            <button class="workspace-action primary" type="button" id="tutorial-offer-start" data-text="tutorialOfferStart">Начать обучение</button>
+            <button class="tutorial-offer-later" type="button" id="tutorial-offer-later" data-text="tutorialOfferLater">Не сейчас</button>
+          </div>
+        </section>
         <div class="home-overview" id="home-overview" hidden>
           <section class="home-feature" aria-labelledby="home-project-name">
             <div class="home-feature-details">
@@ -246,11 +257,50 @@
           <button type="button" class="settings-action" id="settings-clear-previews" data-text="settingsClearPreviews">Очистить</button>
         </div>
       </section>
+      <section class="settings-section settings-tutorial-section" aria-labelledby="settings-learn">
+        <h3 id="settings-learn" data-text="tutorialSettingsHeading">Обучение</h3>
+        <div class="settings-row">
+          <span class="settings-copy"><strong data-text="tutorialSettingsTitle">Интерактивный туториал</strong><small data-text="tutorialSettingsDescription">Пройти заново или освоить механику</small></span>
+          <button type="button" id="settings-tutorial" class="settings-action" data-text="tutorialSettingsButton">Начать</button>
+        </div>
+      </section>
       <p class="settings-status" id="settings-status" role="status" aria-live="polite" hidden></p>
       <footer class="settings-footer">
         <button type="button" class="settings-reset" id="settings-reset" data-text="settingsReset">По умолчанию</button>
         <button type="submit" class="workspace-action primary" value="close" data-text="done">Готово</button>
       </footer>
+    </form>
+  </dialog>
+  <dialog id="tutorial-picker" class="tutorial-picker" aria-labelledby="tutorial-picker-title">
+    <form method="dialog">
+      <div class="tutorial-picker-head">
+        <span class="tutorial-picker-label" data-text="tutorialPickerBadge">BRICKLAB ACADEMY</span>
+        <h2 id="tutorial-picker-title" data-text="tutorialPickerTitle">Научись конструировать</h2>
+        <p data-text="tutorialPickerDescription">Выбери небольшую практическую миссию. Всё происходит прямо в редакторе.</p>
+      </div>
+      <div class="tutorial-choices">
+        <button type="button" class="tutorial-choice" data-tutorial-mode="quick">
+          <span class="tutorial-choice-symbol">⚡</span>
+          <strong data-text="tutorialQuickTitle">Быстрый старт</strong>
+          <small data-text="tutorialQuickDuration">3 действия · около минуты</small>
+          <span data-text="tutorialQuickDescription">Камера, штифт и соединение деталей</span>
+        </button>
+        <button type="button" class="tutorial-choice tutorial-choice-featured" data-tutorial-mode="first">
+          <span class="tutorial-choice-symbol">🧱</span>
+          <strong data-text="tutorialFirstTitle">Первая сборка</strong>
+          <small data-text="tutorialFirstDuration">5 действий · 3–5 минут</small>
+          <span data-text="tutorialFirstDescription">Собери, покрась и сохрани модель</span>
+        </button>
+        <button type="button" class="tutorial-choice" data-tutorial-mode="mechanics">
+          <span class="tutorial-choice-symbol">⚙️</span>
+          <strong data-text="tutorialMechanicsTitle">Оживи механизм</strong>
+          <small data-text="tutorialMechanicsDuration">3 действия · после основ</small>
+          <span data-text="tutorialMechanicsDescription">Запусти вращение шестерён редуктора</span>
+        </button>
+      </div>
+      <div class="tutorial-picker-footer">
+        <button type="submit" class="secondary" value="cancel" data-text="tutorialPickerCancel">Вернуться</button>
+      </div>
     </form>
   </dialog>
   <dialog id="remove-dialog">
