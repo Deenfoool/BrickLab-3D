@@ -293,3 +293,45 @@ dialog p,.setting{margin:18px 0}
   .menu-library .editor-part-details{padding:8px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important}}
+
+/* BrickLab Academy: optional lessons, with non-blocking coaching during editing. */
+.tutorial-offer{display:flex;align-items:center;gap:17px;margin-bottom:25px;padding:18px 20px;border:1px solid #725b35;border-radius:13px;background:linear-gradient(110deg,#332a21,#22252b 65%);box-shadow:0 9px 25px #0004}
+.tutorial-offer-icon{display:grid;place-items:center;flex:none;width:48px;height:48px;border-radius:12px;color:#ffbe4b;background:#413323}
+.tutorial-offer-copy{min-width:0;flex:1}
+.tutorial-offer-copy h2{font-size:20px;letter-spacing:-.02em}
+.tutorial-offer-copy p{margin:5px 0 0;color:#bec4ce;font-size:13px}
+.tutorial-offer-actions{display:flex;align-items:center;gap:10px}
+.tutorial-offer-later{padding:8px 0;border:0;background:none;font-size:13px;color:#bbc1cc}
+.tutorial-offer-later:hover{color:#fff}
+.tutorial-picker{width:min(720px,calc(100% - 24px));padding:0;max-height:88dvh;overflow-y:auto;border:1px solid #50545e;border-radius:17px;box-shadow:0 30px 90px #000c}
+.tutorial-picker-head{padding:25px 27px 21px;background:linear-gradient(115deg,#342b22,#20232b);border-bottom:1px solid #454850}
+.tutorial-picker-label{color:#fbc66c;letter-spacing:.14em;font-size:11px;font-weight:750}
+.tutorial-picker-head h2{margin-top:6px;font-size:27px}
+.tutorial-picker-head p{margin:7px 0 0;color:#c1c6d1;font-size:13px}
+.tutorial-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:22px}
+.tutorial-choice{display:flex;align-items:flex-start;flex-direction:column;min-width:0;min-height:210px;gap:10px;padding:18px;border:1px solid #484d56;border-radius:13px;background:#292d34;text-align:left}
+.tutorial-choice:hover,.tutorial-choice:focus-visible{border-color:#ffbf4b;background:#343331;transform:translateY(-2px)}
+.tutorial-choice-featured{border-color:#916b34;background:linear-gradient(150deg,#3b3023,#292c34)}
+.tutorial-choice-symbol{font-size:28px;line-height:1}
+.tutorial-choice strong{font-size:17px}
+.tutorial-choice small{color:#ffcf7c;font-size:12px}
+.tutorial-choice>span:last-child{color:#c1c6d0;font-size:12px;line-height:1.45}
+.tutorial-picker-footer{display:flex;justify-content:flex-end;padding:0 22px 20px}
+.tutorial-coach{position:fixed;top:80px;right:20px;z-index:55;width:min(340px,calc(100vw - 24px));padding:17px 18px;border:1px solid #8d6b35;border-radius:13px;background:#202229f5;color:#f6f6f7;box-shadow:0 14px 46px #0009;pointer-events:auto;backdrop-filter:blur(12px)}
+.tutorial-eyebrow{margin:0 0 6px;color:#ffbf4d;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.tutorial-coach h2{margin:0;font-size:19px;letter-spacing:-.03em;line-height:1.3}
+.tutorial-description{margin:9px 0 12px;font-size:13px;color:#d3d7df;line-height:1.55}
+.tutorial-progress{display:flex;gap:5px;margin:0 0 9px}
+.tutorial-progress span{height:5px;flex:1;border-radius:5px;background:#454953}
+.tutorial-progress .tutorial-progress-done{background:#ffb01b}
+.tutorial-help{padding:10px 12px;margin:11px 0;border-radius:8px;background:#343437;color:#f6db9c;font-size:12px;line-height:1.5}
+.tutorial-footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:9px;margin-top:12px}
+.tutorial-footer button{border:0;cursor:pointer;font-size:12px}
+.tutorial-quiet{background:none;color:#c4c8d1;padding:6px 0}
+.tutorial-quiet:hover{color:#fff}
+.tutorial-link{background:none;color:#ffd284;padding:6px 0}
+.tutorial-link:hover{text-decoration:underline}
+.tutorial-next{padding:9px 11px!important;border-radius:7px;background:#ffb01b;color:#17130c;font-weight:750}
+.tutorial-highlight{outline:2px solid #ffbd4e!important;outline-offset:3px;box-shadow:0 0 0 6px #ffc05233!important}
+@media(max-width:950px){.tutorial-offer{flex-wrap:wrap}.tutorial-offer-actions{width:100%}}
+@media(max-width:620px){.tutorial-offer{margin-bottom:17px;padding:14px;gap:10px}.tutorial-offer-copy h2{font-size:17px}.tutorial-choices{grid-template-columns:1fr;padding:13px}.tutorial-choice{min-height:auto;gap:7px;padding:14px}.tutorial-picker-head{padding:18px}.tutorial-coach{top:auto;bottom:12px;right:12px;padding:13px 14px}.tutorial-coach h2{font-size:17px}}
