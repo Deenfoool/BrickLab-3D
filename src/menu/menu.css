@@ -332,6 +332,8 @@ dialog p,.setting{margin:18px 0}
 .tutorial-link{background:none;color:#ffd284;padding:6px 0}
 .tutorial-link:hover{text-decoration:underline}
 .tutorial-next{padding:9px 11px!important;border-radius:7px;background:#ffb01b;color:#17130c;font-weight:750}
-.tutorial-highlight{outline:2px solid #ffbd4e!important;outline-offset:3px;box-shadow:0 0 0 6px #ffc05233!important}
+.tutorial-highlight{outline:2px solid #ffbd4e!important;outline-offset:3px;box-shadow:0 0 0 6px #ffc05233!important;animation:tutorial-spotlight 1.9s ease-in-out infinite}
+@keyframes tutorial-spotlight{0%,100%{outline-color:#ffbd4e;box-shadow:0 0 0 5px #ffc05233}50%{outline-color:#fff0b1;box-shadow:0 0 0 9px #ffc05222}}
+@media(prefers-reduced-motion:reduce){.tutorial-highlight{animation:none}}
 @media(max-width:950px){.tutorial-offer{flex-wrap:wrap}.tutorial-offer-actions{width:100%}}
 @media(max-width:620px){.tutorial-offer{margin-bottom:17px;padding:14px;gap:10px}.tutorial-offer-copy h2{font-size:17px}.tutorial-choices{grid-template-columns:1fr;padding:13px}.tutorial-choice{min-height:auto;gap:7px;padding:14px}.tutorial-picker-head{padding:18px}.tutorial-coach{top:auto;bottom:12px;right:12px;padding:13px 14px}.tutorial-coach h2{font-size:17px}}
