@@ -27,6 +27,7 @@ import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-dri
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
 import { editorLabels } from './labels.js?v=torque-clutch'
 import { readPreference, writePreference } from '../menu/preferences.js?v=full-settings'
+import { mountTutorial } from './tutorial.js?v=academy-v1'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
@@ -47,7 +48,7 @@ const simulating = mode => mode === 'testDrive'
 const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
-export async function mountEditor(root, { document, language, save, download, signal, reportLoad }) {
+export async function mountEditor(root, { document, projectId, language, save, download, signal, reportLoad }) {
   const source = upgradeInlineEngineFan(promoteLegacyBelts(expandComponents(document, parts)))
   let buildingSet = instructionState(source.buildingSet)
   const pdf = buildingSet ? createInstructionPdfReader() : undefined
@@ -246,6 +247,7 @@ export async function mountEditor(root, { document, language, save, download, si
   const paintColor = el('paintColor')
   const paintSwatches = [...el('paintTools').querySelectorAll('[data-paint]')]
   let scene
+  let tutorial = null
   try {
     scene = createScene(el('viewport'), models)
   } catch (error) {
@@ -482,6 +484,7 @@ export async function mountEditor(root, { document, language, save, download, si
     const successful = save(currentDocument())
     setMessage(successful ? (showMessage ? t.ready : '') : t.storage, !successful)
     render()
+    return successful
   }
 
   function selectedPart() {
@@ -779,6 +782,7 @@ export async function mountEditor(root, { document, language, save, download, si
     showMotion()
     refreshPartsPanel()
     render()
+    if (mode === 'kinematics' && id) tutorial?.handle('gearSelected', { rotatable: Boolean(hinge?.ok || transmission?.ok) })
   }
 
   function applyState(next) {
@@ -815,10 +819,12 @@ export async function mountEditor(root, { document, language, save, download, si
   }
 
   function commit(next) {
+    const beforeLinks = state.links
     undo.push(state)
     if (undo.length > 80) undo.shift()
     redo.length = 0
     applyState({ belts: state.belts, layers: state.layers, ...next })
+    if (hasNewConnection(beforeLinks, state.links)) tutorial?.handle('connected')
   }
 
   function paintPart(id, color, allMatching = false) {
@@ -831,7 +837,10 @@ export async function mountEditor(root, { document, language, save, download, si
       changed = true
       return { ...item, color }
     })
-    if (changed) commit({ ...state, parts: painted })
+    if (changed) {
+      commit({ ...state, parts: painted })
+      tutorial?.handle('painted')
+    }
   }
 
   function updatePaintSwatches() {
@@ -1129,7 +1138,10 @@ export async function mountEditor(root, { document, language, save, download, si
     selected = id
     if (isolation) isolation = new Set([...isolation, id, ...additional])
     commit({ parts: placed, links: nextLinks, belts: [...state.belts, ...(pastedBelts ?? [])] })
-    audio.play(meshed || hasNewConnection(previousLinks, state.links) ? 'snap' : 'place')
+    const snapped = hasNewConnection(previousLinks, state.links)
+    tutorial?.handle('placed', { newPart: !original, design: pose.design })
+    if (snapped) tutorial?.handle('connected')
+    audio.play(meshed || snapped ? 'snap' : 'place')
   }
 
   function mirrorCopy(axis) {
@@ -1457,6 +1469,7 @@ export async function mountEditor(root, { document, language, save, download, si
     setSelection(selected)
     if (mode === 'testDrive') drivePanel.setActive(true)
     audio.play('tool')
+    if (mode === 'kinematics') tutorial?.handle('kinematics')
   }
 
   function stepAnimation(time) {
@@ -1508,6 +1521,7 @@ export async function mountEditor(root, { document, language, save, download, si
     updatePaintSwatches()
   })
   scene.watchView(positionHandles)
+  on(scene.canvas, 'bricklab-camera-interaction', () => tutorial?.handle('camera'))
   on(el('axleHandles'), 'pointerdown', beginResize)
   on(el('axleHandles'), 'pointermove', previewResize)
   on(el('axleHandles'), 'pointerup', finishResize)
@@ -1516,7 +1530,10 @@ export async function mountEditor(root, { document, language, save, download, si
     if (!el('name').value.trim()) el('name').value = currentDocument().name
     persist()
   })
-  on(el('save'), 'click', () => persist(true))
+  on(el('save'), 'click', () => {
+    const success = persist(true)
+    tutorial?.handle('saved', { success })
+  })
   on(el('export'), 'click', () => download(currentDocument()))
   const connectionTools = el('connectionTools')
   const connectionToggle = connectionTools.querySelector('summary')
@@ -1614,6 +1631,7 @@ export async function mountEditor(root, { document, language, save, download, si
     angle = Number(event.target.value)
     showMotion(true)
     render()
+    if (hinge?.ok || transmission?.ok) tutorial?.handle('motion')
   })
   on(el('applyHinge'), 'click', () => {
     if (!hinge?.ok) return
@@ -1682,6 +1700,7 @@ export async function mountEditor(root, { document, language, save, download, si
       audio.unlock()
       stepAnimation.previous = 0
       frame = requestAnimationFrame(stepAnimation)
+      if (hinge?.ok || transmission?.ok) tutorial?.handle('motion')
     }
     render()
   })
@@ -2026,6 +2045,7 @@ export async function mountEditor(root, { document, language, save, download, si
   scene.belts.set(state.belts)
   setSelection(undefined)
   scene.resetView()
+  tutorial = mountTutorial(root, { projectId, language, signal })
   reportLoad?.('scene', true)
   if (instructionReady) await instructionReady
 }
