@@ -308,8 +308,8 @@ export function mountInstructions(
       frame.src = `${source}#page=${pageNumber}&view=FitH`
       frame.hidden = false
       previewStatus.textContent = ru
-        ? 'PDF открыт во встроенном просмотрщике. Для распознавания деталей загрузите PDF с устройства.'
-        : 'PDF is displayed in the browser viewer. Upload the PDF for part recognition.'
+        ? 'Пробуем показать PDF внутри редактора. Если окно пустое, выберите PDF с устройства. Для распознавания деталей нужен загруженный файл.'
+        : 'Trying to display the PDF in the editor. If the viewer is blank, upload the PDF. A local file is needed for part recognition.'
       previewStatus.hidden = false
       retryPage.hidden = true
       officialPdf.href = source
