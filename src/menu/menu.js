@@ -1,6 +1,7 @@
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
-import { locales } from './locale.js?v=project-cards-fix'
+import { locales } from './locale.js?v=full-settings'
+import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { revealMenu, showEditorLoading, startStartup } from './startup.js?v=bold-brand'
 import { downloadProject, makeRecord, newProject, parseProject, readProjects, writeProjects } from '../projects/documents.js'
 
@@ -213,6 +214,7 @@ function renderList() {
     if (!entry.project.document.parts.length) continue
     pending.set(entry.card, entry)
   }
+  if (readPreference('previews') === 'off') return
   const enqueue = entry => {
     queue.push({
       project: entry.project,
@@ -307,7 +309,9 @@ function renderHome(visible) {
   const latestArt = byId('home-project-art')
   const fallback = element('div', 'home-fallback')
   const hint = element('span', null, t.emptyModel)
-  hint.hidden = latest.document.parts.length > 0
+  const previewsEnabled = readPreference('previews') !== 'off'
+  hint.hidden = previewsEnabled && latest.document.parts.length > 0
+  if (!previewsEnabled && latest.document.parts.length) hint.textContent = t.previewDisabled
   fallback.append(icon('layers'), hint)
   latestArt.replaceChildren(fallback)
   byId('home-project-name').textContent = latest.document.name
@@ -320,7 +324,7 @@ function renderHome(visible) {
   const setCover = safeImage(latest.document.buildingSet?.set?.image)
   const emptyModel = latest.document.parts.length === 0
   homeInstruction(latest, signal, emptyModel && !setCover ? latestArt : null)
-  if (emptyModel && setCover) showPreview(latestArt, setCover, signal, t.setCover)
+  if ((emptyModel || !previewsEnabled) && setCover) showPreview(latestArt, setCover, signal, t.setCover)
 
   const recentList = recent.map(project => ({ project, ...recentBuild(project, formatter) }))
   byId('home-recent-list').replaceChildren(...recentList.map(({ item }) => item))
@@ -337,7 +341,7 @@ function renderHome(visible) {
     project,
     show(preview) { if (preview) showPreview(art, preview, signal) },
   }))]
-  if (entries.some(({ project }) => project.document.parts.length)) {
+  if (previewsEnabled && entries.some(({ project }) => project.document.parts.length)) {
     import('./home-previews.js?v=project-shadows')
       .then(({ loadHomePreviews }) => loadHomePreviews(entries, signal))
       .catch(() => { if (!signal.aborted && latest.document.parts.length) entries[0].show(null) })
@@ -380,6 +384,7 @@ function render(initial = false) {
   byId('settings-button').setAttribute('aria-label', t.settings)
   byId('language').value = language
   byId('settings-language').value = language
+  syncSettingsControls()
   query.placeholder = t.search
   query.setAttribute('aria-label', t.search)
   byId('dashboard').hidden = !listVisible
@@ -551,6 +556,25 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }
 }
 
+function syncSettingsControls() {
+  for (const input of settingsDialog.querySelectorAll('[data-pref]')) {
+    const value = readPreference(input.dataset.pref)
+    if (input.type === 'checkbox') input.checked = value === 'on'
+    else input.value = value
+  }
+}
+
+function settingsNotice(key) {
+  const status = byId('settings-status')
+  status.hidden = !key
+  status.textContent = key ? strings()[key] : ''
+}
+
+function refreshSettingsPreviews() {
+  if (currentPage() === 'home') renderHome(true)
+  if (currentPage() === 'projects') renderList()
+}
+
 function setLanguage(value) {
   language = value === 'en' ? 'en' : 'ru'
   try {
@@ -565,7 +589,48 @@ query.addEventListener('input', renderList)
 libraryRetry.addEventListener('click', () => location.reload())
 byId('language').addEventListener('change', event => setLanguage(event.target.value))
 byId('settings-language').addEventListener('change', event => setLanguage(event.target.value))
-byId('settings-button').addEventListener('click', () => settingsDialog.showModal())
+byId('settings-button').addEventListener('click', () => {
+  syncSettingsControls()
+  settingsNotice(null)
+  settingsDialog.showModal()
+})
+for (const input of settingsDialog.querySelectorAll('[data-pref]')) {
+  input.addEventListener('change', () => {
+    const name = input.dataset.pref
+    const value = input.type === 'checkbox' ? input.checked ? 'on' : 'off' : input.value
+    if (!writePreference(name, value)) {
+      syncSettingsControls()
+      settingsNotice('settingsSaveError')
+      return
+    }
+    settingsNotice(null)
+    if (name === 'previews') refreshSettingsPreviews()
+  })
+}
+byId('settings-reset').addEventListener('click', () => {
+  if (!resetPreferences()) {
+    settingsNotice('settingsResetError')
+    return
+  }
+  language = 'ru'
+  render()
+  syncSettingsControls()
+  settingsNotice('settingsResetDone')
+})
+byId('settings-clear-previews').addEventListener('click', async event => {
+  const control = event.currentTarget
+  control.disabled = true
+  try {
+    if (!globalThis.caches) throw Error('Cache Storage unavailable')
+    await Promise.all(['bricklab-project-previews-v1', 'bricklab-project-previews-v2'].map(name => caches.delete(name)))
+    refreshSettingsPreviews()
+    settingsNotice('settingsCacheCleared')
+  } catch {
+    settingsNotice('settingsCacheError')
+  } finally {
+    control.disabled = false
+  }
+})
 byId('create').addEventListener('click', () => addProject(newProject(strings().untitled)))
 byId('open').addEventListener('click', () => byId('import-file').click())
 byId('import-file').addEventListener('change', async event => {
