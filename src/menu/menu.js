@@ -195,7 +195,7 @@ function renderList() {
     if (loading || signal.aborted) return
     loading = true
     try {
-      const { loadHomePreviews } = await import('./home-previews.js?v=project-home')
+      const { loadHomePreviews } = await import('./home-previews.js?v=project-shadows')
       while (!signal.aborted && queue.length) {
         await loadHomePreviews(queue.splice(0, 12), signal)
       }
@@ -338,7 +338,7 @@ function renderHome(visible) {
     show(preview) { if (preview) showPreview(art, preview, signal) },
   }))]
   if (entries.some(({ project }) => project.document.parts.length)) {
-    import('./home-previews.js?v=project-home')
+    import('./home-previews.js?v=project-shadows')
       .then(({ loadHomePreviews }) => loadHomePreviews(entries, signal))
       .catch(() => { if (!signal.aborted && latest.document.parts.length) entries[0].show(null) })
   }
@@ -609,7 +609,7 @@ removeDialog.addEventListener('close', () => {
   if (removeDialog.returnValue === 'remove' && pendingRemoval) {
     const id = pendingRemoval
     updateProjects(projects.filter(project => project.id !== id))
-    import('./home-previews.js?v=project-home').then(({ removeHomePreview }) => removeHomePreview(id)).catch(() => {})
+    import('./home-previews.js?v=project-shadows').then(({ removeHomePreview }) => removeHomePreview(id)).catch(() => {})
     render()
     query.focus()
   }
