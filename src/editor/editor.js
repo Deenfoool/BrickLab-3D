@@ -26,6 +26,7 @@ import { upgradeInlineEngineFan } from './inline-engine.js'
 import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
 import { editorLabels } from './labels.js?v=torque-clutch'
+import { readPreference, writePreference } from '../menu/preferences.js?v=full-settings'
 
 const X = new Vector3(1, 0, 0)
 const Y = new Vector3(0, 1, 0)
@@ -310,8 +311,8 @@ export async function mountEditor(root, { document, language, save, download, si
   let transform
   let gizmoSnap
   let gizmoRaw
-  let snapEnabled = true
-  let steppedRotation = true
+  let snapEnabled = readPreference('snap') !== 'off'
+  let steppedRotation = readPreference('rotationSnap') !== 'off'
   let grab
   let rightDown
   let gizmoPart
@@ -1536,7 +1537,7 @@ export async function mountEditor(root, { document, language, save, download, si
       if (gizmoPart) updateGizmo()
     }
   })
-  scene.gizmo.setRotationSnap(rotationStep)
+  scene.gizmo.setRotationSnap(steppedRotation ? rotationStep : null)
   on(el('pivotMode'), 'change', () => {
     cancelGizmo()
     jointMode = el('pivotMode').value === 'joint'
@@ -1544,11 +1545,13 @@ export async function mountEditor(root, { document, language, save, download, si
   })
   on(el('rotationSnap'), 'click', () => {
     steppedRotation = !steppedRotation
+    writePreference('rotationSnap', steppedRotation ? 'on' : 'off')
     scene.gizmo.setRotationSnap(steppedRotation ? rotationStep : null)
     render()
   })
   on(el('snap'), 'click', () => {
     snapEnabled = !snapEnabled
+    writePreference('snap', snapEnabled ? 'on' : 'off')
     if (moving && pointer) updatePointer(pointer)
     else render()
   })
