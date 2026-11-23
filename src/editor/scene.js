@@ -107,6 +107,17 @@ export function createScene(host, models) {
   })
   resize.observe(host)
   controls.addEventListener('change', invalidate)
+  // Only real user camera interactions count towards onboarding.
+  let userCameraAction = false
+  controls.addEventListener('start', () => { userCameraAction = true })
+  controls.addEventListener('end', () => {
+    if (!userCameraAction) return
+    userCameraAction = false
+    canvas.dispatchEvent(new Event('bricklab-camera-interaction'))
+  })
+  canvas.addEventListener('wheel', () => {
+    canvas.dispatchEvent(new Event('bricklab-camera-interaction'))
+  }, { passive: true })
 
   let onViewChange
   function invalidate() {
