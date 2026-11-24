@@ -419,3 +419,6 @@ dialog p,.setting{margin:18px 0}
 .community-author{display:inline-flex;align-items:center;gap:5px;overflow-wrap:anywhere}
 .community-author-avatar{width:23px;height:23px;border-radius:5px;object-fit:cover}
 @media(max-width:620px){.community-public-workshop{padding:8px}.community-profile-identity{padding:0 12px 12px;gap:10px}.community-builder-detail .community-profile-avatar{width:68px;height:68px;margin-top:-20px}.community-builder-detail .community-card-body h2{font-size:20px}}
+
+.community-actions button[aria-pressed=true],.community-card-body button[aria-pressed=true]{border-color:#ba934c;background:#473620;color:#ffd18b}
+.community-builder .workspace-action{justify-self:start}.community-meta{overflow-wrap:anywhere}

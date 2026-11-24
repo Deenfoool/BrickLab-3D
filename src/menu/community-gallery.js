@@ -6,6 +6,8 @@ const copy={
 }
 Object.assign(copy.ru,{viewer:'3D-просмотр',viewerClose:'Закрыть',viewerReset:'Сбросить камеру',viewerFull:'На весь экран',viewerExitFull:'Выйти из полного экрана',viewerZoomIn:'Приблизить',viewerZoomOut:'Отдалить',viewerHelp:'Перетаскивай модель для вращения, колесо — масштаб, правая кнопка — перемещение. На телефоне — жесты двумя пальцами.',viewerUnavailable:'3D-просмотр недоступен. Можно открыть модель в редакторе.',viewerPartial:'Отображено деталей:',viewerLimit:'Просмотр поддерживает до 600 деталей и 120 уникальных артикулов.'})
 Object.assign(copy.en,{viewer:'3D viewer',viewerClose:'Close',viewerReset:'Reset camera',viewerFull:'Fullscreen',viewerExitFull:'Exit fullscreen',viewerZoomIn:'Zoom in',viewerZoomOut:'Zoom out',viewerHelp:'Drag to rotate, scroll to zoom, right drag to pan. On mobile, use two-finger gestures.',viewerUnavailable:'3D viewer unavailable. Open the build in the editor instead.',viewerPartial:'Rendered parts:',viewerLimit:'Viewer supports up to 600 parts and 120 unique designs.'})
+Object.assign(copy.ru,{like:'Нравится',liked:'Нравится ✓',views:'Просмотры',downloads:'Скачивания',follow:'Подписаться',unfollow:'Вы подписаны',followers:'Подписчики',following:'Подписки',popular:'Популярные',signIn:'Войти для подписок и лайков',socialLimit:'Достигнут лимит подписок или лайков.',followingEmpty:'Пока нет публикаций авторов, на которых вы подписаны.'})
+Object.assign(copy.en,{like:'Like',liked:'Liked ✓',views:'Views',downloads:'Downloads',follow:'Follow',unfollow:'Following',followers:'Followers',following:'Following',popular:'Popular',signIn:'Sign in to like and follow',socialLimit:'Like or follow limit reached.',followingEmpty:'No builds from followed creators yet.'})
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export function communityRoute(route){const m=/^community\/(build|profile)\/([^/]+)$/.exec(route);return route==='community'?{type:'list'}:m&&uuid.test(m[2])?{type:m[1],id:m[2]}:{type:'missing'}}
 export function previewDocument(doc){
@@ -18,16 +20,16 @@ function el(tag,cls,value){const n=document.createElement(tag);if(cls)n.classNam
 function button(label,fn,cls='workspace-action'){const b=el('button',cls,label);b.type='button';b.onclick=fn;return b}
 function link(label,href,cls='workspace-action'){const a=el('a',cls,label);a.href=href;return a}
 function icon(id){const s=document.createElementNS('http://www.w3.org/2000/svg','svg'),u=document.createElementNS(s.namespaceURI,'use');s.setAttribute('class','icon');s.setAttribute('aria-hidden','true');u.setAttribute('href','#'+id);s.append(u);return s}
-async function request(path,signal,raw=false){
- const r=await fetch(path,{signal,credentials:'omit',cache:'no-store',redirect:'error'})
- if(!r.ok){const e=new Error('Request failed');e.status=r.status;throw e}
+async function request(path,signal,raw=false,method='GET'){
+ const r=await fetch(path,{signal,method,credentials:'same-origin',cache:'no-store',redirect:'error'})
+ if(!r.ok){const e=new Error('Request failed');e.status=r.status;try{e.code=(await r.json()).error}catch{}throw e}
  if(raw){if(Number(r.headers.get('content-length'))>4194304)throw Error('Model too large');const text=await r.text();if(text.length>4194304)throw Error('Model too large');return parseProject(text)}
  return r.json()
 }
 export async function openPublishedCopy(id,signal,openCopy,load=request){
  if(!uuid.test(id))throw Error('Invalid publication ID')
  if(signal.aborted)return
- const doc=await load('/community/build/'+id+'/download',signal,true)
+ const doc=await load('/community/build/'+id+'/document',signal,true)
  if(!signal.aborted)return openCopy(doc)
 }
 export async function mountCommunity(root,{language='ru',route='community',signal,openCopy}){
@@ -36,7 +38,34 @@ export async function mountCommunity(root,{language='ru',route='community',signa
  const clearPreviews=()=>{observer?.disconnect();observer=null;epoch++;for(const u of urls)URL.revokeObjectURL(u);urls.clear()}
  signal.addEventListener('abort',()=>{clearPreviews();activeRequest?.abort();activeViewer?.()},{once:true})
  const status=el('p','account-muted');status.setAttribute('role','status')
- const fail=e=>{if(!signal.aborted)status.textContent=e.status===503?t.disabled:e.status===404?t.missing:t.failed}
+ const fail=e=>{if(!signal.aborted)status.textContent=e.status===401?t.signIn:e.code==='social_limit'?t.socialLimit:e.status===503?t.disabled:e.status===404?t.missing:t.failed}
+ let social={signedIn:false,ownId:null,likes:[],follows:[]}
+ try{social=await request('/api/community/me/social',signal)}catch(e){if(signal.aborted)return}
+ if(signal.aborted)return
+ const liked=new Set(social.likes),followed=new Set(social.follows),reactionUpdates=new Map(),viewUpdates=new Map(),pending=new Set()
+ function reaction(kind,id,count,own=false){
+  const set=kind==='like'?liked:followed,key=kind+':'+id,label=kind==='like'?[t.like,t.liked]:[t.follow,t.unfollow]
+  const control=button('',async()=>{
+   if(!social.signedIn){location.hash='#account';return}
+   if(control.disabled||pending.has(key))return
+   pending.add(key);control.disabled=true
+   try{
+    const result=await request('/api/community/'+kind+'/'+id,signal,false,set.has(id)?'DELETE':'PUT')
+    if(signal.aborted)return
+    if(result.active)set.add(id);else set.delete(id)
+    for(const update of reactionUpdates.get(key)??[])update(result.count)
+   }catch(e){fail(e)}finally{pending.delete(key);if(!signal.aborted)control.disabled=own}
+  })
+  function update(n){control.textContent=(set.has(id)?label[1]:label[0])+' · '+n;control.setAttribute('aria-pressed',String(set.has(id)))}
+  if(!reactionUpdates.has(key))reactionUpdates.set(key,[])
+  reactionUpdates.get(key).push(update);update(count??0);control.disabled=own
+  if(!social.signedIn)control.title=t.signIn
+  return control
+ }
+ async function recordView(id){
+  if(!social.signedIn||signal.aborted)return
+  try{const counts=await request('/api/community/view/'+id,signal,false,'POST');if(!signal.aborted)for(const fn of viewUpdates.get(id)??[])fn(counts.views,counts.downloads)}catch{}
+ }
  const artFor=(b,large=false)=>{
   const art=el('div','community-art'+(large?' large':''));art.append(icon('layers'))
   const run=button(t.preview,()=>queue(), 'workspace-action community-preview-button')
@@ -50,7 +79,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
     if(signal.aborted||generation!==epoch||!art.isConnected)return
     let renderer
     try{
-      const d=await request('/community/build/'+b.id+'/download',signal,true),safe=previewDocument(d)
+      const d=await request('/community/build/'+b.id+'/document',signal,true),safe=previewDocument(d)
       if(!safe){run.textContent=t.previewLimit;return}
       const {createProjectPreviewRenderer}=await import('../editor/project-preview.js?v=contact-shadow')
       if(signal.aborted||generation!==epoch)return
@@ -100,7 +129,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   message.setAttribute('role','status');dialog.append(bar,host,message,el('p','community-viewer-help',t.viewerHelp));root.append(dialog)
   try{
    dialog.showModal()
-   const doc=await request('/community/build/'+b.id+'/download',controller.signal,true),safe=previewDocument(doc)
+   const doc=await request('/community/build/'+b.id+'/document',controller.signal,true),safe=previewDocument(doc)
    if(!safe){message.textContent=t.viewerLimit;return}
    const {mountModelViewer}=await import('./community-viewer.js?v=viewer-1')
    controller.signal.throwIfAborted()
@@ -108,6 +137,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
    if(closed){session.dispose();return}
    message.textContent=session.shown<session.total?t.viewerPartial+' '+session.shown+'/'+session.total:''
    for(const control of [minus,plus,reset])control.disabled=false
+   void recordView(b.id)
   }catch(e){if(!closed)message.textContent=t.viewerUnavailable}
  }
  function buildCard(b,detail=false){
@@ -116,6 +146,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   const meta=el('div','community-meta'),author=link(b.author,'#community/profile/'+b.authorId,'community-author')
   const authorImage=publicImage(b.authorAvatarUrl,b.authorId,'avatar');if(authorImage){authorImage.className='community-author-avatar';author.prepend(authorImage)}
   meta.append(author,el('span',null,b.partCount+' '+t.partCount),el('span',null,t[b.category]??t.other),el('span',null,t.revision+' '+b.revision))
+  const statistics=el('div','community-meta'),views=el('span'),downloads=el('span');const update=(v,d)=>{views.textContent=t.views+': '+v;downloads.textContent=t.downloads+': '+d};update(b.views??0,b.downloads??0);if(!viewUpdates.has(b.id))viewUpdates.set(b.id,[]);viewUpdates.get(b.id).push(update);statistics.append(views,downloads)
   const description=el('p','community-description',b.description)
   const actions=el('div','community-actions')
   const open=button(t.open,async()=>{
@@ -125,10 +156,10 @@ export async function mountCommunity(root,{language='ru',route='community',signa
     catch(e){fail(e)}
     finally{if(!signal.aborted){open.disabled=false;open.textContent=t.open}}
   },'workspace-action primary')
-  open.title=t.copyHint;actions.append(open)
+  open.title=t.copyHint;actions.append(open,reaction('like',b.id,b.likes,b.authorId===social.ownId))
   const viewButton=button(t.viewer,()=>showViewer(b));viewButton.disabled=b.partCount===0||b.partCount>600;if(viewButton.disabled)viewButton.title=t.viewerLimit;actions.append(viewButton)
   const download=link(t.download,'/community/build/'+b.id+'/download');download.download='';actions.append(download)
-  body.append(title,meta,description,actions);card.append(art,body);return card
+  body.append(title,meta,statistics,description,actions);card.append(art,body);return card
  }
  function publicImage(url,id,kind){
   const expected='/api/community/profile/'+id+'/'+kind
@@ -139,6 +170,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   const a=el('article','community-card community-builder'+(detail?' community-builder-detail':'')),avatar=el('div','account-avatar community-profile-avatar',Array.from(p.displayName).slice(0,2).join('').toUpperCase()),body=el('div','community-card-body')
   const img=publicImage(p.avatarUrl,p.id,'avatar');if(img)avatar.replaceChildren(img)
   body.append(detail?el('h2',null,p.displayName):link(p.displayName,'#community/profile/'+p.id,'community-title'),el('p','community-description',p.bio))
+  body.append(el('p','account-muted',t.followers+': '+(p.followers??0)),reaction('follow',p.id,p.followers,p.id===social.ownId))
   if(detail){
    const theme=['blueprint','graphite','amber'].includes(p.coverTheme)?p.coverTheme:'blueprint'
    const cover=el('div','community-profile-cover cover-'+theme),coverImg=publicImage(p.coverUrl,p.id,'cover')
@@ -155,7 +187,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   root.prepend(link(t.back,'#community'))
   status.textContent=t.loading
   try{
-   if(view.type==='build'){const {build}=await request('/api/community/build/'+view.id,signal);if(!signal.aborted){status.textContent='';root.append(buildCard(build,true))}}
+   if(view.type==='build'){const {build}=await request('/api/community/build/'+view.id,signal);if(!signal.aborted){status.textContent='';root.append(buildCard(build,true));void recordView(build.id)}}
    else{const {profile}=await request('/api/community/profile/'+view.id,signal);if(signal.aborted)return;status.textContent='';const theme=['default','first-build','carbon','neon'].includes(profile.backgroundTheme)?profile.backgroundTheme:'default';const workshop=el('section','community-public-workshop cosmetic-'+theme);workshop.append(builderCard(profile,true),el('h2',null,t.models));const grid=el('div','community-grid');workshop.append(grid);root.append(workshop);const {builds}=await request('/api/community/builds?author='+view.id,signal);if(signal.aborted)return;for(const b of builds)grid.append(buildCard(b));if(!builds.length)grid.append(el('p','account-muted',t.empty))}
   }catch(e){fail(e)}
   return
@@ -163,30 +195,32 @@ export async function mountCommunity(root,{language='ru',route='community',signa
  const tabs=el('div','community-actions'),filters=el('form','community-filters'),grid=el('div','community-grid'),more=button(t.more,()=>load(false))
  let mode='models',offset=0,serial=0
  const models=button(t.models,()=>switchMode('models')),builders=button(t.builders,()=>switchMode('builders'))
- tabs.append(models,builders)
+ const following=button(t.following,()=>switchMode('following'));tabs.append(models,builders,following)
  const search=el('input');search.type='search';search.maxLength=100;search.placeholder=t.search;search.setAttribute('aria-label',t.search)
  function select(entries,label){const n=el('select');n.setAttribute('aria-label',label);for(const [v,text] of entries){const option=el('option',null,text);option.value=v;n.append(option)}return n}
- const category=select([['',t.all],...['vehicles','mechanisms','architecture','robots','other'].map(k=>[k,t[k]])],t.all),sort=select(['recent','oldest','name','parts'].map(k=>[k,t[k]]),t.recent)
+ const category=select([['',t.all],...['vehicles','mechanisms','architecture','robots','other'].map(k=>[k,t[k]])],t.all),sort=select(['recent','oldest','name','parts','popular'].map(k=>[k,t[k]]),t.recent)
  const submit=el('button','workspace-action primary',t.find);submit.type='submit';filters.append(search,category,sort,submit)
  filters.onsubmit=e=>{e.preventDefault();load(true)};category.onchange=sort.onchange=()=>load(true)
  root.append(tabs,filters,grid,more);more.hidden=true
- function switchMode(next){mode=next;models.setAttribute('aria-pressed',String(mode==='models'));builders.setAttribute('aria-pressed',String(mode==='builders'));filters.hidden=mode!=='models';load(true)}
+ function switchMode(next){mode=next;models.setAttribute('aria-pressed',String(mode==='models'));builders.setAttribute('aria-pressed',String(mode==='builders'));following.setAttribute('aria-pressed',String(mode==='following'));filters.hidden=mode==='builders';load(true)}
  async function load(reset){
   const version=++serial;activeRequest?.abort();activeRequest=new AbortController()
   const requestSignal=activeRequest.signal
-  if(reset){offset=0;clearPreviews();previewJobs=0;grid.replaceChildren()}
+  if(reset){offset=0;clearPreviews();previewJobs=0;reactionUpdates.clear();viewUpdates.clear();grid.replaceChildren()}
   more.hidden=true;status.textContent=t.loading
   try{
+   if(mode==='following'&&!social.signedIn){status.textContent=t.signIn;grid.append(link(t.signIn,'#account'));return}
    if(mode==='builders'){
     const {profiles}=await request('/api/community',requestSignal);if(signal.aborted||version!==serial)return
     for(const p of profiles)grid.append(builderCard(p))
    }else{
     const qs=new URLSearchParams({q:search.value.trim(),category:category.value,sort:sort.value,offset:String(offset)})
+    if(mode==='following')qs.set('feed','following')
     const result=await request('/api/community/builds?'+qs,requestSignal);if(signal.aborted||version!==serial)return
     for(const b of result.builds)grid.append(buildCard(b))
     offset=result.nextOffset??0;more.hidden=result.nextOffset===null
    }
-   status.textContent=grid.childElementCount?'':t.empty
+   status.textContent=grid.childElementCount?'':mode==='following'?t.followingEmpty:t.empty
   }catch(e){if(version===serial&&e.name!=='AbortError')fail(e)}
  }
  switchMode('models')

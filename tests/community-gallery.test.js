@@ -20,7 +20,7 @@ test('opening publication directly creates a copy from the published download',a
  const doc={format:'bricklab-3d',version:1,name:'Build',parts:[],connections:[]}
  const opened=[]
  await openPublishedCopy(id,controller.signal,d=>opened.push(d),async(path,signal,raw)=>{
-  assert.equal(path,'/community/build/'+id+'/download');assert.equal(signal,controller.signal);assert.equal(raw,true);return doc
+  assert.equal(path,'/community/build/'+id+'/document');assert.equal(signal,controller.signal);assert.equal(raw,true);return doc
  })
  assert.deepEqual(opened,[doc])
  await assert.rejects(openPublishedCopy('bad',controller.signal,()=>assert.fail('invalid ID'),()=>assert.fail('unexpected fetch')))
