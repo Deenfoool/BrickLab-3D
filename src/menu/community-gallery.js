@@ -4,6 +4,8 @@ const copy={
  ru:{intro:'Открывай модели других конструкторов и делись своими сборками.',models:'Сборки',builders:'Конструкторы',search:'Название, автор или описание',find:'Найти',all:'Все категории',vehicles:'Транспорт',mechanisms:'Механизмы',architecture:'Архитектура',robots:'Роботы',other:'Другое',recent:'Сначала новые',oldest:'Сначала старые',name:'По названию',parts:'По количеству деталей',partCount:'деталей',more:'Показать ещё',loading:'Загрузка…',empty:'Ничего не найдено',disabled:'Сообщество пока не открыто на этом сервере.',failed:'Не удалось загрузить данные. Попробуй обновить страницу.',missing:'Публикация недоступна или была снята.',back:'К галерее',open:'Открыть в редакторе',download:'Скачать .bricklab',author:'Автор',revision:'Ревизия',preview:'Построить 3D-миниатюру',noPreview:'Миниатюра недоступна',previewLimit:'Для большой модели доступно открытие в редакторе',opening:'Загрузка модели…',manage:'Личный кабинет',copyHint:'Будет создана независимая локальная копия.'},
  en:{intro:'Explore builds by other constructors and share your own.',models:'Builds',builders:'Builders',search:'Title, author or description',find:'Search',all:'All categories',vehicles:'Vehicles',mechanisms:'Mechanisms',architecture:'Architecture',robots:'Robots',other:'Other',recent:'Newest first',oldest:'Oldest first',name:'By title',parts:'By part count',partCount:'parts',more:'Load more',loading:'Loading…',empty:'No results',disabled:'Community is not open on this server yet.',failed:'Could not load data. Refresh and retry.',missing:'Publication unavailable or removed.',back:'Back to gallery',open:'Open in editor',download:'Download .bricklab',author:'Author',revision:'Revision',preview:'Render 3D thumbnail',noPreview:'Thumbnail unavailable',previewLimit:'Large build: open in editor to view',opening:'Loading build…',manage:'My account',copyHint:'Creates an independent local copy.'}
 }
+Object.assign(copy.ru,{viewer:'3D-просмотр',viewerClose:'Закрыть',viewerReset:'Сбросить камеру',viewerFull:'На весь экран',viewerExitFull:'Выйти из полного экрана',viewerZoomIn:'Приблизить',viewerZoomOut:'Отдалить',viewerHelp:'Перетаскивай модель для вращения, колесо — масштаб, правая кнопка — перемещение. На телефоне — жесты двумя пальцами.',viewerUnavailable:'3D-просмотр недоступен. Можно открыть модель в редакторе.',viewerPartial:'Отображено деталей:',viewerLimit:'Просмотр поддерживает до 600 деталей и 120 уникальных артикулов.'})
+Object.assign(copy.en,{viewer:'3D viewer',viewerClose:'Close',viewerReset:'Reset camera',viewerFull:'Fullscreen',viewerExitFull:'Exit fullscreen',viewerZoomIn:'Zoom in',viewerZoomOut:'Zoom out',viewerHelp:'Drag to rotate, scroll to zoom, right drag to pan. On mobile, use two-finger gestures.',viewerUnavailable:'3D viewer unavailable. Open the build in the editor instead.',viewerPartial:'Rendered parts:',viewerLimit:'Viewer supports up to 600 parts and 120 unique designs.'})
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export function communityRoute(route){const m=/^community\/(build|profile)\/([^/]+)$/.exec(route);return route==='community'?{type:'list'}:m&&uuid.test(m[2])?{type:m[1],id:m[2]}:{type:'missing'}}
 export function previewDocument(doc){
@@ -30,9 +32,9 @@ export async function openPublishedCopy(id,signal,openCopy,load=request){
 }
 export async function mountCommunity(root,{language='ru',route='community',signal,openCopy}){
  const t=copy[language]??copy.ru,view=communityRoute(route),urls=new Set()
- let observer,work=Promise.resolve(),previewJobs=0,epoch=0,activeRequest=null
+ let observer,work=Promise.resolve(),previewJobs=0,epoch=0,activeRequest=null,activeViewer=null
  const clearPreviews=()=>{observer?.disconnect();observer=null;epoch++;for(const u of urls)URL.revokeObjectURL(u);urls.clear()}
- signal.addEventListener('abort',()=>{clearPreviews();activeRequest?.abort()},{once:true})
+ signal.addEventListener('abort',()=>{clearPreviews();activeRequest?.abort();activeViewer?.()},{once:true})
  const status=el('p','account-muted');status.setAttribute('role','status')
  const fail=e=>{if(!signal.aborted)status.textContent=e.status===503?t.disabled:e.status===404?t.missing:t.failed}
  const artFor=(b,large=false)=>{
@@ -66,6 +68,48 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   }
   return art
  }
+ async function showViewer(b){
+  if(signal.aborted||activeViewer)return
+  const controller=new AbortController(),dialog=el('dialog','community-viewer-dialog'),bar=el('div','community-viewer-toolbar'),title=el('h2',null,b.title),host=el('div','community-viewer-stage'),message=el('p','community-viewer-status',t.loading)
+  const headingId='community-viewer-title';title.id=headingId;dialog.setAttribute('aria-labelledby',headingId)
+  let session,closed=false
+  const controls=el('div','community-viewer-controls')
+  const minus=button('−',()=>session?.zoom(1.25)),plus=button('+',()=>session?.zoom(.8)),reset=button(t.viewerReset,()=>session?.reset())
+  minus.setAttribute('aria-label',t.viewerZoomOut);plus.setAttribute('aria-label',t.viewerZoomIn)
+  const full=button(t.viewerFull,async()=>{
+   if(document.fullscreenElement===dialog)await document.exitFullscreen?.().catch(()=>{})
+   else if(dialog.requestFullscreen){try{await dialog.requestFullscreen()}catch{dialog.classList.toggle('expanded')}}
+   else dialog.classList.toggle('expanded')
+   updateFull()
+  })
+  function updateFull(){full.textContent=document.fullscreenElement===dialog||dialog.classList.contains('expanded')?t.viewerExitFull:t.viewerFull}
+  const close=button(t.viewerClose,finish)
+  function finish(){
+   if(closed)return;closed=true;controller.abort();session?.dispose()
+   document.removeEventListener('fullscreenchange',updateFull)
+   if(document.fullscreenElement===dialog)void document.exitFullscreen?.().catch(()=>{})
+   if(dialog.open)dialog.close()
+   dialog.remove();activeViewer=null
+  }
+  activeViewer=finish
+  document.addEventListener('fullscreenchange',updateFull)
+  dialog.addEventListener('cancel',e=>{e.preventDefault();finish()})
+  dialog.addEventListener('close',finish)
+  for(const control of [minus,plus,reset])control.disabled=true
+  controls.append(minus,plus,reset,full,close);bar.append(title,controls)
+  message.setAttribute('role','status');dialog.append(bar,host,message,el('p','community-viewer-help',t.viewerHelp));root.append(dialog)
+  try{
+   dialog.showModal()
+   const doc=await request('/community/build/'+b.id+'/download',controller.signal,true),safe=previewDocument(doc)
+   if(!safe){message.textContent=t.viewerLimit;return}
+   const {mountModelViewer}=await import('./community-viewer.js?v=viewer-1')
+   controller.signal.throwIfAborted()
+   session=await mountModelViewer(host,safe,{signal:controller.signal,onProgress:(n,total)=>{message.textContent=t.loading+' '+n+'/'+total}})
+   if(closed){session.dispose();return}
+   message.textContent=session.shown<session.total?t.viewerPartial+' '+session.shown+'/'+session.total:''
+   for(const control of [minus,plus,reset])control.disabled=false
+  }catch(e){if(!closed)message.textContent=t.viewerUnavailable}
+ }
  function buildCard(b,detail=false){
   const card=el('article','community-card'+(detail?' community-detail':'')),art=artFor(b,detail),body=el('div','community-card-body')
   const title=detail?el('h2',null,b.title):link(b.title,'#community/build/'+b.id,'community-title')
@@ -81,6 +125,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
     finally{if(!signal.aborted){open.disabled=false;open.textContent=t.open}}
   },'workspace-action primary')
   open.title=t.copyHint;actions.append(open)
+  const viewButton=button(t.viewer,()=>showViewer(b));viewButton.disabled=b.partCount===0||b.partCount>600;if(viewButton.disabled)viewButton.title=t.viewerLimit;actions.append(viewButton)
   const download=link(t.download,'/community/build/'+b.id+'/download');download.download='';actions.append(download)
   body.append(title,meta,description,actions);card.append(art,body);return card
  }
