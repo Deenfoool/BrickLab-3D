@@ -1,0 +1,18 @@
+CREATE TABLE bricklab.community_likes (user_id uuid NOT NULL REFERENCES bricklab.users(id) ON DELETE CASCADE,build_id uuid NOT NULL REFERENCES bricklab.public_builds(public_id) ON DELETE CASCADE,PRIMARY KEY(user_id,build_id));
+CREATE TABLE bricklab.community_follows (user_id uuid NOT NULL REFERENCES bricklab.users(id) ON DELETE CASCADE,author_id uuid NOT NULL REFERENCES bricklab.public_profiles(public_id) ON DELETE CASCADE,PRIMARY KEY(user_id,author_id));
+CREATE TABLE bricklab.community_events (user_id uuid NOT NULL REFERENCES bricklab.users(id) ON DELETE CASCADE,build_id uuid NOT NULL REFERENCES bricklab.public_builds(public_id) ON DELETE CASCADE,kind text NOT NULL CHECK(kind IN ('view','download')),PRIMARY KEY(user_id,build_id,kind));
+CREATE INDEX community_likes_build ON bricklab.community_likes(build_id);
+CREATE INDEX community_follows_author ON bricklab.community_follows(author_id);
+CREATE INDEX community_events_build ON bricklab.community_events(build_id,kind);
+ALTER TABLE bricklab.community_likes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bricklab.community_follows ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bricklab.community_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY own_likes ON bricklab.community_likes FOR ALL TO bricklab_app USING(user_id=nullif(current_setting('bricklab.user_id',true),'')::uuid) WITH CHECK(user_id=nullif(current_setting('bricklab.user_id',true),'')::uuid AND EXISTS(SELECT 1 FROM bricklab.public_builds b JOIN bricklab.public_profiles p ON p.public_id=b.author_id WHERE b.public_id=community_likes.build_id AND p.user_id<>community_likes.user_id));
+CREATE POLICY own_follows ON bricklab.community_follows FOR ALL TO bricklab_app USING(user_id=nullif(current_setting('bricklab.user_id',true),'')::uuid) WITH CHECK(user_id=nullif(current_setting('bricklab.user_id',true),'')::uuid AND EXISTS(SELECT 1 FROM bricklab.public_profiles p WHERE p.public_id=community_follows.author_id AND p.user_id<>community_follows.user_id));
+CREATE POLICY own_events ON bricklab.community_events FOR ALL TO bricklab_app USING(user_id=nullif(current_setting('bricklab.user_id',true),'')::uuid) WITH CHECK(user_id=nullif(current_setting('bricklab.user_id',true),'')::uuid AND EXISTS(SELECT 1 FROM bricklab.public_builds b JOIN bricklab.public_profiles p ON p.public_id=b.author_id WHERE b.public_id=community_events.build_id AND p.user_id<>community_events.user_id));
+GRANT SELECT,INSERT,DELETE ON bricklab.community_likes,bricklab.community_follows TO bricklab_app;
+GRANT SELECT,INSERT ON bricklab.community_events TO bricklab_app;
+CREATE VIEW bricklab.community_like_counts AS SELECT build_id,count(*)::int AS likes FROM bricklab.community_likes GROUP BY build_id;
+CREATE VIEW bricklab.community_follow_counts AS SELECT author_id,count(*)::int AS followers FROM bricklab.community_follows GROUP BY author_id;
+CREATE VIEW bricklab.community_event_counts AS SELECT build_id,(count(*) FILTER(WHERE kind='view'))::int AS views,(count(*) FILTER(WHERE kind='download'))::int AS downloads FROM bricklab.community_events GROUP BY build_id;
+GRANT SELECT ON bricklab.community_like_counts,bricklab.community_follow_counts,bricklab.community_event_counts TO bricklab_app;
