@@ -370,5 +370,5 @@ dialog p,.setting{margin:18px 0}
 .notification-popover>.notification-action{padding:10px 14px}
 .notification-footer{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;flex:none;border:0;border-top:1px solid #454952;background:#292c33;color:var(--gold);font-size:13px;font-weight:650}
 .notification-footer:hover{background:#38332b}.notification-footer .icon{width:16px;height:16px;transform:rotate(-90deg)}
-@media(max-height:820px) and (min-width:701px){.sidebar-bottom{margin-bottom:16px}.navigation{margin-top:clamp(24px,8vh,65px)}}
-@media(max-width:700px){.sidebar{overflow:visible}.sidebar-external{padding:3px 0 0;gap:2px;justify-content:flex-end}.sidebar-external-link{width:30px;height:30px}.sidebar-external-link .icon{width:16px;height:16px}}
+@media(max-height:820px) and (min-width:621px){.sidebar-bottom{margin-bottom:16px}.navigation{margin-top:clamp(24px,8vh,65px)}}
+@media(max-width:620px){.sidebar{overflow:visible}.sidebar-external{padding:3px 0 0;gap:2px;justify-content:flex-end}.sidebar-external-link{width:30px;height:30px}.sidebar-external-link .icon{width:16px;height:16px}}

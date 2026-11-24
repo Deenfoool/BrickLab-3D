@@ -31,7 +31,7 @@ function field(label,type,autocomplete,maxLength){
 }
 export function createCloudAccount({root,link,getProjects,download,openCopy,linkLocal,onNotifications=()=>{},api=createAuthClient(),cloud=createProjectsClient(),profiles=createProfileClient(),activityApi=createActivityClient()}){
  let lang='ru',visible=false,mode='login',user=null,checked=false,busy=false,error='',selected=null,remote=[],historyId=null,history=[],feedback='',section='workshop',profileData=null,activityData=null,passport={source:'',document:null,revision:null}
- let notificationError=false
+ let notificationError=false,bellRefreshing=false,bellRendered=false
  const t=()=>copy[lang]
  function publishNotifications(){onNotifications({lang,signedIn:Boolean(user),checked,busy,items:activityData?.notifications??null,error:notificationError})}
  function label(){const e=link.querySelector('[data-account-label]');e.textContent=user?t().account:t().login;link.title=e.textContent;link.setAttribute('aria-label',e.textContent)}
@@ -47,7 +47,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
  function refresh(){return run(()=>api.me())}
  async function refreshNotifications(mark=false){
    if(!api.allowed||busy)return
-   busy=true;notificationError=false;publishNotifications()
+   busy=true;notificationError=false;bellRefreshing=true;bellRendered=false;publishNotifications()
    let identityChanged=false
    try{
      const next=await api.me()
@@ -60,10 +60,11 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
      else activityData=null
    }catch(e){
      notificationError=true
+     if(!checked)error=e.code??'auth_unavailable'
      if(e.status===401){user=null;remote=[];history=[];historyId=null;profileData=null;activityData=null;passport={source:'',document:null,revision:null};identityChanged=true}
    }finally{
-     busy=false
-     if(identityChanged||visible&&section==='notifications')render()
+     busy=false;bellRefreshing=false
+     if(identityChanged||visible&&(bellRendered||section==='notifications'||!user&&!checked))render()
      else{
        label();publishNotifications()
        const badge=root.querySelector('[data-notification-nav-count]')
@@ -73,7 +74,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
  }
  async function operate(fn){
    if(busy||!user)return
-   busy=true;error='';feedback='';render()
+   busy=true;error='';feedback='';notificationError=false;render()
    try{await fn()}
    catch(e){error=e.code??'unknown';if(e.status===401){user=null;remote=[];history=[];historyId=null;profileData=null;activityData=null;passport={source:'',document:null,revision:null}}}
    finally{busy=false;render()}
@@ -121,6 +122,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
  }
  function render(){
    label();publishNotifications();if(!visible)return
+   if(bellRefreshing)bellRendered=true
    root.replaceChildren()
    const s=t()
    if(!api.allowed){root.append(message('https_required'),localLink());return}
