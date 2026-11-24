@@ -2,7 +2,7 @@ import {renderAdminPanel} from './admin-panel.js?v=security-1'
 import {renderBureauPanel} from './bureau-panel.js?v=profile-gallery-1'
 import { createAuthClient } from './auth-client.js?v=security-1'
 
-import { createProjectsClient, cloudLink } from './projects-client.js?v=bureau-1'
+import { createProjectsClient, cloudLink } from './projects-client.js?v=profile-gallery-1'
 
 import { renderCloudWorkshop } from './cloud-workshop.js?v=profile-gallery-1'
 
@@ -113,6 +113,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
  function remoteProjectControls(p){
    const s=t(),row=node('div','project-cloud-controls')
    if(!user)return row
+   row.append(node('small','account-muted',(lang==='ru'?'Облако · актуальная версия ':'Cloud · latest revision ')+p.revision))
    row.append(control(s.open,async()=>{const item=await cloud.get(p.id);openCopy(item.document,{ownerId:user.id,id:item.id,revision:item.revision})},true),
      control(s.download,async()=>download((await cloud.get(p.id)).document)),
      control(s.history,async()=>{if(historyId===p.id){historyId=null;history=[]}else{history=await cloud.revisions(p.id);historyId=p.id}}))
@@ -186,7 +187,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    localProjectControls,
    remoteProjectControls,
    refreshProjects(){return operate(async()=>{remote=await cloud.list();activityData=await activityApi.get();if(historyId)history=await cloud.revisions(historyId)})},
-   async fetchProjectPreview(id,ownerId){if(!user||user.id!==ownerId)return null;const item=await cloud.get(id);return user?.id===ownerId?item:null},
+   async fetchProjectPreview(id,ownerId,signal){if(!user||user.id!==ownerId||signal?.aborted)return null;const item=await cloud.get(id,undefined,signal);return user?.id===ownerId&&!signal?.aborted?item:null},
    showNotifications(){section='notifications';if(visible)render()},
    refreshNotifications,
    readNotifications(){return refreshNotifications(true)},
