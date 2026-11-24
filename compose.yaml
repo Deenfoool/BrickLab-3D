@@ -1,0 +1,16 @@
+services:
+  bricklab:
+    build: .
+    ports:
+      - "${BRICKLAB_BIND:-127.0.0.1}:${BRICKLAB_PORT:-8080}:8080"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 15s

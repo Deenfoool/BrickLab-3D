@@ -3,8 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "node server/index.js",
     "test": "node --test",
-    "demo": "node examples/drivetrain.js"
+    "demo": "node examples/drivetrain.js",
+    "test:server": "node --test tests/server-http.test.js"
   },
   "devDependencies": {
     "@dimforge/rapier3d-compat": "0.19.3"
