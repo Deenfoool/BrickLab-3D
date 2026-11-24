@@ -2,7 +2,7 @@ import themes from '../../catalog/sets/themes.json' with { type: 'json' }
 import { mountSetFilters } from './filter-panel.js'
 import { filterSetItems } from './filters.js'
 import {
-  connectRebrickable,
+  initRebrickable,
   hasRebrickable,
   loadSetPage,
   importSet,
@@ -30,10 +30,10 @@ export const setStrings = (language) =>
         more: 'Показать ещё',
         retry: 'Повторить загрузку',
         connectHint:
-          'Подключите Rebrickable, чтобы увидеть полный каталог наборов.',
+          'Полный каталог временно недоступен. Показаны локальные наборы.',
         pieces: 'деталей',
         error:
-          'Не удалось загрузить данные. Проверьте ключ и соединение. При ограничении API попробуйте позже.',
+          'Не удалось загрузить данные. Повторите попытку позже. При ограничении API попробуйте позже.',
         source: 'Данные Rebrickable',
         noBooks: 'PDF для этого набора не найден.',
         findingBooks: 'Ищем инструкцию…',
@@ -61,10 +61,10 @@ export const setStrings = (language) =>
         empty: 'No sets found.',
         more: 'Show more',
         retry: 'Retry loading',
-        connectHint: 'Connect Rebrickable to browse the full set catalog.',
+        connectHint: 'Full catalog temporarily unavailable. Showing local sets.',
         pieces: 'parts',
         error:
-          'Could not load data. Check the key and connection. If rate limited, try again later.',
+          'Could not load data. Please try again later. If rate limited, try again later.',
         source: 'Data by Rebrickable',
         noBooks: 'No PDF found for this set.',
         findingBooks: 'Looking for instructions…',
@@ -101,6 +101,8 @@ export async function mountSetCatalog(
   { language, signal, projects, begin, resume },
 ) {
   const t = setStrings(language)
+  await initRebrickable(signal)
+  if (signal.aborted) return
   const cached = storedSets()
   const response = await fetch(
     new URL('../../catalog/sets/42215-1.json', import.meta.url),
@@ -123,40 +125,6 @@ export async function mountSetCatalog(
     signal,
     change: scheduleSearch,
   })
-  const connect = node('details', undefined, 'set-connect')
-  connect.append(node('summary', t.connect))
-  const key = node('input')
-  key.type = 'password'
-  key.placeholder = t.key
-  key.setAttribute('aria-label', t.key)
-  key.autocomplete = 'off'
-  const info = node('p', t.keyHint)
-  const authStatus = node('span')
-  connect.append(
-    key,
-    control(
-      t.connect,
-      () => {
-        connectRebrickable(key.value)
-        key.value = ''
-        authStatus.textContent = hasRebrickable() ? '✓' : ''
-        resetList()
-      },
-      signal,
-    ),
-    control(
-      t.disconnect,
-      () => {
-        connectRebrickable('')
-        key.value = ''
-        authStatus.textContent = ''
-        resetList()
-      },
-      signal,
-    ),
-    authStatus,
-    info,
-  )
   const status = node('p')
   status.setAttribute('role', 'status')
   const grid = node('div', undefined, 'set-grid')
@@ -166,7 +134,7 @@ export async function mountSetCatalog(
   credit.rel = 'noopener'
   const more = control(t.more, () => loadMore(), signal)
   more.classList.add('set-load-more')
-  root.replaceChildren(form, connect, status, grid, more, credit)
+  root.replaceChildren(form, status, grid, more, credit)
   const pageSize = 24
   let localItems = []
   let localOffset = 0
