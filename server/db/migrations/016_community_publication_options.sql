@@ -7,9 +7,10 @@ ALTER TABLE bricklab.public_builds
  ADD COLUMN tags text[] NOT NULL DEFAULT '{}' CHECK(cardinality(tags)<=8),
  ADD COLUMN work_type text NOT NULL DEFAULT 'original' CHECK(work_type IN ('original','remix','instruction')),
  ADD COLUMN attribution text NOT NULL DEFAULT '' CHECK(length(attribution)<=250),
+ ADD COLUMN origin_id uuid,
  ADD COLUMN images bytea[] NOT NULL DEFAULT '{}' CHECK(cardinality(images)<=4),
  ADD CONSTRAINT remix_needs_download CHECK(NOT allow_remix OR allow_download);
-GRANT INSERT(allow_download,allow_comments,allow_remix,difficulty,tags,work_type,attribution,images),
+GRANT INSERT(allow_download,allow_comments,allow_remix,difficulty,tags,work_type,attribution,origin_id,images),
  UPDATE(allow_download,allow_comments,allow_remix,difficulty,tags,work_type,attribution,images) ON bricklab.public_builds TO bricklab_app;
 
 CREATE TABLE bricklab.community_bookmarks (
