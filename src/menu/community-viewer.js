@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js'
 import {partMesh,parts,loadPartModel} from '../editor/parts.js?v=system-complete'
+import {viewerFitDistance} from './community-viewer-math.js'
 import {loadParts} from '../editor/model.js?v=track-builder'
 
 export async function mountModelViewer(host,document,{signal,onProgress=()=>{}}){
@@ -59,9 +60,9 @@ export async function mountModelViewer(host,document,{signal,onProgress=()=>{}})
   controls.minDistance=radius*.12;controls.maxDistance=radius*30
   controls.addEventListener('change',draw)
   function reset(){
-   const half=THREE.MathUtils.degToRad(camera.fov/2),horizontal=Math.atan(Math.tan(half)*camera.aspect)
-   const distance=radius/Math.sin(Math.min(half,horizontal))*1.18
-   camera.near=Math.max(.01,radius*.001);camera.far=Math.max(100,radius*80)
+   const distance=viewerFitDistance(radius,camera.fov,camera.aspect)
+   controls.maxDistance=Math.max(radius*30,distance*2)
+   camera.near=Math.max(.01,radius*.001);camera.far=Math.max(100,controls.maxDistance+radius*2)
    camera.position.copy(center).addScaledVector(new THREE.Vector3(1.35,.92,1.6).normalize(),distance)
    controls.target.copy(center);camera.updateProjectionMatrix();controls.update();draw()
   }
