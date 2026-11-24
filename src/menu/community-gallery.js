@@ -62,7 +62,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   })
   function update(n){control.textContent=(set.has(id)?label[1]:label[0])+' · '+n;control.setAttribute('aria-pressed',String(set.has(id)))}
   if(!reactionUpdates.has(key))reactionUpdates.set(key,[])
-  reactionUpdates.get(key).push(update);update(count??0);control.disabled=own
+  update.control=control;reactionUpdates.get(key).push(update);update(count??0);control.disabled=own
   if(!social.signedIn)control.title=t.signIn
   return control
  }
@@ -123,6 +123,8 @@ export async function mountCommunity(root,{language='ru',route='community',signa
    if(document.fullscreenElement===dialog)void document.exitFullscreen?.().catch(()=>{})
    if(dialog.open)dialog.close()
    dialog.remove();activeViewer=null;modalNotice=null
+   for(const [key,callbacks] of reactionUpdates){const live=callbacks.filter(fn=>fn.control?.isConnected);if(live.length)reactionUpdates.set(key,live);else reactionUpdates.delete(key)}
+   const listeners=viewUpdates.get(b.id)?.filter(fn=>fn!==update)??[];if(listeners.length)viewUpdates.set(b.id,listeners);else viewUpdates.delete(b.id)
    if(!signal.aborted&&view.type==='build'&&location.hash==='#community/build/'+b.id)location.hash='#community'
   }
   activeViewer=finish
