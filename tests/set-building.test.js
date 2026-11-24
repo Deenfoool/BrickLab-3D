@@ -7,12 +7,14 @@ import {
   safeBook,
 } from '../src/sets/data.js'
 import {
-  connectRebrickable,
+  initRebrickable,
   importSet,
   loadSetPage,
   searchSets,
 } from '../src/sets/rebrickable.js'
 import inventory from '../catalog/sets/42215-1.json' with { type: 'json' }
+
+globalThis.location = { origin: 'https://bricklab.example' }
 
 test('42215 inventory retains 2359 regular pieces, spares and the two instruction books', () => {
   const set = validateSet(inventory)
@@ -60,11 +62,11 @@ test('inventory mappings count colors independently and reflect deletions withou
   )
 })
 
-test('Rebrickable import follows inventory pagination and sends its key only in authorization', async () => {
+test('Rebrickable import follows inventory pagination through same-origin proxy', async () => {
   const original = globalThis.fetch
   const calls = []
-  connectRebrickable('test-key')
   globalThis.fetch = async (url, options) => {
+    if(String(url).endsWith('/config')) return Response.json({enabled:true})
     calls.push({ url: String(url), options })
     if (String(url).endsWith('/sets/1-1/'))
       return {
@@ -77,7 +79,7 @@ test('Rebrickable import follows inventory pagination and sends its key only in 
       json: async () => ({
         next: second
           ? null
-          : 'https://rebrickable.com/api/v3/lego/sets/1-1/parts/?page=2',
+          : 'https://bricklab.example/api/rebrickable/lego/sets/1-1/parts/?page=2',
         results: [
           {
             part: {
@@ -94,20 +96,20 @@ test('Rebrickable import follows inventory pagination and sends its key only in 
     }
   }
   try {
+    await initRebrickable()
     const set = await importSet('1-1')
     assert.equal(set.inventory.length, 2)
     assert.equal(set.inventory[0].ldraw[0], '3023b')
     assert.ok(
       calls.every(
         (c) =>
-          c.options.headers.Authorization === 'key test-key' &&
-          !c.url.includes('test-key'),
+          !c.options.headers?.Authorization &&
+          c.url.startsWith('https://bricklab.example/api/rebrickable/'),
       ),
     )
     assert.ok(!JSON.stringify(set).includes('test-key'))
   } finally {
     globalThis.fetch = original
-    connectRebrickable('')
   }
 })
 
@@ -115,21 +117,22 @@ test('set catalog loads one page at a time and preserves the API continuation an
   const original = globalThis.fetch
   const calls = []
   const controller = new AbortController()
-  connectRebrickable('pagination-test')
   globalThis.fetch = async (url, options) => {
+    if(String(url).endsWith('/config')) return Response.json({enabled:true})
     calls.push({ url: new URL(url), options })
     return {
       ok: true,
       json: async () => ({
         next:
           calls.length === 1
-            ? 'https://rebrickable.com/api/v3/lego/sets/?search=technic&page=2'
+            ? 'https://bricklab.example/api/rebrickable/lego/sets/?search=technic&page=2'
             : null,
         results: [{ set_num: `${calls.length}-1`, name: 'Set', year: 2025 }],
       }),
     }
   }
   try {
+    await initRebrickable()
     const first = await loadSetPage('technic', controller.signal)
     assert.equal(calls.length, 1)
     assert.equal(calls[0].url.searchParams.get('page_size'), '24')
@@ -148,7 +151,6 @@ test('set catalog loads one page at a time and preserves the API continuation an
     assert.equal(calls.length, 3)
   } finally {
     globalThis.fetch = original
-    connectRebrickable('')
   }
 })
 
@@ -191,12 +193,13 @@ test('set filters apply inclusive limits and numeric ordering to cached catalogs
 test('set filter requests use server parameters and preserve continuation query parameters', async () => {
   const original = globalThis.fetch
   const urls = []
-  connectRebrickable('filter-test')
   globalThis.fetch = async (url) => {
+    if(String(url).endsWith('/config')) return Response.json({enabled:true})
     urls.push(new URL(url))
     return { ok: true, json: async () => ({ next: null, results: [] }) }
   }
   try {
+    await initRebrickable()
     await loadSetPage('truck', undefined, undefined, {
       themeId: 1,
       minYear: 2000,
@@ -220,7 +223,6 @@ test('set filter requests use server parameters and preserve continuation query 
     assert.equal(urls[2].searchParams.has('max_parts'), false)
   } finally {
     globalThis.fetch = original
-    connectRebrickable('')
   }
 })
 
