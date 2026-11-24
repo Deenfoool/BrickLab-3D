@@ -36,3 +36,7 @@
 .account-profile{max-width:540px}.account-profile-row{border-top:1px solid #44464d;padding-top:13px;display:grid;gap:5px}
 @media(max-width:800px){.account-auth{grid-template-columns:1fr}.account-auth-hero{min-height:200px;padding:24px;gap:10px}.account-hero-art{position:absolute;right:0;bottom:0;width:49%;opacity:.65;z-index:-1}.account-workspace{grid-template-columns:1fr}.account-build-list{max-height:260px}}
 @media(max-width:620px){.account-topbar{padding:7px}.account-topbar span{display:none}.account-stats{grid-template-columns:1fr 1fr}.account-stats>div:last-child{grid-column:1/-1}.account-notice{font-size:12px}.account-card{padding:13px}.account-revision-actions{margin-left:0;width:100%}.project-card-actions{flex-wrap:wrap}.project-card-actions .project-card-open{min-width:90px}}
+
+/* Four card actions must also fit narrow desktop grid columns. */
+.project-card-actions:has(.project-card-cloud){flex-wrap:wrap}
+.project-card-actions:has(.project-card-cloud) .project-card-open{min-width:82px}
