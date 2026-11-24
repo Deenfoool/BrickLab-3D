@@ -2,7 +2,8 @@ import { sessionDiagnostics } from '../feedback/diagnostics.js?v=bug-report-v1'
 import { mountBugReport } from '../feedback/dialog.js?v=bug-report-v1'
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
-import { locales } from './locale.js?v=profile-gallery-1'
+import { locales } from './locale.js?v=hub-1'
+import { mountHomeHub, mountHubSearch } from './home-hub.js?v=hub-1'
 import { mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
 import { createCloudAccount } from './account.js?v=community-options-1'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
@@ -41,6 +42,7 @@ let communitySession
 let setSession
 let editorSession
 let librarySession
+let hubSession,hubSearch,hubSearchLanguage,pendingLibraryQuery='',pendingSetQuery=''
 let homePreviewSession
 let projectPreviewSession
 let projectPreviewObserver
@@ -398,7 +400,7 @@ function renderHome(visible) {
   overview.hidden = !visible || projects.length === 0
   if (overview.hidden) return
 
-  const [latest, ...recent] = sortByModified(projects).slice(0, 4)
+  const [latest, ...recent] = sortByModified(projects).slice(0, 1)
   const t = strings()
   const formatter = new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric' })
   const latestArt = byId('home-project-art')
@@ -486,16 +488,20 @@ function render(initial = false) {
   byId('tutorial-offer').hidden = !home || projects.length > 0 || readTutorial().seen
   byId('dashboard').hidden = !listVisible
   if (!listVisible) stopProjectPreviews()
-  byId('home-title').hidden = !home
+  byId('hub-hero').hidden = !home
+  byId('home-title').hidden = true
+  byId('hub-tutorial').hidden = !home
   byId('home-actions').hidden = !home && !listVisible
   byId('home-sets').hidden = !home
-  byId('home-example-heading').hidden = !home
-  examplePanel.hidden = !home && page !== 'examples'
+  byId('home-example-heading').hidden = true
+  examplePanel.hidden = page !== 'examples'
   examplePanel.classList.toggle('home-examples', home)
   examplePanel.setAttribute('aria-labelledby', home ? 'home-example-title' : 'page-title')
   if (home && exampleGrid.firstElementChild !== featuredExample) exampleGrid.prepend(featuredExample)
   if (!home && exampleGrid.lastElementChild !== featuredExample) exampleGrid.append(featuredExample)
   renderHome(home)
+  renderHub(home)
+  if(!hubSearch||hubSearchLanguage!==language){hubSearch?.dispose();hubSearchLanguage=language;hubSearch=mountHubSearch({language,getProjects:()=>projects,getCloud:()=>cloudAccount.projectState(),openLocal:openProject,openCloud:async(id,owner)=>{try{const item=await cloudAccount.fetchProjectPreview(id,owner);if(item&&cloudAccount.projectState().ownerId===owner)addProject(item.document,null,{ownerId:owner,id:item.id,revision:item.revision})}catch{setStatus('exampleUnavailable')}},goLibrary:q=>{pendingLibraryQuery=q;closeLibrary();if(currentPage()==='library')void openLibrary();else location.hash='#library'},goSets:q=>{pendingSetQuery=q;closeSets();if(currentPage()==='sets')void openSets();else location.hash='#sets'}})}
   libraryRoot.hidden = page !== 'library'
   byId('sets-panel').hidden = page !== 'sets'
   byId('account-panel').hidden = page !== 'account'
@@ -517,6 +523,14 @@ function render(initial = false) {
   return editorReady
 }
 
+function renderHub(visible){
+ const root=byId('home-hub');root.hidden=!visible
+ if(!visible){hubSession?.controller.abort();hubSession=null;return}
+ if(hubSession?.language===language)return
+ hubSession?.controller.abort()
+ const controller=new AbortController();hubSession={language,controller}
+ void mountHomeHub(root,{language,signal:controller.signal}).catch(()=>{if(!controller.signal.aborted)root.textContent=language==='ru'?'Не удалось загрузить главную.':'Could not load home.'})
+}
 function closeCommunity(){communitySession?.controller.abort();communitySession=null;byId('community-panel').replaceChildren()}
 async function openCommunity(){
  const route=location.hash.slice(1),key=language+':'+route
@@ -539,9 +553,10 @@ async function openSets() {
   const root = byId('sets-panel')
   root.textContent = strings().loadingLibrary
   try {
-    const { mountSetCatalog } = await import('../sets/catalog.js?v=browser-recognition')
+    const { mountSetCatalog } = await import('../sets/catalog.js?v=hub-1')
     if (controller.signal.aborted) return
-    await mountSetCatalog(root, { language, signal: controller.signal, projects: () => projects,
+    const initialQuery=pendingSetQuery;pendingSetQuery=''
+    await mountSetCatalog(root, { language, signal: controller.signal, initialQuery, projects: () => projects,
       resume: openProject,
       begin(set) {
         const data = newProject(set.name)
@@ -590,6 +605,7 @@ async function openLibrary() {
     session.view = mountLibrary(libraryRoot, {
       sections, models: parts, language: session.language, labels, initialSection: librarySection, initialGroup: libraryGroup, signal: controller.signal,
     })
+    if(pendingLibraryQuery){librarySearch.value=pendingLibraryQuery;pendingLibraryQuery='';librarySearch.dispatchEvent(new Event('input'))}
     libraryControls.hidden = false
     libraryScroll.hidden = false
     libraryStatus.hidden = true
@@ -736,6 +752,9 @@ byId('settings-tutorial').addEventListener('click', () => {
   settingsDialog.close()
   tutorialPicker.showModal()
 })
+byId('hub-tutorial').addEventListener('click',()=>tutorialPicker.showModal())
+byId('hub-search-button').addEventListener('click',()=>hubSearch?.open())
+document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'&&!shell.hidden&&!document.querySelector('dialog[open]')){event.preventDefault();hubSearch?.open()}})
 byId('tutorial-offer-start').addEventListener('click', () => tutorialPicker.showModal())
 byId('tutorial-offer-later').addEventListener('click', () => {
   dismissTutorialOffer()
