@@ -42,7 +42,7 @@ export function validatePublication(value){
 export function publicPreview(doc){
  if(!Array.isArray(doc?.parts)||doc.parts.length>600)return null
  const valid=(v,n,max)=>Array.isArray(v)&&v.length===n&&v.every(x=>Number.isFinite(x)&&Math.abs(x)<=max)
- const parts=doc.parts.filter(p=>p&&/^[a-zA-Z0-9_-]{1,40}$/.test(String(p.design))).map((p,i)=>({id:'preview-'+i,design:String(p.design),...(valid(p.position,3,1000000)?{position:p.position}:{}),...(valid(p.rotation,4,2)?{rotation:p.rotation}:{}),...(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color)?{color:p.color}:{}),mirrored:p.mirrored===true}))
+ const parts=doc.parts.filter(p=>p&&['string','number'].includes(typeof p.design)&&/^[a-zA-Z0-9_-]{1,40}$/.test(String(p.design))).map((p,i)=>({id:'preview-'+i,design:String(p.design),...(valid(p.position,3,1000000)?{position:p.position}:{}),...(valid(p.rotation,4,2)?{rotation:p.rotation}:{}),...(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color)?{color:p.color}:{}),mirrored:p.mirrored===true}))
  if(!parts.length||new Set(parts.map(p=>p.design)).size>120)return null
  return {format:'bricklab-3d',version:1,name:String(doc.name??'Model').slice(0,120),parts,connections:[],gears:[]}
 }
@@ -194,7 +194,7 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
     }
     const build=/^\/(api\/)?community\/build\/([^/]+)(\/(?:download|document|preview))?$/.exec(path)
     if(build&&uuid.test(build[2])){
-     if(build[3]){const p=await store.getPublicBuild(build[2],true);if(!p)throw new ProjectError(404,'not_found');if(build[3]==='/preview'){const preview=publicPreview(p.document);if(!preview)throw new ProjectError(422,'preview_limit');reply(res,200,preview);return true}if(p.allowDownload===false)throw new ProjectError(403,'download_disabled');if(build[3]==='/download'){try{const user=await session(req);if(user)await store.recordPublicEvent(user.id,build[2],'download')}catch(e){logger.error('Download statistics failed:',e.code||e.name)}}res.setHeader('Content-Disposition','attachment; filename="bricklab-'+build[2]+'.bricklab"');reply(res,200,JSON.stringify(p.document),'application/octet-stream');return true}
+     if(build[3]){const p=await store.getPublicBuild(build[2],true);if(!p)throw new ProjectError(404,'not_found');if(build[3]==='/preview'){const preview=publicPreview(p.document);if(!preview)throw new ProjectError(422,'preview_limit');reply(res,200,preview);return true}if(p.allowDownload===false)throw new ProjectError(403,'download_disabled');if(build[3]==='/download'){try{const user=await session(req);if(user)await store.recordPublicEvent(user.id,build[2],'download')}catch(e){logger.error('Download statistics failed:',e.code||e.name)}}res.setHeader('Content-Disposition','attachment; filename="bricklab-'+build[2]+'.bricklab"');reply(res,200,JSON.stringify({...p.document,communityOrigin:{id:build[2]}}),'application/octet-stream');return true}
      const p=publicBuild(await store.getPublicBuild(build[2]));if(!p)throw new ProjectError(404,'not_found')
      if(build[1])reply(res,200,{build:p});else {res.writeHead(302,{'Location':'/#community/build/'+p.id,'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}return true
     }
