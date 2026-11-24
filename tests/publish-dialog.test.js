@@ -22,5 +22,6 @@ test('linked builds retain optimistic revision checks and reject shared copies',
  await assert.rejects(savePublicationRevision({record:linked,user:{id:owner},cloud,linkLocal:()=>assert.fail('must not link on conflict')}),{code:'revision_conflict'})
  assert.equal(writes,1)
  await assert.rejects(savePublicationRevision({record:{...linked,cloud:{...linked.cloud,kind:'bureau'}},user:{id:owner},cloud,linkLocal:()=>assert.fail()}),/shared/)
+ await assert.rejects(savePublicationRevision({record:{...linked,cloud:{...linked.cloud,ownerId:id}},user:{id:owner},cloud,linkLocal:()=>assert.fail()}),/shared/)
  assert.equal(writes,1)
 })
