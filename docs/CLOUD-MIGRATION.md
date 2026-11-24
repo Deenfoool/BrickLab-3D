@@ -151,3 +151,7 @@ API: POST /api/auth/register (email, displayName, password), POST /api/auth/logi
 ## Почта: Yandex Cloud Postbox (замена Resend)
 
 SMTP_SSL на postbox.cloud.yandex.net:465 с проверкой TLS-сертификата. BRICKLAB_MAIL_USER — ID API-ключа с yc.postbox.send, BRICKLAB_MAIL_KEY — секретная часть, BRICKLAB_MAIL_FROM — разрешённый адрес noreply@bricklab-3d.ru. Сервисный аккаунт в том же каталоге с postbox.sender. Python smtplib в контейнере; секреты передаются дочернему процессу через stdin, не в аргументах, сообщения и SMTP-ответы не журналируются. Ошибки возвращают только безопасные коды. Тестовое письмо отправляется вручную из контейнера через createMailer с purpose:test. Публичную регистрацию включать отдельно после проверки фактической доставки и безопасности.
+
+### Postbox HTTPS вместо SMTP
+
+После тайм-аутов 465/587 используется POST https://postbox.cloud.yandex.net/v2/email/outbound-emails (443), AWS Signature V4, ru-central1/ses. BRICKLAB_MAIL_USER и BRICKLAB_MAIL_KEY теперь содержат ID и секрет **статического ключа доступа**, не SMTP API-ключа. Отправка подтверждается MessageId. Python не требуется для почты; прежний SMTP-скрипт больше не используется. Тесты проверяют эталонную подпись и контракт транспорта; реальная доставка проверяется оператором. Публичная регистрация остаётся закрытой до проверки.

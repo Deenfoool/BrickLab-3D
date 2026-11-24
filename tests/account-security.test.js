@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import {createServer} from 'node:http'
 import {createHash} from 'node:crypto'
 import {createAccountSecurityHandler} from '../server/account-security.js'
-import {createMailer} from '../server/mail.js'
+import {createMailer,postboxHeaders,sendPostbox} from '../server/mail.js'
 import {verifyPassword} from '../server/auth.js'
 import {createAuthClient} from '../src/menu/auth-client.js'
 import {adminTarget} from '../src/menu/admin-panel.js'
@@ -70,4 +70,30 @@ test('Postbox adapter passes credentials only to transport and uses dedicated te
  assert.ok(!call.text.includes('undefined'))
  assert.equal(createMailer({}),null)
  assert.equal(createMailer({BRICKLAB_MAIL_KEY:'key',BRICKLAB_MAIL_FROM:'noreply@bricklab-3d.ru'}),null)
+})
+
+test('Postbox SigV4 fixed reference signature',()=>{
+ const headers=postboxHeaders('test-id','test-secret','{"test":true}',new Date('2026-11-24T14:25:00Z'))
+ assert.equal(headers['x-amz-date'],'20261124T142500Z')
+ assert.equal(headers.authorization,'AWS4-HMAC-SHA256 Credential=test-id/20261124/ru-central1/ses/aws4_request, SignedHeaders=content-type;host;x-amz-date, Signature=c2045ab405f34675720a3919672956a26d4797f56630d1dd43a8c4397f2f8fd1')
+})
+test('Postbox HTTPS transport signs the exact UTF-8 request and requires acceptance',async()=>{
+ const msg={username:'test-id',password:'test-secret',from:'noreply@bricklab-3d.ru',to:email,subject:'Тест',text:'Код'}
+ const id=await sendPostbox(msg,async(url,opts)=>{
+  assert.equal(url,'https://postbox.cloud.yandex.net/v2/email/outbound-emails')
+  assert.equal(opts.method,'POST');assert.equal(opts.redirect,'error')
+  const body=JSON.parse(opts.body)
+  assert.equal(body.FromEmailAddress,msg.from)
+  assert.deepEqual(body.Destination.ToAddresses,[email])
+  assert.equal(body.Content.Simple.Body.Text.Data,'Код')
+  assert.ok(!opts.body.includes(msg.password))
+  const date=opts.headers['x-amz-date']
+  const now=new Date(date.slice(0,4)+'-'+date.slice(4,6)+'-'+date.slice(6,8)+'T'+date.slice(9,11)+':'+date.slice(11,13)+':'+date.slice(13,15)+'Z')
+  assert.deepEqual(opts.headers,postboxHeaders(msg.username,msg.password,opts.body,now))
+  return new Response(JSON.stringify({MessageId:'accepted-id'}),{status:200})
+ })
+ assert.equal(id,'accepted-id')
+ await assert.rejects(sendPostbox(msg,async()=>new Response('private response',{status:403})),{message:'postbox_http_403'})
+ await assert.rejects(sendPostbox(msg,async()=>new Response('{}',{status:200})),{message:'postbox_invalid_response'})
+ await assert.rejects(sendPostbox(msg,async()=>{throw Error('private error')}),{message:'postbox_connection'})
 })
