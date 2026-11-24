@@ -402,3 +402,20 @@ dialog p,.setting{margin:18px 0}
 .community-viewer-dialog:fullscreen,.community-viewer-dialog.expanded{width:100vw;height:100dvh;max-width:none;max-height:none;border:0;border-radius:0;margin:0}
 .community-viewer-dialog:fullscreen .community-viewer-stage,.community-viewer-dialog.expanded .community-viewer-stage{height:100%;min-height:0}
 @media(max-width:620px){.community-viewer-dialog{padding:10px}.community-viewer-stage{height:48dvh}.community-viewer-toolbar h2{font-size:15px}}
+
+.community-public-workshop{display:grid;gap:18px;padding:16px;border-radius:14px;min-width:0}
+.community-public-workshop>h2{font-size:20px}
+.community-builder-detail{display:block;padding:0;gap:0}
+.community-profile-cover{position:relative;isolation:isolate;aspect-ratio:4/1;min-height:110px;max-height:280px;display:flex;align-items:flex-start;padding:18px;overflow:hidden;color:#e3eaf3;font-size:12px;letter-spacing:.16em;font-weight:700;background:#2c3540}
+.community-profile-cover.cover-blueprint{background-color:#233a50;background-image:linear-gradient(#99b4c222 1px,transparent 1px),linear-gradient(90deg,#99b4c222 1px,transparent 1px);background-size:22px 22px}
+.community-profile-cover.cover-graphite{background:linear-gradient(135deg,#4b5059,#21232a)}
+.community-profile-cover.cover-amber{background:linear-gradient(135deg,#8c5b20,#302b27)}
+.community-profile-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.community-profile-identity{position:relative;display:flex;align-items:flex-start;gap:18px;padding:0 20px 18px}
+.community-profile-avatar{overflow:hidden;flex:none}.community-profile-avatar img{display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit}
+.community-builder-detail .community-profile-avatar{margin-top:-30px;width:90px;height:90px;font-size:27px;border:4px solid #222429;z-index:1}
+.community-builder-detail .community-card-body{padding:15px 0 0;min-width:0}
+.community-builder-detail .community-card-body h2{font-size:25px;overflow-wrap:anywhere}
+.community-author{display:inline-flex;align-items:center;gap:5px;overflow-wrap:anywhere}
+.community-author-avatar{width:23px;height:23px;border-radius:5px;object-fit:cover}
+@media(max-width:620px){.community-public-workshop{padding:8px}.community-profile-identity{padding:0 12px 12px;gap:10px}.community-builder-detail .community-profile-avatar{width:68px;height:68px;margin-top:-20px}.community-builder-detail .community-card-body h2{font-size:20px}}

@@ -114,6 +114,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   const card=el('article','community-card'+(detail?' community-detail':'')),art=artFor(b,detail),body=el('div','community-card-body')
   const title=detail?el('h2',null,b.title):link(b.title,'#community/build/'+b.id,'community-title')
   const meta=el('div','community-meta'),author=link(b.author,'#community/profile/'+b.authorId,'community-author')
+  const authorImage=publicImage(b.authorAvatarUrl,b.authorId,'avatar');if(authorImage){authorImage.className='community-author-avatar';author.prepend(authorImage)}
   meta.append(author,el('span',null,b.partCount+' '+t.partCount),el('span',null,t[b.category]??t.other),el('span',null,t.revision+' '+b.revision))
   const description=el('p','community-description',b.description)
   const actions=el('div','community-actions')
@@ -129,7 +130,24 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   const download=link(t.download,'/community/build/'+b.id+'/download');download.download='';actions.append(download)
   body.append(title,meta,description,actions);card.append(art,body);return card
  }
- function builderCard(p){const a=el('article','community-card community-builder'),avatar=el('div','account-avatar',Array.from(p.displayName).slice(0,2).join('').toUpperCase()),body=el('div','community-card-body');body.append(link(p.displayName,'#community/profile/'+p.id,'community-title'),el('p','community-description',p.bio));a.append(avatar,body);return a}
+ function publicImage(url,id,kind){
+  const expected='/api/community/profile/'+id+'/'+kind
+  if(!uuid.test(id)||url!==expected)return null
+  const image=el('img');image.src=expected;image.alt='';image.loading='lazy';return image
+ }
+ function builderCard(p,detail=false){
+  const a=el('article','community-card community-builder'+(detail?' community-builder-detail':'')),avatar=el('div','account-avatar community-profile-avatar',Array.from(p.displayName).slice(0,2).join('').toUpperCase()),body=el('div','community-card-body')
+  const img=publicImage(p.avatarUrl,p.id,'avatar');if(img)avatar.replaceChildren(img)
+  body.append(detail?el('h2',null,p.displayName):link(p.displayName,'#community/profile/'+p.id,'community-title'),el('p','community-description',p.bio))
+  if(detail){
+   const theme=['blueprint','graphite','amber'].includes(p.coverTheme)?p.coverTheme:'blueprint'
+   const cover=el('div','community-profile-cover cover-'+theme),coverImg=publicImage(p.coverUrl,p.id,'cover')
+   if(coverImg)cover.append(coverImg)
+   else cover.append(el('span',null,'BRICKLAB / WORKSHOP'))
+   const identity=el('div','community-profile-identity');identity.append(avatar,body);a.append(cover,identity)
+  }else a.append(avatar,body)
+  return a
+ }
  root.replaceChildren()
  const heading=el('div','community-heading');heading.append(el('p','account-muted',t.intro),link(t.manage,'#account'));root.append(heading,status)
  if(view.type==='missing'){status.textContent=t.missing;return}
@@ -138,7 +156,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   status.textContent=t.loading
   try{
    if(view.type==='build'){const {build}=await request('/api/community/build/'+view.id,signal);if(!signal.aborted){status.textContent='';root.append(buildCard(build,true))}}
-   else{const {profile}=await request('/api/community/profile/'+view.id,signal);if(signal.aborted)return;status.textContent='';root.append(builderCard(profile),el('h2',null,t.models));const grid=el('div','community-grid');root.append(grid);const {builds}=await request('/api/community/builds?author='+view.id,signal);if(signal.aborted)return;for(const b of builds)grid.append(buildCard(b));if(!builds.length)grid.append(el('p','account-muted',t.empty))}
+   else{const {profile}=await request('/api/community/profile/'+view.id,signal);if(signal.aborted)return;status.textContent='';const theme=['default','first-build','carbon','neon'].includes(profile.backgroundTheme)?profile.backgroundTheme:'default';const workshop=el('section','community-public-workshop cosmetic-'+theme);workshop.append(builderCard(profile,true),el('h2',null,t.models));const grid=el('div','community-grid');workshop.append(grid);root.append(workshop);const {builds}=await request('/api/community/builds?author='+view.id,signal);if(signal.aborted)return;for(const b of builds)grid.append(buildCard(b));if(!builds.length)grid.append(el('p','account-muted',t.empty))}
   }catch(e){fail(e)}
   return
  }

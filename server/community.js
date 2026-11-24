@@ -4,7 +4,9 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export function validatePublicCard(value){
  const clean=(s,max)=>typeof s==='string'&&s.length<=max&&!/[\u0000-\u0008\u000b-\u001f\u007f]/.test(s)&&!/[\ud800-\udfff]/u.test(s)
  if(!value||!clean(value.displayName,80)||!value.displayName.trim()||!clean(value.bio,500))throw new ProjectError(400,'invalid_public_profile')
- return {displayName:value.displayName.trim(),bio:value.bio.trim()}
+ const appearance={}
+ for(const k of ['showAvatar','showCover','showBackground']){if(value[k]!==undefined){if(typeof value[k]!=='boolean')throw new ProjectError(400,'invalid_public_profile');appearance[k]=value[k]}}
+ return {displayName:value.displayName.trim(),bio:value.bio.trim(),...appearance}
 }
 export const buildCategories=['vehicles','mechanisms','architecture','robots','other']
 export function galleryQuery(url){
@@ -19,10 +21,16 @@ export function validatePublication(value){
  return {revision:value.revision,description:value.description.trim(),...(value.category===undefined?{}:{category:value.category})}
 }
 export function publicBuild(row){
- return row?{id:row.id,authorId:row.authorId,author:row.author,title:row.title,description:row.description,revision:row.revision,category:row.category??'other',partCount:row.partCount??0,publishedAt:row.publishedAt}:null
+ return row?{id:row.id,authorId:row.authorId,author:row.author,authorAvatarUrl:row.authorHasAvatar===true&&uuid.test(row.authorId)?'/api/community/profile/'+row.authorId+'/avatar':null,title:row.title,description:row.description,revision:row.revision,category:row.category??'other',partCount:row.partCount??0,publishedAt:row.publishedAt}:null
 }
 export function publicCard(row){
- return row?{id:row.id,displayName:row.displayName,bio:row.bio,updatedAt:row.updatedAt}:null
+ if(!row)return null
+ const base=uuid.test(row.id)?'/api/community/profile/'+row.id:null
+ return {id:row.id,displayName:row.displayName,bio:row.bio,updatedAt:row.updatedAt,
+  avatarUrl:base&&row.hasAvatar===true?base+'/avatar':null,coverUrl:base&&row.hasCover===true?base+'/cover':null,
+  coverTheme:['blueprint','graphite','amber'].includes(row.coverTheme)?row.coverTheme:null,
+  backgroundTheme:['default','first-build','carbon','neon'].includes(row.backgroundTheme)?row.backgroundTheme:null}
+
 }
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
 export function communityPage(cards,detail=false,builds=[]){
@@ -83,6 +91,14 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
      if(build[1])reply(res,200,{build:p});else {res.writeHead(302,{'Location':'/#community/build/'+p.id,'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}return true
     }
     if(path==='/api/community/builds'){const {author,...options}=galleryQuery(req.url);const rows=await store.listPublicBuilds(author,options);reply(res,200,{builds:rows.slice(0,24).map(publicBuild),nextOffset:rows.length>24&&options.offset+24<=10000?options.offset+24:null});return true}
+    const media=/^\/api\/community\/profile\/([^/]+)\/(avatar|cover)$/.exec(path)
+    if(media&&uuid.test(media[1])){
+      const image=await store.getPublicMedia(media[1],media[2])
+      if(!image)throw new ProjectError(404,'not_found')
+      const bytes=Buffer.isBuffer(image)?image:Buffer.from(image)
+      res.writeHead(200,{'Content-Type':'image/webp','Content-Length':bytes.length,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Robots-Tag':'noindex, nofollow'})
+      res.end(bytes);return true
+    }
     const m=/^\/(api\/)?community\/profile\/([^/]+)$/.exec(path)
     if(m&&uuid.test(m[2])){
      const card=publicCard(await store.getPublicCard(m[2]))
