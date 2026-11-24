@@ -57,7 +57,7 @@ PGPASSWORD="$POSTGRES_PASSWORD" docker run --rm --network "$NET" \
     -e PGHOST="$DB" -e PGDATABASE=bricklab_browser_test -e PGUSER=bricklab_admin \
     -e PGPASSWORD -e BRICKLAB_APP_PASSWORD -v "$TMP/server/db:/migrations:ro" \
     postgres:16 sh /migrations/setup.sh
-for check in account_security.sql community_options.sql; do
+for check in account_security.sql community_options.sql store_orders.sql; do
     docker exec -i -e PGPASSWORD="$POSTGRES_PASSWORD" "$DB" \
       psql -X -v ON_ERROR_STOP=1 -U bricklab_admin -d bricklab_browser_test \
       < "$TMP/server/db/tests/$check"
@@ -66,7 +66,7 @@ PGPASSWORD="$BRICKLAB_APP_PASSWORD" docker run --rm --network "$NET" \
     --memory=1536m --cpus=1 -e PGHOST="$DB" -e PGDATABASE=bricklab_browser_test \
     -e PGUSER=bricklab_app -e PGPASSWORD -e BRICKLAB_TEST_DB=true \
     -v "$TMP:/tests" -w /tests bricklab-test-runner:local \
-    node --test --test-concurrency=1 tests/server-auth.test.js tests/community-db.test.js tests/store-db.test.js
+    node --test --test-concurrency=1 tests/server-auth.test.js tests/community-db.test.js
 unset POSTGRES_PASSWORD BRICKLAB_APP_PASSWORD
 docker rm -f "$DB" >/dev/null
 docker network rm "$NET" >/dev/null
