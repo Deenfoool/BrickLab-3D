@@ -12,7 +12,8 @@ test('community routes only accept public UUIDs and previews discard nongeometry
  assert.equal(communityRoute('community/build/no').type,'missing')
  const doc={name:'Example',parts:[{design:'3001',id:'private',position:[1,2,3],rotation:[0,0,0,1],color:'#ff0000',extra:'secret'}],connections:[{}],buildingSet:{url:'https://example.invalid'}}
  const p=previewDocument(doc);assert.equal(p.parts[0].design,'3001');assert.equal(p.parts[0].id,'preview-0');assert.equal(p.parts[0].extra,undefined);assert.equal(p.buildingSet,undefined);assert.deepEqual(p.connections,[])
- assert.equal(previewDocument({parts:Array(601).fill({design:'3001'})}),null)
+ assert.equal(previewDocument({parts:Array(601).fill({design:'3001'})}).parts.length,601)
+ assert.equal(previewDocument({parts:Array(20001).fill({design:'3001'})}),null)
 })
 
 test('opening publication directly creates a copy from the published download',async()=>{
