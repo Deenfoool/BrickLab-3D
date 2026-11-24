@@ -3,7 +3,7 @@ import {hashPassword} from './auth.js'
 import {ProjectError} from './projects.js'
 const digest=s=>createHash('sha256').update(s).digest('hex')
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const adminActions=['block','unblock','revoke_sessions','hide_comment','dismiss_reports','unpublish_build','unpublish_profile']
+const adminActions=['block','unblock','revoke_sessions','hide_comment','dismiss_reports','dismiss_build_reports','unpublish_build','unpublish_profile']
 function emailOf(value){
  const email=typeof value==='string'?value.trim().toLowerCase():''
  if(!/^[^\s@\u0000-\u001f\u007f]+@[^\s@\u0000-\u001f\u007f]+\.[^\s@\u0000-\u001f\u007f]+$/.test(email)||email.length>254||/[\ud800-\udfff]/u.test(email))throw new ProjectError(400,'invalid_credentials')
@@ -49,6 +49,7 @@ export function createAccountSecurityHandler({store,origin,registrationEnabled=f
       let rows
       if(path==='/api/admin/users')rows=await store.adminUsers(user.id,q,offset)
       else if(path==='/api/admin/reports')rows=await store.adminReports(user.id,offset)
+      else if(path==='/api/admin/build-reports')rows=await store.adminBuildReports(user.id,offset)
       else if(path==='/api/admin/audit')rows=await store.adminAudit(user.id,offset)
       else throw new ProjectError(404,'not_found')
       reply(res,200,{items:rows.slice(0,30),nextOffset:rows.length>30&&offset+30<=10000?offset+30:null});return true
