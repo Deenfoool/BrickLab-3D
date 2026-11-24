@@ -1,5 +1,5 @@
-import { modelPassport, badges, ranks, rankFor, challenges, challengeReadiness } from './workshop-model.js?v=cloud-workshop-1'
-import { workshopCopy } from './workshop-copy.js?v=cloud-workshop-1'
+import { modelPassport, badges, ranks, rankFor, challenges, challengeReadiness } from './workshop-model.js?v=profile-1'
+import { workshopCopy } from './workshop-copy.js?v=profile-1'
 
 export const sections=[['workshop','icon-home'],['cloud','folder'],['passport','icon-account'],['achievements','icon-trophy'],['challenges','icon-flask'],['rankings','icon-trophy'],['publicProfile','icon-account'],['diary','book'],['bureau','icon-account'],['favorites','icon-heart'],['notifications','icon-bell'],['storage','icon-cloud'],['settings','settings'],['security','icon-shield']]
 const implemented=new Set(['workshop','cloud','passport','achievements','challenges','storage','settings','security'])
