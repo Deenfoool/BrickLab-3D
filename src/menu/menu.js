@@ -2,10 +2,11 @@ import { sessionDiagnostics } from '../feedback/diagnostics.js?v=bug-report-v1'
 import { mountBugReport } from '../feedback/dialog.js?v=bug-report-v1'
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
-import { locales } from './locale.js?v=hub-1'
+import { locales } from './locale.js?v=store-1'
+import {mountStore} from './store.js?v=store-1'
 import { mountHomeHub, mountHubSearch } from './home-hub.js?v=hub-1'
 import { mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=community-options-1'
+import { createCloudAccount } from './account.js?v=store-1'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -22,7 +23,7 @@ const status = byId('status')
 const removeDialog = byId('remove-dialog')
 const settingsDialog = byId('settings-dialog')
 const tutorialPicker = byId('tutorial-picker')
-const pages = ['home', 'projects', 'examples', 'library', 'sets', 'account', 'community']
+const pages = ['home', 'projects', 'examples', 'library', 'sets', 'account', 'community', 'store']
 let projects = readProjects()
 let storageWarning = false
 let activeMenu = null
@@ -42,6 +43,7 @@ let communitySession
 let setSession
 let editorSession
 let librarySession
+let storeSession
 let hubSession,hubSearch,hubSearchLanguage,pendingLibraryQuery='',pendingSetQuery=''
 let homePreviewSession
 let projectPreviewSession
@@ -510,6 +512,8 @@ function render(initial = false) {
   libraryRoot.hidden = page !== 'library'
   byId('sets-panel').hidden = page !== 'sets'
   byId('account-panel').hidden = page !== 'account'
+  const storeRoot=byId('store-panel');storeRoot.hidden=page!=='store'
+  if(page==='store'){if(storeSession?.language!==language){storeSession?.controller.abort();const controller=new AbortController();storeSession={controller,language};mountStore(storeRoot,{language,signal:controller.signal})}}else{storeSession?.controller.abort();storeSession=null;storeRoot.replaceChildren()}
   cloudAccount.update(language, page === 'account')
   byId('community-panel').hidden=page!=='community'
   if(page==='community')openCommunity()
