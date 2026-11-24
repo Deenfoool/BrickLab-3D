@@ -1,5 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import { createBrickLabServer } from './http.js'
+import { createRebrickableHandler } from './rebrickable.js'
+import { createCspReportHandler } from './csp-report.js'
 import {createAccountSecurityHandler} from './account-security.js'
 import {createMailer} from './mail.js'
 import { createAuthHandler } from './auth.js'
@@ -34,7 +36,8 @@ if (process.env.PGPASSWORD) {
     throw error
   }
 }
-const server = createBrickLabServer({ root: fileURLToPath(new URL('../', import.meta.url)), auth, projects, profile, activity, community, bureau, security })
+const server = createBrickLabServer({ root: fileURLToPath(new URL('../', import.meta.url)), auth, projects, profile, activity, community, bureau, security,
+  rebrickable:createRebrickableHandler({apiKey:process.env.BRICKLAB_REBRICKABLE_API_KEY || ''}), cspReport:createCspReportHandler() })
 server.on('error', async error => {
   console.error('Unable to start BrickLab:', error.message)
   clearInterval(cleanup)

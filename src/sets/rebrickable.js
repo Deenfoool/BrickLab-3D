@@ -1,25 +1,22 @@
 import { setSearchParams } from './filters.js'
 import { knownBooks, validateSet } from './data.js?v=browser-recognition'
-const endpoint = 'https://rebrickable.com/api/v3/'
-let apiKey = ''
-export function connectRebrickable(key) {
-  apiKey = key.trim()
+const endpoint = '/api/rebrickable/'
+let enabled = false
+export async function initRebrickable(signal) {
+  enabled = false
+  try {
+    const response = await fetch(endpoint+'config', {signal,credentials:'same-origin',redirect:'error'})
+    if(response.ok) enabled=(await response.json()).enabled===true
+  }catch{}
+  return enabled
 }
-export const hasRebrickable = () => Boolean(apiKey)
+export const hasRebrickable = () => enabled
 async function request(path, signal) {
-  if (!apiKey) throw Error('api-key-required')
-  const url = new URL(path, endpoint)
-  if (
-    url.origin !== new URL(endpoint).origin ||
-    !url.pathname.startsWith('/api/v3/')
-  )
-    throw Error('invalid-page')
-  const response = await fetch(url, {
-    headers: { Authorization: `key ${apiKey}` },
-    signal,
-    credentials: 'omit',
-  })
-  if (!response.ok) throw Error(`api-${response.status}`)
+  if (!enabled) throw Error('catalog-disabled')
+  const url = new URL(path, new URL(endpoint,location.origin))
+  if(url.origin!==location.origin || !url.pathname.startsWith(endpoint))throw Error('invalid-page')
+  const response = await fetch(url, {signal,credentials:'same-origin',redirect:'error'})
+  if (!response.ok) throw Error('api-'+response.status)
   return response.json()
 }
 export async function loadSetPage(query, signal, next, filters) {

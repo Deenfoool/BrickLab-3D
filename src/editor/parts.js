@@ -11,10 +11,11 @@ const filesRoot = new URL('../../assets/ldraw/', import.meta.url)
 const fileURL = new URL('../../assets/ldraw/technic.mpd?v=connector-coverage', import.meta.url)
 const material = new THREE.MeshStandardMaterial({ roughness: .47, metalness: .08, fog: false })
 let palette
+let fallbackMaterials
 
 export function loadCoreModels() {
   return palette ??= new Promise((resolve, reject) => {
-    newLoader().load(fileURL.href, group => {
+    newLoader().then(loader => loader.load(fileURL.href, group => {
       const models = new Map()
       for (const child of group.children) {
         const design = child.name.toLowerCase().replace(/\.dat$/, '')
@@ -24,15 +25,24 @@ export function loadCoreModels() {
       }
       if (models.size !== partOrder.length) reject(Error(`LDraw palette: ${models.size}/${partOrder.length}`))
       else resolve(models)
-    }, undefined, reject)
+    }, undefined, reject), reject)
   }).catch(error => {
     palette = undefined
     throw error
   })
 }
 
-function newLoader() {
-  return new LDrawLoader().setConditionalLineMaterial(LDrawConditionalLineMaterial)
+async function newLoader() {
+  const loader = new LDrawLoader().setConditionalLineMaterial(LDrawConditionalLineMaterial)
+  fallbackMaterials ??= fetch(new URL('material-fallbacks.ldr', filesRoot)).then(response => {
+    if (!response.ok) throw Error(`LDraw materials: HTTP ${response.status}`)
+    return response.text()
+  }).catch(error => {
+    fallbackMaterials = undefined
+    throw error
+  })
+  loader.parseMaterials(await fallbackMaterials)
+  return loader
 }
 
 export function extractModel(group, preserveColors = false, preserveMaterials = false) {
@@ -120,7 +130,7 @@ export async function loadPartModel(part, { smoothNormals = part.group !== 'base
       if (!files.has(resolved)) pending.push(resolved)
     }
   }
-  const loader = newLoader().setFileMap(fileMap)
+  const loader = (await newLoader()).setFileMap(fileMap)
   // Repeated baseplate studs make edge smoothing expensive; flat faces keep their normals.
   loader.smoothNormals = smoothNormals
   loader.addDefaultMaterials()

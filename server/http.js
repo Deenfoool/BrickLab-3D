@@ -41,7 +41,7 @@ function rangeOf(header, size) {
     ? { start: first, end: last } : null
 }
 
-export function createBrickLabServer({ root, logger = console, auth, projects, profile, activity, community, bureau, security } = {}) {
+export function createBrickLabServer({ root, logger = console, auth, projects, profile, activity, community, bureau, security, rebrickable, cspReport } = {}) {
   const base = realpathSync(root)
   const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff')
@@ -52,6 +52,8 @@ export function createBrickLabServer({ root, logger = console, auth, projects, p
       try { pathname = decodeURIComponent(req.url.split('?')[0]) } catch { return send(req, res, 400, 'Bad path') }
       if (!pathname.startsWith('/') || pathname.includes('\\') || /[\u0000-\u001f\u007f]/.test(pathname) ||
           pathname.split('/').some(part => part === '.' || part === '..')) return send(req, res, 400, 'Bad path')
+      if (rebrickable && await rebrickable(req,res,pathname)) return
+      if (cspReport && await cspReport(req,res,pathname)) return
       if (security && await security(req,res,pathname)) return
       if (auth && pathname.startsWith('/api/auth/') && await auth(req, res, pathname)) return
       if (bureau && await bureau(req,res,pathname)) return
