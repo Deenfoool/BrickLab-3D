@@ -1,4 +1,5 @@
 import postgres from 'postgres'
+import {securityStore} from './security-store.js'
 import {bureauStore} from './bureau-store.js'
 import { ProjectError } from '../projects.js'
 import { backgroundInventory } from '../profile-media.js'
@@ -28,7 +29,8 @@ export function connectAuthStore(env = process.env) {
   const missing = () => new ProjectError(404,'not_found')
   return {
     ...bureauStore(scope),
-    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1`; await sql`select 1 from bricklab.project_favorites limit 1`; await sql`select 1 from bricklab.award_reads limit 1`; await sql`select cover_theme,background_theme from bricklab.public_profiles limit 1`; await sql`select category,part_count from bricklab.public_builds limit 1`;await sql`select 1 from bricklab.community_like_counts limit 1`;await sql`select 1 from bricklab.community_follow_counts limit 1`;await sql`select 1 from bricklab.community_event_counts limit 1`;await sql`select 1 from bricklab.community_comments limit 1`;await sql`select 1 from bricklab.community_comment_reports limit 1`;await sql`select 1 from bricklab.community_reputation limit 1`;await sql`select 1 from bricklab.bureaus limit 1`;await sql`select 1 from bricklab.bureau_members limit 1`;await sql`select 1 from bricklab.bureau_projects limit 1`;await sql`select 1 from bricklab.bureau_revisions limit 1` },
+    ...securityStore(sql,scope,lock),
+    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1`; await sql`select 1 from bricklab.project_favorites limit 1`; await sql`select 1 from bricklab.award_reads limit 1`; await sql`select cover_theme,background_theme from bricklab.public_profiles limit 1`; await sql`select category,part_count from bricklab.public_builds limit 1`;await sql`select 1 from bricklab.community_like_counts limit 1`;await sql`select 1 from bricklab.community_follow_counts limit 1`;await sql`select 1 from bricklab.community_event_counts limit 1`;await sql`select 1 from bricklab.community_comments limit 1`;await sql`select 1 from bricklab.community_comment_reports limit 1`;await sql`select 1 from bricklab.community_reputation limit 1`;await sql`select 1 from bricklab.bureaus limit 1`;await sql`select 1 from bricklab.bureau_members limit 1`;await sql`select 1 from bricklab.bureau_projects limit 1`;await sql`select 1 from bricklab.bureau_revisions limit 1`;await sql`select email_verified_at,blocked_at from bricklab.users limit 1`;await sql`select 1 from bricklab.account_tokens limit 1`;await sql`select 1 from bricklab.admin_accounts limit 1`;await sql`select 1 from bricklab.admin_audit limit 1` },
     async register({ email, displayName, passwordHash, tokenHash, expiresAt }) {
       return sql.begin(async tx => {
         const [user] = await tx`insert into bricklab.users (email, display_name, password_hash)
@@ -40,21 +42,26 @@ export function connectAuthStore(env = process.env) {
       })
     },
     async findUser(email) {
-      const [user] = await sql`select id, email, display_name as "displayName", password_hash as "passwordHash"
-        from bricklab.users where lower(email) = ${email}`
+      const [user] = await sql`select u.id,u.email,u.display_name as "displayName",u.password_hash as "passwordHash",exists(select 1 from bricklab.admin_accounts a where a.user_id=u.id) as admin
+        from bricklab.users u where lower(u.email) = ${email} and u.blocked_at is null`
       return user
     },
-    async createSession(userId, tokenHash, expiresAt, previousHash) {
-      await sql.begin(async tx => {
+    async createSession(userId, tokenHash, expiresAt, previousHash,expectedHash) {
+      return sql.begin(async tx => {
+        await lock(tx,userId)
+        const [u]=await tx`select password_hash as hash,blocked_at as blocked from bricklab.users where id=${userId}`
+        if(!u||u.blocked||(expectedHash!==undefined&&u.hash!==expectedHash))return false
         if (previousHash) await tx`delete from bricklab.sessions where token_hash = ${previousHash}`
         await tx`insert into bricklab.sessions (token_hash, user_id, expires_at) values (${tokenHash}, ${userId}, ${expiresAt})`
+        return true
       })
     },
     async getSession(tokenHash) {
-      const [user] = await sql`select u.id, u.email, u.display_name as "displayName"
+      const [user] = await sql`select u.id,u.email,u.display_name as "displayName",exists(select 1 from bricklab.admin_accounts a where a.user_id=u.id) as admin
         from bricklab.sessions s join bricklab.users u on u.id = s.user_id
-        where s.token_hash = ${tokenHash} and s.expires_at > now()`
-      return user
+        where s.token_hash = ${tokenHash} and s.expires_at > now() and u.blocked_at is null`
+      if(!user)return user
+      const {admin,...safe}=user;return admin?{...safe,admin:true}:safe
     },
     async deleteSession(tokenHash) {
       await sql`delete from bricklab.sessions where token_hash = ${tokenHash}`
@@ -291,7 +298,7 @@ export function connectAuthStore(env = process.env) {
       if(download){const [p]=await sql`select document from bricklab.public_builds where public_id=${id}`;return p}
       const [p]=await sql`select b.public_id as id,b.author_id as "authorId",c.display_name as author,c.avatar_image is not null as "authorHasAvatar",b.title,b.description,b.revision,b.category,b.part_count as "partCount",b.published_at as "publishedAt",coalesce(l.likes,0) as likes,coalesce(e.views,0) as views,coalesce(e.downloads,0) as downloads from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id left join bricklab.community_like_counts l on l.build_id=b.public_id left join bricklab.community_event_counts e on e.build_id=b.public_id where b.public_id=${id}`;return p
     },
-    async cleanup() { await sql`delete from bricklab.sessions where expires_at <= now()` },
+    async cleanup() { await sql`delete from bricklab.sessions where expires_at <= now()`;await sql`delete from bricklab.account_tokens where expires_at <= now()` },
     async close() { await sql.end({ timeout: 5 }) },
   }
 }

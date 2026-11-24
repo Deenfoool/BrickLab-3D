@@ -134,9 +134,9 @@ export function createAuthHandler({ store, origin, registrationEnabled = false, 
             if (!record?.passwordHash || !valid) throw new InputError(401, 'invalid_login')
             const { passwordHash, ...safeUser } = record
             user = safeUser
-            await store.createSession(user.id, s.tokenHash, s.expiresAt, previousHash)
+            if(await store.createSession(user.id, s.tokenHash, s.expiresAt, previousHash,passwordHash)===false)throw new InputError(401,'invalid_login')
           }
-          reply(res, register ? 201 : 200, { user: { id: user.id, email: user.email, displayName: user.displayName } }, cookie(s.token))
+          reply(res, register ? 201 : 200, { user: { id: user.id, email: user.email, displayName: user.displayName,...(user.admin===true?{admin:true}:{}) } }, cookie(s.token))
         } finally { active-- }
       }
     } catch (error) {
