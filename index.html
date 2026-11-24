@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#181a1d">
   <title>BrickLab 3D</title>
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./src/menu/menu.css?v=hub-1">
+  <link rel="stylesheet" href="./src/menu/menu.css?v=store-1">
   <link rel="stylesheet" href="./src/editor/editor.css?v=community-options-1">
   <link rel="stylesheet" href="./src/sets/sets.css?v=brick-intros">
   <link rel="stylesheet" href="./src/menu/startup.css?v=ldraw-brand">
@@ -15,7 +15,7 @@
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=hub-1"></script>
+  <script type="module" src="./src/menu/menu.js?v=store-1"></script>
 </head>
 <body>
   <section class="startup" id="startup" aria-label="Подготовка BrickLab 3D">
@@ -83,6 +83,7 @@
         <a href="#sets" data-page="sets"><svg class="icon" aria-hidden="true"><use href="#layers"/></svg><span data-text="sets">Сборка по инструкции</span></a>
         <a href="#examples" data-page="examples"><svg class="icon" aria-hidden="true"><use href="#layers"/></svg><span data-text="examples">Примеры</span></a>
         <a href="#community" data-page="community"><svg class="icon" aria-hidden="true"><use href="#icon-community"/></svg><span data-text="community">Сообщество</span></a>
+        <a href="#store" data-page="store"><svg class="icon" aria-hidden="true"><use href="#icon-heart"/></svg><span data-text="store">Магазин</span></a>
         <a href="#library" data-page="library"><svg class="icon" aria-hidden="true"><use href="#icon-library"/></svg><span data-text="library">Библиотека</span></a>
       </nav>
         <div class="topbar-tools">
@@ -164,6 +165,7 @@
         </div>
         <section id="sets-panel" hidden></section>
         <section id="community-panel" class="community-panel" aria-labelledby="page-title" hidden></section>
+        <section id="store-panel" class="store-panel" hidden aria-labelledby="page-title"></section>
         <section id="account-panel" class="account-panel" aria-labelledby="page-title" hidden></section>
         <div class="home-section-head home-example-heading" id="home-example-heading" hidden>
           <h2 id="home-example-title" data-text="featuredExamples">Готовые примеры</h2>
