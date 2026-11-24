@@ -82,7 +82,7 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
      const p=publicBuild(await store.getPublicBuild(build[2]));if(!p)throw new ProjectError(404,'not_found')
      if(build[1])reply(res,200,{build:p});else {res.writeHead(302,{'Location':'/#community/build/'+p.id,'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}return true
     }
-    if(path==='/api/community/builds'){const {author,...options}=galleryQuery(req.url);const rows=await store.listPublicBuilds(author,options);reply(res,200,{builds:rows.slice(0,24).map(publicBuild),nextOffset:rows.length>24?options.offset+24:null});return true}
+    if(path==='/api/community/builds'){const {author,...options}=galleryQuery(req.url);const rows=await store.listPublicBuilds(author,options);reply(res,200,{builds:rows.slice(0,24).map(publicBuild),nextOffset:rows.length>24&&options.offset+24<=10000?options.offset+24:null});return true}
     const m=/^\/(api\/)?community\/profile\/([^/]+)$/.exec(path)
     if(m&&uuid.test(m[2])){
      const card=publicCard(await store.getPublicCard(m[2]))
