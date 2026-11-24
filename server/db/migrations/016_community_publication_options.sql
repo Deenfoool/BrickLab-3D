@@ -11,7 +11,7 @@ ALTER TABLE bricklab.public_builds
  ADD COLUMN images bytea[] NOT NULL DEFAULT '{}' CHECK(cardinality(images)<=4),
  ADD CONSTRAINT remix_needs_download CHECK(NOT allow_remix OR allow_download);
 GRANT INSERT(allow_download,allow_comments,allow_remix,difficulty,tags,work_type,attribution,origin_id,images),
- UPDATE(allow_download,allow_comments,allow_remix,difficulty,tags,work_type,attribution,images) ON bricklab.public_builds TO bricklab_app;
+ UPDATE(allow_download,allow_comments,allow_remix,difficulty,tags,work_type,attribution,origin_id,images) ON bricklab.public_builds TO bricklab_app;
 
 CREATE TABLE bricklab.community_bookmarks (
  user_id uuid NOT NULL REFERENCES bricklab.users(id) ON DELETE CASCADE,
