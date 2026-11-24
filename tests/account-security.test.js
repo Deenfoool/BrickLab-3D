@@ -59,11 +59,15 @@ test('client retains only explicit admin flag and supports pending responses',as
  assert.deepEqual(await client.register({email}),{pending:true})
  assert.deepEqual(await client.me(),{id,email,displayName:'Admin',admin:true})
 })
-test('mail adapter uses fixed HTTPS provider endpoint and never includes key in message',async()=>{
+test('Postbox adapter passes credentials only to transport and uses dedicated test message',async()=>{
  let call
- const mail=createMailer({BRICKLAB_MAIL_KEY:'test-key',BRICKLAB_MAIL_FROM:'BrickLab <test@example.invalid>'},async(url,opts)=>{call={url,opts};return {ok:true}})
+ const mail=createMailer({BRICKLAB_MAIL_USER:'test-id',BRICKLAB_MAIL_KEY:'test-key',BRICKLAB_MAIL_FROM:'noreply@bricklab-3d.ru'},async(message)=>{call=message})
  await mail({email,purpose:'register',code:'a'.repeat(48)})
- assert.equal(call.url,'https://api.resend.com/emails');assert.equal(call.opts.headers.Authorization,'Bearer test-key')
- assert.equal(JSON.parse(call.opts.body).to[0],email);assert.ok(!call.opts.body.includes('test-key'))
+ assert.equal(call.username,'test-id');assert.equal(call.password,'test-key')
+ assert.equal(call.to,email);assert.equal(call.from,'noreply@bricklab-3d.ru');assert.ok(!call.text.includes('test-key'))
+ assert.ok(call.text.includes('a'.repeat(48)))
+ await mail({email,purpose:'test'})
+ assert.ok(!call.text.includes('undefined'))
  assert.equal(createMailer({}),null)
+ assert.equal(createMailer({BRICKLAB_MAIL_KEY:'key',BRICKLAB_MAIL_FROM:'noreply@bricklab-3d.ru'}),null)
 })

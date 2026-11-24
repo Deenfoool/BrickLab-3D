@@ -147,3 +147,7 @@ API: POST /api/auth/register (email, displayName, password), POST /api/auth/logi
 Оператор может создать администратора тестовой базы с --test; --reset-existing явно сбрасывает пароль существующего аккаунта, отзывает сессии и выдаёт права после повторного ввода email. Оба параметра только через sudo на VPS. Для продакшена админ-аккаунт заводится до включения публичной регистрации. Тесты account-security.test.js используют фиктивную почту и хранилище, не подтверждают реальную доставку или RLS.
 
 Проверка PostgreSQL (только bricklab_browser_test): docker compose exec -T db psql -X -v ON_ERROR_STOP=1 -U bricklab_admin -d bricklab_browser_test < server/db/tests/account_security.sql. Транзакция проверяет права app, запрет самостоятельного назначения админа, блокировку и отзыв сессий, защиту админов и RLS журнала; фикстуры откатываются.
+
+## Почта: Yandex Cloud Postbox (замена Resend)
+
+SMTP_SSL на postbox.cloud.yandex.net:465 с проверкой TLS-сертификата. BRICKLAB_MAIL_USER — ID API-ключа с yc.postbox.send, BRICKLAB_MAIL_KEY — секретная часть, BRICKLAB_MAIL_FROM — разрешённый адрес noreply@bricklab-3d.ru. Сервисный аккаунт в том же каталоге с postbox.sender. Python smtplib в контейнере; секреты передаются дочернему процессу через stdin, не в аргументах, сообщения и SMTP-ответы не журналируются. Ошибки возвращают только безопасные коды. Тестовое письмо отправляется вручную из контейнера через createMailer с purpose:test. Публичную регистрацию включать отдельно после проверки фактической доставки и безопасности.
