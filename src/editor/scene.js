@@ -480,8 +480,21 @@ export function createScene(host, models) {
     canvas.remove()
   }
 
+  function capturePublication(){
+    if(!active||!canvas.width||!canvas.height)return null
+    const helpers=[floor,axes,frontArrow,marker,gizmo.getHelper(),ghost].filter(o=>o&&typeof o.visible==='boolean')
+    const visibility=helpers.map(o=>o.visible)
+    try{
+      for(const o of helpers)o.visible=false
+      renderer.render(world,camera)
+      const shot=canvas.ownerDocument.createElement('canvas'),scale=Math.min(1,1200/Math.max(canvas.width,canvas.height))
+      shot.width=Math.max(1,Math.round(canvas.width*scale));shot.height=Math.max(1,Math.round(canvas.height*scale))
+      shot.getContext('2d').drawImage(canvas,0,0,shot.width,shot.height)
+      return new Promise(resolve=>shot.toBlob(resolve,'image/webp',.85))
+    }finally{helpers.forEach((o,i)=>o.visible=visibility[i]);invalidate()}
+  }
   resetView()
-  return { selectionCenter(ids) {
+  return { capturePublication, selectionCenter(ids) {
     const bounds = new THREE.Box3()
     for (const id of ids) if (objects.has(id)) bounds.expandByObject(objects.get(id), true)
     return bounds.getCenter(new THREE.Vector3()).toArray()

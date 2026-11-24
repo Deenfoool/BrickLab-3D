@@ -1,4 +1,5 @@
 import {parseProject} from '../projects/documents.js'
+import {sanitizePreview,isLargePreview,previewLimits} from './public-preview.js?v=large-viewer-1'
 import {readPreference} from './preferences.js?v=full-settings'
 const copy={
  ru:{intro:'Открывай модели других конструкторов и делись своими сборками.',models:'Сборки',builders:'Конструкторы',search:'Название, автор или описание',find:'Найти',all:'Все категории',vehicles:'Транспорт',mechanisms:'Механизмы',architecture:'Архитектура',robots:'Роботы',other:'Другое',recent:'Сначала новые',oldest:'Сначала старые',name:'По названию',parts:'По количеству деталей',partCount:'деталей',more:'Показать ещё',loading:'Загрузка…',empty:'Ничего не найдено',disabled:'Сообщество пока не открыто на этом сервере.',failed:'Не удалось загрузить данные. Попробуй обновить страницу.',missing:'Публикация недоступна или была снята.',back:'К галерее',open:'Открыть в редакторе',download:'Скачать .bricklab',author:'Автор',revision:'Ревизия',preview:'Построить 3D-миниатюру',noPreview:'Миниатюра недоступна',previewLimit:'Для большой модели доступно открытие в редакторе',opening:'Загрузка модели…',manage:'Личный кабинет',copyHint:'Будет создана независимая локальная копия.'},
@@ -12,14 +13,13 @@ Object.assign(copy.ru,{discussion:'Комментарии',commentPlaceholder:'�
 Object.assign(copy.en,{discussion:'Comments',commentPlaceholder:'Write a comment…',send:'Post',reply:'Reply',replyTo:'Reply to',cancelReply:'Cancel reply',deleted:'Comment removed',removeComment:'Delete',confirmRemove:'Delete your comment?',report:'Report',reportReason:'Report reason',spam:'Spam',abuse:'Abuse',otherReport:'Other',reportSent:'Report saved.',commentEmpty:'No comments yet.',commentProfile:'Publish your Workshop profile to comment.',commentLogin:'Sign in to leave a comment.',commentLimit:'Comment limit: 30 per day, 1000 total.',reportLimit:'Report limit reached.',invalidReply:'This comment no longer accepts replies.',leaders:'Leaderboard',reputation:'Reputation',ratingHint:'5 points per received like, 3 per unique download, 2 per follower. A community rating, not an engineering qualification.',buildCount:'Builds',receivedLikes:'Received likes'})
 Object.assign(copy.ru,{aboutModel:'О конструкции',moreByAuthor:'Другие работы автора',allAuthor:'Все работы автора',share:'Поделиться',copied:'Ссылка скопирована',shareFailed:'Скопируй адрес публикации',published:'Опубликовано',noDescription:'Автор не добавил описание.',viewModel:'Посмотреть модель',relatedEmpty:'Других опубликованных работ пока нет.'})
 Object.assign(copy.en,{aboutModel:'About the build',moreByAuthor:'More by this creator',allAuthor:'All creator builds',share:'Share',copied:'Link copied',shareFailed:'Copy publication address',published:'Published',noDescription:'No description provided.',viewModel:'View model',relatedEmpty:'No other published builds yet.'})
+Object.assign(copy.ru,{bookmarks:'Избранное',bookmark:'В избранное',bookmarked:'В избранном ✓',downloadDisabled:'Автор не разрешил скачивание файла и открытие в редакторе.',commentsDisabled:'Автор отключил новые комментарии.',copyright:'Нарушение авторских прав',reportBuild:'Пожаловаться на конструкцию',reportBuildSent:'Жалоба на конструкцию отправлена.',difficulty:'Сложность',unspecified:'Не указана',easy:'Начальная',medium:'Средняя',hard:'Высокая',expert:'Экспертная',original:'Авторская модель',remix:'Модификация',instruction:'По инструкции',attribution:'Оригинал',remixAllowed:'Модификации с указанием автора разрешены',remixForbidden:'Публикация модификаций не разрешена',images:'Снимки',image:'Снимок',threeD:'3D-модель',viewOnly:'Только просмотр',bookmarkEmpty:'В избранном пока нет конструкций.'})
+Object.assign(copy.en,{bookmarks:'Favorites',bookmark:'Save',bookmarked:'Saved ✓',downloadDisabled:'The author disabled file downloads and opening in the editor.',commentsDisabled:'The author disabled new comments.',copyright:'Copyright violation',reportBuild:'Report build',reportBuildSent:'Build report submitted.',difficulty:'Difficulty',unspecified:'Unspecified',easy:'Beginner',medium:'Intermediate',hard:'Advanced',expert:'Expert',original:'Original build',remix:'Modification',instruction:'From instructions',attribution:'Original',remixAllowed:'Attributed modifications allowed',remixForbidden:'Publishing modifications is not allowed',images:'Screenshots',image:'Image',threeD:'3D model',viewOnly:'View only',bookmarkEmpty:'No favorite builds yet.'})
+Object.assign(copy.ru,{viewerLimit:'Модель превышает предел просмотра: 20 000 деталей или 2 000 артикулов.',largeViewer:'Облегчённый 3D-просмотр',largeHelp:'Перетаскивай модель, чтобы вращать её. Масштаб и редактирование доступны в редакторе.',largeHelpRestricted:'Перетаскивай модель, чтобы вращать её. Автор запретил открытие в редакторе.',simplified:'Упрощённая геометрия деталей:',largeLoading:'Загрузка геометрии',previewLimit:'Открыть облегчённый просмотр',viewerUnavailable:'3D-просмотр недоступен. Попробуй снимки, если они добавлены.'})
+Object.assign(copy.en,{viewerLimit:'Model exceeds the viewer limit of 20,000 parts or 2,000 designs.',largeViewer:'Lightweight 3D viewer',largeHelp:'Drag to rotate the model. Zoom and editing are available in the editor.',largeHelpRestricted:'Drag to rotate the model. The author disabled opening in the editor.',simplified:'Simplified part geometry:',largeLoading:'Loading geometry',previewLimit:'Open lightweight viewer',viewerUnavailable:'3D viewer unavailable. Try screenshots if provided.'})
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export function communityRoute(route){const m=/^community\/(build|profile)\/([^/]+)$/.exec(route);return route==='community'?{type:'list'}:m&&uuid.test(m[2])?{type:m[1],id:m[2]}:{type:'missing'}}
-export function previewDocument(doc){
- if(!Array.isArray(doc?.parts)||!doc.parts.length||doc.parts.length>600||new Set(doc.parts.map(p=>p?.design)).size>120)return null
- const valid=(v,n,max)=>Array.isArray(v)&&v.length===n&&v.every(x=>Number.isFinite(x)&&Math.abs(x)<=max)
- if(doc.parts.some(p=>!p||!['string','number'].includes(typeof p.design)||!/^[a-zA-Z0-9_-]{1,40}$/.test(String(p.design))))return null
- return {format:'bricklab-3d',version:1,name:doc.name,parts:doc.parts.map((p,i)=>({id:'preview-'+i,design:String(p.design),...(valid(p.position,3,1000000)?{position:p.position}:{}),...(valid(p.rotation,4,2)?{rotation:p.rotation}:{}),...(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color)?{color:p.color}:{}),mirrored:p.mirrored===true})),connections:[],gears:[]}
-}
+export function previewDocument(doc){return sanitizePreview(doc,{strict:true})}
 function el(tag,cls,value){const n=document.createElement(tag);if(cls)n.className=cls;if(value!==undefined)n.textContent=value;return n}
 function button(label,fn,cls='workspace-action'){const b=el('button',cls,label);b.type='button';b.onclick=fn;return b}
 function link(label,href,cls='workspace-action'){const a=el('a',cls,label);a.href=href;return a}
@@ -43,12 +43,12 @@ export async function mountCommunity(root,{language='ru',route='community',signa
  signal.addEventListener('abort',()=>{clearPreviews();activeRequest?.abort();activeViewer?.()},{once:true})
  const status=el('p','account-muted');status.setAttribute('role','status')
  const fail=e=>{if(!signal.aborted)(modalNotice??status).textContent=e.status===401?t.signIn:e.code==='social_limit'?t.socialLimit:e.status===503?t.disabled:e.status===404?t.missing:t.failed}
- let social={signedIn:false,ownId:null,likes:[],follows:[]}
+ let social={signedIn:false,ownId:null,likes:[],follows:[],bookmarks:[]}
  try{social=await request('/api/community/me/social',signal)}catch(e){if(signal.aborted)return}
  if(signal.aborted)return
- const liked=new Set(social.likes),followed=new Set(social.follows),reactionUpdates=new Map(),viewUpdates=new Map(),pending=new Set()
+ const liked=new Set(social.likes),followed=new Set(social.follows),bookmarked=new Set(social.bookmarks??[]),reactionUpdates=new Map(),viewUpdates=new Map(),pending=new Set()
  function reaction(kind,id,count,own=false){
-  const set=kind==='like'?liked:followed,key=kind+':'+id,label=kind==='like'?[t.like,t.liked]:[t.follow,t.unfollow]
+  const set=kind==='like'?liked:kind==='bookmark'?bookmarked:followed,key=kind+':'+id,label=kind==='like'?[t.like,t.liked]:kind==='bookmark'?[t.bookmark,t.bookmarked]:[t.follow,t.unfollow]
   const control=button('',async()=>{
    if(!social.signedIn){location.hash='#account';return}
    if(control.disabled||pending.has(key))return
@@ -60,7 +60,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
     for(const update of reactionUpdates.get(key)??[])update(result.count)
    }catch(e){fail(e)}finally{pending.delete(key);if(!signal.aborted)control.disabled=own}
   })
-  function update(n){control.textContent=(set.has(id)?label[1]:label[0])+' · '+n;control.setAttribute('aria-pressed',String(set.has(id)))}
+  function update(n){control.textContent=(set.has(id)?label[1]:label[0])+(kind==='bookmark'?'':' · '+n);control.setAttribute('aria-pressed',String(set.has(id)))}
   if(!reactionUpdates.has(key))reactionUpdates.set(key,[])
   update.control=control;reactionUpdates.get(key).push(update);update(count??0);control.disabled=own
   if(!social.signedIn)control.title=t.signIn
@@ -71,8 +71,12 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   try{const counts=await request('/api/community/view/'+id,signal,false,'POST');if(!signal.aborted)for(const fn of viewUpdates.get(id)??[])fn(counts.views,counts.downloads)}catch{}
  }
  const artFor=(b,large=false)=>{
-  const art=el('div','community-art'+(large?' large':''));art.append(icon('layers'))
-  const run=button(t.preview,()=>queue(), 'workspace-action community-preview-button')
+  const art=el('div','community-art'+(large?' large':''))
+  if(b.imageCount>0&&uuid.test(b.id)){const image=el('img');image.src='/api/community/build/'+b.id+'/image/0';image.alt=b.title;image.loading='lazy';art.append(image);return art}
+  art.append(icon('layers'))
+  const openLarge=()=>{if(activeViewer)location.hash='#community/build/'+b.id;else void showViewer(b)}
+  const largeCard=b.partCount>previewLimits.thumbnailParts
+  const run=button(largeCard?t.previewLimit:t.preview,()=>largeCard?openLarge():queue(), 'workspace-action community-preview-button')
   art.append(run)
   let queued=false
   function queue(){
@@ -83,8 +87,9 @@ export async function mountCommunity(root,{language='ru',route='community',signa
     if(signal.aborted||generation!==epoch||!art.isConnected)return
     let renderer
     try{
-      const d=await request('/community/build/'+b.id+'/document',signal,true),safe=previewDocument(d)
-      if(!safe){run.textContent=t.previewLimit;return}
+      const d=await request('/api/community/build/'+b.id+'/preview',signal,false),safe=previewDocument(d)
+      if(!safe){run.textContent=t.viewerLimit;return}
+      if(isLargePreview(safe)){run.textContent=t.previewLimit;run.disabled=false;run.onclick=openLarge;return}
       const {createProjectPreviewRenderer}=await import('../editor/project-preview.js?v=contact-shadow')
       if(signal.aborted||generation!==epoch)return
       renderer=createProjectPreviewRenderer()
@@ -95,7 +100,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
     finally{renderer?.dispose()}
    })
   }
-  if(readPreference('previews')!=='off'&&b.partCount>0&&b.partCount<=600&&typeof IntersectionObserver==='function'){
+  if(readPreference('previews')!=='off'&&b.partCount>0&&b.partCount<=previewLimits.thumbnailParts&&typeof IntersectionObserver==='function'){
    if(!observer)observer=new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting&&previewJobs<8){previewJobs++;const f=e.target._bricklabPreview;if(f)f()}},{rootMargin:'100px'})
    art._bricklabPreview=queue;observer.observe(art)
   }
@@ -105,7 +110,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   if(signal.aborted||activeViewer)return
   const controller=new AbortController(),dialog=el('dialog','community-viewer-dialog community-model-dialog'),bar=el('div','community-viewer-toolbar'),title=el('h2',null,b.title),host=el('div','community-viewer-stage'),message=el('p','community-viewer-status',t.loading)
   const headingId='community-viewer-title';title.id=headingId;dialog.setAttribute('aria-labelledby',headingId)
-  let session,closed=false
+  let session,closed=false,largeMode=false
   const controls=el('div','community-viewer-controls')
   const minus=button('−',()=>session?.zoom(1.25)),plus=button('+',()=>session?.zoom(.8)),reset=button(t.viewerReset,()=>session?.reset())
   minus.setAttribute('aria-label',t.viewerZoomOut);plus.setAttribute('aria-label',t.viewerZoomIn)
@@ -136,23 +141,45 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   message.setAttribute('role','status')
   const notice=el('p','account-muted');notice.setAttribute('role','status');modalNotice=notice
   const layout=el('div','community-model-layout'),left=el('div','community-model-view'),info=el('section','community-model-info')
-  left.append(host,message,el('p','community-viewer-help',t.viewerHelp))
+  const help=el('p','community-viewer-help',t.viewerHelp)
+  left.append(host,message,help)
+  if(b.imageCount>0&&uuid.test(b.id)){
+    const pictures=el('div','community-model-pictures'),main=el('img','community-model-picture'),choices=el('div','community-image-choices')
+    main.hidden=true
+    const three=button(t.threeD,()=>{main.hidden=true;host.hidden=false;message.hidden=false;minus.hidden=plus.hidden=largeMode;reset.hidden=false;for(const c of choices.children)c.setAttribute('aria-pressed',String(c===three))})
+    three.setAttribute('aria-pressed','true');choices.append(three)
+    for(let i=0;i<Math.min(4,b.imageCount);i++){const thumb=button('',()=>{main.src='/api/community/build/'+b.id+'/image/'+i;main.hidden=false;host.hidden=true;message.hidden=true;for(const c of [minus,plus,reset])c.hidden=true;for(const c of choices.children)c.setAttribute('aria-pressed',String(c===thumb))});thumb.setAttribute('aria-label',t.image+' '+(i+1));thumb.setAttribute('aria-pressed','false');const img=el('img');img.src='/api/community/build/'+b.id+'/image/'+i;img.alt='';thumb.append(img);choices.append(thumb)}
+    pictures.append(choices);left.insertBefore(main,host);left.append(pictures)
+  }
   const author=link(b.author,'#community/profile/'+b.authorId,'community-author')
   const avatar=publicImage(b.authorAvatarUrl,b.authorId,'avatar');if(avatar){avatar.className='community-author-avatar';author.prepend(avatar)}
   const authorBar=el('div','community-model-author');authorBar.append(author)
   const meta=el('div','community-meta')
   for(const v of [t[b.category]??t.other,b.partCount+' '+t.partCount,t.revision+' '+b.revision])meta.append(el('span',null,v))
+  meta.append(el('span',null,t.difficulty+': '+(t[b.difficulty]??t.unspecified)),el('span',null,t[b.workType]??t.original))
+  for(const tag of b.tags??[])meta.append(el('span',null,'#'+tag))
   if(b.publishedAt)meta.append(el('span',null,t.published+': '+new Date(b.publishedAt).toLocaleDateString(language)))
   const stats=el('div','community-meta'),views=el('span'),downloads=el('span')
   const update=(v,d)=>{views.textContent=t.views+': '+v;downloads.textContent=t.downloads+': '+d};update(b.views??0,b.downloads??0)
   if(!viewUpdates.has(b.id))viewUpdates.set(b.id,[]);viewUpdates.get(b.id).push(update);stats.append(views,downloads)
   const actions=el('div','community-actions')
-  const open=button(t.open,async()=>{if(open.disabled||closed)return;open.disabled=true;try{await openPublishedCopy(b.id,controller.signal,openCopy)}catch(e){if(!closed)fail(e)}finally{if(!closed)open.disabled=false}},'workspace-action primary')
+  const open=button(t.open,async()=>{if(open.disabled||closed)return;open.disabled=true;try{await openPublishedCopy(b.id,controller.signal,doc=>openCopy({...doc,communityOrigin:{id:b.id}}))}catch(e){if(!closed)fail(e)}finally{if(!closed)open.disabled=false}},'workspace-action primary')
   open.title=t.copyHint
   const download=link(t.download,'/community/build/'+b.id+'/download');download.download=''
   const share=button(t.share,async()=>{const url=new URL(location.href);url.hash='community/build/'+b.id;try{await navigator.clipboard.writeText(url.href);notice.textContent=t.copied}catch{const input=el('input');input.value=url.href;input.readOnly=true;input.setAttribute('aria-label',t.shareFailed);notice.replaceChildren(input);input.select()}})
-  actions.append(open,download,reaction('like',b.id,b.likes,b.authorId===social.ownId),share)
-  info.append(authorBar,meta,el('h3',null,t.aboutModel),el('p','community-description',b.description||t.noDescription),stats,actions,notice)
+  if(b.allowDownload!==false)actions.append(open,download)
+  else actions.append(el('p','account-muted',t.downloadDisabled))
+  actions.append(reaction('like',b.id,b.likes,b.authorId===social.ownId),reaction('bookmark',b.id,0),share)
+  const reportForm=el('form','community-actions'),reason=el('select'),send=el('button','workspace-action',t.report);send.type='submit'
+  for(const key of ['spam','abuse','copyright','other']){const opt=el('option',null,key==='other'?t.otherReport:t[key]);opt.value=key;reason.append(opt)}
+  reason.setAttribute('aria-label',t.reportReason);reportForm.hidden=true;reportForm.append(reason,send,button(t.viewerClose,()=>{reportForm.hidden=true}))
+  reportForm.onsubmit=async e=>{e.preventDefault();if(send.disabled)return;send.disabled=true;try{await request('/api/community/build/'+b.id+'/report',controller.signal,false,'POST',{reason:reason.value});if(!closed){notice.textContent=t.reportBuildSent;reportForm.hidden=true}}catch(e){if(!closed)fail(e)}finally{send.disabled=false}}
+  if(b.authorId!==social.ownId)actions.append(button(t.reportBuild,()=>{if(!social.signedIn){location.hash='#account';return}reportForm.hidden=!reportForm.hidden}))
+  actions.append(reportForm)
+  const credit=el('div','community-model-credit')
+  if(b.attribution){credit.append(el('p','account-muted',t.attribution+': '+b.attribution));if(b.originId&&uuid.test(b.originId))credit.append(link(t.attribution,'#community/build/'+b.originId))}
+  credit.append(el('p','account-muted',b.allowRemix?t.remixAllowed:t.remixForbidden))
+  info.append(authorBar,meta,el('h3',null,t.aboutModel),el('p','community-description',b.description||t.noDescription),credit,stats,actions,notice)
   layout.append(left,info)
   const related=el('section','community-related'),relatedHead=el('div','community-heading'),relatedGrid=el('div','community-related-grid')
   relatedHead.append(el('h3',null,t.moreByAuthor),link(t.allAuthor,'#community/profile/'+b.authorId))
@@ -175,15 +202,24 @@ export async function mountCommunity(root,{language='ru',route='community',signa
       body.append(link(item.title,'#community/build/'+item.id,'community-title'),el('p','account-muted',item.partCount+' '+t.partCount))
       card.append(artFor(item),body);relatedGrid.append(card)}
    }catch{if(!closed)relatedGrid.append(el('p','account-muted',t.failed))}})()
-   const doc=await request('/community/build/'+b.id+'/document',controller.signal,true),safe=previewDocument(doc)
+   const doc=await request('/api/community/build/'+b.id+'/preview',controller.signal,false),safe=previewDocument(doc)
    if(!safe){message.textContent=t.viewerLimit;return}
-   const {mountModelViewer}=await import('./community-viewer.js?v=viewer-1')
+   largeMode=isLargePreview(safe)
+   let mount
+   if(largeMode){
+    minus.hidden=plus.hidden=true;help.textContent=b.allowDownload===false?t.largeHelpRestricted:t.largeHelp
+    mount=(await import('./community-large-viewer.js?v=large-viewer-1')).mountLargeModelViewer
+   }else mount=(await import('./community-viewer.js?v=viewer-1')).mountModelViewer
    controller.signal.throwIfAborted()
-   session=await mountModelViewer(host,safe,{signal:controller.signal,onProgress:(n,total)=>{message.textContent=t.loading+' '+n+'/'+total}})
+   session=await mount(host,safe,{signal:controller.signal,onProgress:(n,total)=>{message.textContent=(largeMode?t.largeLoading:t.loading)+' '+n+'/'+total}})
    if(closed){session.dispose();return}
-   message.textContent=session.shown<session.total?t.viewerPartial+' '+session.shown+'/'+session.total:''
+   const notices=[]
+   if(largeMode)notices.push(t.largeViewer)
+   if(session.shown<b.partCount)notices.push(t.viewerPartial+' '+session.shown+'/'+b.partCount)
+   if(session.simplified)notices.push(t.simplified+' '+session.simplified)
+   message.textContent=notices.join(' · ')
    for(const control of [minus,plus,reset])control.disabled=false
-  }catch(e){if(!closed)message.textContent=t.viewerUnavailable}
+  }catch(e){if(!closed)message.textContent=e.code==='preview_limit'?t.viewerLimit:t.viewerUnavailable}
  }
  function discussion(build,signal){
   const section=el('section','community-discussion'),heading=el('h2',null,t.discussion),notice=el('p','account-muted'),list=el('div','community-comment-list')
@@ -213,7 +249,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
    row.append(el('p','community-comment-text',c.body??t.deleted))
    if(c.body!==null){
     const actions=el('div','community-actions')
-    if(social.ownId&&!c.parentId)actions.append(button(t.reply,()=>{setParent(c);text.focus();form.scrollIntoView({block:'nearest'})}))
+    if(build.allowComments!==false&&social.ownId&&!c.parentId)actions.append(button(t.reply,()=>{setParent(c);text.focus();form.scrollIntoView({block:'nearest'})}))
     if(social.ownId===c.authorId)actions.append(button(t.removeComment,async()=>{if(!confirm(t.confirmRemove))return;try{await request('/api/community/comment/'+c.id,signal,false,'DELETE');await load(true)}catch(e){error(e)}}))
     else if(social.signedIn){
      const report=button(t.report,()=>{report.hidden=true;reportForm.hidden=false})
@@ -239,7 +275,8 @@ export async function mountCommunity(root,{language='ru',route='community',signa
    }catch(e){error(e)}finally{loading=false;more.disabled=false}
   }
   section.append(heading)
-  if(social.ownId)section.append(form)
+  if(build.allowComments===false)section.append(el('p','account-muted',t.commentsDisabled))
+  else if(social.ownId)section.append(form)
   else section.append(link(social.signedIn?t.commentProfile:t.commentLogin,'#account'))
   section.append(notice,list,more);void load(true);return section
  }
@@ -263,15 +300,15 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   const open=button(t.open,async()=>{
     if(open.disabled||signal.aborted)return
     open.disabled=true;open.textContent=t.opening;status.textContent=''
-    try{await openPublishedCopy(b.id,signal,openCopy)}
+    try{await openPublishedCopy(b.id,signal,doc=>openCopy({...doc,communityOrigin:{id:b.id}}))}
     catch(e){fail(e)}
     finally{if(!signal.aborted){open.disabled=false;open.textContent=t.open}}
   },'workspace-action primary')
-  open.title=t.copyHint;actions.append(open,reaction('like',b.id,b.likes,b.authorId===social.ownId))
+  open.title=t.copyHint;if(b.allowDownload!==false)actions.append(open);actions.append(reaction('like',b.id,b.likes,b.authorId===social.ownId),reaction('bookmark',b.id,0))
   const viewButton=button(t.viewModel,()=>showViewer(b));actions.append(viewButton)
   art.addEventListener('click',e=>{if(!e.target.closest('button,a'))void showViewer(b)})
   art.classList.add('community-art-link')
-  const download=link(t.download,'/community/build/'+b.id+'/download');download.download='';actions.append(download)
+  const download=link(t.download,'/community/build/'+b.id+'/download');download.download='';if(b.allowDownload!==false)actions.append(download)
   body.append(title,meta,statistics,description,actions);card.append(art,body);return card
  }
  function publicImage(url,id,kind){
@@ -308,21 +345,21 @@ export async function mountCommunity(root,{language='ru',route='community',signa
  const tabs=el('div','community-actions'),filters=el('form','community-filters'),grid=el('div','community-grid'),more=button(t.more,()=>load(false))
  let mode='models',offset=0,serial=0
  const models=button(t.models,()=>switchMode('models')),builders=button(t.builders,()=>switchMode('builders'))
- const following=button(t.following,()=>switchMode('following'));const leaders=button(t.leaders,()=>switchMode('leaders'));tabs.append(models,builders,following,leaders)
+ const following=button(t.following,()=>switchMode('following'));const leaders=button(t.leaders,()=>switchMode('leaders'));const bookmarks=button(t.bookmarks,()=>switchMode('bookmarks'));tabs.append(models,builders,following,bookmarks,leaders)
  const search=el('input');search.type='search';search.maxLength=100;search.placeholder=t.search;search.setAttribute('aria-label',t.search)
  function select(entries,label){const n=el('select');n.setAttribute('aria-label',label);for(const [v,text] of entries){const option=el('option',null,text);option.value=v;n.append(option)}return n}
  const category=select([['',t.all],...['vehicles','mechanisms','architecture','robots','other'].map(k=>[k,t[k]])],t.all),sort=select(['recent','oldest','name','parts','popular'].map(k=>[k,t[k]]),t.recent)
  const submit=el('button','workspace-action primary',t.find);submit.type='submit';filters.append(search,category,sort,submit)
  filters.onsubmit=e=>{e.preventDefault();load(true)};category.onchange=sort.onchange=()=>load(true)
  root.append(tabs,filters,grid,more);more.hidden=true
- function switchMode(next){mode=next;models.setAttribute('aria-pressed',String(mode==='models'));builders.setAttribute('aria-pressed',String(mode==='builders'));following.setAttribute('aria-pressed',String(mode==='following'));leaders.setAttribute('aria-pressed',String(mode==='leaders'));filters.hidden=mode==='builders'||mode==='leaders';load(true)}
+ function switchMode(next){mode=next;models.setAttribute('aria-pressed',String(mode==='models'));builders.setAttribute('aria-pressed',String(mode==='builders'));following.setAttribute('aria-pressed',String(mode==='following'));leaders.setAttribute('aria-pressed',String(mode==='leaders'));bookmarks.setAttribute('aria-pressed',String(mode==='bookmarks'));filters.hidden=mode==='builders'||mode==='leaders';load(true)}
  async function load(reset){
   const version=++serial;activeRequest?.abort();activeRequest=new AbortController()
   const requestSignal=activeRequest.signal
   if(reset){offset=0;clearPreviews();previewJobs=0;reactionUpdates.clear();viewUpdates.clear();grid.replaceChildren()}
   more.hidden=true;status.textContent=t.loading
   try{
-   if(mode==='following'&&!social.signedIn){status.textContent=t.signIn;grid.append(link(t.signIn,'#account'));return}
+   if(['following','bookmarks'].includes(mode)&&!social.signedIn){status.textContent=t.signIn;grid.append(link(t.signIn,'#account'));return}
    if(mode==='leaders'){
     const result=await request('/api/community/leaderboard?offset='+offset,requestSignal);if(signal.aborted||version!==serial)return
     if(reset)grid.append(el('p','community-rating-hint',t.ratingHint));for(const p of result.profiles)grid.append(builderCard(p));offset=result.nextOffset??0;more.hidden=result.nextOffset===null
@@ -331,12 +368,12 @@ export async function mountCommunity(root,{language='ru',route='community',signa
     for(const p of profiles)grid.append(builderCard(p))
    }else{
     const qs=new URLSearchParams({q:search.value.trim(),category:category.value,sort:sort.value,offset:String(offset)})
-    if(mode==='following')qs.set('feed','following')
+    if(['following','bookmarks'].includes(mode))qs.set('feed',mode)
     const result=await request('/api/community/builds?'+qs,requestSignal);if(signal.aborted||version!==serial)return
     for(const b of result.builds)grid.append(buildCard(b))
     offset=result.nextOffset??0;more.hidden=result.nextOffset===null
    }
-   status.textContent=grid.childElementCount?'':mode==='following'?t.followingEmpty:t.empty
+   status.textContent=grid.childElementCount?'':mode==='following'?t.followingEmpty:mode==='bookmarks'?t.bookmarkEmpty:t.empty
   }catch(e){if(version===serial&&e.name!=='AbortError')fail(e)}
  }
  switchMode('models')

@@ -15,6 +15,7 @@ test('viewer model strips metadata and bounds part designs',()=>{
  const doc={name:'Test',parts:[{design:'3001',id:'private',position:[1,2,3],rotation:[0,0,0,1],color:'#00ff00'}],connections:[],buildingSet:{url:'https://example.invalid'}}
  const safe=previewDocument(doc)
  assert.equal(safe.parts[0].id,'preview-0');assert.equal(safe.buildingSet,undefined)
- assert.equal(previewDocument({parts:Array.from({length:121},(_,i)=>({design:String(i)}))}),null)
+ assert.equal(previewDocument({parts:Array.from({length:121},(_,i)=>({design:String(i)}))}).parts.length,121)
+ assert.equal(previewDocument({parts:Array.from({length:2001},(_,i)=>({design:String(i)}))}),null)
  assert.equal(previewDocument({parts:[{design:'../file'}]}),null)
 })

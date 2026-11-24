@@ -6,16 +6,16 @@
   <meta name="theme-color" content="#181a1d">
   <title>BrickLab 3D</title>
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./src/menu/menu.css?v=community-2">
-  <link rel="stylesheet" href="./src/editor/editor.css?v=community-2">
+  <link rel="stylesheet" href="./src/menu/menu.css?v=hub-1">
+  <link rel="stylesheet" href="./src/editor/editor.css?v=community-options-1">
   <link rel="stylesheet" href="./src/sets/sets.css?v=brick-intros">
   <link rel="stylesheet" href="./src/menu/startup.css?v=ldraw-brand">
   <link rel="stylesheet" href="./src/feedback/feedback.css?v=bug-report-v1">
-  <link rel="stylesheet" href="./src/menu/account.css?v=security-1">
+  <link rel="stylesheet" href="./src/menu/account.css?v=community-options-1">
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=community-2"></script>
+  <script type="module" src="./src/menu/menu.js?v=hub-1"></script>
 </head>
 <body>
   <section class="startup" id="startup" aria-label="Подготовка BrickLab 3D">
@@ -94,6 +94,7 @@
             </button>
             <section id="notification-popover" class="notification-popover" aria-labelledby="notification-heading" hidden></section>
           </div>
+          <button class="topbar-link hub-search-toggle" id="hub-search-button" type="button" data-link-label="hubSearch"><svg class="icon" aria-hidden="true"><use href="#search"/></svg><span class="sr-only" data-text="hubSearch">Поиск в BrickLab</span></button>
           <a class="account-topbar" id="account-link" href="#account" data-page="account"><svg class="icon" aria-hidden="true"><use href="#icon-account"/></svg><span data-account-label>Войти</span></a>
           <label class="language">
             <select id="language" aria-label="Язык / Language"><option value="ru">RU</option><option value="en">EN</option></select>
@@ -103,12 +104,17 @@
       </header>
       <div class="content">
         <h1 id="page-title">Рабочая область</h1>
+        <section id="hub-hero" class="hub-hero" hidden>
+          <div class="hub-hero-copy"><span class="hub-kicker">BRICKLAB HUB</span><h1 data-text="hubHeadline">От идеи до механизма.</h1><p data-text="hubIntro">Создавай конструкции, собирай модели и делись своими изобретениями.</p><a id="hub-account-cta" href="#account" class="hub-link" data-text="hubSignIn" hidden>Войти или зарегистрироваться</a></div>
+          <img src="./assets/examples/5-plus-r-gearbox.webp" alt="" width="720" height="450">
+        </section>
         <div class="page-toolbar">
           <h1 id="home-title" data-text="workspace" hidden>Рабочая область</h1>
         <div class="home-actions" id="home-actions" hidden>
           <button class="workspace-action primary" id="create" type="button"><svg class="icon" aria-hidden="true"><use href="#plus"/></svg><span data-text="create">Новая сборка</span></button>
           <a class="workspace-action" id="home-sets" href="#sets"><svg class="icon" aria-hidden="true"><use href="#book"/></svg><span data-text="sets">Сборка по инструкции</span></a>
           <button class="workspace-action workspace-action-quiet" id="open" type="button"><svg class="icon" aria-hidden="true"><use href="#folder"/></svg><span data-text="open">Открыть файл</span></button>
+          <button class="workspace-action" id="hub-tutorial" type="button" hidden><span data-text="hubLearn">Обучение</span></button>
           <input type="file" id="import-file" accept=".bricklab,.json" hidden>
         </div>
         </div>
@@ -131,7 +137,7 @@
               <p class="home-feature-meta" id="home-project-meta"></p>
               <div class="home-instruction" id="home-instruction" hidden>
                 <span class="home-instruction-art" id="home-instruction-art"><svg class="icon" aria-hidden="true"><use href="#book"/></svg></span>
-                <div><strong data-text="instruction">Инструкция</strong><p id="home-instruction-page"></p></div>
+                <div><strong data-text="instruction">Инструкция</strong><p id="home-instruction-page"></p><progress id="home-instruction-progress" max="1" value="0" hidden></progress></div>
               </div>
               <button class="workspace-action primary" id="continue-project" type="button"><svg class="icon" aria-hidden="true"><use href="#play"/></svg><span data-text="continueBuild">Продолжить сборку</span></button>
             </div>
@@ -142,6 +148,8 @@
             <ul class="home-recent-list" id="home-recent-list"></ul>
           </section>
         </div>
+        <section id="hub-cloud-continue" class="hub-cloud-continue" hidden></section>
+        <section id="home-hub" class="home-hub" hidden aria-label="BrickLab Hub"></section>
         <div id="dashboard" hidden>
           <section class="project-list" aria-labelledby="list-title">
             <div class="section-head">

@@ -119,7 +119,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
   }
   content.append(c)
   if(publicLoaded){
-    const builds=card(t.publishBuilds);builds.append(el('p','account-muted',t.publicationHint))
+    const builds=card(t.publishBuilds);builds.append(el('p','account-muted',lang==='ru'?'Разрешения, обложки и сведения меняются через окно публикации в редакторе.':'Edit permissions, covers and details in the editor publication dialog.'))
     if(!publicCard)builds.append(el('p','account-muted',t.profileRequired))
     else{
       const publishedProjects=remote.filter(project=>publicBuilds.some(b=>b.projectId===project.id))
@@ -127,11 +127,8 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
       for(const project of publishedProjects){
         const old=publicBuilds.find(b=>b.projectId===project.id),row=card(project.name)
         row.append(el('p','account-muted',t.privateRevision+': '+project.revision+(old?' · '+t.publishedRevision+': '+old.revision:'')))
-        const form=el('form','workshop-form'),description=el('textarea'),label=el('label','account-field'),consent=el('input'),check=el('label','workshop-check')
-        description.maxLength=1000;description.value=old?.description??'';description.disabled=busy;label.append(el('span',null,t.publicationDescription),description)
-        consent.type='checkbox';consent.required=true;consent.disabled=busy;check.append(consent,el('span',null,t.publishConsent))
-        const submit=el('button','workspace-action primary',old?t.updateBuild:t.publishBuild);submit.type='submit';submit.disabled=busy
-        const category=el('select'),categoryLabel=el('label','account-field');for(const key of ['vehicles','mechanisms','architecture','robots','other']){const option=el('option',null,t[key]);option.value=key;category.append(option)}category.value=old?.category??'other';category.disabled=busy;categoryLabel.append(el('span',null,t.category),category);form.append(label,categoryLabel,check,submit);form.onsubmit=e=>{e.preventDefault();if(!busy&&consent.checked)publishBuild(project.id,{revision:project.revision,description:description.value,consent:true,category:category.value})};row.append(form)
+        row.append(el('p','account-muted',old.description||''),el('p','account-muted',lang==='ru'?'Для изменения публикации открой сборку в редакторе.':'Open the build in the editor to update its publication.'))
+        const edit=el('a','workspace-action',lang==='ru'?'Мои сборки':'My builds');edit.href='#projects';row.append(edit)
         if(old){const link=el('a','workspace-action',t.viewPublication);link.href='#community/build/'+old.id;row.append(link,button(t.unpublishBuild,()=>unpublishBuild(project.id),busy))}
         builds.append(row)
       }

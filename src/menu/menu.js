@@ -2,9 +2,10 @@ import { sessionDiagnostics } from '../feedback/diagnostics.js?v=bug-report-v1'
 import { mountBugReport } from '../feedback/dialog.js?v=bug-report-v1'
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
-import { locales } from './locale.js?v=profile-gallery-1'
+import { locales } from './locale.js?v=hub-1'
+import { mountHomeHub, mountHubSearch } from './home-hub.js?v=hub-1'
 import { mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=community-2'
+import { createCloudAccount } from './account.js?v=community-options-1'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -41,6 +42,7 @@ let communitySession
 let setSession
 let editorSession
 let librarySession
+let hubSession,hubSearch,hubSearchLanguage,pendingLibraryQuery='',pendingSetQuery=''
 let homePreviewSession
 let projectPreviewSession
 let projectPreviewObserver
@@ -53,7 +55,7 @@ const notificationPopover = createNotificationPopover({root:byId('notification-c
   onOpen:()=>{cloudAccount.showNotifications();if(location.hash!=='#account')location.hash='#account'}
 })
 const cloudAccount = createCloudAccount({ root: byId('account-panel'), link: byId('account-link'),
-  getProjects: () => projects, download: downloadProject, openCopy: (data, cloud) => addProject(data, null, cloud), linkLocal: linkCloudProject, onNotifications: state => notificationPopover.update(state), onProjectsChanged:()=>{if(currentPage()==='projects')renderList()} })
+  getProjects: () => projects, download: downloadProject, openCopy: (data, cloud) => addProject(data, null, cloud), linkLocal: linkCloudProject, onNotifications: state => notificationPopover.update(state), onProjectsChanged:()=>{if(currentPage()==='projects')renderList();if(currentPage()==='home')renderCloudContinue()} })
 
 try {
   if (localStorage.getItem('bricklab.language') === 'en') language = 'en'
@@ -102,6 +104,7 @@ function updateProjects(next) {
 }
 
 function openProject(id) {
+  try{localStorage.setItem('bricklab.lastOpenedProject',id)}catch{}
   const hash = `#project/${id}`
   if (location.hash === hash) render()
   else location.hash = hash
@@ -378,6 +381,7 @@ function homeInstruction(project, signal, emptyModelArt) {
   const book = Array.isArray(set.books) ? set.books[bookIndex] : undefined
   const total = Number.isSafeInteger(book?.pages) && book.pages >= page ? book.pages : undefined
   byId('home-instruction-page').textContent = strings().instructionPage(page, total)
+  const progress=byId('home-instruction-progress');progress.hidden=!total;progress.max=total??1;progress.value=total?page:0
   const preview = byId('home-instruction-art')
   preview.replaceChildren(icon('book'))
   if (!book?.url) return
@@ -398,7 +402,8 @@ function renderHome(visible) {
   overview.hidden = !visible || projects.length === 0
   if (overview.hidden) return
 
-  const [latest, ...recent] = sortByModified(projects).slice(0, 4)
+  let lastOpened;try{lastOpened=localStorage.getItem('bricklab.lastOpenedProject')}catch{}
+  const latest=projects.find(p=>p.id===lastOpened)??sortByModified(projects)[0],recent=[]
   const t = strings()
   const formatter = new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric' })
   const latestArt = byId('home-project-art')
@@ -462,6 +467,7 @@ function render(initial = false) {
   shell.hidden = Boolean(activeProject)
   editorRoot.hidden = !activeProject
   if (!activeProject) closeEditor()
+  else try{localStorage.setItem('bricklab.lastOpenedProject',activeProject.id)}catch{}
   document.documentElement.lang = language
   document.querySelectorAll('[data-text]').forEach(node => {
     node.textContent = t[node.dataset.text]
@@ -486,16 +492,21 @@ function render(initial = false) {
   byId('tutorial-offer').hidden = !home || projects.length > 0 || readTutorial().seen
   byId('dashboard').hidden = !listVisible
   if (!listVisible) stopProjectPreviews()
-  byId('home-title').hidden = !home
+  byId('hub-hero').hidden = !home
+  byId('home-title').hidden = true
+  byId('hub-tutorial').hidden = !home
   byId('home-actions').hidden = !home && !listVisible
   byId('home-sets').hidden = !home
-  byId('home-example-heading').hidden = !home
-  examplePanel.hidden = !home && page !== 'examples'
+  byId('home-example-heading').hidden = true
+  examplePanel.hidden = page !== 'examples'
   examplePanel.classList.toggle('home-examples', home)
   examplePanel.setAttribute('aria-labelledby', home ? 'home-example-title' : 'page-title')
   if (home && exampleGrid.firstElementChild !== featuredExample) exampleGrid.prepend(featuredExample)
   if (!home && exampleGrid.lastElementChild !== featuredExample) exampleGrid.append(featuredExample)
   renderHome(home)
+  renderCloudContinue()
+  renderHub(home)
+  if(!hubSearch||hubSearchLanguage!==language){hubSearch?.dispose();hubSearchLanguage=language;hubSearch=mountHubSearch({language,getProjects:()=>projects,getCloud:()=>cloudAccount.projectState(),openLocal:openProject,openCloud:async(id,owner)=>{try{const item=await cloudAccount.fetchProjectPreview(id,owner);if(item&&cloudAccount.projectState().ownerId===owner)addProject(item.document,null,{ownerId:owner,id:item.id,revision:item.revision})}catch{setStatus('exampleUnavailable')}},goLibrary:q=>{pendingLibraryQuery=q;closeLibrary();if(currentPage()==='library')void openLibrary();else location.hash='#library'},goSets:q=>{pendingSetQuery=q;closeSets();if(currentPage()==='sets')void openSets();else location.hash='#sets'}})}
   libraryRoot.hidden = page !== 'library'
   byId('sets-panel').hidden = page !== 'sets'
   byId('account-panel').hidden = page !== 'account'
@@ -517,6 +528,27 @@ function render(initial = false) {
   return editorReady
 }
 
+function renderCloudContinue(){
+ const root=byId('hub-cloud-continue'),cta=byId('hub-account-cta'),state=cloudAccount.projectState()
+ const visible=currentPage()==='home'
+ cta.hidden=!visible||!state.checked||state.signedIn
+ root.hidden=!visible||projects.length>0||!state.signedIn||!state.remote.length
+ root.replaceChildren()
+ if(root.hidden)return
+ const latest=[...state.remote].sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt))[0]
+ const detail=element('div','hub-cloud-detail'),action=button('workspace-action primary',strings().continueBuild)
+ detail.append(element('p','home-feature-label',strings().hubCloudLatest),element('h2',null,latest.name))
+ action.onclick=async()=>{action.disabled=true;try{const item=await cloudAccount.fetchProjectPreview(latest.id,state.ownerId);if(item&&currentPage()==='home'&&cloudAccount.projectState().ownerId===state.ownerId)addProject(item.document,null,{ownerId:state.ownerId,id:item.id,revision:item.revision})}catch{setStatus('exampleUnavailable')}finally{action.disabled=false}}
+ root.append(detail,action)
+}
+function renderHub(visible){
+ const root=byId('home-hub');root.hidden=!visible
+ if(!visible){hubSession?.controller.abort();hubSession=null;return}
+ if(hubSession?.language===language)return
+ hubSession?.controller.abort()
+ const controller=new AbortController();hubSession={language,controller}
+ void mountHomeHub(root,{language,signal:controller.signal}).catch(()=>{if(!controller.signal.aborted)root.textContent=language==='ru'?'Не удалось загрузить главную.':'Could not load home.'})
+}
 function closeCommunity(){communitySession?.controller.abort();communitySession=null;byId('community-panel').replaceChildren()}
 async function openCommunity(){
  const route=location.hash.slice(1),key=language+':'+route
@@ -524,7 +556,7 @@ async function openCommunity(){
  closeCommunity()
  const controller=new AbortController();communitySession={key,controller}
  const root=byId('community-panel');root.textContent=strings().loadingLibrary
- try{const {mountCommunity}=await import('./community-gallery.js?v=community-2');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
+ try{const {mountCommunity}=await import('./community-gallery.js?v=large-viewer-1');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
  catch(e){if(!controller.signal.aborted)root.textContent=language==='ru'?'Не удалось открыть сообщество.':'Could not open community.'}
 }
 function closeSets() {
@@ -539,9 +571,10 @@ async function openSets() {
   const root = byId('sets-panel')
   root.textContent = strings().loadingLibrary
   try {
-    const { mountSetCatalog } = await import('../sets/catalog.js?v=browser-recognition')
+    const { mountSetCatalog } = await import('../sets/catalog.js?v=hub-1')
     if (controller.signal.aborted) return
-    await mountSetCatalog(root, { language, signal: controller.signal, projects: () => projects,
+    const initialQuery=pendingSetQuery;pendingSetQuery=''
+    await mountSetCatalog(root, { language, signal: controller.signal, initialQuery, projects: () => projects,
       resume: openProject,
       begin(set) {
         const data = newProject(set.name)
@@ -590,6 +623,7 @@ async function openLibrary() {
     session.view = mountLibrary(libraryRoot, {
       sections, models: parts, language: session.language, labels, initialSection: librarySection, initialGroup: libraryGroup, signal: controller.signal,
     })
+    if(pendingLibraryQuery){librarySearch.value=pendingLibraryQuery;pendingLibraryQuery='';librarySearch.dispatchEvent(new Event('input'))}
     libraryControls.hidden = false
     libraryScroll.hidden = false
     libraryStatus.hidden = true
@@ -623,19 +657,19 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=community-2')
+    const { mountEditor } = await import('../editor/editor.js?v=community-options-1')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
       document: project.document, projectId: project.id, language, signal: controller.signal,
       download: downloadProject,
-      async publish(document) {
+      async publish(document,capture) {
         if(controller.signal.aborted)return
         const record=projects.find(item=>item.id===project.id)
         if(!record)return
-        const {openPublishDialog}=await import('./publish-dialog.js?v=community-2')
+        const {openPublishDialog}=await import('./publish-dialog.js?v=community-options-1')
         if(controller.signal.aborted)return
-        await openPublishDialog({record:{...record,document},language,signal:controller.signal,linkLocal:linkCloudProject,onPublished:()=>{void cloudAccount.refreshProjects()}})
+        await openPublishDialog({record:{...record,document},language,signal:controller.signal,linkLocal:linkCloudProject,capture,onPublished:()=>{void cloudAccount.refreshProjects()}})
       },
       // An initial deep link uses the main loader and still waits for the first instruction page.
       reportLoad: guidedSet ? transition?.report ?? (() => {}) : undefined,
@@ -736,6 +770,9 @@ byId('settings-tutorial').addEventListener('click', () => {
   settingsDialog.close()
   tutorialPicker.showModal()
 })
+byId('hub-tutorial').addEventListener('click',()=>tutorialPicker.showModal())
+byId('hub-search-button').addEventListener('click',()=>hubSearch?.open())
+document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'&&!shell.hidden&&!document.querySelector('dialog[open]')){event.preventDefault();hubSearch?.open()}})
 byId('tutorial-offer-start').addEventListener('click', () => tutorialPicker.showModal())
 byId('tutorial-offer-later').addEventListener('click', () => {
   dismissTutorialOffer()

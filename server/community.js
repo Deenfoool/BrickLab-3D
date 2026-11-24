@@ -1,5 +1,7 @@
 import {createHash} from 'node:crypto'
 import {ProjectError} from './projects.js'
+import {normalizeImage} from './profile-media.js'
+import {sanitizePreview} from '../src/menu/public-preview.js'
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export function validatePublicCard(value){
  const clean=(s,max)=>typeof s==='string'&&s.length<=max&&!/[\u0000-\u0008\u000b-\u001f\u007f]/.test(s)&&!/[\ud800-\udfff]/u.test(s)
@@ -18,8 +20,27 @@ export function galleryQuery(url){
 export function validatePublication(value){
  if(!value||!Number.isSafeInteger(value.revision)||value.revision<1||value.revision>2147483647||typeof value.description!=='string'||value.description.length>1000||/[\u0000-\u0008\u000b-\u001f\u007f]/.test(value.description)||/[\ud800-\udfff]/u.test(value.description)||value.consent!==true)throw new ProjectError(400,'invalid_publication')
  if(value.category!==undefined&&!buildCategories.includes(value.category))throw new ProjectError(400,'invalid_publication')
- return {revision:value.revision,description:value.description.trim(),...(value.category===undefined?{}:{category:value.category})}
+ const extra={}
+ const invalid=()=>{throw new ProjectError(400,'invalid_publication')}
+ for(const key of ['allowDownload','allowComments','allowRemix']){
+  if(value[key]!==undefined){if(typeof value[key]!=='boolean')invalid();extra[key]=value[key]}
+ }
+ if(extra.allowRemix===true&&extra.allowDownload===false)invalid()
+ if(value.allowDownload!==undefined&&value.rightsConfirmed!==true)invalid()
+ if(value.difficulty!==undefined){if(!['unspecified','easy','medium','hard','expert'].includes(value.difficulty))invalid();extra.difficulty=value.difficulty}
+ if(value.tags!==undefined){
+  if(!Array.isArray(value.tags)||value.tags.length>8||value.tags.some(t=>typeof t!=='string'||!t.trim()||t.length>32||/[\u0000-\u001f\u007f]/.test(t)))invalid()
+  extra.tags=[...new Set(value.tags.map(t=>t.trim()))]
+ }
+ if(value.workType!==undefined){if(!['original','remix','instruction'].includes(value.workType))invalid();extra.workType=value.workType}
+ if(value.attribution!==undefined){if(typeof value.attribution!=='string'||value.attribution.length>250||/[\u0000-\u001f\u007f]/.test(value.attribution))invalid();extra.attribution=value.attribution.trim()}
+ if(value.images!==undefined){
+  if(!Array.isArray(value.images)||value.images.length>4||value.images.some(i=>typeof i!=='string'||i.length>699120||!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(i)))invalid()
+  extra.images=value.images
+ }
+ return {revision:value.revision,description:value.description.trim(),...(value.category===undefined?{}:{category:value.category}),...extra}
 }
+export function publicPreview(doc){return sanitizePreview(doc)}
 export function validateComment(value){
  if(!value||typeof value.body!=='string'||value.body.length>1500||!value.body.trim()||/[\u0000-\u0008\u000b-\u001f\u007f]/.test(value.body)||/[\ud800-\udfff]/u.test(value.body)||(value.parentId!=null&&!uuid.test(value.parentId)))throw new ProjectError(400,'invalid_comment')
  return {body:value.body.trim(),parentId:value.parentId??null}
@@ -36,7 +57,7 @@ async function discussionBody(req){
  try{return JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new ProjectError(400,'invalid_json')}
 }
 export function publicBuild(row){
- return row?{id:row.id,authorId:row.authorId,author:row.author,authorAvatarUrl:row.authorHasAvatar===true&&uuid.test(row.authorId)?'/api/community/profile/'+row.authorId+'/avatar':null,title:row.title,description:row.description,revision:row.revision,category:row.category??'other',partCount:row.partCount??0,likes:row.likes??0,views:row.views??0,downloads:row.downloads??0,publishedAt:row.publishedAt}:null
+ return row?{id:row.id,authorId:row.authorId,author:row.author,authorAvatarUrl:row.authorHasAvatar===true&&uuid.test(row.authorId)?'/api/community/profile/'+row.authorId+'/avatar':null,title:row.title,description:row.description,revision:row.revision,category:row.category??'other',partCount:row.partCount??0,likes:row.likes??0,views:row.views??0,downloads:row.downloads??0,publishedAt:row.publishedAt,allowDownload:row.allowDownload!==false,allowComments:row.allowComments!==false,allowRemix:row.allowRemix===true,difficulty:row.difficulty??'unspecified',tags:row.tags??[],workType:row.workType??'original',attribution:row.attribution??'',originId:row.originId??null,imageCount:row.imageCount??0}:null
 }
 export function publicCard(row){
  if(!row)return null
@@ -55,7 +76,7 @@ export function communityPage(cards,detail=false,builds=[]){
 }
 export function createCommunityHandler({store,origin,enabled=false,logger=console}){
  const cookieName=new URL(origin).protocol==='https:'?'__Host-bricklab_session':'bricklab_session'
- let active=0
+ let active=0,mediaActive=0
  async function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return /^[a-f0-9]{64}$/.test(token||'')?await store.getSession(createHash('sha256').update(token).digest('hex')):null}
  function reply(res,status,data,type='application/json; charset=utf-8'){
   const b=type.startsWith('application/json')?JSON.stringify(data):data
@@ -94,11 +115,11 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
       else await store.removeComment(user.id,comment[1])
       reply(res,200,{ok:true});return true
     }
-    const social=/^\/api\/community\/(like|follow|view)\/([^/]+)$/.exec(path)
+    const social=/^\/api\/community\/(like|follow|view|bookmark)\/([^/]+)$/.exec(path)
     if(path==='/api/community/me/social'){
       if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
       const user=await session(req)
-      reply(res,200,user?await store.socialState(user.id):{signedIn:false,ownId:null,likes:[],follows:[]});return true
+      reply(res,200,user?await store.socialState(user.id):{signedIn:false,ownId:null,likes:[],follows:[],bookmarks:[]});return true
     }
     if(social&&uuid.test(social[2])){
       const kind=social[1],id=social[2]
@@ -108,6 +129,15 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
       if(!user)throw new ProjectError(401,'unauthenticated')
       if(kind==='view'){reply(res,200,await store.recordPublicEvent(user.id,id,'view'));return true}
       reply(res,200,await store.setSocial(user.id,kind,id,req.method==='PUT'));return true
+    }
+    const report=/^\/api\/community\/build\/([^/]+)\/report$/.exec(path)
+    if(report&&uuid.test(report[1])){
+      if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
+      if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
+      const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated')
+      const data=await discussionBody(req)
+      if(!['spam','abuse','copyright','other'].includes(data?.reason))throw new ProjectError(400,'invalid_report')
+      await store.reportBuild(user.id,report[1],data.reason);reply(res,200,{ok:true});return true
     }
     const ownBuild=/^\/api\/community\/me\/builds\/([^/]+)$/.exec(path)
     if(path==='/api/community/me/builds'||ownBuild){
@@ -119,9 +149,19 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
      if(req.method==='PUT'){
       if(req.headers['content-type']?.split(';')[0].trim()!=='application/json')throw new ProjectError(415,'json_required')
       let size=0;const chunks=[]
-      for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>8192){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
+      for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>2900000){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
       let data;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new ProjectError(400,'invalid_json')}
-      await store.publishBuild(user.id,ownBuild[1],validatePublication(data))
+      const input=validatePublication(data)
+      if(input.images?.length){
+       if(mediaActive>=2)throw new ProjectError(429,'too_many_attempts')
+       mediaActive++
+       try{
+        const images=[]
+        for(const image of input.images){const [head,encoded]=image.split(',');images.push(await normalizeImage(Buffer.from(encoded,'base64'),head.slice(5,-7),'publication'))}
+        input.images=images
+       }finally{mediaActive--}
+      }
+      await store.publishBuild(user.id,ownBuild[1],input)
      }else if(req.method==='DELETE')await store.unpublishBuild(user.id,ownBuild[1])
      reply(res,200,{builds:await store.listOwnBuilds(user.id)});return true
     }
@@ -141,13 +181,19 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
      reply(res,200,{profile:publicCard(await store.getOwnCard(user.id))});return true
     }
     if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
-    const build=/^\/(api\/)?community\/build\/([^/]+)(\/(?:download|document))?$/.exec(path)
+    const image=/^\/api\/community\/build\/([^/]+)\/image\/([0-3])$/.exec(path)
+    if(image&&uuid.test(image[1])){
+      const bytes=await store.getBuildImage(image[1],Number(image[2]))
+      if(!bytes)throw new ProjectError(404,'not_found')
+      res.writeHead(200,{'Content-Type':'image/webp','Content-Length':bytes.length,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(bytes);return true
+    }
+    const build=/^\/(api\/)?community\/build\/([^/]+)(\/(?:download|document|preview))?$/.exec(path)
     if(build&&uuid.test(build[2])){
-     if(build[3]){const p=await store.getPublicBuild(build[2],true);if(!p)throw new ProjectError(404,'not_found');if(build[3]==='/download'){try{const user=await session(req);if(user)await store.recordPublicEvent(user.id,build[2],'download')}catch(e){logger.error('Download statistics failed:',e.code||e.name)}}res.setHeader('Content-Disposition','attachment; filename="bricklab-'+build[2]+'.bricklab"');reply(res,200,JSON.stringify(p.document),'application/octet-stream');return true}
+     if(build[3]){const p=await store.getPublicBuild(build[2],true);if(!p)throw new ProjectError(404,'not_found');if(build[3]==='/preview'){const preview=publicPreview(p.document);if(!preview)throw new ProjectError(422,'preview_limit');reply(res,200,preview);return true}if(p.allowDownload===false)throw new ProjectError(403,'download_disabled');if(build[3]==='/download'){try{const user=await session(req);if(user)await store.recordPublicEvent(user.id,build[2],'download')}catch(e){logger.error('Download statistics failed:',e.code||e.name)}}res.setHeader('Content-Disposition','attachment; filename="bricklab-'+build[2]+'.bricklab"');reply(res,200,JSON.stringify({...p.document,communityOrigin:{id:build[2]}}),'application/octet-stream');return true}
      const p=publicBuild(await store.getPublicBuild(build[2]));if(!p)throw new ProjectError(404,'not_found')
      if(build[1])reply(res,200,{build:p});else {res.writeHead(302,{'Location':'/#community/build/'+p.id,'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}return true
     }
-    if(path==='/api/community/builds'){const {author,...options}=galleryQuery(req.url);const feed=new URL(req.url,'http://localhost').searchParams.get('feed');if(feed!==null){if(feed!=='following')throw new ProjectError(400,'invalid_gallery_query');const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated');options.followingUid=user.id}const rows=await store.listPublicBuilds(author,options);reply(res,200,{builds:rows.slice(0,24).map(publicBuild),nextOffset:rows.length>24&&options.offset+24<=10000?options.offset+24:null});return true}
+    if(path==='/api/community/builds'){const {author,...options}=galleryQuery(req.url);const feed=new URL(req.url,'http://localhost').searchParams.get('feed');if(feed!==null){if(!['following','bookmarks'].includes(feed))throw new ProjectError(400,'invalid_gallery_query');const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated');if(feed==='following')options.followingUid=user.id;else options.bookmarkUid=user.id}const week=new URL(req.url,'http://localhost').searchParams.get('week');if(week!==null){if(week!=='1')throw new ProjectError(400,'invalid_gallery_query');options.week=true}const rows=await store.listPublicBuilds(author,options);reply(res,200,{builds:rows.slice(0,24).map(publicBuild),nextOffset:rows.length>24&&options.offset+24<=10000?options.offset+24:null});return true}
     const media=/^\/api\/community\/profile\/([^/]+)\/(avatar|cover)$/.exec(path)
     if(media&&uuid.test(media[1])){
       const image=await store.getPublicMedia(media[1],media[2])
@@ -163,7 +209,7 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
      if(m[1])reply(res,200,{profile:{...card,reputation:publicReputation(store.reputation?await store.reputation(card.id):null)}})
      else {res.writeHead(302,{'Location':'/#community/profile/'+card.id,'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}
     }else if(path==='/community'||path==='/api/community'){
-     const cards=(await store.listPublicCards()).map(publicCard)
+     const q=(new URL(req.url,'http://localhost').searchParams.get('q')??'').trim();if(q.length>100||/[\u0000-\u001f\u007f]/.test(q))throw new ProjectError(400,'invalid_gallery_query');const cards=(await store.listPublicCards(q)).map(publicCard)
      if(path.startsWith('/api/'))reply(res,200,{profiles:cards})
      else {res.writeHead(302,{'Location':'/#community','Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}
     }else throw new ProjectError(404,'not_found')

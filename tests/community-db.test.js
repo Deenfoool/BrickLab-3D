@@ -1,0 +1,36 @@
+import {test} from 'node:test'
+import assert from 'node:assert/strict'
+import {randomUUID,randomBytes} from 'node:crypto'
+test('publication options with PostgreSQL app role', {skip:process.env.BRICKLAB_TEST_DB!=='true'},async t=>{
+ assert.equal(process.env.PGDATABASE,'bricklab_browser_test','Refusing to run fixtures in a non-test database')
+ const {connectAuthStore}=await import('../server/db/auth-store.js')
+ const store=connectAuthStore();t.after(()=>store.close());await store.ready()
+ const register=displayName=>store.register({email:randomUUID()+'@example.invalid',displayName,passwordHash:'test-hash',tokenHash:randomBytes(32).toString('hex'),expiresAt:new Date(Date.now()+3600000)})
+ const owner=await register('Hub Owner '+randomUUID()),reader=await register('Hub Reader '+randomUUID())
+ await store.publishCard(owner.id,{displayName:owner.displayName,bio:''})
+ await store.publishCard(reader.id,{displayName:reader.displayName,bio:''})
+ const doc={format:'bricklab-3d',version:1,name:'Community test model',parts:[{id:'part',design:'3001',position:[0,0,0]}],connections:[]}
+ const project=await store.createProject(owner.id,doc)
+ const opts={revision:project.revision,description:'Test',category:'mechanisms',allowDownload:false,allowComments:false,allowRemix:false,tags:['test'],images:[Buffer.from('test-image')]}
+ await store.publishBuild(owner.id,project.id,opts)
+ const [build]=await store.listOwnBuilds(owner.id)
+ assert.equal(build.allowDownload,false);assert.equal(build.allowComments,false);assert.equal(build.imageCount,1)
+ assert.deepEqual(await store.getBuildImage(build.id,0),Buffer.from('test-image'))
+ await assert.rejects(store.addComment(reader.id,build.id,{body:'Blocked',parentId:null}),{message:'comments_disabled'})
+ await store.setSocial(reader.id,'bookmark',build.id,true)
+ assert.ok((await store.listPublicBuilds(null,{bookmarkUid:reader.id})).some(b=>b.id===build.id))
+ assert.ok(!(await store.listPublicBuilds(null,{bookmarkUid:owner.id})).some(b=>b.id===build.id))
+ await store.reportBuild(reader.id,build.id,'copyright')
+ await store.publishBuild(owner.id,project.id,{...opts,allowDownload:true,allowComments:true,allowRemix:true,images:undefined})
+ const updated=await store.getPublicBuild(build.id);assert.equal(updated.allowRemix,true);assert.equal(updated.imageCount,1)
+ assert.equal((await store.getPublicBuild(build.id,true)).allowDownload,true)
+ await store.addComment(reader.id,build.id,{body:'Allowed',parentId:null})
+ assert.ok((await store.listPublicCards(owner.displayName)).some(p=>p.displayName===owner.displayName))
+ assert.ok((await store.listPublicBuilds(null,{week:true})).some(b=>b.id===build.id))
+ const remix=await store.createProject(reader.id,{...doc,name:'Remix',communityOrigin:{id:build.id}})
+ await store.publishBuild(reader.id,remix.id,{revision:remix.revision,description:'Remix',category:'mechanisms',allowDownload:true})
+ const [derived]=await store.listOwnBuilds(reader.id)
+ assert.equal(derived.originId,build.id);assert.equal(derived.workType,'remix');assert.ok(derived.attribution.includes(owner.displayName))
+ await store.publishBuild(owner.id,project.id,{...opts,images:undefined})
+ await assert.rejects(store.publishBuild(reader.id,remix.id,{revision:remix.revision,description:'Remix'}),{message:'remix_disabled'})
+})

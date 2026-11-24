@@ -5,9 +5,10 @@ const owner='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',id='aaaaaaaa-aaaa-aaaa-aaaa-a
 const doc={name:'Test build',parts:[{id:'p',design:'3001'}],connections:[]}
 const record={id:'local',document:doc}
 const valid={description:' Working gearbox ',category:'mechanisms',downloadAllowed:true,rightsConfirmed:true}
-test('publishing requires explicit download permission and rights confirmation',()=>{
- assert.deepEqual(publicationInput(2,valid),{revision:2,description:'Working gearbox',category:'mechanisms',consent:true})
- for(const input of [{...valid,downloadAllowed:false},{...valid,rightsConfirmed:false},{...valid,category:'invalid'},{...valid,description:'a'.repeat(1001)}])assert.throws(()=>publicationInput(2,input),/invalid_publication/)
+test('publishing requires rights confirmation and supports view-only access',()=>{
+ assert.deepEqual(publicationInput(2,valid),{revision:2,description:'Working gearbox',category:'mechanisms',consent:true,rightsConfirmed:true,allowDownload:true,allowComments:true,allowRemix:false,difficulty:'unspecified',tags:[],workType:'original',attribution:''})
+ assert.equal(publicationInput(2,{...valid,downloadAllowed:false}).allowDownload,false)
+ for(const input of [{...valid,downloadAllowed:false,allowRemix:true},{...valid,rightsConfirmed:false},{...valid,category:'invalid'},{...valid,description:'a'.repeat(1001)}])assert.throws(()=>publicationInput(2,input),/invalid_publication/)
  assert.throws(()=>publicationInput(0,valid),/invalid_publication/)
 })
 test('new builds save a private revision before publication and link the local record',async()=>{

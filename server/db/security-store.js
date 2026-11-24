@@ -36,9 +36,10 @@ export function securityStore(sql,scope,lock){
    })
   },
   async revokeOtherSessions(uid,current){return sql.begin(async tx=>{await lock(tx,uid);await tx`delete from bricklab.sessions where user_id=${uid} and token_hash<>${current}`})},
-  async adminOverview(uid){return scope(uid,async tx=>{await ensure(tx);const [r]=await tx`select (select count(id)::int from bricklab.users) as users,(select count(id)::int from bricklab.users where email_verified_at is not null) as verified,(select count(id)::int from bricklab.users where blocked_at is not null) as blocked,(select count(*)::int from bricklab.public_builds) as builds,(select count(*)::int from bricklab.public_profiles) as profiles,(select count(*)::int from bricklab.community_comment_reports where resolved_at is null) as reports`;return r})},
+  async adminOverview(uid){return scope(uid,async tx=>{await ensure(tx);const [r]=await tx`select (select count(id)::int from bricklab.users) as users,(select count(id)::int from bricklab.users where email_verified_at is not null) as verified,(select count(id)::int from bricklab.users where blocked_at is not null) as blocked,(select count(*)::int from bricklab.public_builds) as builds,(select count(*)::int from bricklab.public_profiles) as profiles,((select count(*)::int from bricklab.community_comment_reports where resolved_at is null)+(select count(*)::int from bricklab.community_build_reports where resolved_at is null)) as reports`;return r})},
   async adminUsers(uid,q,offset){return scope(uid,async tx=>{await ensure(tx);return tx`select u.id,u.email,u.display_name as "displayName",u.created_at as "createdAt",u.email_verified_at as "verifiedAt",u.blocked_at as "blockedAt",exists(select 1 from bricklab.admin_accounts a where a.user_id=u.id) as admin from bricklab.users u where (${q}='' or strpos(lower(u.email||' '||u.display_name),lower(${q}))>0) order by u.created_at desc,u.id limit 31 offset ${offset}`})},
   async adminReports(uid,offset){return scope(uid,async tx=>{await ensure(tx);return tx`select c.id,c.body,c.build_id as "buildId",p.display_name as author,count(*)::int as reports,array_agg(distinct r.reason) as reasons,max(r.created_at) as "reportedAt" from bricklab.community_comment_reports r join bricklab.community_comments c on c.id=r.comment_id join bricklab.public_profiles p on p.public_id=c.author_id where r.resolved_at is null group by c.id,p.display_name order by max(r.created_at) desc,c.id limit 31 offset ${offset}`})},
+  async adminBuildReports(uid,offset){return scope(uid,async tx=>{await ensure(tx);return tx`select b.public_id as id,b.title,b.description,p.display_name as author,count(*)::int as reports,array_agg(distinct r.reason) as reasons,max(r.created_at) as "reportedAt" from bricklab.community_build_reports r join bricklab.public_builds b on b.public_id=r.build_id join bricklab.public_profiles p on p.public_id=b.author_id where r.resolved_at is null group by b.public_id,p.display_name order by max(r.created_at) desc,b.public_id limit 31 offset ${offset}`})},
   async adminAudit(uid,offset){return scope(uid,async tx=>{await ensure(tx);return tx`select id::text,actor_id as "actorId",action,target_id as "targetId",reason,created_at as "createdAt" from bricklab.admin_audit order by id desc limit 31 offset ${offset}`})},
   async adminAction(uid,action,id,reason){
    return scope(uid,async tx=>{
@@ -49,6 +50,9 @@ export function securityStore(sql,scope,lock){
      const [c]=await tx`select id from bricklab.community_comments where id=${id}`;if(!c)throw missing()
      if(action==='hide_comment')await tx`update bricklab.community_comments set body=null where id=${id}`
      await tx`update bricklab.community_comment_reports set resolved_at=now() where comment_id=${id} and resolved_at is null`
+    }else if(action==='dismiss_build_reports'){
+     const [b]=await tx`select public_id from bricklab.public_builds where public_id=${id}`;if(!b)throw missing()
+     await tx`update bricklab.community_build_reports set resolved_at=now() where build_id=${id} and resolved_at is null`
     }else if(action==='unpublish_build'){
      if(!(await tx`delete from bricklab.public_builds where public_id=${id} returning public_id`).length)throw missing()
     }else if(action==='unpublish_profile'){

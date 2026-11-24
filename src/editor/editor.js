@@ -16,7 +16,7 @@ import { nearestDetent } from '../mechanics/axial.js?v=torque-clutch'
 import { nearbyConnections, translationSnaps } from './snap.js?v=volvo-spur-gears'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=system-complete'
 import { mountLibrary } from './library.js?v=system-complete'
-import { createScene } from './scene.js?v=academy-v1'
+import { createScene } from './scene.js?v=community-options-1'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=volvo-spur-gears'
@@ -1550,7 +1550,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     const control=el('publish')
     if(control.disabled)return
     control.disabled=true
-    try { await publish(currentDocument()) }
+    try { await publish(currentDocument(),()=>scene.capturePublication()) }
     catch (error) { if(!signal.aborted){console.error(error);setMessage(language==='ru'?'Не удалось открыть публикацию':'Could not open publication',true)} }
     finally { if(!signal.aborted)control.disabled=false }
   })
