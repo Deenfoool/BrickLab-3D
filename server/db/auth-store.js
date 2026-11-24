@@ -179,7 +179,7 @@ export function connectAuthStore(env = process.env) {
     },
     async unpublishCard(uid){return scope(uid,tx=>tx`delete from bricklab.public_profiles where user_id=${uid}`)},
     async getPublicCard(id){const [p]=await sql`select public_id as id,display_name as "displayName",bio,updated_at as "updatedAt",avatar_image is not null as "hasAvatar",cover_image is not null as "hasCover",cover_theme as "coverTheme",background_theme as "backgroundTheme",coalesce((select followers from bricklab.community_follow_counts f where f.author_id=public_profiles.public_id),0) as followers from bricklab.public_profiles where public_id=${id}`;return p},
-    async listPublicCards(){return sql`select public_id as id,display_name as "displayName",bio,updated_at as "updatedAt",avatar_image is not null as "hasAvatar",cover_image is not null as "hasCover",cover_theme as "coverTheme",background_theme as "backgroundTheme",coalesce((select followers from bricklab.community_follow_counts f where f.author_id=public_profiles.public_id),0) as followers from bricklab.public_profiles order by updated_at desc,public_id limit 30`},
+    async listPublicCards(q=''){return sql`select public_id as id,display_name as "displayName",bio,updated_at as "updatedAt",avatar_image is not null as "hasAvatar",cover_image is not null as "hasCover",cover_theme as "coverTheme",background_theme as "backgroundTheme",coalesce((select followers from bricklab.community_follow_counts f where f.author_id=public_profiles.public_id),0) as followers from bricklab.public_profiles where (${q}='' or strpos(lower(display_name),lower(${q}))>0) order by updated_at desc,public_id limit 30`},
     async listOwnBuilds(uid){return scope(uid,tx=>tx`select b.public_id as id,b.project_id as "projectId",b.revision,b.title,b.description,b.category,b.allow_download as "allowDownload",b.allow_comments as "allowComments",b.allow_remix as "allowRemix",b.difficulty,b.tags,b.work_type as "workType",b.attribution,b.origin_id as "originId",cardinality(b.images) as "imageCount",b.part_count as "partCount",b.published_at as "publishedAt" from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id where c.user_id=${uid} order by b.published_at desc`)},
     async publishBuild(uid,id,input){
       return scope(uid,async tx=>{
@@ -319,12 +319,13 @@ export function connectAuthStore(env = process.env) {
       })
     },
     async listPublicBuilds(author=null,options={}){
-      const {q='',category='',sort='recent',offset=0,limit=30,followingUid=null,bookmarkUid=null}=options
+      const {q='',category='',sort='recent',offset=0,limit=30,followingUid=null,bookmarkUid=null,week=false}=options
       const query=tx=>tx`select b.public_id as id,b.author_id as "authorId",c.display_name as author,c.avatar_image is not null as "authorHasAvatar",b.title,b.description,b.revision,b.category,b.allow_download as "allowDownload",b.allow_comments as "allowComments",b.allow_remix as "allowRemix",b.difficulty,b.tags,b.work_type as "workType",b.attribution,b.origin_id as "originId",cardinality(b.images) as "imageCount",b.part_count as "partCount",b.published_at as "publishedAt",coalesce(l.likes,0) as likes,coalesce(e.views,0) as views,coalesce(e.downloads,0) as downloads
         from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id left join bricklab.community_like_counts l on l.build_id=b.public_id left join bricklab.community_event_counts e on e.build_id=b.public_id
         where (${author}::uuid is null or b.author_id=${author}::uuid)
         and (${followingUid}::uuid is null or exists(select 1 from bricklab.community_follows f where f.user_id=${followingUid}::uuid and f.author_id=b.author_id))
         and (${bookmarkUid}::uuid is null or exists(select 1 from bricklab.community_bookmarks f where f.user_id=${bookmarkUid}::uuid and f.build_id=b.public_id))
+        and (not ${week}::boolean or b.published_at>=now()-interval '7 days')
         and (${category}='' or b.category=${category})
         and (${q}='' or strpos(lower(b.title||' '||b.description||' '||c.display_name||' '||array_to_string(b.tags,' ')),lower(${q}))>0)
         order by case when ${sort}='popular' then coalesce(l.likes,0) end desc nulls last,case when ${sort}='popular' then coalesce(e.views,0) end desc nulls last,case when ${sort}='parts' then b.part_count end desc nulls last,
