@@ -104,6 +104,7 @@ function updateProjects(next) {
 }
 
 function openProject(id) {
+  try{localStorage.setItem('bricklab.lastOpenedProject',id)}catch{}
   const hash = `#project/${id}`
   if (location.hash === hash) render()
   else location.hash = hash
@@ -380,6 +381,7 @@ function homeInstruction(project, signal, emptyModelArt) {
   const book = Array.isArray(set.books) ? set.books[bookIndex] : undefined
   const total = Number.isSafeInteger(book?.pages) && book.pages >= page ? book.pages : undefined
   byId('home-instruction-page').textContent = strings().instructionPage(page, total)
+  const progress=byId('home-instruction-progress');progress.hidden=!total;progress.max=total??1;progress.value=total?page:0
   const preview = byId('home-instruction-art')
   preview.replaceChildren(icon('book'))
   if (!book?.url) return
@@ -400,7 +402,8 @@ function renderHome(visible) {
   overview.hidden = !visible || projects.length === 0
   if (overview.hidden) return
 
-  const [latest, ...recent] = sortByModified(projects).slice(0, 1)
+  let lastOpened;try{lastOpened=localStorage.getItem('bricklab.lastOpenedProject')}catch{}
+  const latest=projects.find(p=>p.id===lastOpened)??sortByModified(projects)[0],recent=[]
   const t = strings()
   const formatter = new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric' })
   const latestArt = byId('home-project-art')
@@ -464,6 +467,7 @@ function render(initial = false) {
   shell.hidden = Boolean(activeProject)
   editorRoot.hidden = !activeProject
   if (!activeProject) closeEditor()
+  else try{localStorage.setItem('bricklab.lastOpenedProject',activeProject.id)}catch{}
   document.documentElement.lang = language
   document.querySelectorAll('[data-text]').forEach(node => {
     node.textContent = t[node.dataset.text]
