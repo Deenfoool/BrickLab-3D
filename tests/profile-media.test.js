@@ -18,7 +18,7 @@ test('cosmetic ownership is server-derived and checkout disabled',()=>{
  assert.throws(()=>validateProfile({bio:'',cover:'amber',background:'fake'}),{message:'invalid_profile'})
 })
 test('real decoder produces a normalized WebP and rejects invalid PNG',{skip:process.env.BRICKLAB_TEST_IMAGE!=='true'},async()=>{
- const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1sAAAAASUVORK5CYII=','base64')
+ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGP8z4AATAxEcQAz0QEHOoQ+uAAAAABJRU5ErkJggg==','base64')
  const image=await normalizeImage(png,'image/png','avatar')
  assert.equal(imageFormat(image,'image/webp'),'webp')
  await assert.rejects(normalizeImage(Buffer.from([137,80,78,71,13,10,26,10]),'image/png','cover'),{message:'invalid_image'})
