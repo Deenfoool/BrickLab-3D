@@ -26,7 +26,7 @@ export function connectAuthStore(env = process.env) {
   }
   const missing = () => new ProjectError(404,'not_found')
   return {
-    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1`; await sql`select 1 from bricklab.project_favorites limit 1`; await sql`select 1 from bricklab.award_reads limit 1` },
+    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1`; await sql`select 1 from bricklab.project_favorites limit 1`; await sql`select 1 from bricklab.award_reads limit 1`; await sql`select 1 from bricklab.public_profiles limit 1` },
     async register({ email, displayName, passwordHash, tokenHash, expiresAt }) {
       return sql.begin(async tx => {
         const [user] = await tx`insert into bricklab.users (email, display_name, password_hash)
@@ -145,6 +145,11 @@ export function connectAuthStore(env = process.env) {
     async readAwards(uid){
       return scope(uid,tx=>tx`insert into bricklab.award_reads(user_id,award) select user_id,award from bricklab.workshop_awards where user_id=${uid} on conflict do nothing`)
     },
+    async getOwnCard(uid){return scope(uid,async tx=>{const [p]=await tx`select public_id as id,display_name as "displayName",bio,updated_at as "updatedAt" from bricklab.public_profiles where user_id=${uid}`;return p})},
+    async publishCard(uid,p){return scope(uid,tx=>tx`insert into bricklab.public_profiles(user_id,display_name,bio) values(${uid},${p.displayName},${p.bio}) on conflict(user_id) do update set display_name=excluded.display_name,bio=excluded.bio,updated_at=now()`)},
+    async unpublishCard(uid){return scope(uid,tx=>tx`delete from bricklab.public_profiles where user_id=${uid}`)},
+    async getPublicCard(id){const [p]=await sql`select public_id as id,display_name as "displayName",bio,updated_at as "updatedAt" from bricklab.public_profiles where public_id=${id}`;return p},
+    async listPublicCards(){return sql`select public_id as id,display_name as "displayName",bio,updated_at as "updatedAt" from bricklab.public_profiles order by updated_at desc,public_id limit 30`},
     async cleanup() { await sql`delete from bricklab.sessions where expires_at <= now()` },
     async close() { await sql.end({ timeout: 5 }) },
   }
