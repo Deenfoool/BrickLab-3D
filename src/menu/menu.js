@@ -524,7 +524,7 @@ async function openCommunity(){
  closeCommunity()
  const controller=new AbortController();communitySession={key,controller}
  const root=byId('community-panel');root.textContent=strings().loadingLibrary
- try{const {mountCommunity}=await import('./community-gallery.js?v=discussion-1');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
+ try{const {mountCommunity}=await import('./community-gallery.js?v=community-2');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
  catch(e){if(!controller.signal.aborted)root.textContent=language==='ru'?'Не удалось открыть сообщество.':'Could not open community.'}
 }
 function closeSets() {
@@ -623,12 +623,20 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=audit-resume-1')
+    const { mountEditor } = await import('../editor/editor.js?v=community-2')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
       document: project.document, projectId: project.id, language, signal: controller.signal,
       download: downloadProject,
+      async publish(document) {
+        if(controller.signal.aborted)return
+        const record=projects.find(item=>item.id===project.id)
+        if(!record)return
+        const {openPublishDialog}=await import('./publish-dialog.js?v=community-2')
+        if(controller.signal.aborted)return
+        await openPublishDialog({record:{...record,document},language,signal:controller.signal,linkLocal:linkCloudProject,onPublished:()=>{void cloudAccount.refreshProjects()}})
+      },
       // An initial deep link uses the main loader and still waits for the first instruction page.
       reportLoad: guidedSet ? transition?.report ?? (() => {}) : undefined,
       save(document) {
