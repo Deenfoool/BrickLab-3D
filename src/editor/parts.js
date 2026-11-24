@@ -11,6 +11,7 @@ const filesRoot = new URL('../../assets/ldraw/', import.meta.url)
 const fileURL = new URL('../../assets/ldraw/technic.mpd?v=connector-coverage', import.meta.url)
 const material = new THREE.MeshStandardMaterial({ roughness: .47, metalness: .08, fog: false })
 let palette
+let fallbackMaterials
 
 export function loadCoreModels() {
   return palette ??= new Promise((resolve, reject) => {
@@ -33,7 +34,14 @@ export function loadCoreModels() {
 
 async function newLoader() {
   const loader = new LDrawLoader().setConditionalLineMaterial(LDrawConditionalLineMaterial)
-  await loader.preloadMaterials(new URL('material-fallbacks.ldr', filesRoot).href)
+  fallbackMaterials ??= fetch(new URL('material-fallbacks.ldr', filesRoot)).then(response => {
+    if (!response.ok) throw Error(`LDraw materials: HTTP ${response.status}`)
+    return response.text()
+  }).catch(error => {
+    fallbackMaterials = undefined
+    throw error
+  })
+  loader.parseMaterials(await fallbackMaterials)
   return loader
 }
 
