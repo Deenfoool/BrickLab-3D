@@ -2,9 +2,11 @@ import { createAuthClient } from './auth-client.js?v=cloud-auth-1'
 
 import { createProjectsClient, cloudLink } from './projects-client.js?v=cloud-projects-1'
 
-import { renderCloudWorkshop } from './cloud-workshop.js?v=profile-media-1'
+import { renderCloudWorkshop } from './cloud-workshop.js?v=activity-1'
 
-import {createProfileClient} from './profile-client.js?v=profile-media-1'
+import {createProfileClient} from './profile-client.js?v=activity-1'
+
+import {createActivityClient} from './activity-client.js?v=activity-1'
 
 const copy = {
  ru:{login:'Войти',register:'Регистрация',account:'BrickLab Workshop',hero:'Твоя мастерская. Где угодно.',intro:'Настоящий аккаунт BrickLab Cloud.',email:'Электронная почта',name:'Имя пользователя',password:'Пароль',enter:'Войти',create:'Создать аккаунт',local:'Продолжить без аккаунта',logout:'Выйти',loading:'Проверяем серверную сессию…',retry:'Повторить проверку',profile:'Серверный аккаунт',localBuilds:'Локальные сборки',selected:'Выбранная сборка',coming:'Приватные облачные сборки и история версий. Сохраняй изменения явно; локальные сборки не удаляются. Достижения пока не подключены.',closed:'Регистрация доступна только при разрешении администратора. Подтверждение почты и восстановление пароля ещё не реализованы.',https_required:'Для входа необходим HTTPS или локальный адрес разработки.',auth_unavailable:'Сервер авторизации недоступен. Повтори попытку.',invalid_credentials:'Проверь введённые данные.',invalid_login:'Неверная почта или пароль.',registration_disabled:'Регистрация пока закрыта.',registration_unavailable:'Не удалось создать аккаунт с этими данными.',too_many_attempts:'Слишком много попыток. Попробуй позже.',invalid_origin:'Адрес приложения не совпадает с настройками сервера.',unknown:'Не удалось выполнить запрос.',busy:'Выполняется запрос…',passwordHelp:'Минимум 12 символов при регистрации.'},
@@ -16,6 +18,8 @@ Object.assign(copy.ru,{profile_unavailable:'Профиль недоступен.
 Object.assign(copy.en,{profile_unavailable:'Profile unavailable.',invalid_profile:'Check biography and cover.',profileSaved:'Profile saved on the server.'})
 Object.assign(copy.ru,{invalid_image:'Не удалось обработать изображение. Допустимы PNG, JPEG и WebP.',background_locked:'Этот фон ещё не получен.',mediaSaved:'Внешний вид сохранён.'})
 Object.assign(copy.en,{invalid_image:'Image could not be processed. Use PNG, JPEG or WebP.',background_locked:'This background is not owned.',mediaSaved:'Appearance saved.'})
+Object.assign(copy.ru,{activity_unavailable:'Дневник и избранное недоступны.',favoriteAdd:'В избранное',favoriteRemove:'Убрать из избранного'})
+Object.assign(copy.en,{activity_unavailable:'Activity unavailable.',favoriteAdd:'Add to favorites',favoriteRemove:'Remove from favorites'})
 function node(tag, cls, value) {
  const e=document.createElement(tag); if(cls)e.className=cls; if(value!==undefined)e.textContent=value; return e
 }
@@ -25,8 +29,8 @@ function action(label,fn,primary=false){
 function field(label,type,autocomplete,maxLength){
  const wrap=node('label','account-field'),input=node('input');input.type=type;input.autocomplete=autocomplete;input.required=true;input.maxLength=maxLength;wrap.append(node('span',null,label),input);return {wrap,input}
 }
-export function createCloudAccount({root,link,getProjects,download,openCopy,linkLocal,api=createAuthClient(),cloud=createProjectsClient(),profiles=createProfileClient()}){
- let lang='ru',visible=false,mode='login',user=null,checked=false,busy=false,error='',selected=null,remote=[],historyId=null,history=[],feedback='',section='workshop',profileData=null,passport={source:'',document:null,revision:null}
+export function createCloudAccount({root,link,getProjects,download,openCopy,linkLocal,api=createAuthClient(),cloud=createProjectsClient(),profiles=createProfileClient(),activityApi=createActivityClient()}){
+ let lang='ru',visible=false,mode='login',user=null,checked=false,busy=false,error='',selected=null,remote=[],historyId=null,history=[],feedback='',section='workshop',profileData=null,activityData=null,passport={source:'',document:null,revision:null}
  const t=()=>copy[lang]
  function label(){const e=link.querySelector('[data-account-label]');e.textContent=user?t().account:t().login;link.title=e.textContent;link.setAttribute('aria-label',e.textContent)}
  function message(code){const p=node('p','account-notice',t()[code]??t().unknown);p.setAttribute('role','status');return p}
@@ -34,7 +38,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
  async function run(fn){
    if(busy)return
    busy=true;error='';render()
-   try{const next=await fn();if(next?.id!==user?.id){remote=[];history=[];historyId=null;feedback='';profileData=null;section=selected&&next?'cloud':'workshop';passport={source:'',document:null,revision:null}}user=next;checked=true;if(user){remote=await cloud.list();profileData=await profiles.get()}}
+   try{const next=await fn();if(next?.id!==user?.id){remote=[];history=[];historyId=null;feedback='';profileData=null;activityData=null;section=selected&&next?'cloud':'workshop';passport={source:'',document:null,revision:null}}user=next;checked=true;if(user){remote=await cloud.list();profileData=await profiles.get();activityData=await activityApi.get()}}
    catch(e){error=e.code??'unknown'}
    finally{busy=false;render()}
  }
@@ -43,7 +47,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    if(busy||!user)return
    busy=true;error='';feedback='';render()
    try{await fn()}
-   catch(e){error=e.code??'unknown';if(e.status===401){user=null;remote=[];history=[];historyId=null;profileData=null;passport={source:'',document:null,revision:null}}}
+   catch(e){error=e.code??'unknown';if(e.status===401){user=null;remote=[];history=[];historyId=null;profileData=null;activityData=null;passport={source:'',document:null,revision:null}}}
    finally{busy=false;render()}
  }
  function control(label,fn,primary=false){const b=action(label,()=>operate(fn),primary);b.disabled=busy;return b}
@@ -51,7 +55,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    const link=cloudLink(record,user.id)
    const saved=link&&!forceNew?await cloud.save(link.id,link.revision,record.document):await cloud.create(record.document)
    feedback=linkLocal(record.id,{ownerId:user.id,id:saved.id,revision:saved.revision},record.cloud)?'saved':'localLinkFailed'
-   remote=await cloud.list();profileData=await profiles.get()
+   remote=await cloud.list();profileData=await profiles.get();activityData=await activityApi.get()
    if(historyId===saved.id)history=await cloud.revisions(saved.id)
  }
  function cloudPanel(){
@@ -68,7 +72,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
      if(linked)row.append(control(s.copyCloud,()=>saveLocal(r,true)))
      local.append(row)
    }
-   server.append(node('h2',null,s.cloud),control(s.refresh,async()=>{remote=await cloud.list();if(historyId)history=await cloud.revisions(historyId)}))
+   server.append(node('h2',null,s.cloud),control(s.refresh,async()=>{remote=await cloud.list();activityData=await activityApi.get();if(historyId)history=await cloud.revisions(historyId)}))
    if(!remote.length)server.append(node('p','account-muted',s.empty))
    for(const p of remote){
      const row=node('div','account-card')
@@ -76,6 +80,8 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
      row.append(control(s.open,async()=>{const item=await cloud.get(p.id);openCopy(item.document,{ownerId:user.id,id:item.id,revision:item.revision})},true),
        control(s.download,async()=>download((await cloud.get(p.id)).document)),
        control(s.history,async()=>{historyId=p.id;history=await cloud.revisions(p.id)}))
+     const favorite=activityData?.favorites.some(f=>f.id===p.id)
+     if(activityData)row.append(control(favorite?s.favoriteRemove:s.favoriteAdd,async()=>{activityData=await activityApi.favorite(p.id,!favorite)}))
      if(historyId===p.id)for(const rev of history){
        const entry=node('div','account-revision')
        entry.append(node('strong',null,s.version+' '+rev.revision),control(s.oldCopy,async()=>openCopy((await cloud.get(p.id,rev.revision)).document)),control(s.download,async()=>download((await cloud.get(p.id,rev.revision)).document)))
@@ -102,7 +108,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
      const logout=action(s.logout,()=>run(()=>api.logout()));logout.disabled=busy;header.append(identity,logout)
      const projects=getProjects()
      if(profileData?.profile.avatarUrl){const img=node('img','profile-avatar-image');img.src=profileData.profile.avatarUrl;img.alt='';avatar.replaceChildren(img)}
-     root.append(header,renderCloudWorkshop({lang,user,local:projects,remote,section,busy,cloudPanel,passport,profileData,uploadMedia(kind,file){operate(async()=>{profileData=await profiles.upload(kind,file);feedback='mediaSaved'})},removeMedia(kind){operate(async()=>{profileData=await profiles.remove(kind);feedback='mediaSaved'})},saveProfile(data){operate(async()=>{profileData=await profiles.save(data);feedback='profileSaved'})},
+     root.append(header,renderCloudWorkshop({lang,user,local:projects,remote,section,busy,cloudPanel,passport,profileData,activityData,refreshActivity(){operate(async()=>{activityData=await activityApi.get()})},readActivity(){operate(async()=>{activityData=await activityApi.read()})},toggleFavorite(id,add){operate(async()=>{activityData=await activityApi.favorite(id,add)})},openFavorite(id){operate(async()=>{const item=await cloud.get(id);openCopy(item.document,{ownerId:user.id,id:item.id,revision:item.revision})})},uploadMedia(kind,file){operate(async()=>{profileData=await profiles.upload(kind,file);feedback='mediaSaved'})},removeMedia(kind){operate(async()=>{profileData=await profiles.remove(kind);feedback='mediaSaved'})},saveProfile(data){operate(async()=>{profileData=await profiles.save(data);feedback='profileSaved'})},
        go(key){section=key;render()},selectPassport(source){passport={source,document:null,revision:null};render()},
        loadPassport(){operate(async()=>{const item=await cloud.get(passport.source.slice(6));passport={source:passport.source,document:item.document,revision:item.revision}})}}),localLink());if(feedback)root.append(message(feedback));if(error)root.append(message(error));if(busy)root.append(message('busy'));return
    }

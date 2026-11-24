@@ -26,7 +26,7 @@ export function connectAuthStore(env = process.env) {
   }
   const missing = () => new ProjectError(404,'not_found')
   return {
-    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1` },
+    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1`; await sql`select 1 from bricklab.project_favorites limit 1`; await sql`select 1 from bricklab.award_reads limit 1` },
     async register({ email, displayName, passwordHash, tokenHash, expiresAt }) {
       return sql.begin(async tx => {
         const [user] = await tx`insert into bricklab.users (email, display_name, password_hash)
@@ -125,6 +125,26 @@ export function connectAuthStore(env = process.env) {
     async getMedia(uid,kind){return scope(uid,async tx=>{const [r]=await tx`select image from bricklab.profile_media where user_id=${uid} and kind=${kind}`;return r?.image})},
     async saveMedia(uid,kind,image){return scope(uid,tx=>tx`insert into bricklab.profile_media(user_id,kind,image) values(${uid},${kind},${image}) on conflict(user_id,kind) do update set image=excluded.image,version=gen_random_uuid()`)},
     async deleteMedia(uid,kind){return scope(uid,tx=>tx`delete from bricklab.profile_media where user_id=${uid} and kind=${kind}`)},
+    async getActivity(uid){
+      return scope(uid,async tx=>{
+        const favorites=await tx`select f.project_id as id,p.name,p.head_revision as revision from bricklab.project_favorites f join bricklab.projects p on p.id=f.project_id where f.user_id=${uid} order by f.created_at desc,p.id`
+        const events=await tx`select r.project_id as "projectId",r.revision,r.document->>'name' as name,r.created_at as "at" from bricklab.project_revisions r join bricklab.projects p on p.id=r.project_id order by r.created_at desc,r.project_id,r.revision desc limit 100`
+        const notifications=await tx`select a.award,a.awarded_at as "at",(r.award is not null) as read from bricklab.workshop_awards a left join bricklab.award_reads r on r.user_id=a.user_id and r.award=a.award where a.user_id=${uid} order by a.awarded_at desc,a.award`
+        const [size]=await tx`select coalesce(sum(octet_length(document::text)),0)::bigint as bytes from bricklab.project_revisions`
+        return {favorites,events,notifications,bytes:Number(size.bytes)}
+      })
+    },
+    async setFavorite(uid,id,add){
+      return scope(uid,async tx=>{
+        const [p]=await tx`select id from bricklab.projects where id=${id}`
+        if(!p)throw missing()
+        if(add)await tx`insert into bricklab.project_favorites(user_id,project_id) values(${uid},${id}) on conflict do nothing`
+        else await tx`delete from bricklab.project_favorites where user_id=${uid} and project_id=${id}`
+      })
+    },
+    async readAwards(uid){
+      return scope(uid,tx=>tx`insert into bricklab.award_reads(user_id,award) select user_id,award from bricklab.workshop_awards where user_id=${uid} on conflict do nothing`)
+    },
     async cleanup() { await sql`delete from bricklab.sessions where expires_at <= now()` },
     async close() { await sql.end({ timeout: 5 }) },
   }
