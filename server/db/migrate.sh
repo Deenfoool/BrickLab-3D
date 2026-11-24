@@ -34,7 +34,8 @@ SQL
     printf "SELECT EXISTS (SELECT 1 FROM bricklab.schema_migrations WHERE version = '%s') AS applied, NOT EXISTS (SELECT 1 FROM bricklab.schema_migrations WHERE version = '%s' AND checksum <> '%s') AS matches \\gset\n" "$version" "$version" "$checksum"
     printf '\\if :applied\n\\if :matches\n\\echo Already applied: %s\n\\else\n\\echo Migration checksum mismatch: %s\nSELECT 1 / 0;\n\\endif\n\\else\n\\echo Applying: %s\n' "$version" "$version" "$version"
     cat "$migration"
-    printf "\nINSERT INTO bricklab.schema_migrations (version, checksum) VALUES ('%s', '%s');\n\\endif\n" "$version" "$checksum"
+    printf "\nINSERT INTO bricklab.schema_migrations (version, checksum) VALUES ('%s', '%s');\n" "$version" "$checksum"
+    printf '%s\n' '\endif'
   done
   [ "$found" -eq 1 ] || { echo 'No migrations found' >&2; exit 1; }
   printf 'COMMIT;\n'
