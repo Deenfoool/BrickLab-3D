@@ -2,6 +2,8 @@ import { createAuthClient } from './auth-client.js?v=cloud-auth-1'
 
 import { createProjectsClient, cloudLink } from './projects-client.js?v=cloud-projects-1'
 
+import { renderCloudWorkshop } from './cloud-workshop.js?v=cloud-workshop-1'
+
 const copy = {
  ru:{login:'Войти',register:'Регистрация',account:'BrickLab Workshop',hero:'Твоя мастерская. Где угодно.',intro:'Настоящий аккаунт BrickLab Cloud.',email:'Электронная почта',name:'Имя пользователя',password:'Пароль',enter:'Войти',create:'Создать аккаунт',local:'Продолжить без аккаунта',logout:'Выйти',loading:'Проверяем серверную сессию…',retry:'Повторить проверку',profile:'Серверный аккаунт',localBuilds:'Локальные сборки',selected:'Выбранная сборка',coming:'Приватные облачные сборки и история версий. Сохраняй изменения явно; локальные сборки не удаляются. Достижения пока не подключены.',closed:'Регистрация доступна только при разрешении администратора. Подтверждение почты и восстановление пароля ещё не реализованы.',https_required:'Для входа необходим HTTPS или локальный адрес разработки.',auth_unavailable:'Сервер авторизации недоступен. Повтори попытку.',invalid_credentials:'Проверь введённые данные.',invalid_login:'Неверная почта или пароль.',registration_disabled:'Регистрация пока закрыта.',registration_unavailable:'Не удалось создать аккаунт с этими данными.',too_many_attempts:'Слишком много попыток. Попробуй позже.',invalid_origin:'Адрес приложения не совпадает с настройками сервера.',unknown:'Не удалось выполнить запрос.',busy:'Выполняется запрос…',passwordHelp:'Минимум 12 символов при регистрации.'},
  en:{login:'Sign in',register:'Register',account:'BrickLab Workshop',hero:'Your workshop. Anywhere.',intro:'Your real BrickLab Cloud account.',email:'Email',name:'Display name',password:'Password',enter:'Sign in',create:'Create account',local:'Continue without an account',logout:'Sign out',loading:'Checking server session…',retry:'Retry',profile:'Server account',localBuilds:'Local builds',selected:'Selected build',coming:'Private cloud builds and revision history. Save changes explicitly; local builds are retained. Achievements are not connected yet.',closed:'Registration requires administrator approval. Email verification and password recovery are not implemented yet.',https_required:'Sign-in requires HTTPS or a local development address.',auth_unavailable:'Authentication service unavailable. Try again.',invalid_credentials:'Check your input.',invalid_login:'Incorrect email or password.',registration_disabled:'Registration is currently closed.',registration_unavailable:'Unable to create an account with those details.',too_many_attempts:'Too many attempts. Try again later.',invalid_origin:'Application address does not match the server configuration.',unknown:'Request failed.',busy:'Request in progress…',passwordHelp:'At least 12 characters when registering.'}
@@ -18,7 +20,7 @@ function field(label,type,autocomplete,maxLength){
  const wrap=node('label','account-field'),input=node('input');input.type=type;input.autocomplete=autocomplete;input.required=true;input.maxLength=maxLength;wrap.append(node('span',null,label),input);return {wrap,input}
 }
 export function createCloudAccount({root,link,getProjects,download,openCopy,linkLocal,api=createAuthClient(),cloud=createProjectsClient()}){
- let lang='ru',visible=false,mode='login',user=null,checked=false,busy=false,error='',selected=null,remote=[],historyId=null,history=[],feedback=''
+ let lang='ru',visible=false,mode='login',user=null,checked=false,busy=false,error='',selected=null,remote=[],historyId=null,history=[],feedback='',section='workshop',passport={source:'',document:null,revision:null}
  const t=()=>copy[lang]
  function label(){const e=link.querySelector('[data-account-label]');e.textContent=user?t().account:t().login;link.title=e.textContent;link.setAttribute('aria-label',e.textContent)}
  function message(code){const p=node('p','account-notice',t()[code]??t().unknown);p.setAttribute('role','status');return p}
@@ -26,7 +28,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
  async function run(fn){
    if(busy)return
    busy=true;error='';render()
-   try{const next=await fn();if(next?.id!==user?.id){remote=[];history=[];historyId=null;feedback=''}user=next;checked=true;if(user)remote=await cloud.list()}
+   try{const next=await fn();if(next?.id!==user?.id){remote=[];history=[];historyId=null;feedback='';section=selected&&next?'cloud':'workshop';passport={source:'',document:null,revision:null}}user=next;checked=true;if(user)remote=await cloud.list()}
    catch(e){error=e.code??'unknown'}
    finally{busy=false;render()}
  }
@@ -35,7 +37,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    if(busy||!user)return
    busy=true;error='';feedback='';render()
    try{await fn()}
-   catch(e){error=e.code??'unknown';if(e.status===401){user=null;remote=[];history=[];historyId=null}}
+   catch(e){error=e.code??'unknown';if(e.status===401){user=null;remote=[];history=[];historyId=null;passport={source:'',document:null,revision:null}}}
    finally{busy=false;render()}
  }
  function control(label,fn,primary=false){const b=action(label,()=>operate(fn),primary);b.disabled=busy;return b}
@@ -92,10 +94,10 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
      const header=node('div','account-dashboard-head'),identity=node('div','account-identity'),avatar=node('div','account-avatar',Array.from(user.displayName).slice(0,2).join('').toUpperCase()),details=node('div')
      details.append(node('h2',null,user.displayName),node('p','account-muted',user.email));identity.append(avatar,details)
      const logout=action(s.logout,()=>run(()=>api.logout()));logout.disabled=busy;header.append(identity,logout)
-     const card=node('section','account-card');card.append(node('h2',null,s.profile),node('p','account-muted',s.coming))
-     const projects=getProjects();card.append(node('p',null,s.localBuilds+': '+projects.length))
-     const chosen=projects.find(p=>p.id===selected);if(chosen)card.append(node('p',null,s.selected+': '+chosen.document.name))
-     root.append(header,card,cloudPanel(),localLink());if(feedback)root.append(message(feedback));if(error)root.append(message(error));if(busy)root.append(message('busy'));return
+     const projects=getProjects()
+     root.append(header,renderCloudWorkshop({lang,user,local:projects,remote,section,busy,cloudPanel,passport,
+       go(key){section=key;render()},selectPassport(source){passport={source,document:null,revision:null};render()},
+       loadPassport(){operate(async()=>{const item=await cloud.get(passport.source.slice(6));passport={source:passport.source,document:item.document,revision:item.revision}})}}),localLink());if(feedback)root.append(message(feedback));if(error)root.append(message(error));if(busy)root.append(message('busy'));return
    }
    const panel=node('div','account-auth'),hero=node('div','account-auth-hero'),brand=node('div','account-brand','BRICKLAB CLOUD')
    hero.append(brand,node('h2',null,s.hero),node('p',null,s.intro))
@@ -119,7 +121,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    panel.append(hero,form);root.append(panel)
  }
  return {
-   selectProject(id){selected=id},
+   selectProject(id){selected=id;section='cloud'},
    update(language,show){
      const next=language==='en'?'en':'ru',changed=next!==lang||visible!==show
      lang=next;visible=show;label()
