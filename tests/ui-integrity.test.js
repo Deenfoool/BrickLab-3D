@@ -54,3 +54,23 @@ test('localized menu elements exist in both supported languages', () => {
     }
   }
 })
+
+
+test('global navigation and utility actions are in the topbar exactly once', () => {
+  const html = source('index.html')
+  const header = html.match(/<header class="topbar">([\s\S]*?)<\/header>/)?.[1]
+  assert.ok(header)
+  assert.ok(!html.includes('<aside class="sidebar">'))
+  for (const page of ['home','projects','sets','examples','community','library','account']) {
+    assert.equal([...html.matchAll(new RegExp('data-page="'+page+'"','g'))].length,1)
+    assert.ok(header.includes('data-page="'+page+'"'))
+  }
+  for (const id of ['bug-report-button','settings-button','notification-trigger','language']) {
+    assert.ok(header.includes('id="'+id+'"'))
+    assert.equal([...html.matchAll(new RegExp('id="'+id+'"','g'))].length,1)
+  }
+  const toolbar = html.match(/<div class="page-toolbar">([\s\S]*?)<div class="home-overview"/)?.[1]
+  assert.ok(toolbar?.includes('id="home-actions"'))
+  assert.ok(!header.includes('id="home-actions"'))
+  assert.ok(html.includes('class="shell-footer"'))
+})
