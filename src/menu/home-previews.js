@@ -6,13 +6,13 @@ export async function loadHomePreviews(entries, signal) {
   let renderer
   let webglAvailable = true
   try {
-    for (const { project, show } of entries) {
+    for (const { project, show, cache: persist = true } of entries) {
       if (signal.aborted) break
       if (!project.document.parts.length) continue
       let preview
       const key = cacheKey(project.id)
       try {
-        const cached = await cache?.match(key).catch(() => null)
+        const cached = persist ? await cache?.match(key).catch(() => null) : null
         if (cached?.headers.get('X-BrickLab-Modified') === new Date(project.modifiedAt).toISOString()) {
           preview = await cached.blob()
         } else if (webglAvailable) {
@@ -26,7 +26,7 @@ export async function loadHomePreviews(entries, signal) {
             }
           }
           preview = await renderer?.render(project.document, signal)
-          if (preview && !signal.aborted) {
+          if (persist && preview && !signal.aborted) {
             await cache?.put(key, new Response(preview, {
               headers: { 'Content-Type': preview.type, 'X-BrickLab-Modified': new Date(project.modifiedAt).toISOString() },
             })).catch(() => {})

@@ -429,3 +429,12 @@ dialog p,.setting{margin:18px 0}
   .navigation{grid-row:3}
   .notification-popover{left:0;right:auto}
 }
+
+/* Unified project gallery: local and cloud copies use the same cards. */
+.project-cloud-controls{display:flex;flex-wrap:wrap;align-items:center;gap:7px;padding-top:8px;border-top:1px solid #3d4149}
+.project-cloud-controls>small{width:100%;font-size:12px}
+.project-cloud-controls>.workspace-action{font-size:12px;min-height:34px;padding:6px 9px}
+.project-cloud-controls>.account-revision{width:100%;display:flex;flex-wrap:wrap;gap:5px}
+.project-cloud-controls>.account-revision .workspace-action{font-size:12px;min-height:32px}
+#project-cloud-status{margin-bottom:14px;color:var(--muted);font-size:13px}
+.project-card-remote .project-card-meta{margin-top:auto}

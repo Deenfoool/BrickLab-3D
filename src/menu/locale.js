@@ -1,7 +1,7 @@
 export const locales = {
   ru: {
     community:'Сообщество',
-    account: 'BrickLab Workshop', cloudPreview: 'Личный кабинет — облако',
+    account: 'Мой профиль', cloudPreview: 'Сохранение в облако', refreshCloud: 'Обновить облачные сборки',
     bugReport: 'Сообщить о баге',
     sets: 'Сборка по инструкции',
     sections: 'Разделы', home: 'Главная', projects: 'Мои сборки', examples: 'Примеры', library: 'Библиотека',
@@ -69,7 +69,7 @@ export const locales = {
   },
   en: {
     community:'Community',
-    account: 'BrickLab Workshop', cloudPreview: 'Cloud account',
+    account: 'My profile', cloudPreview: 'Cloud storage', refreshCloud: 'Refresh cloud builds',
     bugReport: 'Report a bug',
     sets: 'Build with instructions',
     sections: 'Sections', home: 'Home', projects: 'My builds', examples: 'Examples', library: 'Library',
