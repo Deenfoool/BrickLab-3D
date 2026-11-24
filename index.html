@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#181a1d">
   <title>BrickLab 3D</title>
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./src/menu/menu.css?v=topbar-1">
+  <link rel="stylesheet" href="./src/menu/menu.css?v=profile-gallery-1">
   <link rel="stylesheet" href="./src/editor/editor.css?v=editor-feedback">
   <link rel="stylesheet" href="./src/sets/sets.css?v=brick-intros">
   <link rel="stylesheet" href="./src/menu/startup.css?v=ldraw-brand">
@@ -15,7 +15,7 @@
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=no-passport-1"></script>
+  <script type="module" src="./src/menu/menu.js?v=profile-gallery-1"></script>
 </head>
 <body>
   <section class="startup" id="startup" aria-label="Подготовка BrickLab 3D">
@@ -147,7 +147,9 @@
             <div class="section-head">
               <h2 id="list-title" class="sr-only" data-text="projects">Мои сборки</h2>
               <label class="search"><svg class="icon"><use href="#search"/></svg><input id="query" type="search" placeholder="Найти сборку" aria-label="Найти сборку"></label>
+              <button type="button" class="workspace-action" id="project-cloud-refresh" data-text="refreshCloud" hidden>Обновить облачные сборки</button>
             </div>
+            <p id="project-cloud-status" role="status" hidden></p>
             <div class="project-grid" id="project-rows"></div>
             <div class="empty" id="empty-state" hidden></div>
           </section>
