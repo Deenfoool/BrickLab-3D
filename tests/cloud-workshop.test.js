@@ -4,7 +4,7 @@ import {workshopSummary,sections} from '../src/menu/cloud-workshop.js'
 import {modelPassport,challengeReadiness,challenges} from '../src/menu/workshop-model.js'
 test('workshop metrics reflect actual server revisions, without fabricated experience',()=>{
  assert.deepEqual(workshopSummary([{},{}],[{revision:1},{revision:3}]),{local:2,cloud:2,revisions:4})
- assert.equal(sections.length,14)
+ assert.equal(sections.length,11)
  assert.ok(!sections.some(([key])=>key==='passport'))
 })
 test('passport structural checks do not certify physics',()=>{
@@ -16,8 +16,8 @@ test('passport structural checks do not certify physics',()=>{
 })
 
 
-test('production workshop has no passport section, while model analysis remains available for challenges',()=>{
+test('production workshop omits experimental and merged sections while model analysis remains available',()=>{
  assert.ok(!sections.some(([key])=>key==='passport'))
- assert.ok(sections.some(([key])=>key==='challenges'))
+ assert.ok(!sections.some(([key])=>['challenges','publicProfile','diary'].includes(key)))
  assert.equal(typeof modelPassport,'function')
 })
