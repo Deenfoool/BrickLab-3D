@@ -40,9 +40,9 @@ export async function mountLargeModelViewer(host,doc,{signal,onProgress=()=>{}})
   if(renderer){renderer.domElement.remove();renderer.dispose();renderer.forceContextLoss()}
  }
  function resize(){
-  if(!renderer||disposed)return
-  renderer.setSize(Math.max(1,host.clientWidth),Math.max(1,host.clientHeight),false)
-  camera.aspect=Math.max(1,host.clientWidth)/Math.max(1,host.clientHeight);camera.updateProjectionMatrix();draw()
+  if(!renderer||disposed||!host.clientWidth||!host.clientHeight)return
+  renderer.setSize(host.clientWidth,host.clientHeight,false)
+  camera.aspect=host.clientWidth/host.clientHeight;camera.updateProjectionMatrix();draw()
  }
  function reset(){
   if(disposed)return
@@ -88,32 +88,42 @@ export async function mountLargeModelViewer(host,doc,{signal,onProgress=()=>{}})
       if(parts[design].pack)for(const g of model.meshes)geometries.add(g)
       usedTriangles+=cost;usedBytes+=memory
      }
-     const reflected=new Map()
-     const buckets=new Map()
-     for(const entry of entries){
-      const color=entry.part.color??parts[design].color
-      const key=String(color)+'|'+Boolean(entry.part.mirrored)
-      if(!buckets.has(key))buckets.set(key,{color,mirrored:Boolean(entry.part.mirrored),entries:[]})
-      buckets.get(key).entries.push(entry)
+     const reflected=new Map(),template=partMesh(source,'#ffffff'),finish=template.userData.finish
+     materials.add(finish)
+     const instanceColor=new THREE.Color()
+     function addInstances(geometry,material,list,colored){
+      const mesh=new THREE.InstancedMesh(geometry,material,list.length)
+      instances.add(mesh)
+      for(const [i,{part,index}] of list.entries()){
+       const pose=previewPose(part,index,source.bounds.max.y)
+       matrix.compose(position.fromArray(pose.position),rotation.fromArray(pose.rotation),unit)
+       mesh.setMatrixAt(i,matrix)
+       if(colored)mesh.setColorAt(i,instanceColor.set(part.color??parts[design].color))
+       partBounds.copy(geometry.boundingBox).applyMatrix4(matrix);bounds.union(partBounds)
+      }
+      mesh.instanceMatrix.needsUpdate=true;if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true
+      mesh.computeBoundingSphere();solids.add(mesh)
      }
-     for(const bucket of buckets.values()){
-      const template=partMesh(source,bucket.color)
-      materials.add(template.userData.finish)
+     for(const mirror of [false,true]){
+      const list=entries.filter(e=>Boolean(e.part.mirrored)===mirror)
+      if(!list.length)continue
       for(const child of template.children){
        let geometry=child.geometry
-       if(bucket.mirrored){
+       if(mirror){
         if(!reflected.has(geometry)){const g=reflectedGeometry(geometry);reflected.set(geometry,g);geometries.add(g)}
         geometry=reflected.get(geometry)
        }
-       const mesh=new THREE.InstancedMesh(geometry,child.material,bucket.entries.length)
-       instances.add(mesh)
-       for(const [i,{part,index}] of bucket.entries.entries()){
-        const pose=previewPose(part,index,source.bounds.max.y)
-        matrix.compose(position.fromArray(pose.position),rotation.fromArray(pose.rotation),unit)
-        mesh.setMatrixAt(i,matrix)
-        partBounds.copy(geometry.boundingBox).applyMatrix4(matrix);bounds.union(partBounds)
+       const mats=Array.isArray(child.material)?child.material:[child.material]
+       if(mats.every(m=>m===finish)){addInstances(geometry,child.material,list,true);continue}
+       if(mats.every(m=>m!==finish)){addInstances(geometry,child.material,list,false);continue}
+       // Mixed printed/fixed finishes must not be multiplied by the instance color.
+       // Group only these uncommon material combinations by actual part color.
+       const buckets=new Map()
+       for(const entry of list){const color=entry.part.color??parts[design].color;if(!buckets.has(color))buckets.set(color,[]);buckets.get(color).push(entry)}
+       for(const [color,bucket] of buckets){
+        const coloredFinish=finish.clone();coloredFinish.color.set(color);materials.add(coloredFinish)
+        addInstances(geometry,mats.map(m=>m===finish?coloredFinish:m),bucket,false)
        }
-       mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingSphere();solids.add(mesh)
       }
      }
      shown+=entries.length
