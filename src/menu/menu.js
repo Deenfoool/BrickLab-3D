@@ -2,8 +2,8 @@ import { sessionDiagnostics } from '../feedback/diagnostics.js?v=bug-report-v1'
 import { mountBugReport } from '../feedback/dialog.js?v=bug-report-v1'
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
-import { locales } from './locale.js?v=cloud-auth-1'
-import { createCloudAccount } from './account.js?v=cloud-auth-1'
+import { locales } from './locale.js?v=cloud-projects-1'
+import { createCloudAccount } from './account.js?v=cloud-projects-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
 import { revealMenu, showEditorLoading, startStartup } from './startup.js?v=bold-brand'
@@ -45,7 +45,7 @@ let librarySection
 let libraryGroup = ''
 let language = 'ru'
 const cloudAccount = createCloudAccount({ root: byId('account-panel'), link: byId('account-link'),
-  getProjects: () => projects, download: downloadProject, openCopy: data => addProject(data) })
+  getProjects: () => projects, download: downloadProject, openCopy: (data, cloud) => addProject(data, null, cloud), linkLocal: linkCloudProject })
 
 try {
   if (localStorage.getItem('bricklab.language') === 'en') language = 'en'
@@ -99,12 +99,21 @@ function openProject(id) {
   else location.hash = hash
 }
 
-function addProject(data, tutorialMode = null) {
+function addProject(data, tutorialMode = null, cloud = null) {
   const record = makeRecord(data)
+  if (cloud) record.cloud = cloud
   updateProjects([record, ...projects])
   if (tutorialMode) startTutorial(record.id, tutorialMode)
   openProject(record.id)
   return record.id
+}
+
+function linkCloudProject(id, cloud, expected) {
+  const latest = storageWarning ? projects : readProjects()
+  const record = latest.find(item => item.id === id)
+  if (!record || JSON.stringify(record.cloud ?? null) !== JSON.stringify(expected ?? null)) return false
+  updateProjects(latest.map(item => item.id === id ? { ...item, cloud } : item))
+  return !storageWarning
 }
 
 async function beginTutorial(mode) {
@@ -568,6 +577,8 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
         if (controller.signal.aborted) return false
         const record = makeRecord(document, project.id)
         const latest = storageWarning ? projects : readProjects()
+        const existing = latest.find(item => item.id === project.id)
+        if (existing?.cloud) record.cloud = existing.cloud
         updateProjects([record, ...latest.filter(item => item.id !== project.id)])
         return !storageWarning
       },
