@@ -1,8 +1,8 @@
 import {parseProject} from '../projects/documents.js'
 import {readPreference} from './preferences.js?v=full-settings'
 const copy={
- ru:{intro:'Открывай модели других конструкторов и делись своими сборками.',models:'Сборки',builders:'Конструкторы',search:'Название, автор или описание',find:'Найти',all:'Все категории',vehicles:'Транспорт',mechanisms:'Механизмы',architecture:'Архитектура',robots:'Роботы',other:'Другое',recent:'Сначала новые',oldest:'Сначала старые',name:'По названию',parts:'По количеству деталей',partCount:'деталей',more:'Показать ещё',loading:'Загрузка…',empty:'Ничего не найдено',disabled:'Сообщество пока не открыто на этом сервере.',failed:'Не удалось загрузить данные. Попробуй обновить страницу.',missing:'Публикация недоступна или была снята.',back:'К галерее',open:'Открыть копию в редакторе',download:'Скачать .bricklab',author:'Автор',revision:'Ревизия',preview:'Построить 3D-миниатюру',noPreview:'Миниатюра недоступна',previewLimit:'Для большой модели доступно открытие в редакторе',opening:'Загрузка модели…',manage:'Личный кабинет',details:'Посмотреть сборку',confirm:'Открыть скачанную копию чужой модели? Изменения не затронут автора.'},
- en:{intro:'Explore builds by other constructors and share your own.',models:'Builds',builders:'Builders',search:'Title, author or description',find:'Search',all:'All categories',vehicles:'Vehicles',mechanisms:'Mechanisms',architecture:'Architecture',robots:'Robots',other:'Other',recent:'Newest first',oldest:'Oldest first',name:'By title',parts:'By part count',partCount:'parts',more:'Load more',loading:'Loading…',empty:'No results',disabled:'Community is not open on this server yet.',failed:'Could not load data. Refresh and retry.',missing:'Publication unavailable or removed.',back:'Back to gallery',open:'Open copy in editor',download:'Download .bricklab',author:'Author',revision:'Revision',preview:'Render 3D thumbnail',noPreview:'Thumbnail unavailable',previewLimit:'Large build: open in editor to view',opening:'Loading build…',manage:'My account',details:'View build',confirm:'Open a downloaded copy of this build? Changes do not affect the author.'}
+ ru:{intro:'Открывай модели других конструкторов и делись своими сборками.',models:'Сборки',builders:'Конструкторы',search:'Название, автор или описание',find:'Найти',all:'Все категории',vehicles:'Транспорт',mechanisms:'Механизмы',architecture:'Архитектура',robots:'Роботы',other:'Другое',recent:'Сначала новые',oldest:'Сначала старые',name:'По названию',parts:'По количеству деталей',partCount:'деталей',more:'Показать ещё',loading:'Загрузка…',empty:'Ничего не найдено',disabled:'Сообщество пока не открыто на этом сервере.',failed:'Не удалось загрузить данные. Попробуй обновить страницу.',missing:'Публикация недоступна или была снята.',back:'К галерее',open:'Открыть в редакторе',download:'Скачать .bricklab',author:'Автор',revision:'Ревизия',preview:'Построить 3D-миниатюру',noPreview:'Миниатюра недоступна',previewLimit:'Для большой модели доступно открытие в редакторе',opening:'Загрузка модели…',manage:'Личный кабинет',copyHint:'Будет создана независимая локальная копия.'},
+ en:{intro:'Explore builds by other constructors and share your own.',models:'Builds',builders:'Builders',search:'Title, author or description',find:'Search',all:'All categories',vehicles:'Vehicles',mechanisms:'Mechanisms',architecture:'Architecture',robots:'Robots',other:'Other',recent:'Newest first',oldest:'Oldest first',name:'By title',parts:'By part count',partCount:'parts',more:'Load more',loading:'Loading…',empty:'No results',disabled:'Community is not open on this server yet.',failed:'Could not load data. Refresh and retry.',missing:'Publication unavailable or removed.',back:'Back to gallery',open:'Open in editor',download:'Download .bricklab',author:'Author',revision:'Revision',preview:'Render 3D thumbnail',noPreview:'Thumbnail unavailable',previewLimit:'Large build: open in editor to view',opening:'Loading build…',manage:'My account',copyHint:'Creates an independent local copy.'}
 }
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export function communityRoute(route){const m=/^community\/(build|profile)\/([^/]+)$/.exec(route);return route==='community'?{type:'list'}:m&&uuid.test(m[2])?{type:m[1],id:m[2]}:{type:'missing'}}
@@ -21,6 +21,12 @@ async function request(path,signal,raw=false){
  if(!r.ok){const e=new Error('Request failed');e.status=r.status;throw e}
  if(raw){if(Number(r.headers.get('content-length'))>4194304)throw Error('Model too large');const text=await r.text();if(text.length>4194304)throw Error('Model too large');return parseProject(text)}
  return r.json()
+}
+export async function openPublishedCopy(id,signal,openCopy,load=request){
+ if(!uuid.test(id))throw Error('Invalid publication ID')
+ if(signal.aborted)return
+ const doc=await load('/community/build/'+id+'/download',signal,true)
+ if(!signal.aborted)return openCopy(doc)
 }
 export async function mountCommunity(root,{language='ru',route='community',signal,openCopy}){
  const t=copy[language]??copy.ru,view=communityRoute(route),urls=new Set()
@@ -67,10 +73,14 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   meta.append(author,el('span',null,b.partCount+' '+t.partCount),el('span',null,t[b.category]??t.other),el('span',null,t.revision+' '+b.revision))
   const description=el('p','community-description',b.description)
   const actions=el('div','community-actions')
-  if(!detail)actions.append(link(t.details,'#community/build/'+b.id))
-  else{
-    const open=button(t.open,async()=>{if(!confirm(t.confirm))return;open.disabled=true;open.textContent=t.opening;try{const d=await request('/community/build/'+b.id+'/download',signal,true);if(!signal.aborted)openCopy(d)}catch(e){fail(e);open.disabled=false;open.textContent=t.open}},'workspace-action primary');actions.append(open)
-  }
+  const open=button(t.open,async()=>{
+    if(open.disabled||signal.aborted)return
+    open.disabled=true;open.textContent=t.opening;status.textContent=''
+    try{await openPublishedCopy(b.id,signal,openCopy)}
+    catch(e){fail(e)}
+    finally{if(!signal.aborted){open.disabled=false;open.textContent=t.open}}
+  },'workspace-action primary')
+  open.title=t.copyHint;actions.append(open)
   const download=link(t.download,'/community/build/'+b.id+'/download');download.download='';actions.append(download)
   body.append(title,meta,description,actions);card.append(art,body);return card
  }
