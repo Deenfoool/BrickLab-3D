@@ -1,6 +1,6 @@
 export const locales = {
   ru: {
-    hubHeadline:'От идеи до механизма.',hubIntro:'Создавай конструкции, собирай модели и делись своими изобретениями.',hubLearn:'Обучение',hubSearch:'Поиск в BrickLab (Ctrl+K)',
+    hubCloudLatest:'Последняя облачная сборка',hubSignIn:'Войти или зарегистрироваться',hubHeadline:'От идеи до механизма.',hubIntro:'Создавай конструкции, собирай модели и делись своими изобретениями.',hubLearn:'Обучение',hubSearch:'Поиск в BrickLab (Ctrl+K)',
     community:'Сообщество',
     account: 'Мой профиль', cloudPreview: 'Сохранение в облако', refreshCloud: 'Обновить облачные сборки',
     bugReport: 'Сообщить о баге',
@@ -69,7 +69,7 @@ export const locales = {
     saved: 'Сборка сохранена.', partCount: count => `Деталей в сборке: ${count}`,
   },
   en: {
-    hubHeadline:'From idea to mechanism.',hubIntro:'Create builds, explore models and share your inventions.',hubLearn:'Learn',hubSearch:'Search BrickLab (Ctrl+K)',
+    hubCloudLatest:'Latest cloud build',hubSignIn:'Sign in or register',hubHeadline:'From idea to mechanism.',hubIntro:'Create builds, explore models and share your inventions.',hubLearn:'Learn',hubSearch:'Search BrickLab (Ctrl+K)',
     community:'Community',
     account: 'My profile', cloudPreview: 'Cloud storage', refreshCloud: 'Refresh cloud builds',
     bugReport: 'Report a bug',
