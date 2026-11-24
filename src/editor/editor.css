@@ -276,3 +276,7 @@ body:has(.editor:not([hidden])){overflow:hidden}
 .part-context [data-axis="0"] { color: #ffaaae; }
 .part-context [data-axis="1"] { color: #a5dbaf; }
 .part-context [data-axis="2"] { color: #9dc5ff; }
+
+.editor .editor-publish{border-color:#b98025;background:#392d1d;color:#ffd28a;font-weight:650;white-space:nowrap}
+.editor .editor-publish:hover:not(:disabled){background:#55401f}
+.editor-actions{flex-wrap:wrap;justify-content:flex-end}
