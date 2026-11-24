@@ -41,21 +41,22 @@ function rangeOf(header, size) {
     ? { start: first, end: last } : null
 }
 
-export function createBrickLabServer({ root, logger = console } = {}) {
+export function createBrickLabServer({ root, logger = console, auth } = {}) {
   const base = realpathSync(root)
   const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
     res.setHeader('X-Frame-Options', 'SAMEORIGIN')
     try {
-      if (req.method !== 'GET' && req.method !== 'HEAD') {
-        res.setHeader('Allow', 'GET, HEAD')
-        return send(req, res, 405, 'Method not allowed')
-      }
       let pathname
       try { pathname = decodeURIComponent(req.url.split('?')[0]) } catch { return send(req, res, 400, 'Bad path') }
       if (!pathname.startsWith('/') || pathname.includes('\\') || /[\u0000-\u001f\u007f]/.test(pathname) ||
           pathname.split('/').some(part => part === '.' || part === '..')) return send(req, res, 400, 'Bad path')
+      if (auth && pathname.startsWith('/api/auth/') && await auth(req, res, pathname)) return
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        res.setHeader('Allow', 'GET, HEAD')
+        return send(req, res, 405, 'Method not allowed')
+      }
       if (pathname === '/api/health') {
         return send(req, res, 200, JSON.stringify({ status: 'ok', service: 'bricklab-3d' }), 'application/json; charset=utf-8')
       }

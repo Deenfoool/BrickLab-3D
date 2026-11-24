@@ -1,12 +1,29 @@
 import { fileURLToPath } from 'node:url'
 import { createBrickLabServer } from './http.js'
+import { createAuthHandler } from './auth.js'
 
 const host = process.env.HOST || '0.0.0.0'
 const port = Number(process.env.PORT || 8080)
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer from 1 to 65535')
-const server = createBrickLabServer({ root: fileURLToPath(new URL('../', import.meta.url)) })
-server.on('error', error => {
+let store, auth, cleanup
+if (process.env.PGPASSWORD) {
+  const { connectAuthStore } = await import('./db/auth-store.js')
+  store = connectAuthStore()
+  try {
+    await store.ready()
+    auth = createAuthHandler({ store, origin: process.env.PUBLIC_ORIGIN || 'http://localhost:8080',
+      registrationEnabled: process.env.BRICKLAB_REGISTRATION_ENABLED === 'true' })
+    cleanup = setInterval(() => store.cleanup().catch(error => console.error('Session cleanup failed:', error.code || error.name)), 3600_000).unref()
+  } catch (error) {
+    await store.close()
+    throw error
+  }
+}
+const server = createBrickLabServer({ root: fileURLToPath(new URL('../', import.meta.url)), auth })
+server.on('error', async error => {
   console.error('Unable to start BrickLab:', error.message)
+  clearInterval(cleanup)
+  await store?.close()
   process.exitCode = 1
 })
 server.listen(port, host, () => console.log(`BrickLab listening on ${host}:${port}`))
@@ -14,9 +31,11 @@ let stopping = false
 function shutdown() {
   if (stopping) return
   stopping = true
+  clearInterval(cleanup)
   const timeout = setTimeout(() => server.closeAllConnections(), 10_000).unref()
-  server.close(error => {
+  server.close(async error => {
     clearTimeout(timeout)
+    await store?.close()
     if (error) process.exitCode = 1
   })
 }

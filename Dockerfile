@@ -3,7 +3,9 @@ FROM node:22-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=8080
 
-COPY --chown=node:node package.json index.html ./
+COPY --chown=node:node package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+COPY --chown=node:node index.html ./
 COPY --chown=node:node server ./server
 COPY --chown=node:node src ./src
 COPY --chown=node:node assets ./assets

@@ -10,5 +10,8 @@
   },
   "devDependencies": {
     "@dimforge/rapier3d-compat": "0.19.3"
+  },
+  "dependencies": {
+    "postgres": "3.4.7"
   }
 }

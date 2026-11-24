@@ -22,9 +22,10 @@ services:
       PGUSER: bricklab_admin
       PGPASSWORD: "${BRICKLAB_DB_PASSWORD:?Set BRICKLAB_DB_PASSWORD in .env}"
       PGCONNECT_TIMEOUT: 10
+      BRICKLAB_APP_PASSWORD: "${BRICKLAB_APP_PASSWORD:?Set BRICKLAB_APP_PASSWORD in .env}"
     volumes:
       - ./server/db:/migrations:ro
-    entrypoint: ["/bin/sh", "/migrations/migrate.sh"]
+    entrypoint: ["/bin/sh", "/migrations/setup.sh"]
     depends_on:
       db:
         condition: service_healthy
@@ -36,6 +37,13 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 8080
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: bricklab
+      PGUSER: bricklab_app
+      PGPASSWORD: "${BRICKLAB_APP_PASSWORD:?Set BRICKLAB_APP_PASSWORD in .env}"
+      PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-http://localhost:8080}"
+      BRICKLAB_REGISTRATION_ENABLED: "${BRICKLAB_REGISTRATION_ENABLED:-false}"
     depends_on:
       migrate:
         condition: service_completed_successfully
