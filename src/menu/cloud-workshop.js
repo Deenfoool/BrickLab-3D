@@ -122,8 +122,9 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
     const builds=card(t.publishBuilds);builds.append(el('p','account-muted',t.publicationHint))
     if(!publicCard)builds.append(el('p','account-muted',t.profileRequired))
     else{
-      if(!remote.length)builds.append(el('p','account-muted',t.noBuilds))
-      for(const project of remote){
+      const publishedProjects=remote.filter(project=>publicBuilds.some(b=>b.projectId===project.id))
+      if(!publishedProjects.length)builds.append(el('p','account-muted',lang==='ru'?'Пока нет публикаций. Открой сборку в редакторе и нажми «Опубликовать».':'No publications yet. Open a build in the editor and choose Publish.'))
+      for(const project of publishedProjects){
         const old=publicBuilds.find(b=>b.projectId===project.id),row=card(project.name)
         row.append(el('p','account-muted',t.privateRevision+': '+project.revision+(old?' · '+t.publishedRevision+': '+old.revision:'')))
         const form=el('form','workshop-form'),description=el('textarea'),label=el('label','account-field'),consent=el('input'),check=el('label','workshop-check')
