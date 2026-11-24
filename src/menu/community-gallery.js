@@ -8,6 +8,8 @@ Object.assign(copy.ru,{viewer:'3D-просмотр',viewerClose:'Закрыть'
 Object.assign(copy.en,{viewer:'3D viewer',viewerClose:'Close',viewerReset:'Reset camera',viewerFull:'Fullscreen',viewerExitFull:'Exit fullscreen',viewerZoomIn:'Zoom in',viewerZoomOut:'Zoom out',viewerHelp:'Drag to rotate, scroll to zoom, right drag to pan. On mobile, use two-finger gestures.',viewerUnavailable:'3D viewer unavailable. Open the build in the editor instead.',viewerPartial:'Rendered parts:',viewerLimit:'Viewer supports up to 600 parts and 120 unique designs.'})
 Object.assign(copy.ru,{like:'Нравится',liked:'Нравится ✓',views:'Просмотры',downloads:'Скачивания',follow:'Подписаться',unfollow:'Вы подписаны',followers:'Подписчики',following:'Подписки',popular:'Популярные',signIn:'Войти для подписок и лайков',socialLimit:'Достигнут лимит подписок или лайков.',followingEmpty:'Пока нет публикаций авторов, на которых вы подписаны.'})
 Object.assign(copy.en,{like:'Like',liked:'Liked ✓',views:'Views',downloads:'Downloads',follow:'Follow',unfollow:'Following',followers:'Followers',following:'Following',popular:'Popular',signIn:'Sign in to like and follow',socialLimit:'Like or follow limit reached.',followingEmpty:'No builds from followed creators yet.'})
+Object.assign(copy.ru,{discussion:'Комментарии',commentPlaceholder:'Написать комментарий…',send:'Отправить',reply:'Ответить',replyTo:'Ответ пользователю',cancelReply:'Отменить ответ',deleted:'Комментарий удалён',removeComment:'Удалить',confirmRemove:'Удалить свой комментарий?',report:'Пожаловаться',reportReason:'Причина жалобы',spam:'Спам',abuse:'Оскорбления',otherReport:'Другое',reportSent:'Жалоба сохранена.',commentEmpty:'Пока нет комментариев.',commentProfile:'Для комментариев опубликуй свой профиль в Workshop.',commentLogin:'Войди, чтобы оставить комментарий.',commentLimit:'Лимит комментариев: 30 за сутки, 1000 всего.',reportLimit:'Достигнут лимит жалоб.',invalidReply:'На этот комментарий больше нельзя ответить.',leaders:'Рейтинг',reputation:'Репутация',ratingHint:'5 очков за полученный лайк, 3 за уникальное скачивание, 2 за подписчика. Это рейтинг сообщества, не инженерная квалификация.',buildCount:'Сборки',receivedLikes:'Полученные лайки'})
+Object.assign(copy.en,{discussion:'Comments',commentPlaceholder:'Write a comment…',send:'Post',reply:'Reply',replyTo:'Reply to',cancelReply:'Cancel reply',deleted:'Comment removed',removeComment:'Delete',confirmRemove:'Delete your comment?',report:'Report',reportReason:'Report reason',spam:'Spam',abuse:'Abuse',otherReport:'Other',reportSent:'Report saved.',commentEmpty:'No comments yet.',commentProfile:'Publish your Workshop profile to comment.',commentLogin:'Sign in to leave a comment.',commentLimit:'Comment limit: 30 per day, 1000 total.',reportLimit:'Report limit reached.',invalidReply:'This comment no longer accepts replies.',leaders:'Leaderboard',reputation:'Reputation',ratingHint:'5 points per received like, 3 per unique download, 2 per follower. A community rating, not an engineering qualification.',buildCount:'Builds',receivedLikes:'Received likes'})
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export function communityRoute(route){const m=/^community\/(build|profile)\/([^/]+)$/.exec(route);return route==='community'?{type:'list'}:m&&uuid.test(m[2])?{type:m[1],id:m[2]}:{type:'missing'}}
 export function previewDocument(doc){
@@ -20,8 +22,8 @@ function el(tag,cls,value){const n=document.createElement(tag);if(cls)n.classNam
 function button(label,fn,cls='workspace-action'){const b=el('button',cls,label);b.type='button';b.onclick=fn;return b}
 function link(label,href,cls='workspace-action'){const a=el('a',cls,label);a.href=href;return a}
 function icon(id){const s=document.createElementNS('http://www.w3.org/2000/svg','svg'),u=document.createElementNS(s.namespaceURI,'use');s.setAttribute('class','icon');s.setAttribute('aria-hidden','true');u.setAttribute('href','#'+id);s.append(u);return s}
-async function request(path,signal,raw=false,method='GET'){
- const r=await fetch(path,{signal,method,credentials:'same-origin',cache:'no-store',redirect:'error'})
+async function request(path,signal,raw=false,method='GET',body){
+ const r=await fetch(path,{signal,method,credentials:'same-origin',cache:'no-store',redirect:'error',...(body===undefined?{}:{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})})
  if(!r.ok){const e=new Error('Request failed');e.status=r.status;try{e.code=(await r.json()).error}catch{}throw e}
  if(raw){if(Number(r.headers.get('content-length'))>4194304)throw Error('Model too large');const text=await r.text();if(text.length>4194304)throw Error('Model too large');return parseProject(text)}
  return r.json()
@@ -140,6 +142,71 @@ export async function mountCommunity(root,{language='ru',route='community',signa
    void recordView(b.id)
   }catch(e){if(!closed)message.textContent=t.viewerUnavailable}
  }
+ function discussion(build){
+  const section=el('section','community-discussion'),heading=el('h2',null,t.discussion),notice=el('p','account-muted'),list=el('div','community-comment-list')
+  notice.setAttribute('role','status')
+  const path='/api/community/build/'+build.id+'/comments'
+  let offset=0,parent=null,busy=false,loading=false
+  const form=el('form','community-comment-form'),text=el('textarea'),replyLabel=el('span','account-muted'),cancel=button(t.cancelReply,()=>setParent(null)),submit=el('button','workspace-action primary',t.send)
+  text.required=true;text.maxLength=1500;text.rows=3;text.placeholder=t.commentPlaceholder;text.setAttribute('aria-label',t.commentPlaceholder)
+  submit.type='submit'
+  function setParent(c){parent=c;replyLabel.textContent=c?t.replyTo+' '+c.author:'';cancel.hidden=!c}
+  setParent(null)
+  const replyBar=el('div','community-actions');replyBar.append(replyLabel,cancel);form.append(replyBar,text,submit)
+  function error(e){notice.textContent=e.code==='comment_limit'?t.commentLimit:e.code==='report_limit'?t.reportLimit:e.code==='invalid_reply'?t.invalidReply:e.code==='public_profile_required'?t.commentProfile:e.status===401?t.commentLogin:t.failed}
+  form.onsubmit=async e=>{
+   e.preventDefault();if(busy||!text.value.trim())return
+   busy=true;submit.disabled=true;text.disabled=true
+   try{await request(path,signal,false,'POST',{body:text.value,parentId:parent?.id??null});if(signal.aborted)return;text.value='';setParent(null);await load(true)}
+   catch(e){error(e)}finally{busy=false;submit.disabled=false;text.disabled=false}
+  }
+  const more=button(t.more,()=>load(false));more.hidden=true
+  function renderComment(c){
+   const row=el('article','community-comment'+(c.parentId?' reply':'')),top=el('div','community-comment-header'),avatar=publicImage(c.avatarUrl,c.authorId,'avatar')
+   if(avatar){avatar.className='community-author-avatar';top.append(avatar)}
+   top.append(link(c.author,'#community/profile/'+c.authorId,'community-author'),el('span','account-muted',new Date(c.createdAt).toLocaleString(language==='ru'?'ru-RU':'en-US')))
+   row.append(top)
+   if(c.parentId)row.append(el('p','account-muted',t.replyTo+' '+(c.parentAuthor??'…')))
+   row.append(el('p','community-comment-text',c.body??t.deleted))
+   if(c.body!==null){
+    const actions=el('div','community-actions')
+    if(social.ownId&&!c.parentId)actions.append(button(t.reply,()=>{setParent(c);text.focus();form.scrollIntoView({block:'nearest'})}))
+    if(social.ownId===c.authorId)actions.append(button(t.removeComment,async()=>{if(!confirm(t.confirmRemove))return;try{await request('/api/community/comment/'+c.id,signal,false,'DELETE');await load(true)}catch(e){error(e)}}))
+    else if(social.signedIn){
+     const report=button(t.report,()=>{report.hidden=true;reportForm.hidden=false})
+     const reportForm=el('form','community-actions'),reason=el('select'),send=el('button','workspace-action',t.report)
+     reason.setAttribute('aria-label',t.reportReason)
+     for(const [value,label] of [['spam',t.spam],['abuse',t.abuse],['other',t.otherReport]]){const option=el('option',null,label);option.value=value;reason.append(option)}
+     send.type='submit';reportForm.hidden=true;reportForm.append(reason,send,button(t.viewerClose,()=>{reportForm.hidden=true;report.hidden=false}))
+     reportForm.onsubmit=async e=>{e.preventDefault();send.disabled=true;try{await request('/api/community/comment/'+c.id+'/report',signal,false,'POST',{reason:reason.value});reportForm.hidden=true;notice.textContent=t.reportSent}catch(e){error(e);send.disabled=false}}
+     actions.append(report,reportForm)
+    }
+    row.append(actions)
+   }
+   return row
+  }
+  async function load(reset){
+   if(loading)return;loading=true;more.disabled=true;notice.textContent=t.loading
+   try{
+    const result=await request(path+'?offset='+(reset?0:offset),signal)
+    if(signal.aborted)return
+    if(reset)list.replaceChildren()
+    for(const c of result.comments)list.append(renderComment(c))
+    offset=result.nextOffset??0;more.hidden=result.nextOffset===null;notice.textContent=list.childElementCount?'':t.commentEmpty
+   }catch(e){error(e)}finally{loading=false;more.disabled=false}
+  }
+  section.append(heading)
+  if(social.ownId)section.append(form)
+  else section.append(link(social.signedIn?t.commentProfile:t.commentLogin,'#account'))
+  section.append(notice,list,more);void load(true);return section
+ }
+ function reputationBlock(p){
+  const r=p.reputation;if(!r)return null
+  const block=el('div','community-reputation')
+  if(p.position)block.append(el('strong','community-rank','#'+p.position))
+  for(const [label,n] of [[t.reputation,r.score],[t.buildCount,r.builds],[t.receivedLikes,r.likes],[t.downloads,r.downloads]]){const item=el('div');item.append(el('strong',null,String(n)),el('span','account-muted',label));block.append(item)}
+  block.title=t.ratingHint;return block
+ }
  function buildCard(b,detail=false){
   const card=el('article','community-card'+(detail?' community-detail':'')),art=artFor(b,detail),body=el('div','community-card-body')
   const title=detail?el('h2',null,b.title):link(b.title,'#community/build/'+b.id,'community-title')
@@ -170,7 +237,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   const a=el('article','community-card community-builder'+(detail?' community-builder-detail':'')),avatar=el('div','account-avatar community-profile-avatar',Array.from(p.displayName).slice(0,2).join('').toUpperCase()),body=el('div','community-card-body')
   const img=publicImage(p.avatarUrl,p.id,'avatar');if(img)avatar.replaceChildren(img)
   body.append(detail?el('h2',null,p.displayName):link(p.displayName,'#community/profile/'+p.id,'community-title'),el('p','community-description',p.bio))
-  body.append(el('p','account-muted',t.followers+': '+(p.followers??0)),reaction('follow',p.id,p.followers,p.id===social.ownId))
+  const reputation=reputationBlock(p);if(reputation)body.append(reputation);body.append(reaction('follow',p.id,p.followers,p.id===social.ownId))
   if(detail){
    const theme=['blueprint','graphite','amber'].includes(p.coverTheme)?p.coverTheme:'blueprint'
    const cover=el('div','community-profile-cover cover-'+theme),coverImg=publicImage(p.coverUrl,p.id,'cover')
@@ -187,7 +254,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   root.prepend(link(t.back,'#community'))
   status.textContent=t.loading
   try{
-   if(view.type==='build'){const {build}=await request('/api/community/build/'+view.id,signal);if(!signal.aborted){status.textContent='';root.append(buildCard(build,true));void recordView(build.id)}}
+   if(view.type==='build'){const {build}=await request('/api/community/build/'+view.id,signal);if(!signal.aborted){status.textContent='';root.append(buildCard(build,true),discussion(build));void recordView(build.id)}}
    else{const {profile}=await request('/api/community/profile/'+view.id,signal);if(signal.aborted)return;status.textContent='';const theme=['default','first-build','carbon','neon'].includes(profile.backgroundTheme)?profile.backgroundTheme:'default';const workshop=el('section','community-public-workshop cosmetic-'+theme);workshop.append(builderCard(profile,true),el('h2',null,t.models));const grid=el('div','community-grid');workshop.append(grid);root.append(workshop);const {builds}=await request('/api/community/builds?author='+view.id,signal);if(signal.aborted)return;for(const b of builds)grid.append(buildCard(b));if(!builds.length)grid.append(el('p','account-muted',t.empty))}
   }catch(e){fail(e)}
   return
@@ -195,14 +262,14 @@ export async function mountCommunity(root,{language='ru',route='community',signa
  const tabs=el('div','community-actions'),filters=el('form','community-filters'),grid=el('div','community-grid'),more=button(t.more,()=>load(false))
  let mode='models',offset=0,serial=0
  const models=button(t.models,()=>switchMode('models')),builders=button(t.builders,()=>switchMode('builders'))
- const following=button(t.following,()=>switchMode('following'));tabs.append(models,builders,following)
+ const following=button(t.following,()=>switchMode('following'));const leaders=button(t.leaders,()=>switchMode('leaders'));tabs.append(models,builders,following,leaders)
  const search=el('input');search.type='search';search.maxLength=100;search.placeholder=t.search;search.setAttribute('aria-label',t.search)
  function select(entries,label){const n=el('select');n.setAttribute('aria-label',label);for(const [v,text] of entries){const option=el('option',null,text);option.value=v;n.append(option)}return n}
  const category=select([['',t.all],...['vehicles','mechanisms','architecture','robots','other'].map(k=>[k,t[k]])],t.all),sort=select(['recent','oldest','name','parts','popular'].map(k=>[k,t[k]]),t.recent)
  const submit=el('button','workspace-action primary',t.find);submit.type='submit';filters.append(search,category,sort,submit)
  filters.onsubmit=e=>{e.preventDefault();load(true)};category.onchange=sort.onchange=()=>load(true)
  root.append(tabs,filters,grid,more);more.hidden=true
- function switchMode(next){mode=next;models.setAttribute('aria-pressed',String(mode==='models'));builders.setAttribute('aria-pressed',String(mode==='builders'));following.setAttribute('aria-pressed',String(mode==='following'));filters.hidden=mode==='builders';load(true)}
+ function switchMode(next){mode=next;models.setAttribute('aria-pressed',String(mode==='models'));builders.setAttribute('aria-pressed',String(mode==='builders'));following.setAttribute('aria-pressed',String(mode==='following'));leaders.setAttribute('aria-pressed',String(mode==='leaders'));filters.hidden=mode==='builders'||mode==='leaders';load(true)}
  async function load(reset){
   const version=++serial;activeRequest?.abort();activeRequest=new AbortController()
   const requestSignal=activeRequest.signal
@@ -210,7 +277,10 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   more.hidden=true;status.textContent=t.loading
   try{
    if(mode==='following'&&!social.signedIn){status.textContent=t.signIn;grid.append(link(t.signIn,'#account'));return}
-   if(mode==='builders'){
+   if(mode==='leaders'){
+    const result=await request('/api/community/leaderboard?offset='+offset,requestSignal);if(signal.aborted||version!==serial)return
+    if(reset)grid.append(el('p','community-rating-hint',t.ratingHint));for(const p of result.profiles)grid.append(builderCard(p));offset=result.nextOffset??0;more.hidden=result.nextOffset===null
+   }else if(mode==='builders'){
     const {profiles}=await request('/api/community',requestSignal);if(signal.aborted||version!==serial)return
     for(const p of profiles)grid.append(builderCard(p))
    }else{
