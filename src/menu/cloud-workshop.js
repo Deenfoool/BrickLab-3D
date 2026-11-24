@@ -36,7 +36,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
  const layout=el('div','workshop-layout cosmetic-'+(profile?.background??'default')),nav=el('nav','workshop-nav'),content=el('div','workshop-content')
  nav.setAttribute('aria-label',t.workshop)
  for(const [key,symbol] of [...sections,...(user.admin===true?[['admin','icon-shield']]:[])]){
-  const b=button(t[key],()=>go(key),busy);b.prepend(icon(symbol));b.setAttribute('aria-pressed',String(section===key))
+  const b=key==='cloud'?el('a','workspace-action',t[key]):button(t[key],()=>go(key),busy);if(key==='cloud')b.href='#projects';b.prepend(icon(symbol));if(key!=='cloud')b.setAttribute('aria-pressed',String(section===key))
   if(section===key)b.setAttribute('aria-current','page')
   if(!implemented.has(key)&&key!=='admin')b.title=t.pending
   if(key==='notifications'){const n=activityData?.notifications.filter(x=>!x.read).length??0,badge=el('small','workshop-unread',n);badge.dataset.notificationNavCount='';badge.hidden=!n;b.append(badge)}
