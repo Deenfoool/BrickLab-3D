@@ -26,7 +26,7 @@ export function connectAuthStore(env = process.env) {
   }
   const missing = () => new ProjectError(404,'not_found')
   return {
-    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1`; await sql`select 1 from bricklab.project_favorites limit 1`; await sql`select 1 from bricklab.award_reads limit 1`; await sql`select 1 from bricklab.public_profiles limit 1` },
+    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1`; await sql`select 1 from bricklab.project_favorites limit 1`; await sql`select 1 from bricklab.award_reads limit 1`; await sql`select 1 from bricklab.public_profiles limit 1`; await sql`select 1 from bricklab.public_builds limit 1` },
     async register({ email, displayName, passwordHash, tokenHash, expiresAt }) {
       return sql.begin(async tx => {
         const [user] = await tx`insert into bricklab.users (email, display_name, password_hash)
@@ -150,6 +150,23 @@ export function connectAuthStore(env = process.env) {
     async unpublishCard(uid){return scope(uid,tx=>tx`delete from bricklab.public_profiles where user_id=${uid}`)},
     async getPublicCard(id){const [p]=await sql`select public_id as id,display_name as "displayName",bio,updated_at as "updatedAt" from bricklab.public_profiles where public_id=${id}`;return p},
     async listPublicCards(){return sql`select public_id as id,display_name as "displayName",bio,updated_at as "updatedAt" from bricklab.public_profiles order by updated_at desc,public_id limit 30`},
+    async listOwnBuilds(uid){return scope(uid,tx=>tx`select b.public_id as id,b.project_id as "projectId",b.revision,b.title,b.description,b.published_at as "publishedAt" from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id where c.user_id=${uid} order by b.published_at desc`)},
+    async publishBuild(uid,id,input){
+      return scope(uid,async tx=>{
+        await lock(tx,uid)
+        const [c]=await tx`select public_id from bricklab.public_profiles where user_id=${uid} for update`
+        if(!c)throw new ProjectError(409,'public_profile_required')
+        const [p]=await tx`select p.id,r.document from bricklab.projects p join bricklab.project_revisions r on r.project_id=p.id and r.revision=${input.revision} where p.id=${id} and p.owner_id=${uid}`
+        if(!p)throw missing()
+        await tx`insert into bricklab.public_builds(project_id,author_id,revision,title,description,document) values(${id},${c.public_id},${input.revision},${p.document.name},${input.description},${tx.json(p.document)}) on conflict(project_id) do update set revision=excluded.revision,title=excluded.title,description=excluded.description,document=excluded.document,published_at=now()`
+      })
+    },
+    async unpublishBuild(uid,id){return scope(uid,async tx=>{const [p]=await tx`select id from bricklab.projects where id=${id} and owner_id=${uid}`;if(!p)throw missing();await tx`delete from bricklab.public_builds where project_id=${id} and author_id in (select public_id from bricklab.public_profiles where user_id=${uid})`})},
+    async listPublicBuilds(author=null){return sql`select b.public_id as id,b.author_id as "authorId",c.display_name as author,b.title,b.description,b.revision,b.published_at as "publishedAt" from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id where (${author}::uuid is null or b.author_id=${author}::uuid) order by b.published_at desc,b.public_id limit 30`},
+    async getPublicBuild(id,download=false){
+      if(download){const [p]=await sql`select document from bricklab.public_builds where public_id=${id}`;return p}
+      const [p]=await sql`select b.public_id as id,b.author_id as "authorId",c.display_name as author,b.title,b.description,b.revision,b.published_at as "publishedAt" from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id where b.public_id=${id}`;return p
+    },
     async cleanup() { await sql`delete from bricklab.sessions where expires_at <= now()` },
     async close() { await sql.end({ timeout: 5 }) },
   }

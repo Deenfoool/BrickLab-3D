@@ -6,13 +6,21 @@ export function validatePublicCard(value){
  if(!value||!clean(value.displayName,80)||!value.displayName.trim()||!clean(value.bio,500))throw new ProjectError(400,'invalid_public_profile')
  return {displayName:value.displayName.trim(),bio:value.bio.trim()}
 }
+export function validatePublication(value){
+ if(!value||!Number.isSafeInteger(value.revision)||value.revision<1||value.revision>2147483647||typeof value.description!=='string'||value.description.length>1000||/[\u0000-\u0008\u000b-\u001f\u007f]/.test(value.description)||/[\ud800-\udfff]/u.test(value.description)||value.consent!==true)throw new ProjectError(400,'invalid_publication')
+ return {revision:value.revision,description:value.description.trim()}
+}
+export function publicBuild(row){
+ return row?{id:row.id,authorId:row.authorId,author:row.author,title:row.title,description:row.description,revision:row.revision,publishedAt:row.publishedAt}:null
+}
 export function publicCard(row){
  return row?{id:row.id,displayName:row.displayName,bio:row.bio,updatedAt:row.updatedAt}:null
 }
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
-export function communityPage(cards,detail=false){
+export function communityPage(cards,detail=false,builds=[]){
+ const models=builds.map(b=>'<article><h2><a href="/community/build/'+esc(b.id)+'">'+esc(b.title)+'</a></h2><p>'+esc(b.description)+'</p><p>Автор / Author: <a href="/community/profile/'+esc(b.authorId)+'">'+esc(b.author)+'</a> · v'+esc(b.revision)+'</p><a href="/community/build/'+esc(b.id)+'/download" download>Скачать / Download .bricklab</a></article>').join('')
  const list=cards.map(c=>'<article><h2>'+ (detail?esc(c.displayName):'<a href="/community/profile/'+esc(c.id)+'">'+esc(c.displayName)+'</a>')+'</h2><p>'+esc(c.bio)+'</p></article>').join('')
- return '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BrickLab Community</title><style>body{font:16px/1.6 system-ui,sans-serif;color:#eee;background:#191b1e;margin:0}main{max-width:880px;padding:28px;margin:auto}nav{display:flex;gap:18px;flex-wrap:wrap}a{color:#ffc56b}article{background:#24262c;border:1px solid #444851;padding:20px;margin:12px 0;border-radius:12px;overflow-wrap:anywhere}p{white-space:pre-wrap}h2{margin:0}</style><main><nav><a href="/">BrickLab 3D</a><a href="/community">Сообщество / Community</a></nav><h1>'+(detail?'Профиль конструктора / Builder profile':'BrickLab Community')+'</h1>'+ (list||'<p>Пока нет опубликованных профилей / No published profiles yet.</p>')+'</main></html>'
+ return '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BrickLab Community</title><style>body{font:16px/1.6 system-ui,sans-serif;color:#eee;background:#191b1e;margin:0}main{max-width:880px;padding:28px;margin:auto}nav{display:flex;gap:18px;flex-wrap:wrap}a{color:#ffc56b}article{background:#24262c;border:1px solid #444851;padding:20px;margin:12px 0;border-radius:12px;overflow-wrap:anywhere}p{white-space:pre-wrap}h2{margin:0}</style><main><nav><a href="/">BrickLab 3D</a><a href="/community">Сообщество / Community</a></nav><h1>'+(detail?'Профиль конструктора / Builder profile':'BrickLab Community')+'</h1>'+ (list||'<p>Пока нет опубликованных профилей / No published profiles yet.</p>')+'<h2>Сборки / Builds</h2>'+ (models||'<p>Нет опубликованных сборок / No published builds.</p>')+'</main></html>'
 }
 export function createCommunityHandler({store,origin,enabled=false,logger=console}){
  const cookieName=new URL(origin).protocol==='https:'?'__Host-bricklab_session':'bricklab_session'
@@ -28,6 +36,22 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
    if(active>=8)throw new ProjectError(429,'too_many_attempts')
    active++
    try{
+    const ownBuild=/^\/api\/community\/me\/builds\/([^/]+)$/.exec(path)
+    if(path==='/api/community/me/builds'||ownBuild){
+     if(ownBuild?(!uuid.test(ownBuild[1])||!['PUT','DELETE'].includes(req.method)):req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
+     if(req.method!=='GET'&&req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
+     const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1)
+     const user=/^[a-f0-9]{64}$/.test(token||'')&&await store.getSession(createHash('sha256').update(token).digest('hex'))
+     if(!user)throw new ProjectError(401,'unauthenticated')
+     if(req.method==='PUT'){
+      if(req.headers['content-type']?.split(';')[0].trim()!=='application/json')throw new ProjectError(415,'json_required')
+      let size=0;const chunks=[]
+      for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>8192){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
+      let data;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new ProjectError(400,'invalid_json')}
+      await store.publishBuild(user.id,ownBuild[1],validatePublication(data))
+     }else if(req.method==='DELETE')await store.unpublishBuild(user.id,ownBuild[1])
+     reply(res,200,{builds:await store.listOwnBuilds(user.id)});return true
+    }
     if(path==='/api/community/me'){
      if(!['GET','PUT','DELETE'].includes(req.method))throw new ProjectError(405,'method_not_allowed')
      if(req.method!=='GET'&&req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
@@ -44,16 +68,23 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
      reply(res,200,{profile:publicCard(await store.getOwnCard(user.id))});return true
     }
     if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
+    const build=/^\/(api\/)?community\/build\/([^/]+)(\/download)?$/.exec(path)
+    if(build&&uuid.test(build[2])){
+     if(build[3]){const p=await store.getPublicBuild(build[2],true);if(!p)throw new ProjectError(404,'not_found');res.setHeader('Content-Disposition','attachment; filename="bricklab-'+build[2]+'.bricklab"');reply(res,200,JSON.stringify(p.document),'application/octet-stream');return true}
+     const p=publicBuild(await store.getPublicBuild(build[2]));if(!p)throw new ProjectError(404,'not_found')
+     if(build[1])reply(res,200,{build:p});else reply(res,200,communityPage([],false,[p]),'text/html; charset=utf-8');return true
+    }
+    if(path==='/api/community/builds'){reply(res,200,{builds:(await store.listPublicBuilds()).map(publicBuild)});return true}
     const m=/^\/(api\/)?community\/profile\/([^/]+)$/.exec(path)
     if(m&&uuid.test(m[2])){
      const card=publicCard(await store.getPublicCard(m[2]))
      if(!card)throw new ProjectError(404,'not_found')
      if(m[1])reply(res,200,{profile:card})
-     else reply(res,200,communityPage([card],true),'text/html; charset=utf-8')
+     else reply(res,200,communityPage([card],true,store.listPublicBuilds?(await store.listPublicBuilds(card.id)).map(publicBuild):[]),'text/html; charset=utf-8')
     }else if(path==='/community'||path==='/api/community'){
      const cards=(await store.listPublicCards()).map(publicCard)
      if(path.startsWith('/api/'))reply(res,200,{profiles:cards})
-     else reply(res,200,communityPage(cards),'text/html; charset=utf-8')
+     else reply(res,200,communityPage(cards,false,store.listPublicBuilds?(await store.listPublicBuilds()).map(publicBuild):[]),'text/html; charset=utf-8')
     }else throw new ProjectError(404,'not_found')
    }finally{active--}
   }catch(e){if(e instanceof ProjectError)reply(res,e.status,{error:e.message});else{logger.error('Community operation failed:',e.code||e.name);reply(res,503,{error:'community_unavailable'})}}

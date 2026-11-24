@@ -15,6 +15,8 @@ Object.assign(extra.ru,{activityRefresh:'Обновить',activityMissing:'Да
 Object.assign(extra.en,{activityRefresh:'Refresh',activityMissing:'Activity unavailable.',activityEmpty:'No events yet.',createdBuild:'Cloud build created',savedRevision:'Revision saved',openBuild:'Open copy',readNotice:'Read',newNotice:'New',awardNotice:'Achievement earned',bytesHint:'Logical size of all revision documents, excluding database overhead and images.',recent:'Latest 100 saves'})
 Object.assign(extra.ru,{publicLoad:'Проверить статус публикации',publicExplain:'Публикуются только имя и описание, введённые ниже. Почта, приватная аватарка, обложка и сборки не публикуются. Любой посетитель сможет увидеть карточку; снятие публикации не удаляет уже сделанные копии.',publicName:'Публичное имя',publicBio:'Публичное описание',publishCard:'Опубликовать профиль',updateCard:'Обновить публикацию',unpublishCard:'Снять публикацию',publicConfirm:'Я согласен сделать эти данные общедоступными.',visitCard:'Открыть публичный профиль',visitCommunity:'Каталог конструкторов',notPublished:'Профиль не опубликован',isPublished:'Профиль опубликован'})
 Object.assign(extra.en,{publicLoad:'Check publication status',publicExplain:'Only the name and biography entered below are published. Email, private avatar, cover and builds remain private. Anyone can view the card; unpublishing cannot remove copies already made.',publicName:'Public name',publicBio:'Public biography',publishCard:'Publish profile',updateCard:'Update publication',unpublishCard:'Unpublish',publicConfirm:'I agree to make these details public.',visitCard:'Open public profile',visitCommunity:'Builder directory',notPublished:'Profile not published',isPublished:'Profile published'})
+Object.assign(extra.ru,{publishBuilds:'Витрина сборок',publishBuild:'Опубликовать текущую ревизию',updateBuild:'Обновить опубликованную ревизию',unpublishBuild:'Снять публикацию сборки',publishedRevision:'Опубликована версия',privateRevision:'Приватная версия',publicationDescription:'Описание публикации',publishConsent:'Я разрешаю всем посетителям скачивать полный файл этой ревизии. Проверил содержимое и права на публикацию.',publicationHint:'Публикуется полный файл выбранной ревизии, включая данные модели. Новые сохранения остаются приватными. Снятие публикации профиля удаляет все его публикации. Уже скачанные копии отозвать нельзя.',viewPublication:'Открыть публикацию',profileRequired:'Сначала опубликуй публичный профиль.'})
+Object.assign(extra.en,{publishBuilds:'Published builds',publishBuild:'Publish current revision',updateBuild:'Update published revision',unpublishBuild:'Unpublish build',publishedRevision:'Published revision',privateRevision:'Private revision',publicationDescription:'Publication description',publishConsent:'I allow anyone to download the complete file of this revision. I reviewed its contents and publication rights.',publicationHint:'The complete selected revision is published, including model data. New saves remain private. Unpublishing the profile removes its publications. Existing downloads cannot be revoked.',viewPublication:'Open publication',profileRequired:'Publish your public profile first.'})
 function el(tag,cls,value){const n=document.createElement(tag);if(cls)n.className=cls;if(value!==undefined)n.textContent=String(value);return n}
 function icon(id){const s=document.createElementNS('http://www.w3.org/2000/svg','svg'),u=document.createElementNS(s.namespaceURI,'use');s.setAttribute('class','icon');s.setAttribute('aria-hidden','true');u.setAttribute('href','#'+id);s.append(u);return s}
 function button(label,fn,disabled=false){const b=el('button','workspace-action',label);b.type='button';b.disabled=disabled;b.onclick=fn;return b}
@@ -24,7 +26,7 @@ function metrics(items){const g=el('div','workshop-metric-grid');for(const [k,v]
 export function workshopSummary(local,remote){
  return {local:local.length,cloud:remote.length,revisions:remote.reduce((n,p)=>n+(Number.isSafeInteger(p.revision)&&p.revision>0?p.revision:0),0)}
 }
-export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,cloudPanel,passport,selectPassport,loadPassport,profileData,saveProfile,uploadMedia,removeMedia,activityData,publicCard,publicLoaded,loadPublic,publishPublic,unpublishPublic,refreshActivity,readActivity,toggleFavorite,openFavorite}){
+export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,cloudPanel,passport,selectPassport,loadPassport,profileData,saveProfile,uploadMedia,removeMedia,activityData,publicCard,publicLoaded,publicBuilds=[],loadPublic,publishPublic,unpublishPublic,publishBuild,unpublishBuild,refreshActivity,readActivity,toggleFavorite,openFavorite}){
  const t={...workshopCopy[lang],...extra[lang]},summary=workshopSummary(local,remote)
  const profile=profileData?.profile,progress=profileData?.progress,rank=progress?rankFor(progress.xp):null
  const layout=el('div','workshop-layout cosmetic-'+(profile?.background??'default')),nav=el('nav','workshop-nav'),content=el('div','workshop-content')
@@ -134,10 +136,29 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,clou
    l1.append(el('span',null,t.publicName),name);l2.append(el('span',null,t.publicBio),bio);l3.append(consent,el('span',null,t.publicConfirm))
    const submit=el('button','workspace-action primary',publicCard?t.updateCard:t.publishCard);submit.type='submit';submit.disabled=busy
    form.append(l1,l2,l3,submit);form.onsubmit=e=>{e.preventDefault();if(!busy&&consent.checked)publishPublic({displayName:name.value,bio:bio.value})};c.append(form)
-   if(publicCard){const link=el('a','workspace-action',t.visitCard);link.href='/community/profile/'+publicCard.id;link.target='_blank';link.rel='noopener noreferrer';c.append(link,button(t.unpublishCard,unpublishPublic,busy))}
+   if(publicCard){const link=el('a','workspace-action',t.visitCard);link.href='/community/profile/'+publicCard.id;link.target='_blank';link.rel='noopener noreferrer';c.append(link,button(t.unpublishCard,()=>{if(!publicBuilds.length||confirm(t.publicationHint))unpublishPublic()},busy))}
    const directory=el('a','workspace-action',t.visitCommunity);directory.href='/community';directory.target='_blank';directory.rel='noopener noreferrer';c.append(directory)
   }
   content.append(c)
+  if(publicLoaded){
+    const builds=card(t.publishBuilds);builds.append(el('p','account-muted',t.publicationHint))
+    if(!publicCard)builds.append(el('p','account-muted',t.profileRequired))
+    else{
+      if(!remote.length)builds.append(el('p','account-muted',t.noBuilds))
+      for(const project of remote){
+        const old=publicBuilds.find(b=>b.projectId===project.id),row=card(project.name)
+        row.append(el('p','account-muted',t.privateRevision+': '+project.revision+(old?' · '+t.publishedRevision+': '+old.revision:'')))
+        const form=el('form','workshop-form'),description=el('textarea'),label=el('label','account-field'),consent=el('input'),check=el('label','workshop-check')
+        description.maxLength=1000;description.value=old?.description??'';description.disabled=busy;label.append(el('span',null,t.publicationDescription),description)
+        consent.type='checkbox';consent.required=true;consent.disabled=busy;check.append(consent,el('span',null,t.publishConsent))
+        const submit=el('button','workspace-action primary',old?t.updateBuild:t.publishBuild);submit.type='submit';submit.disabled=busy
+        form.append(label,check,submit);form.onsubmit=e=>{e.preventDefault();if(!busy&&consent.checked)publishBuild(project.id,{revision:project.revision,description:description.value,consent:true})};row.append(form)
+        if(old){const link=el('a','workspace-action',t.viewPublication);link.href='/community/build/'+old.id;link.target='_blank';link.rel='noopener noreferrer';row.append(link,button(t.unpublishBuild,()=>unpublishBuild(project.id),busy))}
+        builds.append(row)
+      }
+    }
+    content.append(builds)
+  }
  }else if(section==='security'){
   const c=card(t.security);c.append(el('p',null,t.email+': '+user.email),el('p','account-muted',t.securityText),el('p','account-muted',t.privateOnly));content.append(c)
  }else{const c=card(t[section]);c.append(el('p','account-muted',t.pending));content.append(c)}
