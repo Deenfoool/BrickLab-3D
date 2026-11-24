@@ -1,5 +1,6 @@
 import { randomBytes, scrypt, timingSafeEqual, createHash } from 'node:crypto'
 import { promisify } from 'node:util'
+import { isIP, SocketAddress } from 'node:net'
 
 const derive = promisify(scrypt)
 const params = { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }
@@ -57,7 +58,37 @@ function credentials(data, registering) {
   }
   return { email, password, displayName }
 }
-export function createAuthHandler({ store, origin, registrationEnabled = false, logger = console }) {
+// Forwarded headers are only accepted from an explicitly trusted transport peer.
+function normalizeIp(value) {
+  if (typeof value !== 'string' || !isIP(value) || value.includes('%')) return null
+  if (isIP(value) === 4) return value
+  const canonical = new SocketAddress({ address: value, family: 'ipv6' }).address
+  const mapped = /^::ffff:([\da-f]+):([\da-f]+)$/i.exec(canonical)
+  if (mapped) {
+    const hi = parseInt(mapped[1], 16), lo = parseInt(mapped[2], 16)
+    return [hi >> 8, hi & 255, lo >> 8, lo & 255].join('.')
+  }
+  return canonical.startsWith('::ffff:') && isIP(canonical.slice(7)) === 4
+    ? canonical.slice(7) : canonical
+}
+
+export function createClientIpResolver(trustedProxyIp = '') {
+  const trusted = normalizeIp(trustedProxyIp)
+  if (trustedProxyIp && !trusted) throw Error('BRICKLAB_TRUSTED_PROXY_IP must be a single IP address')
+  return req => {
+    const peer = normalizeIp(req.socket.remoteAddress)
+    if (trusted && peer === trusted) {
+      // Nginx must overwrite this header; reject lists, duplicate values and malformed IPs.
+      const header = req.headersDistinct?.['x-real-ip']
+      const forwarded = header ? (header.length === 1 ? header[0] : null) : req.headers['x-real-ip']
+      return normalizeIp(forwarded) || peer
+    }
+    return peer || 'unknown'
+  }
+}
+
+export function createAuthHandler({ store, origin, registrationEnabled = false, logger = console, trustedProxyIp = '' }) {
+  const clientIp = createClientIpResolver(trustedProxyIp)
   const url = new URL(origin)
   if (url.origin !== origin || (url.protocol !== 'https:' &&
       !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)))) {
@@ -112,8 +143,8 @@ export function createAuthHandler({ store, origin, registrationEnabled = false, 
       } else {
         const register = path.endsWith('/register')
         if (register && !registrationEnabled) { reply(res, 403, { error: 'registration_disabled' }); return true }
-        // Do not trust forwarded IP headers from the public Internet.
-        if (!throttle('ip:' + req.socket.remoteAddress, 60, 60_000)) throw new InputError(429, 'too_many_attempts')
+        // Only a configured reverse proxy may supply the original IP.
+        if (!throttle('ip:' + clientIp(req), 60, 60_000)) throw new InputError(429, 'too_many_attempts')
         const input = credentials(await readJson(req), register)
         if (!throttle('account:' + input.email, 10, 15 * 60_000) || active >= 4) throw new InputError(429, 'too_many_attempts')
         active++
