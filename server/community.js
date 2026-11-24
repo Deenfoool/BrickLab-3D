@@ -6,12 +6,20 @@ export function validatePublicCard(value){
  if(!value||!clean(value.displayName,80)||!value.displayName.trim()||!clean(value.bio,500))throw new ProjectError(400,'invalid_public_profile')
  return {displayName:value.displayName.trim(),bio:value.bio.trim()}
 }
+export const buildCategories=['vehicles','mechanisms','architecture','robots','other']
+export function galleryQuery(url){
+ const p=new URL(url,'http://localhost').searchParams
+ const q=(p.get('q')??'').trim(),category=p.get('category')??'',sort=p.get('sort')??'recent',raw=p.get('offset')??'0',author=p.get('author')??null
+ if(q.length>100||/[\u0000-\u001f\u007f]/.test(q)||(category&&!buildCategories.includes(category))||!['recent','oldest','name','parts'].includes(sort)||!/^\d{1,5}$/.test(raw)||Number(raw)>10000||(author!==null&&!uuid.test(author)))throw new ProjectError(400,'invalid_gallery_query')
+ return {author,q,category,sort,offset:Number(raw),limit:25}
+}
 export function validatePublication(value){
  if(!value||!Number.isSafeInteger(value.revision)||value.revision<1||value.revision>2147483647||typeof value.description!=='string'||value.description.length>1000||/[\u0000-\u0008\u000b-\u001f\u007f]/.test(value.description)||/[\ud800-\udfff]/u.test(value.description)||value.consent!==true)throw new ProjectError(400,'invalid_publication')
- return {revision:value.revision,description:value.description.trim()}
+ if(value.category!==undefined&&!buildCategories.includes(value.category))throw new ProjectError(400,'invalid_publication')
+ return {revision:value.revision,description:value.description.trim(),...(value.category===undefined?{}:{category:value.category})}
 }
 export function publicBuild(row){
- return row?{id:row.id,authorId:row.authorId,author:row.author,title:row.title,description:row.description,revision:row.revision,publishedAt:row.publishedAt}:null
+ return row?{id:row.id,authorId:row.authorId,author:row.author,title:row.title,description:row.description,revision:row.revision,category:row.category??'other',partCount:row.partCount??0,publishedAt:row.publishedAt}:null
 }
 export function publicCard(row){
  return row?{id:row.id,displayName:row.displayName,bio:row.bio,updatedAt:row.updatedAt}:null
@@ -20,7 +28,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 export function communityPage(cards,detail=false,builds=[]){
  const models=builds.map(b=>'<article><h2><a href="/community/build/'+esc(b.id)+'">'+esc(b.title)+'</a></h2><p>'+esc(b.description)+'</p><p>Автор / Author: <a href="/community/profile/'+esc(b.authorId)+'">'+esc(b.author)+'</a> · v'+esc(b.revision)+'</p><a href="/community/build/'+esc(b.id)+'/download" download>Скачать / Download .bricklab</a></article>').join('')
  const list=cards.map(c=>'<article><h2>'+ (detail?esc(c.displayName):'<a href="/community/profile/'+esc(c.id)+'">'+esc(c.displayName)+'</a>')+'</h2><p>'+esc(c.bio)+'</p></article>').join('')
- return '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BrickLab Community</title><style>body{font:16px/1.6 system-ui,sans-serif;color:#eee;background:#191b1e;margin:0}main{max-width:880px;padding:28px;margin:auto}nav{display:flex;gap:18px;flex-wrap:wrap}a{color:#ffc56b}article{background:#24262c;border:1px solid #444851;padding:20px;margin:12px 0;border-radius:12px;overflow-wrap:anywhere}p{white-space:pre-wrap}h2{margin:0}</style><main><nav><a href="/">BrickLab 3D</a><a href="/community">Сообщество / Community</a></nav><h1>'+(detail?'Профиль конструктора / Builder profile':'BrickLab Community')+'</h1>'+ (list||'<p>Пока нет опубликованных профилей / No published profiles yet.</p>')+'<h2>Сборки / Builds</h2>'+ (models||'<p>Нет опубликованных сборок / No published builds.</p>')+'</main></html>'
+ return '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BrickLab Community</title><style>body{font:16px/1.6 system-ui,sans-serif;color:#eee;background:#191b1e;margin:0}main{max-width:880px;padding:28px;margin:auto}nav{display:flex;gap:18px;flex-wrap:wrap}a{color:#ffc56b}article{background:#24262c;border:1px solid #444851;padding:20px;margin:12px 0;border-radius:12px;overflow-wrap:anywhere}p{white-space:pre-wrap}h2{margin:0}</style><main><nav><a href="/">BrickLab 3D</a><a href="/community">Сообщество / Community</a></nav><h1>'+(detail?'Профиль конструктора / Builder profile':'BrickLab Community')+'</h1>'+ (list||(builds.length?'':'<p>Пока нет опубликованных профилей / No published profiles yet.</p>'))+'<h2>Сборки / Builds</h2>'+ (models||'<p>Нет опубликованных сборок / No published builds.</p>')+'</main></html>'
 }
 export function createCommunityHandler({store,origin,enabled=false,logger=console}){
  const cookieName=new URL(origin).protocol==='https:'?'__Host-bricklab_session':'bricklab_session'
@@ -72,19 +80,19 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
     if(build&&uuid.test(build[2])){
      if(build[3]){const p=await store.getPublicBuild(build[2],true);if(!p)throw new ProjectError(404,'not_found');res.setHeader('Content-Disposition','attachment; filename="bricklab-'+build[2]+'.bricklab"');reply(res,200,JSON.stringify(p.document),'application/octet-stream');return true}
      const p=publicBuild(await store.getPublicBuild(build[2]));if(!p)throw new ProjectError(404,'not_found')
-     if(build[1])reply(res,200,{build:p});else reply(res,200,communityPage([],false,[p]),'text/html; charset=utf-8');return true
+     if(build[1])reply(res,200,{build:p});else {res.writeHead(302,{'Location':'/#community/build/'+p.id,'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}return true
     }
-    if(path==='/api/community/builds'){reply(res,200,{builds:(await store.listPublicBuilds()).map(publicBuild)});return true}
+    if(path==='/api/community/builds'){const {author,...options}=galleryQuery(req.url);const rows=await store.listPublicBuilds(author,options);reply(res,200,{builds:rows.slice(0,24).map(publicBuild),nextOffset:rows.length>24?options.offset+24:null});return true}
     const m=/^\/(api\/)?community\/profile\/([^/]+)$/.exec(path)
     if(m&&uuid.test(m[2])){
      const card=publicCard(await store.getPublicCard(m[2]))
      if(!card)throw new ProjectError(404,'not_found')
      if(m[1])reply(res,200,{profile:card})
-     else reply(res,200,communityPage([card],true,store.listPublicBuilds?(await store.listPublicBuilds(card.id)).map(publicBuild):[]),'text/html; charset=utf-8')
+     else {res.writeHead(302,{'Location':'/#community/profile/'+card.id,'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}
     }else if(path==='/community'||path==='/api/community'){
      const cards=(await store.listPublicCards()).map(publicCard)
      if(path.startsWith('/api/'))reply(res,200,{profiles:cards})
-     else reply(res,200,communityPage(cards,false,store.listPublicBuilds?(await store.listPublicBuilds()).map(publicBuild):[]),'text/html; charset=utf-8')
+     else {res.writeHead(302,{'Location':'/#community','Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}
     }else throw new ProjectError(404,'not_found')
    }finally{active--}
   }catch(e){if(e instanceof ProjectError)reply(res,e.status,{error:e.message});else{logger.error('Community operation failed:',e.code||e.name);reply(res,503,{error:'community_unavailable'})}}

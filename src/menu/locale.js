@@ -1,5 +1,6 @@
 export const locales = {
   ru: {
+    community:'Сообщество',
     account: 'BrickLab Workshop', cloudPreview: 'Личный кабинет — облако',
     bugReport: 'Сообщить о баге',
     sets: 'Сборка по инструкции',
@@ -67,6 +68,7 @@ export const locales = {
     saved: 'Сборка сохранена.', partCount: count => `Деталей в сборке: ${count}`,
   },
   en: {
+    community:'Community',
     account: 'BrickLab Workshop', cloudPreview: 'Cloud account',
     bugReport: 'Report a bug',
     sets: 'Build with instructions',

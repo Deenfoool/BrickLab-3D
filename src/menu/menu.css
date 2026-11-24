@@ -372,3 +372,20 @@ dialog p,.setting{margin:18px 0}
 .notification-footer:hover{background:#38332b}.notification-footer .icon{width:16px;height:16px;transform:rotate(-90deg)}
 @media(max-height:820px) and (min-width:621px){.sidebar-bottom{margin-bottom:16px}.navigation{margin-top:clamp(24px,8vh,65px)}}
 @media(max-width:620px){.sidebar{overflow:visible}.sidebar-external{padding:3px 0 0;gap:2px;justify-content:flex-end}.sidebar-external-link{width:30px;height:30px}.sidebar-external-link .icon{width:16px;height:16px}}
+
+/* Community shares the workspace shell and palette. */
+.community-panel{display:grid;gap:16px;max-width:1400px;margin:auto}.community-panel>h2{font-size:22px}
+.community-heading,.community-actions,.community-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.community-heading{justify-content:space-between}
+.community-actions [aria-pressed=true]{background:#3a3020;border-color:#a57d3a;color:var(--gold)}
+.community-filters{display:grid;grid-template-columns:minmax(130px,2fr) minmax(130px,1fr) minmax(130px,1fr) auto;gap:10px}
+.community-filters input,.community-filters select{min-width:0;width:100%;padding:10px;border:1px solid #50545b;background:#22252b;border-radius:8px}
+.community-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:16px}
+.community-card{min-width:0;overflow:hidden;border:1px solid #444750;border-radius:12px;background:#222429;display:grid;align-content:start}
+.community-art{display:grid;place-items:center;align-content:center;gap:8px;aspect-ratio:12/7;background:radial-gradient(#414854,#23272d 75%);min-width:0;overflow:hidden;padding:10px}
+.community-art.large{max-height:480px;aspect-ratio:12/6}.community-art>.icon{width:40px;height:40px;color:#9199a7}.community-art img{width:100%;height:100%;object-fit:contain}.community-preview-button{font-size:12px;min-height:30px}
+.community-card-body{padding:14px;display:grid;gap:10px;min-width:0}.community-title{font-size:18px;font-weight:700;overflow-wrap:anywhere}.community-title:hover,.community-author:hover{color:var(--gold)}
+.community-meta{font-size:12px;color:var(--muted);gap:6px}.community-meta span{padding:3px 6px;border-radius:5px;background:#30333b}.community-author{color:var(--gold)}
+.community-description{white-space:pre-wrap;overflow-wrap:anywhere;color:#c0c3cb;font-size:13px}.community-grid .community-description{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.community-card .workspace-action{font-size:12px;min-height:36px}.community-detail h2{font-size:26px}.community-detail .community-card-body{padding:20px}.community-builder{display:flex;align-items:flex-start;padding:14px;gap:10px}.community-builder .community-card-body{padding:0;flex:1}
+@media(max-width:850px){.community-filters{grid-template-columns:1fr 1fr}.community-filters input{grid-column:1/-1}}
+@media(max-height:920px) and (min-width:621px){.navigation{margin-top:clamp(20px,7vh,60px)}}

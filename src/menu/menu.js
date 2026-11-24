@@ -2,9 +2,9 @@ import { sessionDiagnostics } from '../feedback/diagnostics.js?v=bug-report-v1'
 import { mountBugReport } from '../feedback/dialog.js?v=bug-report-v1'
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
-import { locales } from './locale.js?v=community-builds-1'
-import { createCloudAccount } from './account.js?v=community-builds-1'
-import { createNotificationPopover } from './notifications.js?v=community-builds-1'
+import { locales } from './locale.js?v=gallery-1'
+import { createCloudAccount } from './account.js?v=gallery-1'
+import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
 import { revealMenu, showEditorLoading, startStartup } from './startup.js?v=bold-brand'
@@ -20,7 +20,7 @@ const status = byId('status')
 const removeDialog = byId('remove-dialog')
 const settingsDialog = byId('settings-dialog')
 const tutorialPicker = byId('tutorial-picker')
-const pages = ['home', 'projects', 'examples', 'library', 'sets', 'account']
+const pages = ['home', 'projects', 'examples', 'library', 'sets', 'account', 'community']
 let projects = readProjects()
 let storageWarning = false
 let activeMenu = null
@@ -36,6 +36,7 @@ const libraryRetry = byId('library-retry')
 const libraryControls = libraryRoot.querySelector('[data-library-controls]')
 const libraryScroll = libraryRoot.querySelector('[data-library-scroll]')
 const librarySearch = libraryControls.querySelector('input')
+let communitySession
 let setSession
 let editorSession
 let librarySession
@@ -407,6 +408,7 @@ function renderHome(visible) {
 
 function currentPage() {
   const hash = location.hash.slice(1)
+  if (hash.startsWith('community/')) return 'community'
   if (hash.startsWith('project/')) return 'project'
   return pages.includes(hash) ? hash : 'home'
 }
@@ -461,6 +463,9 @@ function render(initial = false) {
   byId('sets-panel').hidden = page !== 'sets'
   byId('account-panel').hidden = page !== 'account'
   cloudAccount.update(language, page === 'account')
+  byId('community-panel').hidden=page!=='community'
+  if(page==='community')openCommunity()
+  else closeCommunity()
   if (page === 'sets') openSets()
   else closeSets()
   byId('page-title').hidden = home
@@ -475,6 +480,16 @@ function render(initial = false) {
   return editorReady
 }
 
+function closeCommunity(){communitySession?.controller.abort();communitySession=null;byId('community-panel').replaceChildren()}
+async function openCommunity(){
+ const route=location.hash.slice(1),key=language+':'+route
+ if(communitySession?.key===key)return
+ closeCommunity()
+ const controller=new AbortController();communitySession={key,controller}
+ const root=byId('community-panel');root.textContent=strings().loadingLibrary
+ try{const {mountCommunity}=await import('./community-gallery.js?v=gallery-1');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
+ catch(e){if(!controller.signal.aborted)root.textContent=language==='ru'?'Не удалось открыть сообщество.':'Could not open community.'}
+}
 function closeSets() {
   setSession?.controller.abort()
   setSession = null
