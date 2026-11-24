@@ -91,6 +91,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
  async function saveLocal(record,forceNew=false){
    const link=cloudLink(record,user.id)
    const saved=link&&!forceNew?await cloud.save(link.id,link.revision,record.document):await cloud.create(record.document)
+   if(record.cloud?.kind==='bureau'){feedback='saved';remote=await cloud.list();profileData=await profiles.get();activityData=await activityApi.get();return}
    feedback=linkLocal(record.id,{ownerId:user.id,id:saved.id,revision:saved.revision},record.cloud)?'saved':'localLinkFailed'
    remote=await cloud.list();profileData=await profiles.get();activityData=await activityApi.get()
    if(historyId===saved.id)history=await cloud.revisions(saved.id)
@@ -104,8 +105,9 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
      const row=node('div','account-card'),linked=cloudLink(r,user.id)
      row.append(node('strong',null,r.document.name))
      if(linked)row.append(node('small','account-muted',s.linked+' '+linked.revision))
+     else if(r.cloud?.kind==='bureau')row.append(node('small','account-muted',lang==='ru'?'Связано с бюро · версия '+r.cloud.revision:'Bureau link · revision '+r.cloud.revision))
      else if(r.cloud)row.append(node('small','account-muted',s.otherAccount))
-     row.append(control(linked?s.saveRevision:s.upload,()=>saveLocal(r),true))
+     row.append(control(linked?s.saveRevision:r.cloud?.kind==='bureau'?s.copyCloud:s.upload,()=>saveLocal(r),true))
      if(linked)row.append(control(s.copyCloud,()=>saveLocal(r,true)))
      local.append(row)
    }

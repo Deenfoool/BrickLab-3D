@@ -24,7 +24,7 @@ export function renderBureauPanel({lang,user,signal,getProjects,openCopy,linkLoc
   polling=true;const id=detail.id
   try{
    const {bureau}=await call('/'+id)
-   if(signal.aborted||detail?.id!==id)return
+   if(signal.aborted||busy||detail?.id!==id)return
    if(bureau.role!==detail.role||bureau.projects.length!==detail.projects.length||bureau.projects.some(p=>!watchers.has(p.id))){notice.textContent=t.refresh;return}
    for(const p of bureau.projects){const update=watchers.get(p.id);if(update)update(p.revision)}
   }catch(e){if(!signal.aborted)notice.textContent=t.syncError}
