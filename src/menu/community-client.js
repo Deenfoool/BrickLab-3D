@@ -8,5 +8,5 @@ export function createCommunityClient({fetcher=globalThis.fetch,location=globalT
   if(d?.profile!==null&&(!/^[0-9a-f-]{36}$/i.test(d?.profile?.id)||typeof d.profile.displayName!=='string'||typeof d.profile.bio!=='string'))throw new AuthError('community_unavailable')
   return d.profile
  }
- return {get:()=>call(),publish:({displayName,bio,showAvatar,showCover,showBackground})=>call('PUT',{displayName,bio,showAvatar,showCover,showBackground}),unpublish:()=>call('DELETE'),builds:()=>call('GET',undefined,'/me/builds'),publishBuild:(id,{revision,description,consent,category})=>call('PUT',{revision,description,consent,category},'/me/builds/'+encodeURIComponent(id)),unpublishBuild:id=>call('DELETE',undefined,'/me/builds/'+encodeURIComponent(id))}
+ return {get:()=>call(),publish:({displayName,bio,showAvatar,showCover,showBackground})=>call('PUT',{displayName,bio,showAvatar,showCover,showBackground}),unpublish:()=>call('DELETE'),builds:()=>call('GET',undefined,'/me/builds'),publishBuild:(id,data)=>call('PUT',data,'/me/builds/'+encodeURIComponent(id)),unpublishBuild:id=>call('DELETE',undefined,'/me/builds/'+encodeURIComponent(id))}
 }
