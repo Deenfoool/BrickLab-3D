@@ -111,15 +111,6 @@ export function createAccountPreview({ root, link: accountLink, getProjects, dow
     form.addEventListener('submit',event=>{event.preventDefault(); state.signIn(); tab=selected?'cloud':'workshop'; render()})
     panel.append(hero,form); root.append(notice(),panel)
   }
-  function renderProfile() {
-    const s = t(), card=node('div','account-card account-profile')
-    const avatar=node('div','account-avatar','DB')
-    card.append(avatar,node('h2',null,state.profile.displayName),node('p','account-muted',state.profile.email))
-    for (const [label,value] of [[s.storage,s.storageHint],[s.security,s.securityHint]]) {
-      const row=node('div','account-profile-row');row.append(node('strong',null,label),node('p','account-muted',value));card.append(row)
-    }
-    root.append(card)
-  }
   function renderCloud(target) {
     const s=t(), local=getProjects()
     const byId=new Map(local.map(p=>[p.id,p]))
@@ -145,7 +136,7 @@ export function createAccountPreview({ root, link: accountLink, getProjects, dow
       const record=byId.get(selected), p=state.get(selected), doc=record?.document??state.document(selected,p?.revisions.at(-1)?.revision)
       const card=node('div','account-card')
       const head=node('div','account-detail-head')
-      const title=node('div');title.append(node('p','account-eyebrow',p?s.snapshot:s.localOnly),node('h2',null,doc?.name??s.choose))
+      const title=node('div');title.append(node('p','account-eyebrow',p&&!p.trashed?s.snapshot:s.localOnly),node('h2',null,doc?.name??s.choose))
       const save=action(s.save,()=>{status=state.save(record);if(status==='saved')workshop.addEvent('savedEvent',record.document.name);render()},true);save.disabled=!record||p?.role==='viewer'||Boolean(p?.trashed)
       head.append(title,save);card.append(head)
       const sync=p?.trashed?'syncMissing':!p?'syncLocal':!record?'syncMissing':p.revisions.at(-1).serialized===JSON.stringify(record.document)?'syncSaved':'syncChanged'
@@ -154,7 +145,7 @@ export function createAccountPreview({ root, link: accountLink, getProjects, dow
       else if(p?.role==='owner')card.append(action(workshop.label('trashAction'),()=>{state.moveToTrash(selected);status='';render()}))
       if(!record)card.append(node('p','account-muted',s.noLocal))
       const stats=node('div','account-stats')
-      for(const [label,val] of [[s.parts,doc?.parts?.length??0],[s.versions,p?.revisions.length??0],[s.latest,p?date(p.revisions.at(-1).savedAt):'—']]){
+      for(const [label,val] of [[s.parts,doc?.parts?.length??0],[s.versions,p?.revisions.length??0],[s.latest,p&&!p.trashed?date(p.revisions.at(-1).savedAt):'—']]){
         const item=node('div');item.append(node('small',null,label),node('strong',null,String(val)));stats.append(item)
       }
       card.append(stats)
