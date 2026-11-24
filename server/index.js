@@ -21,7 +21,8 @@ if (process.env.PGPASSWORD) {
     const origin=process.env.PUBLIC_ORIGIN||'http://localhost:8080',registrationEnabled=process.env.BRICKLAB_REGISTRATION_ENABLED==='true'
     security=createAccountSecurityHandler({store,origin,registrationEnabled,mail:createMailer()})
     auth = createAuthHandler({ store, origin: process.env.PUBLIC_ORIGIN || 'http://localhost:8080',
-      registrationEnabled: registrationEnabled && new URL(origin).protocol==='http:' })
+      registrationEnabled: registrationEnabled && new URL(origin).protocol==='http:',
+      trustedProxyIp: process.env.BRICKLAB_TRUSTED_PROXY_IP || '' })
     projects = createProjectsHandler({ store, origin: process.env.PUBLIC_ORIGIN || 'http://localhost:8080' })
     profile = createProfileHandler({store,origin:process.env.PUBLIC_ORIGIN || 'http://localhost:8080'})
     activity = createActivityHandler({store,origin:process.env.PUBLIC_ORIGIN || 'http://localhost:8080'})
