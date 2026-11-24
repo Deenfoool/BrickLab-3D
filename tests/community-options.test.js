@@ -15,7 +15,8 @@ test('explicit options validate permissions, attribution, tags and image limits'
 test('geometry-only projection excludes original identifiers, connections, instructions and private fields',()=>{
  const p=publicPreview(doc)
  assert.equal(p.parts[0].id,'preview-0');assert.equal(p.parts[0].extra,undefined);assert.equal(p.privateNote,undefined);assert.equal(p.buildingSet,undefined);assert.deepEqual(p.connections,[])
- assert.equal(publicPreview({...doc,parts:Array(601).fill(doc.parts[0])}),null)
+ assert.equal(publicPreview({...doc,parts:Array(601).fill(doc.parts[0])}).parts.length,601)
+ assert.equal(publicPreview({...doc,parts:Array(20001).fill(doc.parts[0])}),null)
 })
 test('protected originals, public preview, social actions and image reads use separate routes',async t=>{
  let allowDownload=false;const actions=[],reports=[],events=[],feeds=[]
