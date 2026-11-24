@@ -49,3 +49,6 @@ ALTER POLICY comments_insert ON bricklab.community_comments WITH CHECK(
  body IS NOT NULL AND EXISTS(SELECT 1 FROM bricklab.public_profiles p WHERE p.public_id=community_comments.author_id AND p.user_id=nullif(current_setting('bricklab.user_id',true),'')::uuid)
  AND EXISTS(SELECT 1 FROM bricklab.public_builds b WHERE b.public_id=community_comments.build_id AND b.allow_comments)
 );
+
+ALTER TABLE bricklab.admin_audit DROP CONSTRAINT admin_audit_action_check;
+ALTER TABLE bricklab.admin_audit ADD CONSTRAINT admin_audit_action_check CHECK(action IN ('block','unblock','revoke_sessions','hide_comment','dismiss_reports','unpublish_build','unpublish_profile','dismiss_build_reports'));
