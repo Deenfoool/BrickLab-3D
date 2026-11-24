@@ -4,7 +4,7 @@ import { createAuthClient } from './auth-client.js?v=security-1'
 
 import { createProjectsClient, cloudLink } from './projects-client.js?v=bureau-1'
 
-import { renderCloudWorkshop } from './cloud-workshop.js?v=security-1'
+import { renderCloudWorkshop } from './cloud-workshop.js?v=no-passport-1'
 
 import {createProfileClient} from './profile-client.js?v=notifications-1'
 
@@ -40,7 +40,7 @@ function field(label,type,autocomplete,maxLength){
  const wrap=node('label','account-field'),input=node('input');input.type=type;input.autocomplete=autocomplete;input.required=true;input.maxLength=maxLength;wrap.append(node('span',null,label),input);return {wrap,input}
 }
 export function createCloudAccount({root,link,getProjects,download,openCopy,linkLocal,onNotifications=()=>{},api=createAuthClient(),cloud=createProjectsClient(),profiles=createProfileClient(),activityApi=createActivityClient(),communityApi=createCommunityClient()}){
- let lang='ru',visible=false,mode='login',user=null,checked=false,busy=false,error='',selected=null,remote=[],historyId=null,history=[],feedback='',section='workshop',profileData=null,activityData=null,publicCard=null,publicLoaded=false,publicBuilds=[],passport={source:'',document:null,revision:null}
+ let lang='ru',visible=false,mode='login',user=null,checked=false,busy=false,error='',selected=null,remote=[],historyId=null,history=[],feedback='',section='workshop',profileData=null,activityData=null,publicCard=null,publicLoaded=false,publicBuilds=[]
  let bureauController=null,bureauSelection={id:null},adminController=null,emailDraft='',securityFeedback=''
  let notificationError=false,bellRefreshing=false,bellRendered=false
  const t=()=>copy[lang]
@@ -51,7 +51,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
  async function run(fn){
    if(busy)return
    busy=true;error='';notificationError=false;render()
-   try{const next=await fn();if(next?.id!==user?.id){remote=[];history=[];historyId=null;feedback='';profileData=null;activityData=null;publicCard=null;publicLoaded=false;publicBuilds=[];bureauSelection={id:null};section=next&&section==='notifications'?'notifications':selected&&next?'cloud':'workshop';passport={source:'',document:null,revision:null}}user=next;checked=true;if(user){remote=await cloud.list();profileData=await profiles.get();activityData=await activityApi.get()}}
+   try{const next=await fn();if(next?.id!==user?.id){remote=[];history=[];historyId=null;feedback='';profileData=null;activityData=null;publicCard=null;publicLoaded=false;publicBuilds=[];bureauSelection={id:null};section=next&&section==='notifications'?'notifications':selected&&next?'cloud':'workshop'}user=next;checked=true;if(user){remote=await cloud.list();profileData=await profiles.get();activityData=await activityApi.get()}}
    catch(e){error=e.code??'unknown';notificationError=true}
    finally{busy=false;render()}
  }
@@ -64,7 +64,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
      const next=await api.me()
      checked=true
      if(next?.id!==user?.id){
-       user=next;identityChanged=true;remote=[];history=[];historyId=null;profileData=null;activityData=null;publicCard=null;publicLoaded=false;publicBuilds=[];bureauSelection={id:null};passport={source:'',document:null,revision:null};feedback='';error=''
+       user=next;identityChanged=true;remote=[];history=[];historyId=null;profileData=null;activityData=null;publicCard=null;publicLoaded=false;publicBuilds=[];bureauSelection={id:null};feedback='';error=''
        if(user){remote=await cloud.list();profileData=await profiles.get()}
      }
      if(user)activityData=mark&&!identityChanged?await activityApi.read():await activityApi.get()
@@ -72,7 +72,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    }catch(e){
      notificationError=true
      if(!checked)error=e.code??'auth_unavailable'
-     if(e.status===401){user=null;remote=[];history=[];historyId=null;profileData=null;activityData=null;publicCard=null;publicLoaded=false;publicBuilds=[];bureauSelection={id:null};passport={source:'',document:null,revision:null};identityChanged=true}
+     if(e.status===401){user=null;remote=[];history=[];historyId=null;profileData=null;activityData=null;publicCard=null;publicLoaded=false;publicBuilds=[];bureauSelection={id:null};identityChanged=true}
    }finally{
      busy=false;bellRefreshing=false
      if(identityChanged||visible&&(bellRendered||section==='notifications'||!user&&!checked))render()
@@ -87,7 +87,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    if(busy||!user)return
    busy=true;error='';feedback='';notificationError=false;render()
    try{await fn()}
-   catch(e){error=e.code??'unknown';if(e.status===401){user=null;remote=[];history=[];historyId=null;profileData=null;activityData=null;publicCard=null;publicLoaded=false;publicBuilds=[];bureauSelection={id:null};passport={source:'',document:null,revision:null}}}
+   catch(e){error=e.code??'unknown';if(e.status===401){user=null;remote=[];history=[];historyId=null;profileData=null;activityData=null;publicCard=null;publicLoaded=false;publicBuilds=[];bureauSelection={id:null}}}
    finally{busy=false;render()}
  }
  function control(label,fn,primary=false){const b=action(label,()=>operate(fn),primary);b.disabled=busy;return b}
@@ -153,9 +153,8 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
      const logout=action(s.logout,()=>run(()=>api.logout()));logout.disabled=busy;header.append(identity,logout)
      const projects=getProjects()
      if(profileData?.profile.avatarUrl){const img=node('img','profile-avatar-image');img.src=profileData.profile.avatarUrl;img.alt='';avatar.replaceChildren(img)}
-     root.append(header,renderCloudWorkshop({lang,user,local:projects,remote,section:section==='admin'&&!user.admin?'workshop':section,busy,cloudPanel,revokeOthers(){operate(async()=>{await api.revokeOthers();feedback='sessionsRevoked'})},adminPanel:()=>{adminController=new AbortController();return renderAdminPanel({lang,signal:adminController.signal})},bureauPanel:()=>{bureauController=new AbortController();return renderBureauPanel({lang,user,signal:bureauController.signal,getProjects,openCopy,linkLocal,download,selection:bureauSelection})},passport,profileData,activityData,publicCard,publicLoaded,publicBuilds,loadPublic(){operate(async()=>{publicCard=await communityApi.get();publicBuilds=await communityApi.builds();publicLoaded=true})},publishBuild(id,data){operate(async()=>{publicBuilds=await communityApi.publishBuild(id,data);feedback='publicationSaved'})},unpublishBuild(id){operate(async()=>{publicBuilds=await communityApi.unpublishBuild(id);feedback='publicationRemoved'})},publishPublic(data){operate(async()=>{publicCard=await communityApi.publish(data);publicLoaded=true;feedback='publicSaved'})},unpublishPublic(){operate(async()=>{publicCard=await communityApi.unpublish();publicBuilds=[];publicLoaded=true;feedback='publicRemoved'})},refreshActivity(){operate(async()=>{activityData=await activityApi.get()})},readActivity(){operate(async()=>{activityData=await activityApi.read()})},toggleFavorite(id,add){operate(async()=>{activityData=await activityApi.favorite(id,add)})},openFavorite(id){operate(async()=>{const item=await cloud.get(id);openCopy(item.document,{ownerId:user.id,id:item.id,revision:item.revision})})},uploadMedia(kind,file){operate(async()=>{profileData=await profiles.upload(kind,file);feedback='mediaSaved'})},removeMedia(kind){operate(async()=>{profileData=await profiles.remove(kind);feedback='mediaSaved'})},saveProfile(data){operate(async()=>{profileData=await profiles.save(data);feedback='profileSaved'})},
-       go(key){section=key;render()},selectPassport(source){passport={source,document:null,revision:null};render()},
-       loadPassport(){operate(async()=>{const item=await cloud.get(passport.source.slice(6));passport={source:passport.source,document:item.document,revision:item.revision}})}}),localLink());if(feedback)root.append(message(feedback));if(error)root.append(message(error));if(busy)root.append(message('busy'));return
+     root.append(header,renderCloudWorkshop({lang,user,local:projects,remote,section:section==='admin'&&!user.admin?'workshop':section,busy,cloudPanel,revokeOthers(){operate(async()=>{await api.revokeOthers();feedback='sessionsRevoked'})},adminPanel:()=>{adminController=new AbortController();return renderAdminPanel({lang,signal:adminController.signal})},bureauPanel:()=>{bureauController=new AbortController();return renderBureauPanel({lang,user,signal:bureauController.signal,getProjects,openCopy,linkLocal,download,selection:bureauSelection})},profileData,activityData,publicCard,publicLoaded,publicBuilds,loadPublic(){operate(async()=>{publicCard=await communityApi.get();publicBuilds=await communityApi.builds();publicLoaded=true})},publishBuild(id,data){operate(async()=>{publicBuilds=await communityApi.publishBuild(id,data);feedback='publicationSaved'})},unpublishBuild(id){operate(async()=>{publicBuilds=await communityApi.unpublishBuild(id);feedback='publicationRemoved'})},publishPublic(data){operate(async()=>{publicCard=await communityApi.publish(data);publicLoaded=true;feedback='publicSaved'})},unpublishPublic(){operate(async()=>{publicCard=await communityApi.unpublish();publicBuilds=[];publicLoaded=true;feedback='publicRemoved'})},refreshActivity(){operate(async()=>{activityData=await activityApi.get()})},readActivity(){operate(async()=>{activityData=await activityApi.read()})},toggleFavorite(id,add){operate(async()=>{activityData=await activityApi.favorite(id,add)})},openFavorite(id){operate(async()=>{const item=await cloud.get(id);openCopy(item.document,{ownerId:user.id,id:item.id,revision:item.revision})})},uploadMedia(kind,file){operate(async()=>{profileData=await profiles.upload(kind,file);feedback='mediaSaved'})},removeMedia(kind){operate(async()=>{profileData=await profiles.remove(kind);feedback='mediaSaved'})},saveProfile(data){operate(async()=>{profileData=await profiles.save(data);feedback='profileSaved'})},
+       go(key){section=key;render()}}),localLink());if(feedback)root.append(message(feedback));if(error)root.append(message(error));if(busy)root.append(message('busy'));return
    }
    const panel=node('div','account-auth'),hero=node('div','account-auth-hero'),brand=node('div','account-brand','BRICKLAB CLOUD')
    hero.append(brand,node('h2',null,s.hero),node('p',null,s.intro))

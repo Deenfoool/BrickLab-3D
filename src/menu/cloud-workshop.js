@@ -1,8 +1,8 @@
-import { modelPassport, badges, ranks, rankFor, challenges, challengeReadiness } from './workshop-model.js?v=activity-1'
+import { badges, ranks, rankFor, challenges, challengeReadiness } from './workshop-model.js?v=activity-1'
 import { workshopCopy } from './workshop-copy.js?v=activity-1'
 
-export const sections=[['workshop','icon-home'],['cloud','folder'],['passport','icon-account'],['achievements','icon-trophy'],['challenges','icon-flask'],['rankings','icon-trophy'],['publicProfile','icon-account'],['diary','book'],['bureau','icon-account'],['favorites','icon-heart'],['notifications','icon-bell'],['storage','icon-cloud'],['settings','settings'],['security','icon-shield'],['cosmetics','icon-heart']]
-const implemented=new Set(['workshop','cloud','passport','achievements','challenges','storage','settings','security','cosmetics','diary','favorites','notifications','publicProfile','bureau'])
+export const sections=[['workshop','icon-home'],['cloud','folder'],['achievements','icon-trophy'],['challenges','icon-flask'],['rankings','icon-trophy'],['publicProfile','icon-account'],['diary','book'],['bureau','icon-account'],['favorites','icon-heart'],['notifications','icon-bell'],['storage','icon-cloud'],['settings','settings'],['security','icon-shield'],['cosmetics','icon-heart']]
+const implemented=new Set(['workshop','cloud','achievements','challenges','storage','settings','security','cosmetics','diary','favorites','notifications','publicProfile','bureau'])
 const extra={
  ru:{active:'Личный аккаунт · BrickLab Cloud',pending:'Этот раздел ещё не подключён к серверу.',noAwards:'Серверный учёт наград ещё не подключён. XP и награды не начисляются по локальным данным.',catalog:'Каталог будущих достижений',rankPlan:'Планируемая лестница званий',localDoc:'Локальный документ',cloudDoc:'Облачная ревизия',chooseSource:'Источник паспорта',load:'Загрузить паспорт',latest:'Актуальная версия',privateOnly:'Все облачные сборки пока приватные.',limits:'Текущие ограничения: 20 проектов, 20 версий на проект, запрос до 2 МиБ, бюджет около 64 МиБ на аккаунт.',noBytes:'Точное использование диска пока не отображается.',identity:'Данные текущей серверной сессии. Редактирование профиля будет подключено отдельно.',securityText:'Серверная сессия хранится в HttpOnly cookie. Доступно завершение остальных сессий. Подтверждение почты и восстановление пароля требуют настроенного почтового сервиса. 2FA пока не подключена.',errors:'Ошибки ссылок',malformed:'Некорректные детали',duplicates:'Повторяющиеся ID',unavailable:'Нет данных для паспорта',actual:'Подтверждённые облачные данные',notIssued:'Начисление не подключено',manual:'Сохранение и получение сборок выполняются вручную.',sourceLocal:'Локальная',sourceCloud:'Облачная'},
  en:{active:'Personal account · BrickLab Cloud',pending:'This section is not connected to the server yet.',noAwards:'Server-issued awards are not connected yet. Local data does not award XP or badges.',catalog:'Upcoming achievement catalog',rankPlan:'Planned rank ladder',localDoc:'Local document',cloudDoc:'Cloud revision',chooseSource:'Passport source',load:'Load passport',latest:'Latest revision',privateOnly:'All cloud builds are currently private.',limits:'Current limits: 20 projects, 20 revisions per project, 2 MiB per request, approximately 64 MiB per account.',noBytes:'Exact disk usage is not available yet.',identity:'Current server session identity. Profile editing will be connected separately.',securityText:'The server session uses an HttpOnly cookie. Other sessions can be revoked. Email verification and recovery require a configured mail provider. 2FA is not connected yet.',errors:'Broken links',malformed:'Malformed parts',duplicates:'Duplicate IDs',unavailable:'No passport data',actual:'Confirmed cloud data',notIssued:'Awards not connected',manual:'Builds are saved and retrieved manually.',sourceLocal:'Local',sourceCloud:'Cloud'}
@@ -30,7 +30,7 @@ function metrics(items){const g=el('div','workshop-metric-grid');for(const [k,v]
 export function workshopSummary(local,remote){
  return {local:local.length,cloud:remote.length,revisions:remote.reduce((n,p)=>n+(Number.isSafeInteger(p.revision)&&p.revision>0?p.revision:0),0)}
 }
-export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,cloudPanel,bureauPanel,adminPanel,revokeOthers,passport,selectPassport,loadPassport,profileData,saveProfile,uploadMedia,removeMedia,activityData,publicCard,publicLoaded,publicBuilds=[],loadPublic,publishPublic,unpublishPublic,publishBuild,unpublishBuild,refreshActivity,readActivity,toggleFavorite,openFavorite}){
+export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,cloudPanel,bureauPanel,adminPanel,revokeOthers,profileData,saveProfile,uploadMedia,removeMedia,activityData,publicCard,publicLoaded,publicBuilds=[],loadPublic,publishPublic,unpublishPublic,publishBuild,unpublishBuild,refreshActivity,readActivity,toggleFavorite,openFavorite}){
  const t={...workshopCopy[lang],...extra[lang],admin:lang==='ru'?'Администрирование':'Administration',revokeOthers:lang==='ru'?'Завершить остальные сессии':'End other sessions'},summary=workshopSummary(local,remote)
  const profile=profileData?.profile,progress=profileData?.progress,rank=progress?rankFor(progress.xp):null
  const layout=el('div','workshop-layout cosmetic-'+(profile?.background??'default')),nav=el('nav','workshop-nav'),content=el('div','workshop-content')
@@ -54,29 +54,9 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,clou
   const avatar=el('div','workshop-avatar',Array.from(user.displayName).slice(0,2).join('').toUpperCase());if(profile?.avatarUrl){const img=el('img','profile-avatar-image');img.src=profile.avatarUrl;img.alt='';avatar.replaceChildren(img)}person.append(avatar,name);identity.append(person)
   hero.append(cover,identity);if(profile?.bio)hero.append(el('p','workshop-bio',profile.bio));hero.append(metrics([[t.local,summary.local],[t.cloud,summary.cloud],[t.revisions,summary.revisions],[t.xp,progress?.xp??'—'],[t.title,rank?t[rank.id]:'—']]))
   const actions=card(t.welcome),quick=el('div','workshop-shortcuts')
-  for(const key of ['cloud','passport','storage','diary','favorites','security'])quick.append(button(t[key],()=>go(key),busy))
+  for(const key of ['cloud','storage','diary','favorites','security'])quick.append(button(t[key],()=>go(key),busy))
   actions.append(el('p','account-muted',t.manual),quick)
   content.append(hero,actions)
- }else if(section==='passport'){
-  const c=card(t.buildPassport),label=el('label','account-field'),choose=el('select')
-  const blank=el('option',null,t.select);blank.value='';choose.append(blank)
-  for(const r of local){const opt=el('option',null,t.sourceLocal+' · '+r.document.name);opt.value='local:'+r.id;choose.append(opt)}
-  for(const r of remote){const opt=el('option',null,t.sourceCloud+' · '+r.name+' · '+r.revision);opt.value='cloud:'+r.id;choose.append(opt)}
-  choose.value=passport.source;choose.disabled=busy;choose.onchange=()=>selectPassport(choose.value)
-  label.append(el('span',null,t.chooseSource),choose);c.append(label)
-  if(passport.source.startsWith('cloud:'))c.append(button(t.load,loadPassport,busy))
-  const doc=passport.source.startsWith('local:')?local.find(r=>'local:'+r.id===passport.source)?.document:passport.document
-  if(doc){
-   const p=modelPassport(doc)
-   c.append(el('h2',null,doc.name),el('p','account-muted',passport.source.startsWith('cloud:')?t.cloudDoc+' '+passport.revision:t.localDoc),
-    metrics([[t.parts,p.parts],[t.connections,p.connections],[t.gearsCount,p.gears],[t.belts,p.belts]]),
-    el('p',null,t.structure+': '+(p.structure?t.valid:t.invalid)),
-    metrics([[t.errors,p.broken],[t.malformed,p.malformed],[t.duplicates,p.duplicates]]),
-    el('p',null,t.drive+': '+(p.driveConfigured?t.configured:t.notConfigured)),
-    el('p','account-muted',t.kinematics+': '+t.unverified+' · '+t.physicsTest+': '+t.unverified),
-    el('p','account-muted',t.unverifiedHint),el('p','account-notice',t.noCertificate))
-  }else c.append(el('p','account-muted',t.unavailable))
-  content.append(c)
  }else if(section==='achievements'){
   const c=card(t.achievements),grid=el('div','workshop-badges');c.append(el('p','account-muted',t.progressHint));const first=el('div','workshop-badge'+(progress?.awards.some(a=>a.award==='firstCloudSave')?' earned':''));first.append(el('strong',null,t.firstCloudSave),el('p','account-muted',t.firstCloudSaveDesc),el('small',null,progress?progress.awards.some(a=>a.award==='firstCloudSave')?t.awarded:t.locked:t.profileMissing));grid.append(first)
   for(const b of badges){const item=el('div','workshop-badge rarity-'+b.rarity),medal=el('div','workshop-medal');medal.append(icon(b.icon));item.append(medal,el('strong',null,t[b.id==='bureau'?'bureauBadge':b.id]),el('p','account-muted',t[b.id+'Desc']),el('small',null,t.notIssued));grid.append(item)}
