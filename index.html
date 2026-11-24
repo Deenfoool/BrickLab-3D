@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#181a1d">
   <title>BrickLab 3D</title>
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./src/menu/menu.css?v=discussion-1">
+  <link rel="stylesheet" href="./src/menu/menu.css?v=topbar-1">
   <link rel="stylesheet" href="./src/editor/editor.css?v=editor-feedback">
   <link rel="stylesheet" href="./src/sets/sets.css?v=brick-intros">
   <link rel="stylesheet" href="./src/menu/startup.css?v=ldraw-brand">
@@ -74,43 +74,20 @@
     <symbol id="icon-bug" viewBox="0 0 24 24"><path d="m8 3 1.5 2M16 3l-1.5 2M9 8h6a3 3 0 0 1 3 3v5a6 6 0 0 1-12 0v-5a3 3 0 0 1 3-3ZM9 8V7a3 3 0 0 1 6 0v1M12 12v9M3 9l3 2M21 9l-3 2M2 15h4M18 15h4M3 21l4-3M21 21l-4-3"/></symbol>
   </svg>
   <div class="shell">
-    <aside class="sidebar">
-      <a class="brand" href="#home"><img src="./assets/bricklab.svg" alt="" width="48" height="48"><span>BrickLab 3D</span></a>
-      <nav class="navigation" aria-label="Разделы">
-        <a href="#home" data-page="home"><svg class="icon"><use href="#icon-home"/></svg><span data-text="home">Главная</span></a>
-        <a href="#projects" data-page="projects"><svg class="icon"><use href="#folder"/></svg><span data-text="projects">Мои сборки</span></a>
-        <a href="#sets" data-page="sets"><svg class="icon"><use href="#layers"/></svg><span data-text="sets">Сборка по инструкции</span></a>
-        <a href="#examples" data-page="examples"><svg class="icon"><use href="#layers"/></svg><span data-text="examples">Примеры</span></a>
+    <main class="main">
+      <header class="topbar">
+        <a class="brand" href="#home"><img src="./assets/bricklab.svg" alt="" width="48" height="48"><span>BrickLab 3D</span></a>
+        <nav class="navigation" aria-label="Разделы">
+        <a href="#home" data-page="home"><svg class="icon" aria-hidden="true"><use href="#icon-home"/></svg><span data-text="home">Главная</span></a>
+        <a href="#projects" data-page="projects"><svg class="icon" aria-hidden="true"><use href="#folder"/></svg><span data-text="projects">Мои сборки</span></a>
+        <a href="#sets" data-page="sets"><svg class="icon" aria-hidden="true"><use href="#layers"/></svg><span data-text="sets">Сборка по инструкции</span></a>
+        <a href="#examples" data-page="examples"><svg class="icon" aria-hidden="true"><use href="#layers"/></svg><span data-text="examples">Примеры</span></a>
         <a href="#community" data-page="community"><svg class="icon" aria-hidden="true"><use href="#icon-community"/></svg><span data-text="community">Сообщество</span></a>
         <a href="#library" data-page="library"><svg class="icon" aria-hidden="true"><use href="#icon-library"/></svg><span data-text="library">Библиотека</span></a>
       </nav>
-      <div class="sidebar-bottom">
-        <button type="button" id="bug-report-button" data-link-label="bugReport" aria-label="Сообщить о баге" title="Сообщить о баге"><svg class="icon" aria-hidden="true"><use href="#icon-bug"/></svg><span data-text="bugReport">Сообщить о баге</span></button>
-        <button type="button" id="settings-button" aria-label="Настройки"><svg class="icon"><use href="#settings"/></svg><span data-text="settings">Настройки</span></button>
-        <div class="sidebar-external">
-          <a class="sidebar-external-link" href="https://github.com/Deenfoool/BrickLab-3D" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub">
-            <svg class="icon" aria-hidden="true"><use href="#icon-github"/></svg>
-          </a>
-          <a class="sidebar-external-link" href="https://deenfoool.github.io/portfolio/" target="_blank" rel="noopener" data-link-label="portfolio" aria-label="Портфолио" title="Портфолио">
-            <svg class="icon" aria-hidden="true"><use href="#icon-portfolio"/></svg>
-          </a>
-          <a class="sidebar-external-link" href="https://tips.tips/000482810" target="_blank" rel="noopener" data-link-label="donate" aria-label="Поддержать проект" title="Поддержать проект">
-            <svg class="icon" aria-hidden="true"><use href="#icon-donate"/></svg>
-          </a>
-        </div>
-      </div>
-    </aside>
-
-    <main class="main">
-      <header class="topbar">
-        <h1 id="home-title" data-text="workspace" hidden>Рабочая область</h1>
-        <div class="home-actions" id="home-actions" hidden>
-          <button class="workspace-action primary" id="create" type="button"><svg class="icon" aria-hidden="true"><use href="#plus"/></svg><span data-text="create">Новая сборка</span></button>
-          <a class="workspace-action" id="home-sets" href="#sets"><svg class="icon" aria-hidden="true"><use href="#book"/></svg><span data-text="sets">Сборка по инструкции</span></a>
-          <button class="workspace-action workspace-action-quiet" id="open" type="button"><svg class="icon" aria-hidden="true"><use href="#folder"/></svg><span data-text="open">Открыть файл</span></button>
-          <input type="file" id="import-file" accept=".bricklab,.json" hidden>
-        </div>
         <div class="topbar-tools">
+          <button type="button" class="topbar-link topbar-utility" id="bug-report-button" data-link-label="bugReport" aria-label="Сообщить о баге" title="Сообщить о баге"><svg class="icon" aria-hidden="true"><use href="#icon-bug"/></svg><span class="sr-only" data-text="bugReport">Сообщить о баге</span></button>
+          <button type="button" class="topbar-link topbar-utility" id="settings-button" data-link-label="settings" aria-label="Настройки" title="Настройки"><svg class="icon" aria-hidden="true"><use href="#settings"/></svg><span class="sr-only" data-text="settings">Настройки</span></button>
           <div id="notification-control" class="notification-control">
             <button type="button" class="topbar-link notification-trigger" id="notification-trigger" aria-label="Уведомления" aria-expanded="false" aria-controls="notification-popover">
               <svg class="icon" aria-hidden="true"><use href="#icon-bell"/></svg><span class="notification-count" id="notification-count" hidden></span>
@@ -126,6 +103,15 @@
       </header>
       <div class="content">
         <h1 id="page-title">Рабочая область</h1>
+        <div class="page-toolbar">
+          <h1 id="home-title" data-text="workspace" hidden>Рабочая область</h1>
+        <div class="home-actions" id="home-actions" hidden>
+          <button class="workspace-action primary" id="create" type="button"><svg class="icon" aria-hidden="true"><use href="#plus"/></svg><span data-text="create">Новая сборка</span></button>
+          <a class="workspace-action" id="home-sets" href="#sets"><svg class="icon" aria-hidden="true"><use href="#book"/></svg><span data-text="sets">Сборка по инструкции</span></a>
+          <button class="workspace-action workspace-action-quiet" id="open" type="button"><svg class="icon" aria-hidden="true"><use href="#folder"/></svg><span data-text="open">Открыть файл</span></button>
+          <input type="file" id="import-file" accept=".bricklab,.json" hidden>
+        </div>
+        </div>
         <section id="tutorial-offer" class="tutorial-offer" hidden aria-labelledby="tutorial-offer-title">
           <div class="tutorial-offer-icon"><svg class="icon" aria-hidden="true"><use href="#layers"/></svg></div>
           <div class="tutorial-offer-copy">
@@ -223,6 +209,19 @@
         </section>
         <p id="status" class="status" role="status" hidden></p>
       </div>
+      <footer class="shell-footer">
+        <div class="project-links">
+          <a class="project-external-link" href="https://github.com/Deenfoool/BrickLab-3D" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub">
+            <svg class="icon" aria-hidden="true"><use href="#icon-github"/></svg>
+          </a>
+          <a class="project-external-link" href="https://deenfoool.github.io/portfolio/" target="_blank" rel="noopener" data-link-label="portfolio" aria-label="Портфолио" title="Портфолио">
+            <svg class="icon" aria-hidden="true"><use href="#icon-portfolio"/></svg>
+          </a>
+          <a class="project-external-link" href="https://tips.tips/000482810" target="_blank" rel="noopener" data-link-label="donate" aria-label="Поддержать проект" title="Поддержать проект">
+            <svg class="icon" aria-hidden="true"><use href="#icon-donate"/></svg>
+          </a>
+        </div>
+      </footer>
     </main>
   </div>
   <main id="editor" class="editor" hidden></main>
