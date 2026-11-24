@@ -1,4 +1,5 @@
 import {parseProject} from '../projects/documents.js'
+import {sanitizePreview,isLargePreview,previewLimits} from './public-preview.js?v=large-viewer-1'
 import {readPreference} from './preferences.js?v=full-settings'
 const copy={
  ru:{intro:'Открывай модели других конструкторов и делись своими сборками.',models:'Сборки',builders:'Конструкторы',search:'Название, автор или описание',find:'Найти',all:'Все категории',vehicles:'Транспорт',mechanisms:'Механизмы',architecture:'Архитектура',robots:'Роботы',other:'Другое',recent:'Сначала новые',oldest:'Сначала старые',name:'По названию',parts:'По количеству деталей',partCount:'деталей',more:'Показать ещё',loading:'Загрузка…',empty:'Ничего не найдено',disabled:'Сообщество пока не открыто на этом сервере.',failed:'Не удалось загрузить данные. Попробуй обновить страницу.',missing:'Публикация недоступна или была снята.',back:'К галерее',open:'Открыть в редакторе',download:'Скачать .bricklab',author:'Автор',revision:'Ревизия',preview:'Построить 3D-миниатюру',noPreview:'Миниатюра недоступна',previewLimit:'Для большой модели доступно открытие в редакторе',opening:'Загрузка модели…',manage:'Личный кабинет',copyHint:'Будет создана независимая локальная копия.'},
@@ -14,14 +15,11 @@ Object.assign(copy.ru,{aboutModel:'О конструкции',moreByAuthor:'Др
 Object.assign(copy.en,{aboutModel:'About the build',moreByAuthor:'More by this creator',allAuthor:'All creator builds',share:'Share',copied:'Link copied',shareFailed:'Copy publication address',published:'Published',noDescription:'No description provided.',viewModel:'View model',relatedEmpty:'No other published builds yet.'})
 Object.assign(copy.ru,{bookmarks:'Избранное',bookmark:'В избранное',bookmarked:'В избранном ✓',downloadDisabled:'Автор не разрешил скачивание файла и открытие в редакторе.',commentsDisabled:'Автор отключил новые комментарии.',copyright:'Нарушение авторских прав',reportBuild:'Пожаловаться на конструкцию',reportBuildSent:'Жалоба на конструкцию отправлена.',difficulty:'Сложность',unspecified:'Не указана',easy:'Начальная',medium:'Средняя',hard:'Высокая',expert:'Экспертная',original:'Авторская модель',remix:'Модификация',instruction:'По инструкции',attribution:'Оригинал',remixAllowed:'Модификации с указанием автора разрешены',remixForbidden:'Публикация модификаций не разрешена',images:'Снимки',image:'Снимок',threeD:'3D-модель',viewOnly:'Только просмотр',bookmarkEmpty:'В избранном пока нет конструкций.'})
 Object.assign(copy.en,{bookmarks:'Favorites',bookmark:'Save',bookmarked:'Saved ✓',downloadDisabled:'The author disabled file downloads and opening in the editor.',commentsDisabled:'The author disabled new comments.',copyright:'Copyright violation',reportBuild:'Report build',reportBuildSent:'Build report submitted.',difficulty:'Difficulty',unspecified:'Unspecified',easy:'Beginner',medium:'Intermediate',hard:'Advanced',expert:'Expert',original:'Original build',remix:'Modification',instruction:'From instructions',attribution:'Original',remixAllowed:'Attributed modifications allowed',remixForbidden:'Publishing modifications is not allowed',images:'Screenshots',image:'Image',threeD:'3D model',viewOnly:'View only',bookmarkEmpty:'No favorite builds yet.'})
+Object.assign(copy.ru,{viewerLimit:'Модель превышает предел просмотра: 20 000 деталей или 2 000 артикулов.',largeViewer:'Облегчённый 3D-просмотр',largeHelp:'Перетаскивай модель, чтобы вращать её. Масштаб и редактирование доступны в редакторе.',largeHelpRestricted:'Перетаскивай модель, чтобы вращать её. Автор запретил открытие в редакторе.',simplified:'Упрощённая геометрия деталей:',largeLoading:'Загрузка геометрии',previewLimit:'Открыть облегчённый просмотр',viewerUnavailable:'3D-просмотр недоступен. Попробуй снимки, если они добавлены.'})
+Object.assign(copy.en,{viewerLimit:'Model exceeds the viewer limit of 20,000 parts or 2,000 designs.',largeViewer:'Lightweight 3D viewer',largeHelp:'Drag to rotate the model. Zoom and editing are available in the editor.',largeHelpRestricted:'Drag to rotate the model. The author disabled opening in the editor.',simplified:'Simplified part geometry:',largeLoading:'Loading geometry',previewLimit:'Open lightweight viewer',viewerUnavailable:'3D viewer unavailable. Try screenshots if provided.'})
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export function communityRoute(route){const m=/^community\/(build|profile)\/([^/]+)$/.exec(route);return route==='community'?{type:'list'}:m&&uuid.test(m[2])?{type:m[1],id:m[2]}:{type:'missing'}}
-export function previewDocument(doc){
- if(!Array.isArray(doc?.parts)||!doc.parts.length||doc.parts.length>600||new Set(doc.parts.map(p=>p?.design)).size>120)return null
- const valid=(v,n,max)=>Array.isArray(v)&&v.length===n&&v.every(x=>Number.isFinite(x)&&Math.abs(x)<=max)
- if(doc.parts.some(p=>!p||!['string','number'].includes(typeof p.design)||!/^[a-zA-Z0-9_-]{1,40}$/.test(String(p.design))))return null
- return {format:'bricklab-3d',version:1,name:doc.name,parts:doc.parts.map((p,i)=>({id:'preview-'+i,design:String(p.design),...(valid(p.position,3,1000000)?{position:p.position}:{}),...(valid(p.rotation,4,2)?{rotation:p.rotation}:{}),...(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color)?{color:p.color}:{}),mirrored:p.mirrored===true})),connections:[],gears:[]}
-}
+export function previewDocument(doc){return sanitizePreview(doc,{strict:true})}
 function el(tag,cls,value){const n=document.createElement(tag);if(cls)n.className=cls;if(value!==undefined)n.textContent=value;return n}
 function button(label,fn,cls='workspace-action'){const b=el('button',cls,label);b.type='button';b.onclick=fn;return b}
 function link(label,href,cls='workspace-action'){const a=el('a',cls,label);a.href=href;return a}
@@ -76,7 +74,9 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   const art=el('div','community-art'+(large?' large':''))
   if(b.imageCount>0&&uuid.test(b.id)){const image=el('img');image.src='/api/community/build/'+b.id+'/image/0';image.alt=b.title;image.loading='lazy';art.append(image);return art}
   art.append(icon('layers'))
-  const run=button(t.preview,()=>queue(), 'workspace-action community-preview-button')
+  const openLarge=()=>{if(activeViewer)location.hash='#community/build/'+b.id;else void showViewer(b)}
+  const largeCard=b.partCount>previewLimits.thumbnailParts
+  const run=button(largeCard?t.previewLimit:t.preview,()=>largeCard?openLarge():queue(), 'workspace-action community-preview-button')
   art.append(run)
   let queued=false
   function queue(){
@@ -88,7 +88,8 @@ export async function mountCommunity(root,{language='ru',route='community',signa
     let renderer
     try{
       const d=await request('/api/community/build/'+b.id+'/preview',signal,false),safe=previewDocument(d)
-      if(!safe){run.textContent=t.previewLimit;return}
+      if(!safe){run.textContent=t.viewerLimit;return}
+      if(isLargePreview(safe)){run.textContent=t.previewLimit;run.disabled=false;run.onclick=openLarge;return}
       const {createProjectPreviewRenderer}=await import('../editor/project-preview.js?v=contact-shadow')
       if(signal.aborted||generation!==epoch)return
       renderer=createProjectPreviewRenderer()
@@ -99,7 +100,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
     finally{renderer?.dispose()}
    })
   }
-  if(readPreference('previews')!=='off'&&b.partCount>0&&b.partCount<=600&&typeof IntersectionObserver==='function'){
+  if(readPreference('previews')!=='off'&&b.partCount>0&&b.partCount<=previewLimits.thumbnailParts&&typeof IntersectionObserver==='function'){
    if(!observer)observer=new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting&&previewJobs<8){previewJobs++;const f=e.target._bricklabPreview;if(f)f()}},{rootMargin:'100px'})
    art._bricklabPreview=queue;observer.observe(art)
   }
@@ -109,7 +110,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   if(signal.aborted||activeViewer)return
   const controller=new AbortController(),dialog=el('dialog','community-viewer-dialog community-model-dialog'),bar=el('div','community-viewer-toolbar'),title=el('h2',null,b.title),host=el('div','community-viewer-stage'),message=el('p','community-viewer-status',t.loading)
   const headingId='community-viewer-title';title.id=headingId;dialog.setAttribute('aria-labelledby',headingId)
-  let session,closed=false
+  let session,closed=false,largeMode=false
   const controls=el('div','community-viewer-controls')
   const minus=button('−',()=>session?.zoom(1.25)),plus=button('+',()=>session?.zoom(.8)),reset=button(t.viewerReset,()=>session?.reset())
   minus.setAttribute('aria-label',t.viewerZoomOut);plus.setAttribute('aria-label',t.viewerZoomIn)
@@ -140,11 +141,12 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   message.setAttribute('role','status')
   const notice=el('p','account-muted');notice.setAttribute('role','status');modalNotice=notice
   const layout=el('div','community-model-layout'),left=el('div','community-model-view'),info=el('section','community-model-info')
-  left.append(host,message,el('p','community-viewer-help',t.viewerHelp))
+  const help=el('p','community-viewer-help',t.viewerHelp)
+  left.append(host,message,help)
   if(b.imageCount>0&&uuid.test(b.id)){
     const pictures=el('div','community-model-pictures'),main=el('img','community-model-picture'),choices=el('div','community-image-choices')
     main.hidden=true
-    const three=button(t.threeD,()=>{main.hidden=true;host.hidden=false;message.hidden=false;for(const c of [minus,plus,reset])c.hidden=false;for(const c of choices.children)c.setAttribute('aria-pressed',String(c===three))})
+    const three=button(t.threeD,()=>{main.hidden=true;host.hidden=false;message.hidden=false;minus.hidden=plus.hidden=largeMode;reset.hidden=false;for(const c of choices.children)c.setAttribute('aria-pressed',String(c===three))})
     three.setAttribute('aria-pressed','true');choices.append(three)
     for(let i=0;i<Math.min(4,b.imageCount);i++){const thumb=button('',()=>{main.src='/api/community/build/'+b.id+'/image/'+i;main.hidden=false;host.hidden=true;message.hidden=true;for(const c of [minus,plus,reset])c.hidden=true;for(const c of choices.children)c.setAttribute('aria-pressed',String(c===thumb))});thumb.setAttribute('aria-label',t.image+' '+(i+1));thumb.setAttribute('aria-pressed','false');const img=el('img');img.src='/api/community/build/'+b.id+'/image/'+i;img.alt='';thumb.append(img);choices.append(thumb)}
     pictures.append(choices);left.insertBefore(main,host);left.append(pictures)
@@ -202,13 +204,22 @@ export async function mountCommunity(root,{language='ru',route='community',signa
    }catch{if(!closed)relatedGrid.append(el('p','account-muted',t.failed))}})()
    const doc=await request('/api/community/build/'+b.id+'/preview',controller.signal,false),safe=previewDocument(doc)
    if(!safe){message.textContent=t.viewerLimit;return}
-   const {mountModelViewer}=await import('./community-viewer.js?v=viewer-1')
+   largeMode=isLargePreview(safe)
+   let mount
+   if(largeMode){
+    minus.hidden=plus.hidden=true;help.textContent=b.allowDownload===false?t.largeHelpRestricted:t.largeHelp
+    mount=(await import('./community-large-viewer.js?v=large-viewer-1')).mountLargeModelViewer
+   }else mount=(await import('./community-viewer.js?v=viewer-1')).mountModelViewer
    controller.signal.throwIfAborted()
-   session=await mountModelViewer(host,safe,{signal:controller.signal,onProgress:(n,total)=>{message.textContent=t.loading+' '+n+'/'+total}})
+   session=await mount(host,safe,{signal:controller.signal,onProgress:(n,total)=>{message.textContent=(largeMode?t.largeLoading:t.loading)+' '+n+'/'+total}})
    if(closed){session.dispose();return}
-   message.textContent=session.shown<session.total?t.viewerPartial+' '+session.shown+'/'+session.total:''
+   const notices=[]
+   if(largeMode)notices.push(t.largeViewer)
+   if(session.shown<b.partCount)notices.push(t.viewerPartial+' '+session.shown+'/'+b.partCount)
+   if(session.simplified)notices.push(t.simplified+' '+session.simplified)
+   message.textContent=notices.join(' · ')
    for(const control of [minus,plus,reset])control.disabled=false
-  }catch(e){if(!closed)message.textContent=t.viewerUnavailable}
+  }catch(e){if(!closed)message.textContent=e.code==='preview_limit'?t.viewerLimit:t.viewerUnavailable}
  }
  function discussion(build,signal){
   const section=el('section','community-discussion'),heading=el('h2',null,t.discussion),notice=el('p','account-muted'),list=el('div','community-comment-list')
