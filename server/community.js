@@ -193,7 +193,7 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
      const p=publicBuild(await store.getPublicBuild(build[2]));if(!p)throw new ProjectError(404,'not_found')
      if(build[1])reply(res,200,{build:p});else {res.writeHead(302,{'Location':'/#community/build/'+p.id,'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}return true
     }
-    if(path==='/api/community/builds'){const {author,...options}=galleryQuery(req.url);const feed=new URL(req.url,'http://localhost').searchParams.get('feed');if(feed!==null){if(!['following','bookmarks'].includes(feed))throw new ProjectError(400,'invalid_gallery_query');const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated');if(feed==='following')options.followingUid=user.id;else options.bookmarkUid=user.id}const rows=await store.listPublicBuilds(author,options);reply(res,200,{builds:rows.slice(0,24).map(publicBuild),nextOffset:rows.length>24&&options.offset+24<=10000?options.offset+24:null});return true}
+    if(path==='/api/community/builds'){const {author,...options}=galleryQuery(req.url);const feed=new URL(req.url,'http://localhost').searchParams.get('feed');if(feed!==null){if(!['following','bookmarks'].includes(feed))throw new ProjectError(400,'invalid_gallery_query');const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated');if(feed==='following')options.followingUid=user.id;else options.bookmarkUid=user.id}const week=new URL(req.url,'http://localhost').searchParams.get('week');if(week!==null){if(week!=='1')throw new ProjectError(400,'invalid_gallery_query');options.week=true}const rows=await store.listPublicBuilds(author,options);reply(res,200,{builds:rows.slice(0,24).map(publicBuild),nextOffset:rows.length>24&&options.offset+24<=10000?options.offset+24:null});return true}
     const media=/^\/api\/community\/profile\/([^/]+)\/(avatar|cover)$/.exec(path)
     if(media&&uuid.test(media[1])){
       const image=await store.getPublicMedia(media[1],media[2])
@@ -209,7 +209,7 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
      if(m[1])reply(res,200,{profile:{...card,reputation:publicReputation(store.reputation?await store.reputation(card.id):null)}})
      else {res.writeHead(302,{'Location':'/#community/profile/'+card.id,'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}
     }else if(path==='/community'||path==='/api/community'){
-     const cards=(await store.listPublicCards()).map(publicCard)
+     const q=(new URL(req.url,'http://localhost').searchParams.get('q')??'').trim();if(q.length>100||/[\u0000-\u001f\u007f]/.test(q))throw new ProjectError(400,'invalid_gallery_query');const cards=(await store.listPublicCards(q)).map(publicCard)
      if(path.startsWith('/api/'))reply(res,200,{profiles:cards})
      else {res.writeHead(302,{'Location':'/#community','Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}
     }else throw new ProjectError(404,'not_found')
