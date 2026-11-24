@@ -2,7 +2,8 @@ import { sessionDiagnostics } from '../feedback/diagnostics.js?v=bug-report-v1'
 import { mountBugReport } from '../feedback/dialog.js?v=bug-report-v1'
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
-import { locales } from './locale.js?v=bug-report-v1'
+import { locales } from './locale.js?v=cloud-preview-1'
+import { createAccountPreview } from './account.js?v=cloud-preview-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
 import { revealMenu, showEditorLoading, startStartup } from './startup.js?v=bold-brand'
@@ -18,7 +19,7 @@ const status = byId('status')
 const removeDialog = byId('remove-dialog')
 const settingsDialog = byId('settings-dialog')
 const tutorialPicker = byId('tutorial-picker')
-const pages = ['home', 'projects', 'examples', 'library', 'sets']
+const pages = ['home', 'projects', 'examples', 'library', 'sets', 'account']
 let projects = readProjects()
 let storageWarning = false
 let activeMenu = null
@@ -43,6 +44,8 @@ let projectPreviewObserver
 let librarySection
 let libraryGroup = ''
 let language = 'ru'
+const accountPreview = createAccountPreview({ root: byId('account-panel'), link: byId('account-link'),
+  getProjects: () => projects, download: downloadProject, openCopy: data => addProject(data) })
 
 try {
   if (localStorage.getItem('bricklab.language') === 'en') language = 'en'
@@ -186,7 +189,16 @@ function projectCard(project, formatter) {
     removeDialog.returnValue = 'cancel'
     removeDialog.showModal()
   })
-  actions.append(open, download, remove)
+  const cloud = button('workspace-action project-card-cloud')
+  cloud.append(icon('icon-cloud'))
+  cloud.title = t.cloudPreview
+  cloud.setAttribute('aria-label', t.cloudPreview + ': ' + project.document.name)
+  cloud.addEventListener('click', () => {
+    accountPreview.selectProject(project.id)
+    if (location.hash === '#account') render()
+    else location.hash = '#account'
+  })
+  actions.append(open, download, cloud, remove)
   body.append(title, summary, meta, actions)
   card.append(art, body)
   return { card, art, project }
@@ -432,6 +444,8 @@ function render(initial = false) {
   renderHome(home)
   libraryRoot.hidden = page !== 'library'
   byId('sets-panel').hidden = page !== 'sets'
+  byId('account-panel').hidden = page !== 'account'
+  accountPreview.update(language, page === 'account')
   if (page === 'sets') openSets()
   else closeSets()
   byId('page-title').hidden = home
