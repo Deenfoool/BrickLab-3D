@@ -2,8 +2,8 @@ import { sessionDiagnostics } from '../feedback/diagnostics.js?v=bug-report-v1'
 import { mountBugReport } from '../feedback/dialog.js?v=bug-report-v1'
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
-import { locales } from './locale.js?v=gallery-1'
-import { createCloudAccount } from './account.js?v=no-passport-1'
+import { locales } from './locale.js?v=profile-gallery-1'
+import { createCloudAccount } from './account.js?v=profile-gallery-1'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -52,7 +52,7 @@ const notificationPopover = createNotificationPopover({root:byId('notification-c
   onOpen:()=>{cloudAccount.showNotifications();if(location.hash!=='#account')location.hash='#account'}
 })
 const cloudAccount = createCloudAccount({ root: byId('account-panel'), link: byId('account-link'),
-  getProjects: () => projects, download: downloadProject, openCopy: (data, cloud) => addProject(data, null, cloud), linkLocal: linkCloudProject, onNotifications: state => notificationPopover.update(state) })
+  getProjects: () => projects, download: downloadProject, openCopy: (data, cloud) => addProject(data, null, cloud), linkLocal: linkCloudProject, onNotifications: state => notificationPopover.update(state), onProjectsChanged:()=>{if(currentPage()==='projects')renderList()} })
 
 try {
   if (localStorage.getItem('bricklab.language') === 'en') language = 'en'
@@ -205,19 +205,30 @@ function projectCard(project, formatter) {
     removeDialog.returnValue = 'cancel'
     removeDialog.showModal()
   })
-  const cloud = button('workspace-action project-card-cloud')
-  cloud.append(icon('icon-cloud'))
-  cloud.title = t.cloudPreview
-  cloud.setAttribute('aria-label', t.cloudPreview + ': ' + project.document.name)
-  cloud.addEventListener('click', () => {
-    cloudAccount.selectProject(project.id)
-    if (location.hash === '#account') render()
-    else location.hash = '#account'
-  })
-  actions.append(open, download, cloud, remove)
-  body.append(title, summary, meta, actions)
+  actions.append(open, download, remove)
+  body.append(title, summary, meta, actions, cloudAccount.localProjectControls(project))
   card.append(art, body)
   return { card, art, project }
+}
+
+function remoteProjectCard(p, formatter, ownerId) {
+  const card=element('article','project-card project-card-remote')
+  const art=element('div','project-card-image')
+  art.setAttribute('aria-hidden','true')
+  const placeholder=element('div','project-card-placeholder')
+  placeholder.append(icon('icon-cloud'))
+  art.append(placeholder)
+  const body=element('div','project-card-body')
+  const title=element('h2','project-card-title',p.name)
+  const description=element('p','project-card-description',language==='ru'?'Облачная сборка':'Cloud build')
+  const meta=element('div','project-card-meta')
+  const version=element('span',null,(language==='ru'?'Версия ':'Revision ')+p.revision)
+  const date=element('time',null,formatter.format(new Date(p.updatedAt)))
+  date.dateTime=p.updatedAt
+  meta.append(version,date)
+  body.append(title,description,meta,cloudAccount.remoteProjectControls(p))
+  card.append(art,body)
+  return {card,art,remote:p,ownerId,description}
 }
 
 function stopProjectPreviews() {
@@ -237,10 +248,18 @@ function renderList() {
     project => project.document.name.toLocaleLowerCase(language).includes(keyword),
   ))
   const formatter = new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric' })
+  const state=cloudAccount.projectState()
   const cards = visible.map(project => projectCard(project, formatter))
+  for(const p of state.remote.filter(p=>p.name.toLocaleLowerCase(language).includes(keyword)))cards.push(remoteProjectCard(p,formatter,state.ownerId))
   rows.replaceChildren(...cards.map(({ card }) => card))
+  const info=byId('project-cloud-status')
+  info.textContent=[state.message,state.warning].filter(Boolean).join(' · ')
+  info.hidden=!info.textContent
+  const refresh=byId('project-cloud-refresh')
+  refresh.hidden=!state.signedIn
+  refresh.disabled=state.busy
   const empty = byId('empty-state')
-  empty.hidden = visible.length > 0
+  empty.hidden = cards.length > 0
   empty.textContent = strings()[keyword ? 'noResults' : 'empty']
   if (!cards.length) return
 
@@ -254,9 +273,24 @@ function renderList() {
     if (loading || signal.aborted) return
     loading = true
     try {
-      const { loadHomePreviews } = await import('./home-previews.js?v=project-shadows')
+      const { loadHomePreviews } = await import('./home-previews.js?v=profile-gallery-1')
       while (!signal.aborted && queue.length) {
-        await loadHomePreviews(queue.splice(0, 12), signal)
+        const batch=[]
+        for(const entry of queue.splice(0,4)){
+          if(signal.aborted)break
+          if(entry.remote){
+            try{
+              const item=await cloudAccount.fetchProjectPreview(entry.remote.id,entry.ownerId)
+              if(!item||signal.aborted)continue
+              const doc=item.document
+              entry.description.textContent=(typeof doc.description==='string'&&doc.description.trim())||(language==='ru'?doc.parts.length+' деталей':doc.parts.length+' parts')
+              const cover=safeImage(doc.buildingSet?.set?.image)
+              if(cover)showPreview(entry.art,cover,signal)
+              batch.push({project:{id:entry.remote.id,modifiedAt:entry.remote.updatedAt,document:doc},cache:false,show:entry.show})
+            }catch{}
+          }else batch.push(entry)
+        }
+        if(!signal.aborted)await loadHomePreviews(batch,signal)
       }
     } catch {
       // The saved builds and their actions remain available without WebGL or cache.
@@ -267,6 +301,7 @@ function renderList() {
 
   const pending = new Map()
   for (const entry of cards) {
+    if(entry.remote){pending.set(entry.card,entry);continue}
     const cover = safeImage(entry.project.document.buildingSet?.set?.image)
     if (cover) showPreview(entry.art, cover, signal)
     if (!entry.project.document.parts.length) continue
@@ -275,7 +310,7 @@ function renderList() {
   if (readPreference('previews') === 'off') return
   const enqueue = entry => {
     queue.push({
-      project: entry.project,
+      ...entry,
       show(preview) { if (preview && !signal.aborted) showPreview(entry.art, preview, signal) },
     })
   }
@@ -663,6 +698,7 @@ function setLanguage(value) {
 }
 
 query.addEventListener('input', renderList)
+byId('project-cloud-refresh').addEventListener('click',()=>cloudAccount.refreshProjects())
 libraryRetry.addEventListener('click', () => location.reload())
 byId('language').addEventListener('change', event => setLanguage(event.target.value))
 byId('settings-language').addEventListener('change', event => setLanguage(event.target.value))
@@ -792,6 +828,7 @@ window.addEventListener('hashchange', event => {
   query.value = ''
   if (currentPage() === 'library' || new URL(event.oldURL).hash === '#library') window.scrollTo(0, 0)
   render()
+  if(currentPage()==='projects')void cloudAccount.refreshProjects()
 })
 window.addEventListener('focus',()=>{if(!document.hidden&&currentPage()!=='project'&&currentPage()!=='account')void cloudAccount.refreshNotifications()})
 window.addEventListener('storage', event => {
