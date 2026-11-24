@@ -2,11 +2,11 @@ import { createAuthClient } from './auth-client.js?v=cloud-auth-1'
 
 import { createProjectsClient, cloudLink } from './projects-client.js?v=cloud-projects-1'
 
-import { renderCloudWorkshop } from './cloud-workshop.js?v=activity-1'
+import { renderCloudWorkshop } from './cloud-workshop.js?v=notifications-1'
 
-import {createProfileClient} from './profile-client.js?v=activity-1'
+import {createProfileClient} from './profile-client.js?v=notifications-1'
 
-import {createActivityClient} from './activity-client.js?v=activity-1'
+import {createActivityClient} from './activity-client.js?v=notifications-1'
 
 const copy = {
  ru:{login:'Войти',register:'Регистрация',account:'BrickLab Workshop',hero:'Твоя мастерская. Где угодно.',intro:'Настоящий аккаунт BrickLab Cloud.',email:'Электронная почта',name:'Имя пользователя',password:'Пароль',enter:'Войти',create:'Создать аккаунт',local:'Продолжить без аккаунта',logout:'Выйти',loading:'Проверяем серверную сессию…',retry:'Повторить проверку',profile:'Серверный аккаунт',localBuilds:'Локальные сборки',selected:'Выбранная сборка',coming:'Приватные облачные сборки и история версий. Сохраняй изменения явно; локальные сборки не удаляются. Достижения пока не подключены.',closed:'Регистрация доступна только при разрешении администратора. Подтверждение почты и восстановление пароля ещё не реализованы.',https_required:'Для входа необходим HTTPS или локальный адрес разработки.',auth_unavailable:'Сервер авторизации недоступен. Повтори попытку.',invalid_credentials:'Проверь введённые данные.',invalid_login:'Неверная почта или пароль.',registration_disabled:'Регистрация пока закрыта.',registration_unavailable:'Не удалось создать аккаунт с этими данными.',too_many_attempts:'Слишком много попыток. Попробуй позже.',invalid_origin:'Адрес приложения не совпадает с настройками сервера.',unknown:'Не удалось выполнить запрос.',busy:'Выполняется запрос…',passwordHelp:'Минимум 12 символов при регистрации.'},
@@ -29,20 +29,48 @@ function action(label,fn,primary=false){
 function field(label,type,autocomplete,maxLength){
  const wrap=node('label','account-field'),input=node('input');input.type=type;input.autocomplete=autocomplete;input.required=true;input.maxLength=maxLength;wrap.append(node('span',null,label),input);return {wrap,input}
 }
-export function createCloudAccount({root,link,getProjects,download,openCopy,linkLocal,api=createAuthClient(),cloud=createProjectsClient(),profiles=createProfileClient(),activityApi=createActivityClient()}){
+export function createCloudAccount({root,link,getProjects,download,openCopy,linkLocal,onNotifications=()=>{},api=createAuthClient(),cloud=createProjectsClient(),profiles=createProfileClient(),activityApi=createActivityClient()}){
  let lang='ru',visible=false,mode='login',user=null,checked=false,busy=false,error='',selected=null,remote=[],historyId=null,history=[],feedback='',section='workshop',profileData=null,activityData=null,passport={source:'',document:null,revision:null}
+ let notificationError=false
  const t=()=>copy[lang]
+ function publishNotifications(){onNotifications({lang,signedIn:Boolean(user),checked,busy,items:activityData?.notifications??null,error:notificationError})}
  function label(){const e=link.querySelector('[data-account-label]');e.textContent=user?t().account:t().login;link.title=e.textContent;link.setAttribute('aria-label',e.textContent)}
  function message(code){const p=node('p','account-notice',t()[code]??t().unknown);p.setAttribute('role','status');return p}
  function localLink(){const a=node('a','workspace-action',t().local);a.href='#home';return a}
  async function run(fn){
    if(busy)return
-   busy=true;error='';render()
-   try{const next=await fn();if(next?.id!==user?.id){remote=[];history=[];historyId=null;feedback='';profileData=null;activityData=null;section=selected&&next?'cloud':'workshop';passport={source:'',document:null,revision:null}}user=next;checked=true;if(user){remote=await cloud.list();profileData=await profiles.get();activityData=await activityApi.get()}}
-   catch(e){error=e.code??'unknown'}
+   busy=true;error='';notificationError=false;render()
+   try{const next=await fn();if(next?.id!==user?.id){remote=[];history=[];historyId=null;feedback='';profileData=null;activityData=null;section=next&&section==='notifications'?'notifications':selected&&next?'cloud':'workshop';passport={source:'',document:null,revision:null}}user=next;checked=true;if(user){remote=await cloud.list();profileData=await profiles.get();activityData=await activityApi.get()}}
+   catch(e){error=e.code??'unknown';notificationError=true}
    finally{busy=false;render()}
  }
  function refresh(){return run(()=>api.me())}
+ async function refreshNotifications(mark=false){
+   if(!api.allowed||busy)return
+   busy=true;notificationError=false;publishNotifications()
+   let identityChanged=false
+   try{
+     const next=await api.me()
+     checked=true
+     if(next?.id!==user?.id){
+       user=next;identityChanged=true;remote=[];history=[];historyId=null;profileData=null;activityData=null;passport={source:'',document:null,revision:null};feedback='';error=''
+       if(user){remote=await cloud.list();profileData=await profiles.get()}
+     }
+     if(user)activityData=mark&&!identityChanged?await activityApi.read():await activityApi.get()
+     else activityData=null
+   }catch(e){
+     notificationError=true
+     if(e.status===401){user=null;remote=[];history=[];historyId=null;profileData=null;activityData=null;passport={source:'',document:null,revision:null};identityChanged=true}
+   }finally{
+     busy=false
+     if(identityChanged||visible&&section==='notifications')render()
+     else{
+       label();publishNotifications()
+       const badge=root.querySelector('[data-notification-nav-count]')
+       if(badge){const n=activityData?.notifications.filter(x=>!x.read).length??0;badge.textContent=n;badge.hidden=!n}
+     }
+   }
+ }
  async function operate(fn){
    if(busy||!user)return
    busy=true;error='';feedback='';render()
@@ -92,7 +120,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    layout.append(local,server);return layout
  }
  function render(){
-   label();if(!visible)return
+   label();publishNotifications();if(!visible)return
    root.replaceChildren()
    const s=t()
    if(!api.allowed){root.append(message('https_required'),localLink());return}
@@ -135,9 +163,13 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
  }
  return {
    selectProject(id){selected=id;section='cloud'},
+   showNotifications(){section='notifications';if(visible)render()},
+   refreshNotifications,
+   readNotifications(){return refreshNotifications(true)},
    update(language,show){
      const next=language==='en'?'en':'ru',changed=next!==lang||visible!==show
-     lang=next;visible=show;label()
+     lang=next;visible=show;label();publishNotifications()
+     if(!show&&!checked&&api.allowed&&!busy&&!notificationError)void refreshNotifications()
      if(show&&changed){render();if(api.allowed&&!busy){checked=false;refresh()}}else if(show&&!busy&&user)render()
    }
  }

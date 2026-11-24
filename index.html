@@ -6,16 +6,16 @@
   <meta name="theme-color" content="#181a1d">
   <title>BrickLab 3D</title>
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./src/menu/menu.css?v=academy-v1">
+  <link rel="stylesheet" href="./src/menu/menu.css?v=notifications-1">
   <link rel="stylesheet" href="./src/editor/editor.css?v=editor-feedback">
   <link rel="stylesheet" href="./src/sets/sets.css?v=brick-intros">
   <link rel="stylesheet" href="./src/menu/startup.css?v=ldraw-brand">
   <link rel="stylesheet" href="./src/feedback/feedback.css?v=bug-report-v1">
-  <link rel="stylesheet" href="./src/menu/account.css?v=activity-1">
+  <link rel="stylesheet" href="./src/menu/account.css?v=notifications-1">
   <script type="importmap">
     {"imports":{"three":"./vendor/three/build/three.module.min.js","three/addons/":"./vendor/three/examples/jsm/"}}
   </script>
-  <script type="module" src="./src/menu/menu.js?v=activity-1"></script>
+  <script type="module" src="./src/menu/menu.js?v=notifications-1"></script>
 </head>
 <body>
   <section class="startup" id="startup" aria-label="Подготовка BrickLab 3D">
@@ -85,6 +85,17 @@
       <div class="sidebar-bottom">
         <button type="button" id="bug-report-button" data-link-label="bugReport" aria-label="Сообщить о баге" title="Сообщить о баге"><svg class="icon" aria-hidden="true"><use href="#icon-bug"/></svg><span data-text="bugReport">Сообщить о баге</span></button>
         <button type="button" id="settings-button" aria-label="Настройки"><svg class="icon"><use href="#settings"/></svg><span data-text="settings">Настройки</span></button>
+        <div class="sidebar-external">
+          <a class="sidebar-external-link" href="https://github.com/Deenfoool/BrickLab-3D" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub">
+            <svg class="icon" aria-hidden="true"><use href="#icon-github"/></svg>
+          </a>
+          <a class="sidebar-external-link" href="https://deenfoool.github.io/portfolio/" target="_blank" rel="noopener" data-link-label="portfolio" aria-label="Портфолио" title="Портфолио">
+            <svg class="icon" aria-hidden="true"><use href="#icon-portfolio"/></svg>
+          </a>
+          <a class="sidebar-external-link" href="https://tips.tips/000482810" target="_blank" rel="noopener" data-link-label="donate" aria-label="Поддержать проект" title="Поддержать проект">
+            <svg class="icon" aria-hidden="true"><use href="#icon-donate"/></svg>
+          </a>
+        </div>
       </div>
     </aside>
 
@@ -98,15 +109,12 @@
           <input type="file" id="import-file" accept=".bricklab,.json" hidden>
         </div>
         <div class="topbar-tools">
-          <a class="topbar-link" href="https://github.com/Deenfoool/BrickLab-3D" target="_blank" rel="noopener" aria-label="GitHub" title="GitHub">
-            <svg class="icon" aria-hidden="true"><use href="#icon-github"/></svg>
-          </a>
-          <a class="topbar-link" href="https://deenfoool.github.io/portfolio/" target="_blank" rel="noopener" data-link-label="portfolio" aria-label="Портфолио" title="Портфолио">
-            <svg class="icon" aria-hidden="true"><use href="#icon-portfolio"/></svg>
-          </a>
-          <a class="topbar-link" href="https://tips.tips/000482810" target="_blank" rel="noopener" data-link-label="donate" aria-label="Поддержать проект" title="Поддержать проект">
-            <svg class="icon" aria-hidden="true"><use href="#icon-donate"/></svg>
-          </a>
+          <div id="notification-control" class="notification-control">
+            <button type="button" class="topbar-link notification-trigger" id="notification-trigger" aria-label="Уведомления" aria-expanded="false" aria-controls="notification-popover">
+              <svg class="icon" aria-hidden="true"><use href="#icon-bell"/></svg><span class="notification-count" id="notification-count" hidden></span>
+            </button>
+            <section id="notification-popover" class="notification-popover" aria-labelledby="notification-heading" hidden></section>
+          </div>
           <a class="account-topbar" id="account-link" href="#account" data-page="account"><svg class="icon" aria-hidden="true"><use href="#icon-account"/></svg><span data-account-label>Войти</span></a>
           <label class="language">
             <select id="language" aria-label="Язык / Language"><option value="ru">RU</option><option value="en">EN</option></select>

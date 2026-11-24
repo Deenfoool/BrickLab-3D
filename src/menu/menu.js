@@ -2,8 +2,9 @@ import { sessionDiagnostics } from '../feedback/diagnostics.js?v=bug-report-v1'
 import { mountBugReport } from '../feedback/dialog.js?v=bug-report-v1'
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
-import { locales } from './locale.js?v=activity-1'
-import { createCloudAccount } from './account.js?v=activity-1'
+import { locales } from './locale.js?v=notifications-1'
+import { createCloudAccount } from './account.js?v=notifications-1'
+import { createNotificationPopover } from './notifications.js?v=notifications-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
 import { revealMenu, showEditorLoading, startStartup } from './startup.js?v=bold-brand'
@@ -44,8 +45,13 @@ let projectPreviewObserver
 let librarySection
 let libraryGroup = ''
 let language = 'ru'
+const notificationPopover = createNotificationPopover({root:byId('notification-control'),trigger:byId('notification-trigger'),count:byId('notification-count'),panel:byId('notification-popover'),
+  onRefresh:()=>cloudAccount.refreshNotifications(),
+  onRead:()=>cloudAccount.readNotifications(),
+  onOpen:()=>{cloudAccount.showNotifications();if(location.hash!=='#account')location.hash='#account'}
+})
 const cloudAccount = createCloudAccount({ root: byId('account-panel'), link: byId('account-link'),
-  getProjects: () => projects, download: downloadProject, openCopy: (data, cloud) => addProject(data, null, cloud), linkLocal: linkCloudProject })
+  getProjects: () => projects, download: downloadProject, openCopy: (data, cloud) => addProject(data, null, cloud), linkLocal: linkCloudProject, onNotifications: state => notificationPopover.update(state) })
 
 try {
   if (localStorage.getItem('bricklab.language') === 'en') language = 'en'
@@ -767,10 +773,12 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape') closeMenu(true)
 })
 window.addEventListener('hashchange', event => {
+  notificationPopover.close()
   query.value = ''
   if (currentPage() === 'library' || new URL(event.oldURL).hash === '#library') window.scrollTo(0, 0)
   render()
 })
+window.addEventListener('focus',()=>{if(!document.hidden&&currentPage()!=='project'&&currentPage()!=='account')void cloudAccount.refreshNotifications()})
 window.addEventListener('storage', event => {
   if (event.key === 'bricklab.projects.v1' || event.key === null) {
     projects = readProjects()
