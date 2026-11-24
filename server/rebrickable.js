@@ -10,7 +10,7 @@ function target(path, params) {
   for (const [k,v] of params) {
     if (url.searchParams.has(k)) return null
     if (numbers.has(k)) {
-      if (!/^\d{1,8}$/.test(v) || (k==='page_size' && (+v<1||+v>1000)) || (k==='page' && (+v<1||+v>10000))) return null
+      if (!/^\d{1,8}$/.test(v) || (k==='page_size' && (+v<1||+v>(path.endsWith('/parts/')?1000:24))) || (k==='page' && (+v<1||+v>10000))) return null
     } else if (k==='search') {
       if (v.length>100 || /[\x00-\x1f\x7f]/.test(v)) return null
     } else if (k==='ordering') {
@@ -104,7 +104,7 @@ export function createRebrickableHandler({apiKey='',fetcher=globalThis.fetch,spa
     if(hit){cache.delete(id);cacheBytes-=hit.bytes}
     let pending=inflight.get(id)
     if(!pending){
-      if(inflight.size>=6){reply(res,429,'{"error":"catalog_rate_limited"}');return true}
+      if(inflight.size>=4){reply(res,429,'{"error":"catalog_rate_limited"}');return true}
       pending=tail.then(()=>query(url))
       tail=pending.catch(()=>{})
       inflight.set(id,pending)
