@@ -48,7 +48,7 @@ const simulating = mode => mode === 'testDrive'
 const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
-export async function mountEditor(root, { document, projectId, language, save, download, signal, reportLoad }) {
+export async function mountEditor(root, { document, projectId, language, save, download, publish, signal, reportLoad }) {
   const source = upgradeInlineEngineFan(promoteLegacyBelts(expandComponents(document, parts)))
   let buildingSet = instructionState(source.buildingSet)
   const pdf = buildingSet ? createInstructionPdfReader() : undefined
@@ -109,6 +109,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
         <button data-el="redo" class="editor-square" type="button" title="${t.redo}" aria-label="${t.redo}">↷</button>
         <button data-el="export" type="button">${t.download}</button>
         <button data-el="save" class="editor-primary" type="button">${t.save}</button>
+        <button data-el="publish" class="editor-publish" type="button" ${typeof publish==='function'?'':'hidden'}>${language==='ru'?'Опубликовать':'Publish'}</button>
       </div>
     </header>
     <div class="editor-workspace">
@@ -1544,6 +1545,15 @@ export async function mountEditor(root, { document, projectId, language, save, d
     tutorial?.handle('saved', { success })
   })
   on(el('export'), 'click', () => download(currentDocument()))
+  on(el('publish'), 'click', async () => {
+    if (typeof publish !== 'function' || !persist(true)) return
+    const control=el('publish')
+    if(control.disabled)return
+    control.disabled=true
+    try { await publish(currentDocument()) }
+    catch (error) { if(!signal.aborted){console.error(error);setMessage(language==='ru'?'Не удалось открыть публикацию':'Could not open publication',true)} }
+    finally { if(!signal.aborted)control.disabled=false }
+  })
   const connectionTools = el('connectionTools')
   const connectionToggle = connectionTools.querySelector('summary')
   for (const name of buildTools) on(el(`${name}Tool`), 'click', () => {
