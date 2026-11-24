@@ -1,4 +1,5 @@
-import { createAccountState } from './account-state.js?v=cloud-preview-1'
+import { createAccountState } from './account-state.js?v=workshop-1'
+import { createWorkshop, workshopSections } from './workshop.js?v=workshop-1'
 
 const copy = {
   ru: {
@@ -76,7 +77,9 @@ function select(items, value, t, change, disabled = false) {
 }
 export function createAccountPreview({ root, link: accountLink, getProjects, download, openCopy }) {
   const state = createAccountState()
-  let language = 'ru', mode = 'login', tab = 'cloud', selected = null, status = ''
+  let language = 'ru', mode = 'login', tab = 'workshop', selected = null, status = '', filter = 'allBuilds'
+  const workshop = createWorkshop({state,getProjects,download,openCopy,render,
+    go(key){tab=key;render()},chooseProject(id){selected=id;tab='cloud';filter='allBuilds';status='';render()}})
   const t = () => copy[language]
   const date = value => new Intl.DateTimeFormat(language, { dateStyle:'medium', timeStyle:'short' }).format(new Date(value))
   function updateLabel() {
@@ -105,7 +108,7 @@ export function createAccountPreview({ root, link: accountLink, getProjects, dow
     form.append(field(s.email,sample('email','builder@example.invalid')),field(s.password,sample('password','',s.fakePassword)))
     const submit = node('button','workspace-action primary',mode==='login'?s.enter:s.register); submit.type='submit'
     form.append(submit,link(s.local,'#home'))
-    form.addEventListener('submit',event=>{event.preventDefault(); state.signIn(); tab='cloud'; render()})
+    form.addEventListener('submit',event=>{event.preventDefault(); state.signIn(); tab=selected?'cloud':'workshop'; render()})
     panel.append(hero,form); root.append(notice(),panel)
   }
   function renderProfile() {
@@ -117,13 +120,15 @@ export function createAccountPreview({ root, link: accountLink, getProjects, dow
     }
     root.append(card)
   }
-  function renderCloud() {
+  function renderCloud(target) {
     const s=t(), local=getProjects()
     const byId=new Map(local.map(p=>[p.id,p]))
-    const ids=[...new Set([...byId.keys(),...state.list().map(p=>p.id)])]
+    const ids=[...new Set([...byId.keys(),...state.list().map(p=>p.id)])].filter(id=>{const p=state.get(id);return filter==='allBuilds'||(filter==='localOnly'&&byId.has(id))||(filter==='cloudOnly'&&p&&!p.trashed)||(filter==='publishedOnly'&&p&&!p.trashed&&p.visibility==='public')})
     if (!ids.includes(selected)) selected=ids[0]??null
     const layout=node('div','account-workspace'), list=node('aside','account-card account-build-list'), detail=node('div','account-detail')
-    list.append(node('h2',null,s.localBuilds))
+    list.append(node('h2',null,workshop.label('cloud')))
+    const filters=select(['allBuilds','localOnly','cloudOnly','publishedOnly'],filter,Object.fromEntries(['allBuilds','localOnly','cloudOnly','publishedOnly'].map(k=>[k,workshop.label(k)])),value=>{filter=value;status='';render()})
+    list.append(filters)
     if (!ids.length) list.append(node('p','account-muted',s.empty),link(s.create,'#projects'))
     for (const id of ids) {
       const p=state.get(id), record=byId.get(id)
@@ -131,7 +136,7 @@ export function createAccountPreview({ root, link: accountLink, getProjects, dow
       if (!doc) continue
       const b=node('button','account-build');b.type='button';b.setAttribute('aria-pressed',String(id===selected))
       const label=node('div','account-build-label')
-      label.append(node('strong',null,doc.name),node('small',null,p?s.snapshot+' · '+p.revisions.length+' '+s.versions.toLowerCase():s.localOnly))
+      label.append(node('strong',null,doc.name),node('small',null,p&&!p.trashed?s.snapshot+' · '+p.revisions.length+' '+s.versions.toLowerCase():s.localOnly))
       b.append(icon(p?'icon-cloud':'folder'),label);b.onclick=()=>{selected=id;status='';render()};list.append(b)
     }
     if (!selected) {
@@ -141,8 +146,12 @@ export function createAccountPreview({ root, link: accountLink, getProjects, dow
       const card=node('div','account-card')
       const head=node('div','account-detail-head')
       const title=node('div');title.append(node('p','account-eyebrow',p?s.snapshot:s.localOnly),node('h2',null,doc?.name??s.choose))
-      const save=action(s.save,()=>{status=state.save(record);render()},true);save.disabled=!record||p?.role==='viewer'
+      const save=action(s.save,()=>{status=state.save(record);if(status==='saved')workshop.addEvent('savedEvent',record.document.name);render()},true);save.disabled=!record||p?.role==='viewer'||Boolean(p?.trashed)
       head.append(title,save);card.append(head)
+      const sync=p?.trashed?'syncMissing':!p?'syncLocal':!record?'syncMissing':p.revisions.at(-1).serialized===JSON.stringify(record.document)?'syncSaved':'syncChanged'
+      card.append(node('p','account-muted',workshop.label('sync')+': '+workshop.label(sync)))
+      if(p?.trashed)card.append(action(workshop.label('restore'),()=>{state.restore(selected);render()}))
+      else if(p?.role==='owner')card.append(action(workshop.label('trashAction'),()=>{state.moveToTrash(selected);status='';render()}))
       if(!record)card.append(node('p','account-muted',s.noLocal))
       const stats=node('div','account-stats')
       for(const [label,val] of [[s.parts,doc?.parts?.length??0],[s.versions,p?.revisions.length??0],[s.latest,p?date(p.revisions.at(-1).savedAt):'—']]){
@@ -152,15 +161,17 @@ export function createAccountPreview({ root, link: accountLink, getProjects, dow
       if(status){const msg=node('p','account-result',s[status]??status);msg.setAttribute('role','status');card.append(msg)}
       detail.append(card)
       const access=node('section','account-card');access.append(node('h2',null,s.access))
-      if(p){
-        access.append(field(s.visibility,select(['private','unlisted','public'],p.visibility,s,value=>{state.setVisibility(selected,value);render()},p.role!=='owner')),
+      if(p&&!p.trashed){
+        access.append(field(s.visibility,select(['private','unlisted','public'],p.visibility,s,value=>{if(state.setVisibility(selected,value))workshop.addEvent('visibilityEvent',doc.name);render()},p.role!=='owner')),
           node('p','account-muted',s[p.visibility+'Hint']),
           field(s.role,select(['owner','editor','viewer'],p.role,s,value=>{state.simulateRole(selected,value);status='';render()})),
           node('p','account-muted',s.roleHelp))
       }else access.append(node('p','account-muted',s.noSnapshot))
       detail.append(access)
+      if(p&&!p.trashed)detail.append(workshop.accessMembers(p,render))
+      if(doc)detail.append(workshop.renderBuildPassport(doc,p?.revisions.length??0))
       const history=node('section','account-card');history.append(node('h2',null,s.history),node('p','account-muted',s.historyHelp))
-      if(!p)history.append(node('p','account-empty',s.noHistory))
+      if(!p||p.trashed)history.append(node('p','account-empty',s.noHistory))
       else for(const revision of [...p.revisions].reverse()){
         const row=node('div','account-revision'),info=node('div');info.append(node('strong',null,s.revision+' '+revision.revision),node('small',null,date(revision.savedAt)))
         const actions=node('div','account-revision-actions'),id=selected,n=revision.revision
@@ -169,24 +180,33 @@ export function createAccountPreview({ root, link: accountLink, getProjects, dow
       }
       detail.append(history)
     }
-    layout.append(list,detail);root.append(layout)
+    layout.append(list,detail);target.append(layout)
   }
   function render() {
     updateLabel();root.replaceChildren()
     if(!state.profile){renderAuth();return}
     const s=t(), header=node('div','account-dashboard-head')
-    const info=node('div','account-identity'),avatar=node('div','account-avatar','DB')
-    const name=node('div');name.append(node('h2',null,state.profile.displayName),node('p','account-muted',s.accountHint))
+    const info=node('div','account-identity'),avatar=node('div','account-avatar',workshop.profile.avatar)
+    const name=node('div');name.append(node('h2',null,workshop.profile.displayName),node('p','account-muted',s.accountHint))
     info.append(avatar,name)
-    const exit=action(s.logout,()=>{if(confirm(s.confirmLogout)){state.signOut();status='';render()}})
+    const exit=action(s.logout,()=>{if(confirm(s.confirmLogout)){state.signOut();workshop.reset();selected=null;filter='allBuilds';status='';tab='workshop';render()}})
     header.append(info,exit)
-    const tabs=node('div','account-tabs account-dashboard-tabs')
-    for(const [key,label] of [['cloud',s.cloud],['profile',s.profile]]){const b=action(label,()=>{tab=key;render()});b.setAttribute('aria-pressed',String(tab===key));tabs.append(b)}
-    root.append(notice(),header,tabs)
-    if(tab==='cloud')renderCloud();else renderProfile()
+    const layout=node('div','workshop-layout'),nav=node('nav','workshop-nav'),content=node('div','workshop-content')
+    nav.setAttribute('aria-label',workshop.label('workshop'))
+    for(const [key,symbol] of workshopSections){
+      const control=action(workshop.label(key),()=>{tab=key;render()})
+      control.prepend(icon(symbol));control.setAttribute('aria-pressed',String(tab===key))
+      if(tab===key)control.setAttribute('aria-current','page')
+      if(key==='notifications'&&workshop.unread)control.append(node('small','workshop-unread',String(workshop.unread)))
+      nav.append(control)
+    }
+    const sectionTitle=node('h2','workshop-section-title',workshop.label(tab))
+    content.append(sectionTitle)
+    if(tab==='cloud')renderCloud(content);else workshop.mount(content,tab)
+    layout.append(nav,content);root.append(notice(),header,layout)
   }
   return {
-    selectProject(id){selected=id;tab='cloud';status=''},
-    update(lang,visible){language=lang==='en'?'en':'ru';updateLabel();if(visible)render()},
+    selectProject(id){selected=id;tab='cloud';filter='allBuilds';status=''},
+    update(lang,visible){language=lang==='en'?'en':'ru';workshop.setLanguage(language);updateLabel();if(visible)render()},
   }
 }

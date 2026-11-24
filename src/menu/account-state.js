@@ -10,12 +10,17 @@ export function createAccountState() {
       profile = { displayName: name, email: 'builder@example.invalid' }
     },
     signOut() { profile = null; projects.clear(); bytes = 0 },
-    list() { return [...projects.values()] },
+    list() { return [...projects.values()].filter(p => !p.trashed) },
+    trash() { return [...projects.values()].filter(p => p.trashed) },
+    usage() { return {bytes, projects:projects.size, revisions:[...projects.values()].reduce((sum,p)=>sum+p.revisions.length,0)} },
+    moveToTrash(id) { const p=projects.get(id);if(!profile||p?.role!=='owner'||p.trashed)return false;p.trashed=true;return true },
+    restore(id) {const p=projects.get(id);if(!profile||!p?.trashed||p.role!=='owner')return false;p.trashed=false;return true},
+    member(id,name,role){const p=projects.get(id);if(!profile||p?.role!=='owner'||p.trashed||!name||name.length>60||![null,'editor','viewer'].includes(role))return false;p.members??=[];const i=p.members.findIndex(m=>m.name===name);if(role===null){if(i>=0)p.members.splice(i,1)}else if(i>=0)p.members[i].role=role;else if(p.members.length<20)p.members.push({name,role});else return false;return true},
     get(id) { return projects.get(id) },
     save(record) {
       if (!profile) return 'signed_out'
       const existing = projects.get(record.id)
-      if (existing?.role === 'viewer') return 'forbidden'
+      if (existing?.role === 'viewer' || existing?.trashed) return 'forbidden'
       const serialized = JSON.stringify(record.document)
       if (existing?.revisions.at(-1)?.serialized === serialized) return 'unchanged'
       const size = new TextEncoder().encode(serialized).length
@@ -28,13 +33,13 @@ export function createAccountState() {
     },
     setVisibility(id, value) {
       const project = projects.get(id)
-      if (!profile || project?.role !== 'owner' || !['private','unlisted','public'].includes(value)) return false
+      if (!profile || project?.role !== 'owner' || project.trashed || !['private','unlisted','public'].includes(value)) return false
       project.visibility = value
       return true
     },
     simulateRole(id, role) {
       const project = projects.get(id)
-      if (!profile || !project || !['owner','editor','viewer'].includes(role)) return false
+      if (!profile || !project || project.trashed || !['owner','editor','viewer'].includes(role)) return false
       project.role = role
       return true
     },
