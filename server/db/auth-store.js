@@ -1,4 +1,5 @@
 import postgres from 'postgres'
+import {bureauStore} from './bureau-store.js'
 import { ProjectError } from '../projects.js'
 import { backgroundInventory } from '../profile-media.js'
 
@@ -26,7 +27,8 @@ export function connectAuthStore(env = process.env) {
   }
   const missing = () => new ProjectError(404,'not_found')
   return {
-    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1`; await sql`select 1 from bricklab.project_favorites limit 1`; await sql`select 1 from bricklab.award_reads limit 1`; await sql`select cover_theme,background_theme from bricklab.public_profiles limit 1`; await sql`select category,part_count from bricklab.public_builds limit 1`;await sql`select 1 from bricklab.community_like_counts limit 1`;await sql`select 1 from bricklab.community_follow_counts limit 1`;await sql`select 1 from bricklab.community_event_counts limit 1`;await sql`select 1 from bricklab.community_comments limit 1`;await sql`select 1 from bricklab.community_comment_reports limit 1`;await sql`select 1 from bricklab.community_reputation limit 1` },
+    ...bureauStore(scope),
+    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1`; await sql`select 1 from bricklab.project_favorites limit 1`; await sql`select 1 from bricklab.award_reads limit 1`; await sql`select cover_theme,background_theme from bricklab.public_profiles limit 1`; await sql`select category,part_count from bricklab.public_builds limit 1`;await sql`select 1 from bricklab.community_like_counts limit 1`;await sql`select 1 from bricklab.community_follow_counts limit 1`;await sql`select 1 from bricklab.community_event_counts limit 1`;await sql`select 1 from bricklab.community_comments limit 1`;await sql`select 1 from bricklab.community_comment_reports limit 1`;await sql`select 1 from bricklab.community_reputation limit 1`;await sql`select 1 from bricklab.bureaus limit 1`;await sql`select 1 from bricklab.bureau_members limit 1`;await sql`select 1 from bricklab.bureau_projects limit 1`;await sql`select 1 from bricklab.bureau_revisions limit 1` },
     async register({ email, displayName, passwordHash, tokenHash, expiresAt }) {
       return sql.begin(async tx => {
         const [user] = await tx`insert into bricklab.users (email, display_name, password_hash)
