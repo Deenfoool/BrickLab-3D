@@ -1,5 +1,5 @@
 import { createAccountState } from './account-state.js?v=workshop-1'
-import { createWorkshop, workshopSections } from './workshop.js?v=workshop-1'
+import { createWorkshop, workshopSections } from './workshop.js?v=no-diary-1'
 
 const copy = {
   ru: {

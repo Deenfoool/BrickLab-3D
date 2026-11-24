@@ -4,7 +4,7 @@ import { readTutorial } from './tutorial-state.js?v=onboarding-v1'
 
 export const workshopSections=[
   ['workshop','icon-home'],['cloud','folder'],['passport','icon-account'],['achievements','icon-trophy'],
-  ['challenges','icon-flask'],['rankings','icon-trophy'],['publicProfile','icon-account'],['diary','book'],
+  ['challenges','icon-flask'],['rankings','icon-trophy'],['publicProfile','icon-account'],
   ['bureau','icon-account'],['favorites','icon-heart'],['notifications','icon-bell'],
   ['storage','icon-cloud'],['settings','settings'],['security','icon-shield']
 ]
@@ -67,7 +67,7 @@ export function createWorkshop({state,getProjects,go,chooseProject,render,openCo
     const t=tr();root.append(profileHero());cards(root,[experience(),reputation()]);const quick=card(t.welcome)
     quick.append(node('p','account-muted',t.welcomeSub))
     const list=node('div','workshop-shortcuts')
-    for(const k of ['cloud','passport','achievements','challenges','diary','storage'])list.append(sectionLink(t[k],k))
+    for(const k of ['cloud','passport','achievements','challenges','storage'])list.append(sectionLink(t[k],k))
     quick.append(list);root.append(quick,showcase())
     const policy=card(t.rep);policy.append(node('p','account-muted',t.donationNote));root.append(policy)
   }
@@ -129,14 +129,13 @@ export function createWorkshop({state,getProjects,go,chooseProject,render,openCo
     for(const r of records()){const row=node('div','workshop-between workshop-rank-row');row.append(node('span',null,r.document.name),btn(favorites.has(r.id)?t.removeFavorite:t.addFavorite,()=>{if(favorites.has(r.id))favorites.delete(r.id);else favorites.add(r.id);render()}));c.append(row)}
     if(!records().length)c.append(node('p','account-muted',t.noFavorites));root.append(c)
   }
-  function activity(root,diary=false){
-    const t=tr(),c=card(t[diary?'diary':'notifications'])
-    if(!diary)c.append(btn(t.markRead,()=>{events.forEach(e=>e.read=true);render()}))
-    const shown=diary?events:profile.notifications?events:[]
-    if(!shown.length)c.append(node('p','account-muted',t[diary?'diaryEmpty':'noNotifications']))
-    for(const e of shown){const row=node('div','workshop-event'),detail=node('div');detail.append(node('strong',null,t[e.type]||e.type),node('p','account-muted',e.detail),node('small','account-muted',date(e.at)));row.append(icon(diary?'book':'icon-bell'),detail);if(!diary&&!e.read)row.append(tag(t.unread,'gold'));c.append(row)}
+  function activity(root){
+    const t=tr(),c=card(t.notifications)
+    c.append(btn(t.markRead,()=>{events.forEach(e=>e.read=true);render()}))
+    const shown=profile.notifications?events:[]
+    if(!shown.length)c.append(node('p','account-muted',t.noNotifications))
+    for(const e of shown){const row=node('div','workshop-event'),detail=node('div');detail.append(node('strong',null,t[e.type]||e.type),node('p','account-muted',e.detail),node('small','account-muted',date(e.at)));row.append(icon('icon-bell'),detail);if(!e.read)row.append(tag(t.unread,'gold'));c.append(row)}
     root.append(c)
-    if(diary){const l=card(t.lineage);l.append(node('p','account-muted',t.lineageHint));root.append(l)}
   }
   function storage(root){
     const t=tr(),c=card(t.storage),used=state.usage(),g=node('div','workshop-metric-grid')
@@ -182,7 +181,7 @@ export function createWorkshop({state,getProjects,go,chooseProject,render,openCo
     setLanguage(lang){language=lang==='en'?'en':'ru'},
     label(key){return tr()[key]||key},
     mount(root,tab){
-      const handlers={workshop:dashboard,passport,achievements,challenges:renderChallenges,rankings:rankingsPage,bureau:bureauPage,favorites:favoritesPage,notifications:r=>activity(r),diary:r=>activity(r,true),storage,settings,security,publicProfile}
+      const handlers={workshop:dashboard,passport,achievements,challenges:renderChallenges,rankings:rankingsPage,bureau:bureauPage,favorites:favoritesPage,notifications:r=>activity(r),storage,settings,security,publicProfile}
       ;(handlers[tab]||dashboard)(root)
     }
   }

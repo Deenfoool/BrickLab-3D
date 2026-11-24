@@ -40,3 +40,11 @@ test('all achievement, rank and skill labels exist in Russian and English',()=>{
     for(const c of challenges){assert.ok(t[c.id]);assert.ok(t[c.id+'Desc'])}
   }
 })
+
+
+test('preview keeps experiments but removes the builder diary',async()=>{
+ const {workshopSections}=await import('../src/menu/workshop.js')
+ assert.ok(workshopSections.some(([key])=>key==='passport'))
+ assert.ok(workshopSections.some(([key])=>key==='challenges'))
+ assert.ok(!workshopSections.some(([key])=>key==='diary'))
+})
