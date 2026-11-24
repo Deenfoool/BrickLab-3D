@@ -39,7 +39,17 @@ export async function inspectSetPart(
     host.append(image)
     return
   }
-  let renderer, controls, material
+  let renderer, controls, material, observer, disposed = false
+  const dispose = () => {
+    if (disposed) return
+    disposed = true
+    observer?.disconnect()
+    controls?.dispose()
+    material?.dispose()
+    renderer?.dispose()
+    renderer?.forceContextLoss()
+    renderer?.domElement.remove()
+  }
   try {
     const [THREE, { OrbitControls }] = await Promise.all([
       import('three'),
@@ -84,16 +94,11 @@ export async function inspectSetPart(
       renderer.render(world, camera)
     }
     controls.addEventListener('change', render)
-    const observer = new ResizeObserver(render)
+    observer = new ResizeObserver(render)
     observer.observe(host)
     controller.signal.addEventListener(
       'abort',
-      () => {
-        observer.disconnect()
-        controls.dispose()
-        material.dispose()
-        renderer.dispose()
-      },
+      dispose,
       { once: true },
     )
     status.textContent = ru
@@ -101,9 +106,7 @@ export async function inspectSetPart(
       : 'Drag to rotate. Scroll to zoom.'
     render()
   } catch (error) {
-    controls?.dispose()
-    material?.dispose()
-    renderer?.dispose()
+    dispose()
     if (!controller.signal.aborted)
       status.textContent = ru
         ? 'Не удалось открыть 3D-модель.'
