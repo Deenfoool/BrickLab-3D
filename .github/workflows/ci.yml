@@ -64,6 +64,31 @@ jobs:
         run: sh server/db/migrate.sh
       - name: Verify database constraints and revision history
         run: psql -X -v ON_ERROR_STOP=1 -f server/db/test-schema.sql
+      - name: Provision restricted application role
+        env:
+          BRICKLAB_APP_PASSWORD: ci-only-runtime-password
+        run: sh server/db/provision-app.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Test authentication with PostgreSQL
+        env:
+          PGUSER: bricklab_app
+          PGPASSWORD: ci-only-runtime-password
+          BRICKLAB_TEST_DB: 'true'
+        run: node --test tests/server-auth.test.js
+      - name: Verify runtime cannot access project tables
+        env:
+          PGUSER: bricklab_app
+          PGPASSWORD: ci-only-runtime-password
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -c 'SELECT 1 FROM bricklab.sessions LIMIT 1'
+          if psql -X -v ON_ERROR_STOP=1 -c 'SELECT * FROM bricklab.projects'; then
+            echo "Runtime role has unexpected access to projects"
+            exit 1
+          fi
       - name: Reject changed applied migration
         run: |
           printf '\\n-- modified after application\\n' >> server/db/migrations/001_initial.sql
