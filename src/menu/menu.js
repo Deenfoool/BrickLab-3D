@@ -3,6 +3,7 @@ import { mountBugReport } from '../feedback/dialog.js?v=bug-report-v1'
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
 import { locales } from './locale.js?v=profile-gallery-1'
+import { mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
 import { createCloudAccount } from './account.js?v=profile-gallery-1'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
@@ -156,7 +157,7 @@ function closeMenu(restoreFocus = false) {
   if (restoreFocus) toggle.focus()
 }
 
-function projectCard(project, formatter) {
+function projectCard(project, formatter, cloudHead) {
   const t = strings()
   // Older cached locale modules must not break the entire saved-builds page.
   const projectParts = count => typeof t.projectParts === 'function'
@@ -188,7 +189,7 @@ function projectCard(project, formatter) {
   const meta = element('div', 'project-card-meta')
   const date = element('time', null, formatter.format(new Date(project.modifiedAt)))
   date.dateTime = project.modifiedAt
-  meta.append(element('span', null, projectParts(project.document.parts.length)), date)
+  meta.append(element('span', null, (language==='ru'?'Локально · ':'Local · ')+projectParts(project.document.parts.length)), date)
 
   const actions = element('div', 'project-card-actions')
   const open = button('workspace-action primary project-card-open', t.projectOpen || t.open || (language === 'ru' ? 'Открыть' : 'Open'))
@@ -207,6 +208,7 @@ function projectCard(project, formatter) {
   })
   actions.append(open, download, remove)
   body.append(title, summary, meta, actions, cloudAccount.localProjectControls(project))
+  if(cloudHead)body.append(cloudAccount.remoteProjectControls(cloudHead))
   card.append(art, body)
   return { card, art, project }
 }
@@ -222,7 +224,7 @@ function remoteProjectCard(p, formatter, ownerId) {
   const title=element('h2','project-card-title',p.name)
   const description=element('p','project-card-description',language==='ru'?'Облачная сборка':'Cloud build')
   const meta=element('div','project-card-meta')
-  const version=element('span',null,(language==='ru'?'Версия ':'Revision ')+p.revision)
+  const version=element('span',null,(language==='ru'?'Облако · версия ':'Cloud · revision ')+p.revision)
   const date=element('time',null,formatter.format(new Date(p.updatedAt)))
   date.dateTime=p.updatedAt
   meta.append(version,date)
@@ -249,8 +251,8 @@ function renderList() {
   ))
   const formatter = new Intl.DateTimeFormat(language, { month: 'short', day: 'numeric' })
   const state=cloudAccount.projectState()
-  const cards = visible.map(project => projectCard(project, formatter))
-  for(const p of state.remote.filter(p=>p.name.toLocaleLowerCase(language).includes(keyword)))cards.push(remoteProjectCard(p,formatter,state.ownerId))
+  const matchingRemote=state.remote.filter(p=>p.name.toLocaleLowerCase(language).includes(keyword)||visible.some(r=>r.cloud?.kind!=='bureau'&&r.cloud?.ownerId===state.ownerId&&r.cloud?.id===p.id))
+  const cards=mergeProjectGallery(visible,matchingRemote,state.ownerId).map(({project,cloud})=>project?projectCard(project,formatter,cloud):remoteProjectCard(cloud,formatter,state.ownerId))
   rows.replaceChildren(...cards.map(({ card }) => card))
   const info=byId('project-cloud-status')
   info.textContent=[state.message,state.warning].filter(Boolean).join(' · ')
@@ -280,7 +282,7 @@ function renderList() {
           if(signal.aborted)break
           if(entry.remote){
             try{
-              const item=await cloudAccount.fetchProjectPreview(entry.remote.id,entry.ownerId)
+              const item=await cloudAccount.fetchProjectPreview(entry.remote.id,entry.ownerId,signal)
               if(!item||signal.aborted)continue
               const doc=item.document
               entry.description.textContent=(typeof doc.description==='string'&&doc.description.trim())||(language==='ru'?doc.parts.length+' деталей':doc.parts.length+' parts')
