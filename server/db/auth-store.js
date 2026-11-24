@@ -30,7 +30,7 @@ export function connectAuthStore(env = process.env) {
   return {
     ...bureauStore(scope),
     ...securityStore(sql,scope,lock),
-    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1`; await sql`select 1 from bricklab.project_favorites limit 1`; await sql`select 1 from bricklab.award_reads limit 1`; await sql`select cover_theme,background_theme from bricklab.public_profiles limit 1`; await sql`select category,part_count from bricklab.public_builds limit 1`;await sql`select 1 from bricklab.community_like_counts limit 1`;await sql`select 1 from bricklab.community_follow_counts limit 1`;await sql`select 1 from bricklab.community_event_counts limit 1`;await sql`select 1 from bricklab.community_comments limit 1`;await sql`select 1 from bricklab.community_comment_reports limit 1`;await sql`select 1 from bricklab.community_reputation limit 1`;await sql`select 1 from bricklab.bureaus limit 1`;await sql`select 1 from bricklab.bureau_members limit 1`;await sql`select 1 from bricklab.bureau_projects limit 1`;await sql`select 1 from bricklab.bureau_revisions limit 1`;await sql`select email_verified_at,blocked_at from bricklab.users limit 1`;await sql`select 1 from bricklab.account_tokens limit 1`;await sql`select 1 from bricklab.admin_accounts limit 1`;await sql`select 1 from bricklab.admin_audit limit 1` },
+    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1`; await sql`select 1 from bricklab.project_favorites limit 1`; await sql`select 1 from bricklab.award_reads limit 1`; await sql`select cover_theme,background_theme from bricklab.public_profiles limit 1`; await sql`select category,part_count,allow_download,allow_comments,images from bricklab.public_builds limit 1`;await sql`select 1 from bricklab.community_bookmarks limit 1`;await sql`select 1 from bricklab.community_build_reports limit 1`;await sql`select 1 from bricklab.community_like_counts limit 1`;await sql`select 1 from bricklab.community_follow_counts limit 1`;await sql`select 1 from bricklab.community_event_counts limit 1`;await sql`select 1 from bricklab.community_comments limit 1`;await sql`select 1 from bricklab.community_comment_reports limit 1`;await sql`select 1 from bricklab.community_reputation limit 1`;await sql`select 1 from bricklab.bureaus limit 1`;await sql`select 1 from bricklab.bureau_members limit 1`;await sql`select 1 from bricklab.bureau_projects limit 1`;await sql`select 1 from bricklab.bureau_revisions limit 1`;await sql`select email_verified_at,blocked_at from bricklab.users limit 1`;await sql`select 1 from bricklab.account_tokens limit 1`;await sql`select 1 from bricklab.admin_accounts limit 1`;await sql`select 1 from bricklab.admin_audit limit 1` },
     async register({ email, displayName, passwordHash, tokenHash, expiresAt }) {
       return sql.begin(async tx => {
         const [user] = await tx`insert into bricklab.users (email, display_name, password_hash)
@@ -180,7 +180,7 @@ export function connectAuthStore(env = process.env) {
     async unpublishCard(uid){return scope(uid,tx=>tx`delete from bricklab.public_profiles where user_id=${uid}`)},
     async getPublicCard(id){const [p]=await sql`select public_id as id,display_name as "displayName",bio,updated_at as "updatedAt",avatar_image is not null as "hasAvatar",cover_image is not null as "hasCover",cover_theme as "coverTheme",background_theme as "backgroundTheme",coalesce((select followers from bricklab.community_follow_counts f where f.author_id=public_profiles.public_id),0) as followers from bricklab.public_profiles where public_id=${id}`;return p},
     async listPublicCards(){return sql`select public_id as id,display_name as "displayName",bio,updated_at as "updatedAt",avatar_image is not null as "hasAvatar",cover_image is not null as "hasCover",cover_theme as "coverTheme",background_theme as "backgroundTheme",coalesce((select followers from bricklab.community_follow_counts f where f.author_id=public_profiles.public_id),0) as followers from bricklab.public_profiles order by updated_at desc,public_id limit 30`},
-    async listOwnBuilds(uid){return scope(uid,tx=>tx`select b.public_id as id,b.project_id as "projectId",b.revision,b.title,b.description,b.category,b.part_count as "partCount",b.published_at as "publishedAt" from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id where c.user_id=${uid} order by b.published_at desc`)},
+    async listOwnBuilds(uid){return scope(uid,tx=>tx`select b.public_id as id,b.project_id as "projectId",b.revision,b.title,b.description,b.category,b.allow_download as "allowDownload",b.allow_comments as "allowComments",b.allow_remix as "allowRemix",b.difficulty,b.tags,b.work_type as "workType",b.attribution,b.origin_id as "originId",cardinality(b.images) as "imageCount",b.part_count as "partCount",b.published_at as "publishedAt" from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id where c.user_id=${uid} order by b.published_at desc`)},
     async publishBuild(uid,id,input){
       return scope(uid,async tx=>{
         await lock(tx,uid)
@@ -188,7 +188,22 @@ export function connectAuthStore(env = process.env) {
         if(!c)throw new ProjectError(409,'public_profile_required')
         const [p]=await tx`select p.id,r.document from bricklab.projects p join bricklab.project_revisions r on r.project_id=p.id and r.revision=${input.revision} where p.id=${id} and p.owner_id=${uid}`
         if(!p)throw missing()
-        await tx`insert into bricklab.public_builds(project_id,author_id,revision,title,description,document,category) values(${id},${c.public_id},${input.revision},${p.document.name},${input.description},${tx.json(p.document)},${input.category??'other'}) on conflict(project_id) do update set revision=excluded.revision,title=excluded.title,description=excluded.description,document=excluded.document,category=excluded.category,published_at=now()`
+        const [old]=await tx`select public_id,allow_download,allow_comments,allow_remix,difficulty,tags,work_type,attribution,origin_id from bricklab.public_builds where project_id=${id}`
+        const allowDownload=input.allowDownload??old?.allow_download??true,allowComments=input.allowComments??old?.allow_comments??true,allowRemix=input.allowRemix??old?.allow_remix??false
+        if(allowRemix&&!allowDownload)throw new ProjectError(400,'invalid_publication')
+        let workType=input.workType??old?.work_type??'original',attribution=input.attribution??old?.attribution??'',originId=old?.origin_id??null
+        const requested=p.document.communityOrigin?.id??originId
+        if(requested){
+          if(typeof requested!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requested)||requested===old?.public_id)throw new ProjectError(400,'invalid_publication')
+          const [source]=await tx`select b.public_id,b.title,b.allow_remix,b.allow_download,c.display_name,c.user_id from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id where b.public_id=${requested}`
+          if(!source||(!source.allow_remix||!source.allow_download)&&source.user_id!==uid)throw new ProjectError(403,'remix_disabled')
+          originId=source.public_id;workType='remix';attribution=(source.display_name+' — '+source.title).slice(0,250)
+        }
+        if(workType!=='original'&&!attribution)throw new ProjectError(400,'invalid_publication')
+        const images=input.images?.map(bytes=>bytes.toString('base64'))??[]
+        await tx`insert into bricklab.public_builds(project_id,author_id,revision,title,description,document,category,allow_download,allow_comments,allow_remix,difficulty,tags,work_type,attribution,origin_id,images)
+          values(${id},${c.public_id},${input.revision},${p.document.name},${input.description},${tx.json(p.document)},${input.category??'other'},${allowDownload},${allowComments},${allowRemix},${input.difficulty??old?.difficulty??'unspecified'},ARRAY(SELECT jsonb_array_elements_text(${tx.json(input.tags??old?.tags??[])}::jsonb)),${workType},${attribution},${originId},ARRAY(SELECT decode(value,'base64') FROM jsonb_array_elements_text(${tx.json(images)}::jsonb)))
+          on conflict(project_id) do update set revision=excluded.revision,title=excluded.title,description=excluded.description,document=excluded.document,category=excluded.category,published_at=now(),allow_download=excluded.allow_download,allow_comments=excluded.allow_comments,allow_remix=excluded.allow_remix,difficulty=excluded.difficulty,tags=excluded.tags,work_type=excluded.work_type,attribution=excluded.attribution,origin_id=excluded.origin_id,images=case when ${input.images!==undefined} then excluded.images else public_builds.images end`
       })
     },
     async unpublishBuild(uid,id){return scope(uid,async tx=>{const [p]=await tx`select id from bricklab.projects where id=${id} and owner_id=${uid}`;if(!p)throw missing();await tx`delete from bricklab.public_builds where project_id=${id} and author_id in (select public_id from bricklab.public_profiles where user_id=${uid})`})},
@@ -203,7 +218,7 @@ export function connectAuthStore(env = process.env) {
         await lock(tx,uid)
         const [p]=await tx`select public_id as id from bricklab.public_profiles where user_id=${uid}`
         if(!p)throw new ProjectError(409,'public_profile_required')
-        const [b]=await tx`select 1 from bricklab.public_builds where public_id=${id}`;if(!b)throw missing()
+        const [b]=await tx`select allow_comments from bricklab.public_builds where public_id=${id}`;if(!b)throw missing();if(!b.allow_comments)throw new ProjectError(403,'comments_disabled')
         if(input.parentId){
           const [parent]=await tx`select parent_id,body from bricklab.community_comments where id=${input.parentId} and build_id=${id}`
           if(!parent||parent.parent_id||parent.body===null)throw new ProjectError(400,'invalid_reply')
@@ -245,12 +260,21 @@ export function connectAuthStore(env = process.env) {
         const [own]=await tx`select public_id as id from bricklab.public_profiles where user_id=${uid}`
         const likes=await tx`select build_id as id from bricklab.community_likes where user_id=${uid}`
         const follows=await tx`select author_id as id from bricklab.community_follows where user_id=${uid}`
-        return {signedIn:true,ownId:own?.id??null,likes:likes.map(r=>r.id),follows:follows.map(r=>r.id)}
+        const bookmarks=await tx`select build_id as id from bricklab.community_bookmarks where user_id=${uid}`
+        return {signedIn:true,ownId:own?.id??null,likes:likes.map(r=>r.id),follows:follows.map(r=>r.id),bookmarks:bookmarks.map(r=>r.id)}
       })
     },
     async setSocial(uid,kind,id,add){
       return scope(uid,async tx=>{
         await lock(tx,uid)
+        if(kind==='bookmark'){
+          const [target]=await tx`select 1 from bricklab.public_builds where public_id=${id}`;if(!target)throw missing()
+          if(add){const [n]=await tx`select count(*)::int as n from bricklab.community_bookmarks where user_id=${uid}`
+            if(n.n>=1000){const [old]=await tx`select 1 from bricklab.community_bookmarks where user_id=${uid} and build_id=${id}`;if(!old)throw new ProjectError(409,'social_limit')}
+            await tx`insert into bricklab.community_bookmarks(user_id,build_id) values(${uid},${id}) on conflict do nothing`
+          }else await tx`delete from bricklab.community_bookmarks where user_id=${uid} and build_id=${id}`
+          return {active:add,count:0}
+        }
         if(kind==='like'){
           const [target]=await tx`select p.user_id as owner from bricklab.public_builds b join bricklab.public_profiles p on p.public_id=b.author_id where b.public_id=${id}`
           if(!target)throw missing()
@@ -273,6 +297,19 @@ export function connectAuthStore(env = process.env) {
         const [r]=await tx`select followers as count from bricklab.community_follow_counts where author_id=${id}`;return {active:add,count:r?.count??0}
       })
     },
+    async reportBuild(uid,id,reason){
+      return scope(uid,async tx=>{
+        await lock(tx,uid)
+        const [target]=await tx`select p.user_id as owner from bricklab.public_builds b join bricklab.public_profiles p on p.public_id=b.author_id where b.public_id=${id}`
+        if(!target)throw missing();if(target.owner===uid)throw new ProjectError(403,'self_reaction')
+        const [existing]=await tx`select 1 from bricklab.community_build_reports where reporter_id=${uid} and build_id=${id}`;if(existing)return
+        const [n]=await tx`select count(*)::int as n from bricklab.community_build_reports where reporter_id=${uid}`;if(n.n>=1000)throw new ProjectError(429,'report_limit')
+        await tx`insert into bricklab.community_build_reports(reporter_id,build_id,reason) values(${uid},${id},${reason}) on conflict do nothing`
+      })
+    },
+    async getBuildImage(id,index){
+      const [p]=await sql`select images[${index+1}] as image from bricklab.public_builds where public_id=${id}`;return p?.image
+    },
     async recordPublicEvent(uid,id,kind){
       return scope(uid,async tx=>{
         await tx`insert into bricklab.community_events(user_id,build_id,kind) select ${uid},b.public_id,${kind} from bricklab.public_builds b join bricklab.public_profiles p on p.public_id=b.author_id where b.public_id=${id} and p.user_id<>${uid} on conflict do nothing`
@@ -281,22 +318,23 @@ export function connectAuthStore(env = process.env) {
       })
     },
     async listPublicBuilds(author=null,options={}){
-      const {q='',category='',sort='recent',offset=0,limit=30,followingUid=null}=options
-      const query=tx=>tx`select b.public_id as id,b.author_id as "authorId",c.display_name as author,c.avatar_image is not null as "authorHasAvatar",b.title,b.description,b.revision,b.category,b.part_count as "partCount",b.published_at as "publishedAt",coalesce(l.likes,0) as likes,coalesce(e.views,0) as views,coalesce(e.downloads,0) as downloads
+      const {q='',category='',sort='recent',offset=0,limit=30,followingUid=null,bookmarkUid=null}=options
+      const query=tx=>tx`select b.public_id as id,b.author_id as "authorId",c.display_name as author,c.avatar_image is not null as "authorHasAvatar",b.title,b.description,b.revision,b.category,b.allow_download as "allowDownload",b.allow_comments as "allowComments",b.allow_remix as "allowRemix",b.difficulty,b.tags,b.work_type as "workType",b.attribution,b.origin_id as "originId",cardinality(b.images) as "imageCount",b.part_count as "partCount",b.published_at as "publishedAt",coalesce(l.likes,0) as likes,coalesce(e.views,0) as views,coalesce(e.downloads,0) as downloads
         from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id left join bricklab.community_like_counts l on l.build_id=b.public_id left join bricklab.community_event_counts e on e.build_id=b.public_id
         where (${author}::uuid is null or b.author_id=${author}::uuid)
         and (${followingUid}::uuid is null or exists(select 1 from bricklab.community_follows f where f.user_id=${followingUid}::uuid and f.author_id=b.author_id))
+        and (${bookmarkUid}::uuid is null or exists(select 1 from bricklab.community_bookmarks f where f.user_id=${bookmarkUid}::uuid and f.build_id=b.public_id))
         and (${category}='' or b.category=${category})
-        and (${q}='' or strpos(lower(b.title||' '||b.description||' '||c.display_name),lower(${q}))>0)
+        and (${q}='' or strpos(lower(b.title||' '||b.description||' '||c.display_name||' '||array_to_string(b.tags,' ')),lower(${q}))>0)
         order by case when ${sort}='popular' then coalesce(l.likes,0) end desc nulls last,case when ${sort}='popular' then coalesce(e.views,0) end desc nulls last,case when ${sort}='parts' then b.part_count end desc nulls last,
           case when ${sort}='name' then lower(b.title) end asc nulls last,
           case when ${sort}='oldest' then b.published_at end asc nulls last,
           b.published_at desc,b.public_id limit ${limit} offset ${offset}`
-      return followingUid?scope(followingUid,query):query(sql)
+      return followingUid||bookmarkUid?scope(followingUid??bookmarkUid,query):query(sql)
     },
     async getPublicBuild(id,download=false){
-      if(download){const [p]=await sql`select document from bricklab.public_builds where public_id=${id}`;return p}
-      const [p]=await sql`select b.public_id as id,b.author_id as "authorId",c.display_name as author,c.avatar_image is not null as "authorHasAvatar",b.title,b.description,b.revision,b.category,b.part_count as "partCount",b.published_at as "publishedAt",coalesce(l.likes,0) as likes,coalesce(e.views,0) as views,coalesce(e.downloads,0) as downloads from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id left join bricklab.community_like_counts l on l.build_id=b.public_id left join bricklab.community_event_counts e on e.build_id=b.public_id where b.public_id=${id}`;return p
+      if(download){const [p]=await sql`select document,allow_download as "allowDownload" from bricklab.public_builds where public_id=${id}`;return p}
+      const [p]=await sql`select b.public_id as id,b.author_id as "authorId",c.display_name as author,c.avatar_image is not null as "authorHasAvatar",b.title,b.description,b.revision,b.category,b.allow_download as "allowDownload",b.allow_comments as "allowComments",b.allow_remix as "allowRemix",b.difficulty,b.tags,b.work_type as "workType",b.attribution,b.origin_id as "originId",cardinality(b.images) as "imageCount",b.part_count as "partCount",b.published_at as "publishedAt",coalesce(l.likes,0) as likes,coalesce(e.views,0) as views,coalesce(e.downloads,0) as downloads from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id left join bricklab.community_like_counts l on l.build_id=b.public_id left join bricklab.community_event_counts e on e.build_id=b.public_id where b.public_id=${id}`;return p
     },
     async cleanup() { await sql`delete from bricklab.sessions where expires_at <= now()`;await sql`delete from bricklab.account_tokens where expires_at <= now()` },
     async close() { await sql.end({ timeout: 5 }) },
