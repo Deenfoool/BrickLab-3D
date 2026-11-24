@@ -192,7 +192,8 @@ export function connectAuthStore(env = process.env) {
         const allowDownload=input.allowDownload??old?.allow_download??true,allowComments=input.allowComments??old?.allow_comments??true,allowRemix=input.allowRemix??old?.allow_remix??false
         if(allowRemix&&!allowDownload)throw new ProjectError(400,'invalid_publication')
         let workType=input.workType??old?.work_type??'original',attribution=input.attribution??old?.attribution??'',originId=old?.origin_id??null
-        const requested=p.document.communityOrigin?.id??originId
+        const requested=originId??p.document.communityOrigin?.id
+        if(originId&&p.document.communityOrigin?.id&&p.document.communityOrigin.id!==originId)throw new ProjectError(400,'invalid_publication')
         if(requested){
           if(typeof requested!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requested)||requested===old?.public_id)throw new ProjectError(400,'invalid_publication')
           const [source]=await tx`select b.public_id,b.title,b.allow_remix,b.allow_download,c.display_name,c.user_id from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id where b.public_id=${requested}`
