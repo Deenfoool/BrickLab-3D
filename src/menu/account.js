@@ -1,9 +1,10 @@
+import {renderAdminPanel} from './admin-panel.js?v=security-1'
 import {renderBureauPanel} from './bureau-panel.js?v=bureau-1'
-import { createAuthClient } from './auth-client.js?v=cloud-auth-1'
+import { createAuthClient } from './auth-client.js?v=security-1'
 
 import { createProjectsClient, cloudLink } from './projects-client.js?v=bureau-1'
 
-import { renderCloudWorkshop } from './cloud-workshop.js?v=bureau-1'
+import { renderCloudWorkshop } from './cloud-workshop.js?v=security-1'
 
 import {createProfileClient} from './profile-client.js?v=notifications-1'
 
@@ -27,6 +28,8 @@ Object.assign(copy.ru,{community_disabled:'Сообщество пока отк�
 Object.assign(copy.en,{community_disabled:'Community is disabled on this server.',community_unavailable:'Community unavailable.',invalid_public_profile:'Check public name and biography.',publicSaved:'Public profile published.',publicRemoved:'Profile unpublished.'})
 Object.assign(copy.ru,{public_profile_required:'Сначала опубликуй профиль конструктора.',invalid_publication:'Проверь описание и согласие на публикацию.',publicationSaved:'Сборка опубликована.',publicationRemoved:'Публикация сборки снята.',managePublic:'Управление публикациями'})
 Object.assign(copy.en,{public_profile_required:'Publish your builder profile first.',invalid_publication:'Check description and publication consent.',publicationSaved:'Build published.',publicationRemoved:'Build unpublished.',managePublic:'Manage publications'})
+Object.assign(copy.ru,{closed:'Регистрация новых аккаунтов управляется сервером.',forgot:'Забыли пароль?',reset:'Восстановление пароля',verify:'Подтверждение почты',resetConfirm:'Новый пароль',sendCode:'Отправить код на почту',code:'Код из письма',codeSent:'Если адрес подходит, код отправлен. Проверь почту и спам. Код действителен 30 минут.',accountCreated:'Аккаунт создан. Теперь войди.',passwordChanged:'Пароль изменён. Войди с новым паролем.',invalid_code:'Код неверный или просрочен.',mail_unavailable:'Отправка почты пока недоступна.',revokeOthers:'Завершить остальные сессии',sessionsRevoked:'Другие сессии завершены.',admin:'Панель администратора',admin_required:'Недостаточно прав.',registration_disabled:'Регистрация пока закрыта.'})
+Object.assign(copy.en,{closed:'New account registration is controlled by the server.',forgot:'Forgot password?',reset:'Password recovery',verify:'Verify email',resetConfirm:'New password',sendCode:'Send email code',code:'Code from email',codeSent:'If the address is eligible, a code was sent. Check inbox and spam. It expires in 30 minutes.',accountCreated:'Account created. Sign in now.',passwordChanged:'Password changed. Sign in with your new password.',invalid_code:'Invalid or expired code.',mail_unavailable:'Email delivery is not available.',revokeOthers:'End other sessions',sessionsRevoked:'Other sessions ended.',admin:'Administration',admin_required:'Insufficient privileges.',registration_disabled:'Registration is currently closed.'})
 function node(tag, cls, value) {
  const e=document.createElement(tag); if(cls)e.className=cls; if(value!==undefined)e.textContent=value; return e
 }
@@ -38,7 +41,7 @@ function field(label,type,autocomplete,maxLength){
 }
 export function createCloudAccount({root,link,getProjects,download,openCopy,linkLocal,onNotifications=()=>{},api=createAuthClient(),cloud=createProjectsClient(),profiles=createProfileClient(),activityApi=createActivityClient(),communityApi=createCommunityClient()}){
  let lang='ru',visible=false,mode='login',user=null,checked=false,busy=false,error='',selected=null,remote=[],historyId=null,history=[],feedback='',section='workshop',profileData=null,activityData=null,publicCard=null,publicLoaded=false,publicBuilds=[],passport={source:'',document:null,revision:null}
- let bureauController=null,bureauSelection={id:null}
+ let bureauController=null,bureauSelection={id:null},adminController=null,emailDraft='',securityFeedback=''
  let notificationError=false,bellRefreshing=false,bellRendered=false
  const t=()=>copy[lang]
  function publishNotifications(){onNotifications({lang,signedIn:Boolean(user),checked,busy,items:activityData?.notifications??null,error:notificationError})}
@@ -132,7 +135,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    layout.append(local,server);return layout
  }
  function render(){
-   bureauController?.abort();bureauController=null
+   bureauController?.abort();bureauController=null;adminController?.abort();adminController=null
    label();publishNotifications();if(!visible)return
    if(bellRefreshing)bellRendered=true
    root.replaceChildren()
@@ -150,7 +153,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
      const logout=action(s.logout,()=>run(()=>api.logout()));logout.disabled=busy;header.append(identity,logout)
      const projects=getProjects()
      if(profileData?.profile.avatarUrl){const img=node('img','profile-avatar-image');img.src=profileData.profile.avatarUrl;img.alt='';avatar.replaceChildren(img)}
-     root.append(header,renderCloudWorkshop({lang,user,local:projects,remote,section,busy,cloudPanel,bureauPanel:()=>{bureauController=new AbortController();return renderBureauPanel({lang,user,signal:bureauController.signal,getProjects,openCopy,linkLocal,download,selection:bureauSelection})},passport,profileData,activityData,publicCard,publicLoaded,publicBuilds,loadPublic(){operate(async()=>{publicCard=await communityApi.get();publicBuilds=await communityApi.builds();publicLoaded=true})},publishBuild(id,data){operate(async()=>{publicBuilds=await communityApi.publishBuild(id,data);feedback='publicationSaved'})},unpublishBuild(id){operate(async()=>{publicBuilds=await communityApi.unpublishBuild(id);feedback='publicationRemoved'})},publishPublic(data){operate(async()=>{publicCard=await communityApi.publish(data);publicLoaded=true;feedback='publicSaved'})},unpublishPublic(){operate(async()=>{publicCard=await communityApi.unpublish();publicBuilds=[];publicLoaded=true;feedback='publicRemoved'})},refreshActivity(){operate(async()=>{activityData=await activityApi.get()})},readActivity(){operate(async()=>{activityData=await activityApi.read()})},toggleFavorite(id,add){operate(async()=>{activityData=await activityApi.favorite(id,add)})},openFavorite(id){operate(async()=>{const item=await cloud.get(id);openCopy(item.document,{ownerId:user.id,id:item.id,revision:item.revision})})},uploadMedia(kind,file){operate(async()=>{profileData=await profiles.upload(kind,file);feedback='mediaSaved'})},removeMedia(kind){operate(async()=>{profileData=await profiles.remove(kind);feedback='mediaSaved'})},saveProfile(data){operate(async()=>{profileData=await profiles.save(data);feedback='profileSaved'})},
+     root.append(header,renderCloudWorkshop({lang,user,local:projects,remote,section:section==='admin'&&!user.admin?'workshop':section,busy,cloudPanel,revokeOthers(){operate(async()=>{await api.revokeOthers();feedback='sessionsRevoked'})},adminPanel:()=>{adminController=new AbortController();return renderAdminPanel({lang,signal:adminController.signal})},bureauPanel:()=>{bureauController=new AbortController();return renderBureauPanel({lang,user,signal:bureauController.signal,getProjects,openCopy,linkLocal,download,selection:bureauSelection})},passport,profileData,activityData,publicCard,publicLoaded,publicBuilds,loadPublic(){operate(async()=>{publicCard=await communityApi.get();publicBuilds=await communityApi.builds();publicLoaded=true})},publishBuild(id,data){operate(async()=>{publicBuilds=await communityApi.publishBuild(id,data);feedback='publicationSaved'})},unpublishBuild(id){operate(async()=>{publicBuilds=await communityApi.unpublishBuild(id);feedback='publicationRemoved'})},publishPublic(data){operate(async()=>{publicCard=await communityApi.publish(data);publicLoaded=true;feedback='publicSaved'})},unpublishPublic(){operate(async()=>{publicCard=await communityApi.unpublish();publicBuilds=[];publicLoaded=true;feedback='publicRemoved'})},refreshActivity(){operate(async()=>{activityData=await activityApi.get()})},readActivity(){operate(async()=>{activityData=await activityApi.read()})},toggleFavorite(id,add){operate(async()=>{activityData=await activityApi.favorite(id,add)})},openFavorite(id){operate(async()=>{const item=await cloud.get(id);openCopy(item.document,{ownerId:user.id,id:item.id,revision:item.revision})})},uploadMedia(kind,file){operate(async()=>{profileData=await profiles.upload(kind,file);feedback='mediaSaved'})},removeMedia(kind){operate(async()=>{profileData=await profiles.remove(kind);feedback='mediaSaved'})},saveProfile(data){operate(async()=>{profileData=await profiles.save(data);feedback='profileSaved'})},
        go(key){section=key;render()},selectPassport(source){passport={source,document:null,revision:null};render()},
        loadPassport(){operate(async()=>{const item=await cloud.get(passport.source.slice(6));passport={source:passport.source,document:item.document,revision:item.revision}})}}),localLink());if(feedback)root.append(message(feedback));if(error)root.append(message(error));if(busy)root.append(message('busy'));return
    }
@@ -158,20 +161,32 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    hero.append(brand,node('h2',null,s.hero),node('p',null,s.intro))
    const art=node('img','account-hero-art');art.src=new URL('../../assets/examples/5-plus-r-gearbox.webp',import.meta.url).href;art.alt='';hero.append(art)
    const form=node('form','account-auth-form'),tabs=node('div','account-tabs')
-   for(const k of ['login','register']){const b=action(s[k],()=>{mode=k;error='';render()});b.disabled=busy;b.setAttribute('aria-pressed',String(mode===k));tabs.append(b)}
+   for(const k of ['login','register']){const b=action(s[k],()=>{mode=k;error='';securityFeedback='';render()});b.disabled=busy;b.setAttribute('aria-pressed',String(mode===k));tabs.append(b)}
    form.append(tabs,node('h2',null,s[mode]))
-   const reg=mode==='register',name=reg?field(s.name,'text','nickname',80):null,email=field(s.email,'email','username',254),password=field(s.password,'password',reg?'new-password':'current-password',256)
-   if(name)form.append(name.wrap)
-   if(reg){password.input.minLength=12;form.append(node('p','account-muted',s.closed+' '+s.passwordHelp))}
-   form.append(email.wrap,password.wrap)
-   for(const f of [name,email,password])if(f)f.input.disabled=busy
-   const submit=node('button','workspace-action primary',reg?s.create:s.enter);submit.type='submit';submit.disabled=busy;form.append(submit,localLink())
-   if(error)form.append(message(error));if(busy)form.append(message('busy'))
+   const secure=globalThis.location.protocol==='https:',reg=mode==='register',verify=mode==='verify',reset=mode==='reset',resetConfirm=mode==='resetConfirm',sendOnly=reset||reg&&secure,finish=verify||resetConfirm
+   const name=(verify||reg&&!secure)?field(s.name,'text','nickname',80):null,email=field(s.email,'email','username',254),password=sendOnly?null:field(s.password,'password',reg||finish?'new-password':'current-password',256),code=finish?field(s.code,'text','one-time-code',48):null
+   email.input.value=emailDraft;if(name)form.append(name.wrap)
+   if(reg)form.append(node('p','account-muted',s.closed))
+   form.append(email.wrap)
+   if(code){code.input.minLength=48;code.input.autocapitalize='none';code.input.spellcheck=false;form.append(code.wrap)}
+   if(password){if(reg||finish){password.input.minLength=12;form.append(node('p','account-muted',s.passwordHelp))}form.append(password.wrap)}
+   for(const f of [name,email,password,code])if(f)f.input.disabled=busy
+   const submit=node('button','workspace-action primary',sendOnly?s.sendCode:verify?s.create:resetConfirm?s.resetConfirm:reg?s.create:s.enter);submit.type='submit';submit.disabled=busy;form.append(submit,localLink())
+   if(mode==='login'&&secure)form.append(action(s.forgot,()=>{mode='reset';error='';securityFeedback='';render()}))
+   if(finish)form.append(action(s.sendCode,()=>{mode=verify?'register':'reset';error='';securityFeedback='';render()}))
+   if(securityFeedback)form.append(message(securityFeedback));if(error)form.append(message(error));if(busy)form.append(message('busy'))
    form.addEventListener('submit',event=>{
      event.preventDefault();if(busy)return
-     const data={email:email.input.value,password:password.input.value,...(reg?{displayName:name.input.value}:{})}
-     password.input.value=''
-     run(()=>reg?api.register(data):api.login(data))
+     const data={email:email.input.value,...(password?{password:password.input.value}:{}),...(name?{displayName:name.input.value}:{}),...(code?{code:code.input.value.trim().toLowerCase()}: {})}
+     emailDraft=data.email;if(password)password.input.value=''
+     if(!sendOnly&&!finish){securityFeedback='';run(()=>reg?api.register(data):api.login(data));return}
+     busy=true;error='';securityFeedback='';render()
+     void (async()=>{
+      try{
+       if(sendOnly){if(reset)await api.resetRequest(data.email);else await api.register({email:data.email});mode=reset?'resetConfirm':'verify';securityFeedback='codeSent'}
+       else{if(verify)await api.verify(data);else await api.resetConfirm(data);mode='login';securityFeedback=verify?'accountCreated':'passwordChanged'}
+      }catch(e){error=e.code??'unknown'}finally{busy=false;render()}
+     })()
    })
    panel.append(hero,form);root.append(panel)
  }
@@ -182,7 +197,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    readNotifications(){return refreshNotifications(true)},
    update(language,show){
      const next=language==='en'?'en':'ru',changed=next!==lang||visible!==show
-     lang=next;visible=show;if(!show){bureauController?.abort();bureauController=null}label();publishNotifications()
+     lang=next;visible=show;if(!show){bureauController?.abort();bureauController=null;adminController?.abort();adminController=null}label();publishNotifications()
      if(!show&&!checked&&api.allowed&&!busy&&!notificationError)void refreshNotifications()
      if(show&&changed){render();if(api.allowed&&!busy){checked=false;refresh()}}else if(show&&!busy&&user)render()
    }

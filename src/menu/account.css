@@ -103,3 +103,9 @@
 .bureau-member{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px;border-top:1px solid #444750;overflow-wrap:anywhere}
 .bureau-panel .account-card{min-width:0}.bureau-panel select,.bureau-panel input{max-width:100%;min-width:0}
 .bureau-panel[aria-busy=true]{cursor:progress}
+
+.admin-panel,.admin-content{display:grid;gap:12px;min-width:0}
+.admin-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.admin-metrics strong{font-size:27px}
+.admin-panel .account-card{overflow-wrap:anywhere;min-width:0}
+.admin-panel .community-actions{flex-wrap:wrap}
