@@ -483,3 +483,7 @@ dialog p,.setting{margin:18px 0}
 .community-image-choices [aria-pressed=true]{border-color:#ffb01b;color:#ffd28a}
 .community-model-credit{display:grid;gap:5px}
 @media(max-width:620px){.community-model-picture{height:40dvh}.community-image-choices img{width:54px;height:40px}}
+
+.publish-card-preview{display:grid;gap:6px;padding:12px;background:#191c22;border:1px solid #41454e;border-radius:10px}
+.publish-card-preview img{width:100%;max-height:190px;object-fit:contain;background:#14161b;border-radius:6px}
+.publish-card-preview .community-description{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
