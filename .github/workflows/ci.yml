@@ -30,3 +30,44 @@ jobs:
         run: npm ci
       - name: Run regression tests
         run: npm test
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: bricklab
+          POSTGRES_USER: bricklab_admin
+          POSTGRES_PASSWORD: ci-only-test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bricklab_admin -d bricklab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: bricklab
+      PGUSER: bricklab_admin
+      PGPASSWORD: ci-only-test-password
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client if needed
+        run: command -v psql || (sudo apt-get update && sudo apt-get install -y postgresql-client)
+      - name: Apply migrations
+        run: sh server/db/migrate.sh
+      - name: Verify migration is idempotent
+        run: sh server/db/migrate.sh
+      - name: Verify database constraints and revision history
+        run: psql -X -v ON_ERROR_STOP=1 -f server/db/test-schema.sql
+      - name: Reject changed applied migration
+        run: |
+          printf '\\n-- modified after application\\n' >> server/db/migrations/001_initial.sql
+          if sh server/db/migrate.sh; then
+            echo "Changed migration was accepted"
+            exit 1
+          fi

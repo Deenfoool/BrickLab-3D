@@ -1,4 +1,34 @@
 services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: bricklab
+      POSTGRES_USER: bricklab_admin
+      POSTGRES_PASSWORD: "${BRICKLAB_DB_PASSWORD:?Set BRICKLAB_DB_PASSWORD in .env}"
+    volumes:
+      - bricklab-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bricklab_admin -d bricklab"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+  migrate:
+    image: postgres:16
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: bricklab
+      PGUSER: bricklab_admin
+      PGPASSWORD: "${BRICKLAB_DB_PASSWORD:?Set BRICKLAB_DB_PASSWORD in .env}"
+      PGCONNECT_TIMEOUT: 10
+    volumes:
+      - ./server/db:/migrations:ro
+    entrypoint: ["/bin/sh", "/migrations/migrate.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
   bricklab:
     build: .
     ports:
@@ -6,6 +36,9 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 8080
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     init: true
     restart: unless-stopped
     read_only: true
@@ -14,3 +47,5 @@ services:
     security_opt:
       - no-new-privileges:true
     stop_grace_period: 15s
+volumes:
+  bricklab-db:
