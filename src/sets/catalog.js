@@ -98,7 +98,7 @@ function storedSets() {
 }
 export async function mountSetCatalog(
   root,
-  { language, signal, projects, begin, resume },
+  { language, signal, projects, begin, resume, initialQuery = '' },
 ) {
   const t = setStrings(language)
   await initRebrickable(signal)
@@ -115,6 +115,7 @@ export async function mountSetCatalog(
   const form = node('form', undefined, 'set-search')
   const query = node('input')
   query.type = 'search'
+  query.value = initialQuery
   query.placeholder = t.search
   query.setAttribute('aria-label', t.search)
   const submit = node('button', t.find, 'secondary')
