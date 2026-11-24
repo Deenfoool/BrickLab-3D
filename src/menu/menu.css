@@ -438,3 +438,34 @@ dialog p,.setting{margin:18px 0}
 .project-cloud-controls>.account-revision .workspace-action{font-size:12px;min-height:32px}
 #project-cloud-status{margin-bottom:14px;color:var(--muted);font-size:13px}
 .project-card-remote .project-card-meta{margin-top:auto}
+
+/* Publish and community model detail dialogs. */
+.publish-dialog{width:min(620px,calc(100vw - 24px));max-width:none;max-height:calc(100dvh - 24px);overflow:auto;padding:22px;background:#22252b;color:var(--ink);border:1px solid #50545e;border-radius:14px}
+.publish-dialog[open]{display:grid;gap:16px}
+.publish-dialog::backdrop{background:#000b}
+.publish-dialog h2{font-size:23px}
+.publish-dialog .workshop-form{gap:12px}
+.publish-dialog .account-field{min-width:0}
+.publish-dialog input:not([type=checkbox]),.publish-dialog textarea,.publish-dialog select{width:100%;background:#191c22;color:var(--ink);border:1px solid #454952;border-radius:7px;padding:10px;box-sizing:border-box}
+.publish-dialog .workshop-check{display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.5}
+.publish-dialog .workshop-check input{flex:none;margin-top:4px}
+.publish-footer{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}
+.community-viewer-dialog.community-model-dialog{width:min(1280px,calc(100vw - 24px))}
+.community-model-dialog[open]{display:flex;flex-direction:column;gap:16px}
+.community-model-layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(250px,1fr);align-items:start;gap:16px}
+.community-model-view{min-width:0;display:grid;gap:8px}
+.community-model-info{display:grid;gap:12px;min-width:0;background:#191c22;border:1px solid #41454e;border-radius:10px;padding:16px}
+.community-model-info .community-description{font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.community-model-info .community-meta{display:flex;flex-wrap:wrap}
+.community-model-info h3,.community-related h3{font-size:17px;margin:0}
+.community-model-author{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.community-model-author .community-author-avatar{width:36px;height:36px;border-radius:50%}
+.community-related{display:grid;gap:12px}
+.community-related-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:10px}
+.community-related-grid .community-card-body{padding:10px;gap:5px}
+.community-related-grid .community-title{font-size:14px}
+.community-model-dialog:fullscreen,.community-model-dialog.expanded{width:100vw;max-width:none}
+.community-model-dialog:fullscreen .community-viewer-stage,.community-model-dialog.expanded .community-viewer-stage{height:min(65dvh,720px);min-height:240px}
+.community-art-link{display:block;cursor:pointer}
+.community-art-link:focus-visible{outline-offset:-3px}
+@media(max-width:760px){.community-model-layout{grid-template-columns:1fr}.community-model-info{padding:12px}.community-model-dialog .community-viewer-stage{height:40dvh}.publish-dialog{padding:14px}}
