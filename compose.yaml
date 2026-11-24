@@ -8,7 +8,7 @@ services:
     volumes:
       - bricklab-db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bricklab_admin -d bricklab"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U bricklab_admin -d bricklab"]
       interval: 5s
       timeout: 5s
       retries: 15

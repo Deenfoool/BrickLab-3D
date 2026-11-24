@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+export LC_ALL=C
 # Uses the standard libpq PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD variables.
 # Run with the database migration administrator, never a web request.
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -30,7 +31,7 @@ SQL
     esac
     case "$version" in *[!a-z0-9_]*) echo "Invalid migration filename: $version" >&2; exit 1 ;; esac
     checksum=$(sha256sum "$migration" | cut -d ' ' -f 1)
-    printf "SELECT EXISTS (SELECT 1 FROM bricklab.schema_migrations WHERE version = '%s') AS applied, NOT EXISTS (SELECT 1 FROM bricklab.schema_migrations WHERE version = '%s' AND checksum <> '%s') AS matches;\\gset\n" "$version" "$version" "$checksum"
+    printf "SELECT EXISTS (SELECT 1 FROM bricklab.schema_migrations WHERE version = '%s') AS applied, NOT EXISTS (SELECT 1 FROM bricklab.schema_migrations WHERE version = '%s' AND checksum <> '%s') AS matches \\gset\n" "$version" "$version" "$checksum"
     printf '\\if :applied\n\\if :matches\n\\echo Already applied: %s\n\\else\n\\echo Migration checksum mismatch: %s\nSELECT 1 / 0;\n\\endif\n\\else\n\\echo Applying: %s\n' "$version" "$version" "$version"
     cat "$migration"
     printf "\nINSERT INTO bricklab.schema_migrations (version, checksum) VALUES ('%s', '%s');\n\\endif\n" "$version" "$checksum"
