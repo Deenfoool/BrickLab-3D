@@ -1869,6 +1869,13 @@ class LDrawLoader extends Loader {
 		fileLoader.setWithCredentials( this.withCredentials );
 
 		const text = await fileLoader.loadAsync( url );
+		this.parseMaterials( text );
+
+	}
+
+	// Parse an already-loaded LDConfig text without another FileLoader request.
+	parseMaterials( text ) {
+
 		const colorLineRegex = /^0 !COLOUR/;
 		const lines = text.split( /[\n\r]/g );
 		const materials = [];
