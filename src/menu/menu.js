@@ -55,7 +55,7 @@ const notificationPopover = createNotificationPopover({root:byId('notification-c
   onOpen:()=>{cloudAccount.showNotifications();if(location.hash!=='#account')location.hash='#account'}
 })
 const cloudAccount = createCloudAccount({ root: byId('account-panel'), link: byId('account-link'),
-  getProjects: () => projects, download: downloadProject, openCopy: (data, cloud) => addProject(data, null, cloud), linkLocal: linkCloudProject, onNotifications: state => notificationPopover.update(state), onProjectsChanged:()=>{if(currentPage()==='projects')renderList()} })
+  getProjects: () => projects, download: downloadProject, openCopy: (data, cloud) => addProject(data, null, cloud), linkLocal: linkCloudProject, onNotifications: state => notificationPopover.update(state), onProjectsChanged:()=>{if(currentPage()==='projects')renderList();if(currentPage()==='home')renderCloudContinue()} })
 
 try {
   if (localStorage.getItem('bricklab.language') === 'en') language = 'en'
@@ -504,6 +504,7 @@ function render(initial = false) {
   if (home && exampleGrid.firstElementChild !== featuredExample) exampleGrid.prepend(featuredExample)
   if (!home && exampleGrid.lastElementChild !== featuredExample) exampleGrid.append(featuredExample)
   renderHome(home)
+  renderCloudContinue()
   renderHub(home)
   if(!hubSearch||hubSearchLanguage!==language){hubSearch?.dispose();hubSearchLanguage=language;hubSearch=mountHubSearch({language,getProjects:()=>projects,getCloud:()=>cloudAccount.projectState(),openLocal:openProject,openCloud:async(id,owner)=>{try{const item=await cloudAccount.fetchProjectPreview(id,owner);if(item&&cloudAccount.projectState().ownerId===owner)addProject(item.document,null,{ownerId:owner,id:item.id,revision:item.revision})}catch{setStatus('exampleUnavailable')}},goLibrary:q=>{pendingLibraryQuery=q;closeLibrary();if(currentPage()==='library')void openLibrary();else location.hash='#library'},goSets:q=>{pendingSetQuery=q;closeSets();if(currentPage()==='sets')void openSets();else location.hash='#sets'}})}
   libraryRoot.hidden = page !== 'library'
@@ -527,6 +528,19 @@ function render(initial = false) {
   return editorReady
 }
 
+function renderCloudContinue(){
+ const root=byId('hub-cloud-continue'),cta=byId('hub-account-cta'),state=cloudAccount.projectState()
+ const visible=currentPage()==='home'
+ cta.hidden=!visible||!state.checked||state.signedIn
+ root.hidden=!visible||projects.length>0||!state.signedIn||!state.remote.length
+ root.replaceChildren()
+ if(root.hidden)return
+ const latest=[...state.remote].sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt))[0]
+ const detail=element('div','hub-cloud-detail'),action=button('workspace-action primary',strings().continueBuild)
+ detail.append(element('p','home-feature-label',strings().hubCloudLatest),element('h2',null,latest.name))
+ action.onclick=async()=>{action.disabled=true;try{const item=await cloudAccount.fetchProjectPreview(latest.id,state.ownerId);if(item&&currentPage()==='home'&&cloudAccount.projectState().ownerId===state.ownerId)addProject(item.document,null,{ownerId:state.ownerId,id:item.id,revision:item.revision})}catch{setStatus('exampleUnavailable')}finally{action.disabled=false}}
+ root.append(detail,action)
+}
 function renderHub(visible){
  const root=byId('home-hub');root.hidden=!visible
  if(!visible){hubSession?.controller.abort();hubSession=null;return}
