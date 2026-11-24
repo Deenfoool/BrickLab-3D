@@ -2,9 +2,9 @@ import { createAuthClient } from './auth-client.js?v=cloud-auth-1'
 
 import { createProjectsClient, cloudLink } from './projects-client.js?v=cloud-projects-1'
 
-import { renderCloudWorkshop } from './cloud-workshop.js?v=profile-1'
+import { renderCloudWorkshop } from './cloud-workshop.js?v=profile-media-1'
 
-import {createProfileClient} from './profile-client.js?v=profile-1'
+import {createProfileClient} from './profile-client.js?v=profile-media-1'
 
 const copy = {
  ru:{login:'Войти',register:'Регистрация',account:'BrickLab Workshop',hero:'Твоя мастерская. Где угодно.',intro:'Настоящий аккаунт BrickLab Cloud.',email:'Электронная почта',name:'Имя пользователя',password:'Пароль',enter:'Войти',create:'Создать аккаунт',local:'Продолжить без аккаунта',logout:'Выйти',loading:'Проверяем серверную сессию…',retry:'Повторить проверку',profile:'Серверный аккаунт',localBuilds:'Локальные сборки',selected:'Выбранная сборка',coming:'Приватные облачные сборки и история версий. Сохраняй изменения явно; локальные сборки не удаляются. Достижения пока не подключены.',closed:'Регистрация доступна только при разрешении администратора. Подтверждение почты и восстановление пароля ещё не реализованы.',https_required:'Для входа необходим HTTPS или локальный адрес разработки.',auth_unavailable:'Сервер авторизации недоступен. Повтори попытку.',invalid_credentials:'Проверь введённые данные.',invalid_login:'Неверная почта или пароль.',registration_disabled:'Регистрация пока закрыта.',registration_unavailable:'Не удалось создать аккаунт с этими данными.',too_many_attempts:'Слишком много попыток. Попробуй позже.',invalid_origin:'Адрес приложения не совпадает с настройками сервера.',unknown:'Не удалось выполнить запрос.',busy:'Выполняется запрос…',passwordHelp:'Минимум 12 символов при регистрации.'},
@@ -14,6 +14,8 @@ Object.assign(copy.ru,{cloud:'Облачные сборки',refresh:'Обнов
 Object.assign(copy.en,{cloud:'Cloud builds',refresh:'Refresh',upload:'Save to cloud',saveRevision:'Save changes',open:'Open local copy',history:'Revision history',download:'Download',empty:'No builds yet',saved:'Build saved to cloud.',linked:'Cloud · revision',localWarning:'Local copies remain in this browser after sign-out. Avoid saving private builds on shared computers.',revision_conflict:'A newer cloud revision exists. Your local build is preserved. Open a fresh copy and compare changes or save a separate project.',projects_unavailable:'Cloud storage unavailable.',project_limit:'Project limit reached.',revision_limit:'Revision limit reached.',storage_limit:'Storage limit reached.',body_too_large:'Build exceeds the size limit.',invalid_document:'Invalid build format.',not_found:'Build unavailable.',unauthenticated:'Session expired. Sign in again.',copyCloud:'Save as separate project',localLinkFailed:'Cloud revision saved, but local link could not be stored. Refresh the list to open it.',version:'Revision',oldCopy:'Open historical copy',otherAccount:'Linked to another account — saves as a separate copy.'})
 Object.assign(copy.ru,{profile_unavailable:'Профиль недоступен.',invalid_profile:'Проверь описание и обложку.',profileSaved:'Профиль сохранён на сервере.'})
 Object.assign(copy.en,{profile_unavailable:'Profile unavailable.',invalid_profile:'Check biography and cover.',profileSaved:'Profile saved on the server.'})
+Object.assign(copy.ru,{invalid_image:'Не удалось обработать изображение. Допустимы PNG, JPEG и WebP.',background_locked:'Этот фон ещё не получен.',mediaSaved:'Внешний вид сохранён.'})
+Object.assign(copy.en,{invalid_image:'Image could not be processed. Use PNG, JPEG or WebP.',background_locked:'This background is not owned.',mediaSaved:'Appearance saved.'})
 function node(tag, cls, value) {
  const e=document.createElement(tag); if(cls)e.className=cls; if(value!==undefined)e.textContent=value; return e
 }
@@ -99,7 +101,8 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
      details.append(node('h2',null,user.displayName),node('p','account-muted',user.email));identity.append(avatar,details)
      const logout=action(s.logout,()=>run(()=>api.logout()));logout.disabled=busy;header.append(identity,logout)
      const projects=getProjects()
-     root.append(header,renderCloudWorkshop({lang,user,local:projects,remote,section,busy,cloudPanel,passport,profileData,saveProfile(data){operate(async()=>{profileData=await profiles.save(data);feedback='profileSaved'})},
+     if(profileData?.profile.avatarUrl){const img=node('img','profile-avatar-image');img.src=profileData.profile.avatarUrl;img.alt='';avatar.replaceChildren(img)}
+     root.append(header,renderCloudWorkshop({lang,user,local:projects,remote,section,busy,cloudPanel,passport,profileData,uploadMedia(kind,file){operate(async()=>{profileData=await profiles.upload(kind,file);feedback='mediaSaved'})},removeMedia(kind){operate(async()=>{profileData=await profiles.remove(kind);feedback='mediaSaved'})},saveProfile(data){operate(async()=>{profileData=await profiles.save(data);feedback='profileSaved'})},
        go(key){section=key;render()},selectPassport(source){passport={source,document:null,revision:null};render()},
        loadPassport(){operate(async()=>{const item=await cloud.get(passport.source.slice(6));passport={source:passport.source,document:item.document,revision:item.revision}})}}),localLink());if(feedback)root.append(message(feedback));if(error)root.append(message(error));if(busy)root.append(message('busy'));return
    }

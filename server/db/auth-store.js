@@ -1,5 +1,6 @@
 import postgres from 'postgres'
 import { ProjectError } from '../projects.js'
+import { backgroundInventory } from '../profile-media.js'
 
 export function connectAuthStore(env = process.env) {
   const sql = postgres({
@@ -25,7 +26,7 @@ export function connectAuthStore(env = process.env) {
   }
   const missing = () => new ProjectError(404,'not_found')
   return {
-    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1` },
+    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1` },
     async register({ email, displayName, passwordHash, tokenHash, expiresAt }) {
       return sql.begin(async tx => {
         const [user] = await tx`insert into bricklab.users (email, display_name, password_hash)
@@ -100,15 +101,30 @@ export function connectAuthStore(env = process.env) {
     },
     async getProfile(uid) {
       return scope(uid,async tx=>{
-        const [p]=await tx`select bio,cover from bricklab.profiles where user_id=${uid}`
+        const [p]=await tx`select bio,cover,background from bricklab.profiles where user_id=${uid}`
         const awards=await tx`select award,awarded_at as "awardedAt" from bricklab.workshop_awards where user_id=${uid} order by awarded_at`
-        return {...(p??{bio:'',cover:'blueprint'}),awards}
+        const media=await tx`select kind,version from bricklab.profile_media where user_id=${uid}`
+        const entitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
+        const inventory=backgroundInventory(awards,entitlements)
+        const profile=p??{bio:'',cover:'blueprint',background:'default'}
+        if(!inventory.some(i=>i.id===profile.background&&i.owned))profile.background='default'
+        return {...profile,awards,inventory,avatarUrl:media.find(m=>m.kind==='avatar')?'/api/profile/avatar?v='+media.find(m=>m.kind==='avatar').version:null,coverUrl:media.find(m=>m.kind==='cover')?'/api/profile/cover?v='+media.find(m=>m.kind==='cover').version:null}
       })
     },
     async saveProfile(uid,p) {
-      return scope(uid,tx=>tx`insert into bricklab.profiles(user_id,bio,cover) values(${uid},${p.bio},${p.cover})
-        on conflict(user_id) do update set bio=excluded.bio,cover=excluded.cover,updated_at=now()`)
+      return scope(uid,async tx=>{
+        await tx`insert into bricklab.profiles(user_id,bio,cover) values(${uid},${p.bio},${p.cover}) on conflict(user_id) do update set bio=excluded.bio,cover=excluded.cover,updated_at=now()`
+        if(p.background!==undefined){
+          const awards=await tx`select award from bricklab.workshop_awards where user_id=${uid}`
+          const entitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
+          if(!backgroundInventory(awards,entitlements).some(i=>i.id===p.background&&i.owned))throw new ProjectError(403,'background_locked')
+          await tx`update bricklab.profiles set background=${p.background} where user_id=${uid}`
+        }
+      })
     },
+    async getMedia(uid,kind){return scope(uid,async tx=>{const [r]=await tx`select image from bricklab.profile_media where user_id=${uid} and kind=${kind}`;return r?.image})},
+    async saveMedia(uid,kind,image){return scope(uid,tx=>tx`insert into bricklab.profile_media(user_id,kind,image) values(${uid},${kind},${image}) on conflict(user_id,kind) do update set image=excluded.image,version=gen_random_uuid()`)},
+    async deleteMedia(uid,kind){return scope(uid,tx=>tx`delete from bricklab.profile_media where user_id=${uid} and kind=${kind}`)},
     async cleanup() { await sql`delete from bricklab.sessions where expires_at <= now()` },
     async close() { await sql.end({ timeout: 5 }) },
   }
