@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto'
 import {ProjectError} from './projects.js'
 import {normalizeImage} from './profile-media.js'
+import {sanitizePreview} from '../src/menu/public-preview.js'
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export function validatePublicCard(value){
  const clean=(s,max)=>typeof s==='string'&&s.length<=max&&!/[\u0000-\u0008\u000b-\u001f\u007f]/.test(s)&&!/[\ud800-\udfff]/u.test(s)
@@ -39,13 +40,7 @@ export function validatePublication(value){
  }
  return {revision:value.revision,description:value.description.trim(),...(value.category===undefined?{}:{category:value.category}),...extra}
 }
-export function publicPreview(doc){
- if(!Array.isArray(doc?.parts)||doc.parts.length>600)return null
- const valid=(v,n,max)=>Array.isArray(v)&&v.length===n&&v.every(x=>Number.isFinite(x)&&Math.abs(x)<=max)
- const parts=doc.parts.filter(p=>p&&['string','number'].includes(typeof p.design)&&/^[a-zA-Z0-9_-]{1,40}$/.test(String(p.design))).map((p,i)=>({id:'preview-'+i,design:String(p.design),...(valid(p.position,3,1000000)?{position:p.position}:{}),...(valid(p.rotation,4,2)?{rotation:p.rotation}:{}),...(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color)?{color:p.color}:{}),mirrored:p.mirrored===true}))
- if(!parts.length||new Set(parts.map(p=>p.design)).size>120)return null
- return {format:'bricklab-3d',version:1,name:String(doc.name??'Model').slice(0,120),parts,connections:[],gears:[]}
-}
+export function publicPreview(doc){return sanitizePreview(doc)}
 export function validateComment(value){
  if(!value||typeof value.body!=='string'||value.body.length>1500||!value.body.trim()||/[\u0000-\u0008\u000b-\u001f\u007f]/.test(value.body)||/[\ud800-\udfff]/u.test(value.body)||(value.parentId!=null&&!uuid.test(value.parentId)))throw new ProjectError(400,'invalid_comment')
  return {body:value.body.trim(),parentId:value.parentId??null}
