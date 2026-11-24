@@ -4,7 +4,7 @@ function route(id){if(!uuid.test(id))throw new AuthError('invalid_project');retu
 function revision(n){if(!Number.isSafeInteger(n)||n<1)throw new AuthError('invalid_revision');return n}
 export function cloudLink(record,ownerId){
  const c=record?.cloud
- return c?.ownerId===ownerId&&uuid.test(c.id)&&Number.isSafeInteger(c.revision)&&c.revision>0?c:null
+ return c?.kind!=='bureau'&&c?.ownerId===ownerId&&uuid.test(c.id)&&Number.isSafeInteger(c.revision)&&c.revision>0?c:null
 }
 export function createProjectsClient({fetcher=globalThis.fetch,location=globalThis.location}={}){
  async function request(path='',method='GET',body){
