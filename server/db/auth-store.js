@@ -26,7 +26,7 @@ export function connectAuthStore(env = process.env) {
   }
   const missing = () => new ProjectError(404,'not_found')
   return {
-    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1`; await sql`select 1 from bricklab.project_favorites limit 1`; await sql`select 1 from bricklab.award_reads limit 1`; await sql`select cover_theme,background_theme from bricklab.public_profiles limit 1`; await sql`select category,part_count from bricklab.public_builds limit 1`;await sql`select 1 from bricklab.community_like_counts limit 1`;await sql`select 1 from bricklab.community_follow_counts limit 1`;await sql`select 1 from bricklab.community_event_counts limit 1` },
+    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1`; await sql`select 1 from bricklab.project_favorites limit 1`; await sql`select 1 from bricklab.award_reads limit 1`; await sql`select cover_theme,background_theme from bricklab.public_profiles limit 1`; await sql`select category,part_count from bricklab.public_builds limit 1`;await sql`select 1 from bricklab.community_like_counts limit 1`;await sql`select 1 from bricklab.community_follow_counts limit 1`;await sql`select 1 from bricklab.community_event_counts limit 1`;await sql`select 1 from bricklab.community_comments limit 1`;await sql`select 1 from bricklab.community_comment_reports limit 1`;await sql`select 1 from bricklab.community_reputation limit 1` },
     async register({ email, displayName, passwordHash, tokenHash, expiresAt }) {
       return sql.begin(async tx => {
         const [user] = await tx`insert into bricklab.users (email, display_name, password_hash)
@@ -183,6 +183,54 @@ export function connectAuthStore(env = process.env) {
       })
     },
     async unpublishBuild(uid,id){return scope(uid,async tx=>{const [p]=await tx`select id from bricklab.projects where id=${id} and owner_id=${uid}`;if(!p)throw missing();await tx`delete from bricklab.public_builds where project_id=${id} and author_id in (select public_id from bricklab.public_profiles where user_id=${uid})`})},
+    async listComments(id,offset=0){
+      const [b]=await sql`select 1 from bricklab.public_builds where public_id=${id}`;if(!b)throw missing()
+      return sql`select c.id,c.parent_id as "parentId",c.author_id as "authorId",p.display_name as author,p.avatar_image is not null as "authorHasAvatar",c.body,c.created_at as "createdAt"
+        from bricklab.community_comments c join bricklab.public_profiles p on p.public_id=c.author_id
+        where c.build_id=${id} order by c.created_at desc,c.id limit 31 offset ${offset}`
+    },
+    async addComment(uid,id,input){
+      return scope(uid,async tx=>{
+        await lock(tx,uid)
+        const [p]=await tx`select public_id as id from bricklab.public_profiles where user_id=${uid}`
+        if(!p)throw new ProjectError(409,'public_profile_required')
+        const [b]=await tx`select 1 from bricklab.public_builds where public_id=${id}`;if(!b)throw missing()
+        if(input.parentId){
+          const [parent]=await tx`select parent_id,body from bricklab.community_comments where id=${input.parentId} and build_id=${id}`
+          if(!parent||parent.parent_id||parent.body===null)throw new ProjectError(400,'invalid_reply')
+        }
+        const [n]=await tx`select count(*)::int as total,count(*) filter(where created_at>now()-interval '1 day')::int as daily from bricklab.community_comments where author_id=${p.id}`
+        if(n.total>=1000||n.daily>=30)throw new ProjectError(429,'comment_limit')
+        await tx`insert into bricklab.community_comments(build_id,author_id,parent_id,body) values(${id},${p.id},${input.parentId},${input.body})`
+      })
+    },
+    async removeComment(uid,id){
+      return scope(uid,async tx=>{
+        const rows=await tx`update bricklab.community_comments set body=null where id=${id} and author_id in(select public_id from bricklab.public_profiles where user_id=${uid}) returning id`
+        if(!rows.length)throw missing()
+      })
+    },
+    async reportComment(uid,id,reason){
+      return scope(uid,async tx=>{
+        await lock(tx,uid)
+        const [c]=await tx`select p.user_id as owner from bricklab.community_comments c join bricklab.public_profiles p on p.public_id=c.author_id where c.id=${id} and c.body is not null`
+        if(!c)throw missing();if(c.owner===uid)throw new ProjectError(403,'self_reaction')
+        const [old]=await tx`select 1 from bricklab.community_comment_reports where reporter_id=${uid} and comment_id=${id}`
+        if(old)return
+        const [n]=await tx`select count(*)::int as n from bricklab.community_comment_reports where reporter_id=${uid}`
+        if(n.n>=1000)throw new ProjectError(429,'report_limit')
+        await tx`insert into bricklab.community_comment_reports(reporter_id,comment_id,reason) values(${uid},${id},${reason}) on conflict do nothing`
+      })
+    },
+    async reputation(id){
+      const [r]=await sql`select builds,likes,downloads,followers,score from bricklab.community_reputation where author_id=${id}`
+      return r
+    },
+    async leaderboard(offset=0){
+      return sql`select p.public_id as id,p.display_name as "displayName",p.bio,p.updated_at as "updatedAt",p.avatar_image is not null as "hasAvatar",r.builds,r.likes,r.downloads,r.followers,r.score
+        from bricklab.community_reputation r join bricklab.public_profiles p on p.public_id=r.author_id
+        where r.builds>0 order by r.score desc,r.likes desc,p.public_id limit 31 offset ${offset}`
+    },
     async socialState(uid){
       return scope(uid,async tx=>{
         const [own]=await tx`select public_id as id from bricklab.public_profiles where user_id=${uid}`

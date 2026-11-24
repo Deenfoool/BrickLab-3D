@@ -20,6 +20,21 @@ export function validatePublication(value){
  if(value.category!==undefined&&!buildCategories.includes(value.category))throw new ProjectError(400,'invalid_publication')
  return {revision:value.revision,description:value.description.trim(),...(value.category===undefined?{}:{category:value.category})}
 }
+export function validateComment(value){
+ if(!value||typeof value.body!=='string'||value.body.length>1500||!value.body.trim()||/[\u0000-\u0008\u000b-\u001f\u007f]/.test(value.body)||/[\ud800-\udfff]/u.test(value.body)||(value.parentId!=null&&!uuid.test(value.parentId)))throw new ProjectError(400,'invalid_comment')
+ return {body:value.body.trim(),parentId:value.parentId??null}
+}
+export function publicReputation(r){
+ return {builds:Number(r?.builds??0),likes:Number(r?.likes??0),downloads:Number(r?.downloads??0),followers:Number(r?.followers??0),score:Number(r?.score??0)}
+}
+function publicComment(r){return {id:r.id,parentId:r.parentId,authorId:r.authorId,author:r.author,body:r.body,createdAt:r.createdAt,avatarUrl:r.authorHasAvatar===true&&uuid.test(r.authorId)?'/api/community/profile/'+r.authorId+'/avatar':null}}
+function discussionOffset(url){const raw=new URL(url,'http://localhost').searchParams.get('offset')??'0';if(!/^\d{1,5}$/.test(raw)||Number(raw)>10000)throw new ProjectError(400,'invalid_gallery_query');return Number(raw)}
+async function discussionBody(req){
+ if(req.headers['content-type']?.split(';')[0].trim()!=='application/json')throw new ProjectError(415,'json_required')
+ let size=0;const chunks=[]
+ for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>8192){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
+ try{return JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new ProjectError(400,'invalid_json')}
+}
 export function publicBuild(row){
  return row?{id:row.id,authorId:row.authorId,author:row.author,authorAvatarUrl:row.authorHasAvatar===true&&uuid.test(row.authorId)?'/api/community/profile/'+row.authorId+'/avatar':null,title:row.title,description:row.description,revision:row.revision,category:row.category??'other',partCount:row.partCount??0,likes:row.likes??0,views:row.views??0,downloads:row.downloads??0,publishedAt:row.publishedAt}:null
 }
@@ -53,6 +68,32 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
    if(active>=8)throw new ProjectError(429,'too_many_attempts')
    active++
    try{
+    const thread=/^\/api\/community\/build\/([^/]+)\/comments$/.exec(path)
+    const comment=/^\/api\/community\/comment\/([^/]+)(\/report)?$/.exec(path)
+    if(path==='/api/community/leaderboard'){
+      if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
+      const offset=discussionOffset(req.url),rows=await store.leaderboard(offset)
+      reply(res,200,{profiles:rows.slice(0,30).map((r,i)=>({...publicCard(r),reputation:publicReputation(r),position:offset+i+1})),nextOffset:rows.length>30&&offset+30<=10000?offset+30:null});return true
+    }
+    if(thread&&uuid.test(thread[1])){
+      if(req.method==='GET'){
+        const offset=discussionOffset(req.url),rows=await store.listComments(thread[1],offset)
+        reply(res,200,{comments:rows.slice(0,30).map(publicComment),nextOffset:rows.length>30&&offset+30<=10000?offset+30:null});return true
+      }
+      if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
+      if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
+      const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated')
+      await store.addComment(user.id,thread[1],validateComment(await discussionBody(req)))
+      reply(res,201,{ok:true});return true
+    }
+    if(comment&&uuid.test(comment[1])){
+      if(req.method!==(comment[2]?'POST':'DELETE'))throw new ProjectError(405,'method_not_allowed')
+      if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
+      const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated')
+      if(comment[2]){const data=await discussionBody(req);if(!['spam','abuse','other'].includes(data?.reason))throw new ProjectError(400,'invalid_report');await store.reportComment(user.id,comment[1],data.reason)}
+      else await store.removeComment(user.id,comment[1])
+      reply(res,200,{ok:true});return true
+    }
     const social=/^\/api\/community\/(like|follow|view)\/([^/]+)$/.exec(path)
     if(path==='/api/community/me/social'){
       if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
@@ -119,7 +160,7 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
     if(m&&uuid.test(m[2])){
      const card=publicCard(await store.getPublicCard(m[2]))
      if(!card)throw new ProjectError(404,'not_found')
-     if(m[1])reply(res,200,{profile:card})
+     if(m[1])reply(res,200,{profile:{...card,reputation:publicReputation(store.reputation?await store.reputation(card.id):null)}})
      else {res.writeHead(302,{'Location':'/#community/profile/'+card.id,'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}
     }else if(path==='/community'||path==='/api/community'){
      const cards=(await store.listPublicCards()).map(publicCard)
