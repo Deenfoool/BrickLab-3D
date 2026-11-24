@@ -2,11 +2,12 @@ import { fileURLToPath } from 'node:url'
 import { createBrickLabServer } from './http.js'
 import { createAuthHandler } from './auth.js'
 import { createProjectsHandler } from './projects.js'
+import { createProfileHandler } from './profile.js'
 
 const host = process.env.HOST || '0.0.0.0'
 const port = Number(process.env.PORT || 8080)
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer from 1 to 65535')
-let store, auth, projects, cleanup
+let store, auth, projects, profile, cleanup
 if (process.env.PGPASSWORD) {
   const { connectAuthStore } = await import('./db/auth-store.js')
   store = connectAuthStore()
@@ -15,13 +16,14 @@ if (process.env.PGPASSWORD) {
     auth = createAuthHandler({ store, origin: process.env.PUBLIC_ORIGIN || 'http://localhost:8080',
       registrationEnabled: process.env.BRICKLAB_REGISTRATION_ENABLED === 'true' })
     projects = createProjectsHandler({ store, origin: process.env.PUBLIC_ORIGIN || 'http://localhost:8080' })
+    profile = createProfileHandler({store,origin:process.env.PUBLIC_ORIGIN || 'http://localhost:8080'})
     cleanup = setInterval(() => store.cleanup().catch(error => console.error('Session cleanup failed:', error.code || error.name)), 3600_000).unref()
   } catch (error) {
     await store.close()
     throw error
   }
 }
-const server = createBrickLabServer({ root: fileURLToPath(new URL('../', import.meta.url)), auth, projects })
+const server = createBrickLabServer({ root: fileURLToPath(new URL('../', import.meta.url)), auth, projects, profile })
 server.on('error', async error => {
   console.error('Unable to start BrickLab:', error.message)
   clearInterval(cleanup)

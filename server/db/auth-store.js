@@ -25,7 +25,7 @@ export function connectAuthStore(env = process.env) {
   }
   const missing = () => new ProjectError(404,'not_found')
   return {
-    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1` },
+    async ready() { await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1` },
     async register({ email, displayName, passwordHash, tokenHash, expiresAt }) {
       return sql.begin(async tx => {
         const [user] = await tx`insert into bricklab.users (email, display_name, password_hash)
@@ -64,6 +64,7 @@ export function connectAuthStore(env = process.env) {
         await lock(tx,uid); await quota(tx,doc,true)
         const [p]=await tx`insert into bricklab.projects (owner_id,name) values (${uid},${doc.name}) returning id,name,head_revision as revision,created_at as "createdAt",updated_at as "updatedAt"`
         await tx`insert into bricklab.project_revisions (project_id,revision,author_id,document) values (${p.id},1,${uid},${tx.json(doc)})`
+        await tx`insert into bricklab.workshop_awards(user_id,award) values(${uid},'firstCloudSave') on conflict do nothing`
         return p
       })
     },
@@ -96,6 +97,17 @@ export function connectAuthStore(env = process.env) {
         if(!p)throw missing()
         return tx`select revision,created_at as "savedAt" from bricklab.project_revisions where project_id=${id} order by revision desc limit 20`
       })
+    },
+    async getProfile(uid) {
+      return scope(uid,async tx=>{
+        const [p]=await tx`select bio,cover from bricklab.profiles where user_id=${uid}`
+        const awards=await tx`select award,awarded_at as "awardedAt" from bricklab.workshop_awards where user_id=${uid} order by awarded_at`
+        return {...(p??{bio:'',cover:'blueprint'}),awards}
+      })
+    },
+    async saveProfile(uid,p) {
+      return scope(uid,tx=>tx`insert into bricklab.profiles(user_id,bio,cover) values(${uid},${p.bio},${p.cover})
+        on conflict(user_id) do update set bio=excluded.bio,cover=excluded.cover,updated_at=now()`)
     },
     async cleanup() { await sql`delete from bricklab.sessions where expires_at <= now()` },
     async close() { await sql.end({ timeout: 5 }) },

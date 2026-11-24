@@ -41,7 +41,7 @@ function rangeOf(header, size) {
     ? { start: first, end: last } : null
 }
 
-export function createBrickLabServer({ root, logger = console, auth, projects } = {}) {
+export function createBrickLabServer({ root, logger = console, auth, projects, profile } = {}) {
   const base = realpathSync(root)
   const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff')
@@ -53,6 +53,7 @@ export function createBrickLabServer({ root, logger = console, auth, projects } 
       if (!pathname.startsWith('/') || pathname.includes('\\') || /[\u0000-\u001f\u007f]/.test(pathname) ||
           pathname.split('/').some(part => part === '.' || part === '..')) return send(req, res, 400, 'Bad path')
       if (auth && pathname.startsWith('/api/auth/') && await auth(req, res, pathname)) return
+      if (profile && await profile(req,res,pathname)) return
       if (projects && await projects(req, res, pathname)) return
       if (req.method !== 'GET' && req.method !== 'HEAD') {
         res.setHeader('Allow', 'GET, HEAD')
