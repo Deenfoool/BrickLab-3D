@@ -1,0 +1,30 @@
+{
+  "framework": null,
+  "installCommand": "true",
+  "buildCommand": "node scripts/build-preview.mjs",
+  "outputDirectory": "dist-preview",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/preview-version.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
+  ]
+}
