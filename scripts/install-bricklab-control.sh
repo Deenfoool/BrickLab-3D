@@ -182,6 +182,8 @@ NoNewPrivileges=true
 # Docker bind mounts in the existing release script must be visible to the host daemon.
 PrivateTmp=false
 UNIT
+printf 'd /run/bricklab-control-maintenance 0755 root root -\n' >/etc/tmpfiles.d/bricklab-control-maintenance.conf
+systemd-tmpfiles --create /etc/tmpfiles.d/bricklab-control-maintenance.conf
 systemctl daemon-reload
 if [[ "${1:-}" == --enable-actions ]]; then
   systemctl enable --now bricklab-control-actions.socket

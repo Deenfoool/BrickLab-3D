@@ -35,9 +35,11 @@ LINKS = {
 ACTION_SOCKET = pathlib.Path("/run/bricklab-control-actions.sock")
 ACTIONS = {"restart": ("Перезапустить BrickLab", "Приложение будет кратковременно недоступно."),
            "backup": ("Создать резервные копии", "Запустятся существующие службы бэкапа БД и конфигурации."),
-           "deploy": ("Запустить утверждённый релиз", "Будет запущена проверка и установка заранее утверждённого на VPS SHA.")}
+           "deploy": ("Запустить утверждённый релиз", "Будет запущена проверка и установка заранее утверждённого на VPS SHA."),
+           "maintenance_on": ("Включить техработы", "Публичный сайт и API будут закрыты до отмены. Mini App и бот останутся доступны."),
+           "maintenance_off": ("Завершить техработы", "Публичный сайт снова станет доступен.")}
 PENDING = {}
-RESULTS = {"approval_required": "⚠ Нет утверждённого релиза. Требуется отдельное подтверждение на VPS.",
+RESULTS = {"approval_required": "⚠ Операция не разрешена или не настроена на VPS.",
            "queued": "⏳ Запуск службы запрошен. Это не успешный релиз; результат в разделе Версия.", "ok": "✅ Операция завершена.", "failed": "❌ Операция завершилась ошибкой.",
            "health_failed": "⚠ Перезапуск выполнен, но API не прошёл проверку.",
            "not_running": "⚠ Приложение не запущено. Перезапуск отменён.",
@@ -211,6 +213,9 @@ def render(page, data):
                         [("Коммиты", "/commits/feature/cloud-migration"), ("CI / тесты", "/actions"),
                          ("Pull Requests", "/pulls"), ("Issues", "/issues"), ("Новый Issue", "/issues/new")]])
     if page == "automation":
+        if actions_enabled() and data.get("automation",{}).get("maintenance_ready") is True:
+            action = "maintenance_off" if data["automation"].get("maintenance_active") else "maintenance_on"
+            buttons.append([{"text":ACTIONS[action][0],"callback_data":"act:"+action}])
         buttons.extend([[{"text": name, "callback_data": "pref:" + key}] for name,key in
                         [("Выключить уведомления" if preferences().get("enabled") else "Включить уведомления", "off" if preferences().get("enabled") else "on"), ("Тишина на 1 час", "quiet"), ("Снять тишину", "resume")]])
     if page == "home" and os.environ.get("BRICKLAB_MINIAPP_ENABLED") == "1":
@@ -276,7 +281,7 @@ def handle_action(data, cb, msg, owner, call):
     action = pending[0]
     if kind == "no":
         call("editMessageText", {"chat_id": owner, "message_id": msg["message_id"],
-                                 **render({"restart":"docker","backup":"backup","deploy":"release"}[action], snapshot())})
+                                 **render({"restart":"docker","backup":"backup","deploy":"release","maintenance_on":"automation","maintenance_off":"automation"}[action], snapshot())})
         return
     call("editMessageText", {"chat_id": owner, "message_id": msg["message_id"],
                              "text": "⏳ Выполняется: " + ACTIONS[action][0],

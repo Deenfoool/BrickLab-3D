@@ -14,6 +14,7 @@ spec.loader.exec_module(actions)
 SNAPSHOT = pathlib.Path("/run/bricklab-control/snapshot.json")
 STATE = pathlib.Path("/var/lib/bricklab-control-recovery/state.json")
 PAUSE = pathlib.Path("/etc/bricklab-backup/control-recovery.pause")
+MAINTENANCE = pathlib.Path("/run/bricklab-control-maintenance/enabled")
 
 def read(path):
     try:
@@ -49,7 +50,7 @@ def next_state(previous, snapshot, now):
     return state,ready
 
 def still_unhealthy():
-    if PAUSE.exists():
+    if PAUSE.exists() or MAINTENANCE.exists():
         return False
     rc,out=actions.run(["/usr/bin/docker","compose","ps","--status","running","-q","bricklab"],10)
     if rc!=0 or not out.strip():
@@ -65,7 +66,7 @@ def still_unhealthy():
 
 def main():
     state=read(STATE)
-    if PAUSE.exists():
+    if PAUSE.exists() or MAINTENANCE.exists():
         state["failures"]=0
         write(state)
         return

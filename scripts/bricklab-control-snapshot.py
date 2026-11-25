@@ -65,7 +65,7 @@ def audit():
             source = "source" if "source" in {r[1] for r in db.execute("PRAGMA table_info(audit)")} else "'telegram'"
             rows = db.execute("SELECT action,started,result,"+source+" FROM audit ORDER BY started DESC,rowid DESC LIMIT 8").fetchall()
         return {"recent": [{"action": a, "date": datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%d.%m %H:%M UTC"), "result": r, "source": "recovery" if origin=="recovery" else "telegram"}
-                           for a,t,r,origin in rows if a in ("restart","backup","deploy") and r in ("started","ok","failed","unknown","not_running","health_failed","queued","approval_required")]}
+                           for a,t,r,origin in rows if a in ("restart","backup","deploy","maintenance_on","maintenance_off") and r in ("started","ok","failed","unknown","not_running","health_failed","queued","approval_required")]}
     except (sqlite3.Error, ValueError, OSError, OverflowError):
         return {}
 
@@ -165,6 +165,13 @@ def collect():
         data["logs"] = {"lines": len(lines), "errors": sum(bool(re.search(r"\b(?:error|fatal|exception)\b", line, re.I)) for line in lines),
                         "warnings": sum(bool(re.search(r"\b(?:warn|warning)\b", line, re.I)) for line in lines)}
     data["automation"] = {"recovery": unit("bricklab-control-recovery.timer"), "maintenance": "пауза восстановления" if pathlib.Path("/etc/bricklab-backup/control-recovery.pause").exists() else "нет паузы"}
+    ready=pathlib.Path("/etc/bricklab-backup/control-maintenance.enabled").is_file()
+    active=pathlib.Path("/run/bricklab-control-maintenance/enabled").is_file()
+    data["automation"].update(maintenance_ready=ready,maintenance_active=active)
+    if active:
+        data["automation"]["maintenance"]="публичный сайт на техработах"
+    elif ready:
+        data["automation"]["maintenance"]="публичный сайт открыт"
     data["audit"] = audit()
     data["timestamp"] = time.time()
     return data

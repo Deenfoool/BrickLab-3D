@@ -3,6 +3,7 @@
 import fcntl
 import json
 import os
+import pathlib
 import pwd
 import re
 import socket
@@ -16,8 +17,10 @@ import urllib.request
 ROOT = "/opt/bricklab-cloud"
 STATE = "/var/lib/bricklab-control-actions/audit.sqlite3"
 LOCK = "/run/bricklab-deploy.lock"
-LIMITS = {"restart": 600, "backup": 1800, "deploy": 1800}
+LIMITS = {"restart": 600, "backup": 1800, "deploy": 1800, "maintenance_on": 60, "maintenance_off": 60}
 APPROVAL = "/etc/bricklab-backup/control-release.approved"
+MAINTENANCE = pathlib.Path("/run/bricklab-control-maintenance/enabled")
+MAINTENANCE_CONFIG = pathlib.Path("/etc/bricklab-backup/control-maintenance.enabled")
 COMMANDS = {
     "restart": ["/usr/bin/docker", "compose", "restart", "--timeout", "15", "bricklab"],
     "backup": ["/usr/bin/systemctl", "start", "bricklab-backup.service", "bricklab-config-backup.service"],
@@ -44,6 +47,16 @@ def healthy():
     return False
 
 def execute(action):
+    if action in ("maintenance_on", "maintenance_off"):
+        # Reverse proxy support must be independently installed and enabled.
+        if not MAINTENANCE_CONFIG.is_file() or not MAINTENANCE.parent.is_dir():
+            return "approval_required"
+        if action == "maintenance_on":
+            MAINTENANCE.touch(mode=0o644)
+            MAINTENANCE.chmod(0o644)
+        else:
+            MAINTENANCE.unlink(missing_ok=True)
+        return "ok"
     if action == "deploy":
         # The unit acquires the shared release lock itself; do not wait while holding it.
         if not os.path.isfile(APPROVAL):
