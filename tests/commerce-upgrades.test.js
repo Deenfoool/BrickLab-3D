@@ -81,5 +81,28 @@ test('real PostgreSQL enforces extended quota, collection ownership and badge pr
   await db`update bricklab.commerce_grants set revoked_at=now() where order_id=${badge}`
   assert.equal((await store.getPublicCard(card.id)).supportBadge,null)
   assert.equal((await store.getProfile(uid)).supportBadge,null)
+  // Test payments are verified by adapter; this exercises the actual DB
+  // transaction independently of an external payment provider.
+  async function pendingTest(sku,amount){
+   const [o]=await db`insert into bricklab.commerce_orders(user_id,sku,title,amount_kopecks,provider,environment)
+    values(${uid},${sku},${sku},${amount},'yookassa','test') returning id`
+   const payment=crypto.randomUUID()
+   assert.equal(await store.attachCommercePayment(o.id,payment,'live'),false)
+   assert.equal(await store.attachCommercePayment(o.id,payment,'test'),true)
+   assert.equal(await store.fulfillCommercePayment(o.id,payment,'test',amount+1),false)
+   assert.equal(await store.fulfillCommercePayment(o.id,payment,'test',amount),true)
+   assert.equal(await store.fulfillCommercePayment(o.id,payment,'test',amount),true)
+   const [g]=await db`select count(*)::int as n from bricklab.commerce_grants where order_id=${o.id}`
+   assert.equal(g.n,1)
+   return o.id
+  }
+  const p1=await pendingTest('plus-1',24900),p2=await pendingTest('plus-3',64900)
+  const [g1]=await db`select expires_at from bricklab.commerce_grants where order_id=${p1}`
+  const [g2]=await db`select granted_at,expires_at from bricklab.commerce_grants where order_id=${p2}`
+  assert.equal(+g1.expires_at,+g2.granted_at)
+  assert.ok(+g2.expires_at>+g1.expires_at)
+  await pendingTest('slots-100',34900)
+  assert.equal((await store.getActivity(uid)).limits.projects,40)
+  assert.equal((await store.getProfile(uid)).plus,false)
  }finally{await store.close();await db.end()}
 })
