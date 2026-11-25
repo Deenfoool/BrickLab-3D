@@ -35,6 +35,7 @@ services:
     volumes:
       - /var/lib/bricklab-catalog/public:/app/catalog/resolver:ro
       - /var/lib/bricklab-legal:/app/assets/legal:ro
+      - /var/lib/bricklab-instructions-private:/app/private-instructions:ro
     ports:
       - "${BRICKLAB_BIND:-127.0.0.1}:${BRICKLAB_PORT:-8080}:8080"
     environment:
@@ -50,6 +51,8 @@ services:
       BRICKLAB_REGISTRATION_ENABLED: "${BRICKLAB_REGISTRATION_ENABLED:-false}"
       BRICKLAB_COMMUNITY_ENABLED: "${BRICKLAB_COMMUNITY_ENABLED:-false}"
       BRICKLAB_REBRICKABLE_API_KEY: "${BRICKLAB_REBRICKABLE_API_KEY:-}"
+      BRICKLAB_INSTRUCTIONS_RELEASE: "${BRICKLAB_INSTRUCTIONS_RELEASE:-false}"
+      BRICKLAB_PRIVATE_INSTRUCTION_AUDIT: "${BRICKLAB_PRIVATE_INSTRUCTION_AUDIT:-}"
       BRICKLAB_INSTRUCTIONS_PROXY: "${BRICKLAB_INSTRUCTIONS_PROXY:-}"
       BRICKLAB_MAIL_USER: "${BRICKLAB_MAIL_USER:-}"
       BRICKLAB_MAIL_KEY: "${BRICKLAB_MAIL_KEY:-}"
