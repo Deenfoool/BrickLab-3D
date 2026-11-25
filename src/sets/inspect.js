@@ -47,7 +47,6 @@ export async function inspectSetPart(
     controls?.dispose()
     material?.dispose()
     renderer?.dispose()
-    renderer?.forceContextLoss()
     renderer?.domElement.remove()
   }
   try {

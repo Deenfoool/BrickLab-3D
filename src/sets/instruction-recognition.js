@@ -1,27 +1,7 @@
-const ocrRoot = 'https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/'
+import { createOcrWorker } from './ocr.js'
 const quantity = /^[1-9]\d{0,2}[x×]$/i
 const element = /^\d{6,8}$/
-let ocrLibrary
 let database
-
-function loadOcr() {
-  ocrLibrary ??= new Promise((resolve, reject) => {
-    const script = document.createElement('script')
-    script.src = `${ocrRoot}tesseract.min.js`
-    script.crossOrigin = 'anonymous'
-    script.integrity = 'sha384-r1ru3tcf6FhnCFR4B7pIFG+BhFF9LlFtz/P1y4pblWn3AGs9y3lBx5SKLNf4+rED'
-    script.onload = () => globalThis.Tesseract ? resolve(globalThis.Tesseract) : reject(Error('OCR unavailable'))
-    script.onerror = () => {
-      script.remove()
-      reject(Error('OCR unavailable'))
-    }
-    document.head.append(script)
-  }).catch(error => {
-    ocrLibrary = undefined
-    throw error
-  })
-  return ocrLibrary
-}
 
 function openCache() {
   if (!globalThis.indexedDB) return Promise.resolve(null)
@@ -131,18 +111,7 @@ export function createInstructionRecognition(reader, set, signal) {
   function readText(canvas, geometry, request) {
     const run = ocrQueue.then(async () => {
       request.throwIfAborted()
-      ocr ??= loadOcr().then(api => {
-        signal.throwIfAborted()
-        return api.createWorker('eng', 1, {
-          workerPath: `${ocrRoot}worker.min.js`,
-          corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@6.0.0',
-          langPath: 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int',
-          errorHandler: () => {},
-        })
-      }).then(async engine => {
-        await engine.setParameters({ tessedit_pageseg_mode: '11' })
-        return engine
-      }).catch(error => {
+      ocr ??= createOcrWorker(signal).catch(error => {
         ocr = undefined
         throw error
       })

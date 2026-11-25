@@ -1,0 +1,15 @@
+{
+  "LICENSE-core.txt": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+  "LICENSE-tesseract.js.md": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
+  "lang/eng.traineddata.gz": "45b4cb346724ac1774f1c36f42f182b887bcdb28ebe63e6fff90ac41f3fcff91",
+  "tesseract-core-lstm.js": "48a3ee8e00924cb8c7f0cc0d099b1318fea120af56b3ee8fb3a70dd2311806c2",
+  "tesseract-core-lstm.wasm": "220e2e87551edccb85519796a170469f8ab2a8055216789e3b8b1ada18b7bc2b",
+  "tesseract-core-simd-lstm.js": "be3504705d7111d1d1f3f7f9dff326c26d334031ede36e31c4d3cf883027e982",
+  "tesseract-core-simd-lstm.wasm": "187d76742dfc0d8929f0b49a619f145bb6370730776c7bd0d3e20c6b2098808d",
+  "tesseract.min.js": "10fff78484067759c43028a02a72d76d0b90eb17302bb23b58a9ec5410bc928b",
+  "tesseract.min.js.LICENSE.txt": "cdf963ced7d25a0f98901a547647b4d6e2dbe0197fd78c87a059a87b0e542fe2",
+  "tesseract.min.js.map": "a9478825f264a19344d379784f5211aa805d3cd020bdd8f7b35051dd20105d1f",
+  "worker.min.js": "38645599043239c0eb6db08a6504a92dcdc292200535f3e9339cd77c4443b842",
+  "worker.min.js.LICENSE.txt": "45f54171aeaa1d10c0c1a66f374b7bba1f02472b1487fbe892eec04f840002ac",
+  "worker.min.js.map": "51ea3f21d9c0ed195e7de3c4ac493dbb208368162f2674aa2286265495ec7377"
+}

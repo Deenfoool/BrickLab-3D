@@ -37,7 +37,7 @@ export async function mountLargeModelViewer(host,doc,{signal,onProgress=()=>{}})
   for(const mesh of instances)mesh.dispose()
   solids.clear();for(const g of geometries)g.dispose();for(const m of materials)m.dispose()
   instances.clear();geometries.clear();materials.clear()
-  if(renderer){renderer.domElement.remove();renderer.dispose();renderer.forceContextLoss()}
+  if(renderer){renderer.domElement.remove();renderer.dispose()}
  }
  function resize(){
   if(!renderer||disposed||!host.clientWidth||!host.clientHeight)return

@@ -139,7 +139,6 @@ export function createProjectPreviewRenderer() {
       contactShadow.material.dispose()
       contactShadow.texture.dispose()
       renderer.dispose()
-      renderer.forceContextLoss()
     },
   }
 }

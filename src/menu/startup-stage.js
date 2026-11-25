@@ -28,7 +28,6 @@ export async function mountStartupStage(host, { signal, motion, intro, started }
     brand?.dispose()
     vehicle?.dispose()
     renderer.dispose()
-    renderer.forceContextLoss()
     renderer.domElement.remove()
   }
   signal.addEventListener('abort', dispose, { once: true })

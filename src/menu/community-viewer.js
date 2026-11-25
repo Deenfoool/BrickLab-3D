@@ -24,7 +24,7 @@ export async function mountModelViewer(host,document,{signal,onProgress=()=>{}})
   solids.clear()
   for(const [design,model] of models)if(parts[design]?.pack)for(const geometry of model.meshes)geometry.dispose()
   models.clear()
-  if(renderer){renderer.domElement.remove();renderer.dispose();renderer.forceContextLoss()}
+  if(renderer){renderer.domElement.remove();renderer.dispose()}
  }
  function resize(){
   if(!renderer||disposed)return

@@ -127,10 +127,12 @@ export function createScene(host, models) {
   }, { passive: true })
 
   let onViewChange
+  canvas.addEventListener('webglcontextrestored', invalidate)
   function invalidate() {
     if (!active || frame !== null) return
     frame = requestAnimationFrame(() => {
       frame = null
+      if (!active || renderer.getContext().isContextLost()) return
       if (presenting) {
         const helpers=[marker,frontArrow,gizmo.getHelper(),ghost].filter(Boolean)
         const visibility=helpers.map(object=>object.visible)
@@ -471,6 +473,7 @@ export function createScene(host, models) {
 
   function dispose() {
     active = false
+    canvas.removeEventListener('webglcontextrestored', invalidate)
     if (frame !== null) cancelAnimationFrame(frame)
     resize.disconnect()
     controls.dispose()
@@ -487,7 +490,6 @@ export function createScene(host, models) {
     }
     frontArrow.dispose()
     renderer.dispose()
-    renderer.forceContextLoss()
     canvas.remove()
   }
 
