@@ -1,3 +1,4 @@
+import {themeFor} from './store-themes.js?v=themes-2'
 import { badges, ranks, rankFor } from './workshop-model.js?v=activity-1'
 import { workshopCopy } from './workshop-copy.js?v=profile-gallery-1'
 
@@ -90,8 +91,8 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
    const c=card(t.cosmetics);c.append(el('p','account-muted',t.cosmeticHint))
    const grid=el('div','workshop-grid')
    for(const item of profileData?.inventory??[]){
-     const tile=card(t[item.id]),preview=el('div','cosmetic-preview cosmetic-'+item.id)
-     tile.append(preview,el('p','account-muted',item.source==='free'?t.free:item.source==='achievement'?t.achievement:item.priceRub+' ₽ · '+t.purchase))
+     const theme=themeFor(item.id),tile=card(theme?.[lang]??t[item.id]),preview=el('div','cosmetic-preview cosmetic-'+item.id)
+     tile.append(preview);if(theme)tile.append(el('p','account-muted',lang==='ru'?theme.descriptionRu:theme.descriptionEn));tile.append(el('p','account-muted',item.source==='free'?t.free:item.source==='achievement'?t.achievement:item.priceRub+' ₽ · '+t.purchase))
      const active=profile?.background===item.id
      tile.append(button(active?t.equipped:item.owned?t.equip:t.lockedBackground,()=>saveProfile({bio:profile.bio,cover:profile.cover,background:item.id}),busy||active||!item.owned))
      grid.append(tile)
