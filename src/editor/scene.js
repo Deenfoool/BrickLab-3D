@@ -92,6 +92,8 @@ export function createScene(host, models) {
   let ghost
   let frame = null
   let active = true
+  let presenting = false
+  let boxSelectionEnabled = false
   let selectedId
   let fitted = false
   const resize = new ResizeObserver(() => {
@@ -127,8 +129,15 @@ export function createScene(host, models) {
     if (!active || frame !== null) return
     frame = requestAnimationFrame(() => {
       frame = null
-      renderer.render(world, camera)
-      outlines.render(camera, selectedId, highlights)
+      if (presenting) {
+        const helpers=[marker,frontArrow,gizmo.getHelper(),ghost].filter(Boolean)
+        const visibility=helpers.map(object=>object.visible)
+        try { for(const object of helpers)object.visible=false;renderer.render(world,camera) }
+        finally { helpers.forEach((object,index)=>object.visible=visibility[index]) }
+      } else {
+        renderer.render(world, camera)
+        outlines.render(camera, selectedId, highlights)
+      }
       onViewChange?.()
     })
   }
@@ -287,7 +296,7 @@ export function createScene(host, models) {
       pivot.quaternion.copy(jointFrame)
     }
     gizmo.setMode(mode)
-    gizmo.enabled = true
+    gizmo.enabled = !presenting
     gizmo.attach(pivot)
     invalidate()
   }
@@ -386,7 +395,8 @@ export function createScene(host, models) {
   }
 
   function enableBoxSelect(enabled) {
-    controls.touches.ONE = enabled ? null : THREE.TOUCH.ROTATE
+    boxSelectionEnabled=enabled
+    controls.touches.ONE = enabled && !presenting ? null : THREE.TOUCH.ROTATE
   }
 
   function pointer(event, pick = true) {
@@ -497,7 +507,13 @@ export function createScene(host, models) {
     const bounds = new THREE.Box3()
     for (const id of ids) if (objects.has(id)) bounds.expandByObject(objects.get(id), true)
     return bounds.getCenter(new THREE.Vector3()).toArray()
-  }, motorCables, setWorkspaceHelpers(grid, axis) {
+  }, motorCables, setWorkspacePresentation(value) {
+    if(presenting===value)return
+    presenting=value
+    gizmo.enabled=!value&&Boolean(gizmo.object)
+    enableBoxSelect(boxSelectionEnabled)
+    invalidate()
+  }, setWorkspaceHelpers(grid, axis) {
     if (showGrid === grid && showAxes === axis) return
     showGrid = grid; showAxes = axis
     floor.visible = !driveMap && showGrid; axes.visible = !driveMap && showAxes
