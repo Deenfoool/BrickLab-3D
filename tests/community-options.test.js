@@ -1,7 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {createServer} from 'node:http'
-import {createCommunityHandler,validatePublication,publicPreview,publicBuild} from '../server/community.js'
+import {createCommunityHandler,validatePublication,publicPreview,publicBuild,publicComment,publicCard} from '../server/community.js'
 const id='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',uid='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',origin='http://localhost:8081'
 const doc={format:'bricklab-3d',version:1,name:'Private revision',parts:[{id:'private-id',design:'3001',position:[1,2,3],rotation:[0,0,0,1],color:'#ff0000',extra:'secret'}],connections:[{secret:true}],buildingSet:{url:'https://example.invalid'},privateNote:'secret'}
 test('explicit options validate permissions, attribution, tags and image limits',()=>{
@@ -40,4 +40,17 @@ test('protected originals, public preview, social actions and image reads use se
  assert.equal((await fetch(api+'/build/'+id+'/report',report)).status,200);assert.deepEqual(reports,[[uid,id,'copyright']])
  allowDownload=true
  const original=await fetch(base+'/community/build/'+id+'/download',{headers});assert.equal(original.status,200);const data=JSON.parse(await original.text());assert.equal(data.privateNote,'secret');assert.deepEqual(data.communityOrigin,{id});assert.deepEqual(events,[[uid,id,'download']])
+})
+
+test('public signatures expose only allowlisted explicitly published theme IDs',()=>{
+ for(const authorTheme of ['carbon','neon','blueprint','titanium','ember','aurora']){
+  assert.equal(publicBuild({id,authorTheme}).authorTheme,authorTheme)
+  assert.equal(publicComment({id,authorTheme}).authorTheme,authorTheme)
+  assert.equal(publicCard({id,backgroundTheme:authorTheme}).backgroundTheme,authorTheme)
+ }
+ for(const authorTheme of [undefined,null,'fake','signature-neon evil']){
+  assert.equal(publicBuild({id,authorTheme,background:'neon'}).authorTheme,null)
+  assert.equal(publicComment({id,authorTheme,background:'neon'}).authorTheme,null)
+  assert.equal(publicCard({id,backgroundTheme:authorTheme,background:'neon'}).backgroundTheme,null)
+ }
 })
