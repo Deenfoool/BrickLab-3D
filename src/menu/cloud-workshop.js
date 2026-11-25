@@ -1,3 +1,4 @@
+import {applySignature,themeBadge,themePlate,signatureFor} from './profile-signature.js?v=signature-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 import { badges, ranks, rankFor } from './workshop-model.js?v=activity-1'
 import { workshopCopy } from './workshop-copy.js?v=profile-gallery-1'
@@ -20,8 +21,8 @@ Object.assign(extra.ru,{publishBuilds:'Витрина сборок',publishBuild
 Object.assign(extra.en,{publishBuilds:'Published builds',publishBuild:'Publish current revision',updateBuild:'Update published revision',unpublishBuild:'Unpublish build',publishedRevision:'Published revision',privateRevision:'Private revision',publicationDescription:'Publication description',publishConsent:'I allow anyone to download the complete file of this revision. I reviewed its contents and publication rights.',publicationHint:'The complete selected revision is published, including model data. New saves remain private. Unpublishing the profile removes its publications. Existing downloads cannot be revoked.',viewPublication:'Open publication',profileRequired:'Publish your public profile first.'})
 Object.assign(extra.ru,{category:'Категория',vehicles:'Транспорт',mechanisms:'Механизмы',architecture:'Архитектура',robots:'Роботы',other:'Другое'})
 Object.assign(extra.en,{category:'Category',vehicles:'Vehicles',mechanisms:'Mechanisms',architecture:'Architecture',robots:'Robots',other:'Other'})
-Object.assign(extra.ru,{publicExplain:'Публикуются только имя, описание и явно выбранное оформление. Почта и приватные сборки не публикуются. Любой посетитель сможет увидеть карточку; уже сделанные копии отозвать нельзя.',publicAvatar:'Показать текущий аватар',publicCover:'Показать текущую обложку и её тему',publicBackground:'Показать текущий фон мастерской',publicAppearance:'Оформление копируется при публикации. После изменения личного оформления обнови публикацию; чтобы убрать изображение из Community, сними соответствующую галочку и сохрани.'})
-Object.assign(extra.en,{publicExplain:'Only the name, biography and explicitly selected appearance are published. Email and private builds remain private. Anyone can view the card; existing copies cannot be revoked.',publicAvatar:'Show current avatar',publicCover:'Show current cover and theme',publicBackground:'Show current workshop background',publicAppearance:'Appearance is copied on publication. Republish after editing private appearance; uncheck an option and save to remove it from Community.'})
+Object.assign(extra.ru,{publicExplain:'Публикуются только имя, описание и явно выбранное оформление. Почта и приватные сборки не публикуются. Любой посетитель сможет увидеть карточку; уже сделанные копии отозвать нельзя.',publicAvatar:'Показать текущий аватар',publicCover:'Показать текущую обложку и её тему',publicBackground:'Показывать активную тему профиля в сообществе',publicAppearance:'Аватар и обложка копируются при публикации. Активная тема обновляется автоматически, если разрешён её публичный показ. Чтобы скрыть оформление, сними соответствующую галочку и сохрани.'})
+Object.assign(extra.en,{publicExplain:'Only the name, biography and explicitly selected appearance are published. Email and private builds remain private. Anyone can view the card; existing copies cannot be revoked.',publicAvatar:'Show current avatar',publicCover:'Show current cover and theme',publicBackground:'Show active profile theme in the community',publicAppearance:'Avatar and cover are copied on publication. The active theme updates automatically if public display is enabled. Uncheck an option and save to hide it.'})
 function el(tag,cls,value){const n=document.createElement(tag);if(cls)n.className=cls;if(value!==undefined)n.textContent=String(value);return n}
 function icon(id){const s=document.createElementNS('http://www.w3.org/2000/svg','svg'),u=document.createElementNS(s.namespaceURI,'use');s.setAttribute('class','icon');s.setAttribute('aria-hidden','true');u.setAttribute('href','#'+id);s.append(u);return s}
 function button(label,fn,disabled=false){const b=el('button','workspace-action',label);b.type='button';b.disabled=disabled;b.onclick=fn;return b}
@@ -35,6 +36,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
  const t={...workshopCopy[lang],...extra[lang],admin:lang==='ru'?'Администрирование':'Administration',revokeOthers:lang==='ru'?'Завершить остальные сессии':'End other sessions'},summary=workshopSummary(local,remote)
  const profile=profileData?.profile,progress=profileData?.progress,rank=progress?rankFor(progress.xp):null
  const layout=el('div','workshop-layout cosmetic-'+(profile?.background??'default')),nav=el('nav','workshop-nav'),content=el('div','workshop-content')
+ applySignature(layout,profile?.background)
  nav.setAttribute('aria-label',t.workshop)
  for(const [key,symbol] of [...sections,...(user.admin===true?[['admin','icon-shield']]:[])]){
   const b=key==='cloud'?el('a','workspace-action',t[key]):button(t[key],()=>go(key),busy);if(key==='cloud')b.href='#projects';b.prepend(icon(symbol));if(key!=='cloud')b.setAttribute('aria-pressed',String(section===key))
@@ -48,9 +50,10 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
  else if(section==='admin'&&user.admin===true&&adminPanel)content.append(adminPanel())
  else if(section==='workshop'){
   const hero=el('section','workshop-hero cover-'+(profile?.cover??'blueprint')),cover=el('div','workshop-cover'),emblem=el('div','workshop-emblem','BRICKLAB / WORKSHOP')
+  const plate=themePlate(profile?.background);if(plate)cover.append(plate)
   emblem.prepend(icon('layers'));cover.append(emblem);if(profile?.coverUrl){const image=el('img','profile-cover-image');image.src=profile.coverUrl;image.alt='';cover.prepend(image)}
   const identity=el('div','workshop-hero-inner'),person=el('div','workshop-identity'),name=el('div')
-  name.append(el('h2',null,user.displayName),el('p','account-muted',t.active))
+  name.append(el('h2',null,user.displayName),el('p','account-muted',t.active));const badge=themeBadge(profile?.background,lang);if(badge)name.append(badge)
   const avatar=el('div','workshop-avatar',Array.from(user.displayName).slice(0,2).join('').toUpperCase());if(profile?.avatarUrl){const img=el('img','profile-avatar-image');img.src=profile.avatarUrl;img.alt='';avatar.replaceChildren(img)}person.append(avatar,name);identity.append(person)
   hero.append(cover,identity);if(profile?.bio)hero.append(el('p','workshop-bio',profile.bio));hero.append(metrics([[t.local,summary.local],[t.cloud,summary.cloud],[t.revisions,summary.revisions],[t.xp,progress?.xp??'—'],[t.title,rank?t[rank.id]:'—']]))
   const actions=card(t.welcome),quick=el('div','workshop-shortcuts')
@@ -88,11 +91,11 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
      c.append(block)
    }}else c.append(el('p','account-muted',t.profileMissing));content.append(c)
  }else if(section==='cosmetics'){
-   const c=card(t.cosmetics);c.append(el('p','account-muted',t.cosmeticHint))
+   const c=card(t.cosmetics);c.append(el('p','account-muted',t.cosmeticHint),el('p','account-muted',lang==='ru'?'Если показ оформления разрешён в публичном профиле, новая тема сразу появится в сообществе.':'If public appearance is enabled, equipped themes immediately appear in the community.'))
    const grid=el('div','workshop-grid')
    for(const item of profileData?.inventory??[]){
      const theme=themeFor(item.id),tile=card(theme?.[lang]??t[item.id]),preview=el('div','cosmetic-preview cosmetic-'+item.id)
-     tile.append(preview);if(theme)tile.append(el('p','account-muted',lang==='ru'?theme.descriptionRu:theme.descriptionEn));tile.append(el('p','account-muted',item.source==='free'?t.free:item.source==='achievement'?t.achievement:item.priceRub+' ₽ · '+t.purchase))
+     applySignature(preview,item.id);const plate=themePlate(item.id);if(plate)preview.append(plate);tile.append(preview);if(theme)tile.append(el('p','account-muted',lang==='ru'?theme.descriptionRu:theme.descriptionEn));tile.append(el('p','account-muted',item.source==='free'?t.free:item.source==='achievement'?t.achievement:item.priceRub+' ₽ · '+t.purchase))
      const active=profile?.background===item.id
      tile.append(button(active?t.equipped:item.owned?t.equip:t.lockedBackground,()=>saveProfile({bio:profile.bio,cover:profile.cover,background:item.id}),busy||active||!item.owned))
      grid.append(tile)
