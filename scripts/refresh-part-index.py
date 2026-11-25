@@ -244,7 +244,9 @@ def main():
     result = {"schema": 1, "source": LDRAW, "updatedAt": datetime.now(timezone.utc).isoformat(),
               "aliases": aliases, "stats": {"catalogModels": len(available),
               "identityRedirects": len(redirects), "resolvedAliases": len(aliases),
-              "unresolvedAliases": len(set(redirects) - available - set(aliases))}}
+              "unresolvedAliases": len(set(redirects) - available - set(aliases)),
+              "newAliases": sum(previous.get("aliases", {}).get(key) != target for key, target in aliases.items()),
+              "removedAliases": len(set(previous.get("aliases", {})) - set(aliases))}}
     if isinstance(revision, str) and re.fullmatch(r"[a-f0-9]{24}", revision):
         result["elementRevision"] = revision
     if element_error:
