@@ -1,4 +1,6 @@
 import {projectAccount,plusLoyalty} from '../../src/menu/commerce-catalog.js'
+import {commerceQuote} from '../commerce-quote.js'
+import {ProjectError} from '../projects.js'
 
 export async function commerceEntitlements(tx,uid){
     const rows=await tx`select g.id,g.kind,g.sku,g.target,g.granted_at as "grantedAt",g.expires_at as "expiresAt"
@@ -16,10 +18,25 @@ export async function commerceEntitlements(tx,uid){
     return {...projectAccount(grants),loyalty:plusLoyalty(grants)};
 }
 
-// This is the read side only. No app-role INSERT/UPDATE/DELETE grants and no
-// payment acceptance. Test orders can never confer real entitlements.
+// Only trusted server adapters may invoke the security-definer write functions.
+// Direct app-role INSERT/UPDATE/DELETE on the ledger remains denied.
+async function liveQuote(tx,uid,sku,offerVersion,beta){
+ const [pending]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",offer_version as "offerVersion" from bricklab.commerce_orders where user_id=${uid} and environment='live' and status='pending' limit 1`
+ if(pending){if(pending.sku!==sku||pending.offerVersion!==offerVersion)throw new ProjectError(409,'checkout_pending');return pending}
+ const account=await commerceEntitlements(tx,uid)
+ const payments=await tx`select o.sku,o.amount_kopecks as "amountKopecks" from bricklab.commerce_orders o join bricklab.commerce_grants g on g.order_id=o.id and g.user_id=o.user_id where o.user_id=${uid} and o.environment='live' and o.status='succeeded' and g.kind='badge' and g.revoked_at is null`
+ return {...commerceQuote(sku,account,payments,{beta}),offerVersion}
+}
 export function commerceStore(scope){
  return {
+  async quoteCommerceLive(uid,sku,offerVersion,beta=true){return scope(uid,tx=>liveQuote(tx,uid,sku,offerVersion,beta))},
+  async createCommerceLiveOrder(uid,sku,expectedAmount,offerVersion,beta=true){return scope(uid,async tx=>{
+   await tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text,312042))`
+   const quote=await liveQuote(tx,uid,sku,offerVersion,beta)
+   if(quote.amountKopecks!==expectedAmount)throw new ProjectError(409,'quote_changed')
+   const [row]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",idempotency_key as "idempotencyKey",payment_id as "paymentId",created_at as "createdAt" from bricklab.commerce_create_live_order(${sku},${quote.title},${quote.amountKopecks}::integer,${offerVersion})`;return row
+  })},
+  async cancelCommercePayment(id,paymentId,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_cancel_payment(${id}::uuid,${paymentId},${environment},${amount}::integer) as ok`;return r.ok})},
   async createCommerceTestOrder(uid,sku){return scope(uid,async tx=>{const [row]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",idempotency_key as "idempotencyKey",payment_id as "paymentId",created_at as "createdAt" from bricklab.commerce_create_test_order(${sku})`;return row})},
   async attachCommercePayment(id,paymentId,environment){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_attach_payment(${id}::uuid,${paymentId},${environment}) as ok`;return r.ok})},
   async fulfillCommercePayment(id,paymentId,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_fulfill(${id}::uuid,${paymentId},${environment},${amount}::integer) as ok`;return r.ok})},
