@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Execute on the BrickLab VPS as root, with the exact tested commit argument.
 set -Eeuo pipefail
+if [[ ! -f "${BASH_SOURCE[0]}" ]]; then echo 'Run a saved script file, not bash -s' >&2; exit 2; fi
+exec </dev/null
 umask 077
 cd /opt/bricklab-cloud
 TARGET="${1:?Supply an exact release commit SHA}"
@@ -55,7 +57,7 @@ PGPASSWORD="$POSTGRES_PASSWORD" docker run --rm --network "$NET" \
     -e PGHOST="$DB" -e PGDATABASE=bricklab_browser_test -e PGUSER=bricklab_admin \
     -e PGPASSWORD -e BRICKLAB_APP_PASSWORD -v "$TMP/server/db:/migrations:ro" \
     postgres:16 sh /migrations/setup.sh
-for check in account_security.sql community_options.sql; do
+for check in account_security.sql community_options.sql store_orders.sql; do
     docker exec -i -e PGPASSWORD="$POSTGRES_PASSWORD" "$DB" \
       psql -X -v ON_ERROR_STOP=1 -U bricklab_admin -d bricklab_browser_test \
       < "$TMP/server/db/tests/$check"
@@ -103,13 +105,13 @@ docker compose build bricklab
 phase=migrate
 echo "=== APPLY MIGRATION ==="
 docker compose stop bricklab
-docker compose run --rm --no-deps migrate
+docker compose run -T --rm --no-deps migrate
 phase=deploy
 echo "=== START RELEASE ==="
 docker compose up -d --no-deps --no-build --wait --wait-timeout 120 bricklab
 curl -fsS http://127.0.0.1:8080/api/health
 curl -fsS https://bricklab-3d.ru/api/health
-curl -fsS https://bricklab-3d.ru/ | grep -F 'menu.css?v=hub-1' >/dev/null
+curl -fsS https://bricklab-3d.ru/ | grep -F 'menu.css?v=themes-2' >/dev/null
 curl -fsS 'https://bricklab-3d.ru/api/community/builds?sort=popular&week=1' >/dev/null
 trap - ERR
 echo

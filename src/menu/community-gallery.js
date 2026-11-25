@@ -1,3 +1,4 @@
+import {backgroundIds} from './store-themes.js?v=themes-2'
 import {parseProject} from '../projects/documents.js'
 import {sanitizePreview,isLargePreview,previewLimits} from './public-preview.js?v=large-viewer-1'
 import {readPreference} from './preferences.js?v=full-settings'
@@ -338,7 +339,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   status.textContent=t.loading
   try{
    if(view.type==='build'){const {build}=await request('/api/community/build/'+view.id,signal);if(!signal.aborted){status.textContent='';void showViewer(build)}}
-   else{const {profile}=await request('/api/community/profile/'+view.id,signal);if(signal.aborted)return;status.textContent='';const theme=['default','first-build','carbon','neon'].includes(profile.backgroundTheme)?profile.backgroundTheme:'default';const workshop=el('section','community-public-workshop cosmetic-'+theme);workshop.append(builderCard(profile,true),el('h2',null,t.models));const grid=el('div','community-grid');workshop.append(grid);root.append(workshop);const {builds}=await request('/api/community/builds?author='+view.id,signal);if(signal.aborted)return;for(const b of builds)grid.append(buildCard(b));if(!builds.length)grid.append(el('p','account-muted',t.empty))}
+   else{const {profile}=await request('/api/community/profile/'+view.id,signal);if(signal.aborted)return;status.textContent='';const theme=backgroundIds.includes(profile.backgroundTheme)?profile.backgroundTheme:'default';const workshop=el('section','community-public-workshop cosmetic-'+theme);workshop.append(builderCard(profile,true),el('h2',null,t.models));const grid=el('div','community-grid');workshop.append(grid);root.append(workshop);const {builds}=await request('/api/community/builds?author='+view.id,signal);if(signal.aborted)return;for(const b of builds)grid.append(buildCard(b));if(!builds.length)grid.append(el('p','account-muted',t.empty))}
   }catch(e){fail(e)}
   return
  }
