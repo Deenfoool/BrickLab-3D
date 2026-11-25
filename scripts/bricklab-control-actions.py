@@ -15,7 +15,7 @@ import urllib.request
 
 ROOT = "/opt/bricklab-cloud"
 STATE = "/var/lib/bricklab-control-actions/audit.sqlite3"
-LOCK = "/run/lock/bricklab-deploy.lock"
+LOCK = "/run/bricklab-deploy.lock"
 LIMITS = {"restart": 600, "backup": 1800}
 COMMANDS = {
     "restart": ["/usr/bin/docker", "compose", "restart", "--timeout", "15", "bricklab"],

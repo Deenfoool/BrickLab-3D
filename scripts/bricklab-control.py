@@ -16,7 +16,7 @@ SNAPSHOT = pathlib.Path("/run/bricklab-control/snapshot.json")
 MENUS = {
     "home": [("🖥 VPS", "vps"), ("🐳 Docker", "docker"), ("📊 Статистика", "stats"),
              ("🧱 Сообщество", "community"), ("💾 Бэкапы", "backup"), ("🔔 События", "events"),
-             ("🚀 Версия", "release"), ("📋 Диагностика логов", "logs")],
+             ("🚀 Версия", "release"), ("📋 Диагностика логов", "logs"), ("🛡 Журнал действий", "audit")],
 }
 LINKS = {
     "community": [("Администрирование", "/#account/admin/overview"),
@@ -56,7 +56,7 @@ def broker(action, ident):
     except (OSError, UnicodeError):
         return "unknown"
 
-PAGES = {"home", "vps", "docker", "stats", "community", "backup", "events", "release", "logs"}
+PAGES = {"home", "vps", "docker", "stats", "community", "backup", "events", "release", "logs", "audit"}
 
 class ApiError(Exception):
     def __init__(self, code, delay=0):
@@ -92,6 +92,11 @@ def render(page, data):
         return str(data.get(section, {}).get(key, "нет данных"))
     def lines(section, fields):
         return "\n".join(label + ": " + value(section, key) for label, key in fields)
+    recent = data.get("audit", {}).get("recent")
+    history = "нет данных" if recent is None else "\n".join(
+        row["date"] + " · " + ACTIONS[row["action"]][0] + " · " +
+        ("начата; результат неизвестен" if row["result"] == "started" else RESULTS.get(row["result"], "неизвестно"))
+        for row in recent) or "Операций пока нет."
     bodies = {
         "home": "BrickLab Control Center\nAPI: " + value("vps", "api") + "\nВыберите раздел.",
         "vps": "🖥 VPS\n" + lines("vps", [("API локально", "api"), ("HTTPS извне (проверка с VPS)", "https"),
@@ -106,6 +111,7 @@ def render(page, data):
                   + "\nСтатус systemd, не доказательство восстановления копии.",
         "events": "🔔 BrickLab Events\n" + lines("events", [("В очереди", "pending"), ("Повторные попытки", "retrying"),
                      ("Доставлено (хранится до 30 дней)", "delivered"), ("Таймер", "timer")]),
+        "audit": "🛡 Последние операции VPS\n" + history,
         "logs": "📋 Диагностика логов (последние 200 строк за 1 ч)\n" + lines("logs", [("Строки", "lines"), ("С ошибками", "errors"), ("С предупреждениями", "warnings")]) + "\nСодержимое логов не передаётся в Telegram.",
         "release": "🚀 Развёрнутая версия (checkout)\n" + value("release", "commit")
                      + "\nСмена версии и откат пока доступны только через проверенный VPS-процесс.",

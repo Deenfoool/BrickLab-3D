@@ -5,6 +5,8 @@ import os
 import pathlib
 import re
 import shutil
+import sqlite3
+import datetime
 import subprocess
 import time
 import urllib.request
@@ -51,6 +53,18 @@ def query(sql):
     try:
         return json.loads(result)
     except (TypeError, ValueError):
+        return {}
+
+def audit():
+    path = pathlib.Path("/var/lib/bricklab-control-actions/audit.sqlite3")
+    if not path.exists():
+        return {"recent": []}
+    try:
+        with sqlite3.connect("file:"+str(path)+"?mode=ro", uri=True, timeout=2) as db:
+            rows = db.execute("SELECT action,started,result FROM audit ORDER BY started DESC,rowid DESC LIMIT 8").fetchall()
+        return {"recent": [{"action": a, "date": datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%d.%m %H:%M UTC"), "result": r}
+                           for a,t,r in rows if a in ("restart","backup") and r in ("started","ok","failed","unknown","not_running","health_failed")]}
+    except (sqlite3.Error, ValueError, OSError, OverflowError):
         return {}
 
 def collect():
@@ -101,6 +115,7 @@ def collect():
         lines = raw.splitlines()
         data["logs"] = {"lines": len(lines), "errors": sum(bool(re.search(r"\b(?:error|fatal|exception)\b", line, re.I)) for line in lines),
                         "warnings": sum(bool(re.search(r"\b(?:warn|warning)\b", line, re.I)) for line in lines)}
+    data["audit"] = audit()
     data["timestamp"] = time.time()
     return data
 
