@@ -79,7 +79,7 @@ export function createBrickLabServer({ root, logger = console, auth, projects, p
       if (pathname === '/api' || pathname.startsWith('/api/')) {
         return send(req, res, 404, JSON.stringify({ error: 'not_found' }), 'application/json; charset=utf-8')
       }
-      const name = pathname === '/' ? 'index.html' : pathname.slice(1)
+      const name = pathname === '/' ? 'index.html' : pathname === '/requisites' ? 'assets/legal/requisites.html' : pathname.slice(1)
       if (!publicPath(name)) return send(req, res, 404, 'Not found')
       let file, info
       try {
