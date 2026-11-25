@@ -266,6 +266,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   mountFloatingPanels(el('panelLayer'), t, signal)
   const workspaceUI = mountWorkspace(root, { language, scene, signal,
     grid: readPreference('grid') !== 'off', axes: readPreference('axes') !== 'off', changePreference: writePreference,
+    hideSelection: () => setPartsHidden(selectionIds(), true),
   })
   const visibleParts = loadParts(source, models)
   const shown = new Set(visibleParts.map(part => part.id))
@@ -1015,7 +1016,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     el('snap').setAttribute('aria-pressed', String(snapEnabled))
     el('undo').disabled = simulating(mode) || !undo.length
     el('redo').disabled = simulating(mode) || !redo.length
-    workspaceUI.render(mode, tool, state.parts.length, links.length)
+    workspaceUI.render(mode, tool, state.parts.length, links.length, building && Boolean(part) && !dragActive() && !moving && !addingConnection)
     renderHint()
   }
 
