@@ -1,8 +1,8 @@
-import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=unified-1'
+import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=commerce-account-1'
 import {renderWorkshopOverview} from './workshop-overview.js?v=account-projects-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
-import {productById,commerceProducts} from './commerce-catalog.js'
+import {commerceProducts} from './commerce-catalog.js'
 import { badges, ranks, rankFor } from './workshop-model.js?v=activity-1'
 import { workshopCopy } from './workshop-copy.js?v=profile-gallery-1'
 
