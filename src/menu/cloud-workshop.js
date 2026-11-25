@@ -88,10 +88,10 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
   content.append(renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic}))
   const c=card(ru?'Изображения профиля':'Profile images');c.append(el('p','account-muted',ru?'При включённой синхронизации изменения аватара и обложки сразу видны посетителям.':'When sharing is enabled, avatar and cover changes are immediately public.'))
   if(profile){for(const kind of ['avatar','cover']){
-     const block=el('div','account-card'),picker=el('input'),label=el('label','account-field');picker.type='file';picker.accept='image/png,image/jpeg,image/webp';picker.disabled=busy;label.append(el('span',null,t[kind+'Upload']),picker);block.append(label)
+     const block=el('div','account-card'),picker=el('input'),label=el('label','account-field');picker.type='file';picker.accept='image/png,image/jpeg,image/webp';picker.disabled=busy||!publicLoaded;label.append(el('span',null,t[kind+'Upload']),picker);block.append(label)
      const url=profile[kind+'Url'];if(url){const image=el('img','profile-media-preview '+kind);image.src=url;image.alt='';block.append(image)}
-     block.append(button(t.upload,()=>{if(picker.files?.[0])uploadMedia(kind,picker.files[0])},busy))
-     if(url)block.append(button(t.removeImage,()=>removeMedia(kind),busy));c.append(block)
+     block.append(button(t.upload,()=>{if(picker.files?.[0])uploadMedia(kind,picker.files[0])},busy||!publicLoaded))
+     if(url)block.append(button(t.removeImage,()=>removeMedia(kind),busy||!publicLoaded));c.append(block)
   }}else c.append(el('p','account-muted',t.profileMissing))
   content.append(c)
   appendPublicProfile()
