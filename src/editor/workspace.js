@@ -22,6 +22,9 @@ const icons = {
   check:'m5 12 4 4L19 6',
   camera:'M3 6h4l2-3h6l2 3h4v15H3zM16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
   cable:'M5 3v7a4 4 0 0 0 8 0V8a3 3 0 0 1 6 0v13M3 3h4m10 18h4',
+  duplicate:'M8 8h13v13H8zM16 5V3H3v13h2',
+  hide:'m3 3 18 18M10 10a3 3 0 0 0 4 4M2 12s4-7 10-7c6 0 10 7 10 7s-1 2-4 4M6 7c-2 2-4 5-4 5s4 7 10 7c1 0 3-1 4-1',
+  remove:'M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7',
 }
 const svg = name => '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="'+icons[name]+'"/></svg>'
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -35,14 +38,17 @@ export function readWorkspace(raw, guided = false) {
     const old = saved?.modes?.[mode]
     const right = ['scene-parts','inspector','instruction',''].includes(old?.right) ? old.right :
       guided && mode === 'build' ? 'instruction' : initial.right
+    const defaultFloat = mode === 'build' ? ['inspector','scene-parts',...(guided?['instruction']:[])] : mode === 'kinematics' ? ['inspector','scene-parts'] : []
+    const floatRight = Array.isArray(old?.floatRight) ? [...new Set(old.floatRight.filter(id=>['inspector','scene-parts',...(guided?['instruction']:[])].includes(id)))] : defaultFloat
     out.modes[mode] = {
+      floatRight,
       library: typeof old?.library === 'boolean' ? old.library : initial.library,
       right: right === 'instruction' && !guided ? initial.right : right,
     }
   }
   return out
 }
-export function mountWorkspace(root, { language, scene, signal, grid, axes, changePreference }) {
+export function mountWorkspace(root, { language, scene, signal, grid, axes, changePreference, hideSelection }) {
   const ru = language === 'ru'
   const tr = (r,e) => ru ? r : e
   const doc = root.ownerDocument
@@ -87,6 +93,7 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
   const leftTools=create('div','workspace-context-group')
   const rightTools=create('div','workspace-context-group')
   const options=create('div','workspace-context-group workspace-options')
+  const quick=create('div','workspace-context-group workspace-quick')
   const modeLabel=create('span','workspace-tool-name')
   const makeButton=(group,id,icon,label,showLabel=false)=>{
     const b=create('button','workspace-control')
@@ -114,7 +121,14 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
   cable.innerHTML=svg('cable')+'<span>'+tr('Укладка','Route')+'</span>'
   rightTools.prepend(cable,wire)
   options.append(modeLabel,el('pivotMode'),el('rotationSnap'))
-  context.append(leftTools,options,rightTools)
+  const copyBtn=makeButton(quick,'duplicate','duplicate',tr('Дублировать выбранное','Duplicate selection'))
+  const hideBtn=makeButton(quick,'hide','hide',tr('Скрыть выбранное','Hide selection'))
+  const removeBtn=makeButton(quick,'delete','remove',tr('Удалить выбранное','Delete selection'))
+  on(copyBtn,'click',()=>el('duplicate').click())
+  on(hideBtn,'click',hideSelection)
+  on(removeBtn,'click',()=>el('remove').click())
+  quick.hidden=true
+  context.append(leftTools,options,quick,rightTools)
   bar.after(context)
   const footer=create('div','workspace-status')
   const counts=create('span','workspace-count')
@@ -137,21 +151,21 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     const panelMode=mode==='build'||mode==='kinematics'
     const left=panelMode&&!focus&&pref.library&&mode==='build'
     const right=panelMode&&!focus&&pref.right
+    const rightIds=panelMode&&!focus?(settings.floating&&!small?pref.floatRight:right?[right]:[]):[]
     const rightWidth=right==='instruction'?Math.max(settings.rightWidth,Math.min(440,innerWidth*.34)):settings.rightWidth
     root.dataset.workspaceLayout=floating?'floating':'dock'
     root.dataset.workspaceMode=mode
     root.toggleAttribute('data-workspace-focus',focus)
     root.toggleAttribute('data-workspace-presentation',presentation)
     root.toggleAttribute('data-workspace-left',Boolean(left))
-    root.toggleAttribute('data-workspace-right',Boolean(right))
+    root.toggleAttribute('data-workspace-right',rightIds.length>0)
     root.style.setProperty('--workspace-left',settings.leftWidth+'px')
     root.style.setProperty('--workspace-right',rightWidth+'px')
     for(const [id,panel] of Object.entries(panels)){
-      const shown=id==='library'?left:right===id
+      const shown=id==='library'?left:rightIds.includes(id)
       panel.toggleAttribute('data-workspace-hidden',!shown)
     }
-    if(left)expand('library')
-    if(right)expand(right)
+    if(!floating){if(left)expand('library');if(right)expand(right)}
     lib.disabled=mode!=='build'
     pin.disabled=mode!=='build'
     view.disabled=small
@@ -160,7 +174,7 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     pressed(lib,left);pressed(pin,settings.pin);pressed(view,!floating)
     pressed(gridBtn,gridOn&&!presentation);pressed(axesBtn,axesOn&&!presentation)
     pressed(focusBtn,focus);pressed(cameraBtn,presentation)
-    for(const [id,b] of Object.entries(tabs))pressed(b,right===id)
+    for(const [id,b] of Object.entries(tabs))pressed(b,rightIds.includes(id))
     dividerLeft.hidden=floating||!left
     dividerRight.hidden=floating||!right
     scene.setWorkspaceHelpers(gridOn&&!presentation,axesOn&&!presentation)
@@ -169,14 +183,17 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     if(!panels[id])return
     focus=presentation=false
     if(id==='library')settings.modes[mode].library=true
-    else settings.modes[mode].right=id
-    remember();apply()
+    else {settings.modes[mode].right=id;if(!settings.modes[mode].floatRight.includes(id))settings.modes[mode].floatRight.push(id)}
+    expand(id);remember();apply()
   }
   function togglePanel(id){
     focus=presentation=false
     const p=settings.modes[mode]
-    if(id==='library')p.library=!p.library
-    else p.right=p.right===id?'':id
+    if(id==='library'){p.library=!p.library;if(p.library)expand(id)}
+    else if(settings.floating&&innerWidth>=900){
+      if(p.floatRight.includes(id))p.floatRight=p.floatRight.filter(x=>x!==id)
+      else {p.floatRight.push(id);expand(id)}
+    }else{p.right=p.right===id?'':id;if(p.right)expand(id)}
     remember();apply()
   }
   on(lib,'click',()=>togglePanel('library'))
@@ -241,17 +258,22 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     status.setAttribute('aria-label',status.title)
     status.textContent=ok?'✓':'!'
   }
-  function render(nextMode,tool,partCount,linkCount){
+  function render(nextMode,tool,partCount,linkCount,canQuick){
     if(mode!==nextMode){mode=nextMode;focus=presentation=false}
     title.textContent=name.value||tr('Новая сборка','New build')
     counts.textContent=tr('Деталей: ','Parts: ')+partCount+' · '+tr('Связей: ','Links: ')+linkCount
     modeLabel.textContent=nextMode==='build'?({select:tr('Выделение','Select'),box:tr('Рамка','Box select'),move:tr('Перемещение','Move'),rotate:tr('Вращение','Rotate'),length:tr('Длина оси','Axle length'),belt:tr('Ремень','Belt'),track:tr('Гусеница','Track')}[tool]||''):''
     options.hidden=nextMode!=='build'
+    quick.hidden=!canQuick
     apply()
   }
   status.title=tr('Статус локального сохранения','Local save status')
   status.setAttribute('aria-label',status.title)
   status.textContent='·'
   apply()
+  signal.addEventListener('abort',()=>{
+    for(const name of ['data-workspace-layout','data-workspace-mode','data-workspace-focus','data-workspace-presentation','data-workspace-left','data-workspace-right'])root.removeAttribute(name)
+    root.style.removeProperty('--workspace-left');root.style.removeProperty('--workspace-right')
+  },{once:true})
   return {render,setSaved,openPanel,placed(){if(!settings.pin&&mode==='build'){settings.modes.build.library=false;remember();apply()}}}
 }
