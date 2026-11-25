@@ -32,7 +32,7 @@ test('PDF reader reuses an open book, clamps the page, and closes it when a loca
   await reader.render(file, 1, {}, signal)
   reader.close()
   assert.equal(opened.length, 2)
-  assert.equal(opened[0].url, url)
+  assert.equal(opened[0].url, `/api/instructions/pdf?url=${encodeURIComponent(url)}`)
   assert.equal(opened[0].withCredentials, false)
   assert.equal(new TextDecoder().decode(opened[1].data), '%PDF-1.7')
   assert.deepEqual(rendered, [[2, 800, 1600], [3, 800, 1600], [1, 800, 1600]])

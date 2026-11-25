@@ -1,6 +1,8 @@
 import { fileURLToPath } from 'node:url'
 import {createPaymentsHandler,paymentConfig} from './payments.js'
 import { createBrickLabServer } from './http.js'
+import { createInstructionsHandler } from './instructions.js'
+import { createInstructionFetch } from './instruction-fetch.js'
 import { createRebrickableHandler } from './rebrickable.js'
 import { createCspReportHandler } from './csp-report.js'
 import {createAccountSecurityHandler} from './account-security.js'
@@ -38,7 +40,9 @@ if (process.env.PGPASSWORD) {
     throw error
   }
 }
+const instructionFetch = createInstructionFetch({ proxy: process.env.BRICKLAB_INSTRUCTIONS_PROXY || '' })
 const server = createBrickLabServer({ root: fileURLToPath(new URL('../', import.meta.url)), auth, projects, profile, activity, community, bureau, security, payments,
+  instructions: createInstructionsHandler({ fetcher: instructionFetch }),
   rebrickable:createRebrickableHandler({apiKey:process.env.BRICKLAB_REBRICKABLE_API_KEY || ''}), cspReport:createCspReportHandler() })
 server.on('error', async error => {
   console.error('Unable to start BrickLab:', error.message)
@@ -55,6 +59,7 @@ function shutdown() {
   const timeout = setTimeout(() => server.closeAllConnections(), 10_000).unref()
   server.close(async error => {
     clearTimeout(timeout)
+    await instructionFetch.close()
     await store?.close()
     if (error) process.exitCode = 1
   })

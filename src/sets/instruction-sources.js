@@ -140,6 +140,16 @@ export async function discoverBooks(setNumber, signal) {
     return indexed
   }
 
+  // The official set page covers new releases that are not in BrickDB yet.
+  try {
+    const response = await fetch(`/api/instructions/books?set=${encodeURIComponent(setNumber)}`, {
+      signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]), credentials: 'same-origin',
+    })
+    if (response.ok) {
+      const books = normalizeBooks((await response.json()).books)
+      if (books.length) return books
+    }
+  } catch { signal.throwIfAborted() }
   const archive = await loadArchive()
   signal.throwIfAborted()
   return archiveBooks(archive.get(setNumber))

@@ -1,3 +1,4 @@
+import { instructionPdfUrl } from './instruction-url.js'
 // Lazy-load the pinned legacy build for browsers with older PDF rendering APIs.
 const distribution = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.5.438/'
 let library
@@ -30,11 +31,15 @@ export function createInstructionPdfReader(load = loadPdfJs) {
       const pdf = await load()
       session.ops = pdf.OPS
       const input = typeof source === 'string'
-        ? { url: source, withCredentials: false }
+        ? { url: instructionPdfUrl(source), withCredentials: false }
         : { data: new Uint8Array(await source.arrayBuffer()) }
       if (active !== session) throw new DOMException('PDF closed', 'AbortError')
       session.task = pdf.getDocument({
         ...input,
+        // Open pages of large books without downloading every page in advance.
+        disableAutoFetch: true,
+        disableStream: true,
+        rangeChunkSize: 256 * 1024,
         cMapUrl: `${distribution}cmaps/`,
         cMapPacked: true,
         standardFontDataUrl: `${distribution}standard_fonts/`,

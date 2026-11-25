@@ -3,6 +3,7 @@ import { createReadStream, realpathSync } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
 import { extname, relative, resolve, sep } from 'node:path'
+import { createInstructionsHandler } from './instructions.js'
 
 const directories = new Set(['src', 'assets', 'catalog', 'examples', 'vendor'])
 const types = {
@@ -41,7 +42,7 @@ function rangeOf(header, size) {
     ? { start: first, end: last } : null
 }
 
-export function createBrickLabServer({ root, logger = console, auth, projects, profile, activity, community, bureau, security, rebrickable, cspReport, payments } = {}) {
+export function createBrickLabServer({ root, logger = console, auth, projects, profile, activity, community, bureau, security, rebrickable, cspReport, payments, instructions = createInstructionsHandler() } = {}) {
   const base = realpathSync(root)
   const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff')
@@ -58,6 +59,7 @@ export function createBrickLabServer({ root, logger = console, auth, projects, p
         res.writeHead(303,{'Location':'/#store','Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end();return
       }
       if (rebrickable && await rebrickable(req,res,pathname)) return
+      if (instructions && await instructions(req,res,pathname)) return
       if (cspReport && await cspReport(req,res,pathname)) return
       if (security && await security(req,res,pathname)) return
       if (auth && pathname.startsWith('/api/auth/') && await auth(req, res, pathname)) return

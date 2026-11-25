@@ -1,5 +1,5 @@
 import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=pdf-cors-fix'
-import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=instruction-artwork-v3'
+import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=same-origin-pdf'
 import { mountSetPalette } from '../sets/palette.js?v=element-search'
 import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'
