@@ -1,12 +1,12 @@
 import { sessionDiagnostics } from '../feedback/diagnostics.js?v=bug-report-v1'
-import { mountBugReport } from '../feedback/dialog.js?v=bug-report-v1'
+import { mountBugReport } from '../feedback/dialog.js?v=events-1'
 import { safeImage } from '../sets/data.js?v=browser-recognition'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
 import { locales } from './locale.js?v=store-1'
 import {mountStore} from './store.js?v=admin-access-1'
 import { mountHomeHub, mountHubSearch } from './home-hub.js?v=signature-art-1'
 import { mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=fullscreen-1'
+import { createCloudAccount } from './account.js?v=events-1'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -454,6 +454,7 @@ function renderHome(visible) {
 
 function currentPage() {
   const hash = location.hash.slice(1)
+  if (hash.startsWith('account/admin/')) return 'account'
   if (hash.startsWith('community/')) return 'community'
   if (hash.startsWith('project/')) return 'project'
   return pages.includes(hash) ? hash : 'home'
