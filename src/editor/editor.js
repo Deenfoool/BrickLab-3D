@@ -1016,7 +1016,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     el('snap').setAttribute('aria-pressed', String(snapEnabled))
     el('undo').disabled = simulating(mode) || !undo.length
     el('redo').disabled = simulating(mode) || !redo.length
-    workspaceUI.render(mode, tool, state.parts.length, links.length, building && Boolean(part) && !dragActive() && !moving && !addingConnection)
+    workspaceUI.render(mode, tool, state.parts.length, links.length, building && Boolean(part) && !dragActive() && !moving && !addingConnection, !dragActive() && !moving && !pendingPart && !boxSelection)
     renderHint()
   }
 
@@ -1476,6 +1476,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
 
   function setMode(next) {
     if (next === mode) return
+    workspaceUI.exitPresentation()
     if (mode === 'testDrive') drivePanel.setActive(false)
     cancelGizmo()
     cancelPlacement()
@@ -1769,7 +1770,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     if (rightDown && Math.hypot(event.clientX - rightDown[0], event.clientY - rightDown[1]) >= 5) rightDown = null
   }, true)
   on(scene.canvas, 'pointerdown', event => {
-    if (simulating(mode)) return
+    if (simulating(mode) || root.hasAttribute('data-workspace-presentation')) return
     if (event.button === 2) {
       cancelBoxSelection()
       rightDown = [event.clientX, event.clientY]
@@ -1813,7 +1814,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     render()
   })
   on(scene.canvas, 'pointermove', event => {
-    if (simulating(mode)) return
+    if (simulating(mode) || root.hasAttribute('data-workspace-presentation')) return
     if (boxSelection?.pointerId === event.pointerId) {
       updateSelectionFrame(event)
       return
@@ -1841,7 +1842,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     }
   })
   on(scene.canvas, 'pointerup', event => {
-    if (simulating(mode)) return
+    if (simulating(mode) || root.hasAttribute('data-workspace-presentation')) return
     if (event.button === 2) {
       if (rightDown && Math.hypot(event.clientX - rightDown[0], event.clientY - rightDown[1]) < 5) {
         const hit = scene.pointer(event).hit
@@ -1926,6 +1927,10 @@ export async function mountEditor(root, { document, projectId, language, save, d
   })
   on(window, 'keydown', event => {
     if (event.defaultPrevented || root.ownerDocument.querySelector('dialog[open]')) return
+    if (root.hasAttribute('data-workspace-presentation')) {
+      if(event.key==='Escape'){event.preventDefault();workspaceUI.exitPresentation()}
+      return
+    }
     if (event.key === 'Escape' && connectionTools.open) {
       event.preventDefault()
       connectionTools.open = false
@@ -2075,11 +2080,13 @@ export async function mountEditor(root, { document, projectId, language, save, d
   setSelection(undefined)
   scene.resetView()
   tutorial = mountTutorial(root, { projectId, language, signal })
+  if (tutorial?.step === 'placed') workspaceUI.openPanel('library')
   // A resumed mechanics lesson needs kinematics mode and a selectable gear.
   // Without this, reloading during the lesson returns to Build mode and
   // the remaining steps can no longer be completed.
   if (tutorial?.mode === 'mechanics' && ['gearSelected', 'motion'].includes(tutorial.step)) {
     setMode('kinematics')
+    workspaceUI.openPanel('inspector')
     if (tutorial.step === 'motion') {
       const gear = state.parts.find(part => ['10928', '3648'].includes(part.design))
       if (gear) setSelection(gear.id)
