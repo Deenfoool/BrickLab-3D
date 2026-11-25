@@ -1,3 +1,4 @@
+import {renderUnifiedHero,renderPortfolio} from './unified-profile.js?v=unified-1'
 import {applySignature,decorateAuthor,themeBadge,themePlate,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {backgroundIds} from './store-themes.js?v=themes-2'
 import {parseProject} from '../projects/documents.js'
@@ -340,7 +341,17 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   status.textContent=t.loading
   try{
    if(view.type==='build'){const {build}=await request('/api/community/build/'+view.id,signal);if(!signal.aborted){status.textContent='';void showViewer(build)}}
-   else{const {profile}=await request('/api/community/profile/'+view.id,signal);if(signal.aborted)return;status.textContent='';const theme=backgroundIds.includes(profile.backgroundTheme)?profile.backgroundTheme:'default';const workshop=el('section','community-public-workshop cosmetic-'+theme);workshop.append(builderCard(profile,true),el('h2',null,t.models));const grid=el('div','community-grid');workshop.append(grid);root.append(workshop);const {builds}=await request('/api/community/builds?author='+view.id,signal);if(signal.aborted)return;for(const b of builds)grid.append(buildCard(b));if(!builds.length)grid.append(el('p','account-muted',t.empty))}
+   else{
+    const {profile}=await request('/api/community/profile/'+view.id,signal);if(signal.aborted)return
+    const {builds}=await request('/api/community/builds?author='+view.id,signal);if(signal.aborted)return
+    status.textContent='';const theme=backgroundIds.includes(profile.backgroundTheme)?profile.backgroundTheme:'default'
+    const workshop=el('section','unified-public-profile fullscreen-workshop cosmetic-'+theme);applySignature(workshop,profile.backgroundTheme)
+    const actions=[reaction('follow',profile.id,profile.followers,profile.id===social.ownId)]
+    if(profile.id===social.ownId)actions.push(link(language==='ru'?'Вернуться в мастерскую':'Back to workshop','#account','workspace-action'))
+    const r=profile.reputation
+    workshop.append(renderUnifiedHero({lang:language,identity:{...profile,bio:'',subtitle:language==='ru'?'Конструктор BrickLab':'BrickLab builder'},actions,metrics:r?[[t.buildCount,r.builds],[t.receivedLikes,r.likes],[t.downloads,r.downloads],[t.reputation,r.score],[language==='ru'?'Подписчики':'Followers',r.followers]]:[]}))
+    workshop.append(renderPortfolio({lang:language,profile,builds,onOpen:b=>void showViewer(b),makeBuildCard:b=>buildCard(b)}));root.append(workshop)
+   }
   }catch(e){fail(e)}
   return
  }
