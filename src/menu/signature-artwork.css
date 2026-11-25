@@ -1,0 +1,53 @@
+/* Signature collection: shared original vector artwork, not mock screenshots. */
+.signature-carbon{--signature-art:url('../../assets/themes/carbon.svg')}
+.signature-neon{--signature-art:url('../../assets/themes/neon.svg')}
+.signature-blueprint{--signature-art:url('../../assets/themes/blueprint.svg')}
+.signature-titanium{--signature-art:url('../../assets/themes/titanium.svg')}
+.signature-ember{--signature-art:url('../../assets/themes/ember.svg')}
+.signature-aurora{--signature-art:url('../../assets/themes/aurora.svg')}
+.signature-cover{position:relative;isolation:isolate;overflow:hidden}
+.signature-cover:not(.signature-custom-cover){display:flex;align-items:center;justify-content:flex-start;background:var(--sig-cover);min-height:clamp(150px,18vw,230px)}
+.signature-cover .signature-art{position:absolute;inset:0;z-index:0;background-image:var(--signature-art);background-position:right center;background-repeat:no-repeat;background-size:cover;pointer-events:none}
+.signature-cover:not(.signature-custom-cover)::before{content:"";position:absolute;inset:0;z-index:1;background:linear-gradient(90deg,#0c121de0 0%,#0c121da8 25%,transparent 70%);pointer-events:none;mask-image:none}
+.signature-cover:not(.signature-custom-cover)::after{display:none}
+.signature-cover-caption{position:relative;z-index:2;display:grid;gap:7px;max-width:65%;padding:8px 0;color:#f4f6fb;letter-spacing:normal;text-shadow:0 2px 8px #000b}
+.signature-cover-caption strong{font-size:clamp(20px,3.3vw,45px);line-height:1.06;letter-spacing:-.055em;overflow-wrap:anywhere}
+.signature-cover-caption small,.signature-cover-label{font-family:ui-monospace,monospace;color:var(--sig);font-weight:700;font-size:clamp(8px,1vw,11px);letter-spacing:.12em}
+.signature-cover:not(.signature-custom-cover)>.signature-plate,.signature-cover:not(.signature-custom-cover)>.workshop-emblem,.signature-cover:not(.signature-custom-cover)>span:not(.signature-cover-label){display:none}
+.signature-carbon .signature-cover-caption strong{font-style:italic;font-weight:850}
+.signature-neon .signature-cover-caption strong{color:#e6faff;text-shadow:0 0 18px #65dbff65}
+.signature-blueprint .signature-cover-caption strong{font-family:ui-monospace,monospace;font-weight:550;letter-spacing:-.075em}
+.signature-titanium .signature-cover-caption strong{font-weight:850;text-transform:uppercase;letter-spacing:.025em}
+.signature-ember .signature-cover-caption strong{font-weight:900;letter-spacing:-.035em;text-shadow:0 2px 12px #c75a414d}
+.signature-aurora .signature-cover-caption strong{font-weight:550;letter-spacing:-.035em;text-shadow:0 0 22px #81f7d855}
+.signature-cover.signature-custom-cover .signature-plate{margin-left:auto;z-index:3}
+.cosmetic-preview.signature-cover{height:130px;padding:14px;min-height:130px}
+.cosmetic-preview.signature-cover .signature-cover-caption strong{font-size:clamp(16px,2vw,25px)}
+.signature-catalog-preview{display:block;aspect-ratio:auto;padding:0;box-shadow:none;min-width:0}
+.signature-catalog-preview:not(.store-theme-large) .signature-preview-cover{aspect-ratio:16/9;min-height:0;max-height:none;padding:16px}
+.signature-catalog-preview:not(.store-theme-large) .signature-cover-caption{max-width:65%}
+.signature-catalog-preview:not(.store-theme-large) .signature-cover-caption strong{font-size:clamp(20px,2.2vw,29px)}
+.signature-catalog-preview:not(.store-theme-large) .signature-cover-caption small{font-size:8px}
+.store-banner-art .signature-catalog-preview:not(.store-theme-large){padding:0;aspect-ratio:4/5;overflow:hidden}
+.store-banner-art .signature-catalog-preview .signature-preview-cover{width:100%;height:100%;aspect-ratio:auto;padding:10px;align-items:flex-end;background-position:right center}
+.store-banner-art .signature-catalog-preview .signature-art{background-size:auto 110%;background-position:78% top;opacity:.8}
+.store-banner-art .signature-catalog-preview .signature-cover-caption{max-width:100%}
+.store-banner-art .signature-catalog-preview .signature-cover-caption strong{font-size:clamp(12px,1.5vw,20px)}
+.store-banner-art .signature-cover-label,.store-banner-art .signature-cover-caption small{display:none}
+.signature-demo-profile{width:100%;overflow:hidden}
+.signature-catalog-preview.store-theme-large{aspect-ratio:auto;padding:0;background:transparent}
+.signature-demo-profile .signature-preview-cover{aspect-ratio:3.2/1;min-height:140px;max-height:230px;padding:22px}
+.signature-demo-profile .community-profile-identity{z-index:3}
+.signature-demo-profile .community-reputation{margin-top:5px}
+.signature-demo-profile .community-card-body{overflow-wrap:anywhere}
+.signature-theme .community-profile-avatar,.signature-theme .workshop-avatar{position:relative;outline:1px solid var(--sig);outline-offset:4px}
+.signature-carbon :is(.community-profile-avatar,.workshop-avatar){outline-style:double;outline-width:3px}
+.signature-blueprint :is(.community-profile-avatar,.workshop-avatar){outline-style:dashed}
+.signature-titanium :is(.community-profile-avatar,.workshop-avatar){outline:3px double #bac9d9}
+.signature-aurora :is(.community-profile-avatar,.workshop-avatar){outline-color:#a9b6f5;box-shadow:0 0 24px #80d9c65c}
+.signature-theme .workshop-metric{min-height:78px}
+.signature-theme .workshop-metric::after{content:"";display:block;width:28px;height:3px;background:var(--sig);opacity:.6;border-radius:var(--sig-radius)}
+.signature-blueprint .workshop-metric::after{height:1px;width:100%;background:repeating-linear-gradient(90deg,var(--sig) 0 4px,transparent 4px 8px)}
+.signature-titanium .workshop-metric::after{width:42px;background:repeating-linear-gradient(90deg,var(--sig) 0 6px,transparent 6px 9px)}
+.signature-neon .workshop-metric::after{box-shadow:0 0 9px var(--sig)}
+@media(max-width:600px){.signature-cover:not(.signature-custom-cover){min-height:145px}.signature-cover .signature-art{background-size:auto 100%;background-position:80% center}.signature-cover-caption{max-width:66%}.signature-cover-caption strong{font-size:23px}.signature-demo-profile .signature-preview-cover{padding:12px}.signature-demo-profile .community-profile-identity{flex-wrap:wrap}.signature-demo-profile .community-card-body{flex:1 1 180px}.signature-demo-profile .community-reputation>div{flex:1 1 70px;padding:7px}.signature-catalog-preview:not(.store-theme-large) .signature-preview-cover{min-height:130px}.store-banner-art .signature-catalog-preview .signature-preview-cover{min-height:0}.store-banner-art .signature-catalog-preview .signature-cover-caption strong{font-size:13px}}
