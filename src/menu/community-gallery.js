@@ -1,3 +1,4 @@
+import {applySignature,decorateAuthor,themeBadge,themePlate} from './profile-signature.js?v=signature-1'
 import {backgroundIds} from './store-themes.js?v=themes-2'
 import {parseProject} from '../projects/documents.js'
 import {sanitizePreview,isLargePreview,previewLimits} from './public-preview.js?v=large-viewer-1'
@@ -154,7 +155,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   }
   const author=link(b.author,'#community/profile/'+b.authorId,'community-author')
   const avatar=publicImage(b.authorAvatarUrl,b.authorId,'avatar');if(avatar){avatar.className='community-author-avatar';author.prepend(avatar)}
-  const authorBar=el('div','community-model-author');authorBar.append(author)
+  decorateAuthor(author,b.authorTheme,language);const authorBar=el('div','community-model-author');authorBar.append(author);applySignature(authorBar,b.authorTheme)
   const meta=el('div','community-meta')
   for(const v of [t[b.category]??t.other,b.partCount+' '+t.partCount,t.revision+' '+b.revision])meta.append(el('span',null,v))
   meta.append(el('span',null,t.difficulty+': '+(t[b.difficulty]??t.unspecified)),el('span',null,t[b.workType]??t.original))
@@ -244,7 +245,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   function renderComment(c){
    const row=el('article','community-comment'+(c.parentId?' reply':'')),top=el('div','community-comment-header'),avatar=publicImage(c.avatarUrl,c.authorId,'avatar')
    if(avatar){avatar.className='community-author-avatar';top.append(avatar)}
-   top.append(link(c.author,'#community/profile/'+c.authorId,'community-author'),el('span','account-muted',new Date(c.createdAt).toLocaleString(language==='ru'?'ru-RU':'en-US')))
+   const author=link(c.author,'#community/profile/'+c.authorId,'community-author');decorateAuthor(author,c.authorTheme,language);applySignature(top,c.authorTheme);top.append(author,el('span','account-muted',new Date(c.createdAt).toLocaleString(language==='ru'?'ru-RU':'en-US')))
    row.append(top)
    if(c.parentId)row.append(el('p','account-muted',t.replyTo+' '+(c.parentAuthor??'…')))
    row.append(el('p','community-comment-text',c.body??t.deleted))
@@ -294,7 +295,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   if(!detail)title.addEventListener('click',e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;e.preventDefault();void showViewer(b)})
   const meta=el('div','community-meta'),author=link(b.author,'#community/profile/'+b.authorId,'community-author')
   const authorImage=publicImage(b.authorAvatarUrl,b.authorId,'avatar');if(authorImage){authorImage.className='community-author-avatar';author.prepend(authorImage)}
-  meta.append(author,el('span',null,b.partCount+' '+t.partCount),el('span',null,t[b.category]??t.other),el('span',null,t.revision+' '+b.revision))
+  decorateAuthor(author,b.authorTheme,language);applySignature(card,b.authorTheme);meta.append(author,el('span',null,b.partCount+' '+t.partCount),el('span',null,t[b.category]??t.other),el('span',null,t.revision+' '+b.revision))
   const statistics=el('div','community-meta'),views=el('span'),downloads=el('span');const update=(v,d)=>{views.textContent=t.views+': '+v;downloads.textContent=t.downloads+': '+d};update(b.views??0,b.downloads??0);if(!viewUpdates.has(b.id))viewUpdates.set(b.id,[]);viewUpdates.get(b.id).push(update);statistics.append(views,downloads)
   const description=el('p','community-description',b.description)
   const actions=el('div','community-actions')
@@ -319,15 +320,15 @@ export async function mountCommunity(root,{language='ru',route='community',signa
  }
  function builderCard(p,detail=false){
   const a=el('article','community-card community-builder'+(detail?' community-builder-detail':'')),avatar=el('div','account-avatar community-profile-avatar',Array.from(p.displayName).slice(0,2).join('').toUpperCase()),body=el('div','community-card-body')
-  const img=publicImage(p.avatarUrl,p.id,'avatar');if(img)avatar.replaceChildren(img)
+  applySignature(a,p.backgroundTheme);const img=publicImage(p.avatarUrl,p.id,'avatar');if(img)avatar.replaceChildren(img)
   body.append(detail?el('h2',null,p.displayName):link(p.displayName,'#community/profile/'+p.id,'community-title'),el('p','community-description',p.bio))
-  const reputation=reputationBlock(p);if(reputation)body.append(reputation);body.append(reaction('follow',p.id,p.followers,p.id===social.ownId))
+  const badge=themeBadge(p.backgroundTheme,language);if(badge)body.append(badge);const reputation=reputationBlock(p);if(reputation)body.append(reputation);body.append(reaction('follow',p.id,p.followers,p.id===social.ownId))
   if(detail){
    const theme=['blueprint','graphite','amber'].includes(p.coverTheme)?p.coverTheme:'blueprint'
    const cover=el('div','community-profile-cover cover-'+theme),coverImg=publicImage(p.coverUrl,p.id,'cover')
    if(coverImg)cover.append(coverImg)
    else cover.append(el('span',null,'BRICKLAB / WORKSHOP'))
-   const identity=el('div','community-profile-identity');identity.append(avatar,body);a.append(cover,identity)
+   const plate=themePlate(p.backgroundTheme);if(plate)cover.append(plate);const identity=el('div','community-profile-identity');identity.append(avatar,body);a.append(cover,identity)
   }else a.append(avatar,body)
   return a
  }
