@@ -324,7 +324,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   const a=el('article','community-card community-builder'+(detail?' community-builder-detail':'')),avatar=el('div','account-avatar community-profile-avatar',Array.from(p.displayName).slice(0,2).join('').toUpperCase()),body=el('div','community-card-body')
   applySignature(a,p.backgroundTheme);const img=publicImage(p.avatarUrl,p.id,'avatar');if(img)avatar.replaceChildren(img)
   body.append(detail?el('h2',null,p.displayName):link(p.displayName,'#community/profile/'+p.id,'community-title'),el('p','community-description',p.bio))
-  const badge=themeBadge(p.backgroundTheme,language);if(badge)body.append(badge);const support=productById(p.supportBadge);if(support?.kind==='badge')body.append(el('span','commerce-support-badge support-'+support.id,support.title));const reputation=reputationBlock(p);if(reputation)body.append(reputation);body.append(reaction('follow',p.id,p.followers,p.id===social.ownId))
+  const badge=themeBadge(p.backgroundTheme,language);if(badge)body.append(badge);const support=productById(p.supportBadge);if(support?.kind==='badge')body.append(el('span','commerce-support-badge support-'+support.id,support.title));if(p.plus===true)body.append(el('span','commerce-support-badge support-gold-builder','BrickLab Plus'));const reputation=reputationBlock(p);if(reputation)body.append(reputation);body.append(reaction('follow',p.id,p.followers,p.id===social.ownId))
   if(detail){
    const theme=['blueprint','graphite','amber'].includes(p.coverTheme)?p.coverTheme:'blueprint'
    const cover=el('div','community-profile-cover cover-'+theme),coverImg=publicImage(p.coverUrl,p.id,'cover')
