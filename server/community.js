@@ -72,6 +72,7 @@ export function publicCard(row,options={}){
   avatarUrl:base&&row.hasAvatar===true?base+'/avatar':null,coverUrl:base&&row.hasCover===true?base+'/cover':null,
   coverTheme:['blueprint','graphite','amber'].includes(row.coverTheme)?row.coverTheme:null,
   backgroundTheme:backgroundIds.includes(row.backgroundTheme)?row.backgroundTheme:null,
+  ...(row.supportBadge?{supportBadge:row.supportBadge}:{}),
   ...(portfolio?{unified:true,portfolio:projected,awards:row.showAward===true&&visible('awards')?['firstCloudSave']:[],...(owner?{showAvatar:row.shareAvatar===true,showCover:row.shareCover===true}:{})}:{})}
 }
 
