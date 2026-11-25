@@ -9,10 +9,10 @@ export function adminTarget(value){
  const s=String(value).trim(),m=/(?:^|[#/])community\/(?:build|profile)\/([0-9a-f-]{36})\/?$/i.exec(s);const id=m?.[1]??s;return uuid.test(id)?id:null
 }
 function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
-export function renderAdminPanel({lang='ru',signal,fetcher=globalThis.fetch,location=globalThis.location}){
- const t=labels[lang]??labels.ru,root=el('section','admin-panel'),notice=el('p','account-muted'),tabs=el('div','community-actions'),content=el('div','admin-content'),more=el('button','workspace-action',t.more)
+export function renderAdminPanel({lang='ru',signal,initialMode='overview',initialQuery='',fetcher=globalThis.fetch,location=globalThis.location}){
+ const t={...(labels[lang]??labels.ru),bugs:lang==='ru'?'Баг-репорты':'Bug reports',bugSearch:lang==='ru'?'ID отчёта':'Report ID'},root=el('section','admin-panel'),notice=el('p','account-muted'),tabs=el('div','community-actions'),content=el('div','admin-content'),more=el('button','workspace-action',t.more)
  notice.setAttribute('role','status');more.type='button';more.hidden=true
- let mode='overview',offset=0,q='',busy=false,serial=0
+ const modes=['overview','users','reports','build-reports','bugs','content','audit'];let mode=modes.includes(initialMode)?initialMode:'overview',offset=0,q=uuid.test(initialQuery)?initialQuery:'',busy=false,serial=0
  const controls=new Map()
  async function call(path='',method='GET',body){
   if(!authOriginAllowed(location))throw new AuthError('https_required')
@@ -36,6 +36,8 @@ export function renderAdminPanel({lang='ru',signal,fetcher=globalThis.fetch,loca
   if(mode==='users'){
    row.append(el('strong',null,r.displayName),el('p','account-muted',r.email),el('p','account-muted',r.id),el('p',null,(r.admin?t.admin+' · ':'')+(r.verifiedAt?t.verified:t.unverified)+' · '+(r.blockedAt?t.blocked:t.active)))
    if(!r.admin)row.append(button(t[r.blockedAt?'unblock':'block'],()=>action(r.blockedAt?'unblock':'block',r.id)),button(t.revoke_sessions,()=>action('revoke_sessions',r.id)))
+  }else if(mode==='bugs'){
+   row.append(el('strong',null,r.area),el('p','account-muted',r.id+' · '+new Date(r.createdAt).toLocaleString(lang)),el('p','community-comment-text',r.summary))
   }else if(mode==='reports'){
    const link=el('a','community-author',t.comment+' · '+r.author);link.href='#community/build/'+r.buildId
    row.append(link,el('p','community-comment-text',r.body??t.removed),el('p','account-muted',r.reports+' · '+r.reasons.map(x=>t[x]??x).join(', ')),button(t.hide_comment,()=>action('hide_comment',r.id)),button(t.dismiss_reports,()=>action('dismiss_reports',r.id)))
@@ -62,7 +64,7 @@ export function renderAdminPanel({lang='ru',signal,fetcher=globalThis.fetch,loca
     for(const k of ['users','verified','blocked','profiles','builds','reports']){const x=el('div','account-card');x.append(el('strong',null,String(overview[k]??0)),el('span','account-muted',t[k]));grid.append(x)}
     content.append(grid)
    }else{
-    if(mode==='users'&&reset){const form=el('form','community-actions'),search=el('input'),submit=el('button','workspace-action primary',t.find);search.placeholder=t.search;search.setAttribute('aria-label',t.search);search.maxLength=100;search.value=q;submit.type='submit';form.append(search,submit);form.onsubmit=e=>{e.preventDefault();q=search.value.trim();void load(true)};content.append(form)}
+    if(['users','bugs'].includes(mode)&&reset){const form=el('form','community-actions'),search=el('input'),submit=el('button','workspace-action primary',t.find);search.placeholder=mode==='bugs'?t.bugSearch:t.search;search.setAttribute('aria-label',search.placeholder);search.maxLength=100;search.value=q;submit.type='submit';form.append(search,submit);form.onsubmit=e=>{e.preventDefault();q=search.value.trim();void load(true)};content.append(form)}
     const result=await call('/'+mode+'?'+new URLSearchParams({offset:String(offset),q}));if(signal.aborted||version!==serial)return
     for(const r of result.items)content.append(item(r))
     if(!result.items.length)content.append(el('p','account-muted',t.empty))
@@ -71,7 +73,7 @@ export function renderAdminPanel({lang='ru',signal,fetcher=globalThis.fetch,loca
    notice.textContent=''
   }catch(e){if(version===serial)error(e)}
  }
- for(const key of ['overview','users','reports','build-reports','content','audit']){const b=button(t[key],()=>{if(busy)return;mode=key;for(const [k,c] of controls)c.setAttribute('aria-pressed',String(k===key));void load(true)});b.setAttribute('aria-pressed',String(key===mode));controls.set(key,b);tabs.append(b)}
+ for(const key of modes){const b=button(t[key],()=>{if(busy)return;mode=key;q='';for(const [k,c] of controls)c.setAttribute('aria-pressed',String(k===key));void load(true)});b.setAttribute('aria-pressed',String(key===mode));controls.set(key,b);tabs.append(b)}
  more.onclick=()=>load(false);tabs.append(button(t.refresh,()=>{if(!busy)void load(true)}))
  root.append(el('p','account-muted',t.intro),tabs,notice,content,more);void load();return root
 }
