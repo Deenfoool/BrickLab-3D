@@ -1,6 +1,7 @@
+import { loadPartIndex, enrichInventory, normalizeDocumentDesigns } from '../catalog/part-resolver.js?v=catalog-engine-1'
 import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=pdf-cors-fix'
 import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=instruction-artwork-v3'
-import { mountSetPalette } from '../sets/palette.js?v=element-search'
+import { mountSetPalette } from '../sets/palette.js?v=catalog-engine-1'
 import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'
 import { mountCablePanel } from './cable-panel.js'
@@ -16,8 +17,8 @@ import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive
 import { nearestDetent } from '../mechanics/axial.js?v=torque-clutch'
 import { nearbyConnections, translationSnaps } from './snap.js?v=volvo-spur-gears'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=system-complete'
-import { mountLibrary } from './library.js?v=system-complete'
-import { createScene } from './scene.js?v=workspace-21'
+import { mountLibrary } from './library.js?v=catalog-engine-1'
+import { createScene } from './scene.js?v=catalog-engine-1'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=volvo-spur-gears'
@@ -50,8 +51,11 @@ const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
 export async function mountEditor(root, { document, projectId, language, save, download, publish, signal, reportLoad }) {
-  const source = upgradeInlineEngineFan(promoteLegacyBelts(expandComponents(document, parts)))
+  await loadPartIndex()
+  if (signal.aborted) return
+  const source = upgradeInlineEngineFan(promoteLegacyBelts(expandComponents(normalizeDocumentDesigns(document, parts), parts)))
   let buildingSet = instructionState(source.buildingSet)
+  const resolvedInventory = buildingSet ? enrichInventory(buildingSet.set.inventory, parts, { signal }) : null
   const pdf = buildingSet ? createInstructionPdfReader() : undefined
   if (pdf) signal.addEventListener('abort', pdf.close, { once: true })
   const firstPage = prepareInstructionPage(buildingSet, signal, pdf)
@@ -89,6 +93,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
       }
     })
   }
+  const inventory = await resolvedInventory
   if (signal.aborted) return
   root.innerHTML = `
     <header class="editor-bar">
@@ -371,7 +376,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
       all.setAttribute('aria-pressed', String(!active)); set.setAttribute('aria-pressed', String(active))
     }
     tabs.append(all, set); libraryBody.append(tabs, full, paletteRoot)
-    setPalette = mountSetPalette(paletteRoot, buildingSet.set, { language, catalog: parts, groups: sections.flatMap(section => section.groups), signal,
+    setPalette = mountSetPalette(paletteRoot, { ...buildingSet.set, inventory }, { language, catalog: parts, groups: sections.flatMap(section => section.groups), signal,
       select: selectLibraryPart, readParts: () => [...state.parts, ...hiddenParts],
       focus(item) {
         const ids = state.parts.filter(part => part.design === item.design && part.color?.toLowerCase() === item.color.toLowerCase()).map(part => part.id)

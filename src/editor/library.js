@@ -1,4 +1,5 @@
-import { elementNumber, lookupElement } from './element-index.js'
+import { loadPartIndex, resolvePart, resolveInventoryPart } from '../catalog/part-resolver.js?v=catalog-engine-1'
+import { elementNumber, lookupElement } from './element-index.js?v=catalog-engine-1'
 import { previewColumns, previewRows, previewPageSize, searchLibrary } from './library-data.js?v=system-tiles'
 
 const batchSize = 48
@@ -139,10 +140,10 @@ export function mountLibrary(root, { sections, models, language, labels, selectP
     scroll.scrollTop = 0
     const query = search.value.trim()
     matches = searchLibrary(section, groupSelect.value, query)
-    if (Object.hasOwn(byDesign, query)) matches = [byDesign[query]]
+    const identity = resolvePart(query, byDesign)
+    if (identity.design) matches = [identity.model]
     if (elementMatch) {
-      const designs = [elementMatch.partNum, ...elementMatch.ldraw]
-      const model = designs.filter(id => Object.hasOwn(byDesign, id)).map(id => byDesign[id])[0]
+      const model = resolveInventoryPart(elementMatch, byDesign).model
       if (model) matches = [{ ...model, color: elementMatch.color }]
       else {
         matches = []
@@ -187,6 +188,7 @@ export function mountLibrary(root, { sections, models, language, labels, selectP
   configureGroups()
   if (section.groups.some(([id]) => id === initialGroup)) groupSelect.value = initialGroup
   filter()
+  loadPartIndex().then(() => { if (!signal.aborted && search.value.trim()) filter() })
 
   return {
     get section() { return section.id },
