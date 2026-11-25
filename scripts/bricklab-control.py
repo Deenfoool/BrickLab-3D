@@ -177,7 +177,7 @@ def render(page, data):
         "community": "🧱 Сообщество\n" + lines("stats", [("Жалобы на сборки", "build_reports"),
                      ("Жалобы на комментарии", "comment_reports"), ("Баг-репорты за 24 ч", "bugs")])
                      + "\nИзменения выполняются в защищённой веб-админке.",
-        "backup": "💾 Резервное копирование\n" + lines("backup", [("База", "db"), ("Конфигурация", "config")])
+        "backup": "💾 Резервное копирование\n" + lines("backup", [("База", "db"), ("Конфигурация", "config"), ("Последняя проверка восстановления","verification")])
                   + "\nСтатус systemd, не доказательство восстановления копии.",
         "events": "🔔 BrickLab Events\n" + lines("events", [("В очереди", "pending"), ("Повторные попытки", "retrying"),
                      ("Доставлено (хранится до 30 дней)", "delivered"), ("Таймер", "timer")]),
@@ -187,7 +187,7 @@ def render(page, data):
         "bugs": "🐞 Последние баг-репорты\n" + records("bugs") + "\nОписание, логи и личные данные не отправляются в Telegram.",
         "github": "🐙 GitHub / релиз\n" + lines("release", [("Checkout", "commit"), ("Последний локально полученный origin", "tracking"), ("Отставание (коммитов)", "behind"), ("Рабочее дерево", "worktree")]) + "\nGitHub SHA: " + github.get("remote","нет данных") + "\nCI для GitHub SHA: " + github.get("ci","нет данных") + "\nGitHub обновляется не чаще раза в 5 минут. Развёртывание — только утверждённого SHA в разделе Версия.",
         "analytics": "📈 Аналитика за 7 календарных дней (часовой пояс БД)\nДата · аккаунты / текущие сборки по дате публикации\n" + trend_text + "\n\n" + lines("analytics",[("Реакции всего","likes"),("Просмотры (учтённые события)","views"),("Скачивания (учтённые события)","downloads"),("Подписки","follows"),("Деталей в публичных сборках","parts")]),
-        "automation": "⚙ Автоматизация\n" + automation_description() + "\nАвтовосстановление: " + value("automation","recovery") + "\nНе меняет существующие службы мониторинга и Events.",
+        "automation": "⚙ Автоматизация\n" + automation_description() + "\nАвтовосстановление: " + value("automation","recovery") + "\nОбслуживание: " + value("automation","maintenance") + "\nНе меняет существующие службы мониторинга и Events.",
         "audit": "🛡 Последние операции VPS\n" + history,
         "logs": "📋 Диагностика логов (последние 200 строк за 1 ч)\n" + lines("logs", [("Строки", "lines"), ("С ошибками", "errors"), ("С предупреждениями", "warnings")]) + "\nСодержимое логов не передаётся в Telegram.",
         "release": "🚀 Развёрнутая версия (checkout)\n" + value("release", "commit")

@@ -24,7 +24,7 @@ fi
 test "$(id -gn bricklab-control)" = bricklab-control
 test "$(id -nG bricklab-control)" = bricklab-control
 install -d -m 0755 /usr/local/lib/bricklab-control
-install -m 0644 scripts/bricklab-control.py scripts/bricklab-control-snapshot.py scripts/bricklab-control-actions.py scripts/bricklab-control-recovery.py scripts/bricklab-control-miniapp.py scripts/miniapp.html scripts/miniapp.js scripts/miniapp.css scripts/bricklab-control-release.sh scripts/bricklab-control-approve.sh scripts/deploy-community-vps.sh /usr/local/lib/bricklab-control/
+install -m 0644 scripts/bricklab-control.py scripts/bricklab-control-snapshot.py scripts/bricklab-control-actions.py scripts/bricklab-control-recovery.py scripts/bricklab-control-miniapp.py scripts/miniapp.html scripts/miniapp.js scripts/miniapp.css scripts/bricklab-control-release.sh scripts/bricklab-control-approve.sh scripts/deploy-community-vps.sh scripts/bricklab-control-verify-backup.sh /usr/local/lib/bricklab-control/
 python3 -m py_compile /usr/local/lib/bricklab-control/*.py
 cat >/etc/systemd/system/bricklab-control-snapshot.service <<'UNIT'
 [Unit]
@@ -179,7 +179,8 @@ UMask=0077
 ExecStart=/bin/bash /usr/local/lib/bricklab-control/bricklab-control-release.sh
 TimeoutStartSec=45min
 NoNewPrivileges=true
-PrivateTmp=true
+# Docker bind mounts in the existing release script must be visible to the host daemon.
+PrivateTmp=false
 UNIT
 systemctl daemon-reload
 if [[ "${1:-}" == --enable-actions ]]; then

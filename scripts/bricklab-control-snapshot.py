@@ -135,6 +135,12 @@ def collect():
         FROM bricklab.notification_outbox;""")
     data["events"]["timer"] = unit("bricklab-events.timer")
     data["backup"] = {"db": unit("bricklab-backup.service"), "config": unit("bricklab-config-backup.service")}
+    try:
+        stamp, status = pathlib.Path("/var/lib/bricklab-control-verification/result").read_text().split()
+        if status in ("running","ok","failed"):
+            data["backup"]["verification"] = status + " · " + datetime.datetime.fromtimestamp(int(stamp),datetime.timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
+    except (OSError,ValueError,OverflowError):
+        pass
     commit = run(["git", "rev-parse", "HEAD"])
     data["release"] = {"commit": commit if commit and re.fullmatch(r"[0-9a-f]{40}", commit) else "нет данных"}
     data["release"]["job"] = unit("bricklab-control-release.service")
@@ -158,7 +164,7 @@ def collect():
         lines = raw.splitlines()
         data["logs"] = {"lines": len(lines), "errors": sum(bool(re.search(r"\b(?:error|fatal|exception)\b", line, re.I)) for line in lines),
                         "warnings": sum(bool(re.search(r"\b(?:warn|warning)\b", line, re.I)) for line in lines)}
-    data["automation"] = {"recovery": unit("bricklab-control-recovery.timer")}
+    data["automation"] = {"recovery": unit("bricklab-control-recovery.timer"), "maintenance": "пауза восстановления" if pathlib.Path("/etc/bricklab-backup/control-recovery.pause").exists() else "нет паузы"}
     data["audit"] = audit()
     data["timestamp"] = time.time()
     return data
