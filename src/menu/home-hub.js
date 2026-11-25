@@ -1,3 +1,4 @@
+import {applySignature,themeBadge} from './profile-signature.js?v=signature-1'
 import {readPreference} from './preferences.js?v=full-settings'
 import {sanitizePreview,isLargePreview} from './public-preview.js?v=large-viewer-1'
 const words={
@@ -24,7 +25,7 @@ function buildCard(b,t,feature=false,previewQueue){
  if(b.imageCount>0){const img=node('img');img.alt='';img.loading='lazy';img.src='/api/community/build/'+b.id+'/image/0';img.onerror=()=>{img.remove();art.classList.add('hub-build-placeholder')};art.append(img)}else{art.classList.add('hub-build-placeholder');previewQueue?.observe(art,b)}
  const body=node('div','hub-build-body');body.append(node('strong',null,b.title),node('span','hub-muted',String(b.author??'')),node('span','hub-build-meta',String(b.partCount??0)+' '+t.parts+' · ♥ '+String(b.likes??0)))
  if(feature&&b.description)body.append(node('p','hub-description',b.description))
- a.append(art,body);return a
+ const badge=themeBadge(b.authorTheme);if(badge)body.append(badge);applySignature(a,b.authorTheme);a.append(art,body);return a
 }
 function shelf(title,t){const section=node('section','hub-shelf'),head=node('div','home-section-head'),grid=node('div','hub-build-grid');head.append(node('h2',null,title),link(t.all,'#community'));section.append(head,grid);return {section,grid}}
 // A bounded, serial queue avoids opening a WebGL context for every public card.
