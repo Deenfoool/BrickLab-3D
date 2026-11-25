@@ -1,4 +1,4 @@
-import {renderUnifiedHero,renderPortfolio} from './unified-profile.js?v=commerce-account-1'
+import {renderUnifiedHero,renderPortfolio} from './unified-profile.js?v=commerce-plus-1'
 import {productById} from './commerce-catalog.js'
 import {applySignature,decorateAuthor,themeBadge,themePlate,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {backgroundIds} from './store-themes.js?v=themes-2'
