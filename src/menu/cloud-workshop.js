@@ -1,5 +1,5 @@
 import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=unified-1'
-import {renderWorkshopOverview} from './workshop-overview.js?v=fullscreen-1'
+import {renderWorkshopOverview} from './workshop-overview.js?v=unified-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 import { badges, ranks, rankFor } from './workshop-model.js?v=activity-1'
