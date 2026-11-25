@@ -96,12 +96,12 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
  cover.disabled=busy;for(const [key,ru,en] of [['blueprint','Чертёж','Blueprint'],['graphite','Графит','Graphite'],['amber','Янтарь','Amber']]){const option=ui('option',null,lang==='ru'?ru:en);option.value=key;cover.append(option)}cover.value=profile.cover
  form.append(field(t.display,name),field(t.bio,bio),field(t.coverStyle,cover))
  if(publicCard&&!publicCard.unified)form.append(ui('p','account-muted',t.legacy))
- const status=ui('p','account-muted',publicCard?t.shared:t.notShared)
+ const status=ui('p','account-muted',!publicLoaded?(lang==='ru'?'Видимость пока не проверена.':'Visibility has not been checked.'):publicCard?t.shared:t.notShared)
  form.append(ui('h3',null,t.publicationSettings),status,ui('p','account-muted',t.privacy))
  if(!publicLoaded){
   form.append(action(lang==='ru'?'Загрузить настройки публичности':'Load visibility settings',loadPublic,busy))
-  const save=ui('button','workspace-action primary',t.savePrivate);save.type='submit';save.disabled=busy
-  form.append(save);form.onsubmit=e=>{e.preventDefault();if(!busy)saveProfile({displayName:name.value,bio:bio.value,cover:cover.value})};root.append(form);return root
+  form.append(ui('p','account-muted',lang==='ru'?'Сначала проверь статус публикации, чтобы случайно не раскрыть изменения.':'Check publication status before editing to avoid unintentionally sharing changes.'))
+  root.append(form);return root
  }
  // Disabling a public page is a separate destructive action, never an implicit checkbox save.
  const enable=check(t.visibility,!!publicCard,busy||!!publicCard),shareAvatar=check(t.avatar,publicCard?.unified?publicCard.showAvatar:!!publicCard?.avatarUrl,busy),shareCover=check(t.cover,publicCard?.unified?publicCard.showCover:!!publicCard?.coverTheme,busy),shareTheme=check(t.theme,!!publicCard?.backgroundTheme,busy)
