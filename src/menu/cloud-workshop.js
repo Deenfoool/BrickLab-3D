@@ -1,7 +1,8 @@
-import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=unified-1'
+import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=commerce-account-1'
 import {renderWorkshopOverview} from './workshop-overview.js?v=account-projects-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
+import {commerceProducts} from './commerce-catalog.js'
 import { badges, ranks, rankFor } from './workshop-model.js?v=activity-1'
 import { workshopCopy } from './workshop-copy.js?v=profile-gallery-1'
 
@@ -56,7 +57,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
   const displayName=profile?.displayName??publicCard?.displayName??user.displayName,heroActions=[button(ru?'Сменить тему':'Change theme',()=>go('cosmetics'),busy),button(ru?'Редактировать профиль':'Edit profile',()=>go('settings'),busy)]
   if(publicCard){const a=el('a','workspace-action',ru?'Глазами посетителя':'View as visitor');a.href='#community/profile/'+publicCard.id;heroActions.push(a)}
   else heroActions.push(button(ru?'Опубликовать профиль':'Publish profile',()=>go('settings'),busy))
-  const hero=renderUnifiedHero({lang,owner:true,identity:{displayName,bio:profile?.bio,coverTheme:profile?.cover,backgroundTheme:profile?.background,avatarUrl:profile?.avatarUrl,coverUrl:profile?.coverUrl,subtitle:user.admin===true?(ru?'Администратор · BrickLab Cloud':'Administrator · BrickLab Cloud'):t.active},actions:heroActions,metrics:[[t.local,summary.local],[t.cloud,summary.cloud],[t.revisions,summary.revisions],[t.xp,progress?.xp??'—'],[t.title,rank?t[rank.id]:'—']]})
+  const hero=renderUnifiedHero({lang,owner:true,identity:{displayName,bio:profile?.bio,coverTheme:profile?.cover,backgroundTheme:profile?.background,supportBadge:profileData?.supportBadge,avatarUrl:profile?.avatarUrl,coverUrl:profile?.coverUrl,subtitle:user.admin===true?(ru?'Администратор · BrickLab Cloud':'Administrator · BrickLab Cloud'):t.active},actions:heroActions,metrics:[[t.local,summary.local],[t.cloud,summary.cloud],[t.revisions,summary.revisions],[t.xp,progress?.xp??'—'],[t.title,rank?t[rank.id]:'—']]})
   const actions=el('div','workshop-quickbar'),quick=el('div','workshop-shortcuts'),create=button(ru?'Новая сборка':'New build',createBuild,busy);create.classList.add('primary');create.prepend(icon('plus'));quick.append(create)
   for(const key of ['cloud','storage','favorites','cosmetics'])quick.append(button(t[key],()=>go(key),busy))
   actions.append(el('span','workshop-quick-label',ru?'Быстрые действия':'Quick actions'),quick)
@@ -84,7 +85,11 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
   }
   content.append(c)
  }else if(section==='storage'){
-  const c=card(t.storage);c.append(metrics([[t.local,summary.local],[t.cloud,summary.cloud],[t.revisions,summary.revisions]]),el('p',null,t.limits),el('p','account-muted',activityData?t.usage+': '+(activityData.bytes/1048576).toFixed(2)+' MiB. '+t.bytesHint:t.noBytes),el('p','account-muted',t.privateOnly));content.append(c)
+  const c=card(t.storage),limits=activityData?.limits;
+   if(limits){const used=activityData.bytes/1048576;c.append(metrics([[t.cloud,summary.cloud+' / '+limits.projects],[ru?'Версий на проект':'Versions per project',limits.versions],[ru?'Хранилище':'Storage',used.toFixed(2)+' / '+limits.storageMiB+' MiB']]),el('p','account-muted',(ru?'Максимальный запрос: ':'Maximum request: ')+limits.requestMiB+' MiB. '+t.bytesHint));
+    if(summary.cloud>=limits.projects||used>=limits.storageMiB)c.append(el('p','account-notice',ru?'Лимит достигнут. Существующие сборки и версии доступны для открытия и скачивания.':'Limit reached. Existing builds and versions remain available to open and download.'));
+    const shop=el('a','workspace-action',ru?'Расширения облака':'Cloud upgrades');shop.href='#store';c.append(shop)
+   }else c.append(el('p','account-muted',t.noBytes));content.append(c)
  }else if(section==='settings'){
   content.append(renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic}))
   const c=card(ru?'Изображения профиля':'Profile images');c.append(el('p','account-muted',ru?'При включённой синхронизации изменения аватара и обложки сразу видны посетителям.':'When sharing is enabled, avatar and cover changes are immediately public.'))
@@ -107,6 +112,9 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
      grid.append(tile)
    }
    const shop=el('a','workspace-action',lang==='ru'?'Открыть BrickLab Store':'Open BrickLab Store');shop.href='#store';c.append(grid,shop);content.append(c)
+   const supporter=card(ru?'Значки поддержки':'Supporter badges'),badgeGrid=el('div','workshop-grid');supporter.append(el('p','account-muted',ru?'Выбранный значок будет показан в публичном профиле, если он опубликован. Значки не дают XP.':'The selected badge is visible on your published profile. Badges do not award XP.'));
+   for(const badge of commerceProducts.filter(p=>p.kind==='badge')){const owned=profileData?.supportBadges?.includes(badge.id)===true,active=profileData?.supportBadge===badge.id,tile=card(badge.title);tile.append(el('span','commerce-support-badge support-'+badge.id,badge.title),el('p','account-muted',owned?t.owned:t.purchase),button(active?(ru?'Показывается':'Displayed'):ru?'Показывать':'Display',()=>saveProfile({bio:profile.bio,cover:profile.cover,supportBadge:badge.id}),busy||!profile||!owned||active));badgeGrid.append(tile)}
+   supporter.append(badgeGrid,button(ru?'Скрыть значок':'Hide badge',()=>saveProfile({bio:profile.bio,cover:profile.cover,supportBadge:null}),busy||!profile||!profileData?.supportBadge));content.append(supporter)
  }else if(section==='security'){
   const c=card(t.security);c.append(el('p',null,t.email+': '+user.email),el('p','account-muted',t.securityText),el('p','account-muted',t.privateOnly));if(revokeOthers)c.append(button(t.revokeOthers,revokeOthers,busy));content.append(c)
  }else{const c=card(t[section]);c.append(el('p','account-muted',t.pending));content.append(c)}

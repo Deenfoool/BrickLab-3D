@@ -2,7 +2,7 @@ import {filterPortfolio} from '../../src/menu/portfolio-model.js'
 import postgres from 'postgres'
 import {securityStore} from './security-store.js'
 import {storeOrders} from './store-orders.js'
-import {commerceStore} from './commerce-store.js'
+import {commerceStore,commerceEntitlements} from './commerce-store.js'
 import {bureauStore} from './bureau-store.js'
 import { ProjectError } from '../projects.js'
 import { backgroundInventory } from '../profile-media.js'
@@ -23,11 +23,11 @@ export function connectAuthStore(env = process.env) {
     return fn(tx)
   })
   const lock = (tx, uid) => tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text, 312042))`
-  async function quota(tx, doc, creating) {
+  async function quota(tx, doc, creating, limits) {
     const [count] = await tx`select count(*)::int as n from bricklab.projects`
-    if (creating && count.n >= 20) throw new ProjectError(409,'project_limit')
+    if (creating && count.n >= limits.projects) throw new ProjectError(409,'project_limit')
     const [size] = await tx`select coalesce(sum(octet_length(document::text)),0)::text as n from bricklab.project_revisions`
-    if (Number(size.n) + Buffer.byteLength(JSON.stringify(doc)) * 2 > 64 * 1024 * 1024) throw new ProjectError(409,'storage_limit')
+    if (Number(size.n) + Buffer.byteLength(JSON.stringify(doc)) * 2 > limits.storageMiB * 1024 * 1024) throw new ProjectError(409,'storage_limit')
   }
   const missing = () => new ProjectError(404,'not_found')
   return {
@@ -35,7 +35,7 @@ export function connectAuthStore(env = process.env) {
     ...storeOrders(sql,scope),
     ...commerceStore(scope),
     ...securityStore(sql,scope,lock),
-    async ready() { await sql`select 1 from bricklab.commerce_orders limit 1`;await sql`select 1 from bricklab.commerce_grants limit 1`; await sql`select 1 from bricklab.store_products limit 1`;await sql`select 1 from bricklab.store_test_orders limit 1`;await sql`select 1 from bricklab.store_test_entitlements limit 1`; await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1`; await sql`select 1 from bricklab.project_favorites limit 1`; await sql`select 1 from bricklab.award_reads limit 1`; await sql`select cover_theme,background_theme,portfolio,unified from bricklab.public_profiles limit 1`; await sql`select category,part_count,allow_download,allow_comments,images from bricklab.public_builds limit 1`;await sql`select 1 from bricklab.community_bookmarks limit 1`;await sql`select 1 from bricklab.community_build_reports limit 1`;await sql`select 1 from bricklab.community_like_counts limit 1`;await sql`select 1 from bricklab.community_follow_counts limit 1`;await sql`select 1 from bricklab.community_event_counts limit 1`;await sql`select 1 from bricklab.community_comments limit 1`;await sql`select 1 from bricklab.community_comment_reports limit 1`;await sql`select 1 from bricklab.community_reputation limit 1`;await sql`select 1 from bricklab.bureaus limit 1`;await sql`select 1 from bricklab.bureau_members limit 1`;await sql`select 1 from bricklab.bureau_projects limit 1`;await sql`select 1 from bricklab.bureau_revisions limit 1`;await sql`select email_verified_at,blocked_at from bricklab.users limit 1`;await sql`select 1 from bricklab.account_tokens limit 1`;await sql`select 1 from bricklab.admin_accounts limit 1`;await sql`select 1 from bricklab.admin_audit limit 1` },
+    async ready() { await sql`select 1 from bricklab.commerce_badge_selection limit 1`;await sql`select 1 from bricklab.commerce_orders limit 1`;await sql`select 1 from bricklab.commerce_grants limit 1`; await sql`select 1 from bricklab.store_products limit 1`;await sql`select 1 from bricklab.store_test_orders limit 1`;await sql`select 1 from bricklab.store_test_entitlements limit 1`; await sql`select 1 from bricklab.sessions limit 1`; await sql`select 1 from bricklab.projects limit 1`; await sql`select 1 from bricklab.profiles limit 1`; await sql`select 1 from bricklab.workshop_awards limit 1`; await sql`select 1 from bricklab.profile_media limit 1`; await sql`select 1 from bricklab.cosmetic_entitlements limit 1`; await sql`select 1 from bricklab.project_favorites limit 1`; await sql`select 1 from bricklab.award_reads limit 1`; await sql`select cover_theme,background_theme,portfolio,unified from bricklab.public_profiles limit 1`; await sql`select category,part_count,allow_download,allow_comments,images from bricklab.public_builds limit 1`;await sql`select 1 from bricklab.community_bookmarks limit 1`;await sql`select 1 from bricklab.community_build_reports limit 1`;await sql`select 1 from bricklab.community_like_counts limit 1`;await sql`select 1 from bricklab.community_follow_counts limit 1`;await sql`select 1 from bricklab.community_event_counts limit 1`;await sql`select 1 from bricklab.community_comments limit 1`;await sql`select 1 from bricklab.community_comment_reports limit 1`;await sql`select 1 from bricklab.community_reputation limit 1`;await sql`select 1 from bricklab.bureaus limit 1`;await sql`select 1 from bricklab.bureau_members limit 1`;await sql`select 1 from bricklab.bureau_projects limit 1`;await sql`select 1 from bricklab.bureau_revisions limit 1`;await sql`select email_verified_at,blocked_at from bricklab.users limit 1`;await sql`select 1 from bricklab.account_tokens limit 1`;await sql`select 1 from bricklab.admin_accounts limit 1`;await sql`select 1 from bricklab.admin_audit limit 1` },
     async register({ email, displayName, passwordHash, tokenHash, expiresAt }) {
       return sql.begin(async tx => {
         const [user] = await tx`insert into bricklab.users (email, display_name, password_hash)
@@ -72,11 +72,11 @@ export function connectAuthStore(env = process.env) {
       await sql`delete from bricklab.sessions where token_hash = ${tokenHash}`
     },
     async listProjects(uid) {
-      return scope(uid, tx => tx`select id,name,head_revision as revision,created_at as "createdAt",updated_at as "updatedAt" from bricklab.projects order by updated_at desc,id limit 20`)
+      return scope(uid, tx => tx`select id,name,head_revision as revision,created_at as "createdAt",updated_at as "updatedAt" from bricklab.projects order by updated_at desc,id`)
     },
     async createProject(uid,doc) {
       return scope(uid, async tx => {
-        await lock(tx,uid); await quota(tx,doc,true)
+        await lock(tx,uid); const {limits}=await commerceEntitlements(tx,uid); await quota(tx,doc,true,limits)
         const [p]=await tx`insert into bricklab.projects (owner_id,name) values (${uid},${doc.name}) returning id,name,head_revision as revision,created_at as "createdAt",updated_at as "updatedAt"`
         await tx`insert into bricklab.project_revisions (project_id,revision,author_id,document) values (${p.id},1,${uid},${tx.json(doc)})`
         await tx`insert into bricklab.workshop_awards(user_id,award) values(${uid},'firstCloudSave') on conflict do nothing`
@@ -92,8 +92,9 @@ export function connectAuthStore(env = process.env) {
         if(p.revision!==expected)throw new ProjectError(409,'revision_conflict',{currentRevision:p.revision})
         const [same]=await tx`select document=${tx.json(doc)}::jsonb as equal from bricklab.project_revisions where project_id=${id} and revision=${expected}`
         if(same?.equal)return p
-        if(p.revision>=20)throw new ProjectError(409,'revision_limit')
-        await quota(tx,doc,false)
+        const {limits}=await commerceEntitlements(tx,uid)
+        if(p.revision>=limits.versions)throw new ProjectError(409,'revision_limit')
+        await quota(tx,doc,false,limits)
         const next=p.revision+1
         await tx`insert into bricklab.project_revisions (project_id,revision,author_id,document) values (${id},${next},${uid},${tx.json(doc)})`
         const [saved]=await tx`update bricklab.projects set name=${doc.name},head_revision=${next},updated_at=now() where id=${id} returning id,name,head_revision as revision,created_at as "createdAt",updated_at as "updatedAt"`
@@ -111,7 +112,7 @@ export function connectAuthStore(env = process.env) {
       return scope(uid,async tx=>{
         const [p]=await tx`select id from bricklab.projects where id=${id}`
         if(!p)throw missing()
-        return tx`select revision,created_at as "savedAt" from bricklab.project_revisions where project_id=${id} order by revision desc limit 20`
+        return tx`select revision,created_at as "savedAt" from bricklab.project_revisions where project_id=${id} order by revision desc`
       })
     },
     async getProfile(uid) {
@@ -119,23 +120,34 @@ export function connectAuthStore(env = process.env) {
         const [p]=await tx`select bio,cover,background,display_name as "displayName" from bricklab.profiles where user_id=${uid}`
         const awards=await tx`select award,awarded_at as "awardedAt" from bricklab.workshop_awards where user_id=${uid} order by awarded_at`
         const media=await tx`select kind,version from bricklab.profile_media where user_id=${uid}`
-        const entitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
+        const legacyEntitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
+        const commerce=await commerceEntitlements(tx,uid)
+        const entitlements=[...legacyEntitlements,...commerce.themes.map(item=>({item}))]
           const [{admin}]=await tx`select bricklab.is_admin() as admin`
         const inventory=backgroundInventory(awards,entitlements,{admin:admin===true})
         const profile=p??{bio:'',cover:'blueprint',background:'default'}
+        const [selection]=await tx`select badge from bricklab.commerce_badge_selection where user_id=${uid}`
+        const supportBadge=commerce.badges.includes(selection?.badge)?selection.badge:null
         if(!inventory.some(i=>i.id===profile.background&&i.owned))profile.background='default'
-        return {...profile,awards,inventory,avatarUrl:media.find(m=>m.kind==='avatar')?'/api/profile/avatar?v='+media.find(m=>m.kind==='avatar').version:null,coverUrl:media.find(m=>m.kind==='cover')?'/api/profile/cover?v='+media.find(m=>m.kind==='cover').version:null}
+        return {...profile,awards,inventory,supportBadges:commerce.badges,supportBadge,avatarUrl:media.find(m=>m.kind==='avatar')?'/api/profile/avatar?v='+media.find(m=>m.kind==='avatar').version:null,coverUrl:media.find(m=>m.kind==='cover')?'/api/profile/cover?v='+media.find(m=>m.kind==='cover').version:null}
       })
     },
     async saveProfile(uid,p) {
       return scope(uid,async tx=>{
         await lock(tx,uid)
+        if(p.supportBadge!==undefined){
+          const commerce=await commerceEntitlements(tx,uid)
+          if(p.supportBadge!==null&&!commerce.badges.includes(p.supportBadge))throw new ProjectError(403,'badge_locked')
+          await tx`insert into bricklab.commerce_badge_selection(user_id,badge) values(${uid},${p.supportBadge}) on conflict(user_id) do update set badge=excluded.badge`
+        }
         await tx`insert into bricklab.profiles(user_id,bio,cover) values(${uid},${p.bio},${p.cover}) on conflict(user_id) do update set bio=excluded.bio,cover=excluded.cover,updated_at=now()`
         if(p.displayName!==undefined)await tx`update bricklab.profiles set display_name=${p.displayName} where user_id=${uid}`
         await tx`update bricklab.public_profiles set display_name=coalesce(${p.displayName??null},display_name),bio=${p.bio},cover_theme=case when share_cover then ${p.cover} else null end,updated_at=now() where user_id=${uid} and unified`
         if(p.background!==undefined){
           const awards=await tx`select award from bricklab.workshop_awards where user_id=${uid}`
-          const entitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
+          const legacyEntitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
+        const commerce=await commerceEntitlements(tx,uid)
+        const entitlements=[...legacyEntitlements,...commerce.themes.map(item=>({item}))]
           const [{admin}]=await tx`select bricklab.is_admin() as admin`
           if(!backgroundInventory(awards,entitlements,{admin:admin===true}).some(i=>i.id===p.background&&i.owned))throw new ProjectError(403,'background_locked')
           await tx`update bricklab.profiles set background=${p.background} where user_id=${uid}`
@@ -154,7 +166,8 @@ export function connectAuthStore(env = process.env) {
         const notifications=await tx`select a.award,a.awarded_at as "at",(r.award is not null) as read from bricklab.workshop_awards a left join bricklab.award_reads r on r.user_id=a.user_id and r.award=a.award where a.user_id=${uid} order by a.awarded_at desc,a.award`
         const [size]=await tx`select coalesce(sum(octet_length(document::text)),0)::bigint as bytes from bricklab.project_revisions`
         const calendar=await tx`select (r.created_at at time zone 'UTC')::date::text as day,count(*)::int as count from bricklab.project_revisions r join bricklab.projects p on p.id=r.project_id where p.owner_id=${uid} and r.created_at>=now()-interval '365 days' group by 1 order by 1`
-        return {favorites,events,notifications,calendar,bytes:Number(size.bytes)}
+        const {limits,plus,plusUntil}=await commerceEntitlements(tx,uid)
+        return {favorites,events,notifications,calendar,bytes:Number(size.bytes),limits,plus,plusUntil}
       })
     },
     async setFavorite(uid,id,add){
@@ -168,7 +181,7 @@ export function connectAuthStore(env = process.env) {
     async readAwards(uid){
       return scope(uid,tx=>tx`insert into bricklab.award_reads(user_id,award) select user_id,award from bricklab.workshop_awards where user_id=${uid} on conflict do nothing`)
     },
-    async getOwnCard(uid){return scope(uid,async tx=>{const [p]=await tx`select public_id as id,display_name as "displayName",bio,updated_at as "updatedAt",avatar_image is not null as "hasAvatar",cover_image is not null as "hasCover",cover_theme as "coverTheme",background_theme as "backgroundTheme",unified,share_avatar as "shareAvatar",share_cover as "shareCover",portfolio,show_award as "showAward",array(select b.public_id from bricklab.public_builds b where b.author_id=public_profiles.public_id) as "publicIds",coalesce((select followers from bricklab.community_follow_counts f where f.author_id=public_profiles.public_id),0) as followers from bricklab.public_profiles where user_id=${uid}`;return p})},
+    async getOwnCard(uid){return scope(uid,async tx=>{const [p]=await tx`select public_id as id,bricklab.public_support_badge(public_id) as "supportBadge",display_name as "displayName",bio,updated_at as "updatedAt",avatar_image is not null as "hasAvatar",cover_image is not null as "hasCover",cover_theme as "coverTheme",background_theme as "backgroundTheme",unified,share_avatar as "shareAvatar",share_cover as "shareCover",portfolio,show_award as "showAward",array(select b.public_id from bricklab.public_builds b where b.author_id=public_profiles.public_id) as "publicIds",coalesce((select followers from bricklab.community_follow_counts f where f.author_id=public_profiles.public_id),0) as followers from bricklab.public_profiles where user_id=${uid}`;return p})},
     async publishCard(uid,p){
       return scope(uid,async tx=>{
         await lock(tx,uid)
@@ -179,7 +192,9 @@ export function connectAuthStore(env = process.env) {
         let background=null
         if(p.showBackground){
           const awards=await tx`select award from bricklab.workshop_awards where user_id=${uid}`
-          const entitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
+          const legacyEntitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
+        const commerce=await commerceEntitlements(tx,uid)
+        const entitlements=[...legacyEntitlements,...commerce.themes.map(item=>({item}))]
           const [{admin}]=await tx`select bricklab.is_admin() as admin`
           const chosen=profile?.background??'default'
           background=backgroundInventory(awards,entitlements,{admin:admin===true}).some(b=>b.id===chosen&&b.owned)?chosen:'default'
@@ -201,8 +216,8 @@ export function connectAuthStore(env = process.env) {
       return r?.image
     },
     async unpublishCard(uid){return scope(uid,tx=>tx`delete from bricklab.public_profiles where user_id=${uid}`)},
-    async getPublicCard(id){const [p]=await sql`select public_id as id,display_name as "displayName",bio,updated_at as "updatedAt",avatar_image is not null as "hasAvatar",cover_image is not null as "hasCover",cover_theme as "coverTheme",background_theme as "backgroundTheme",unified,share_avatar as "shareAvatar",share_cover as "shareCover",portfolio,show_award as "showAward",array(select b.public_id from bricklab.public_builds b where b.author_id=public_profiles.public_id) as "publicIds",coalesce((select followers from bricklab.community_follow_counts f where f.author_id=public_profiles.public_id),0) as followers from bricklab.public_profiles where public_id=${id}`;return p},
-    async listPublicCards(q=''){return sql`select public_id as id,display_name as "displayName",bio,updated_at as "updatedAt",avatar_image is not null as "hasAvatar",cover_image is not null as "hasCover",cover_theme as "coverTheme",background_theme as "backgroundTheme",unified,share_avatar as "shareAvatar",share_cover as "shareCover",portfolio,show_award as "showAward",array(select b.public_id from bricklab.public_builds b where b.author_id=public_profiles.public_id) as "publicIds",coalesce((select followers from bricklab.community_follow_counts f where f.author_id=public_profiles.public_id),0) as followers from bricklab.public_profiles where (${q}='' or strpos(lower(display_name),lower(${q}))>0) order by updated_at desc,public_id limit 30`},
+    async getPublicCard(id){const [p]=await sql`select public_id as id,bricklab.public_support_badge(public_id) as "supportBadge",display_name as "displayName",bio,updated_at as "updatedAt",avatar_image is not null as "hasAvatar",cover_image is not null as "hasCover",cover_theme as "coverTheme",background_theme as "backgroundTheme",unified,share_avatar as "shareAvatar",share_cover as "shareCover",portfolio,show_award as "showAward",array(select b.public_id from bricklab.public_builds b where b.author_id=public_profiles.public_id) as "publicIds",coalesce((select followers from bricklab.community_follow_counts f where f.author_id=public_profiles.public_id),0) as followers from bricklab.public_profiles where public_id=${id}`;return p},
+    async listPublicCards(q=''){return sql`select public_id as id,bricklab.public_support_badge(public_id) as "supportBadge",display_name as "displayName",bio,updated_at as "updatedAt",avatar_image is not null as "hasAvatar",cover_image is not null as "hasCover",cover_theme as "coverTheme",background_theme as "backgroundTheme",unified,share_avatar as "shareAvatar",share_cover as "shareCover",portfolio,show_award as "showAward",array(select b.public_id from bricklab.public_builds b where b.author_id=public_profiles.public_id) as "publicIds",coalesce((select followers from bricklab.community_follow_counts f where f.author_id=public_profiles.public_id),0) as followers from bricklab.public_profiles where (${q}='' or strpos(lower(display_name),lower(${q}))>0) order by updated_at desc,public_id limit 30`},
     async listOwnBuilds(uid){return scope(uid,tx=>tx`select b.public_id as id,b.project_id as "projectId",b.revision,b.title,b.description,b.category,b.allow_download as "allowDownload",b.allow_comments as "allowComments",b.allow_remix as "allowRemix",b.difficulty,b.tags,b.work_type as "workType",b.attribution,b.origin_id as "originId",cardinality(b.images) as "imageCount",b.part_count as "partCount",b.published_at as "publishedAt" from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id where c.user_id=${uid} order by b.published_at desc`)},
     async publishBuild(uid,id,input){
       return scope(uid,async tx=>{

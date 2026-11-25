@@ -54,7 +54,7 @@ export function mountStore(root,{language='ru',signal}){
    const history=await api('/api/store/orders',signal).catch(e=>{if(e.status===401||e.status===403)return null;throw e})
    if(signal.aborted||version!==serial)return
    const admin=history!==null,items=history?.orders??[]
-   let profileData=admin?await profiles.get():null
+   let profileData=await profiles.get().catch(e=>{if(!admin||e.status===401||e.status===403)return null;throw e})
    if(signal.aborted||version!==serial)return
    message.textContent=(admin?(ru?'Все платные темы доступны администратору бесплатно. ':'All paid themes are free for administrators. '):'')+(catalog.mode==='test'?t.test:t.disabled)
    grid.replaceChildren()
@@ -71,15 +71,15 @@ export function mountStore(root,{language='ru',signal}){
     const dialog=el('dialog','store-preview-dialog'),header=el('div','store-preview-heading');header.append(el('h2',null,name),button(ru?'Закрыть':'Close',()=>dialog.close()))
     dialog.append(header,themePreview(theme,language,true),el('p','account-muted',ru?'Демонстрационный профиль и условные показатели. Тема меняет обложку, рамку, статистику, карточки и бейдж автора. Публичный показ можно отключить. 3D-редактор не меняется.':'Sample profile and illustrative statistics. The theme changes the cover, frame, metrics, cards and author badge. Public display is optional. The 3D editor is unchanged.'),communityExamples(theme,language))
     dialog.setAttribute('aria-label',name);signal.addEventListener('abort',()=>{if(dialog.open)dialog.close()},{once:true})
-    const free=profileData?.inventory?.some(i=>i.id===product.sku&&i.adminAccess===true&&i.owned===true)
+    const owned=profileData?.inventory?.some(i=>i.id===product.sku&&i.owned===true),free=profileData?.inventory?.some(i=>i.id===product.sku&&i.adminAccess===true&&i.owned===true)
     copy.append(details,button(ru?'Примерить тему':'Preview theme',()=>dialog.showModal()),el('strong','store-price',free?(ru?'Бесплатно для администратора':'Free for admin'):money(product.amountKopecks)),dialog)
-    if(free){
+    if(owned){
      const equip=button(ru?'Применить тему':'Equip theme',async()=>{
       if(busy||signal.aborted)return
       busy=true;equipControls.forEach(b=>b.disabled=true);controls.forEach(b=>b.disabled=true)
       try{
        const current=await profiles.get()
-       if(!current.inventory?.some(i=>i.id===product.sku&&i.adminAccess===true&&i.owned===true))throw Error('Admin access unavailable')
+       if(!current.inventory?.some(i=>i.id===product.sku&&i.owned===true))throw Error('Theme access unavailable')
        if(signal.aborted)return
        profileData=await profiles.save({bio:current.profile.bio,cover:current.profile.cover,background:product.sku})
        if(!signal.aborted)await refresh()
@@ -89,6 +89,7 @@ export function mountStore(root,{language='ru',signal}){
      if(equip.disabled)equip.textContent=ru?'Тема применена':'Equipped'
      equipControls.push(equip);copy.append(equip)
     }
+    if(owned&&!free)copy.append(el('p','account-muted',ru?'В вашем инвентаре':'In your inventory'))
     if(order?.status==='paid')copy.append(el('p','account-muted',t.owned))
     else if(admin&&catalog.mode==='test'){
      const buy=button(order?t.resume:(ru?'Проверить тестовую оплату':'Test checkout'),async()=>{
