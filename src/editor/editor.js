@@ -4,7 +4,8 @@ import { mountSetPalette } from '../sets/palette.js?v=element-search'
 import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'
 import { mountCablePanel } from './cable-panel.js'
-import { mountFloatingPanels } from './floating-panels.js?v=cad-dock'
+import { mountFloatingPanels } from './floating-panels.js?v=workspace-21'
+import { mountWorkspace } from './workspace.js?v=workspace-21'
 import { createEditorAudio } from './audio.js?v=editor-sound'
 import { mountMotorPanel } from './motor-panel.js'
 import { Plane, Quaternion, Vector3 } from 'three'
@@ -16,7 +17,7 @@ import { nearestDetent } from '../mechanics/axial.js?v=torque-clutch'
 import { nearbyConnections, translationSnaps } from './snap.js?v=volvo-spur-gears'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=system-complete'
 import { mountLibrary } from './library.js?v=system-complete'
-import { createScene } from './scene.js?v=community-options-1'
+import { createScene } from './scene.js?v=workspace-21'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=volvo-spur-gears'
@@ -263,6 +264,9 @@ export async function mountEditor(root, { document, projectId, language, save, d
     describePart: (partNum, colorId) => setPalette?.describe(partNum, colorId),
   })
   mountFloatingPanels(el('panelLayer'), t, signal)
+  const workspaceUI = mountWorkspace(root, { language, scene, signal,
+    grid: readPreference('grid') !== 'off', axes: readPreference('axes') !== 'off', changePreference: writePreference,
+  })
   const visibleParts = loadParts(source, models)
   const shown = new Set(visibleParts.map(part => part.id))
   const hiddenParts = source.parts.filter(part => !models.has(String(part?.design ?? '')))
@@ -375,6 +379,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
       inspect: item => inspectSetPart(item, { language, signal, prepare: prepareModel, model: design => models.get(design) }),
     })
     findSetPart = (...ids) => {
+      workspaceUI.openPanel('library')
       libraryBody.closest('[data-panel]').querySelector('[data-panel-toggle][aria-expanded="false"]')?.click()
       showSet(true)
       setPalette.find(...ids)
@@ -483,6 +488,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
 
   function persist(showMessage = false) {
     const successful = save(currentDocument())
+    workspaceUI.setSaved(successful)
     setMessage(successful ? (showMessage ? t.ready : '') : t.storage, !successful)
     render()
     return successful
@@ -1009,6 +1015,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     el('snap').setAttribute('aria-pressed', String(snapEnabled))
     el('undo').disabled = simulating(mode) || !undo.length
     el('redo').disabled = simulating(mode) || !redo.length
+    workspaceUI.render(mode, tool, state.parts.length, links.length)
     renderHint()
   }
 
@@ -1144,6 +1151,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     if (isolation) isolation = new Set([...isolation, id, ...additional])
     commit({ parts: placed, links: nextLinks, belts: [...state.belts, ...(pastedBelts ?? [])] })
     const snapped = hasNewConnection(previousLinks, state.links)
+    if (!original) workspaceUI.placed()
     tutorial?.handle('placed', { newPart: !original, design: pose.design })
     if (snapped) tutorial?.handle('connected')
     else tutorial?.nudge('connected')
@@ -1313,6 +1321,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     setMessage()
     const previous = tool
     tool = ['belt', 'track'].includes(next) && tool === next ? 'select' : next
+    if (['belt', 'track'].includes(tool)) workspaceUI.openPanel('inspector')
     if (['belt', 'track'].includes(tool) && root.querySelector('#editor-inspector-body').hidden) {
       root.querySelector('[data-panel="inspector"] [data-panel-toggle]').click()
     }
