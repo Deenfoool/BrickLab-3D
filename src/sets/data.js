@@ -1,3 +1,4 @@
+import { resolveInventoryPart } from '../catalog/part-resolver.js?v=catalog-engine-1'
 // Set inventories are portable project data. Credentials never belong here.
 // Checked against the sequence on LEGO's set-specific instruction pages.
 export const knownBooks = {
@@ -14,7 +15,6 @@ export const knownBooks = {
     },
   ],
 }
-const aliases = { 3023: ['3023b'] }
 export const inventoryKey = (item) => `${item.partNum}/${item.colorId}`
 export const normalizeQuery = (value) =>
   String(value).toLowerCase().replaceAll('ё', 'е').trim()
@@ -63,13 +63,8 @@ export function normalizeBooks(books) {
 }
 export function mapInventory(inventory, catalog) {
   return inventory.map((item) => {
-    const candidates = [
-      item.partNum,
-      ...(item.ldraw ?? []),
-      ...(aliases[item.partNum] ?? []),
-    ]
-    const design = candidates.find((id) => Object.hasOwn(catalog, id))
-    return { ...item, design, model: design ? catalog[design] : null }
+    const result = resolveInventoryPart(item, catalog)
+    return { ...item, design: result.design, model: result.model ?? null, resolution: result.status }
   })
 }
 export function inventoryUsage(items, parts) {
