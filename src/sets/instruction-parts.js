@@ -1,7 +1,7 @@
-export async function instructionPartRegions(set, pdfId, page) {
+export async function instructionPartRegions(set, pdfId, page, {fetcher=fetch}={}) {
   if(!pdfId)return []
   const query=new URLSearchParams({set,pdf:String(pdfId),page:String(page)})
-  const response=await fetch('/api/commerce/instruction-regions?'+query,{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(5000)})
+  const response=await fetcher('/api/commerce/instruction-regions?'+query,{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(5000)})
   if(!response.ok)return []
   const {regions}=await response.json()
   return Array.isArray(regions)?regions:[]
