@@ -6,7 +6,7 @@ import { locales } from './locale.js?v=store-1'
 import {mountStore} from './store.js?v=admin-access-1'
 import { mountHomeHub, mountHubSearch } from './home-hub.js?v=signature-art-1'
 import { mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=admin-access-1'
+import { createCloudAccount } from './account.js?v=fullscreen-1'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -33,6 +33,8 @@ const startupRoot = byId('startup')
 const loadingTemplate = startupRoot.cloneNode(true)
 loadingTemplate.removeAttribute('id')
 const shell = document.querySelector('.shell')
+const workshopHeader=shell.querySelector('.topbar')
+if(typeof ResizeObserver==='function'&&workshopHeader){const observer=new ResizeObserver(()=>{if(!shell.hidden)shell.style.setProperty('--workshop-header-height',workshopHeader.offsetHeight+'px')});observer.observe(workshopHeader)}
 const libraryRoot = byId('library-panel')
 const libraryStatus = byId('library-status')
 const libraryRetry = byId('library-retry')
@@ -57,7 +59,7 @@ const notificationPopover = createNotificationPopover({root:byId('notification-c
   onOpen:()=>{cloudAccount.showNotifications();if(location.hash!=='#account')location.hash='#account'}
 })
 const cloudAccount = createCloudAccount({ root: byId('account-panel'), link: byId('account-link'),
-  getProjects: () => projects, download: downloadProject, openCopy: (data, cloud) => addProject(data, null, cloud), linkLocal: linkCloudProject, onNotifications: state => notificationPopover.update(state), onProjectsChanged:()=>{if(currentPage()==='projects')renderList();if(currentPage()==='home')renderCloudContinue()} })
+  getProjects: () => projects, createBuild:()=>addProject(newProject(strings().untitled)), openLocal:openProject, previewsEnabled:()=>readPreference('previews')!=='off', download: downloadProject, openCopy: (data, cloud) => addProject(data, null, cloud), linkLocal: linkCloudProject, onNotifications: state => notificationPopover.update(state), onProjectsChanged:()=>{if(currentPage()==='projects')renderList();if(currentPage()==='home')renderCloudContinue()} })
 
 try {
   if (localStorage.getItem('bricklab.language') === 'en') language = 'en'
@@ -877,7 +879,7 @@ document.addEventListener('keydown', event => {
 window.addEventListener('hashchange', event => {
   notificationPopover.close()
   query.value = ''
-  if (currentPage() === 'library' || new URL(event.oldURL).hash === '#library') window.scrollTo(0, 0)
+  if (['library','account'].includes(currentPage()) || ['#library','#account'].includes(new URL(event.oldURL).hash)) window.scrollTo(0, 0)
   render()
   if(currentPage()==='projects')void cloudAccount.refreshProjects()
 })
