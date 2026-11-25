@@ -1,6 +1,6 @@
 // Shared part identity resolver. Never infer equivalence from similar names,
 // numeric prefixes, colour or an arbitrary mold relationship.
-import { lookupElement } from '../editor/element-index.js'
+import { lookupElement, configureElementIndex } from '../editor/element-index.js?v=catalog-engine-1'
 
 const seed = Object.freeze({ '66906': '6628', '3023': '3023b' })
 const identifier = value => {
@@ -35,6 +35,7 @@ export async function loadPartIndex({ fetcher = globalThis.fetch, now = Date.now
       }
       if (!Object.keys(next).length) throw Error('empty index')
       generated = next
+      configureElementIndex(data.elementRevision)
       generation++
       nextRefresh = now + 15 * 60_000
     } catch {
