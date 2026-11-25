@@ -124,12 +124,15 @@ export function connectAuthStore(env = process.env) {
     },
     async saveProfile(uid,p) {
       return scope(uid,async tx=>{
+        await lock(tx,uid)
         await tx`insert into bricklab.profiles(user_id,bio,cover) values(${uid},${p.bio},${p.cover}) on conflict(user_id) do update set bio=excluded.bio,cover=excluded.cover,updated_at=now()`
         if(p.background!==undefined){
           const awards=await tx`select award from bricklab.workshop_awards where user_id=${uid}`
           const entitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
           if(!backgroundInventory(awards,entitlements).some(i=>i.id===p.background&&i.owned))throw new ProjectError(403,'background_locked')
           await tx`update bricklab.profiles set background=${p.background} where user_id=${uid}`
+          // Only profiles that explicitly opted in to public appearance are synchronized.
+          await tx`update bricklab.public_profiles set background_theme=${p.background},updated_at=now() where user_id=${uid} and background_theme is not null`
         }
       })
     },
@@ -159,6 +162,7 @@ export function connectAuthStore(env = process.env) {
     async getOwnCard(uid){return scope(uid,async tx=>{const [p]=await tx`select public_id as id,display_name as "displayName",bio,updated_at as "updatedAt",avatar_image is not null as "hasAvatar",cover_image is not null as "hasCover",cover_theme as "coverTheme",background_theme as "backgroundTheme",coalesce((select followers from bricklab.community_follow_counts f where f.author_id=public_profiles.public_id),0) as followers from bricklab.public_profiles where user_id=${uid}`;return p})},
     async publishCard(uid,p){
       return scope(uid,async tx=>{
+        await lock(tx,uid)
         const [profile]=await tx`select cover,background from bricklab.profiles where user_id=${uid}`
         const [avatar]=p.showAvatar?await tx`select image from bricklab.profile_media where user_id=${uid} and kind='avatar'`:[]
         const [cover]=p.showCover?await tx`select image from bricklab.profile_media where user_id=${uid} and kind='cover'`:[]
@@ -212,7 +216,7 @@ export function connectAuthStore(env = process.env) {
     async unpublishBuild(uid,id){return scope(uid,async tx=>{const [p]=await tx`select id from bricklab.projects where id=${id} and owner_id=${uid}`;if(!p)throw missing();await tx`delete from bricklab.public_builds where project_id=${id} and author_id in (select public_id from bricklab.public_profiles where user_id=${uid})`})},
     async listComments(id,offset=0){
       const [b]=await sql`select 1 from bricklab.public_builds where public_id=${id}`;if(!b)throw missing()
-      return sql`select c.id,c.parent_id as "parentId",c.author_id as "authorId",p.display_name as author,p.avatar_image is not null as "authorHasAvatar",c.body,c.created_at as "createdAt",parent_author.display_name as "parentAuthor"
+      return sql`select c.id,c.parent_id as "parentId",c.author_id as "authorId",p.display_name as author,p.avatar_image is not null as "authorHasAvatar",p.background_theme as "authorTheme",c.body,c.created_at as "createdAt",parent_author.display_name as "parentAuthor"
         from bricklab.community_comments c join bricklab.public_profiles p on p.public_id=c.author_id left join bricklab.community_comments parent on parent.id=c.parent_id left join bricklab.public_profiles parent_author on parent_author.public_id=parent.author_id
         where c.build_id=${id} order by c.created_at desc,c.id limit 31 offset ${offset}`
     },
@@ -322,7 +326,7 @@ export function connectAuthStore(env = process.env) {
     },
     async listPublicBuilds(author=null,options={}){
       const {q='',category='',sort='recent',offset=0,limit=30,followingUid=null,bookmarkUid=null,week=false}=options
-      const query=tx=>tx`select b.public_id as id,b.author_id as "authorId",c.display_name as author,c.avatar_image is not null as "authorHasAvatar",b.title,b.description,b.revision,b.category,b.allow_download as "allowDownload",b.allow_comments as "allowComments",b.allow_remix as "allowRemix",b.difficulty,b.tags,b.work_type as "workType",b.attribution,b.origin_id as "originId",cardinality(b.images) as "imageCount",b.part_count as "partCount",b.published_at as "publishedAt",coalesce(l.likes,0) as likes,coalesce(e.views,0) as views,coalesce(e.downloads,0) as downloads
+      const query=tx=>tx`select b.public_id as id,b.author_id as "authorId",c.display_name as author,c.avatar_image is not null as "authorHasAvatar",c.background_theme as "authorTheme",b.title,b.description,b.revision,b.category,b.allow_download as "allowDownload",b.allow_comments as "allowComments",b.allow_remix as "allowRemix",b.difficulty,b.tags,b.work_type as "workType",b.attribution,b.origin_id as "originId",cardinality(b.images) as "imageCount",b.part_count as "partCount",b.published_at as "publishedAt",coalesce(l.likes,0) as likes,coalesce(e.views,0) as views,coalesce(e.downloads,0) as downloads
         from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id left join bricklab.community_like_counts l on l.build_id=b.public_id left join bricklab.community_event_counts e on e.build_id=b.public_id
         where (${author}::uuid is null or b.author_id=${author}::uuid)
         and (${followingUid}::uuid is null or exists(select 1 from bricklab.community_follows f where f.user_id=${followingUid}::uuid and f.author_id=b.author_id))
@@ -338,7 +342,7 @@ export function connectAuthStore(env = process.env) {
     },
     async getPublicBuild(id,download=false){
       if(download){const [p]=await sql`select document,allow_download as "allowDownload" from bricklab.public_builds where public_id=${id}`;return p}
-      const [p]=await sql`select b.public_id as id,b.author_id as "authorId",c.display_name as author,c.avatar_image is not null as "authorHasAvatar",b.title,b.description,b.revision,b.category,b.allow_download as "allowDownload",b.allow_comments as "allowComments",b.allow_remix as "allowRemix",b.difficulty,b.tags,b.work_type as "workType",b.attribution,b.origin_id as "originId",cardinality(b.images) as "imageCount",b.part_count as "partCount",b.published_at as "publishedAt",coalesce(l.likes,0) as likes,coalesce(e.views,0) as views,coalesce(e.downloads,0) as downloads from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id left join bricklab.community_like_counts l on l.build_id=b.public_id left join bricklab.community_event_counts e on e.build_id=b.public_id where b.public_id=${id}`;return p
+      const [p]=await sql`select b.public_id as id,b.author_id as "authorId",c.display_name as author,c.avatar_image is not null as "authorHasAvatar",c.background_theme as "authorTheme",b.title,b.description,b.revision,b.category,b.allow_download as "allowDownload",b.allow_comments as "allowComments",b.allow_remix as "allowRemix",b.difficulty,b.tags,b.work_type as "workType",b.attribution,b.origin_id as "originId",cardinality(b.images) as "imageCount",b.part_count as "partCount",b.published_at as "publishedAt",coalesce(l.likes,0) as likes,coalesce(e.views,0) as views,coalesce(e.downloads,0) as downloads from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id left join bricklab.community_like_counts l on l.build_id=b.public_id left join bricklab.community_event_counts e on e.build_id=b.public_id where b.public_id=${id}`;return p
     },
     async cleanup() { await sql`delete from bricklab.sessions where expires_at <= now()`;await sql`delete from bricklab.account_tokens where expires_at <= now()` },
     async close() { await sql.end({ timeout: 5 }) },
