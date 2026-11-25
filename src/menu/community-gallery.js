@@ -348,8 +348,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
     const workshop=el('section','unified-public-profile fullscreen-workshop cosmetic-'+theme);applySignature(workshop,profile.backgroundTheme)
     const actions=[reaction('follow',profile.id,profile.followers,profile.id===social.ownId)]
     if(profile.id===social.ownId)actions.push(link(language==='ru'?'Вернуться в мастерскую':'Back to workshop','#account','workspace-action'))
-    const r=profile.reputation
-    workshop.append(renderUnifiedHero({lang:language,identity:{...profile,bio:'',subtitle:language==='ru'?'Конструктор BrickLab':'BrickLab builder'},actions,metrics:r?[[t.buildCount,r.builds],[t.receivedLikes,r.likes],[t.downloads,r.downloads],[t.reputation,r.score],[language==='ru'?'Подписчики':'Followers',r.followers]]:[]}))
+    workshop.append(renderUnifiedHero({lang:language,identity:{...profile,bio:'',subtitle:language==='ru'?'Конструктор BrickLab':'BrickLab builder'},actions}))
     workshop.append(renderPortfolio({lang:language,profile,builds,onOpen:b=>void showViewer(b),makeBuildCard:b=>buildCard(b)}));root.append(workshop)
    }
   }catch(e){fail(e)}
