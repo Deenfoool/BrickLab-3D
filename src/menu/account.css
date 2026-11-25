@@ -201,3 +201,14 @@
 .signature-preview-example .signature-badge{max-width:100%}
 @media(max-width:520px){.signature-preview-examples{grid-template-columns:1fr}.signature-theme .signature-plate{font-size:8px;padding:5px}.signature-theme .community-profile-cover,.signature-theme .workshop-cover{gap:6px}.signature-theme .store-preview-tiles>div{padding:5px}}
 @media(prefers-reduced-motion:no-preference){.signature-theme .workshop-build-tile,.community-card.signature-theme,.hub-build.signature-theme{transition:border-color .18s,box-shadow .18s}.signature-neon.community-card:hover,.signature-aurora.community-card:hover{box-shadow:0 0 18px color-mix(in srgb,var(--sig) 22%,transparent)}}
+
+/* Upcoming commerce products are visibly separate from the current store. */
+.commerce-preview{margin-top:24px}
+.commerce-preview-nav{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+.commerce-preview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;margin:12px 0 20px}
+.commerce-preview-card{display:flex;flex-direction:column;gap:9px;padding:18px;border:1px solid currentColor;border-color:color-mix(in srgb,currentColor 18%,transparent);border-radius:12px;background:color-mix(in srgb,currentColor 4%,transparent)}
+.commerce-preview-card h3,.commerce-preview-card p{margin:0;overflow-wrap:anywhere}
+.commerce-preview-card .store-price{margin-top:auto}
+.commerce-preview-instructions{grid-column:1/-1}
+.commerce-preview-tier{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid color-mix(in srgb,currentColor 12%,transparent)}
+.commerce-preview-tier:last-child{border-bottom:0}
