@@ -45,7 +45,7 @@ function rangeOf(header, size) {
     ? { start: first, end: last } : null
 }
 
-export function createBrickLabServer({ root, logger = console, auth, projects, profile, activity, community, bureau, security, rebrickable, cspReport, payments, instructions = createInstructionsHandler() } = {}) {
+export function createBrickLabServer({ root, logger = console, auth, projects, profile, activity, community, bureau, security, rebrickable, cspReport, payments, approvedLegal=null, instructions = createInstructionsHandler() } = {}) {
   const base = realpathSync(root)
   const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff')
@@ -81,6 +81,7 @@ export function createBrickLabServer({ root, logger = console, auth, projects, p
       if (pathname === '/api' || pathname.startsWith('/api/')) {
         return send(req, res, 404, JSON.stringify({ error: 'not_found' }), 'application/json; charset=utf-8')
       }
+      if(approvedLegal?.pages&&Object.hasOwn(approvedLegal.pages,pathname))return send(req,res,200,approvedLegal.pages[pathname],'text/html; charset=utf-8')
       const name = pathname === '/' ? 'index.html' : pathname === '/requisites' ? 'assets/legal/requisites.html' : ['/offer','/privacy','/refund'].includes(pathname) ? 'assets/legal-public'+pathname+'.html' : pathname.slice(1)
       if (!publicPath(name)) return send(req, res, 404, 'Not found')
       let file, info
