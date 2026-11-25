@@ -1,3 +1,4 @@
+import {validatePortfolio,filterPortfolio} from '../src/menu/portfolio-model.js'
 import {backgroundIds} from '../src/menu/store-themes.js'
 import {createHash} from 'node:crypto'
 import {ProjectError} from './projects.js'
@@ -9,6 +10,7 @@ export function validatePublicCard(value){
  if(!value||!clean(value.displayName,80)||!value.displayName.trim()||!clean(value.bio,500))throw new ProjectError(400,'invalid_public_profile')
  const appearance={}
  for(const k of ['showAvatar','showCover','showBackground']){if(value[k]!==undefined){if(typeof value[k]!=='boolean')throw new ProjectError(400,'invalid_public_profile');appearance[k]=value[k]}}
+ if(value.unified!==undefined){if(value.unified!==true||value.consent!==true||!['blueprint','graphite','amber'].includes(value.cover)||!['showAvatar','showCover','showBackground'].every(k=>typeof value[k]==='boolean'))throw new ProjectError(400,'invalid_public_profile');let portfolio;try{portfolio=validatePortfolio(value.portfolio)}catch{throw new ProjectError(400,'invalid_public_profile')}return {displayName:value.displayName.trim(),bio:value.bio.trim(),...appearance,unified:true,cover:value.cover,portfolio}}
  return {displayName:value.displayName.trim(),bio:value.bio.trim(),...appearance}
 }
 export const buildCategories=['vehicles','mechanisms','architecture','robots','other']
@@ -66,7 +68,8 @@ export function publicCard(row){
  return {id:row.id,displayName:row.displayName,bio:row.bio,updatedAt:row.updatedAt,followers:row.followers??0,
   avatarUrl:base&&row.hasAvatar===true?base+'/avatar':null,coverUrl:base&&row.hasCover===true?base+'/cover':null,
   coverTheme:['blueprint','graphite','amber'].includes(row.coverTheme)?row.coverTheme:null,
-  backgroundTheme:backgroundIds.includes(row.backgroundTheme)?row.backgroundTheme:null}
+  backgroundTheme:backgroundIds.includes(row.backgroundTheme)?row.backgroundTheme:null,
+  ...(row.unified===true?{unified:true,showAvatar:row.shareAvatar===true,showCover:row.shareCover===true,portfolio:filterPortfolio(row.portfolio,row.publicIds??[]),awards:row.showAward===true?['firstCloudSave']:[]}: {})}
 
 }
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
@@ -175,7 +178,7 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
      if(req.method==='PUT'){
       if(req.headers['content-type']?.split(';')[0].trim()!=='application/json')throw new ProjectError(415,'json_required')
       let size=0;const chunks=[]
-      for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>4096){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
+      for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>16384){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
       let data;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new ProjectError(400,'invalid_json')}
       await store.publishCard(user.id,validatePublicCard(data))
      }else if(req.method==='DELETE')await store.unpublishCard(user.id)
