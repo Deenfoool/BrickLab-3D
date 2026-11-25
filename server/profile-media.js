@@ -1,11 +1,11 @@
+import {themes} from '../src/menu/store-themes.js'
 import {spawn} from 'node:child_process'
 import {ProjectError} from './projects.js'
 export const mediaLimits={avatar:2*1024*1024,cover:5*1024*1024,publication:512*1024}
 export const backgrounds=[
  {id:'default',source:'free',priceRub:0},
  {id:'first-build',source:'achievement',priceRub:0},
- {id:'carbon',source:'purchase',priceRub:99},
- {id:'neon',source:'purchase',priceRub:149}
+ ...themes.map(t=>({id:t.id,source:'purchase',priceRub:t.priceRub}))
 ]
 export function backgroundInventory(awards,entitlements){
  return backgrounds.map(b=>({...b,owned:b.source==='free'||(b.source==='achievement'&&awards.some(a=>a.award==='firstCloudSave'))||entitlements.some(e=>e.item===b.id),purchaseEnabled:false}))
