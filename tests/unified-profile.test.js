@@ -1,3 +1,4 @@
+import {renderUnifiedEditor,renderPortfolio,renderUnifiedHero} from '../src/menu/unified-profile.js'
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {calendarDays,defaultPortfolio,filterPortfolio,validatePortfolio} from '../src/menu/portfolio-model.js'
@@ -34,4 +35,29 @@ test('unified profile requires explicit consent and projects only allowed public
 test('calendar uses real UTC dates and sums only retained counts',()=>{
  const days=calendarDays([{day:'2026-11-25',count:2},{day:'2026-11-25',count:1},{day:'2026-11-23',count:4},{day:'bad',count:999}],new Date('2026-11-25T10:00:00Z'),3)
  assert.deepEqual(days,[{day:'2026-11-23',count:4},{day:'2026-11-24',count:0},{day:'2026-11-25',count:3}])
+})
+
+function element(tag){
+ const n={tag,children:[],className:'',textContent:'',attrs:{},namespaceURI:'http://www.w3.org/2000/svg',
+ append(...c){this.children.push(...c)},prepend(...c){this.children.unshift(...c)},replaceChildren(...c){this.children=c},setAttribute(k,v){this.attrs[k]=v}}
+ n.classList={add(...v){n.className=[n.className,...v].filter(Boolean).join(' ')}}
+ return n
+}
+const flatten=n=>[n,...n.children.flatMap(flatten)]
+test('owner controls publish only after consent and block order is persisted; visitor sees public blocks only',()=>{
+ const prior=globalThis.document;globalThis.document={createElement:element,createElementNS:(_ns,tag)=>element(tag)}
+ try{
+  const saved=[],published=[],base={lang:'ru',user:{displayName:'Builder'},profile:{bio:'private',cover:'amber'},publicCard:null,publicLoaded:true,publicBuilds:[{id:a,title:'Model'}],busy:false,saveProfile:v=>saved.push(v),publishPublic:v=>published.push(v)}
+  const root=renderUnifiedEditor(base),all=flatten(root),form=all.find(n=>n.tag==='form'),enable=all.find(n=>n.tag==='label'&&n.children.some(c=>c.textContent==='Виден посетителям')).children[0],consent=all.find(n=>n.tag==='label'&&n.children.some(c=>c.textContent.startsWith('Разрешаю публиковать'))).children[0]
+  form.onsubmit({preventDefault(){}});assert.equal(saved.length,1);assert.equal(published.length,0)
+  enable.checked=true;enable.onchange();form.onsubmit({preventDefault(){}});assert.equal(published.length,0)
+  const move=all.find(n=>n.tag==='button'&&n.attrs['aria-label']==='Ниже Закреплённая работа');move.onclick()
+  consent.checked=true;form.onsubmit({preventDefault(){}});assert.equal(published.length,1);assert.equal(published[0].portfolio.blocks[0].key,'publications')
+  const pending=flatten(renderUnifiedEditor({...base,publicLoaded:false}));assert.ok(!pending.some(n=>n.tag==='button'&&n.type==='submit'))
+  const p=defaultPortfolio();p.featured=a;p.blocks.find(b=>b.key==='about').visible=false
+  const visitor=flatten(renderPortfolio({lang:'ru',profile:{portfolio:p,bio:'hidden'},builds:[{id:a,title:'Public build',partCount:32}],owner:false}))
+  assert.ok(visitor.some(n=>n.className==='portfolio-block portfolio-featured'));assert.ok(!visitor.some(n=>n.textContent==='hidden'))
+  const hero=flatten(renderUnifiedHero({lang:'ru',identity:{id:b,displayName:'Builder',avatarUrl:'/api/profile/avatar?v='+a},owner:false}))
+  assert.ok(!hero.some(n=>n.tag==='img'))
+ }finally{if(prior===undefined)delete globalThis.document;else globalThis.document=prior}
 })
