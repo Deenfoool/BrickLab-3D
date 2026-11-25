@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {BASE_LIMITS,commerceProducts,projectAccount,instructionPrice,canUseInteractive} from '../src/menu/commerce-catalog.js';
+import {BASE_LIMITS,commerceProducts,projectAccount,instructionPrice,canUseInteractive,badgeUpgradePrice,bundlePrice,discountedPrice,themePrices} from '../src/menu/commerce-catalog.js';
 test('catalog uses distinct SKUs and positive integer kopecks',()=>{
  assert.equal(new Set(commerceProducts.map(p=>p.id)).size,commerceProducts.length);
  assert.ok(commerceProducts.every(p=>Number.isSafeInteger(p.priceKopecks)&&p.priceKopecks>0));
@@ -32,4 +32,22 @@ test('beta remains free, paid release supported set only after trial',()=>{
  assert.equal(canUseInteractive({...args,step:11,account:{plus:true}}),true);
  assert.equal(canUseInteractive({...args,step:11,account:{instructions:['42215-1']}}),true);
  assert.equal(canUseInteractive({...args,step:11,account:{instructions:['other']}}),false);
+});
+
+test('badge upgrades credit highest eligible owned tier; Founder remains independent',()=>{
+ assert.equal(badgeUpgradePrice('gold-builder',['silver-builder']),30000);
+ assert.equal(badgeUpgradePrice('gold-builder',['silver-builder','bronze-builder']),30000);
+ assert.equal(badgeUpgradePrice('gold-builder',['gold-builder']),0);
+ assert.equal(badgeUpgradePrice('founders-club',['diamond-patron']),149900);
+});
+test('bundle price excludes owned themes and bundle grants all six',()=>{
+ assert.equal(bundlePrice(),69900);
+ assert.ok(bundlePrice(['carbon'])<69900);
+ assert.equal(bundlePrice(Object.keys(themePrices)),0);
+ assert.deepEqual(projectAccount([{id:'b',sku:'theme-collection'}]).themes,Object.keys(themePrices));
+});
+test('plus discount uses integer kopecks',()=>{
+ assert.equal(discountedPrice(12900,true),11610);
+ assert.equal(discountedPrice(12900,false),12900);
+ assert.throws(()=>discountedPrice(-1,true),RangeError);
 });
