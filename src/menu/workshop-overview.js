@@ -43,10 +43,11 @@ export function renderWorkshopOverview({lang,user,local,remote,busy,signal,previ
  }
  if(entries.length)recent.append(grid);else recent.append(node('p','workshop-empty',t.empty),button(t.newBuild,createBuild,busy))
  root.append(recent)
- const lower=node('div','workshop-overview-columns'),favorites=section(t.favorites,button(t.manage,()=>go('favorites'),busy)),published=section(t.published,publicCard?link(t.publicView,'#community/profile/'+publicCard.id):null)
+ const lower=node('div','workshop-overview-columns'),favorites=section(t.favorites,button(t.manage,()=>go('favorites'),busy)),published=section(t.published,button(t.manage,()=>go('publicProfile'),busy))
  const fav=activityData?.favorites??[]
  if(!fav.length)favorites.append(node('p','account-muted',activityData?t.noFavorites:t.loading))
  for(const f of fav.slice(0,4)){const row=node('div','workshop-overview-row'),label=node('div');label.append(node('strong',null,f.name),node('small','account-muted',t.revision+' '+f.revision));row.append(icon('icon-heart'),label,button(t.openCopy,()=>openCloud(f.id),busy));favorites.append(row)}
+ if(publicCard)published.append(link(t.publicView,'#community/profile/'+publicCard.id))
  if(!publicLoaded)published.append(node('p','account-muted',t.loading),button(t.load,loadPublic,busy))
  else if(!publicBuilds.length)published.append(node('p','account-muted',t.noPublished))
  else for(const b of publicBuilds.slice(0,4)){
