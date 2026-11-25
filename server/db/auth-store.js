@@ -78,6 +78,7 @@ export function connectAuthStore(env = process.env) {
         const [p]=await tx`insert into bricklab.projects (owner_id,name) values (${uid},${doc.name}) returning id,name,head_revision as revision,created_at as "createdAt",updated_at as "updatedAt"`
         await tx`insert into bricklab.project_revisions (project_id,revision,author_id,document) values (${p.id},1,${uid},${tx.json(doc)})`
         await tx`insert into bricklab.workshop_awards(user_id,award) values(${uid},'firstCloudSave') on conflict do nothing`
+        await tx`update bricklab.public_profiles set show_award=true where user_id=${uid} and unified and portfolio->'blocks' @> '[{"key":"awards","visible":true}]'::jsonb`
         return p
       })
     },
