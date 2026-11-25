@@ -1,5 +1,5 @@
 import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=unified-1'
-import {renderWorkshopOverview} from './workshop-overview.js?v=unified-1'
+import {renderWorkshopOverview} from './workshop-overview.js?v=account-projects-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 import { badges, ranks, rankFor } from './workshop-model.js?v=activity-1'
@@ -41,7 +41,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
  applySignature(layout,profile?.background)
  const ru=lang==='ru',sidebar=el('aside','workshop-sidebar'),sideHead=el('div','workshop-sidebar-heading'),sideFoot=el('div','workshop-sidebar-footer');sideHead.append(el('span','workshop-sidebar-kicker','BRICKLAB CLOUD'),el('strong',null,ru?'Личный кабинет':'Workspace'));nav.setAttribute('aria-label',t.workshop)
  for(const [key,symbol] of [...sections,...(user.admin===true?[['admin','icon-shield']]:[])]){
-  const b=key==='cloud'?el('a','workspace-action',t[key]):button(t[key],()=>go(key),busy);if(key==='cloud')b.href='#projects';b.prepend(icon(symbol));if(key!=='cloud')b.setAttribute('aria-pressed',String(section===key))
+  const b=button(t[key],()=>go(key),busy);b.prepend(icon(symbol));b.setAttribute('aria-pressed',String(section===key))
   if(section===key)b.setAttribute('aria-current','page')
   if(!implemented.has(key)&&key!=='admin')b.title=t.pending
   if(key==='notifications'){const n=activityData?.notifications.filter(x=>!x.read).length??0,badge=el('small','workshop-unread',n);badge.dataset.notificationNavCount='';badge.hidden=!n;b.append(badge)}
@@ -51,6 +51,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
  if(section!=='workshop')content.append(el('h2','workshop-section-title',t[section]))
  if(section==='bureau'&&bureauPanel)content.append(bureauPanel())
  else if(section==='admin'&&user.admin===true&&adminPanel)content.append(adminPanel())
+ else if(section==='cloud')content.append(el('div','workshop-projects-slot'))
  else if(section==='workshop'){
   const displayName=profile?.displayName??publicCard?.displayName??user.displayName,heroActions=[button(ru?'Сменить тему':'Change theme',()=>go('cosmetics'),busy),button(ru?'Редактировать профиль':'Edit profile',()=>go('settings'),busy)]
   if(publicCard){const a=el('a','workspace-action',ru?'Глазами посетителя':'View as visitor');a.href='#community/profile/'+publicCard.id;heroActions.push(a)}
@@ -120,7 +121,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
         const old=publicBuilds.find(b=>b.projectId===project.id),row=card(project.name)
         row.append(el('p','account-muted',t.privateRevision+': '+project.revision+(old?' · '+t.publishedRevision+': '+old.revision:'')))
         row.append(el('p','account-muted',old.description||''),el('p','account-muted',lang==='ru'?'Для изменения публикации открой сборку в редакторе.':'Open the build in the editor to update its publication.'))
-        const edit=el('a','workspace-action',lang==='ru'?'Мои сборки':'My builds');edit.href='#projects';row.append(edit)
+        row.append(button(t.cloud,()=>go('cloud'),busy))
         if(old){const link=el('a','workspace-action',t.viewPublication);link.href='#community/build/'+old.id;row.append(link,button(t.unpublishBuild,()=>unpublishBuild(project.id),busy))}
         builds.append(row)
       }

@@ -6,7 +6,7 @@ import { locales } from './locale.js?v=store-1'
 import {mountStore} from './store.js?v=admin-access-1'
 import { mountHomeHub, mountHubSearch } from './home-hub.js?v=signature-art-1'
 import { mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=unified-1'
+import { createCloudAccount } from './account.js?v=account-projects-1'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -16,6 +16,8 @@ import { downloadProject, makeRecord, newProject, parseProject, readProjects, wr
 const byId = id => document.getElementById(id)
 const rows = byId('project-rows')
 const query = byId('query')
+const dashboard = byId('dashboard'), dashboardHome = dashboard.parentNode, dashboardNext = dashboard.nextSibling
+const projectActions = byId('home-actions'), projectActionsHome = projectActions.parentNode
 const examplePanel = byId('example-panel')
 const exampleGrid = examplePanel.querySelector('.example-grid')
 const featuredExample = exampleGrid.querySelector('.example-card-featured')
@@ -59,7 +61,7 @@ const notificationPopover = createNotificationPopover({root:byId('notification-c
   onOpen:()=>{cloudAccount.showNotifications();if(location.hash!=='#account')location.hash='#account'}
 })
 const cloudAccount = createCloudAccount({ root: byId('account-panel'), link: byId('account-link'),
-  getProjects: () => projects, createBuild:()=>addProject(newProject(strings().untitled)), openLocal:openProject, previewsEnabled:()=>readPreference('previews')!=='off', download: downloadProject, openCopy: (data, cloud) => addProject(data, null, cloud), linkLocal: linkCloudProject, onNotifications: state => notificationPopover.update(state), onProjectsChanged:()=>{if(currentPage()==='projects')renderList();if(currentPage()==='home')renderCloudContinue()} })
+  getProjects: () => projects, createBuild:()=>addProject(newProject(strings().untitled)), openLocal:openProject, previewsEnabled:()=>readPreference('previews')!=='off', download: downloadProject, openCopy: (data, cloud) => addProject(data, null, cloud), linkLocal: linkCloudProject, onNotifications: state => notificationPopover.update(state), onProjectsPanel:mountAccountProjects, onProjectsChanged:()=>{const signedIn=cloudAccount.projectState().signedIn;document.querySelector('[data-page="projects"]').href=signedIn?'#account/projects':'#projects';if(currentPage()==='projects'){if(signedIn)location.replace('#account/projects');else renderList()}else if(dashboard.parentNode!==dashboardHome&&!dashboard.hidden)renderList();if(currentPage()==='home')renderCloudContinue()} })
 
 try {
   if (localStorage.getItem('bricklab.language') === 'en') language = 'en'
@@ -248,6 +250,27 @@ function stopProjectPreviews() {
 }
 
 const sortByModified = records => [...records].sort((a, b) => Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt))
+
+// Keep one gallery and its original controls and event handlers.
+function mountAccountProjects(slot) {
+  if (!slot) {
+    if (dashboard.parentNode===dashboardHome) return
+    stopProjectPreviews()
+    dashboardHome.insertBefore(dashboard,dashboardNext)
+    projectActionsHome.append(projectActions)
+    dashboard.hidden=currentPage()!=='projects'
+    projectActions.hidden=!['home','projects'].includes(currentPage())
+    if(currentPage()==='account'&&location.hash!=='#account/projects'){
+      document.querySelector('[data-page="projects"]').removeAttribute('aria-current')
+      document.querySelector('[data-page="account"]')?.setAttribute('aria-current','page')
+    }
+    return
+  }
+  slot.append(projectActions,dashboard)
+  projectActions.hidden=false
+  dashboard.hidden=false
+  renderList()
+}
 
 function renderList() {
   closeMenu()
@@ -454,7 +477,7 @@ function renderHome(visible) {
 
 function currentPage() {
   const hash = location.hash.slice(1)
-  if (hash.startsWith('account/admin/')) return 'account'
+  if (hash === 'account/projects' || hash.startsWith('account/admin/')) return 'account'
   if (hash.startsWith('community/')) return 'community'
   if (hash.startsWith('project/')) return 'project'
   return pages.includes(hash) ? hash : 'home'
@@ -464,6 +487,7 @@ function render(initial = false) {
   closeMenu()
   const t = strings()
   const page = currentPage()
+  if(page==='projects'&&cloudAccount.projectState().signedIn){location.replace('#account/projects');return}
   const home = page === 'home'
   const listVisible = page === 'projects'
   const requestedId = page === 'project' ? location.hash.slice('#project/'.length) : null
@@ -484,7 +508,7 @@ function render(initial = false) {
   })
   document.querySelector('.navigation').setAttribute('aria-label', t.sections)
   document.querySelectorAll('[data-page]').forEach(link => {
-    const selected = link.dataset.page === (page === 'project' ? 'projects' : page)
+    const selected = link.dataset.page === (page === 'project' || location.hash==='#account/projects' ? 'projects' : page)
     if (selected) link.setAttribute('aria-current', 'page')
     else link.removeAttribute('aria-current')
   })
@@ -735,7 +759,7 @@ function settingsNotice(key) {
 
 function refreshSettingsPreviews() {
   if (currentPage() === 'home') renderHome(true)
-  if (currentPage() === 'projects') renderList()
+  if (currentPage() === 'projects' || location.hash==='#account/projects'&&!dashboard.hidden) renderList()
 }
 
 function setLanguage(value) {

@@ -29,7 +29,7 @@ function showBlob(art,blob,signal){
  img.onerror=release;img.src=url
 }
 export function renderWorkshopOverview({lang,user,local,remote,busy,signal,previewsEnabled,createBuild,openLocal,openCloud,fetchCloud,go,activityData,publicLoaded,publicCard,publicBuilds,loadPublic,progress}){
- const t=text[lang]??text.en,root=node('div','workshop-overview'),recent=section(t.recent,link(t.all,'#projects')),grid=node('div','workshop-recent-grid'),jobs=[]
+ const t=text[lang]??text.en,root=node('div','workshop-overview'),recent=section(t.recent,button(t.all,()=>go('cloud'),busy)),grid=node('div','workshop-recent-grid'),jobs=[]
  const date=value=>timestamp(value)?new Intl.DateTimeFormat(lang,{dateStyle:'medium'}).format(new Date(value)):''
  const entries=recentWorkshopBuilds(local,remote,user.id)
  for(const entry of entries){

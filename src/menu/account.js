@@ -4,7 +4,7 @@ import { createAuthClient } from './auth-client.js?v=security-1'
 
 import { createProjectsClient, cloudLink } from './projects-client.js?v=profile-gallery-1'
 
-import { renderCloudWorkshop } from './cloud-workshop.js?v=unified-1'
+import { renderCloudWorkshop } from './cloud-workshop.js?v=account-projects-1'
 
 import {createProfileClient} from './profile-client.js?v=unified-1'
 
@@ -39,7 +39,7 @@ function action(label,fn,primary=false){
 function field(label,type,autocomplete,maxLength){
  const wrap=node('label','account-field'),input=node('input');input.type=type;input.autocomplete=autocomplete;input.required=true;input.maxLength=maxLength;wrap.append(node('span',null,label),input);return {wrap,input}
 }
-export function createCloudAccount({root,link,getProjects,download,openCopy,linkLocal,createBuild=()=>{location.hash='#projects'},openLocal=id=>{location.hash='#project/'+id},previewsEnabled=()=>true,onNotifications=()=>{},onProjectsChanged=()=>{},api=createAuthClient(),cloud=createProjectsClient(),profiles=createProfileClient(),activityApi=createActivityClient(),communityApi=createCommunityClient()}){
+export function createCloudAccount({root,link,getProjects,download,openCopy,linkLocal,createBuild=()=>{location.hash='#projects'},openLocal=id=>{location.hash='#project/'+id},previewsEnabled=()=>true,onNotifications=()=>{},onProjectsChanged=()=>{},onProjectsPanel=()=>{},api=createAuthClient(),cloud=createProjectsClient(),profiles=createProfileClient(),activityApi=createActivityClient(),communityApi=createCommunityClient()}){
  let lang='ru',visible=false,mode='login',user=null,checked=false,busy=false,error='',remote=[],historyId=null,history=[],feedback='',section='workshop',profileData=null,activityData=null,publicCard=null,publicLoaded=false,publicBuilds=[]
  let workshopController=null,bureauController=null,bureauSelection={id:null},adminController=null,emailDraft='',securityFeedback=''
  let adminRoute='',notificationError=false,bellRefreshing=false,bellRendered=false
@@ -129,6 +129,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
  }
  function deepAdmin(){const hash=location.hash,m=/^#account\/admin\/(user|bug)\/([0-9a-f-]{36})$/i.exec(hash);if(m)return {initialMode:m[1]==='user'?'users':'bugs',initialQuery:m[2]};const tab=/^#account\/admin\/(overview|users|reports|build-reports|bugs|audit|content)$/.exec(hash);return tab?{initialMode:tab[1]}:null}
  function render(){
+   onProjectsPanel(null)
    workshopController?.abort();workshopController=null
    bureauController?.abort();bureauController=null;adminController?.abort();adminController=null
    label();publishNotifications();onProjectsChanged();if(!visible)return
@@ -143,13 +144,15 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
      return
    }
    if(user){
-     if(user.admin===true&&deepAdmin())section='admin'
+     if(location.hash==='#account/projects')section='cloud'
+     else if(user.admin===true&&deepAdmin())section='admin'
      const projects=getProjects(),ownerId=user.id
      workshopController=new AbortController()
      const signal=workshopController.signal,noticeNodes=[]
      if(feedback)noticeNodes.push(message(feedback));if(error)noticeNodes.push(message(error));if(busy)noticeNodes.push(message('busy'))
      root.append(renderCloudWorkshop({lang,user,local:projects,remote,signal,previewsEnabled:previewsEnabled(),createBuild,openLocal,logout:()=>run(()=>api.logout()),noticeNodes,fetchCloud:async(id,requestSignal)=>{if(user?.id!==ownerId||requestSignal.aborted)return null;const item=await cloud.get(id,undefined,requestSignal);return user?.id===ownerId&&!requestSignal.aborted?item:null},section:section==='admin'&&!user.admin?'workshop':section==='publicProfile'?'settings':section,busy,revokeOthers(){operate(async()=>{await api.revokeOthers();feedback='sessionsRevoked'})},adminPanel:()=>{adminController=new AbortController();return renderAdminPanel({lang,signal:adminController.signal,...(deepAdmin()??{})})},bureauPanel:()=>{bureauController=new AbortController();return renderBureauPanel({lang,user,signal:bureauController.signal,getProjects,openCopy,linkLocal,download,selection:bureauSelection})},profileData,activityData,publicCard,publicLoaded,publicBuilds,loadPublic(){operate(async()=>{publicCard=await communityApi.get();publicBuilds=await communityApi.builds();publicLoaded=true})},publishBuild(id,data){operate(async()=>{publicBuilds=await communityApi.publishBuild(id,data);feedback='publicationSaved'})},unpublishBuild(id){operate(async()=>{publicBuilds=await communityApi.unpublishBuild(id);feedback='publicationRemoved'})},publishPublic(data){operate(async()=>{publicCard=await communityApi.publish(data);profileData=await profiles.get();publicLoaded=true;feedback='publicSaved'})},unpublishPublic(){operate(async()=>{publicCard=await communityApi.unpublish();publicBuilds=[];publicLoaded=true;feedback='publicRemoved'})},refreshActivity(){operate(async()=>{activityData=await activityApi.get()})},readActivity(){operate(async()=>{activityData=await activityApi.read()})},toggleFavorite(id,add){operate(async()=>{activityData=await activityApi.favorite(id,add)})},openFavorite(id){operate(async()=>{const owner=user.id,item=await cloud.get(id);if(user?.id===owner&&visible)openCopy(item.document,{ownerId:owner,id:item.id,revision:item.revision})})},uploadMedia(kind,file){operate(async()=>{profileData=await profiles.upload(kind,file);if(publicCard?.unified)publicCard=await communityApi.get();feedback='mediaSaved'})},removeMedia(kind){operate(async()=>{profileData=await profiles.remove(kind);if(publicCard?.unified)publicCard=await communityApi.get();feedback='mediaSaved'})},saveProfile(data){operate(async()=>{profileData=await profiles.save(data);if(publicCard?.unified)publicCard=await communityApi.get();else if(publicCard?.backgroundTheme&&data.background!==undefined)publicCard={...publicCard,backgroundTheme:profileData.profile.background};feedback='profileSaved'})},
-       go(key){if(deepAdmin()){window.history.replaceState(null,'','#account');adminRoute=''}if(key==='cloud'){location.hash='#projects';return}section=key;render();window.scrollTo({top:0,behavior:'instant'})}}));return
+       go(key){if(key==='cloud'&&location.hash!=='#account/projects'){location.hash='#account/projects';return}if(key!=='cloud'&&(deepAdmin()||location.hash==='#account/projects')){window.history.replaceState(null,'','#account');adminRoute=''}section=key;render();window.scrollTo({top:0,behavior:'instant'})}}));
+     if(section==='cloud')onProjectsPanel(root.querySelector('.workshop-projects-slot'));return
    }
    const panel=node('div','account-auth'),hero=node('div','account-auth-hero'),brand=node('div','account-brand','BRICKLAB CLOUD')
    hero.append(brand,node('h2',null,s.hero),node('p',null,s.intro))
@@ -190,13 +193,15 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    remoteProjectControls,
    refreshProjects(){return operate(async()=>{remote=await cloud.list();activityData=await activityApi.get();if(historyId)history=await cloud.revisions(historyId)})},
    async fetchProjectPreview(id,ownerId,signal){if(!user||user.id!==ownerId||signal?.aborted)return null;const item=await cloud.get(id,undefined,signal);return user?.id===ownerId&&!signal?.aborted?item:null},
-   showNotifications(){section='notifications';if(visible)render()},
+   showNotifications(){if(location.hash==='#account/projects'){window.history.replaceState(null,'','#account');adminRoute=''}section='notifications';if(visible)render()},
    refreshNotifications,
    readNotifications(){return refreshNotifications(true)},
    update(language,show){
-     const next=language==='en'?'en':'ru',route=show&&deepAdmin()?location.hash:'',changed=next!==lang||visible!==show||adminRoute!==route
+     const next=language==='en'?'en':'ru',route=show&&(deepAdmin()||location.hash==='#account/projects')?location.hash:'',changed=next!==lang||visible!==show||adminRoute!==route
+     if(show&&route==='#account/projects')section='cloud'
+     else if(show&&changed&&section==='cloud')section='workshop'
      adminRoute=route
-     lang=next;visible=show;if(!show){workshopController?.abort();workshopController=null;bureauController?.abort();bureauController=null;adminController?.abort();adminController=null}label();publishNotifications()
+     lang=next;visible=show;if(!show){onProjectsPanel(null);workshopController?.abort();workshopController=null;bureauController?.abort();bureauController=null;adminController?.abort();adminController=null}label();publishNotifications()
      if(!show&&!checked&&api.allowed&&!busy&&!notificationError)void refreshNotifications()
      if(show&&changed){render();if(api.allowed&&!busy){checked=false;refresh()}}else if(show&&!busy&&user)render()
    }
