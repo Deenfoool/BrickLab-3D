@@ -35,6 +35,7 @@ export function renderAdminPanel({lang='ru',signal,initialMode='overview',initia
   const row=el('article','account-card')
   if(mode==='users'){
    row.append(el('strong',null,r.displayName),el('p','account-muted',r.email),el('p','account-muted',r.id),el('p',null,(r.admin?t.admin+' · ':'')+(r.verifiedAt?t.verified:t.unverified)+' · '+(r.blockedAt?t.blocked:t.active)))
+   if(r.publicId&&uuid.test(r.publicId)){const a=el('a','workspace-action',lang==='ru'?'Публичный профиль':'Public profile');a.href='#community/profile/'+r.publicId;row.append(a)}
    if(!r.admin)row.append(button(t[r.blockedAt?'unblock':'block'],()=>action(r.blockedAt?'unblock':'block',r.id)),button(t.revoke_sessions,()=>action('revoke_sessions',r.id)))
   }else if(mode==='bugs'){
    row.append(el('strong',null,r.area),el('p','account-muted',r.id+' · '+new Date(r.createdAt).toLocaleString(lang)),el('p','community-comment-text',r.summary))
