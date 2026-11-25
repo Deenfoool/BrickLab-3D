@@ -39,6 +39,11 @@ def report():
                    f"Подтверждённых алиасов: {int(stats['resolvedAliases'])}\n"
                    f"Новых соответствий: {int(stats.get('newAliases', 0))}\n"
                    f"Алиасов без модели: {int(stats['unresolvedAliases'])}")
+        for number, coverage in sorted(index.get("staticCoverage", {}).items())[:5]:
+            total = sum(int(coverage[key]) for key in ("exact", "alias", "external", "ambiguous", "missing"))
+            found = sum(int(coverage[key]) for key in ("exact", "alias", "external"))
+            if total:
+                message += f"\nНабор {number}: {found}/{total} деталей имеют соответствие (аудит локальных данных)"
         if index.get("elementRefreshError"):
             message += "\n⚠ Rebrickable недоступен; прежний индекс сохранён."
     else:
