@@ -27,6 +27,7 @@ jobs:
           python3 -B tests/telegram_events_test.py
           python3 -B tests/telegram_control_test.py
           python3 -B tests/telegram_control_actions_test.py
+          python3 -B tests/telegram_control_automation_test.py
 
   test:
     runs-on: ubuntu-latest

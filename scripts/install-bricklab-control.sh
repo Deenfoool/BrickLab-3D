@@ -118,6 +118,10 @@ if [[ "${1:-}" == --enable-actions ]]; then
 else
   systemctl disable --now bricklab-control-actions.socket
 fi
+if [[ -e /run/bricklab-control/snapshot.json ]]; then
+  chown root:bricklab-control /run/bricklab-control/snapshot.json
+  chmod 0640 /run/bricklab-control/snapshot.json
+fi
 systemctl start bricklab-control-snapshot.service
 systemctl enable --now bricklab-control-snapshot.timer
 systemctl enable --now bricklab-control.service

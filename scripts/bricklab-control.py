@@ -16,13 +16,19 @@ SNAPSHOT = pathlib.Path("/run/bricklab-control/snapshot.json")
 MENUS = {
     "home": [("🖥 VPS", "vps"), ("🐳 Docker", "docker"), ("📊 Статистика", "stats"),
              ("🧱 Сообщество", "community"), ("💾 Бэкапы", "backup"), ("🔔 События", "events"),
-             ("🚀 Версия", "release"), ("📋 Диагностика логов", "logs"), ("🛡 Журнал действий", "audit")],
+             ("🚀 Версия", "release"), ("📋 Диагностика логов", "logs"), ("🛡 Журнал действий", "audit"), ("👥 Пользователи", "users"),
+             ("🧱 Публикации", "builds"), ("🚩 Жалобы", "reports"), ("🐞 Баг-репорты", "bugs"),
+             ("🐙 GitHub", "github"), ("⚙ Автоматизация", "automation")],
 }
 LINKS = {
     "community": [("Администрирование", "/#account/admin/overview"),
                   ("Жалобы на сборки", "/#account/admin/build-reports"),
                   ("Жалобы на комментарии", "/#account/admin/reports"),
                   ("Журнал модерации", "/#account/admin/audit")],
+    "users": [("Все пользователи", "/#account/admin/users")],
+    "builds": [("Управление публикациями", "/#account/admin/content")],
+    "reports": [("Жалобы на сборки", "/#account/admin/build-reports"), ("Жалобы на комментарии", "/#account/admin/reports")],
+    "bugs": [("Все баг-репорты", "/#account/admin/bugs")],
     "stats": [("Открыть статистику", "/#account/admin/overview")],
     "events": [("Администрирование", "/#account/admin/overview")],
 }
@@ -56,7 +62,7 @@ def broker(action, ident):
     except (OSError, UnicodeError):
         return "unknown"
 
-PAGES = {"home", "vps", "docker", "stats", "community", "backup", "events", "release", "logs", "audit"}
+PAGES = {"home", "vps", "docker", "stats", "community", "backup", "events", "release", "logs", "audit", "users", "builds", "reports", "bugs", "github", "automation"}
 
 class ApiError(Exception):
     def __init__(self, code, delay=0):
@@ -97,6 +103,26 @@ def render(page, data):
         row["date"] + " · " + ACTIONS[row["action"]][0] + " · " +
         ("начата; результат неизвестен" if row["result"] == "started" else RESULTS.get(row["result"], "неизвестно"))
         for row in recent) or "Операций пока нет."
+    def records(key):
+        rows = data.get("admin", {}).get(key)
+        if rows is None:
+            return "Нет данных."
+        if not rows:
+            return "Записей пока нет."
+        output = []
+        for row in rows[:5]:
+            ident = str(row.get("id",""))
+            if not re.fullmatch(r"[0-9a-f-]{36}",ident):
+                continue
+            label = ident[:8] + " · " + str(row.get("day",""))[:10]
+            if key == "users":
+                label += " · " + ("почта подтверждена" if row.get("verified") else "без подтверждения")
+                if row.get("blocked"):
+                    label += " · заблокирован"
+            elif key == "builds":
+                label += " · деталей: " + str(row.get("parts",0))
+            output.append(label)
+        return "\n".join(output) or "Нет записей."
     bodies = {
         "home": "BrickLab Control Center\nAPI: " + value("vps", "api") + "\nВыберите раздел.",
         "vps": "🖥 VPS\n" + lines("vps", [("API локально", "api"), ("HTTPS извне (проверка с VPS)", "https"),
@@ -111,6 +137,12 @@ def render(page, data):
                   + "\nСтатус systemd, не доказательство восстановления копии.",
         "events": "🔔 BrickLab Events\n" + lines("events", [("В очереди", "pending"), ("Повторные попытки", "retrying"),
                      ("Доставлено (хранится до 30 дней)", "delivered"), ("Таймер", "timer")]),
+        "users": "👥 Последние аккаунты\n" + records("users") + "\nПерсональные данные и блокировки — только в веб-админке.",
+        "builds": "🧱 Последние публичные сборки\n" + records("builds"),
+        "reports": "🚩 Неразобранные жалобы\n" + lines("stats", [("На сборки", "build_reports"), ("На комментарии", "comment_reports")]) + "\nРешение жалоб — в веб-админке.",
+        "bugs": "🐞 Последние баг-репорты\n" + records("bugs") + "\nОписание, логи и личные данные не отправляются в Telegram.",
+        "github": "🐙 GitHub / релиз\n" + lines("release", [("Checkout", "commit"), ("Последний локально полученный origin", "tracking"), ("Отставание (коммитов)", "behind"), ("Рабочее дерево", "worktree")]) + "\nЛокальная информация после git fetch; CI и PR — по ссылкам. Развёртывание из Telegram не включено.",
+        "automation": "⚙ Автоматизация\n" + automation_description() + "\nНе меняет существующие службы мониторинга и Events.",
         "audit": "🛡 Последние операции VPS\n" + history,
         "logs": "📋 Диагностика логов (последние 200 строк за 1 ч)\n" + lines("logs", [("Строки", "lines"), ("С ошибками", "errors"), ("С предупреждениями", "warnings")]) + "\nСодержимое логов не передаётся в Telegram.",
         "release": "🚀 Развёрнутая версия (checkout)\n" + value("release", "commit")
@@ -122,6 +154,20 @@ def render(page, data):
     buttons = [[{"text": label, "callback_data": "cc:" + key} for label, key in MENUS["home"][i:i+2]]
                for i in range(0, len(MENUS["home"]), 2)] if page == "home" else []
     buttons += [[{"text": label, "url": ORIGIN + path}] for label, path in LINKS.get(page, [])]
+    if page in ("users", "builds", "bugs"):
+        routes = {"users": "/#account/admin/user/", "builds": "/#community/build/", "bugs": "/#account/admin/bug/"}
+        for row in (data.get("admin", {}).get(page) or [])[:5]:
+            ident = str(row.get("id",""))
+            if re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}",ident,re.I):
+                buttons.append([{"text": "Открыть " + ident[:8], "url": ORIGIN + routes[page] + ident}])
+    if page in ("github", "release"):
+        repo = "https://github.com/Deenfoool/BrickLab-3D"
+        buttons.extend([[{"text": name, "url": repo + path}] for name,path in
+                        [("Коммиты", "/commits/feature/cloud-migration"), ("CI / тесты", "/actions"),
+                         ("Pull Requests", "/pulls"), ("Issues", "/issues"), ("Новый Issue", "/issues/new")]])
+    if page == "automation":
+        buttons.extend([[{"text": name, "callback_data": "pref:" + key}] for name,key in
+                        [("Уведомления: вкл/выкл", "toggle"), ("Тишина на 1 час", "quiet"), ("Снять тишину", "resume")]])
     if page == "release":
         buttons.append([{"text": "GitHub", "url": "https://github.com/Deenfoool/BrickLab-3D"}])
     if actions_enabled() and page in ("docker", "backup"):
@@ -202,6 +248,15 @@ def handle(update, owner, call):
         data = cb.get("data", "")
         if not isinstance(data, str):
             return
+        if data in ("pref:toggle","pref:quiet","pref:resume"):
+            update_preferences(data[5:])
+            call("answerCallbackQuery", {"callback_query_id": cb["id"]})
+            try:
+                call("editMessageText", {"chat_id": owner, "message_id": msg["message_id"], **render("automation",snapshot())})
+            except ApiError as exc:
+                if exc.code != "400":
+                    raise
+            return
         if data.startswith(("act:", "yes:", "no:")):
             handle_action(data, cb, msg, owner, call)
             return
@@ -224,6 +279,87 @@ def handle(update, owner, call):
         call("sendMessage", {"chat_id": owner, "protect_content": True,
                              **render("home" if text != "/status" else "vps", snapshot())})
 
+def automation_path():
+    directory = os.environ.get("STATE_DIRECTORY")
+    return pathlib.Path(directory) / "automation.json" if directory else None
+
+def preferences():
+    path = automation_path()
+    try:
+        data = json.loads(path.read_text()) if path else {}
+        return data if isinstance(data,dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+def save_preferences(data):
+    path = automation_path()
+    if not path:
+        return
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data))
+    tmp.replace(path)
+
+def automation_description():
+    p = preferences()
+    enabled = "включены" if p.get("enabled") else "выключены"
+    quiet = "до " + time.strftime("%H:%M UTC", time.gmtime(p["quiet_until"])) if p.get("quiet_until",0)>time.time() else "нет"
+    return "Дополнительные алерты: " + enabled + "\nТихий режим: " + quiet + "\nПроверки: API, SQL, RAM, свободное место, очередь событий.\nСуществующие ежедневные сводки Events не изменяются."
+
+def update_preferences(action):
+    p = preferences()
+    if action == "toggle":
+        p["enabled"] = not p.get("enabled",False)
+        p.pop("last_sample",None)
+        p.pop("samples",None)
+        p.pop("announced",None)
+    elif action == "quiet":
+        p["quiet_until"] = int(time.time()) + 3600
+    elif action == "resume":
+        p["quiet_until"] = 0
+    save_preferences(p)
+
+ALERT_LABELS = {"api":"Локальный API недоступен", "sql":"PostgreSQL не отвечает",
+                "ram":"RAM ≥ 90%", "disk":"Свободное место ≤ 10%", "events":"В очереди ≥ 20 повторных отправок"}
+def alert_flags(data):
+    # Missing metrics are unknown, never interpreted as recovery.
+    flags = {}
+    v = data.get("vps",{})
+    d = data.get("docker",{})
+    e = data.get("events",{})
+    for name, value in (("api",v.get("api")),("sql",d.get("sql"))):
+        if value in ("OK","ошибка"):
+            flags[name] = value != "OK"
+    for name, value, threshold, high in (("ram",v.get("ram_percent"),90,True),("disk",v.get("disk_free_percent"),10,False),("events",e.get("retrying"),20,True)):
+        if type(value) in (int,float):
+            flags[name] = value >= threshold if high else value <= threshold
+    return flags
+
+def check_alerts(owner, call, data=None):
+    p = preferences()
+    if not p.get("enabled"):
+        return
+    data = snapshot() if data is None else data
+    stamp = data.get("timestamp")
+    if type(stamp) not in (int,float) or stamp <= p.get("last_sample",0):
+        return
+    previous = p.get("samples",{})
+    announced = p.get("announced",{})
+    flags = alert_flags(data)
+    changes = []
+    for key, flag in flags.items():
+        old = previous.get(key)
+        if old == flag and bool(announced.get(key,False)) != flag:
+            changes.append((key,flag))
+    p["last_sample"] = stamp
+    p["samples"] = flags
+    if changes and p.get("quiet_until",0) <= time.time():
+        text = "BrickLab · мониторинг\n" + "\n".join(("⚠ " if flag else "✅ Восстановлено: ") + ALERT_LABELS[key] for key,flag in changes)
+        call("sendMessage", {"chat_id":owner,"text":text,"protect_content":True})
+        for key,flag in changes:
+            announced[key] = flag
+    p["announced"] = announced
+    save_preferences(p)
+
 def main():
     token, owner = config(pathlib.Path(os.environ["CREDENTIALS_DIRECTORY"]) / "telegram.json")
     state = pathlib.Path(os.environ["STATE_DIRECTORY"]) / "offset"
@@ -235,6 +371,7 @@ def main():
         return api(token, method, payload, timeout)
     while True:
         try:
+            check_alerts(owner, call)
             updates = call("getUpdates", {"offset": offset, "timeout": 25,
                            "allowed_updates": ["message", "callback_query"]}, 35)
             for update in updates:

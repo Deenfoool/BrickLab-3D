@@ -22,3 +22,13 @@ The Docker page can restart only an already running BrickLab app, not PostgreSQL
 2. Moderation via existing admin service authorization and audit; private report metadata only, attachment consent, role separation, GitHub issues with redaction.
 3. Alert deduplication, maintenance windows, external monitoring independent of VPS, restore drills, limited auto-recovery and scheduled digest. Existing daily events are retained.
 4. Release/CI integration, richer analytics and Telegram Mini App with server-side initData verification.
+
+
+## Phase 3: operator queues
+Recent accounts, public builds and bug reports, report counts and links to existing authenticated admin routes. No email, report body, raw console, screenshot or private project data is exported. Snapshot now root:bricklab-control 0640. Moderation writes remain in the web admin interface with its existing identity, validation and audit; Telegram does not impersonate a site admin.
+
+## Phase 4: release overview
+Shows checkout SHA, locally fetched remote-tracking SHA, behind count and tracked-file worktree status. Links to GitHub commits, Actions, pull requests and issues; issue creation is an authenticated GitHub web form. No GitHub credentials or fetch operations are added, so local tracking can be stale. No remote deployment or rollback from Telegram.
+
+## Phase 5: optional additional alerts
+Off by default to avoid duplicating existing monitoring. Toggle in Automation, snooze additional alerts for one hour, or resume. Persistent state in the bot StateDirectory; two consecutive distinct snapshots are required for both alert and recovery; missing readings are unknown. Thresholds: local API and SQL failure, RAM >=90%, free disk <=10%, retrying events >=20. Sends one message per transition; quiet mode suppresses extra alerts only, not the original monitor or Events. A reboot keeps preferences; no automated restarts or changes to maintenance mode. Existing daily digest remains the source of community daily statistics. Tests: python3 -B tests/telegram_control_automation_test.py.

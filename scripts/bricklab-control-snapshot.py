@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fixed, read-only host collector. Publishes aggregate diagnostics, never raw logs/secrets."""
 import json
+import grp
 import os
 import pathlib
 import re
@@ -73,8 +74,10 @@ def collect():
                          "https": health("https://bricklab-3d.ru/api/health")}
     mem = dict((k.rstrip(":"), int(v)) for k, v, *_ in
                (line.split() for line in pathlib.Path("/proc/meminfo").read_text().splitlines()))
-    vps["ram"] = str(round(100*(1-mem["MemAvailable"]/mem["MemTotal"]))) + "%"
+    vps["ram_percent"] = round(100*(1-mem["MemAvailable"]/mem["MemTotal"]))
+    vps["ram"] = str(vps["ram_percent"]) + "%"
     disk = shutil.disk_usage(ROOT)
+    vps["disk_free_percent"] = round(100*disk.free/disk.total,1)
     vps["disk"] = f"{disk.free/2**30:.1f} GiB свободно / {disk.total/2**30:.1f} GiB"
     vps["uptime"] = str(int(float(pathlib.Path("/proc/uptime").read_text().split()[0])//3600)) + " ч"
     docker = data["docker"] = {}
@@ -101,6 +104,15 @@ def collect():
         'build_reports',(SELECT count(*) FROM bricklab.community_build_reports WHERE resolved_at IS NULL),
         'comment_reports',(SELECT count(*) FROM bricklab.community_comment_reports WHERE resolved_at IS NULL),
         'bugs',(SELECT count(*) FROM bricklab.operator_bug_reports WHERE created_at>now()-interval '24 hours'));""")
+    data["admin"] = query("""SELECT json_build_object(
+        'users', (SELECT coalesce(json_agg(x),'[]'::json) FROM
+          (SELECT id, created_at::date AS day, email_verified_at IS NOT NULL AS verified, blocked_at IS NOT NULL AS blocked
+           FROM bricklab.users ORDER BY created_at DESC,id LIMIT 5) x),
+        'builds', (SELECT coalesce(json_agg(x),'[]'::json) FROM
+          (SELECT public_id AS id, part_count AS parts, published_at::date AS day FROM bricklab.public_builds ORDER BY published_at DESC,public_id LIMIT 5) x),
+        'bugs', (SELECT coalesce(json_agg(x),'[]'::json) FROM
+          (SELECT id, created_at::date AS day FROM bricklab.operator_bug_reports ORDER BY created_at DESC,id LIMIT 5) x)
+        );""")
     data["events"] = query("""SELECT json_build_object(
         'pending',count(*) FILTER (WHERE sent_at IS NULL),
         'retrying',count(*) FILTER (WHERE sent_at IS NULL AND attempts>0),
@@ -110,6 +122,15 @@ def collect():
     data["backup"] = {"db": unit("bricklab-backup.service"), "config": unit("bricklab-config-backup.service")}
     commit = run(["git", "rev-parse", "HEAD"])
     data["release"] = {"commit": commit if commit and re.fullmatch(r"[0-9a-f]{40}", commit) else "нет данных"}
+    tracking = run(["git", "rev-parse", "--verify", "refs/remotes/origin/feature/cloud-migration"])
+    if tracking and re.fullmatch(r"[0-9a-f]{40}", tracking):
+        data["release"]["tracking"] = tracking
+        behind = run(["git", "rev-list", "--count", "HEAD..refs/remotes/origin/feature/cloud-migration"])
+        if behind is not None and behind.isdigit():
+            data["release"]["behind"] = int(behind)
+    status = run(["git", "status", "--porcelain", "--untracked-files=no"])
+    if status is not None:
+        data["release"]["worktree"] = "есть изменения" if status else "чисто (отслеживаемые файлы)"
     raw = run(["docker", "compose", "logs", "--no-color", "--tail", "200", "--since", "1h", "bricklab"])
     if raw is not None:
         lines = raw.splitlines()
@@ -123,7 +144,8 @@ def main():
     data = collect()
     tmp = DEST.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False))
-    os.chmod(tmp, 0o644)
+    os.chown(tmp, 0, grp.getgrnam("bricklab-control").gr_gid)
+    os.chmod(tmp, 0o640)
     tmp.replace(DEST)
 
 if __name__ == "__main__":

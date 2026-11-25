@@ -55,7 +55,7 @@ class Control(unittest.TestCase):
             for row in result["reply_markup"]["inline_keyboard"]:
                 for button in row:
                     if "callback_data" in button:
-                        self.assertIn(button["callback_data"][3:],control.PAGES)
+                        self.assertTrue(button["callback_data"].startswith("pref:") or button["callback_data"][3:] in control.PAGES)
                     else:
                         self.assertTrue(button["url"].startswith("https://"))
 
