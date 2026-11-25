@@ -42,3 +42,26 @@ test('publication options with PostgreSQL app role', {skip:process.env.BRICKLAB_
  await store.publishBuild(owner.id,project.id,{...opts,images:undefined})
  await assert.rejects(store.publishBuild(reader.id,remix.id,{revision:remix.revision,description:'Remix'}),{message:'remix_disabled'})
 })
+
+test('admin can equip and publish all premium themes without a payment', {skip:process.env.BRICKLAB_TEST_DB!=='true'},async t=>{
+ assert.equal(process.env.PGDATABASE,'bricklab_browser_test')
+ const uid=process.env.BRICKLAB_TEST_ADMIN_ID
+ assert.match(uid??'',/^[0-9a-f-]{36}$/i)
+ const {connectAuthStore}=await import('../server/db/auth-store.js')
+ const {themeIds}=await import('../src/menu/store-themes.js')
+ const store=connectAuthStore();t.after(()=>store.close())
+ const initial=await store.getProfile(uid)
+ assert.equal(initial.inventory.filter(i=>i.adminAccess===true&&i.owned).length,6)
+ assert.equal(initial.inventory.find(i=>i.id==='first-build').owned,false)
+ assert.deepEqual(await store.testOrders(uid),[])
+ await store.publishCard(uid,{displayName:'Test admin theme',bio:'',showBackground:true})
+ for(const id of themeIds){
+  await store.saveProfile(uid,{bio:'',cover:'amber',background:id})
+  assert.equal((await store.getProfile(uid)).background,id)
+  assert.equal((await store.getOwnCard(uid)).backgroundTheme,id)
+ }
+ await store.publishCard(uid,{displayName:'Test admin theme',bio:'',showBackground:false})
+ await store.saveProfile(uid,{bio:'',cover:'amber',background:'carbon'})
+ assert.equal((await store.getOwnCard(uid)).backgroundTheme,null)
+ assert.deepEqual(await store.testOrders(uid),[])
+})

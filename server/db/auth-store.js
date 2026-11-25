@@ -116,7 +116,8 @@ export function connectAuthStore(env = process.env) {
         const awards=await tx`select award,awarded_at as "awardedAt" from bricklab.workshop_awards where user_id=${uid} order by awarded_at`
         const media=await tx`select kind,version from bricklab.profile_media where user_id=${uid}`
         const entitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
-        const inventory=backgroundInventory(awards,entitlements)
+          const [{admin}]=await tx`select bricklab.is_admin() as admin`
+        const inventory=backgroundInventory(awards,entitlements,{admin:admin===true})
         const profile=p??{bio:'',cover:'blueprint',background:'default'}
         if(!inventory.some(i=>i.id===profile.background&&i.owned))profile.background='default'
         return {...profile,awards,inventory,avatarUrl:media.find(m=>m.kind==='avatar')?'/api/profile/avatar?v='+media.find(m=>m.kind==='avatar').version:null,coverUrl:media.find(m=>m.kind==='cover')?'/api/profile/cover?v='+media.find(m=>m.kind==='cover').version:null}
@@ -129,7 +130,8 @@ export function connectAuthStore(env = process.env) {
         if(p.background!==undefined){
           const awards=await tx`select award from bricklab.workshop_awards where user_id=${uid}`
           const entitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
-          if(!backgroundInventory(awards,entitlements).some(i=>i.id===p.background&&i.owned))throw new ProjectError(403,'background_locked')
+          const [{admin}]=await tx`select bricklab.is_admin() as admin`
+          if(!backgroundInventory(awards,entitlements,{admin:admin===true}).some(i=>i.id===p.background&&i.owned))throw new ProjectError(403,'background_locked')
           await tx`update bricklab.profiles set background=${p.background} where user_id=${uid}`
           // Only profiles that explicitly opted in to public appearance are synchronized.
           await tx`update bricklab.public_profiles set background_theme=${p.background},updated_at=now() where user_id=${uid} and background_theme is not null`
@@ -170,8 +172,9 @@ export function connectAuthStore(env = process.env) {
         if(p.showBackground){
           const awards=await tx`select award from bricklab.workshop_awards where user_id=${uid}`
           const entitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
+          const [{admin}]=await tx`select bricklab.is_admin() as admin`
           const chosen=profile?.background??'default'
-          background=backgroundInventory(awards,entitlements).some(b=>b.id===chosen&&b.owned)?chosen:'default'
+          background=backgroundInventory(awards,entitlements,{admin:admin===true}).some(b=>b.id===chosen&&b.owned)?chosen:'default'
         }
         await tx`insert into bricklab.public_profiles(user_id,display_name,bio,avatar_image,cover_image,cover_theme,background_theme)
           values(${uid},${p.displayName},${p.bio},${avatar?.image??null},${cover?.image??null},${p.showCover?profile?.cover??'blueprint':null},${background})

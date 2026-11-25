@@ -1,3 +1,4 @@
+import {createProfileClient} from './profile-client.js?v=cloud-profile-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 const labels={
@@ -38,6 +39,7 @@ export function mountStore(root,{language='ru',signal}){
  const message=el('p','account-muted',t.loading),grid=el('div','store-grid'),ordersPanel=el('section','store-orders'),financePanel=el('section','store-orders')
  message.setAttribute('role','status');root.replaceChildren(banner,el('p','account-muted',t.intro),message,grid,ordersPanel,financePanel)
  let serial=0,busy=false
+ const profiles=createProfileClient()
  function ordersList(panel,title,orders){
   panel.replaceChildren(el('h2',null,title))
   if(!orders.length)panel.append(el('p','account-muted',t.noOrders))
@@ -50,12 +52,14 @@ export function mountStore(root,{language='ru',signal}){
    const history=await api('/api/store/orders',signal).catch(e=>{if(e.status===401||e.status===403)return null;throw e})
    if(signal.aborted||version!==serial)return
    const admin=history!==null,items=history?.orders??[]
-   message.textContent=catalog.mode==='test'?t.test:t.disabled
+   let profileData=admin?await profiles.get():null
+   if(signal.aborted||version!==serial)return
+   message.textContent=(admin?(ru?'Все платные темы доступны администратору бесплатно. ':'All paid themes are free for administrators. '):'')+(catalog.mode==='test'?t.test:t.disabled)
    grid.replaceChildren()
    const consent=el('input');consent.type='checkbox'
    const consentLabel=el('label','store-consent');consentLabel.append(consent,el('span',null,t.consent))
    if(admin&&catalog.mode==='test')grid.append(consentLabel)
-   const controls=[]
+   const controls=[],equipControls=[]
    for(const product of catalog.products){
     const theme=themeFor(product.sku);if(!theme)continue
     const card=el('article','store-product'),preview=themePreview(theme,language),copy=el('div','store-product-body')
@@ -65,10 +69,27 @@ export function mountStore(root,{language='ru',signal}){
     const dialog=el('dialog','store-preview-dialog'),header=el('div','store-preview-heading');header.append(el('h2',null,name),button(ru?'Закрыть':'Close',()=>dialog.close()))
     dialog.append(header,themePreview(theme,language,true),el('p','account-muted',ru?'Демонстрационный профиль и условные показатели. Тема меняет обложку, рамку, статистику, карточки и бейдж автора. Публичный показ можно отключить. 3D-редактор не меняется.':'Sample profile and illustrative statistics. The theme changes the cover, frame, metrics, cards and author badge. Public display is optional. The 3D editor is unchanged.'),communityExamples(theme,language))
     dialog.setAttribute('aria-label',name);signal.addEventListener('abort',()=>{if(dialog.open)dialog.close()},{once:true})
-    copy.append(details,button(ru?'Примерить тему':'Preview theme',()=>dialog.showModal()),el('strong','store-price',money(product.amountKopecks)),dialog)
+    const free=profileData?.inventory?.some(i=>i.id===product.sku&&i.adminAccess===true&&i.owned===true)
+    copy.append(details,button(ru?'Примерить тему':'Preview theme',()=>dialog.showModal()),el('strong','store-price',free?(ru?'Бесплатно для администратора':'Free for admin'):money(product.amountKopecks)),dialog)
+    if(free){
+     const equip=button(ru?'Применить тему':'Equip theme',async()=>{
+      if(busy||signal.aborted)return
+      busy=true;equipControls.forEach(b=>b.disabled=true);controls.forEach(b=>b.disabled=true)
+      try{
+       const current=await profiles.get()
+       if(!current.inventory?.some(i=>i.id===product.sku&&i.adminAccess===true&&i.owned===true))throw Error('Admin access unavailable')
+       if(signal.aborted)return
+       profileData=await profiles.save({bio:current.profile.bio,cover:current.profile.cover,background:product.sku})
+       if(!signal.aborted)await refresh()
+      }catch(e){if(!signal.aborted){message.textContent=t.error;equipControls.forEach(b=>b.disabled=b.dataset.equipped==='true');controls.forEach(b=>b.disabled=!consent.checked)}}finally{busy=false}
+     })
+     equip.classList.add('primary');equip.dataset.equipped=String(profileData.profile.background===product.sku);equip.disabled=equip.dataset.equipped==='true'
+     if(equip.disabled)equip.textContent=ru?'Тема применена':'Equipped'
+     equipControls.push(equip);copy.append(equip)
+    }
     if(order?.status==='paid')copy.append(el('p','account-muted',t.owned))
     else if(admin&&catalog.mode==='test'){
-     const buy=button(order?t.resume:t.buy,async()=>{
+     const buy=button(order?t.resume:(ru?'Проверить тестовую оплату':'Test checkout'),async()=>{
       if(busy||!consent.checked)return;busy=true;controls.forEach(b=>b.disabled=true)
       try{
        const result=await api('/api/store/orders',signal,{sku:product.sku,testConsent:true})

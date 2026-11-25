@@ -23,3 +23,12 @@ test('real decoder produces a normalized WebP and rejects invalid PNG',{skip:pro
  assert.equal(imageFormat(image,'image/webp'),'webp')
  await assert.rejects(normalizeImage(Buffer.from([137,80,78,71,13,10,26,10]),'image/png','cover'),{message:'invalid_image'})
 })
+
+test('admin access unlocks purchase themes without granting achievements or purchased entitlements',()=>{
+ const normal=backgroundInventory([],[]),admin=backgroundInventory([],[],{admin:true})
+ assert.equal(normal.filter(i=>i.source==='purchase'&&i.owned).length,0)
+ assert.equal(admin.filter(i=>i.source==='purchase'&&i.adminAccess===true&&i.owned).length,6)
+ assert.equal(admin.find(i=>i.id==='first-build').owned,false)
+ assert.equal(backgroundInventory([],[],{admin:'true'}).filter(i=>i.source==='purchase'&&i.owned).length,0)
+ assert.ok(admin.every(i=>!i.purchaseEnabled))
+})
