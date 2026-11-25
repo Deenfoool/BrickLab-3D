@@ -62,12 +62,16 @@ for check in account_security.sql community_options.sql store_orders.sql; do
       psql -X -v ON_ERROR_STOP=1 -U bricklab_admin -d bricklab_browser_test \
       < "$TMP/server/db/tests/$check"
 done
+# Seed an administrator only in the disposable database for role-based cosmetic tests.
+BRICKLAB_TEST_ADMIN_ID=$(docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$DB" psql -X -qAt -v ON_ERROR_STOP=1 -U bricklab_admin -d bricklab_browser_test -c "WITH u AS (INSERT INTO bricklab.users(email,display_name,password_hash) VALUES ('theme-admin-'||gen_random_uuid()||'@example.invalid','Theme test administrator','test-hash') RETURNING id), a AS (INSERT INTO bricklab.admin_accounts(user_id) SELECT id FROM u RETURNING user_id) SELECT user_id FROM a;")
+[[ "$BRICKLAB_TEST_ADMIN_ID" =~ ^[0-9a-f-]{36}$ ]]
+export BRICKLAB_TEST_ADMIN_ID
 PGPASSWORD="$BRICKLAB_APP_PASSWORD" docker run --rm --network "$NET" \
     --memory=1536m --cpus=1 -e PGHOST="$DB" -e PGDATABASE=bricklab_browser_test \
-    -e PGUSER=bricklab_app -e PGPASSWORD -e BRICKLAB_TEST_DB=true \
+    -e PGUSER=bricklab_app -e PGPASSWORD -e BRICKLAB_TEST_DB=true -e BRICKLAB_TEST_ADMIN_ID \
     -v "$TMP:/tests" -w /tests bricklab-test-runner:local \
     node --test --test-concurrency=1 tests/server-auth.test.js tests/community-db.test.js
-unset POSTGRES_PASSWORD BRICKLAB_APP_PASSWORD
+unset POSTGRES_PASSWORD BRICKLAB_APP_PASSWORD BRICKLAB_TEST_ADMIN_ID
 docker rm -f "$DB" >/dev/null
 docker network rm "$NET" >/dev/null
 
