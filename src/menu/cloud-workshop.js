@@ -1,11 +1,12 @@
-import {renderWorkshopOverview} from './workshop-overview.js?v=fullscreen-1'
+import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=unified-1'
+import {renderWorkshopOverview} from './workshop-overview.js?v=unified-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 import { badges, ranks, rankFor } from './workshop-model.js?v=activity-1'
 import { workshopCopy } from './workshop-copy.js?v=profile-gallery-1'
 
-export const sections=[['workshop','icon-home'],['cloud','folder'],['publicProfile','icon-community'],['achievements','icon-trophy'],['rankings','icon-trophy'],['bureau','icon-account'],['favorites','icon-heart'],['notifications','icon-bell'],['storage','icon-cloud'],['settings','settings'],['security','icon-shield'],['cosmetics','icon-heart']]
-const implemented=new Set(['workshop','cloud','publicProfile','achievements','storage','settings','security','cosmetics','favorites','notifications','bureau'])
+export const sections=[['workshop','icon-home'],['cloud','folder'],['achievements','icon-trophy'],['rankings','icon-trophy'],['bureau','icon-account'],['favorites','icon-heart'],['notifications','icon-bell'],['storage','icon-cloud'],['settings','settings'],['security','icon-shield'],['cosmetics','icon-heart']]
+const implemented=new Set(['workshop','cloud','achievements','storage','settings','security','cosmetics','favorites','notifications','bureau'])
 const extra={
  ru:{active:'Личный аккаунт · BrickLab Cloud',pending:'Этот раздел ещё не подключён к серверу.',noAwards:'Серверный учёт наград ещё не подключён. XP и награды не начисляются по локальным данным.',catalog:'Каталог будущих достижений',rankPlan:'Планируемая лестница званий',localDoc:'Локальный документ',cloudDoc:'Облачная ревизия',chooseSource:'Источник паспорта',load:'Загрузить паспорт',latest:'Актуальная версия',privateOnly:'Все облачные сборки пока приватные.',limits:'Текущие ограничения: 20 проектов, 20 версий на проект, запрос до 2 МиБ, бюджет около 64 МиБ на аккаунт.',noBytes:'Точное использование диска пока не отображается.',identity:'Данные текущей серверной сессии. Редактирование профиля будет подключено отдельно.',securityText:'Серверная сессия хранится в HttpOnly cookie. Доступно завершение остальных сессий. Подтверждение почты и восстановление пароля требуют настроенного почтового сервиса. 2FA пока не подключена.',errors:'Ошибки ссылок',malformed:'Некорректные детали',duplicates:'Повторяющиеся ID',unavailable:'Нет данных для паспорта',actual:'Подтверждённые облачные данные',notIssued:'Начисление не подключено',manual:'Сохранение и получение сборок выполняются вручную.',sourceLocal:'Локальная',sourceCloud:'Облачная'},
  en:{active:'Personal account · BrickLab Cloud',pending:'This section is not connected to the server yet.',noAwards:'Server-issued awards are not connected yet. Local data does not award XP or badges.',catalog:'Upcoming achievement catalog',rankPlan:'Planned rank ladder',localDoc:'Local document',cloudDoc:'Cloud revision',chooseSource:'Passport source',load:'Load passport',latest:'Latest revision',privateOnly:'All cloud builds are currently private.',limits:'Current limits: 20 projects, 20 revisions per project, 2 MiB per request, approximately 64 MiB per account.',noBytes:'Exact disk usage is not available yet.',identity:'Current server session identity. Profile editing will be connected separately.',securityText:'The server session uses an HttpOnly cookie. Other sessions can be revoked. Email verification and recovery require a configured mail provider. 2FA is not connected yet.',errors:'Broken links',malformed:'Malformed parts',duplicates:'Duplicate IDs',unavailable:'No passport data',actual:'Confirmed cloud data',notIssued:'Awards not connected',manual:'Builds are saved and retrieved manually.',sourceLocal:'Local',sourceCloud:'Cloud'}
@@ -51,20 +52,17 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
  if(section==='bureau'&&bureauPanel)content.append(bureauPanel())
  else if(section==='admin'&&user.admin===true&&adminPanel)content.append(adminPanel())
  else if(section==='workshop'){
-  const hero=el('section','workshop-hero cover-'+(profile?.cover??'blueprint')),cover=el('div','workshop-cover'),emblem=el('div','workshop-emblem','BRICKLAB / WORKSHOP')
-  const plate=themePlate(profile?.background);if(plate)cover.append(plate)
-  emblem.prepend(icon('layers'));cover.append(emblem);if(profile?.coverUrl){const image=el('img','profile-cover-image');image.src=profile.coverUrl;image.alt='';cover.prepend(image)}
-  mountThemeCover(cover,profile?.background,{custom:!!profile?.coverUrl})
-  const identity=el('div','workshop-hero-inner'),person=el('div','workshop-identity'),name=el('div')
-  name.append(el('h2',null,user.displayName),el('p','account-muted',user.admin===true?(ru?'Администратор · BrickLab Cloud':'Administrator · BrickLab Cloud'):t.active));const badge=themeBadge(profile?.background,lang);if(badge)name.append(badge)
-  const avatar=el('div','workshop-avatar',Array.from(user.displayName).slice(0,2).join('').toUpperCase());if(profile?.avatarUrl){const img=el('img','profile-avatar-image');img.src=profile.avatarUrl;img.alt='';avatar.replaceChildren(img)}person.append(avatar,name);identity.append(person);const heroActions=el('div','workshop-hero-actions');heroActions.append(button(ru?'Сменить тему':'Change theme',()=>go('cosmetics'),busy),button(ru?'Редактировать профиль':'Edit profile',()=>go('settings'),busy));if(publicCard){const publicLink=el('a','workspace-action',t.visitCard);publicLink.href='#community/profile/'+publicCard.id;heroActions.append(publicLink)}identity.append(heroActions)
-  hero.append(cover,identity);if(profile?.bio)hero.append(el('p','workshop-bio',profile.bio));hero.append(metrics([[t.local,summary.local],[t.cloud,summary.cloud],[t.revisions,summary.revisions],[t.xp,progress?.xp??'—'],[t.title,rank?t[rank.id]:'—']]))
+  const displayName=profile?.displayName??publicCard?.displayName??user.displayName,heroActions=[button(ru?'Сменить тему':'Change theme',()=>go('cosmetics'),busy),button(ru?'Редактировать профиль':'Edit profile',()=>go('settings'),busy)]
+  if(publicCard){const a=el('a','workspace-action',ru?'Глазами посетителя':'View as visitor');a.href='#community/profile/'+publicCard.id;heroActions.push(a)}
+  else heroActions.push(button(ru?'Опубликовать профиль':'Publish profile',()=>go('settings'),busy))
+  const hero=renderUnifiedHero({lang,owner:true,identity:{displayName,bio:profile?.bio,coverTheme:profile?.cover,backgroundTheme:profile?.background,avatarUrl:profile?.avatarUrl,coverUrl:profile?.coverUrl,subtitle:user.admin===true?(ru?'Администратор · BrickLab Cloud':'Administrator · BrickLab Cloud'):t.active},actions:heroActions,metrics:[[t.local,summary.local],[t.cloud,summary.cloud],[t.revisions,summary.revisions],[t.xp,progress?.xp??'—'],[t.title,rank?t[rank.id]:'—']]})
   const actions=el('div','workshop-quickbar'),quick=el('div','workshop-shortcuts'),create=button(ru?'Новая сборка':'New build',createBuild,busy);create.classList.add('primary');create.prepend(icon('plus'));quick.append(create)
   for(const key of ['cloud','storage','favorites','cosmetics'])quick.append(button(t[key],()=>go(key),busy))
   actions.append(el('span','workshop-quick-label',ru?'Быстрые действия':'Quick actions'),quick)
-  content.append(hero,actions,renderWorkshopOverview({lang,user,local,remote,busy,signal,previewsEnabled,createBuild,openLocal,openCloud:openFavorite,fetchCloud,go,activityData,publicLoaded,publicCard,publicBuilds,loadPublic,progress}))
- }else if(section==='publicProfile'){
-  appendPublicProfile()
+  content.append(hero,actions)
+  if(publicCard){const top=el('div','portfolio-owner-heading');top.append(el('h2',null,ru?'Моя витрина':'My showcase'),button(ru?'Настроить блоки':'Customize blocks',()=>go('settings'),busy));content.append(top,renderPortfolio({lang,profile:publicCard,builds:publicBuilds,owner:true}))}
+  content.append(renderWorkshopOverview({lang,user,local,remote,busy,signal,previewsEnabled,createBuild,openLocal,openCloud:openFavorite,fetchCloud,go,activityData,publicLoaded,publicCard,publicBuilds,loadPublic,progress}))
+  if(Array.isArray(activityData?.calendar)){const cal=card(ru?'Личный календарь активности':'Private activity calendar');cal.append(activityCalendar(lang,activityData.calendar));content.append(cal)}
  }else if(section==='achievements'){
   const c=card(t.achievements),grid=el('div','workshop-badges');c.append(el('p','account-muted',t.progressHint));const first=el('div','workshop-badge'+(progress?.awards.some(a=>a.award==='firstCloudSave')?' earned':''));first.append(el('strong',null,t.firstCloudSave),el('p','account-muted',t.firstCloudSaveDesc),el('small',null,progress?progress.awards.some(a=>a.award==='firstCloudSave')?t.awarded:t.locked:t.profileMissing));grid.append(first)
   for(const b of badges){const item=el('div','workshop-badge rarity-'+b.rarity),medal=el('div','workshop-medal');medal.append(icon(b.icon));item.append(medal,el('strong',null,t[b.id==='bureau'?'bureauBadge':b.id]),el('p','account-muted',t[b.id+'Desc']),el('small',null,t.notIssued));grid.append(item)}
@@ -87,13 +85,16 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
  }else if(section==='storage'){
   const c=card(t.storage);c.append(metrics([[t.local,summary.local],[t.cloud,summary.cloud],[t.revisions,summary.revisions]]),el('p',null,t.limits),el('p','account-muted',activityData?t.usage+': '+(activityData.bytes/1048576).toFixed(2)+' MiB. '+t.bytesHint:t.noBytes),el('p','account-muted',t.privateOnly));content.append(c)
  }else if(section==='settings'){
-  const c=card(t.settings);c.append(el('p',null,t.displayName+': '+user.displayName),el('p',null,t.email+': '+user.email),el('p','account-muted',t.profileHint));if(profile){const form=el('form','workshop-form'),bio=el('textarea'),cover=el('select'),label=el('label','account-field'),label2=el('label','account-field');bio.maxLength=500;bio.value=profile.bio;bio.disabled=busy;cover.disabled=busy;for(const k of ['blueprint','graphite','amber']){const opt=el('option',null,t[k]);opt.value=k;cover.append(opt)}cover.value=profile.cover;label.append(el('span',null,t.bio),bio);label2.append(el('span',null,t.cover),cover);const submit=el('button','workspace-action primary',t.saveProfile);submit.type='submit';submit.disabled=busy;form.append(label,label2,submit);form.onsubmit=e=>{e.preventDefault();if(!busy)saveProfile({bio:bio.value,cover:cover.value})};c.append(form);for(const kind of ['avatar','cover']){
-     const block=el('div','account-card'),picker=el('input'),label=el('label','account-field');picker.type='file';picker.accept='image/png,image/jpeg,image/webp';picker.disabled=busy;label.append(el('span',null,t[kind+'Upload']),picker);block.append(label)
+  content.append(renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic}))
+  const c=card(ru?'Изображения профиля':'Profile images');c.append(el('p','account-muted',ru?'При включённой синхронизации изменения аватара и обложки сразу видны посетителям.':'When sharing is enabled, avatar and cover changes are immediately public.'))
+  if(profile){for(const kind of ['avatar','cover']){
+     const block=el('div','account-card'),picker=el('input'),label=el('label','account-field');picker.type='file';picker.accept='image/png,image/jpeg,image/webp';picker.disabled=busy||!publicLoaded;label.append(el('span',null,t[kind+'Upload']),picker);block.append(label)
      const url=profile[kind+'Url'];if(url){const image=el('img','profile-media-preview '+kind);image.src=url;image.alt='';block.append(image)}
-     block.append(button(t.upload,()=>{if(picker.files?.[0])uploadMedia(kind,picker.files[0])},busy))
-     if(url)block.append(button(t.removeImage,()=>removeMedia(kind),busy))
-     c.append(block)
-   }}else c.append(el('p','account-muted',t.profileMissing));content.append(c)
+     block.append(button(t.upload,()=>{if(picker.files?.[0])uploadMedia(kind,picker.files[0])},busy||!publicLoaded))
+     if(url)block.append(button(t.removeImage,()=>removeMedia(kind),busy||!publicLoaded));c.append(block)
+  }}else c.append(el('p','account-muted',t.profileMissing))
+  content.append(c)
+  appendPublicProfile()
  }else if(section==='cosmetics'){
    const c=card(t.cosmetics);c.append(el('p','account-muted',t.cosmeticHint),el('p','account-muted',lang==='ru'?'Если показ оформления разрешён в публичном профиле, новая тема сразу появится в сообществе.':'If public appearance is enabled, equipped themes immediately appear in the community.'))
    const grid=el('div','workshop-grid')
@@ -109,23 +110,6 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
   const c=card(t.security);c.append(el('p',null,t.email+': '+user.email),el('p','account-muted',t.securityText),el('p','account-muted',t.privateOnly));if(revokeOthers)c.append(button(t.revokeOthers,revokeOthers,busy));content.append(c)
  }else{const c=card(t[section]);c.append(el('p','account-muted',t.pending));content.append(c)}
  function appendPublicProfile(){
-  const c=card(t.publicProfile);c.append(el('p','account-muted',t.publicExplain),button(t.publicLoad,loadPublic,busy))
-  if(publicLoaded){
-   c.append(el('p',null,publicCard?t.isPublished:t.notPublished))
-   const form=el('form','workshop-form'),name=el('input'),bio=el('textarea'),l1=el('label','account-field'),l2=el('label','account-field'),consent=el('input'),l3=el('label','workshop-check')
-   name.maxLength=80;name.required=true;name.value=publicCard?.displayName??user.displayName;name.disabled=busy;bio.maxLength=500;bio.value=publicCard?.bio??profile?.bio??'';bio.disabled=busy
-   consent.type='checkbox';consent.required=true;consent.disabled=busy
-   l1.append(el('span',null,t.publicName),name);l2.append(el('span',null,t.publicBio),bio);l3.append(consent,el('span',null,t.publicConfirm))
-   const submit=el('button','workspace-action primary',publicCard?t.updateCard:t.publishCard);submit.type='submit';submit.disabled=busy
-   function appearanceChoice(text,checked){
-    const label=el('label','workshop-check'),input=el('input');input.type='checkbox';input.checked=Boolean(checked);input.disabled=busy;label.append(input,el('span',null,text));return {label,input}
-   }
-   const avatarChoice=appearanceChoice(t.publicAvatar,publicCard?.avatarUrl),coverChoice=appearanceChoice(t.publicCover,publicCard?.coverTheme),backgroundChoice=appearanceChoice(t.publicBackground,publicCard?.backgroundTheme)
-   form.append(l1,l2,el('p','account-muted',t.publicAppearance),avatarChoice.label,coverChoice.label,backgroundChoice.label,l3,submit);form.onsubmit=e=>{e.preventDefault();if(!busy&&consent.checked)publishPublic({displayName:name.value,bio:bio.value,showAvatar:avatarChoice.input.checked,showCover:coverChoice.input.checked,showBackground:backgroundChoice.input.checked})};c.append(form)
-   if(publicCard){const link=el('a','workspace-action',t.visitCard);link.href='#community/profile/'+publicCard.id;c.append(link,button(t.unpublishCard,()=>{if(!publicBuilds.length||confirm(t.publicationHint))unpublishPublic()},busy))}
-   const directory=el('a','workspace-action',t.visitCommunity);directory.href='#community';c.append(directory)
-  }
-  content.append(c)
   if(publicLoaded){
     const builds=card(t.publishBuilds);builds.append(el('p','account-muted',lang==='ru'?'Разрешения, обложки и сведения меняются через окно публикации в редакторе.':'Edit permissions, covers and details in the editor publication dialog.'))
     if(!publicCard)builds.append(el('p','account-muted',t.profileRequired))

@@ -1,3 +1,4 @@
+import {validatePortfolio,filterPortfolio} from '../src/menu/portfolio-model.js'
 import {backgroundIds} from '../src/menu/store-themes.js'
 import {createHash} from 'node:crypto'
 import {ProjectError} from './projects.js'
@@ -9,6 +10,7 @@ export function validatePublicCard(value){
  if(!value||!clean(value.displayName,80)||!value.displayName.trim()||!clean(value.bio,500))throw new ProjectError(400,'invalid_public_profile')
  const appearance={}
  for(const k of ['showAvatar','showCover','showBackground']){if(value[k]!==undefined){if(typeof value[k]!=='boolean')throw new ProjectError(400,'invalid_public_profile');appearance[k]=value[k]}}
+ if(value.unified!==undefined){if(value.unified!==true||value.consent!==true||!['blueprint','graphite','amber'].includes(value.cover)||!['showAvatar','showCover','showBackground'].every(k=>typeof value[k]==='boolean'))throw new ProjectError(400,'invalid_public_profile');let portfolio;try{portfolio=validatePortfolio(value.portfolio)}catch{throw new ProjectError(400,'invalid_public_profile')}return {displayName:value.displayName.trim(),bio:value.bio.trim(),...appearance,unified:true,cover:value.cover,portfolio}}
  return {displayName:value.displayName.trim(),bio:value.bio.trim(),...appearance}
 }
 export const buildCategories=['vehicles','mechanisms','architecture','robots','other']
@@ -60,15 +62,19 @@ async function discussionBody(req){
 export function publicBuild(row){
  return row?{authorTheme:backgroundIds.includes(row.authorTheme)?row.authorTheme:null,id:row.id,authorId:row.authorId,author:row.author,authorAvatarUrl:row.authorHasAvatar===true&&uuid.test(row.authorId)?'/api/community/profile/'+row.authorId+'/avatar':null,title:row.title,description:row.description,revision:row.revision,category:row.category??'other',partCount:row.partCount??0,likes:row.likes??0,views:row.views??0,downloads:row.downloads??0,publishedAt:row.publishedAt,allowDownload:row.allowDownload!==false,allowComments:row.allowComments!==false,allowRemix:row.allowRemix===true,difficulty:row.difficulty??'unspecified',tags:row.tags??[],workType:row.workType??'original',attribution:row.attribution??'',originId:row.originId??null,imageCount:row.imageCount??0}:null
 }
-export function publicCard(row){
+export function publicCard(row,options={}){
  if(!row)return null
- const base=uuid.test(row.id)?'/api/community/profile/'+row.id:null
- return {id:row.id,displayName:row.displayName,bio:row.bio,updatedAt:row.updatedAt,followers:row.followers??0,
+ const base=uuid.test(row.id)?'/api/community/profile/'+row.id:null,owner=options?.owner===true
+ const portfolio=row.unified===true?filterPortfolio(row.portfolio,row.publicIds??[]):null
+ const visible=key=>portfolio?.blocks.some(b=>b.key===key&&b.visible)===true
+ const projected=portfolio?(owner?portfolio:{...portfolio,featured:visible('featured')?portfolio.featured:null,collections:visible('collections')?portfolio.collections:[]}):null
+ return {id:row.id,displayName:row.displayName,bio:portfolio&&!owner&&!visible('about')?'':row.bio,updatedAt:row.updatedAt,followers:row.followers??0,
   avatarUrl:base&&row.hasAvatar===true?base+'/avatar':null,coverUrl:base&&row.hasCover===true?base+'/cover':null,
   coverTheme:['blueprint','graphite','amber'].includes(row.coverTheme)?row.coverTheme:null,
-  backgroundTheme:backgroundIds.includes(row.backgroundTheme)?row.backgroundTheme:null}
-
+  backgroundTheme:backgroundIds.includes(row.backgroundTheme)?row.backgroundTheme:null,
+  ...(portfolio?{unified:true,portfolio:projected,awards:row.showAward===true&&visible('awards')?['firstCloudSave']:[],...(owner?{showAvatar:row.shareAvatar===true,showCover:row.shareCover===true}:{})}:{})}
 }
+
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
 export function communityPage(cards,detail=false,builds=[]){
  const models=builds.map(b=>'<article><h2><a href="/community/build/'+esc(b.id)+'">'+esc(b.title)+'</a></h2><p>'+esc(b.description)+'</p><p>Автор / Author: <a href="/community/profile/'+esc(b.authorId)+'">'+esc(b.author)+'</a> · v'+esc(b.revision)+'</p><a href="/community/build/'+esc(b.id)+'/download" download>Скачать / Download .bricklab</a></article>').join('')
@@ -175,11 +181,11 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
      if(req.method==='PUT'){
       if(req.headers['content-type']?.split(';')[0].trim()!=='application/json')throw new ProjectError(415,'json_required')
       let size=0;const chunks=[]
-      for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>4096){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
+      for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>16384){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
       let data;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new ProjectError(400,'invalid_json')}
       await store.publishCard(user.id,validatePublicCard(data))
      }else if(req.method==='DELETE')await store.unpublishCard(user.id)
-     reply(res,200,{profile:publicCard(await store.getOwnCard(user.id))});return true
+     const card=publicCard(await store.getOwnCard(user.id),{owner:true});if(card&&store.reputation)card.reputation=publicReputation(await store.reputation(card.id));reply(res,200,{profile:card});return true
     }
     if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
     const image=/^\/api\/community\/build\/([^/]+)\/image\/([0-3])$/.exec(path)

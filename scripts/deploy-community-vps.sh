@@ -60,7 +60,7 @@ PGPASSWORD="$POSTGRES_PASSWORD" docker run --rm --network "$NET" \
     -e PGHOST="$DB" -e PGDATABASE=bricklab_browser_test -e PGUSER=bricklab_admin \
     -e PGPASSWORD -e BRICKLAB_APP_PASSWORD -v "$TMP/server/db:/migrations:ro" \
     postgres:16 sh /migrations/setup.sh
-for check in account_security.sql community_options.sql store_orders.sql notification_events.sql; do
+for check in account_security.sql community_options.sql store_orders.sql notification_events.sql unified_profile.sql; do
     docker exec -i -e PGPASSWORD="$POSTGRES_PASSWORD" "$DB" \
       psql -X -v ON_ERROR_STOP=1 -U bricklab_admin -d bricklab_browser_test \
       < "$TMP/server/db/tests/$check"
@@ -118,7 +118,7 @@ echo "=== START RELEASE ==="
 docker compose up -d --no-deps --no-build --wait --wait-timeout 120 bricklab
 curl -fsS http://127.0.0.1:8080/api/health
 curl -fsS https://bricklab-3d.ru/api/health
-curl -fsS https://bricklab-3d.ru/ | grep -F 'menu.js?v=events-1' >/dev/null
+curl -fsS https://bricklab-3d.ru/ | grep -F 'unified-profile.css?v=unified-1' >/dev/null
 curl -fsS 'https://bricklab-3d.ru/api/community/builds?sort=popular&week=1' >/dev/null
 trap - ERR
 echo

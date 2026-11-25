@@ -43,7 +43,7 @@ export function renderWorkshopOverview({lang,user,local,remote,busy,signal,previ
  }
  if(entries.length)recent.append(grid);else recent.append(node('p','workshop-empty',t.empty),button(t.newBuild,createBuild,busy))
  root.append(recent)
- const lower=node('div','workshop-overview-columns'),favorites=section(t.favorites,button(t.manage,()=>go('favorites'),busy)),published=section(t.published,button(t.manage,()=>go('publicProfile'),busy))
+ const lower=node('div','workshop-overview-columns'),favorites=section(t.favorites,button(t.manage,()=>go('favorites'),busy)),published=section(t.published,button(t.manage,()=>go('settings'),busy))
  const fav=activityData?.favorites??[]
  if(!fav.length)favorites.append(node('p','account-muted',activityData?t.noFavorites:t.loading))
  for(const f of fav.slice(0,4)){const row=node('div','workshop-overview-row'),label=node('div');label.append(node('strong',null,f.name),node('small','account-muted',t.revision+' '+f.revision));row.append(icon('icon-heart'),label,button(t.openCopy,()=>openCloud(f.id),busy));favorites.append(row)}
@@ -56,7 +56,7 @@ export function renderWorkshopOverview({lang,user,local,remote,busy,signal,previ
   if(b.imageCount>0&&/^[0-9a-f-]{36}$/i.test(b.id)){const img=node('img');img.alt='';img.loading='lazy';img.src='/api/community/build/'+b.id+'/image/0';img.onload=()=>{if(!signal.aborted)art.replaceChildren(img)}}
   const label=node('div');label.append(node('strong',null,b.title),node('small','account-muted',t.revision+' '+b.revision));row.append(art,label);published.append(row)
  }
- lower.append(favorites,published)
+ lower.append(favorites);if(!publicCard)lower.append(published)
  const activity=section(t.activity,button(t.manage,()=>go('notifications'),busy)),awards=section(t.award,button(t.manage,()=>go('achievements'),busy))
  const events=activityData?.events??[]
  if(!events.length)activity.append(node('p','account-muted',activityData?t.noActivity:t.loading))
