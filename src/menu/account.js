@@ -117,7 +117,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    row.append(control(s.open,async()=>{const item=await cloud.get(p.id);openCopy(item.document,{ownerId:user.id,id:item.id,revision:item.revision})},true),
      control(s.download,async()=>download((await cloud.get(p.id)).document)),
      control(s.history,async()=>{if(historyId===p.id){historyId=null;history=[]}else{history=await cloud.revisions(p.id);historyId=p.id}}))
-   const publish=action(s.managePublic,()=>{section='workshop';location.hash='#account';render()});publish.disabled=busy;row.append(publish)
+   const publish=action(s.managePublic,()=>{section='publicProfile';location.hash='#account';render()});publish.disabled=busy;row.append(publish)
    const favorite=activityData?.favorites.some(f=>f.id===p.id)
    if(activityData)row.append(control(favorite?s.favoriteRemove:s.favoriteAdd,async()=>{activityData=await activityApi.favorite(p.id,!favorite)}))
    if(historyId===p.id)for(const rev of history){
