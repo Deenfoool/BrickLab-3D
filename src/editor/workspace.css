@@ -133,3 +133,6 @@
 .editor[data-workspace-presentation] .workspace-context .workspace-control:not([data-workspace-control=focus],[data-workspace-control=presentation]),
 .editor[data-workspace-presentation] .workspace-context :is([data-el=wires],[data-el=editCable]){display:none}
 .editor[data-workspace-presentation] .workspace-context{justify-content:flex-end}
+
+.editor[data-workspace-presentation] :is(.editor-axle-handles,.editor-selection-frame,.editor-empty,.workspace-status,.part-context){display:none!important}
+.editor[data-workspace-presentation]{grid-template-rows:auto auto minmax(0,1fr)}
