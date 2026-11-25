@@ -34,7 +34,7 @@ export function loadCoreModels() {
 
 async function newLoader() {
   const loader = new LDrawLoader().setConditionalLineMaterial(LDrawConditionalLineMaterial)
-  fallbackMaterials ??= fetch(new URL('material-fallbacks.ldr', filesRoot)).then(response => {
+  fallbackMaterials ??= fetch(new URL('material-fallbacks.ldr?v=full-palette', filesRoot)).then(response => {
     if (!response.ok) throw Error(`LDraw materials: HTTP ${response.status}`)
     return response.text()
   }).catch(error => {
