@@ -15,6 +15,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  telegram:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Telegram worker syntax and security regression tests
+        run: |
+          python3 -m py_compile scripts/bricklab-control.py scripts/bricklab-control-snapshot.py
+          bash -n scripts/install-bricklab-control.sh
+          python3 -B tests/telegram_events_test.py
+          python3 -B tests/telegram_control_test.py
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
