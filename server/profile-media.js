@@ -7,8 +7,8 @@ export const backgrounds=[
  {id:'first-build',source:'achievement',priceRub:0},
  ...themes.map(t=>({id:t.id,source:'purchase',priceRub:t.priceRub}))
 ]
-export function backgroundInventory(awards,entitlements){
- return backgrounds.map(b=>({...b,owned:b.source==='free'||(b.source==='achievement'&&awards.some(a=>a.award==='firstCloudSave'))||entitlements.some(e=>e.item===b.id),purchaseEnabled:false}))
+export function backgroundInventory(awards,entitlements,{admin=false}={}){
+ return backgrounds.map(b=>{const adminAccess=admin===true&&b.source==='purchase';return {...b,owned:adminAccess||b.source==='free'||(b.source==='achievement'&&awards.some(a=>a.award==='firstCloudSave'))||entitlements.some(e=>e.item===b.id),...(adminAccess?{adminAccess:true}:{}),purchaseEnabled:false}})
 }
 export function imageFormat(bytes,mime){
  const png=bytes.length>=8&&bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
