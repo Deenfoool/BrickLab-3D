@@ -49,7 +49,7 @@ export function validateComment(value){
 export function publicReputation(r){
  return {builds:Number(r?.builds??0),likes:Number(r?.likes??0),downloads:Number(r?.downloads??0),followers:Number(r?.followers??0),score:Number(r?.score??0)}
 }
-function publicComment(r){return {id:r.id,parentId:r.parentId,parentAuthor:r.parentAuthor??null,authorId:r.authorId,author:r.author,body:r.body,createdAt:r.createdAt,avatarUrl:r.authorHasAvatar===true&&uuid.test(r.authorId)?'/api/community/profile/'+r.authorId+'/avatar':null}}
+export function publicComment(r){return {authorTheme:backgroundIds.includes(r.authorTheme)?r.authorTheme:null,id:r.id,parentId:r.parentId,parentAuthor:r.parentAuthor??null,authorId:r.authorId,author:r.author,body:r.body,createdAt:r.createdAt,avatarUrl:r.authorHasAvatar===true&&uuid.test(r.authorId)?'/api/community/profile/'+r.authorId+'/avatar':null}}
 function discussionOffset(url){const raw=new URL(url,'http://localhost').searchParams.get('offset')??'0';if(!/^\d{1,5}$/.test(raw)||Number(raw)>10000)throw new ProjectError(400,'invalid_gallery_query');return Number(raw)}
 async function discussionBody(req){
  if(req.headers['content-type']?.split(';')[0].trim()!=='application/json')throw new ProjectError(415,'json_required')
@@ -58,7 +58,7 @@ async function discussionBody(req){
  try{return JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new ProjectError(400,'invalid_json')}
 }
 export function publicBuild(row){
- return row?{id:row.id,authorId:row.authorId,author:row.author,authorAvatarUrl:row.authorHasAvatar===true&&uuid.test(row.authorId)?'/api/community/profile/'+row.authorId+'/avatar':null,title:row.title,description:row.description,revision:row.revision,category:row.category??'other',partCount:row.partCount??0,likes:row.likes??0,views:row.views??0,downloads:row.downloads??0,publishedAt:row.publishedAt,allowDownload:row.allowDownload!==false,allowComments:row.allowComments!==false,allowRemix:row.allowRemix===true,difficulty:row.difficulty??'unspecified',tags:row.tags??[],workType:row.workType??'original',attribution:row.attribution??'',originId:row.originId??null,imageCount:row.imageCount??0}:null
+ return row?{authorTheme:backgroundIds.includes(row.authorTheme)?row.authorTheme:null,id:row.id,authorId:row.authorId,author:row.author,authorAvatarUrl:row.authorHasAvatar===true&&uuid.test(row.authorId)?'/api/community/profile/'+row.authorId+'/avatar':null,title:row.title,description:row.description,revision:row.revision,category:row.category??'other',partCount:row.partCount??0,likes:row.likes??0,views:row.views??0,downloads:row.downloads??0,publishedAt:row.publishedAt,allowDownload:row.allowDownload!==false,allowComments:row.allowComments!==false,allowRemix:row.allowRemix===true,difficulty:row.difficulty??'unspecified',tags:row.tags??[],workType:row.workType??'original',attribution:row.attribution??'',originId:row.originId??null,imageCount:row.imageCount??0}:null
 }
 export function publicCard(row){
  if(!row)return null
