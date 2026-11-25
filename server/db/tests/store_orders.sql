@@ -32,6 +32,10 @@ BEGIN
  IF NOT bricklab.confirm_test_order(first_order.invoice,9900) THEN RAISE EXCEPTION 'Retry rejected'; END IF;
  IF (SELECT count(*) FROM bricklab.store_test_entitlements WHERE invoice=first_order.invoice)<>1 THEN RAISE EXCEPTION 'Test entitlement missing or duplicated'; END IF;
  IF EXISTS(SELECT 1 FROM bricklab.cosmetic_entitlements WHERE item='carbon') THEN RAISE EXCEPTION 'Test payment unlocked real inventory'; END IF;
+ IF (SELECT count(*) FROM bricklab.store_products WHERE active)<>6 THEN RAISE EXCEPTION 'Theme catalog incomplete'; END IF;
+ SELECT * INTO second_order FROM bricklab.create_test_order('aurora');
+ IF second_order.amount_kopecks<>19900 OR NOT bricklab.confirm_test_order(second_order.invoice,19900) THEN RAISE EXCEPTION 'New theme checkout failed'; END IF;
+ IF EXISTS(SELECT 1 FROM bricklab.cosmetic_entitlements WHERE item='aurora') THEN RAISE EXCEPTION 'Test theme unlocked actual inventory'; END IF;
  PERFORM set_config('bricklab.user_id',reader::text,true);
  IF EXISTS(SELECT 1 FROM bricklab.store_test_orders WHERE invoice=first_order.invoice) THEN RAISE EXCEPTION 'Private order leaked'; END IF;
  IF EXISTS(SELECT 1 FROM bricklab.store_test_entitlements WHERE invoice=first_order.invoice) THEN RAISE EXCEPTION 'Private entitlement leaked'; END IF;
