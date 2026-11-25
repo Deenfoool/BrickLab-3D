@@ -60,7 +60,7 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
   let raw
   try { raw=localStorage.getItem(KEY) } catch {}
   const settings=readWorkspace(raw,Boolean(panels.instruction))
-  let mode='build', focus=false, presentation=false, gridOn=grid, axesOn=axes, saveState='initial'
+  let mode='build', focus=false, presentation=false, gridOn=grid, axesOn=axes, saveState='initial', canPresent=true
   const remember=()=>{try{localStorage.setItem(KEY,JSON.stringify(settings))}catch{}}
   const bar=root.querySelector('.editor-bar'), actions=root.querySelector('.editor-actions')
   const back=root.querySelector('.editor-back'), name=el('name')
@@ -170,7 +170,7 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     pin.disabled=mode!=='build'
     view.disabled=small
     for(const b of Object.values(tabs))b.disabled=!panelMode
-    cameraBtn.disabled=mode==='testDrive'
+    cameraBtn.disabled=mode==='testDrive'||(!canPresent&&!presentation)
     pressed(lib,left);pressed(pin,settings.pin);pressed(view,!floating)
     pressed(gridBtn,gridOn&&!presentation);pressed(axesBtn,axesOn&&!presentation)
     pressed(focusBtn,focus);pressed(cameraBtn,presentation)
@@ -178,6 +178,7 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     dividerLeft.hidden=floating||!left
     dividerRight.hidden=floating||!right
     scene.setWorkspaceHelpers(gridOn&&!presentation,axesOn&&!presentation)
+    scene.setWorkspacePresentation(presentation)
   }
   function openPanel(id){
     if(!panels[id])return
@@ -187,6 +188,7 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     expand(id);remember();apply()
   }
   function togglePanel(id){
+    if(focus){openPanel(id);return}
     focus=presentation=false
     const p=settings.modes[mode]
     if(id==='library'){p.library=!p.library;if(p.library)expand(id)}
@@ -258,7 +260,8 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     status.setAttribute('aria-label',status.title)
     status.textContent=ok?'✓':'!'
   }
-  function render(nextMode,tool,partCount,linkCount,canQuick){
+  function render(nextMode,tool,partCount,linkCount,canQuick,idle){
+    canPresent=idle
     if(mode!==nextMode){mode=nextMode;focus=presentation=false}
     title.textContent=name.value||tr('Новая сборка','New build')
     counts.textContent=tr('Деталей: ','Parts: ')+partCount+' · '+tr('Связей: ','Links: ')+linkCount
@@ -275,5 +278,5 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     for(const name of ['data-workspace-layout','data-workspace-mode','data-workspace-focus','data-workspace-presentation','data-workspace-left','data-workspace-right'])root.removeAttribute(name)
     root.style.removeProperty('--workspace-left');root.style.removeProperty('--workspace-right')
   },{once:true})
-  return {render,setSaved,openPanel,placed(){if(!settings.pin&&mode==='build'){settings.modes.build.library=false;remember();apply()}}}
+  return {render,setSaved,openPanel,exitPresentation(){if(presentation){focus=presentation=false;apply()}},placed(){if(!settings.pin&&mode==='build'){settings.modes.build.library=false;remember();apply()}}}
 }
