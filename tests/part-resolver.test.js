@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { resolvePart, resolveInventoryPart, enrichInventory, normalizeDocumentDesigns, loadPartIndex } from '../src/catalog/part-resolver.js?v=catalog-engine-1'
-import { mapInventory, inventoryUsage } from '../src/sets/data.js'
+import { mapInventory, inventoryUsage, auditInventory } from '../src/sets/data.js'
 
 test('66906 uses the existing 6628 model with the original inventory number and colour', () => {
   const model = { design: '6628', color: '#aaaaaa' }
@@ -59,4 +59,9 @@ test('automatic index loads once and retains last valid snapshot after an invali
   assert.equal(resolvePart('official', catalog).design, 'a')
   await loadPartIndex({ fetcher: async () => Response.json({ schema: 1, aliases: { '../bad': 'a' } }), now: 1_000_000 })
   assert.equal(resolvePart('official', catalog).design, 'a')
+})
+
+test('coverage counts quantities, ignores spares and distinguishes uncertain replacements', () => {
+  const rows = mapInventory([{partNum:'66906', quantity:3},{partNum:'6628',quantity:4},{partNum:'x',quantity:2,ldraw:['6628','a']},{partNum:'missing',quantity:5},{partNum:'6628',quantity:8,spare:true}], {'6628':{},a:{}})
+  assert.deepEqual(auditInventory(rows), {exact:4,alias:3,external:0,ambiguous:2,missing:5})
 })
