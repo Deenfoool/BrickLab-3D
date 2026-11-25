@@ -137,7 +137,11 @@ BEGIN
   'newBuilds',(SELECT count(*) FROM bricklab.notification_outbox WHERE kind='build' AND created_at>=start_at AND created_at<end_at),
   'comments',(SELECT count(*) FROM bricklab.community_comments WHERE created_at>=start_at AND created_at<end_at),
   'reports',(SELECT count(*) FROM bricklab.community_build_reports WHERE resolved_at IS NULL)+(SELECT count(*) FROM bricklab.community_comment_reports WHERE resolved_at IS NULL),
-  'testPaid',(SELECT count(*) FROM bricklab.store_test_orders WHERE paid_at>=start_at AND paid_at<end_at)
+  'testPaid',(SELECT count(*) FROM bricklab.store_test_orders WHERE paid_at>=start_at AND paid_at<end_at),
+  'likes',(SELECT count(*) FROM bricklab.community_likes),
+  'downloads',(SELECT count(*) FROM bricklab.community_events WHERE kind='download'),
+  'views',(SELECT count(*) FROM bricklab.community_events WHERE kind='view'),
+  'follows',(SELECT count(*) FROM bricklab.community_follows)
  ));
 END $$;
 REVOKE ALL ON FUNCTION bricklab.prepare_notification_digest() FROM PUBLIC,bricklab_app;
