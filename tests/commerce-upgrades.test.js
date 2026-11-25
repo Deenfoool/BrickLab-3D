@@ -106,5 +106,19 @@ test('real PostgreSQL enforces extended quota, collection ownership and badge pr
   await pendingTest('slots-100',34900)
   assert.equal((await store.getActivity(uid)).limits.projects,40)
   assert.equal((await store.getProfile(uid)).plus,false)
+  await db`update bricklab.users set email_verified_at=now() where id=${uid}`
+  const terms='a'.repeat(64)
+  const quote=await store.quoteCommerceLive(uid,'slots-20',terms)
+  assert.equal(quote.amountKopecks,9900)
+  await assert.rejects(store.createCommerceLiveOrder(uid,'slots-20',1,terms),/quote_changed/)
+  const live=await store.createCommerceLiveOrder(uid,'slots-20',quote.amountKopecks,terms)
+  const payment=crypto.randomUUID()
+  assert.equal(await store.attachCommercePayment(live.id,payment,'live'),true)
+  assert.equal(await store.fulfillCommercePayment(live.id,payment,'test',9900),false)
+  assert.equal(await store.fulfillCommercePayment(live.id,payment,'live',9900),true)
+  assert.equal(await store.fulfillCommercePayment(live.id,payment,'live',9900),true)
+  assert.equal((await store.getActivity(uid)).limits.projects,60)
+  const [receipt]=await db`select receipt_status,offer_version from bricklab.commerce_orders where id=${live.id}`
+  assert.equal(receipt.receipt_status,'pending');assert.equal(receipt.offer_version,terms)
  }finally{await store.close();await db.end()}
 })
