@@ -161,6 +161,34 @@ def catalog_designs(path):
     return {str(design).lower() for design in designs if ID.fullmatch(str(design).lower())}
 
 
+def audit_inventories(folder, available, aliases):
+    results = {}
+    for path in sorted(folder.glob("*.json")):
+        value = read_json(path, {})
+        if not isinstance(value, dict) or not isinstance(value.get("inventory"), list):
+            continue
+        counts = dict(exact=0, alias=0, external=0, ambiguous=0, missing=0)
+        for item in value["inventory"]:
+            if not isinstance(item, dict) or item.get("spare"):
+                continue
+            number = str(item.get("partNum", "")).lower()
+            quantity = item.get("quantity", 0)
+            if not isinstance(quantity, int) or quantity < 1:
+                continue
+            if number in available:
+                status = "exact"
+            elif number in aliases:
+                status = "alias"
+            else:
+                candidates = {candidate if candidate in available else aliases.get(candidate)
+                              for candidate in (item.get("ldraw") or []) if isinstance(candidate, str)}
+                candidates.discard(None)
+                status = "external" if len(candidates) == 1 else "ambiguous" if candidates else "missing"
+            counts[status] += quantity
+        results[str(value.get("number", path.stem))] = counts
+    return results
+
+
 def rows(path):
     with gzip.open(path, "rt", encoding="utf-8-sig", newline="") as source:
         yield from csv.DictReader(source)
@@ -251,6 +279,7 @@ def main():
         result["elementRevision"] = revision
     if element_error:
         result["elementRefreshError"] = element_error
+    result["staticCoverage"] = audit_inventories(args.catalog.parent / "sets", available, aliases)
     payload = json.dumps(result, separators=(",", ":")).encode()
     if len(payload) > MAX_INDEX:
         raise ValueError("index exceeds client limit")
