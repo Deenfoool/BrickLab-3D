@@ -5,7 +5,7 @@ import {
   instructionPagePreview,
   instructionSources,
 } from './instruction-sources.js?v=browser-recognition'
-import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=element-search'
+import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=commerce-regions-1'
 import { canonicalInstructionUrl } from './instruction-url.js'
 import { createInstructionPdfReader } from './instruction-pdf.js?v=same-origin-pdf'
 
@@ -275,7 +275,7 @@ export function mountInstructions(
     if(!local&&canonicalInstructionUrl(entry.url)&&findPart){
       try{
         const query=new URLSearchParams({set:progress.set.number,book:entry.url,page:String(pageNumber)})
-        const response=await fetch('/api/commerce/instruction-access?'+query,{signal,credentials:'same-origin',cache:'no-store'})
+        const response=await fetch('/api/commerce/instruction-access?'+query,{signal:AbortSignal.any([signal,AbortSignal.timeout(3000)]),credentials:'same-origin',cache:'no-store'})
         if(response.ok){const policy=await response.json();interactive=policy.interactive!==false}
       }catch{/* OBT/offline compatibility; paid mode must not be enabled until server-side recognition is protected. */}
     }
