@@ -42,6 +42,7 @@ docker run --rm --network none --memory=1536m --cpus=1 \
     2>&1 | tee /tmp/bricklab-hub-tests.log
 
 echo "=== TELEGRAM WORKER TESTS ==="
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local node --check scripts/miniapp.js
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_events_test.py
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_test.py
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_actions_test.py
