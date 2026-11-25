@@ -1,5 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import {createPaymentsHandler,paymentConfig} from './payments.js'
+import {createYookassaAdapter} from './yookassa.js'
+import {createInstructionRegions} from './instruction-regions.js'
 import { createBrickLabServer } from './http.js'
 import { createInstructionsHandler } from './instructions.js'
 import { createInstructionFetch } from './instruction-fetch.js'
@@ -24,7 +26,7 @@ if (process.env.PGPASSWORD) {
   try {
     await store.ready()
     const origin=process.env.PUBLIC_ORIGIN||'http://localhost:8080',registrationEnabled=process.env.BRICKLAB_REGISTRATION_ENABLED==='true'
-    payments=createPaymentsHandler({store,origin,config:paymentConfig()})
+    payments=createPaymentsHandler({store,origin,config:paymentConfig(),yookassa:createYookassaAdapter({store,origin}),regions:createInstructionRegions(fileURLToPath(new URL('../catalog/sets/',import.meta.url)))})
     security=createAccountSecurityHandler({store,origin,registrationEnabled,mail:createMailer()})
     auth = createAuthHandler({ store, origin: process.env.PUBLIC_ORIGIN || 'http://localhost:8080',
       registrationEnabled: registrationEnabled && new URL(origin).protocol==='http:',
