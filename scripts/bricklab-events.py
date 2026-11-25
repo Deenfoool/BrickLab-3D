@@ -12,7 +12,6 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from zoneinfo import ZoneInfo
 
 ROOT = "/opt/bricklab-cloud"
 CONFIG = "/etc/bricklab-backup/telegram.json"
@@ -120,7 +119,7 @@ def message(event):
         add("Администрирование",ORIGIN+"/#account/admin/overview")
     else:
         raise RuntimeError("unknown_event")
-    stamp=datetime.datetime.fromisoformat(event["created_at"]).astimezone(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y %H:%M МСК")
+    stamp=datetime.datetime.fromisoformat(event["created_at"]).astimezone(datetime.timezone(datetime.timedelta(hours=3))).strftime("%d.%m.%Y %H:%M МСК")
     return {"text":body+"\n\n"+stamp, "reply_markup":{"inline_keyboard":buttons},
             "link_preview_options":{"is_disabled":True}, "protect_content":True,
             "disable_notification":kind in ("daily","build_update","moderation")}
