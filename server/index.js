@@ -1,5 +1,9 @@
 import { fileURLToPath } from 'node:url'
 import {createPaymentsHandler,paymentConfig} from './payments.js'
+import {createYookassaAdapter} from './yookassa.js'
+import {createInstructionRegions} from './instruction-regions.js'
+import {loadInstructionPolicy} from './instruction-access.js'
+import {loadApprovedLegal,liveCommerceConfig} from './legal-release.js'
 import { createBrickLabServer } from './http.js'
 import { createInstructionsHandler } from './instructions.js'
 import { createInstructionFetch } from './instruction-fetch.js'
@@ -17,14 +21,21 @@ import { createCommunityHandler } from './community.js'
 const host = process.env.HOST || '0.0.0.0'
 const port = Number(process.env.PORT || 8080)
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer from 1 to 65535')
-let store, auth, projects, profile, activity, community, bureau, security, payments, cleanup
+let store, auth, projects, profile, activity, community, bureau, security, payments, cleanup, legal
 if (process.env.PGPASSWORD) {
   const { connectAuthStore } = await import('./db/auth-store.js')
   store = connectAuthStore()
   try {
     await store.ready()
     const origin=process.env.PUBLIC_ORIGIN||'http://localhost:8080',registrationEnabled=process.env.BRICKLAB_REGISTRATION_ENABLED==='true'
-    payments=createPaymentsHandler({store,origin,config:paymentConfig()})
+    const instructionPolicy=await loadInstructionPolicy(process.env.BRICKLAB_PRIVATE_INSTRUCTION_AUDIT||'')
+    const instructionRelease=process.env.BRICKLAB_INSTRUCTIONS_RELEASE==='true'
+    if(instructionRelease&&!instructionPolicy.count)throw Error('Paid instructions require a nonempty private audit')
+    legal=await loadApprovedLegal({directory:fileURLToPath(new URL('../assets/legal/',import.meta.url)),approvalFile:process.env.BRICKLAB_COMMERCE_APPROVAL_FILE||''})
+    const liveConfig=liveCommerceConfig(process.env,legal)
+    // Live HTTP checkout remains disabled in this revision pending refund and receipt reconciliation tests.
+    const liveYookassa=createYookassaAdapter({store,origin,config:{...liveConfig,enabled:false}})
+    payments=createPaymentsHandler({store,origin,config:paymentConfig(),legal,liveYookassa,instructionPolicy,instructionRelease,yookassa:createYookassaAdapter({store,origin}),regions:createInstructionRegions(fileURLToPath(new URL('../catalog/sets/',import.meta.url)))})
     security=createAccountSecurityHandler({store,origin,registrationEnabled,mail:createMailer()})
     auth = createAuthHandler({ store, origin: process.env.PUBLIC_ORIGIN || 'http://localhost:8080',
       registrationEnabled: registrationEnabled && new URL(origin).protocol==='http:',
@@ -41,7 +52,7 @@ if (process.env.PGPASSWORD) {
   }
 }
 const instructionFetch = createInstructionFetch({ proxy: process.env.BRICKLAB_INSTRUCTIONS_PROXY || '' })
-const server = createBrickLabServer({ root: fileURLToPath(new URL('../', import.meta.url)), auth, projects, profile, activity, community, bureau, security, payments,
+const server = createBrickLabServer({ root: fileURLToPath(new URL('../', import.meta.url)), auth, projects, profile, activity, community, bureau, security, payments, approvedLegal:legal,
   instructions: createInstructionsHandler({ fetcher: instructionFetch }),
   rebrickable:createRebrickableHandler({apiKey:process.env.BRICKLAB_REBRICKABLE_API_KEY || ''}), cspReport:createCspReportHandler() })
 server.on('error', async error => {

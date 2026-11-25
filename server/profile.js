@@ -1,15 +1,16 @@
 import { createHash } from 'node:crypto'
 import { ProjectError } from './projects.js'
 import { backgrounds,mediaLimits,normalizeImage } from './profile-media.js'
-import {productById} from '../src/menu/commerce-catalog.js'
+import {productById,themePrices} from '../src/menu/commerce-catalog.js'
 export function validateProfile(value){
  if(!value||typeof value!=='object'||Array.isArray(value)||typeof value.bio!=='string'||value.bio.length>500||
   /[\u0000-\u0008\u000b-\u001f\u007f]/.test(value.bio)||/[\ud800-\udfff]/u.test(value.bio)||
   !['blueprint','graphite','amber'].includes(value.cover))throw new ProjectError(400,'invalid_profile')
  if(value.background!==undefined&&!backgrounds.some(b=>b.id===value.background))throw new ProjectError(400,'invalid_profile')
  if(value.displayName!==undefined&&(typeof value.displayName!=='string'||!value.displayName.trim()||value.displayName.length>80||/[\u0000-\u001f\u007f]/.test(value.displayName)||/[\ud800-\udfff]/u.test(value.displayName)))throw new ProjectError(400,'invalid_profile')
+ if(value.plusTheme!==undefined&&(typeof value.plusTheme!=='string'||!Object.hasOwn(themePrices,value.plusTheme)))throw new ProjectError(400,'invalid_profile')
  if(value.supportBadge!==undefined&&value.supportBadge!==null&&productById(value.supportBadge)?.kind!=='badge')throw new ProjectError(400,'invalid_profile')
- return {bio:value.bio.trim(),cover:value.cover,...(value.supportBadge===undefined?{}:{supportBadge:value.supportBadge}),...(value.displayName===undefined?{}:{displayName:value.displayName.trim()}),...(value.background===undefined?{}:{background:value.background})}
+ return {bio:value.bio.trim(),cover:value.cover,...(value.plusTheme===undefined?{}:{plusTheme:value.plusTheme}),...(value.supportBadge===undefined?{}:{supportBadge:value.supportBadge}),...(value.displayName===undefined?{}:{displayName:value.displayName.trim()}),...(value.background===undefined?{}:{background:value.background})}
 }
 export function awardProgress(awards){
  const ids=new Set(awards.map(a=>a.award))
@@ -59,7 +60,7 @@ export function createProfileHandler({store,origin,logger=console}){
     }finally{active--}
    }
    const p=await store.getProfile(user.id)
-   reply(res,200,{profile:{bio:p.bio,cover:p.cover,background:p.background,displayName:p.displayName??null,avatarUrl:p.avatarUrl,coverUrl:p.coverUrl},inventory:p.inventory,supportBadges:p.supportBadges??[],supportBadge:p.supportBadge??null,progress:awardProgress(p.awards)})
+   reply(res,200,{profile:{bio:p.bio,cover:p.cover,background:p.background,displayName:p.displayName??null,avatarUrl:p.avatarUrl,coverUrl:p.coverUrl},inventory:p.inventory,plus:p.plus===true,plusUntil:p.plusUntil??0,plusTheme:p.plusTheme??{chosen:null,nextChangeAt:0},loyalty:p.loyalty??{days:0,milestones:[]},supportBadges:p.supportBadges??[],supportBadge:p.supportBadge??null,progress:awardProgress(p.awards)})
   }catch(e){if(e instanceof ProjectError)reply(res,e.status,{error:e.message});else{logger.error('Profile operation failed:',e.code||e.name);reply(res,503,{error:'profile_unavailable'})}}
   return true
  }

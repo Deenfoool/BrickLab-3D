@@ -22,6 +22,8 @@ const types = {
 }
 
 function publicPath(name) {
+  // Precomputed annotations must pass through the access-checked API.
+  if(/^catalog\/sets\/(?:instruction-part-index|\d+(?:-\d+)?-parts-by-page)\.json$/.test(name))return false
   const segments = name.split('/')
   return name === 'index.html' || (segments.length > 1 && directories.has(segments[0]) &&
     segments.every(part => part && !part.startsWith('.')) &&
@@ -43,7 +45,7 @@ function rangeOf(header, size) {
     ? { start: first, end: last } : null
 }
 
-export function createBrickLabServer({ root, logger = console, auth, projects, profile, activity, community, bureau, security, rebrickable, cspReport, payments, instructions = createInstructionsHandler() } = {}) {
+export function createBrickLabServer({ root, logger = console, auth, projects, profile, activity, community, bureau, security, rebrickable, cspReport, payments, approvedLegal=null, instructions = createInstructionsHandler() } = {}) {
   const base = realpathSync(root)
   const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff')
@@ -73,13 +75,17 @@ export function createBrickLabServer({ root, logger = console, auth, projects, p
         res.setHeader('Allow', 'GET, HEAD')
         return send(req, res, 405, 'Method not allowed')
       }
+      if (pathname === '/store') {
+        res.writeHead(302,{'Location':'/#store','Cache-Control':'no-store'});return res.end()
+      }
       if (pathname === '/api/health') {
         return send(req, res, 200, JSON.stringify({ status: 'ok', service: 'bricklab-3d' }), 'application/json; charset=utf-8')
       }
       if (pathname === '/api' || pathname.startsWith('/api/')) {
         return send(req, res, 404, JSON.stringify({ error: 'not_found' }), 'application/json; charset=utf-8')
       }
-      const name = pathname === '/' ? 'index.html' : pathname === '/requisites' ? 'assets/legal/requisites.html' : pathname.slice(1)
+      if(approvedLegal?.pages&&Object.hasOwn(approvedLegal.pages,pathname))return send(req,res,200,approvedLegal.pages[pathname],'text/html; charset=utf-8')
+      const name = pathname === '/' ? 'index.html' : pathname === '/requisites' ? 'assets/legal/requisites.html' : ['/offer','/privacy','/refund'].includes(pathname) ? 'assets/legal-public'+pathname+'.html' : pathname.slice(1)
       if (!publicPath(name)) return send(req, res, 404, 'Not found')
       let file, info
       try {

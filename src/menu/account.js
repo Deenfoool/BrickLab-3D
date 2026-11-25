@@ -4,9 +4,9 @@ import { createAuthClient } from './auth-client.js?v=security-1'
 
 import { createProjectsClient, cloudLink } from './projects-client.js?v=profile-gallery-1'
 
-import { renderCloudWorkshop } from './cloud-workshop.js?v=commerce-account-1'
+import { renderCloudWorkshop } from './cloud-workshop.js?v=commerce-plus-1'
 
-import {createProfileClient} from './profile-client.js?v=commerce-account-1'
+import {createProfileClient} from './profile-client.js?v=commerce-plus-1'
 
 import {createActivityClient} from './activity-client.js?v=notifications-1'
 

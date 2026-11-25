@@ -55,6 +55,20 @@ test('real PostgreSQL enforces extended quota, collection ownership and badge pr
   const base={bio:'',cover:'blueprint'}
   await assert.rejects(store.saveProfile(uid,{...base,background:'carbon'}),/background_locked/)
   await assert.rejects(store.saveProfile(uid,{...base,supportBadge:'supporter'}),/badge_locked/)
+  await assert.rejects(store.saveProfile(uid,{...base,plusTheme:'carbon'}),/plus_required/)
+  const secondPlus=await grant('plus-1','subscription','',new Date(Date.now()+86400000))
+  await store.saveProfile(uid,{...base,plusTheme:'carbon'})
+  assert.equal((await store.getProfile(uid)).plusTheme.chosen,'carbon')
+  await assert.rejects(store.saveProfile(uid,{...base,plusTheme:'neon'}),/plus_theme_cooldown/)
+  await store.saveProfile(uid,{...base,background:'carbon'})
+  await store.publishCard(uid,{displayName:'Commerce fixture',bio:'',showBackground:true})
+  const publicId=(await store.getOwnCard(uid)).id
+  assert.equal((await store.getPublicCard(publicId)).backgroundTheme,'carbon')
+  assert.equal((await store.getPublicCard(publicId)).plus,true)
+  await db`update bricklab.commerce_grants set revoked_at=now() where order_id=${secondPlus}`
+  assert.equal((await store.getProfile(uid)).background,'default')
+  assert.equal((await store.getPublicCard(publicId)).backgroundTheme,'default')
+  assert.equal((await store.getPublicCard(publicId)).plus,false)
   await grant('theme-collection','themeBundle')
   assert.equal((await store.getProfile(uid)).inventory.filter(x=>x.source==='purchase'&&x.owned).length,6)
   await store.saveProfile(uid,{...base,background:'carbon'})
@@ -69,5 +83,42 @@ test('real PostgreSQL enforces extended quota, collection ownership and badge pr
   await db`update bricklab.commerce_grants set revoked_at=now() where order_id=${badge}`
   assert.equal((await store.getPublicCard(card.id)).supportBadge,null)
   assert.equal((await store.getProfile(uid)).supportBadge,null)
+  // Test payments are verified by adapter; this exercises the actual DB
+  // transaction independently of an external payment provider.
+  async function pendingTest(sku,amount){
+   const [o]=await db`insert into bricklab.commerce_orders(user_id,sku,title,amount_kopecks,provider,environment)
+    values(${uid},${sku},${sku},${amount},'yookassa','test') returning id`
+   const payment=crypto.randomUUID()
+   assert.equal(await store.attachCommercePayment(o.id,payment,'live'),false)
+   assert.equal(await store.attachCommercePayment(o.id,payment,'test'),true)
+   assert.equal(await store.fulfillCommercePayment(o.id,payment,'test',amount+1),false)
+   assert.equal(await store.fulfillCommercePayment(o.id,payment,'test',amount),true)
+   assert.equal(await store.fulfillCommercePayment(o.id,payment,'test',amount),true)
+   const [g]=await db`select count(*)::int as n from bricklab.commerce_grants where order_id=${o.id}`
+   assert.equal(g.n,1)
+   return o.id
+  }
+  const p1=await pendingTest('plus-1',24900),p2=await pendingTest('plus-3',64900)
+  const [g1]=await db`select expires_at from bricklab.commerce_grants where order_id=${p1}`
+  const [g2]=await db`select granted_at,expires_at from bricklab.commerce_grants where order_id=${p2}`
+  assert.equal(+g1.expires_at,+g2.granted_at)
+  assert.ok(+g2.expires_at>+g1.expires_at)
+  await pendingTest('slots-100',34900)
+  assert.equal((await store.getActivity(uid)).limits.projects,40)
+  assert.equal((await store.getProfile(uid)).plus,false)
+  await db`update bricklab.users set email_verified_at=now() where id=${uid}`
+  const terms='a'.repeat(64)
+  const quote=await store.quoteCommerceLive(uid,'slots-20',terms)
+  assert.equal(quote.amountKopecks,9900)
+  await assert.rejects(store.createCommerceLiveOrder(uid,'slots-20',1,terms),/quote_changed/)
+  const live=await store.createCommerceLiveOrder(uid,'slots-20',quote.amountKopecks,terms)
+  const payment=crypto.randomUUID()
+  assert.equal(await store.attachCommercePayment(live.id,payment,'live'),true)
+  assert.equal(await store.fulfillCommercePayment(live.id,payment,'test',9900),false)
+  assert.equal(await store.fulfillCommercePayment(live.id,payment,'live',9900),true)
+  assert.equal(await store.fulfillCommercePayment(live.id,payment,'live',9900),true)
+  assert.equal((await store.getActivity(uid)).limits.projects,60)
+  const [receipt]=await db`select receipt_status,offer_version from bricklab.commerce_orders where id=${live.id}`
+  assert.equal(receipt.receipt_status,'pending');assert.equal(receipt.offer_version,terms)
  }finally{await store.close();await db.end()}
 })

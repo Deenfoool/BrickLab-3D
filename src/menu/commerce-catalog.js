@@ -33,12 +33,13 @@ export function productById(id){return commerceProducts.find(p=>p.id===id)}
 // purchases of storage therefore accumulate, but replaying one grant does not.
 export function projectAccount(grants=[],now=Date.now()){
  const limits={...BASE_LIMITS},seen=new Set(),badges=new Set(),instructions=new Set(),themes=new Set();
- let plus=false,plusUntil=0;
+ let plus=false,plusUntil=0;const future=[];
  for(const grant of grants){
   if(!grant||typeof grant.id!=='string'||!grant.id||seen.has(grant.id)||grant.revoked===true)continue;
   if(grant.expiresAt!==undefined&&(!Number.isFinite(grant.expiresAt)||grant.expiresAt<=now))continue;
   seen.add(grant.id);
   const p=productById(grant.sku);
+  if(Number.isFinite(grant.grantedAt)&&grant.grantedAt>now){if(p?.kind==='subscription'&&Number.isFinite(grant.expiresAt))future.push(grant);continue;}
   if(p?.kind==='storage'){limits.projects+=p.slots;limits.storageMiB+=p.storageMiB}
   if(p?.kind==='subscription'&&Number.isFinite(grant.expiresAt)){plus=true;plusUntil=Math.max(plusUntil,grant.expiresAt)}
   if(p?.kind==='badge')badges.add(p.id);
@@ -46,7 +47,7 @@ export function projectAccount(grants=[],now=Date.now()){
   if(grant.kind==='instruction'&&typeof grant.setId==='string'&&/^\d+-\d+$/.test(grant.setId))instructions.add(grant.setId);
   if(grant.kind==='theme'&&['carbon','neon','blueprint','titanium','ember','aurora'].includes(grant.themeId))themes.add(grant.themeId);
  }
- if(plus){limits.projects+=40;limits.storageMiB+=128;limits.versions=40}
+ if(plus){for(const g of future.sort((a,b)=>a.grantedAt-b.grantedAt))if(g.grantedAt<=plusUntil)plusUntil=Math.max(plusUntil,g.expiresAt);limits.projects+=40;limits.storageMiB+=128;limits.versions=40}
  return {limits,plus,plusUntil,badges:[...badges],instructions:[...instructions],themes:[...themes]};
 }
 // During OBT access stays unchanged; after release only supported sets with
@@ -75,4 +76,20 @@ export function bundlePrice(ownedThemes=[]){
 export function discountedPrice(kopecks,plus){
  if(!Number.isSafeInteger(kopecks)||kopecks<0)throw new RangeError('invalid_amount');
  return plus===true?Math.round(kopecks*(100-PLUS_DISCOUNT_PERCENT)/100):kopecks;
+}
+
+export const PLUS_THEME_CHANGE_MS=30*86400000;
+export function plusLoyalty(grants=[],now=Date.now()){
+ const spans=grants.filter(g=>productById(g?.sku)?.kind==='subscription'&&g.revoked!==true&&Number.isFinite(g.grantedAt)&&Number.isFinite(g.expiresAt)&&g.grantedAt<Math.min(g.expiresAt,now))
+ .map(g=>[g.grantedAt,Math.min(g.expiresAt,now)]).sort((a,b)=>a[0]-b[0]);
+ let total=0,start=0,end=0;
+ for(const [a,b] of spans){if(a>end){total+=end-start;start=a;end=b}else end=Math.max(end,b)}
+ total+=end-start;
+ const days=Math.floor(total/86400000);
+ return {days,milestones:[1,3,6,12].filter(m=>days>=m*30)};
+}
+export function plusThemeState(account,selection,now=Date.now()){
+ const chosen=account.plus&&Object.hasOwn(themePrices,selection?.theme??'')?selection.theme:null;
+ const changedAt=chosen?new Date(selection.changedAt).getTime():0;
+ return {chosen,nextChangeAt:chosen&&Number.isFinite(changedAt)?changedAt+PLUS_THEME_CHANGE_MS:0};
 }

@@ -5,7 +5,8 @@ import {
   instructionPagePreview,
   instructionSources,
 } from './instruction-sources.js?v=browser-recognition'
-import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=element-search'
+import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=commerce-regions-1'
+import { canonicalInstructionUrl } from './instruction-url.js'
 import { createInstructionPdfReader } from './instruction-pdf.js?v=same-origin-pdf'
 
 const maxUnknownPages = 5000
@@ -269,6 +270,21 @@ export function mountInstructions(
     previewStatus.hidden = false
     previewStatus.textContent = ru ? 'Загружаем страницу…' : 'Loading page…'
     const pageNumber = progress.page
+    // Access is checked only for canonical remote books. User PDFs and OBT remain free.
+    let interactive=true,serverOnly=false
+    const canonicalBook=canonicalInstructionUrl(entry.url)
+    const privatePdfId=canonicalBook?new URL(canonicalBook).pathname.match(/\/(\d+)\.pdf$/)?.[1]:null
+    if(!local&&canonicalBook&&findPart){
+      // Never fall back to client recognition when a remote policy check fails.
+      interactive=false
+      try{
+        const query=new URLSearchParams({set:progress.set.number,book:entry.url,page:String(pageNumber)})
+        const response=await fetch('/api/commerce/instruction-access?'+query,{signal:AbortSignal.any([signal,AbortSignal.timeout(3000)]),credentials:'same-origin',cache:'no-store'})
+        if(response.ok){const policy=await response.json();interactive=policy.interactive===true;serverOnly=policy.supported===true}
+      }catch{/* The original PDF is still available. Retry restores overlays when the API recovers. */}
+    }
+    if(signal.aborted)return
+    if(!interactive){recognitionStatus.textContent=ru?'Интерактивность недоступна. PDF и ручной поиск остаются доступны.':'Interactive access unavailable. PDF and manual search remain available.';recognitionStatus.hidden=false}
     const pageLabel = number => ru ? `Страница ${number} инструкции` : `Instruction page ${number}`
     if (!local && display?.image) {
       const { image, decoded, regions } = prepared?.image ? prepared : prepareInstructionPage(progress)
@@ -277,8 +293,8 @@ export function mountInstructions(
       if (ready) {
         image.alt = pageLabel(pageNumber)
         preview.append(image)
-        showPage(image.naturalWidth / image.naturalHeight, findPart &&
-          resolvePdfRegions(display.pdfId, source, pageNumber, entry.pages, null, signal, regions), signal)
+        showPage(image.naturalWidth / image.naturalHeight, interactive && findPart &&
+          (serverOnly?instructionPartRegions(progress.set.number,privatePdfId,pageNumber).catch(()=>[]):resolvePdfRegions(display.pdfId, source, pageNumber, entry.pages, null, signal, regions)), signal)
         if (entry.pages && pageNumber < entry.pages && !navigator.connection?.saveData) {
           const following = instructionPagePreview(progress.set.number, entry.url, pageNumber + 1)
           if (following?.image) {
@@ -308,7 +324,7 @@ export function mountInstructions(
       renderNavigation(books[progress.book] ?? entry)
       canvas.setAttribute('aria-label', pageLabel(shown))
       preview.append(canvas)
-      const regions = findPart && resolvePdfRegions(local ? null : display?.pdfId, source, shown, pages, canvas, signal)
+      const regions = interactive && findPart && (serverOnly?instructionPartRegions(progress.set.number,privatePdfId,shown).catch(()=>[]):resolvePdfRegions(local ? null : display?.pdfId, source, shown, pages, canvas, signal))
       showPage(canvas.width / canvas.height, regions, signal)
     } catch {
       if (signal.aborted) return
