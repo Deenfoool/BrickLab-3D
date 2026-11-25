@@ -50,8 +50,8 @@ export function createScene(host, models) {
   controls.maxDistance = 1800
   const gridSize = 1600
   const floor = new THREE.GridHelper(gridSize, gridSize / snapGrid, 0x475267, 0x2b3039)
-  const showGrid = readPreference('grid') !== 'off'
-  const showAxes = readPreference('axes') !== 'off'
+  let showGrid = readPreference('grid') !== 'off'
+  let showAxes = readPreference('axes') !== 'off'
   floor.visible = showGrid
   const frontArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 50, 0xffb01b, 15, 10)
   frontArrow.visible = false
@@ -94,15 +94,14 @@ export function createScene(host, models) {
   let active = true
   let selectedId
   let fitted = false
-  let lastAspect
   const resize = new ResizeObserver(() => {
     const { clientWidth: width, clientHeight: height } = host
     if (!width || !height) return
     camera.aspect = width / height
     camera.updateProjectionMatrix()
     renderer.setSize(width, height, false)
-    if (!fitted || Math.min(1, lastAspect) !== Math.min(1, camera.aspect)) resetView()
-    lastAspect = camera.aspect
+    // Opening a dock changes the viewport size, not the user's camera pose.
+    if (!fitted) resetView()
     invalidate()
   })
   resize.observe(host)
@@ -498,5 +497,10 @@ export function createScene(host, models) {
     const bounds = new THREE.Box3()
     for (const id of ids) if (objects.has(id)) bounds.expandByObject(objects.get(id), true)
     return bounds.getCenter(new THREE.Vector3()).toArray()
-  }, motorCables, setWiresVisible(value) { motorCables.visible(value); invalidate() }, canvas, camera, gizmo, belts, snapProjector, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, selectInRect, enableBoxSelect, setGhost, setGroupGhost, setMoving, resetView, dispose }
+  }, motorCables, setWorkspaceHelpers(grid, axis) {
+    if (showGrid === grid && showAxes === axis) return
+    showGrid = grid; showAxes = axis
+    floor.visible = !driveMap && showGrid; axes.visible = !driveMap && showAxes
+    invalidate()
+  }, setWiresVisible(value) { motorCables.visible(value); invalidate() }, canvas, camera, gizmo, belts, snapProjector, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, selectInRect, enableBoxSelect, setGhost, setGroupGhost, setMoving, resetView, dispose }
 }
