@@ -1,3 +1,4 @@
+import {themeFor} from './store-themes.js?v=themes-2'
 const labels={
  ru:{title:'BrickLab Store',intro:'Оформление мастерской. Основные функции редактора остаются бесплатными.',disabled:'Продажи пока закрыты. Здесь представлен каталог будущих покупок.',test:'Тестовый режим · реальные деньги не списываются. Покупки доступны только администратору.',login:'Войти в аккаунт',buy:'Тестовая покупка',owned:'Получено в тестовом инвентаре',resume:'Продолжить тестовую оплату',consent:'Подтверждаю, что это тестовая оплата без реального списания и без выдачи платного товара.',history:'Мои тестовые заказы',finance:'BrickLab Finance · тестовый режим',financeNote:'Суммы ниже — виртуальные тестовые операции, не выручка.',total:'Заказов',paid:'Подтверждено',amount:'Тестовый оборот',pending:'Ожидает подтверждения',complete:'Подтверждён',refresh:'Обновить статус',error:'Не удалось выполнить запрос. Попробуй ещё раз.',wait:'Если оплата завершена, дождись уведомления Robokassa и обнови статус.',profile:'Мой инвентарь',carbon:'Карбон',neon:'Неоновая мастерская',noOrders:'Заказов пока нет',loading:'Загрузка…'},
  en:{title:'BrickLab Store',intro:'Customize your workshop. Core editor features stay free.',disabled:'Sales are closed. Preview the upcoming catalog.',test:'Test mode · no real charges. Only administrators can test checkout.',login:'Sign in',buy:'Test purchase',owned:'Received in test inventory',resume:'Resume test payment',consent:'I understand this is a test transaction with no real charge or paid product delivery.',history:'My test orders',finance:'BrickLab Finance · test mode',financeNote:'Amounts below are simulated transactions, not revenue.',total:'Orders',paid:'Confirmed',amount:'Test volume',pending:'Awaiting confirmation',complete:'Confirmed',refresh:'Refresh status',error:'Request failed. Please try again.',wait:'If you completed payment, wait for Robokassa confirmation and refresh.',profile:'My inventory',carbon:'Carbon',neon:'Neon workshop',noOrders:'No orders yet',loading:'Loading…'}}
@@ -9,15 +10,26 @@ async function api(path,signal,data){
  if(!response.ok)throw Object.assign(Error('Store request failed'),{status:response.status})
  return response.json()
 }
+function themePreview(theme,language,large=false){
+ const art=el('div','store-theme-preview cosmetic-'+theme.id+(large?' store-theme-large':''))
+ art.setAttribute('aria-hidden','true')
+ const shell=el('div','store-preview-shell'),bar=el('div','store-preview-bar'),sidebar=el('div','store-preview-sidebar'),main=el('div','store-preview-main'),hero=el('div','store-preview-hero'),avatar=el('div','store-preview-avatar','BL'),info=el('div','store-preview-info'),tiles=el('div','store-preview-tiles')
+ bar.append(el('strong',null,'BRICKLAB / WORKSHOP'),el('span',null,'•••'))
+ for(let i=0;i<4;i++)sidebar.append(el('i'))
+ info.append(el('strong',null,language==='ru'?'Моя мастерская':'My workshop'),el('small',null,'BRICKLAB CLOUD'))
+ hero.append(avatar,info);for(let i=0;i<3;i++){const tile=el('div');tile.append(el('i'),el('span'));tiles.append(tile)}
+ main.append(hero,tiles);shell.append(bar,sidebar,main);art.append(shell);return art
+}
 export function mountStore(root,{language='ru',signal}){
- const t=labels[language]??labels.ru,money=n=>(Number(n)/100).toLocaleString(language==='ru'?'ru-RU':'en-US',{style:'currency',currency:'RUB'})
+ const t=labels[language]??labels.ru,ru=language==='ru',money=n=>(Number(n)/100).toLocaleString(language==='ru'?'ru-RU':'en-US',{style:'currency',currency:'RUB'})
+ const banner=el('div','store-banner'),bannerText=el('div'),bannerArt=el('div','store-banner-art');bannerText.append(el('span','store-kicker','BRICKLAB / COLLECTION 01'),el('h2',null,ru?'Твоя мастерская. Твой стиль.':'Your workshop. Your style.'),el('p',null,ru?'Шесть уникальных тем для оформления профиля и публичной мастерской.':'Six distinct themes for your profile and public workshop.'));for(const id of ['carbon','neon','aurora'])bannerArt.append(themePreview(themeFor(id),language));banner.append(bannerText,bannerArt);
  const message=el('p','account-muted',t.loading),grid=el('div','store-grid'),ordersPanel=el('section','store-orders'),financePanel=el('section','store-orders')
- message.setAttribute('role','status');root.replaceChildren(el('p','account-muted',t.intro),message,grid,ordersPanel,financePanel)
+ message.setAttribute('role','status');root.replaceChildren(banner,el('p','account-muted',t.intro),message,grid,ordersPanel,financePanel)
  let serial=0,busy=false
  function ordersList(panel,title,orders){
   panel.replaceChildren(el('h2',null,title))
   if(!orders.length)panel.append(el('p','account-muted',t.noOrders))
-  for(const order of orders){const row=el('div','store-order-row');row.append(el('strong',null,'#'+order.invoice+' · '+(t[order.sku]??order.sku)),el('span',null,money(order.amountKopecks)),el('span','account-muted',order.status==='paid'?t.complete:t.pending));panel.append(row)}
+  for(const order of orders){const row=el('div','store-order-row');row.append(el('strong',null,'#'+order.invoice+' · '+(themeFor(order.sku)?.[language]??order.sku)),el('span',null,money(order.amountKopecks)),el('span','account-muted',order.status==='paid'?t.complete:t.pending));panel.append(row)}
  }
  async function refresh(){
   const version=++serial;message.textContent=t.loading
@@ -33,10 +45,15 @@ export function mountStore(root,{language='ru',signal}){
    if(admin&&catalog.mode==='test')grid.append(consentLabel)
    const controls=[]
    for(const product of catalog.products){
-    if(!['carbon','neon'].includes(product.sku))continue
-    const card=el('article','store-product'),preview=el('div','cosmetic-preview cosmetic-'+product.sku),copy=el('div','store-product-body')
+    const theme=themeFor(product.sku);if(!theme)continue
+    const card=el('article','store-product'),preview=themePreview(theme,language),copy=el('div','store-product-body')
     const order=items.find(o=>o.sku===product.sku)
-    copy.append(el('h2',null,t[product.sku]),el('strong','store-price',money(product.amountKopecks)))
+    const name=theme[language]??theme.en
+    const details=el('div','store-product-details');details.append(el('span','store-kicker',ru?'ТЕМА МАСТЕРСКОЙ':'WORKSHOP THEME'),el('h2',null,name),el('p','account-muted',ru?theme.descriptionRu:theme.descriptionEn))
+    const dialog=el('dialog','store-preview-dialog'),header=el('div','store-preview-heading');header.append(el('h2',null,name),button(ru?'Закрыть':'Close',()=>dialog.close()))
+    dialog.append(header,themePreview(theme,language,true),el('p','account-muted',ru?'Схематический предпросмотр настоящего оформления профиля. Не изменяет 3D-сцену редактора.':'Illustrative preview of the actual profile styling. Does not change the 3D editor scene.'))
+    dialog.setAttribute('aria-label',name);signal.addEventListener('abort',()=>{if(dialog.open)dialog.close()},{once:true})
+    copy.append(details,button(ru?'Примерить тему':'Preview theme',()=>dialog.showModal()),el('strong','store-price',money(product.amountKopecks)),dialog)
     if(order?.status==='paid')copy.append(el('p','account-muted',t.owned))
     else if(admin&&catalog.mode==='test'){
      const buy=button(order?t.resume:t.buy,async()=>{
