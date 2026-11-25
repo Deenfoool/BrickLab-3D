@@ -258,7 +258,7 @@ export function connectAuthStore(env = process.env) {
       return r
     },
     async leaderboard(offset=0){
-      return sql`select p.public_id as id,p.display_name as "displayName",p.bio,p.updated_at as "updatedAt",p.avatar_image is not null as "hasAvatar",r.builds,r.likes,r.downloads,r.followers,r.score
+      return sql`select p.public_id as id,p.display_name as "displayName",p.bio,p.updated_at as "updatedAt",p.avatar_image is not null as "hasAvatar",p.background_theme as "backgroundTheme",r.builds,r.likes,r.downloads,r.followers,r.score
         from bricklab.community_reputation r join bricklab.public_profiles p on p.public_id=r.author_id
         where r.builds>0 order by r.score desc,r.likes desc,p.public_id limit 31 offset ${offset}`
     },
