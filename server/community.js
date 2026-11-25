@@ -1,3 +1,4 @@
+import {backgroundIds} from '../src/menu/store-themes.js'
 import {createHash} from 'node:crypto'
 import {ProjectError} from './projects.js'
 import {normalizeImage} from './profile-media.js'
@@ -65,7 +66,7 @@ export function publicCard(row){
  return {id:row.id,displayName:row.displayName,bio:row.bio,updatedAt:row.updatedAt,followers:row.followers??0,
   avatarUrl:base&&row.hasAvatar===true?base+'/avatar':null,coverUrl:base&&row.hasCover===true?base+'/cover':null,
   coverTheme:['blueprint','graphite','amber'].includes(row.coverTheme)?row.coverTheme:null,
-  backgroundTheme:['default','first-build','carbon','neon'].includes(row.backgroundTheme)?row.backgroundTheme:null}
+  backgroundTheme:backgroundIds.includes(row.backgroundTheme)?row.backgroundTheme:null}
 
 }
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
