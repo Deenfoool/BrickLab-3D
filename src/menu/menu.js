@@ -1,6 +1,6 @@
 import { sessionDiagnostics } from '../feedback/diagnostics.js?v=bug-report-v1'
 import { mountBugReport } from '../feedback/dialog.js?v=events-1'
-import { safeImage } from '../sets/data.js?v=browser-recognition'
+import { safeImage } from '../sets/data.js?v=catalog-engine-1'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
 import { locales } from './locale.js?v=store-1'
 import {mountStore} from './store.js?v=admin-access-1'
@@ -645,7 +645,7 @@ async function openLibrary() {
   libraryRetry.hidden = true
   try {
     const [{ mountLibrary }, { sections, parts }] = await Promise.all([
-      import('../editor/library.js?v=system-complete'),
+      import('../editor/library.js?v=catalog-engine-1'),
       import('../editor/parts-data.js?v=system-complete'),
     ])
     if (controller.signal.aborted) return
@@ -688,7 +688,7 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=workspace-21')
+    const { mountEditor } = await import('../editor/editor.js?v=catalog-engine-1')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

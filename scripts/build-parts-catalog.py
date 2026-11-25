@@ -475,20 +475,26 @@ def build(archive_path, system_only=False):
         system_index += pack_library(system_models, system_extra[group],
                                      extra_common=('ldconfig.ldr',), prefix=group + '-')
     system_designs = {design for design, *_ in system_index}
+    technic_designs = {row[0] for row in index}
     aliases = defaultdict(list)
+    technic_aliases = defaultdict(list)
     for design, target in redirects.items():
         visited = {design}
         while target in redirects and target not in visited:
             visited.add(target)
             target = redirects[target]
+        if target in visited:
+            continue
         if target in system_designs:
             aliases[target].append(design)
+        if target in technic_designs:
+            technic_aliases[target].append(design)
 
     write_json(ROOT / 'catalog/parts-library.json', {
         'source': {'name': 'LDraw Parts Library', 'release': release, 'sha256': sha256(archive_path.read_bytes()).hexdigest()},
         'sections': [
             {'id': 'technic', 'ru': 'Technic', 'en': 'Technic', 'assetPath': 'technic',
-             'revision': f'{release}-turntables', 'groups': [group[:3] for group in GROUPS], 'parts': index},
+             'revision': f'{release}-turntables', 'groups': [group[:3] for group in GROUPS], 'parts': index, 'aliases': technic_aliases},
             {'id': 'system', 'ru': 'System', 'en': 'System', 'assetPath': 'system',
              'revision': f'{release}-system-complete',
              'groups': SYSTEM_GROUPS, 'parts': system_index, 'aliases': aliases},
