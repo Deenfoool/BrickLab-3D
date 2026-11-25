@@ -40,14 +40,14 @@ export function activityCalendar(lang,entries,{publicOnly=false}={}){
  grid.setAttribute('role','img');grid.setAttribute('aria-label',publicOnly?t.publicDays:t.privateDays)
  root.append(summary,grid,ui('p','account-muted',publicOnly?t.publicDays:t.privateDays));return root
 }
-function buildTile(b,t,onOpen){
- const card=ui('article','portfolio-build-tile'),art=ui('div','portfolio-build-art');art.append(icon('layers'))
- if(b.imageCount>0&&safePublicId(b.id)){const img=ui('img');img.alt='';img.loading='lazy';img.src='/api/community/build/'+b.id+'/image/0';art.append(img)}
+function buildTile(b,t,onOpen,makeArt){
+ const card=ui('article','portfolio-build-tile'),art=makeArt?makeArt(b):ui('div','portfolio-build-art');if(makeArt)art.classList.add('portfolio-build-art');else art.append(icon('layers'))
+ if(!makeArt&&b.imageCount>0&&safePublicId(b.id)){const img=ui('img');img.alt='';img.loading='lazy';img.src='/api/community/build/'+b.id+'/image/0';art.append(img)}
  const info=ui('div','portfolio-build-info');info.append(ui('h3',null,b.title),ui('p','account-muted',String(b.partCount??0)+' · '+t.parts))
  if(onOpen)info.append(action(t.open,()=>onOpen(b)));else info.append(anchor(t.open,'#community/build/'+b.id))
  card.append(art,info);return card
 }
-export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeBuildCard,privateCalendar}){
+export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeBuildCard,makeFeaturedArt,privateCalendar}){
  const t=tr(lang),root=ui('div','portfolio-blocks'),valid=builds.filter(b=>safePublicId(b.id)),p=filterPortfolio(profile?.portfolio,valid.map(b=>b.id))
  const byId=new Map(valid.map(b=>[b.id,b]))
  for(const {key,visible} of p.blocks){
@@ -56,7 +56,7 @@ export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeB
   if(!visible)continue
   const c=block(t[key],key)
   if(key==='featured'){
-   const b=byId.get(p.featured);if(b)c.append(buildTile(b,t,onOpen));else if(owner)c.append(ui('p','account-muted',t.noPin));else continue
+   const b=byId.get(p.featured);if(b)c.append(buildTile(b,t,onOpen,makeFeaturedArt));else if(owner)c.append(ui('p','account-muted',t.noPin));else continue
   }else if(key==='publications'){
    const grid=ui('div','portfolio-build-grid')
    for(const b of valid)grid.append(makeBuildCard?makeBuildCard(b):buildTile(b,t,onOpen))
