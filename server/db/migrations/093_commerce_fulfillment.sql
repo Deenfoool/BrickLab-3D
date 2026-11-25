@@ -25,6 +25,7 @@ CREATE FUNCTION bricklab.commerce_create_test_order(p_sku text) RETURNS SETOF br
 CREATE FUNCTION bricklab.commerce_attach_payment(p_order uuid,p_payment text,p_environment text) RETURNS boolean
  LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
  BEGIN
+ IF p_environment IS DISTINCT FROM 'test' THEN RETURN false; END IF;
  UPDATE bricklab.commerce_orders SET payment_id=p_payment WHERE id=p_order AND environment=p_environment AND status='pending'
  AND (payment_id IS NULL OR payment_id=p_payment);
  RETURN FOUND;
@@ -35,6 +36,7 @@ CREATE FUNCTION bricklab.commerce_fulfill(p_order uuid,p_payment text,p_environm
  LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
  DECLARE o bricklab.commerce_orders%ROWTYPE; uid uuid; k text; target_id text:=''; months integer; starts timestamptz; ends timestamptz;
  BEGIN
+ IF p_environment IS DISTINCT FROM 'test' THEN RETURN false; END IF;
  SELECT user_id INTO uid FROM bricklab.commerce_orders WHERE id=p_order;
  IF uid IS NULL THEN RETURN false; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended(uid::text,312042));
