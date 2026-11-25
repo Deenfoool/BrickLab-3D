@@ -1,5 +1,5 @@
 import { loadPartIndex, resolvePart, resolveInventoryPart } from '../catalog/part-resolver.js?v=catalog-engine-1'
-import { elementNumber, lookupElement } from './element-index.js'
+import { elementNumber, lookupElement } from './element-index.js?v=catalog-engine-1'
 import { previewColumns, previewRows, previewPageSize, searchLibrary } from './library-data.js?v=system-tiles'
 
 const batchSize = 48
