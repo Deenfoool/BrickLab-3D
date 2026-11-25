@@ -1,3 +1,4 @@
+import {themeIds} from '../src/menu/store-themes.js'
 import {createHash,timingSafeEqual} from 'node:crypto'
 import {ProjectError} from './projects.js'
 const checkout='https://auth.robokassa.ru/Merchant/Index.aspx'
@@ -72,7 +73,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
     if(!config.enabled)throw new ProjectError(503,'payments_disabled')
     let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
-    if(!data||!['carbon','neon'].includes(data.sku)||data.testConsent!==true||Object.keys(data).some(k=>!['sku','testConsent'].includes(k)))throw new ProjectError(400,'invalid_order')
+    if(!data||!themeIds.includes(data.sku)||data.testConsent!==true||Object.keys(data).some(k=>!['sku','testConsent'].includes(k)))throw new ProjectError(400,'invalid_order')
     const product=(await store.storeCatalog()).find(p=>p.sku===data.sku)
     if(!product)throw new ProjectError(404,'unknown_product')
     const order=await store.createTestOrder(user.id,product.sku)
