@@ -146,3 +146,58 @@
 .workshop-layout:is(.cosmetic-carbon,.cosmetic-neon,.cosmetic-blueprint,.cosmetic-titanium,.cosmetic-ember,.cosmetic-aurora) .workshop-hero{border-color:color-mix(in srgb,var(--theme-accent) 48%,#353943)}
 .workshop-layout:is(.cosmetic-carbon,.cosmetic-neon,.cosmetic-blueprint,.cosmetic-titanium,.cosmetic-ember,.cosmetic-aurora) .workshop-avatar{box-shadow:0 0 0 2px var(--theme-accent),0 0 22px color-mix(in srgb,var(--theme-accent) 25%,transparent)}
 .cosmetic-preview{border:1px solid color-mix(in srgb,var(--theme-accent,#7c8492) 36%,#373b43)}
+
+/* Signature collection: theme tokens and visual language shared across profile, store and community. */
+.signature-carbon{--sig:#ffb34e;--sig-dark:#211b15;--sig-panel:#272a2e;--sig-radius:5px;--sig-cover:linear-gradient(112deg,#14171c 0 34%,transparent 34% 68%,#d783263b 68% 70%,#14171c 70%),repeating-conic-gradient(from 45deg,#24272c 0% 25%,#353940 0% 50%,#202329 0% 75%,#292d33 0% 100%) 0 0/12px 12px;--sig-metric:repeating-linear-gradient(135deg,#34373c38 0 2px,transparent 2px 6px),linear-gradient(#26292e,#14171c)}
+.signature-neon{--sig:#78eaff;--sig-dark:#171b30;--sig-panel:#191b30;--sig-radius:16px;--sig-cover:linear-gradient(135deg,transparent 0 27%,#4fdcff65 27.2% 27.5%,transparent 27.7% 72%,#d15cfa66 72.2% 72.5%,transparent 72.8%),repeating-linear-gradient(90deg,transparent 0 49px,#72daff28 49px 50px),repeating-linear-gradient(0deg,transparent 0 49px,#ae67ff24 49px 50px),radial-gradient(ellipse at 85% 0%,#552c80,#152c49 52%,#111827);--sig-metric:linear-gradient(145deg,#1c3150,#271c3c)}
+.signature-blueprint{--sig:#a7d9ff;--sig-dark:#152a43;--sig-panel:#182e48;--sig-radius:3px;--sig-cover:repeating-linear-gradient(0deg,transparent 0 19px,#9bceff26 19px 20px),repeating-linear-gradient(90deg,transparent 0 19px,#9bceff26 19px 20px),linear-gradient(130deg,#285481,#132a45);--sig-metric:linear-gradient(90deg,#77bfff10 1px,transparent 1px) 0 0/12px 12px,#172e49}
+.signature-titanium{--sig:#dce6f1;--sig-dark:#232b33;--sig-panel:#2c333c;--sig-radius:7px;--sig-cover:repeating-linear-gradient(0deg,#ffffff07 0 1px,transparent 1px 4px),linear-gradient(120deg,#262c33,#626e79 24%,#303944 45%,#414c59 74%,#202730);--sig-metric:linear-gradient(145deg,#434b55,#252d36 50%,#303943)}
+.signature-ember{--sig:#ff9d72;--sig-dark:#2c1a18;--sig-panel:#302321;--sig-radius:10px;--sig-cover:radial-gradient(ellipse at 12% 110%,#bb482f88,transparent 48%),repeating-linear-gradient(135deg,transparent 0 52px,#cd6d423b 53px 54px,transparent 55px 106px),linear-gradient(140deg,#34221f,#15171a 65%,#56271e);--sig-metric:linear-gradient(145deg,#3e2822,#1c1b1d 80%)}
+.signature-aurora{--sig:#85f0d0;--sig-dark:#14262f;--sig-panel:#1b2b37;--sig-radius:19px;--sig-cover:radial-gradient(circle at 12% 22%,#dbfff4 0 1px,transparent 2px),radial-gradient(circle at 78% 30%,#d3d9ff 0 1px,transparent 2px),radial-gradient(circle at 50% 15%,#d3d9ff 0 1px,transparent 2px),radial-gradient(ellipse at 24% -18%,#44c7a0ab,transparent 65%),radial-gradient(ellipse at 76% 0%,#7972e0a8,transparent 60%),linear-gradient(150deg,#172d39,#101b2a);--sig-metric:linear-gradient(135deg,#233d45,#262a45)}
+.signature-theme .signature-plate{position:relative;z-index:2;display:inline-flex;align-items:center;align-self:flex-start;max-width:100%;padding:7px 12px;border:1px solid var(--sig);border-radius:var(--sig-radius);background:var(--sig-dark);color:var(--sig);font:700 10px/1.4 ui-monospace,monospace;letter-spacing:.12em;white-space:normal;overflow-wrap:anywhere;box-shadow:0 3px 12px #0005}
+.signature-badge.signature-theme{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;max-width:100%;width:max-content;border:1px solid color-mix(in srgb,var(--sig) 60%,#424850);border-radius:var(--sig-radius);color:var(--sig);background:var(--sig-dark);font-size:11px;line-height:1.35;font-weight:700;letter-spacing:.015em;white-space:normal}
+.signature-badge .signature-symbol{font-size:14px;line-height:1}
+.signature-author{flex-wrap:wrap;color:var(--sig)!important}
+.signature-author .community-author-avatar,.signature-theme.community-comment-header .community-author-avatar{border:1px solid var(--sig);border-radius:var(--sig-radius);box-shadow:0 0 0 2px color-mix(in srgb,var(--sig) 20%,transparent)}
+.community-meta .signature-badge span{padding:0;background:none;border-radius:0}
+.signature-theme:is(.workshop-layout,.community-builder-detail) :is(.workshop-cover,.community-profile-cover):not(:has(img)){background:var(--sig-cover);min-height:clamp(135px,17vw,210px)}
+.signature-theme .workshop-cover:not(:has(img))::before{background:linear-gradient(110deg,transparent 55%,color-mix(in srgb,var(--sig) 16%,transparent) 55.3% 55.7%,transparent 56%);mask-image:none}
+.signature-theme .workshop-cover:not(:has(img))::after{opacity:.22}
+.signature-theme .community-profile-cover{justify-content:space-between}
+.signature-theme .community-profile-cover>span:not(.signature-plate){position:relative;z-index:1;color:var(--sig)}
+.signature-theme .community-profile-cover:has(img) .signature-plate,.signature-theme .workshop-cover:has(img) .signature-plate{box-shadow:0 2px 10px #000b}
+.signature-theme .workshop-emblem{color:var(--sig);text-shadow:0 1px 4px #000}
+.signature-theme .workshop-hero,.signature-theme.community-builder{border-color:color-mix(in srgb,var(--sig) 58%,#343841);border-radius:var(--sig-radius);background:linear-gradient(140deg,var(--sig-panel),#1b2027 75%);box-shadow:0 12px 32px #0004}
+.signature-theme :is(.workshop-avatar,.community-profile-avatar,.store-preview-avatar){border-radius:var(--sig-radius);border:2px solid var(--sig);color:var(--sig);background:var(--sig-dark);box-shadow:0 0 0 4px color-mix(in srgb,var(--sig) 18%,#15191f),0 5px 20px #0008}
+.signature-theme :is(.workshop-metric,.community-reputation>div,.store-preview-tiles>div){position:relative;min-width:0;border:1px solid color-mix(in srgb,var(--sig) 30%,#383c45);border-radius:var(--sig-radius);background:var(--sig-metric);padding:12px;overflow-wrap:anywhere}
+.signature-theme :is(.workshop-metric,.community-reputation>div) strong{color:var(--sig);font-variant-numeric:tabular-nums;font-size:clamp(16px,2vw,24px)}
+.signature-theme .community-reputation{background:transparent;padding:0;gap:8px}
+.signature-theme .community-reputation>div{flex:1 1 90px}
+.signature-theme .workshop-nav .workspace-action[aria-pressed=true],.signature-theme .workspace-action.primary{border-color:var(--sig);background:var(--sig-dark);color:var(--sig)}
+.signature-theme .workshop-card,.signature-theme .workshop-build-tile,.community-card.signature-theme,.hub-build.signature-theme{border-color:color-mix(in srgb,var(--sig) 35%,#383c45);border-radius:var(--sig-radius)}
+.community-card.signature-theme:not(.community-builder),.hub-build.signature-theme{border-top:2px solid var(--sig)}
+.signature-theme .workshop-build-tile:hover,.community-card.signature-theme:hover,.hub-build.signature-theme:hover{border-color:var(--sig)}
+.signature-theme.community-model-author,.signature-theme.community-comment-header{border-bottom:1px solid color-mix(in srgb,var(--sig) 28%,transparent);padding-bottom:7px}
+.signature-carbon :is(.workshop-metric,.community-reputation>div,.store-preview-tiles>div){border-top:3px solid var(--sig)}
+.signature-carbon .workshop-metric strong{font-family:ui-monospace,monospace;letter-spacing:-.08em}
+.signature-neon :is(.workshop-hero,.community-profile-avatar,.workshop-avatar,.store-preview-avatar){box-shadow:0 0 16px #6adfff30,0 0 0 1px #b761f44d}
+.signature-neon .signature-badge{box-shadow:0 0 10px #6adfff24}
+.signature-blueprint :is(.workshop-metric,.community-reputation>div,.store-preview-tiles>div){border-style:dashed}
+.signature-blueprint .signature-plate{border-style:double;border-width:3px}
+.signature-titanium :is(.workshop-metric,.community-reputation>div,.store-preview-tiles>div){background:radial-gradient(circle at 5px 5px,#a5aebc 0 1px,transparent 2px),radial-gradient(circle at calc(100% - 5px) 5px,#a5aebc 0 1px,transparent 2px),var(--sig-metric);border-bottom:3px solid #8794a2}
+.signature-ember :is(.workshop-hero,.community-profile-avatar,.workshop-avatar,.store-preview-avatar){box-shadow:0 0 18px #f36b352c,inset 0 -3px 0 #ad5434}
+.signature-ember :is(.workshop-metric,.community-reputation>div,.store-preview-tiles>div){border-left:3px solid #b76a42}
+.signature-aurora :is(.workshop-hero,.community-profile-avatar,.workshop-avatar,.store-preview-avatar){box-shadow:0 0 18px #66d6b92b,0 0 0 2px #9584ee70}
+.signature-aurora .signature-badge{background:linear-gradient(120deg,#193c3e,#2c2850)}
+.cosmetic-preview.signature-theme{display:flex;justify-content:flex-end;align-items:flex-start;padding:10px;background:var(--sig-cover)}
+.store-theme-preview.signature-theme{background:var(--sig-cover)}
+.signature-theme .store-preview-hero{border-radius:var(--sig-radius);background:var(--sig-metric);border-color:var(--sig)}
+.signature-theme .store-preview-bar{color:var(--sig)}
+.signature-theme .store-preview-tiles>div{padding:7px}
+.store-theme-large.signature-theme .store-preview-tiles>div{padding:12px}
+.signature-preview-examples{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.signature-preview-example{display:grid;gap:9px;padding:14px;background:var(--sig-metric);border:1px solid var(--sig);border-radius:var(--sig-radius);min-width:0}
+.signature-preview-example small{color:var(--sig);font-size:11px;letter-spacing:.04em}
+.signature-preview-example .signature-badge{max-width:100%}
+@media(max-width:520px){.signature-preview-examples{grid-template-columns:1fr}.signature-theme .signature-plate{font-size:8px;padding:5px}.signature-theme .community-profile-cover,.signature-theme .workshop-cover{gap:6px}.signature-theme .store-preview-tiles>div{padding:5px}}
+@media(prefers-reduced-motion:no-preference){.signature-theme .workshop-build-tile,.community-card.signature-theme,.hub-build.signature-theme{transition:border-color .18s,box-shadow .18s}.signature-neon.community-card:hover,.signature-aurora.community-card:hover{box-shadow:0 0 18px color-mix(in srgb,var(--sig) 22%,transparent)}}
