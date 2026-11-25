@@ -37,6 +37,7 @@ jobs:
           python3 -B tests/telegram_control_release_test.py
           python3 -B tests/telegram_control_external_test.py
           python3 -B tests/telegram_control_maintenance_test.py
+          python3 -B tests/telegram_control_issue_test.py
 
   test:
     runs-on: ubuntu-latest

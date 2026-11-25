@@ -103,6 +103,99 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
 
+ISSUE_PENDING = {}
+UUID = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", re.I)
+
+def issue_token():
+    path=pathlib.Path(os.environ.get("CREDENTIALS_DIRECTORY","/nonexistent"))/"github-issues.token"
+    try:
+        value=path.read_text().strip()
+        return value if re.fullmatch(r"[A-Za-z0-9_]{20,255}",value) else None
+    except OSError:
+        return None
+
+def issue_map():
+    directory=os.environ.get("STATE_DIRECTORY")
+    if not directory:
+        return None,{}
+    path=pathlib.Path(directory)/"issues.json"
+    try:
+        value=json.loads(path.read_text())
+        if not isinstance(value,dict):
+            return None,{}
+        return path,value
+    except FileNotFoundError:
+        return path,{}
+    except (OSError,ValueError):
+        return None,{}
+
+def write_issue_map(path,data):
+    tmp=path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data))
+    tmp.replace(path)
+
+def create_issue(report_id):
+    token=issue_token()
+    path,records=issue_map()
+    if not token or not path or not UUID.fullmatch(report_id):
+        return "Создание Issue недоступно."
+    if report_id in records:
+        row=records[report_id]
+        if type(row.get("number")) is int:
+            return "Issue уже создан: #"+str(row["number"])
+        return "Предыдущая попытка имеет неопределённый результат. Проверьте GitHub вручную."
+    # Persist before network call, never resend an ambiguous POST.
+    records[report_id]={"status":"started","time":int(time.time())}
+    write_issue_map(path,records)
+    payload={"title":"BrickLab bug report — triage required",
+             "body":"Operator-created triage task. Add a reviewed, non-personal description and reproduction steps manually."}
+    req=urllib.request.Request("https://api.github.com/repos/Deenfoool/BrickLab-3D/issues",
+        data=json.dumps(payload).encode(),method="POST",headers={"Authorization":"Bearer "+token,
+        "Content-Type":"application/json","Accept":"application/vnd.github+json","User-Agent":"BrickLab-Control-Center",
+        "X-GitHub-Api-Version":"2022-11-28"})
+    try:
+        with urllib.request.build_opener(NoRedirect()).open(req,timeout=10) as r:
+            answer=json.loads(r.read(65536))
+            number=answer.get("number")
+            if r.status!=201 or type(number) is not int or number<=0:
+                return "Результат неизвестен. Проверьте GitHub."
+        records[report_id]={"status":"created","number":number,"time":int(time.time())}
+        write_issue_map(path,records)
+        return "✅ Создан Issue #"+str(number)
+    except (OSError,ValueError,AttributeError):
+        return "Результат неизвестен. Проверьте GitHub; автоматического повтора нет."
+
+def handle_issue(data,cb,msg,owner,call):
+    action,key=data.split(":",1)
+    if not issue_token():
+        return
+    if action=="issue":
+        current=(snapshot().get("admin",{}).get("bugs") or [])[:5]
+        if not UUID.fullmatch(key) or key not in [row.get("id") for row in current]:
+            return
+        call("answerCallbackQuery",{"callback_query_id":cb["id"]})
+        ISSUE_PENDING.clear()
+        nonce=secrets.token_hex(12)
+        ISSUE_PENDING[nonce]=(key,msg["message_id"],time.monotonic()+60)
+        call("editMessageText",{"chat_id":owner,"message_id":msg["message_id"],
+             "text":"Создать пустую задачу GitHub для отчёта "+key[:8]+"? Описание, UUID, логи и данные пользователя не публикуются.",
+             "reply_markup":{"inline_keyboard":[[{"text":"Создать","callback_data":"issueyes:"+nonce},
+                                                   {"text":"Отмена","callback_data":"issueno:"+nonce}]]}})
+        return
+    pending=ISSUE_PENDING.get(key)
+    if not pending or pending[1]!=msg["message_id"] or time.monotonic()>pending[2]:
+        call("answerCallbackQuery",{"callback_query_id":cb["id"],"text":"Подтверждение истекло."})
+        return
+    del ISSUE_PENDING[key]
+    call("answerCallbackQuery",{"callback_query_id":cb["id"]})
+    if action=="issueno":
+        call("editMessageText",{"chat_id":owner,"message_id":msg["message_id"],**render("bugs",snapshot())})
+        return
+    result=create_issue(pending[0])
+    call("editMessageText",{"chat_id":owner,"message_id":msg["message_id"],"text":result,
+        "reply_markup":{"inline_keyboard":[[{"text":"GitHub Issues","url":"https://github.com/Deenfoool/BrickLab-3D/issues"}],
+                                            [{"text":"Баг-репорты","callback_data":"cc:bugs"}]]}})
+
 def github_get(path):
     token_path = pathlib.Path(os.environ.get("CREDENTIALS_DIRECTORY","/nonexistent")) / "github.token"
     headers = {"Accept":"application/vnd.github+json","User-Agent":"BrickLab-Control-Center","X-GitHub-Api-Version":"2022-11-28"}
@@ -207,6 +300,8 @@ def render(page, data):
             ident = str(row.get("id",""))
             if re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}",ident,re.I):
                 buttons.append([{"text": "Открыть " + ident[:8], "url": ORIGIN + routes[page] + ident}])
+                if page == "bugs" and issue_token():
+                    buttons.append([{"text":"Создать Issue "+ident[:8],"callback_data":"issue:"+ident}])
     if page in ("github", "release"):
         repo = "https://github.com/Deenfoool/BrickLab-3D"
         buttons.extend([[{"text": name, "url": repo + path}] for name,path in
@@ -299,6 +394,9 @@ def handle(update, owner, call):
             return
         data = cb.get("data", "")
         if not isinstance(data, str):
+            return
+        if data.startswith(("issue:","issueyes:","issueno:")):
+            handle_issue(data,cb,msg,owner,call)
             return
         if data in ("pref:on","pref:off","pref:quiet","pref:resume"):
             call("answerCallbackQuery", {"callback_query_id": cb["id"]})

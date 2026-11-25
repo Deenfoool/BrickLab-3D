@@ -51,6 +51,7 @@ def data():
         return {}
 
 class Handler(http.server.BaseHTTPRequestHandler):
+    timeout = 10
     def log_message(self,*args):
         pass
     def reply(self,status,body,mime):

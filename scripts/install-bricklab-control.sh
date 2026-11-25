@@ -182,6 +182,17 @@ NoNewPrivileges=true
 # Docker bind mounts in the existing release script must be visible to the host daemon.
 PrivateTmp=false
 UNIT
+if [[ -e /etc/bricklab-backup/github-issues.token ]]; then
+  python3 - /etc/bricklab-backup/github-issues.token <<'PY'
+import os,stat,sys
+s=os.stat(sys.argv[1])
+assert stat.S_ISREG(s.st_mode) and s.st_uid==0 and not stat.S_IMODE(s.st_mode)&0o077
+PY
+  install -d -m 0755 /etc/systemd/system/bricklab-control.service.d
+  printf '[Service]\nLoadCredential=github-issues.token:/etc/bricklab-backup/github-issues.token\n' >/etc/systemd/system/bricklab-control.service.d/11-github-issues.conf
+else
+  rm -f /etc/systemd/system/bricklab-control.service.d/11-github-issues.conf
+fi
 printf 'd /run/bricklab-control-maintenance 0755 root root -\n' >/etc/tmpfiles.d/bricklab-control-maintenance.conf
 systemd-tmpfiles --create /etc/tmpfiles.d/bricklab-control-maintenance.conf
 systemctl daemon-reload
