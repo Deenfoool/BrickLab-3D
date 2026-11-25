@@ -5,6 +5,9 @@ if [[ ! -f "${BASH_SOURCE[0]}" ]]; then echo 'Run a saved script file, not bash 
 exec </dev/null
 umask 077
 cd /opt/bricklab-cloud
+# Shared with the Telegram action broker; keep fd open throughout this release.
+exec 9>>/run/bricklab-deploy.lock
+flock -n 9 || { echo "Another BrickLab operation is running" >&2; exit 1; }
 TARGET="${1:?Supply an exact release commit SHA}"
 [[ "$TARGET" =~ ^[0-9a-f]{40}$ ]]
 test "$(git branch --show-current)" = feature/cloud-migration
@@ -39,7 +42,17 @@ docker run --rm --network none --memory=1536m --cpus=1 \
     2>&1 | tee /tmp/bricklab-hub-tests.log
 
 echo "=== TELEGRAM WORKER TESTS ==="
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local node --check scripts/miniapp.js
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_events_test.py
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_test.py
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_actions_test.py
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_automation_test.py
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_recovery_test.py
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_miniapp_test.py
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_release_test.py
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_external_test.py
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_maintenance_test.py
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_issue_test.py
 
 echo "=== ISOLATED DATABASE TESTS ==="
 export POSTGRES_PASSWORD="$(openssl rand -hex 32)"
