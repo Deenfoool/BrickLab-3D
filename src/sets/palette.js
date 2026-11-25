@@ -1,5 +1,5 @@
 import { resolvePart } from '../catalog/part-resolver.js?v=catalog-engine-1'
-import { elementNumber, lookupElement } from '../editor/element-index.js'
+import { elementNumber, lookupElement } from '../editor/element-index.js?v=catalog-engine-1'
 import {
   previewColumns,
   previewRows,
