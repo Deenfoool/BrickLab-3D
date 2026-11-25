@@ -14,10 +14,10 @@ test('passport structural checks do not certify physics',()=>{
 })
 
 
-test('production workshop includes the dedicated public profile and omits experimental sections',()=>{
+test('production workshop merges public editing into account settings and omits experimental sections',()=>{
  assert.ok(!sections.some(([key])=>key==='passport'))
- assert.ok(!sections.some(([key])=>['challenges','diary'].includes(key)))
- assert.deepEqual(sections.map(([key])=>key),['workshop','cloud','publicProfile','achievements','rankings','bureau','favorites','notifications','storage','settings','security','cosmetics'])
- assert.equal(new Set(sections.map(([key])=>key)).size,12)
+ assert.ok(!sections.some(([key])=>['challenges','diary','publicProfile'].includes(key)))
+ assert.deepEqual(sections.map(([key])=>key),['workshop','cloud','achievements','rankings','bureau','favorites','notifications','storage','settings','security','cosmetics'])
+ assert.equal(new Set(sections.map(([key])=>key)).size,11)
  assert.equal(typeof modelPassport,'function')
 })
