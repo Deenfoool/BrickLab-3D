@@ -1,3 +1,4 @@
+import {applySignature,themeBadge,themePlate,signatureFor} from './profile-signature.js?v=signature-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 const labels={
  ru:{title:'BrickLab Store',intro:'Оформление мастерской. Основные функции редактора остаются бесплатными.',disabled:'Продажи пока закрыты. Здесь представлен каталог будущих покупок.',test:'Тестовый режим · реальные деньги не списываются. Покупки доступны только администратору.',login:'Войти в аккаунт',buy:'Тестовая покупка',owned:'Получено в тестовом инвентаре',resume:'Продолжить тестовую оплату',consent:'Подтверждаю, что это тестовая оплата без реального списания и без выдачи платного товара.',history:'Мои тестовые заказы',finance:'BrickLab Finance · тестовый режим',financeNote:'Суммы ниже — виртуальные тестовые операции, не выручка.',total:'Заказов',paid:'Подтверждено',amount:'Тестовый оборот',pending:'Ожидает подтверждения',complete:'Подтверждён',refresh:'Обновить статус',error:'Не удалось выполнить запрос. Попробуй ещё раз.',wait:'Если оплата завершена, дождись уведомления Robokassa и обнови статус.',profile:'Мой инвентарь',carbon:'Карбон',neon:'Неоновая мастерская',noOrders:'Заказов пока нет',loading:'Загрузка…'},
@@ -12,13 +13,19 @@ async function api(path,signal,data){
 }
 function themePreview(theme,language,large=false){
  const art=el('div','store-theme-preview cosmetic-'+theme.id+(large?' store-theme-large':''))
- art.setAttribute('aria-hidden','true')
+ applySignature(art,theme.id);art.setAttribute('aria-hidden','true')
  const shell=el('div','store-preview-shell'),bar=el('div','store-preview-bar'),sidebar=el('div','store-preview-sidebar'),main=el('div','store-preview-main'),hero=el('div','store-preview-hero'),avatar=el('div','store-preview-avatar','BL'),info=el('div','store-preview-info'),tiles=el('div','store-preview-tiles')
- bar.append(el('strong',null,'BRICKLAB / WORKSHOP'),el('span',null,'•••'))
+ bar.append(el('strong',null,'BRICKLAB / WORKSHOP'),el('span',null,signatureFor(theme.id).mark))
  for(let i=0;i<4;i++)sidebar.append(el('i'))
- info.append(el('strong',null,language==='ru'?'Моя мастерская':'My workshop'),el('small',null,'BRICKLAB CLOUD'))
- hero.append(avatar,info);for(let i=0;i<3;i++){const tile=el('div');tile.append(el('i'),el('span'));tiles.append(tile)}
+ info.append(el('strong',null,language==='ru'?'Моя мастерская':'My workshop'),el('small',null,theme.en))
+ hero.append(avatar,info);for(let i=0;i<3;i++){const tile=el('div');tile.append(el('i'),el('span'));if(large)tile.append(el('strong',null,['12','8','24'][i]));tiles.append(tile)}
  main.append(hero,tiles);shell.append(bar,sidebar,main);art.append(shell);return art
+}
+function communityExamples(theme,language){
+ const ru=language==='ru',grid=el('div','signature-preview-examples')
+ for(const [label,title,description] of [[ru?'КАРТОЧКА СБОРКИ':'BUILD CARD',ru?'Моя конструкция':'My build',ru?'Автор · пример':'Author · example'],[ru?'КОММЕНТАРИЙ':'COMMENT',ru?'Конструктор':'Builder',ru?'Пример оформления комментария':'Sample comment styling']]){
+  const card=el('div','signature-preview-example');applySignature(card,theme.id);card.append(el('small',null,label),el('strong',null,title),themeBadge(theme.id,language),el('p','account-muted',description));grid.append(card)
+ }return grid
 }
 export function mountStore(root,{language='ru',signal}){
  const t=labels[language]??labels.ru,ru=language==='ru',money=n=>(Number(n)/100).toLocaleString(language==='ru'?'ru-RU':'en-US',{style:'currency',currency:'RUB'})
@@ -49,9 +56,9 @@ export function mountStore(root,{language='ru',signal}){
     const card=el('article','store-product'),preview=themePreview(theme,language),copy=el('div','store-product-body')
     const order=items.find(o=>o.sku===product.sku)
     const name=theme[language]??theme.en
-    const details=el('div','store-product-details');details.append(el('span','store-kicker',ru?'ТЕМА МАСТЕРСКОЙ':'WORKSHOP THEME'),el('h2',null,name),el('p','account-muted',ru?theme.descriptionRu:theme.descriptionEn))
+    const details=el('div','store-product-details');details.append(el('span','store-kicker',ru?'ТЕМА МАСТЕРСКОЙ':'WORKSHOP THEME'),el('h2',null,name),el('p','account-muted',ru?theme.descriptionRu:theme.descriptionEn),el('p','account-muted',signatureFor(theme.id)[language]??signatureFor(theme.id).en))
     const dialog=el('dialog','store-preview-dialog'),header=el('div','store-preview-heading');header.append(el('h2',null,name),button(ru?'Закрыть':'Close',()=>dialog.close()))
-    dialog.append(header,themePreview(theme,language,true),el('p','account-muted',ru?'Схематический предпросмотр настоящего оформления профиля. Не изменяет 3D-сцену редактора.':'Illustrative preview of the actual profile styling. Does not change the 3D editor scene.'))
+    dialog.append(header,themePreview(theme,language,true),el('p','account-muted',ru?'Демонстрационный профиль и условные показатели. Тема меняет обложку, рамку, статистику, карточки и бейдж автора. Публичный показ можно отключить. 3D-редактор не меняется.':'Sample profile and illustrative statistics. The theme changes the cover, frame, metrics, cards and author badge. Public display is optional. The 3D editor is unchanged.'),communityExamples(theme,language))
     dialog.setAttribute('aria-label',name);signal.addEventListener('abort',()=>{if(dialog.open)dialog.close()},{once:true})
     copy.append(details,button(ru?'Примерить тему':'Preview theme',()=>dialog.showModal()),el('strong','store-price',money(product.amountKopecks)),dialog)
     if(order?.status==='paid')copy.append(el('p','account-muted',t.owned))
