@@ -1,6 +1,8 @@
 import {themeIds} from '../src/menu/store-themes.js'
 import {createHash,timingSafeEqual} from 'node:crypto'
 import {ProjectError} from './projects.js'
+import {instructionAccess} from './instruction-access.js'
+import {canonicalInstructionUrl} from '../src/sets/instruction-url.js'
 const checkout='https://auth.robokassa.ru/Merchant/Index.aspx'
 export function paymentConfig(env=process.env){
  const login=env.BRICKLAB_ROBOKASSA_LOGIN??'',p1=env.BRICKLAB_ROBOKASSA_TEST_PASSWORD1??'',p2=env.BRICKLAB_ROBOKASSA_TEST_PASSWORD2??''
@@ -47,12 +49,12 @@ async function body(req,type){
  for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>8192){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
  return Buffer.concat(chunks).toString('utf8')
 }
-export function createPaymentsHandler({store,origin,config=paymentConfig(),logger=console}){
+export function createPaymentsHandler({store,origin,config=paymentConfig(),logger=console,instructionRelease=false}){
  const cookieName=new URL(origin).protocol==='https:'?'__Host-bricklab_session':'bricklab_session'
  let active=0
  async function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return /^[a-f0-9]{64}$/.test(token||'')?await store.getSession(digest(token)):null}
  return async(req,res,path)=>{
-  if(path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
+  if(path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
   if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
   active++
   try{
@@ -64,6 +66,14 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(!data)throw new ProjectError(400,'invalid_payment_signature')
     if(!await store.confirmTestOrder(data.invoice,data.amount))throw new ProjectError(409,'payment_mismatch')
     reply(res,200,'OK'+data.invoice,true);return true
+   }
+   if(path==='/api/commerce/instruction-access'){
+    if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
+    const q=new URL(req.url,'http://localhost').searchParams,setId=q.get('set'),book=canonicalInstructionUrl(q.get('book')),page=Number(q.get('page'))
+    if(!/^\\d{3,7}-\\d{1,2}$/.test(setId??'')||!book||!Number.isInteger(page)||page<1||page>5000||q.size!==3)throw new ProjectError(400,'invalid_instruction')
+    const viewer=instructionRelease?await session(req):null
+    const account=viewer?await store.commerceAccount(viewer.id):null
+    reply(res,200,instructionAccess({setId,book,page,account,release:instructionRelease}));return true
    }
    const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated')
    if(path==='/api/commerce/account'){
