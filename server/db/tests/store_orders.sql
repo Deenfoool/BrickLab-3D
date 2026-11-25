@@ -41,5 +41,9 @@ BEGIN
  IF EXISTS(SELECT 1 FROM bricklab.store_test_entitlements WHERE invoice=first_order.invoice) THEN RAISE EXCEPTION 'Private entitlement leaked'; END IF;
 END $$;
 RESET ROLE;
+DO $ BEGIN
+ IF (SELECT count(*) FROM bricklab.notification_outbox WHERE kind='test_paid')<>2 THEN RAISE EXCEPTION 'Missing or duplicate paid notification'; END IF;
+ IF (SELECT count(*) FROM bricklab.notification_outbox WHERE kind='test_mismatch')<>1 THEN RAISE EXCEPTION 'Missing mismatch notification'; END IF;
+END $;
 ROLLBACK;
 \echo Store payment database assertions passed.

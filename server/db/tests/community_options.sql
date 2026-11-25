@@ -61,5 +61,10 @@ BEGIN
  IF EXISTS(SELECT 1 FROM bricklab.community_bookmarks WHERE build_id=model) OR EXISTS(SELECT 1 FROM bricklab.community_build_reports WHERE build_id=model) THEN RAISE EXCEPTION 'Orphaned public data'; END IF;
 END $$;
 RESET ROLE;
+DO $ BEGIN
+ IF (SELECT count(*) FROM bricklab.notification_outbox WHERE kind='build')<>1 THEN RAISE EXCEPTION 'Missing or duplicate build event'; END IF;
+ IF (SELECT count(*) FROM bricklab.notification_outbox WHERE kind='build_report')<>1 THEN RAISE EXCEPTION 'Missing build report event'; END IF;
+ IF (SELECT count(*) FROM bricklab.notification_outbox WHERE kind='moderation')<>1 THEN RAISE EXCEPTION 'Missing moderation event'; END IF;
+END $;
 ROLLBACK;
 \echo Community permissions and moderation DB assertions passed.

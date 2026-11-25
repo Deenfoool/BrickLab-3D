@@ -38,6 +38,9 @@ docker run --rm --network none --memory=1536m --cpus=1 \
     bricklab-test-runner:local npm test -- --test-concurrency=1 \
     2>&1 | tee /tmp/bricklab-hub-tests.log
 
+echo "=== TELEGRAM WORKER TESTS ==="
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_events_test.py
+
 echo "=== ISOLATED DATABASE TESTS ==="
 export POSTGRES_PASSWORD="$(openssl rand -hex 32)"
 export BRICKLAB_APP_PASSWORD="$(openssl rand -hex 32)"
@@ -57,7 +60,7 @@ PGPASSWORD="$POSTGRES_PASSWORD" docker run --rm --network "$NET" \
     -e PGHOST="$DB" -e PGDATABASE=bricklab_browser_test -e PGUSER=bricklab_admin \
     -e PGPASSWORD -e BRICKLAB_APP_PASSWORD -v "$TMP/server/db:/migrations:ro" \
     postgres:16 sh /migrations/setup.sh
-for check in account_security.sql community_options.sql store_orders.sql; do
+for check in account_security.sql community_options.sql store_orders.sql notification_events.sql; do
     docker exec -i -e PGPASSWORD="$POSTGRES_PASSWORD" "$DB" \
       psql -X -v ON_ERROR_STOP=1 -U bricklab_admin -d bricklab_browser_test \
       < "$TMP/server/db/tests/$check"
@@ -115,7 +118,7 @@ echo "=== START RELEASE ==="
 docker compose up -d --no-deps --no-build --wait --wait-timeout 120 bricklab
 curl -fsS http://127.0.0.1:8080/api/health
 curl -fsS https://bricklab-3d.ru/api/health
-curl -fsS https://bricklab-3d.ru/ | grep -F 'fullscreen-workshop.css?v=fullscreen-1' >/dev/null
+curl -fsS https://bricklab-3d.ru/ | grep -F 'menu.js?v=events-1' >/dev/null
 curl -fsS 'https://bricklab-3d.ru/api/community/builds?sort=popular&week=1' >/dev/null
 trap - ERR
 echo

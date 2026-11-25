@@ -27,19 +27,20 @@ export function createAccountSecurityHandler({store,origin,registrationEnabled=f
  function reply(res,status,data){const b=JSON.stringify(data);res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Content-Length':Buffer.byteLength(b)});res.end(b)}
  function sessionHash(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookie+'='))?.slice(cookie.length+1);return /^[a-f0-9]{64}$/.test(token||'')?digest(token):null}
  return async(req,res,path)=>{
-  const admin=path==='/api/admin'||path.startsWith('/api/admin/'),config=path==='/api/auth/config',revoke=path==='/api/auth/revoke-others'
+  const admin=path==='/api/admin'||path.startsWith('/api/admin/'),config=path==='/api/auth/config',revoke=path==='/api/auth/revoke-others',bug=path==='/api/feedback/summary'
   const mailRoute=['/api/auth/register','/api/auth/verify','/api/auth/reset-request','/api/auth/reset-confirm'].includes(path)&&(secure||path!=='/api/auth/register')
-  if(!admin&&!config&&!revoke&&!mailRoute)return false
+  if(!admin&&!config&&!revoke&&!mailRoute&&!bug)return false
   try{
    if(config){if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed');reply(res,200,{registrationEnabled:registrationEnabled&&(!secure||!!mail),emailVerification:secure,resetEnabled:secure&&!!mail});return true}
    if(req.method!=='GET'&&req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
    if(active>=4)throw new ProjectError(429,'too_many_attempts')
    active++
    try{
-    if(admin||revoke){
+    if(admin||revoke||bug){
      const hash=sessionHash(req),user=hash&&await store.getSession(hash)
      if(!user)throw new ProjectError(401,'unauthenticated')
      if(revoke){if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed');await store.revokeOtherSessions(user.id,hash);reply(res,200,{ok:true});return true}
+     if(bug){if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed');throttle('bug:'+user.id,6,60000);const d=await body(req);if(typeof d.id!=='string'||!uuid.test(d.id)||typeof d.area!=='string'||!d.area.trim()||d.area.length>100||typeof d.summary!=='string'||!d.summary.trim()||d.summary.length>1500||d.consent!==true||Object.keys(d).some(k=>!['id','area','summary','consent'].includes(k))||/[\u0000\ud800-\udfff]/u.test(d.area+d.summary))throw new ProjectError(400,'invalid_bug_report');if(!await store.submitBug(user.id,d.id,d.area.trim(),d.summary.trim()))throw new ProjectError(429,'too_many_attempts');reply(res,202,{ok:true});return true}
      if(user.admin!==true)throw new ProjectError(403,'admin_required')
      const p=new URL(req.url,'http://localhost').searchParams,q=(p.get('q')??'').trim(),raw=p.get('offset')??'0'
      if(q.length>100||/[\u0000-\u001f\u007f]/.test(q)||!/^\d{1,5}$/.test(raw)||Number(raw)>10000)throw new ProjectError(400,'invalid_admin_action')
@@ -50,6 +51,7 @@ export function createAccountSecurityHandler({store,origin,registrationEnabled=f
       if(path==='/api/admin/users')rows=await store.adminUsers(user.id,q,offset)
       else if(path==='/api/admin/reports')rows=await store.adminReports(user.id,offset)
       else if(path==='/api/admin/build-reports')rows=await store.adminBuildReports(user.id,offset)
+      else if(path==='/api/admin/bugs')rows=await store.adminBugs(user.id,q,offset)
       else if(path==='/api/admin/audit')rows=await store.adminAudit(user.id,offset)
       else throw new ProjectError(404,'not_found')
       reply(res,200,{items:rows.slice(0,30),nextOffset:rows.length>30&&offset+30<=10000?offset+30:null});return true
