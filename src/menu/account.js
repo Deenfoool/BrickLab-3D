@@ -4,7 +4,7 @@ import { createAuthClient } from './auth-client.js?v=security-1'
 
 import { createProjectsClient, cloudLink } from './projects-client.js?v=profile-gallery-1'
 
-import { renderCloudWorkshop } from './cloud-workshop.js?v=store-1'
+import { renderCloudWorkshop } from './cloud-workshop.js?v=themes-2'
 
 import {createProfileClient} from './profile-client.js?v=notifications-1'
 
