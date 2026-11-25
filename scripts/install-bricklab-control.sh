@@ -24,7 +24,7 @@ fi
 test "$(id -gn bricklab-control)" = bricklab-control
 test "$(id -nG bricklab-control)" = bricklab-control
 install -d -m 0755 /usr/local/lib/bricklab-control
-install -m 0644 scripts/bricklab-control.py scripts/bricklab-control-snapshot.py scripts/bricklab-control-actions.py /usr/local/lib/bricklab-control/
+install -m 0644 scripts/bricklab-control.py scripts/bricklab-control-snapshot.py scripts/bricklab-control-actions.py scripts/bricklab-control-recovery.py /usr/local/lib/bricklab-control/
 python3 -m py_compile /usr/local/lib/bricklab-control/*.py
 cat >/etc/systemd/system/bricklab-control-snapshot.service <<'UNIT'
 [Unit]
@@ -112,6 +112,43 @@ RuntimeMaxSec=280
 NoNewPrivileges=true
 PrivateTmp=true
 UNIT
+cat >/etc/systemd/system/bricklab-control-recovery.service <<'UNIT'
+[Unit]
+Description=BrickLab opt-in guarded automatic recovery
+After=bricklab-control-snapshot.service docker.service
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+StateDirectory=bricklab-control-recovery bricklab-control-actions
+StateDirectoryMode=0700
+ExecStart=/usr/bin/python3 /usr/local/lib/bricklab-control/bricklab-control-recovery.py
+TimeoutStartSec=280
+NoNewPrivileges=true
+PrivateTmp=true
+UNIT
+cat >/etc/systemd/system/bricklab-control-recovery.timer <<'UNIT'
+[Unit]
+Description=Check guarded recovery once per minute (manual opt-in)
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=60s
+AccuracySec=5s
+[Install]
+WantedBy=timers.target
+UNIT
+# Optional least-privilege GitHub token; never passed as an argument or logged.
+if [[ -e /etc/bricklab-backup/github.token ]]; then
+  python3 - /etc/bricklab-backup/github.token <<'PY'
+import os,stat,sys
+s=os.stat(sys.argv[1])
+assert stat.S_ISREG(s.st_mode) and s.st_uid==0 and not stat.S_IMODE(s.st_mode)&0o077
+PY
+  install -d -m 0755 /etc/systemd/system/bricklab-control.service.d
+  printf '[Service]\nLoadCredential=github.token:/etc/bricklab-backup/github.token\n' >/etc/systemd/system/bricklab-control.service.d/10-github.conf
+else
+  rm -f /etc/systemd/system/bricklab-control.service.d/10-github.conf
+fi
 systemctl daemon-reload
 if [[ "${1:-}" == --enable-actions ]]; then
   systemctl enable --now bricklab-control-actions.socket

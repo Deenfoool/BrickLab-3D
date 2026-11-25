@@ -136,6 +136,7 @@ def collect():
         lines = raw.splitlines()
         data["logs"] = {"lines": len(lines), "errors": sum(bool(re.search(r"\b(?:error|fatal|exception)\b", line, re.I)) for line in lines),
                         "warnings": sum(bool(re.search(r"\b(?:warn|warning)\b", line, re.I)) for line in lines)}
+    data["automation"] = {"recovery": unit("bricklab-control-recovery.timer")}
     data["audit"] = audit()
     data["timestamp"] = time.time()
     return data

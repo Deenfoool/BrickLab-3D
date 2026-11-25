@@ -49,7 +49,8 @@ class Control(unittest.TestCase):
             with patch.object(control,"SNAPSHOT",p):
                 self.assertEqual(control.snapshot(),{})
         for page in control.PAGES:
-            result=control.render(page,{})
+            with patch.object(control,"github_status",return_value={}):
+                result=control.render(page,{})
             self.assertIn("устарел",result["text"])
             self.assertLess(len(result["text"]),4096)
             for row in result["reply_markup"]["inline_keyboard"]:

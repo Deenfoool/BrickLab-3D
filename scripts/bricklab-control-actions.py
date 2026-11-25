@@ -56,7 +56,7 @@ def execute(action):
         return "health_failed"
     return "ok"
 
-def dispatch(request, state=STATE, lock=LOCK):
+def dispatch(request, state=STATE, lock=LOCK, precondition=None):
     if not isinstance(request, dict) or set(request) != {"action", "id"}:
         return "invalid"
     action, ident = request["action"], request["id"]
@@ -67,6 +67,8 @@ def dispatch(request, state=STATE, lock=LOCK):
             fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return "busy"
+        if precondition is not None and not precondition():
+            return "not_running"
         with sqlite3.connect(state, timeout=5) as db:
             db.execute("CREATE TABLE IF NOT EXISTS audit (id TEXT PRIMARY KEY, action TEXT NOT NULL, started INTEGER NOT NULL, result TEXT NOT NULL)")
             now = int(time.time())

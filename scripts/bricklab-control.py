@@ -93,11 +93,50 @@ def snapshot():
     except (OSError, ValueError, KeyError, TypeError):
         return {}
 
+GITHUB_CACHE = {"until": 0, "data": {}}
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+def github_get(path):
+    token_path = pathlib.Path(os.environ.get("CREDENTIALS_DIRECTORY","/nonexistent")) / "github.token"
+    headers = {"Accept":"application/vnd.github+json","User-Agent":"BrickLab-Control-Center","X-GitHub-Api-Version":"2022-11-28"}
+    try:
+        token = token_path.read_text().strip()
+        if re.fullmatch(r"[A-Za-z0-9_]{20,255}",token):
+            headers["Authorization"] = "Bearer " + token
+    except OSError:
+        pass
+    req = urllib.request.Request("https://api.github.com/repos/Deenfoool/BrickLab-3D/" + path,headers=headers)
+    with urllib.request.build_opener(NoRedirect()).open(req,timeout=5) as r:
+        return json.loads(r.read(512*1024))
+
+def github_status():
+    if GITHUB_CACHE["until"] > time.monotonic():
+        return GITHUB_CACHE["data"]
+    data = {}
+    try:
+        head = github_get("commits/feature/cloud-migration").get("sha")
+        if isinstance(head,str) and re.fullmatch(r"[a-f0-9]{40}",head):
+            data["remote"] = head
+            runs = github_get("actions/runs?per_page=10&head_sha=" + head).get("workflow_runs",[])
+            states = [str(x.get("conclusion") or x.get("status") or "unknown") for x in runs
+                      if x.get("head_sha") == head]
+            data["ci"] = ", ".join(states)[:160] or "нет запусков для SHA"
+        else:
+            data["ci"] = "нет данных"
+    except (OSError, ValueError, TypeError, AttributeError):
+        data["ci"] = "недоступно (права, сеть или лимит API)"
+    GITHUB_CACHE.update(until=time.monotonic()+300,data=data)
+    return data
+
 def render(page, data):
     def value(section, key):
         return str(data.get(section, {}).get(key, "нет данных"))
     def lines(section, fields):
         return "\n".join(label + ": " + value(section, key) for label, key in fields)
+    github = github_status() if page == "github" else {}
     recent = data.get("audit", {}).get("recent")
     history = "нет данных" if recent is None else "\n".join(
         row["date"] + " · " + ACTIONS[row["action"]][0] + " · " +
@@ -141,8 +180,8 @@ def render(page, data):
         "builds": "🧱 Последние публичные сборки\n" + records("builds"),
         "reports": "🚩 Неразобранные жалобы\n" + lines("stats", [("На сборки", "build_reports"), ("На комментарии", "comment_reports")]) + "\nРешение жалоб — в веб-админке.",
         "bugs": "🐞 Последние баг-репорты\n" + records("bugs") + "\nОписание, логи и личные данные не отправляются в Telegram.",
-        "github": "🐙 GitHub / релиз\n" + lines("release", [("Checkout", "commit"), ("Последний локально полученный origin", "tracking"), ("Отставание (коммитов)", "behind"), ("Рабочее дерево", "worktree")]) + "\nЛокальная информация после git fetch; CI и PR — по ссылкам. Развёртывание из Telegram не включено.",
-        "automation": "⚙ Автоматизация\n" + automation_description() + "\nНе меняет существующие службы мониторинга и Events.",
+        "github": "🐙 GitHub / релиз\n" + lines("release", [("Checkout", "commit"), ("Последний локально полученный origin", "tracking"), ("Отставание (коммитов)", "behind"), ("Рабочее дерево", "worktree")]) + "\nGitHub SHA: " + github.get("remote","нет данных") + "\nCI для GitHub SHA: " + github.get("ci","нет данных") + "\nGitHub обновляется не чаще раза в 5 минут. Развёртывание из Telegram не включено.",
+        "automation": "⚙ Автоматизация\n" + automation_description() + "\nАвтовосстановление: " + value("automation","recovery") + "\nНе меняет существующие службы мониторинга и Events.",
         "audit": "🛡 Последние операции VPS\n" + history,
         "logs": "📋 Диагностика логов (последние 200 строк за 1 ч)\n" + lines("logs", [("Строки", "lines"), ("С ошибками", "errors"), ("С предупреждениями", "warnings")]) + "\nСодержимое логов не передаётся в Telegram.",
         "release": "🚀 Развёрнутая версия (checkout)\n" + value("release", "commit")
@@ -249,8 +288,8 @@ def handle(update, owner, call):
         if not isinstance(data, str):
             return
         if data in ("pref:toggle","pref:quiet","pref:resume"):
-            update_preferences(data[5:])
             call("answerCallbackQuery", {"callback_query_id": cb["id"]})
+            update_preferences(data[5:])
             try:
                 call("editMessageText", {"chat_id": owner, "message_id": msg["message_id"], **render("automation",snapshot())})
             except ApiError as exc:
