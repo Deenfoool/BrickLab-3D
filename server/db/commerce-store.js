@@ -1,18 +1,19 @@
-import {projectAccount} from '../../src/menu/commerce-catalog.js'
+import {projectAccount,plusLoyalty} from '../../src/menu/commerce-catalog.js'
 
 export async function commerceEntitlements(tx,uid){
-    const rows=await tx`select g.id,g.kind,g.sku,g.target,g.expires_at as "expiresAt"
+    const rows=await tx`select g.id,g.kind,g.sku,g.target,g.granted_at as "grantedAt",g.expires_at as "expiresAt"
      from bricklab.commerce_grants g
      join bricklab.commerce_orders o on o.id=g.order_id and o.user_id=g.user_id
      where g.user_id=${uid} and o.environment='live' and o.status='succeeded'
        and g.revoked_at is null and g.granted_at<=now()
-       and (g.expires_at is null or g.expires_at>now())
+       and (g.kind='subscription' or g.expires_at is null or g.expires_at>now())
      order by g.granted_at,g.id`;
     const grants=rows.map(g=>({id:g.id,kind:g.kind,sku:g.sku,
      ...(g.kind==='theme'?{themeId:g.target}:{}),
      ...(g.kind==='instruction'?{setId:g.target}:{}),
+     ...(g.grantedAt?{grantedAt:new Date(g.grantedAt).getTime()}:{}),
      ...(g.expiresAt?{expiresAt:new Date(g.expiresAt).getTime()}:{})}));
-    return projectAccount(grants);
+    return {...projectAccount(grants),loyalty:plusLoyalty(grants)};
 }
 
 // This is the read side only. No app-role INSERT/UPDATE/DELETE grants and no
