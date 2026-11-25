@@ -1,4 +1,4 @@
-import {renderAdminPanel} from './admin-panel.js?v=community-options-1'
+import {renderAdminPanel} from './admin-panel.js?v=events-1'
 import {renderBureauPanel} from './bureau-panel.js?v=profile-gallery-1'
 import { createAuthClient } from './auth-client.js?v=security-1'
 
@@ -42,7 +42,7 @@ function field(label,type,autocomplete,maxLength){
 export function createCloudAccount({root,link,getProjects,download,openCopy,linkLocal,createBuild=()=>{location.hash='#projects'},openLocal=id=>{location.hash='#project/'+id},previewsEnabled=()=>true,onNotifications=()=>{},onProjectsChanged=()=>{},api=createAuthClient(),cloud=createProjectsClient(),profiles=createProfileClient(),activityApi=createActivityClient(),communityApi=createCommunityClient()}){
  let lang='ru',visible=false,mode='login',user=null,checked=false,busy=false,error='',remote=[],historyId=null,history=[],feedback='',section='workshop',profileData=null,activityData=null,publicCard=null,publicLoaded=false,publicBuilds=[]
  let workshopController=null,bureauController=null,bureauSelection={id:null},adminController=null,emailDraft='',securityFeedback=''
- let notificationError=false,bellRefreshing=false,bellRendered=false
+ let adminRoute='',notificationError=false,bellRefreshing=false,bellRendered=false
  const t=()=>copy[lang]
  function publishNotifications(){onNotifications({lang,signedIn:Boolean(user),checked,busy,items:activityData?.notifications??null,error:notificationError})}
  function label(){const e=link.querySelector('[data-account-label]');e.textContent=user?t().account:t().login;link.title=e.textContent;link.setAttribute('aria-label',e.textContent)}
@@ -127,6 +127,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    }
    return row
  }
+ function deepAdmin(){const hash=location.hash,m=/^#account\/admin\/(user|bug)\/([0-9a-f-]{36})$/i.exec(hash);if(m)return {initialMode:m[1]==='user'?'users':'bugs',initialQuery:m[2]};const tab=/^#account\/admin\/(overview|users|reports|build-reports|bugs|audit|content)$/.exec(hash);return tab?{initialMode:tab[1]}:null}
  function render(){
    workshopController?.abort();workshopController=null
    bureauController?.abort();bureauController=null;adminController?.abort();adminController=null
@@ -142,12 +143,13 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
      return
    }
    if(user){
+     if(user.admin===true&&deepAdmin())section='admin'
      const projects=getProjects(),ownerId=user.id
      workshopController=new AbortController()
      const signal=workshopController.signal,noticeNodes=[]
      if(feedback)noticeNodes.push(message(feedback));if(error)noticeNodes.push(message(error));if(busy)noticeNodes.push(message('busy'))
-     root.append(renderCloudWorkshop({lang,user,local:projects,remote,signal,previewsEnabled:previewsEnabled(),createBuild,openLocal,logout:()=>run(()=>api.logout()),noticeNodes,fetchCloud:async(id,requestSignal)=>{if(user?.id!==ownerId||requestSignal.aborted)return null;const item=await cloud.get(id,undefined,requestSignal);return user?.id===ownerId&&!requestSignal.aborted?item:null},section:section==='admin'&&!user.admin?'workshop':section,busy,revokeOthers(){operate(async()=>{await api.revokeOthers();feedback='sessionsRevoked'})},adminPanel:()=>{adminController=new AbortController();return renderAdminPanel({lang,signal:adminController.signal})},bureauPanel:()=>{bureauController=new AbortController();return renderBureauPanel({lang,user,signal:bureauController.signal,getProjects,openCopy,linkLocal,download,selection:bureauSelection})},profileData,activityData,publicCard,publicLoaded,publicBuilds,loadPublic(){operate(async()=>{publicCard=await communityApi.get();publicBuilds=await communityApi.builds();publicLoaded=true})},publishBuild(id,data){operate(async()=>{publicBuilds=await communityApi.publishBuild(id,data);feedback='publicationSaved'})},unpublishBuild(id){operate(async()=>{publicBuilds=await communityApi.unpublishBuild(id);feedback='publicationRemoved'})},publishPublic(data){operate(async()=>{publicCard=await communityApi.publish(data);publicLoaded=true;feedback='publicSaved'})},unpublishPublic(){operate(async()=>{publicCard=await communityApi.unpublish();publicBuilds=[];publicLoaded=true;feedback='publicRemoved'})},refreshActivity(){operate(async()=>{activityData=await activityApi.get()})},readActivity(){operate(async()=>{activityData=await activityApi.read()})},toggleFavorite(id,add){operate(async()=>{activityData=await activityApi.favorite(id,add)})},openFavorite(id){operate(async()=>{const owner=user.id,item=await cloud.get(id);if(user?.id===owner&&visible)openCopy(item.document,{ownerId:owner,id:item.id,revision:item.revision})})},uploadMedia(kind,file){operate(async()=>{profileData=await profiles.upload(kind,file);feedback='mediaSaved'})},removeMedia(kind){operate(async()=>{profileData=await profiles.remove(kind);feedback='mediaSaved'})},saveProfile(data){operate(async()=>{profileData=await profiles.save(data);if(publicCard?.backgroundTheme&&data.background!==undefined)publicCard={...publicCard,backgroundTheme:profileData.profile.background};feedback='profileSaved'})},
-       go(key){if(key==='cloud'){location.hash='#projects';return}section=key;render();window.scrollTo({top:0,behavior:'instant'})}}));return
+     root.append(renderCloudWorkshop({lang,user,local:projects,remote,signal,previewsEnabled:previewsEnabled(),createBuild,openLocal,logout:()=>run(()=>api.logout()),noticeNodes,fetchCloud:async(id,requestSignal)=>{if(user?.id!==ownerId||requestSignal.aborted)return null;const item=await cloud.get(id,undefined,requestSignal);return user?.id===ownerId&&!requestSignal.aborted?item:null},section:section==='admin'&&!user.admin?'workshop':section,busy,revokeOthers(){operate(async()=>{await api.revokeOthers();feedback='sessionsRevoked'})},adminPanel:()=>{adminController=new AbortController();return renderAdminPanel({lang,signal:adminController.signal,...(deepAdmin()??{})})},bureauPanel:()=>{bureauController=new AbortController();return renderBureauPanel({lang,user,signal:bureauController.signal,getProjects,openCopy,linkLocal,download,selection:bureauSelection})},profileData,activityData,publicCard,publicLoaded,publicBuilds,loadPublic(){operate(async()=>{publicCard=await communityApi.get();publicBuilds=await communityApi.builds();publicLoaded=true})},publishBuild(id,data){operate(async()=>{publicBuilds=await communityApi.publishBuild(id,data);feedback='publicationSaved'})},unpublishBuild(id){operate(async()=>{publicBuilds=await communityApi.unpublishBuild(id);feedback='publicationRemoved'})},publishPublic(data){operate(async()=>{publicCard=await communityApi.publish(data);publicLoaded=true;feedback='publicSaved'})},unpublishPublic(){operate(async()=>{publicCard=await communityApi.unpublish();publicBuilds=[];publicLoaded=true;feedback='publicRemoved'})},refreshActivity(){operate(async()=>{activityData=await activityApi.get()})},readActivity(){operate(async()=>{activityData=await activityApi.read()})},toggleFavorite(id,add){operate(async()=>{activityData=await activityApi.favorite(id,add)})},openFavorite(id){operate(async()=>{const owner=user.id,item=await cloud.get(id);if(user?.id===owner&&visible)openCopy(item.document,{ownerId:owner,id:item.id,revision:item.revision})})},uploadMedia(kind,file){operate(async()=>{profileData=await profiles.upload(kind,file);feedback='mediaSaved'})},removeMedia(kind){operate(async()=>{profileData=await profiles.remove(kind);feedback='mediaSaved'})},saveProfile(data){operate(async()=>{profileData=await profiles.save(data);if(publicCard?.backgroundTheme&&data.background!==undefined)publicCard={...publicCard,backgroundTheme:profileData.profile.background};feedback='profileSaved'})},
+       go(key){if(deepAdmin()){window.history.replaceState(null,'','#account');adminRoute=''}if(key==='cloud'){location.hash='#projects';return}section=key;render();window.scrollTo({top:0,behavior:'instant'})}}));return
    }
    const panel=node('div','account-auth'),hero=node('div','account-auth-hero'),brand=node('div','account-brand','BRICKLAB CLOUD')
    hero.append(brand,node('h2',null,s.hero),node('p',null,s.intro))
@@ -192,7 +194,8 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    refreshNotifications,
    readNotifications(){return refreshNotifications(true)},
    update(language,show){
-     const next=language==='en'?'en':'ru',changed=next!==lang||visible!==show
+     const next=language==='en'?'en':'ru',route=show&&deepAdmin()?location.hash:'',changed=next!==lang||visible!==show||adminRoute!==route
+     adminRoute=route
      lang=next;visible=show;if(!show){workshopController?.abort();workshopController=null;bureauController?.abort();bureauController=null;adminController?.abort();adminController=null}label();publishNotifications()
      if(!show&&!checked&&api.allowed&&!busy&&!notificationError)void refreshNotifications()
      if(show&&changed){render();if(api.allowed&&!busy){checked=false;refresh()}}else if(show&&!busy&&user)render()
