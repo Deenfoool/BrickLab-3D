@@ -1,4 +1,4 @@
-import {applySignature,themeBadge,themePlate,signatureFor} from './profile-signature.js?v=signature-1'
+import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 const labels={
  ru:{title:'BrickLab Store',intro:'Оформление мастерской. Основные функции редактора остаются бесплатными.',disabled:'Продажи пока закрыты. Здесь представлен каталог будущих покупок.',test:'Тестовый режим · реальные деньги не списываются. Покупки доступны только администратору.',login:'Войти в аккаунт',buy:'Тестовая покупка',owned:'Получено в тестовом инвентаре',resume:'Продолжить тестовую оплату',consent:'Подтверждаю, что это тестовая оплата без реального списания и без выдачи платного товара.',history:'Мои тестовые заказы',finance:'BrickLab Finance · тестовый режим',financeNote:'Суммы ниже — виртуальные тестовые операции, не выручка.',total:'Заказов',paid:'Подтверждено',amount:'Тестовый оборот',pending:'Ожидает подтверждения',complete:'Подтверждён',refresh:'Обновить статус',error:'Не удалось выполнить запрос. Попробуй ещё раз.',wait:'Если оплата завершена, дождись уведомления Robokassa и обнови статус.',profile:'Мой инвентарь',carbon:'Карбон',neon:'Неоновая мастерская',noOrders:'Заказов пока нет',loading:'Загрузка…'},
@@ -12,14 +12,19 @@ async function api(path,signal,data){
  return response.json()
 }
 function themePreview(theme,language,large=false){
- const art=el('div','store-theme-preview cosmetic-'+theme.id+(large?' store-theme-large':''))
+ const ru=language==='ru',art=el('div','store-theme-preview signature-catalog-preview'+(large?' store-theme-large':''))
  applySignature(art,theme.id);art.setAttribute('aria-hidden','true')
- const shell=el('div','store-preview-shell'),bar=el('div','store-preview-bar'),sidebar=el('div','store-preview-sidebar'),main=el('div','store-preview-main'),hero=el('div','store-preview-hero'),avatar=el('div','store-preview-avatar','BL'),info=el('div','store-preview-info'),tiles=el('div','store-preview-tiles')
- bar.append(el('strong',null,'BRICKLAB / WORKSHOP'),el('span',null,signatureFor(theme.id).mark))
- for(let i=0;i<4;i++)sidebar.append(el('i'))
- info.append(el('strong',null,language==='ru'?'Моя мастерская':'My workshop'),el('small',null,theme.en))
- hero.append(avatar,info);for(let i=0;i<3;i++){const tile=el('div');tile.append(el('i'),el('span'));if(large)tile.append(el('strong',null,['12','8','24'][i]));tiles.append(tile)}
- main.append(hero,tiles);shell.append(bar,sidebar,main);art.append(shell);return art
+ const cover=el('div','community-profile-cover signature-preview-cover');mountThemeCover(cover,theme.id)
+ if(!large){art.append(cover);return art}
+ const identity=el('div','community-profile-identity'),avatar=el('div','account-avatar community-profile-avatar','BL'),body=el('div','community-card-body')
+ const stats=el('div','community-reputation')
+ for(const [label,value] of [[ru?'Сборки':'Builds','12'],[ru?'Лайки':'Likes','128'],[ru?'Подписчики':'Followers','24']]){
+  const metric=el('div');metric.append(el('span',null,label),el('strong',null,value));stats.append(metric)
+ }
+ body.append(el('h2',null,ru?'Конструктор':'Builder'),themeBadge(theme.id,language),stats)
+ identity.append(avatar,body)
+ const profile=el('article','community-card community-builder community-builder-detail signature-demo-profile')
+ applySignature(profile,theme.id);profile.append(cover,identity);art.append(profile);return art
 }
 function communityExamples(theme,language){
  const ru=language==='ru',grid=el('div','signature-preview-examples')
