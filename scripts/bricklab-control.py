@@ -139,7 +139,7 @@ def render(page, data):
     github = github_status() if page == "github" else {}
     recent = data.get("audit", {}).get("recent")
     history = "нет данных" if recent is None else "\n".join(
-        row["date"] + " · " + ACTIONS[row["action"]][0] + " · " +
+        row["date"] + " · " + ("Авто · " if row.get("source") == "recovery" else "Telegram · ") + ACTIONS[row["action"]][0] + " · " +
         ("начата; результат неизвестен" if row["result"] == "started" else RESULTS.get(row["result"], "неизвестно"))
         for row in recent) or "Операций пока нет."
     def records(key):
@@ -206,7 +206,7 @@ def render(page, data):
                          ("Pull Requests", "/pulls"), ("Issues", "/issues"), ("Новый Issue", "/issues/new")]])
     if page == "automation":
         buttons.extend([[{"text": name, "callback_data": "pref:" + key}] for name,key in
-                        [("Уведомления: вкл/выкл", "toggle"), ("Тишина на 1 час", "quiet"), ("Снять тишину", "resume")]])
+                        [("Выключить уведомления" if preferences().get("enabled") else "Включить уведомления", "off" if preferences().get("enabled") else "on"), ("Тишина на 1 час", "quiet"), ("Снять тишину", "resume")]])
     if page == "release":
         buttons.append([{"text": "GitHub", "url": "https://github.com/Deenfoool/BrickLab-3D"}])
     if actions_enabled() and page in ("docker", "backup"):
@@ -287,7 +287,7 @@ def handle(update, owner, call):
         data = cb.get("data", "")
         if not isinstance(data, str):
             return
-        if data in ("pref:toggle","pref:quiet","pref:resume"):
+        if data in ("pref:on","pref:off","pref:quiet","pref:resume"):
             call("answerCallbackQuery", {"callback_query_id": cb["id"]})
             update_preferences(data[5:])
             try:
@@ -346,11 +346,13 @@ def automation_description():
 
 def update_preferences(action):
     p = preferences()
-    if action == "toggle":
-        p["enabled"] = not p.get("enabled",False)
-        p.pop("last_sample",None)
-        p.pop("samples",None)
-        p.pop("announced",None)
+    if action in ("on","off"):
+        enabled = action == "on"
+        if enabled != bool(p.get("enabled",False)):
+            p["enabled"] = enabled
+            p.pop("last_sample",None)
+            p.pop("samples",None)
+            p.pop("announced",None)
     elif action == "quiet":
         p["quiet_until"] = int(time.time()) + 3600
     elif action == "resume":
@@ -381,7 +383,7 @@ def check_alerts(owner, call, data=None):
     stamp = data.get("timestamp")
     if type(stamp) not in (int,float) or stamp <= p.get("last_sample",0):
         return
-    previous = p.get("samples",{})
+    previous = p.get("samples",{}) if stamp-p.get("last_sample",0)<=180 else {}
     announced = p.get("announced",{})
     flags = alert_flags(data)
     changes = []

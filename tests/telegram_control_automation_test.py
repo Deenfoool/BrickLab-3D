@@ -14,7 +14,7 @@ class Automation(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d, patch.dict(control.os.environ,{"STATE_DIRECTORY":d}):
             calls=[]
             call=lambda *args: calls.append(args)
-            control.update_preferences("toggle")
+            control.update_preferences("on")
             def sample(t, api):
                 control.check_alerts(42,call,{"timestamp":t,"vps":{"api":api}})
             sample(1,"ошибка")
@@ -28,10 +28,18 @@ class Automation(unittest.TestCase):
             sample(5,"OK")
             self.assertEqual(len(calls),2)
             self.assertIn("Восстановлено",calls[-1][1]["text"])
+    def test_idempotent_enable(self):
+        with tempfile.TemporaryDirectory() as d, patch.dict(control.os.environ,{"STATE_DIRECTORY":d}):
+            control.update_preferences("on")
+            control.update_preferences("on")
+            self.assertTrue(control.preferences()["enabled"])
+            control.update_preferences("off")
+            control.update_preferences("off")
+            self.assertFalse(control.preferences()["enabled"])
     def test_quiet_and_missing_values(self):
         with tempfile.TemporaryDirectory() as d, patch.dict(control.os.environ,{"STATE_DIRECTORY":d}):
             calls=[]
-            control.update_preferences("toggle")
+            control.update_preferences("on")
             control.update_preferences("quiet")
             for t in (1,2):
                 control.check_alerts(42,lambda *a:calls.append(a),{"timestamp":t,"vps":{"ram_percent":95}})
@@ -51,7 +59,7 @@ class Automation(unittest.TestCase):
         self.assertNotIn("private@",str(view))
     def test_preferences_owner_only(self):
         with tempfile.TemporaryDirectory() as d, patch.dict(control.os.environ,{"STATE_DIRECTORY":d}):
-            control.handle({"callback_query":{"id":"x","from":{"id":43},"message":{"chat":{"id":42,"type":"private"},"message_id":1},"data":"pref:toggle"}},42,lambda *a:None)
+            control.handle({"callback_query":{"id":"x","from":{"id":43},"message":{"chat":{"id":42,"type":"private"},"message_id":1},"data":"pref:on"}},42,lambda *a:None)
             self.assertFalse(control.preferences().get("enabled"))
 
 if __name__=="__main__":

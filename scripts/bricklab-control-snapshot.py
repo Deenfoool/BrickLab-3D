@@ -62,9 +62,10 @@ def audit():
         return {"recent": []}
     try:
         with sqlite3.connect("file:"+str(path)+"?mode=ro", uri=True, timeout=2) as db:
-            rows = db.execute("SELECT action,started,result FROM audit ORDER BY started DESC,rowid DESC LIMIT 8").fetchall()
-        return {"recent": [{"action": a, "date": datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%d.%m %H:%M UTC"), "result": r}
-                           for a,t,r in rows if a in ("restart","backup") and r in ("started","ok","failed","unknown","not_running","health_failed")]}
+            source = "source" if "source" in {r[1] for r in db.execute("PRAGMA table_info(audit)")} else "'telegram'"
+            rows = db.execute("SELECT action,started,result,"+source+" FROM audit ORDER BY started DESC,rowid DESC LIMIT 8").fetchall()
+        return {"recent": [{"action": a, "date": datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%d.%m %H:%M UTC"), "result": r, "source": "recovery" if origin=="recovery" else "telegram"}
+                           for a,t,r,origin in rows if a in ("restart","backup") and r in ("started","ok","failed","unknown","not_running","health_failed")]}
     except (sqlite3.Error, ValueError, OSError, OverflowError):
         return {}
 

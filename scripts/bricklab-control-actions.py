@@ -56,7 +56,9 @@ def execute(action):
         return "health_failed"
     return "ok"
 
-def dispatch(request, state=STATE, lock=LOCK, precondition=None):
+def dispatch(request, state=STATE, lock=LOCK, precondition=None, source="telegram"):
+    if source not in ("telegram","recovery"):
+        return "invalid"
     if not isinstance(request, dict) or set(request) != {"action", "id"}:
         return "invalid"
     action, ident = request["action"], request["id"]
@@ -70,14 +72,16 @@ def dispatch(request, state=STATE, lock=LOCK, precondition=None):
         if precondition is not None and not precondition():
             return "not_running"
         with sqlite3.connect(state, timeout=5) as db:
-            db.execute("CREATE TABLE IF NOT EXISTS audit (id TEXT PRIMARY KEY, action TEXT NOT NULL, started INTEGER NOT NULL, result TEXT NOT NULL)")
+            db.execute("CREATE TABLE IF NOT EXISTS audit (id TEXT PRIMARY KEY, action TEXT NOT NULL, started INTEGER NOT NULL, result TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'telegram')")
+            if "source" not in {r[1] for r in db.execute("PRAGMA table_info(audit)")}:
+                db.execute("ALTER TABLE audit ADD COLUMN source TEXT NOT NULL DEFAULT 'telegram'")
             now = int(time.time())
             if db.execute("SELECT 1 FROM audit WHERE id=?", (ident,)).fetchone():
                 return "duplicate"
             last = db.execute("SELECT max(started) FROM audit WHERE action=?", (action,)).fetchone()[0]
             if last is not None and now-last < LIMITS[action]:
                 return "cooldown"
-            db.execute("INSERT INTO audit VALUES (?,?,?,?)", (ident, action, now, "started"))
+            db.execute("INSERT INTO audit(id,action,started,result,source) VALUES (?,?,?,?,?)", (ident, action, now, "started", source))
             db.commit()
             print("Control action started: " + action + " " + ident, file=sys.stderr, flush=True)
             try:

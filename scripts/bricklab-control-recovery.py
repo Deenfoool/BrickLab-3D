@@ -74,7 +74,7 @@ def main():
     if ready:
         # The action broker shares the deploy lock, rechecks under that lock,
         # and records the request before it touches Docker.
-        result=actions.dispatch({"action":"restart","id":secrets.token_hex(12)},precondition=still_unhealthy)
+        result=actions.dispatch({"action":"restart","id":secrets.token_hex(12)},precondition=still_unhealthy,source="recovery")
         print("Automatic recovery: "+result,flush=True)
 
 if __name__=="__main__":

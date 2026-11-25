@@ -10,7 +10,7 @@ Same bot token as BrickLab Events, separate long-polling service. Existing notif
 - Open the existing Telegram bot and send /menu, /status or /start.
 - Check sudo systemctl status bricklab-control.service bricklab-control-snapshot.timer; sudo journalctl -u bricklab-control.service -n 30 --no-pager.
 - Snapshot updates every 60 seconds after completion. Data older than 180 seconds is shown as unknown; HTTPS probe is from VPS, not external monitoring. Backup status reports systemd result only, not verified restorability.
-- To disable: sudo systemctl disable --now bricklab-control.service bricklab-control-snapshot.timer bricklab-control-actions.socket. Existing events continue.
+- To disable: sudo systemctl disable --now bricklab-control.service bricklab-control-snapshot.timer bricklab-control-actions.socket bricklab-control-recovery.timer. Existing events continue.
 
 ## Optional operator actions
 Default install disables the action socket. To explicitly enable after review and tests:
@@ -19,9 +19,9 @@ The Docker page can restart only an already running BrickLab app, not PostgreSQL
 
 ## Next phases (not implemented)
 1. Restore verification, guarded deploy and compatible rollback, independent step-up authentication. Never auto-rollback across incompatible DB migrations.
-2. Moderation via existing admin service authorization and audit; private report metadata only, attachment consent, role separation, GitHub issues with redaction.
-3. Alert deduplication, maintenance windows, external monitoring independent of VPS, restore drills, limited auto-recovery and scheduled digest. Existing daily events are retained.
-4. Release/CI integration, richer analytics and Telegram Mini App with server-side initData verification.
+2. Direct Telegram moderation via existing admin service authorization and audit; attachment consent, role separation, GitHub issue submission with redaction.
+3. Full maintenance mode and external monitoring independent of VPS, restore drills and richer scheduled reports.
+4. Richer analytics and Telegram Mini App with server-side initData verification.
 
 
 ## Phase 3: operator queues
@@ -35,4 +35,4 @@ Off by default to avoid duplicating existing monitoring. Toggle in Automation, s
 
 
 ### Optional recovery timer
-Off on a fresh installation. Only after checking existing monitor recovery policies and testing the new service on a non-production instance, enable via `sudo systemctl enable --now bricklab-control-recovery.timer`. The root-owned collector must observe three distinct recent snapshots (running app, failed local API, SQL OK). Recovery takes the same lock as the release script, rechecks that the app is running, PostgreSQL is ready and API is still failing, and invokes only the existing fixed restart broker. Attempts at most hourly (manual restart cooldown also applies), persisted before execution; no retries, no startup of stopped services, no DB restarts. To pause before manual work: `sudo touch /etc/bricklab-backup/control-recovery.pause`; resume by removing the file. To disable: `sudo systemctl disable --now bricklab-control-recovery.timer`; an already running operation may finish. The quiet mode in Telegram is notification-only and does NOT pause recovery. Review recovery journal and shared action audit. Run `python3 -B tests/telegram_control_recovery_test.py`. No independent external uptime monitor is provisioned here.
+Off on a fresh installation. Only after checking existing monitor recovery policies and testing the new service on a non-production instance, enable via `sudo systemctl enable --now bricklab-control-recovery.timer`. The root-owned collector must observe three distinct recent snapshots (running app, failed local API, SQL OK). Recovery takes the same lock as the release script, rechecks that the app is running, PostgreSQL is ready and API is still failing, and invokes only the existing fixed restart broker. Attempts at most hourly (manual restart cooldown also applies), persisted before execution; no retries, no startup of stopped services, no DB restarts. To pause before manual work: `sudo touch /etc/bricklab-backup/control-recovery.pause`; resume by removing the file. To disable: `sudo systemctl disable --now bricklab-control-recovery.timer`; an already running operation may finish. The quiet mode in Telegram is notification-only and does NOT pause recovery. Review recovery journal and shared action audit (Telegram and automatic recovery are distinguished). Run `python3 -B tests/telegram_control_recovery_test.py`. No independent external uptime monitor is provisioned here.
