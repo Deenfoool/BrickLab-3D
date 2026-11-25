@@ -9,6 +9,7 @@ import { node, control, setStrings } from './catalog.js'
 import {
   mapInventory,
   inventoryUsage,
+  auditInventory,
   normalizeQuery,
   inventoryKey,
 } from './data.js?v=catalog-engine-1'
@@ -23,6 +24,7 @@ export function mountSetPalette(
     [...set.inventory].sort((a, b) => Number(a.spare) - Number(b.spare)),
     catalog,
   )
+  const coverage = auditInventory(items)
   const tools = node('div', undefined, 'set-palette-tools'),
     search = node('input'),
     color = node('select'),
@@ -105,6 +107,9 @@ export function mountSetPalette(
     grid.replaceChildren()
     const missing = items.filter((item) => !item.model).length
     status.textContent = `${filtered.length} · ${t.missing}: ${missing}`
+    status.title = ru
+      ? `Обычных деталей: ${Object.values(coverage).reduce((a,b)=>a+b,0)}; прямые: ${coverage.exact}; алиасы: ${coverage.alias}; внешние ID: ${coverage.external}; неоднозначные: ${coverage.ambiguous}; отсутствуют: ${coverage.missing}`
+      : `Regular pieces: ${Object.values(coverage).reduce((a,b)=>a+b,0)}; exact: ${coverage.exact}; aliases: ${coverage.alias}; external IDs: ${coverage.external}; ambiguous: ${coverage.ambiguous}; missing: ${coverage.missing}`
     for (const item of filtered.slice(0, limit)) {
       const card = node('article', undefined, 'set-part')
       card.dataset.inventory = inventoryKey(item)
