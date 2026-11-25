@@ -123,3 +123,13 @@
   .editor .workspace-status .editor-hint{text-align:left;min-width:130px}
   .workspace-context .workspace-control span{display:none}
 }
+
+.editor[data-workspace-layout] .editor-actions .editor-primary{color:inherit;background:transparent;border-color:#454a53;font-weight:600}
+.editor[data-workspace-layout] .editor-actions .editor-primary:hover{background:#30353d}
+.workspace-quick{border-left:1px solid var(--workspace-line);padding-left:5px}
+.editor .workspace-quick [data-workspace-control=delete]:hover{color:#ff9c9c}
+.editor[data-workspace-focus] .workspace-quick,.editor[data-workspace-focus] .workspace-options{display:none}
+.editor[data-workspace-presentation] .workspace-context :is(.workspace-context-group):first-child,
+.editor[data-workspace-presentation] .workspace-context .workspace-control:not([data-workspace-control=focus],[data-workspace-control=presentation]),
+.editor[data-workspace-presentation] .workspace-context :is([data-el=wires],[data-el=editCable]){display:none}
+.editor[data-workspace-presentation] .workspace-context{justify-content:flex-end}
