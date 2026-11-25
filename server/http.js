@@ -75,6 +75,9 @@ export function createBrickLabServer({ root, logger = console, auth, projects, p
         res.setHeader('Allow', 'GET, HEAD')
         return send(req, res, 405, 'Method not allowed')
       }
+      if (pathname === '/store') {
+        res.writeHead(302,{'Location':'/#store','Cache-Control':'no-store'});return res.end()
+      }
       if (pathname === '/api/health') {
         return send(req, res, 200, JSON.stringify({ status: 'ok', service: 'bricklab-3d' }), 'application/json; charset=utf-8')
       }
