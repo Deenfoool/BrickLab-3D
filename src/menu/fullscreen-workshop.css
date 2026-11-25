@@ -31,7 +31,7 @@
 .fullscreen-workshop .workshop-hero{
  display:grid;gap:0;min-width:0;overflow:visible;margin:0;border:0;border-bottom:1px solid var(--workshop-border);border-radius:0;background:linear-gradient(135deg,var(--workshop-surface),#1a1e25);box-shadow:none
 }
-.fullscreen-workshop .workshop-hero>.workshop-cover{border:0;border-radius:0;min-height:clamp(200px,22vw,360px);padding:clamp(20px,3vw,48px);align-items:center}
+.fullscreen-workshop .workshop-hero>.workshop-cover:not(.signature-custom-cover),.fullscreen-workshop .workshop-hero>.workshop-cover.signature-custom-cover{border:0;border-radius:0;min-height:clamp(200px,22vw,360px);padding:clamp(20px,3vw,48px);align-items:center}
 .fullscreen-workshop .workshop-hero>.workshop-cover.signature-custom-cover{align-items:flex-start}
 .fullscreen-workshop .workshop-cover .signature-cover-caption strong{font-size:clamp(30px,4vw,66px)}
 .fullscreen-workshop .workshop-cover .signature-art{background-size:auto 100%;background-position:right center}
@@ -62,7 +62,7 @@
 .workshop-overview-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .workshop-overview-heading h2{font-size:20px;line-height:1.2}
 .workshop-overview-heading .workspace-action{min-height:33px;font-size:12px;padding:6px 10px;border-color:var(--workshop-border);background:transparent}
-.workshop-recent-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:14px}
+.workshop-recent-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,210px),1fr));gap:14px}
 .workshop-recent-card{display:grid;grid-template-rows:auto 1fr;min-width:0;overflow:hidden;border:1px solid var(--workshop-border);border-radius:var(--sig-radius,10px);background:var(--workshop-surface)}
 .workshop-recent-card:hover{border-color:var(--workshop-accent)}
 .workshop-recent-art{position:relative;display:grid;place-content:center;justify-items:center;gap:8px;aspect-ratio:16/10;overflow:hidden;background:radial-gradient(ellipse at 50% 55%,color-mix(in srgb,var(--workshop-accent) 12%,#303744),#181d24 80%);color:#a0aaba;border-bottom:1px solid var(--workshop-border)}
@@ -85,7 +85,7 @@
 .workshop-public-thumb img{width:100%;height:100%;object-fit:cover}
 .workshop-public-thumb .icon{width:20px;height:20px;color:var(--workshop-accent)}
 a.workshop-overview-row:hover strong{color:var(--workshop-accent)}
-@media(min-width:1600px){.workshop-recent-grid{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}}
+@media(min-width:1600px){.workshop-recent-grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}}
 @media(max-width:1100px){.fullscreen-workshop .workshop-layout{grid-template-columns:205px minmax(0,1fr)}.fullscreen-workshop .workshop-hero>.workshop-metric-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.workshop-overview-columns{grid-template-columns:1fr}.fullscreen-workshop .workshop-cover .signature-cover-caption strong{font-size:clamp(28px,4vw,45px)}}
 @media(max-width:850px){
  .main:has(#account-panel.fullscreen-workshop:not([hidden]))>.topbar{position:static}
@@ -97,11 +97,11 @@ a.workshop-overview-row:hover strong{color:var(--workshop-accent)}
  .fullscreen-workshop .workshop-nav .workspace-action[aria-pressed=true]{box-shadow:inset 0 -2px var(--workshop-accent)}
  .workshop-sidebar-footer{margin:0;padding:0;border:0;display:flex;justify-content:flex-end}
  .workshop-sidebar-footer>.workspace-action{width:auto;min-height:28px;font-size:11px;padding:4px 8px}
- .fullscreen-workshop .workshop-hero>.workshop-cover{min-height:clamp(160px,26vw,225px)}
+ .fullscreen-workshop .workshop-hero>.workshop-cover:not(.signature-custom-cover),.fullscreen-workshop .workshop-hero>.workshop-cover.signature-custom-cover{min-height:clamp(160px,26vw,225px)}
  .fullscreen-workshop .workshop-content{gap:18px}
 }
 @media(max-width:480px){
- .fullscreen-workshop .workshop-hero>.workshop-cover{min-height:155px;padding:15px}
+ .fullscreen-workshop .workshop-hero>.workshop-cover:not(.signature-custom-cover),.fullscreen-workshop .workshop-hero>.workshop-cover.signature-custom-cover{min-height:155px;padding:15px}
  .fullscreen-workshop .workshop-cover .signature-art{background-position:78% center;opacity:.78}
  .fullscreen-workshop .workshop-cover .signature-cover-caption strong{font-size:25px}
  .fullscreen-workshop .workshop-identity{gap:14px}
