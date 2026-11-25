@@ -1,4 +1,4 @@
-import {applySignature,themeBadge,themePlate,signatureFor} from './profile-signature.js?v=signature-1'
+import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 import { badges, ranks, rankFor } from './workshop-model.js?v=activity-1'
 import { workshopCopy } from './workshop-copy.js?v=profile-gallery-1'
@@ -52,6 +52,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
   const hero=el('section','workshop-hero cover-'+(profile?.cover??'blueprint')),cover=el('div','workshop-cover'),emblem=el('div','workshop-emblem','BRICKLAB / WORKSHOP')
   const plate=themePlate(profile?.background);if(plate)cover.append(plate)
   emblem.prepend(icon('layers'));cover.append(emblem);if(profile?.coverUrl){const image=el('img','profile-cover-image');image.src=profile.coverUrl;image.alt='';cover.prepend(image)}
+  mountThemeCover(cover,profile?.background,{custom:!!profile?.coverUrl})
   const identity=el('div','workshop-hero-inner'),person=el('div','workshop-identity'),name=el('div')
   name.append(el('h2',null,user.displayName),el('p','account-muted',t.active));const badge=themeBadge(profile?.background,lang);if(badge)name.append(badge)
   const avatar=el('div','workshop-avatar',Array.from(user.displayName).slice(0,2).join('').toUpperCase());if(profile?.avatarUrl){const img=el('img','profile-avatar-image');img.src=profile.avatarUrl;img.alt='';avatar.replaceChildren(img)}person.append(avatar,name);identity.append(person)
@@ -95,7 +96,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
    const grid=el('div','workshop-grid')
    for(const item of profileData?.inventory??[]){
      const theme=themeFor(item.id),tile=card(theme?.[lang]??t[item.id]),preview=el('div','cosmetic-preview cosmetic-'+item.id)
-     applySignature(preview,item.id);const plate=themePlate(item.id);if(plate)preview.append(plate);tile.append(preview);if(theme)tile.append(el('p','account-muted',lang==='ru'?theme.descriptionRu:theme.descriptionEn));tile.append(el('p','account-muted',item.source==='free'?t.free:item.source==='achievement'?t.achievement:item.priceRub+' ₽ · '+t.purchase))
+     mountThemeCover(preview,item.id);tile.append(preview);if(theme)tile.append(el('p','account-muted',lang==='ru'?theme.descriptionRu:theme.descriptionEn));tile.append(el('p','account-muted',item.source==='free'?t.free:item.source==='achievement'?t.achievement:item.priceRub+' ₽ · '+t.purchase))
      const active=profile?.background===item.id
      tile.append(button(active?t.equipped:item.owned?t.equip:t.lockedBackground,()=>saveProfile({bio:profile.bio,cover:profile.cover,background:item.id}),busy||active||!item.owned))
      grid.append(tile)

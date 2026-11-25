@@ -31,3 +31,16 @@ export function decorateAuthor(node,id,language='ru'){
  node.classList.add('signature-author')
  const badge=themeBadge(id,language);if(badge)node.append(badge)
 }
+
+/** Shared cover composition; uploaded photos take precedence over collection art. */
+export function mountThemeCover(cover,id,{custom=false}={}){
+ const theme=themeFor(id);if(!theme)return false
+ applySignature(cover,id);cover.classList.add('signature-cover')
+ if(custom){cover.classList.add('signature-custom-cover');return true}
+ const art=document.createElement('div');art.className='signature-art';art.setAttribute('aria-hidden','true')
+ const caption=document.createElement('div');caption.className='signature-cover-caption';caption.setAttribute('aria-hidden','true')
+ const label=document.createElement('span');label.className='signature-cover-label';label.textContent='BRICKLAB / SIGNATURE'
+ const title=document.createElement('strong');title.textContent=theme.en
+ const sub=document.createElement('small');sub.textContent=signatureFor(id).mark
+ caption.append(label,title,sub);cover.prepend(art,caption);return true
+}

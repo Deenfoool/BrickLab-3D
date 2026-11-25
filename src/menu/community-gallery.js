@@ -1,4 +1,4 @@
-import {applySignature,decorateAuthor,themeBadge,themePlate} from './profile-signature.js?v=signature-1'
+import {applySignature,decorateAuthor,themeBadge,themePlate,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {backgroundIds} from './store-themes.js?v=themes-2'
 import {parseProject} from '../projects/documents.js'
 import {sanitizePreview,isLargePreview,previewLimits} from './public-preview.js?v=large-viewer-1'
@@ -328,7 +328,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
    const cover=el('div','community-profile-cover cover-'+theme),coverImg=publicImage(p.coverUrl,p.id,'cover')
    if(coverImg)cover.append(coverImg)
    else cover.append(el('span',null,'BRICKLAB / WORKSHOP'))
-   const plate=themePlate(p.backgroundTheme);if(plate)cover.append(plate);const identity=el('div','community-profile-identity');identity.append(avatar,body);a.append(cover,identity)
+   mountThemeCover(cover,p.backgroundTheme,{custom:!!coverImg});const plate=themePlate(p.backgroundTheme);if(plate)cover.append(plate);const identity=el('div','community-profile-identity');identity.append(avatar,body);a.append(cover,identity)
   }else a.append(avatar,body)
   return a
  }
