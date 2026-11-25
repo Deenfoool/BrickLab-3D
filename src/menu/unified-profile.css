@@ -47,7 +47,7 @@
 .portfolio-day.level-3{background:color-mix(in srgb,var(--portfolio-accent) 73%,#232933)}
 .portfolio-day.level-4{background:var(--portfolio-accent)}
 .unified-profile-editor .workshop-form{max-width:none;gap:15px}
-.portfolio-editor-controls{display:grid;gap:14px;padding:16px;border:1px solid var(--portfolio-line);border-radius:var(--sig-radius,8px)}
+.portfolio-editor-controls{min-width:0;margin:0;display:grid;gap:14px;padding:16px;border:1px solid var(--portfolio-line);border-radius:var(--sig-radius,8px)}
 .portfolio-editor-controls h3{font-size:15px;margin-top:8px}
 .portfolio-order,.portfolio-editor-collections{display:grid;gap:8px}
 .portfolio-order-row{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--portfolio-line);background:var(--portfolio-surface);border-radius:var(--sig-radius,6px)}
