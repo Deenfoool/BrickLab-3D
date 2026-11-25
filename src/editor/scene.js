@@ -96,6 +96,7 @@ export function createScene(host, models) {
   let boxSelectionEnabled = false
   let selectedId
   let fitted = false
+  let viewportMeasured = false
   const resize = new ResizeObserver(() => {
     const { clientWidth: width, clientHeight: height } = host
     if (!width || !height) return
@@ -103,6 +104,7 @@ export function createScene(host, models) {
     camera.updateProjectionMatrix()
     renderer.setSize(width, height, false)
     // Opening a dock changes the viewport size, not the user's camera pose.
+    viewportMeasured = true
     if (!fitted) resetView()
     invalidate()
   })
@@ -152,7 +154,7 @@ export function createScene(host, models) {
     controls.target.copy(center)
     camera.position.copy(center).add(new THREE.Vector3(1, .83, 1.35).normalize().multiplyScalar(distance))
     controls.update()
-    fitted = Boolean(lastAspect)
+    fitted = viewportMeasured
     invalidate()
   }
 
