@@ -64,9 +64,11 @@ test('real PostgreSQL enforces extended quota, collection ownership and badge pr
   await store.publishCard(uid,{displayName:'Commerce fixture',bio:'',showBackground:true})
   const publicId=(await store.getOwnCard(uid)).id
   assert.equal((await store.getPublicCard(publicId)).backgroundTheme,'carbon')
+  assert.equal((await store.getPublicCard(publicId)).plus,true)
   await db`update bricklab.commerce_grants set revoked_at=now() where order_id=${secondPlus}`
   assert.equal((await store.getProfile(uid)).background,'default')
   assert.equal((await store.getPublicCard(publicId)).backgroundTheme,'default')
+  assert.equal((await store.getPublicCard(publicId)).plus,false)
   await grant('theme-collection','themeBundle')
   assert.equal((await store.getProfile(uid)).inventory.filter(x=>x.source==='purchase'&&x.owned).length,6)
   await store.saveProfile(uid,{...base,background:'carbon'})
