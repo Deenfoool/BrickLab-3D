@@ -105,7 +105,7 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
  }
  // Disabling a public page is a separate destructive action, never an implicit checkbox save.
  const enable=check(t.visibility,!!publicCard,busy||!!publicCard),shareAvatar=check(t.avatar,publicCard?.unified?publicCard.showAvatar:!!publicCard?.avatarUrl,busy),shareCover=check(t.cover,publicCard?.unified?publicCard.showCover:!!publicCard?.coverTheme,busy),shareTheme=check(t.theme,!!publicCard?.backgroundTheme,busy)
- const consent=check(t.publicConsent,false,busy),panel=ui('div','portfolio-editor-controls')
+ const consent=check(t.publicConsent,false,busy),panel=ui('fieldset','portfolio-editor-controls')
  form.append(enable.label,panel)
  const p=filterPortfolio(publicCard?.portfolio,publicBuilds.map(b=>b.id)),blocks=ui('div','portfolio-order'),collections=ui('div','portfolio-editor-collections')
  function renderBlocks(){
@@ -135,9 +135,7 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
  renderBlocks();renderCollections()
  panel.append(shareAvatar.label,shareCover.label,shareTheme.label,field(t.featured,pin),ui('h3',null,t.order),blocks,ui('h3',null,t.collections),collections,consent.label)
  const submit=ui('button','workspace-action primary',t.save);submit.type='submit';submit.disabled=busy
- function visibility(){panel.hidden=!enable.input.checked;for(const control of panel.querySelectorAll('input,select,button'))control.disabled=busy||!enable.input.checked||control.dataset.fixed==='true';consent.input.required=enable.input.checked;submit.textContent=enable.input.checked?t.publish:t.savePrivate}
- // Initial private form disables hidden inputs so they cannot block a private save.
- function setVisibility(){panel.hidden=!enable.input.checked;consent.input.required=enable.input.checked;for(const input of collections.querySelectorAll('input[required]'))input.required=enable.input.checked;submit.textContent=enable.input.checked?t.publish:t.savePrivate}
+ function setVisibility(){panel.hidden=!enable.input.checked;panel.disabled=busy||!enable.input.checked;consent.input.required=enable.input.checked;submit.textContent=enable.input.checked?t.publish:t.savePrivate}
  enable.input.onchange=setVisibility;setVisibility()
  form.append(submit)
  form.onsubmit=e=>{e.preventDefault();if(busy)return;const data={displayName:name.value,bio:bio.value,cover:cover.value};if(enable.input.checked&&consent.input.checked)publishPublic({...data,unified:true,consent:true,showAvatar:shareAvatar.input.checked,showCover:shareCover.input.checked,showBackground:shareTheme.input.checked,portfolio:p});else if(!enable.input.checked)saveProfile(data)}
