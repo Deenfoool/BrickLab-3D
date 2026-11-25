@@ -36,6 +36,7 @@ services:
       - /var/lib/bricklab-catalog/public:/app/catalog/resolver:ro
       - /var/lib/bricklab-legal:/app/assets/legal:ro
       - /var/lib/bricklab-instructions-private:/app/private-instructions:ro
+      - /var/lib/bricklab-commerce-private:/app/private-commerce:ro
     ports:
       - "${BRICKLAB_BIND:-127.0.0.1}:${BRICKLAB_PORT:-8080}:8080"
     environment:
@@ -57,6 +58,11 @@ services:
       BRICKLAB_MAIL_USER: "${BRICKLAB_MAIL_USER:-}"
       BRICKLAB_MAIL_KEY: "${BRICKLAB_MAIL_KEY:-}"
       BRICKLAB_MAIL_FROM: "${BRICKLAB_MAIL_FROM:-}"
+      BRICKLAB_COMMERCE_APPROVAL_FILE: "${BRICKLAB_COMMERCE_APPROVAL_FILE:-}"
+      BRICKLAB_YOOKASSA_LIVE_ENABLED: "${BRICKLAB_YOOKASSA_LIVE_ENABLED:-false}"
+      BRICKLAB_YOOKASSA_LIVE_SHOP_ID: "${BRICKLAB_YOOKASSA_LIVE_SHOP_ID:-}"
+      BRICKLAB_YOOKASSA_LIVE_SECRET: "${BRICKLAB_YOOKASSA_LIVE_SECRET:-}"
+      BRICKLAB_NPD_RECEIPTS_READY: "${BRICKLAB_NPD_RECEIPTS_READY:-false}"
       BRICKLAB_YOOKASSA_TEST_ENABLED: "${BRICKLAB_YOOKASSA_TEST_ENABLED:-false}"
       BRICKLAB_YOOKASSA_TEST_SHOP_ID: "${BRICKLAB_YOOKASSA_TEST_SHOP_ID:-}"
       BRICKLAB_YOOKASSA_TEST_SECRET: "${BRICKLAB_YOOKASSA_TEST_SECRET:-}"
