@@ -96,6 +96,11 @@ def publish():
     manifest = {"approved": True, "approvedAt": now.isoformat(),
                 "files": {name: hashlib.sha256(data).hexdigest() for name, data in pages.items()}}
     atomic(approval, (json.dumps(manifest, indent=2) + "\n").encode())
+    # The app runs as an unprivileged node user. Permit traversal of the
+    # bind-mounted directories without exposing their listings or review files.
+    LEGAL.chmod(0o711)
+    PRIVATE.chmod(0o711)
+    REVIEW.chmod(0o700)
     env = ENV.read_text(encoding="utf-8")
     updates = {
         "BRICKLAB_COMMERCE_APPROVAL_FILE": "/app/private-commerce/approval.json",
