@@ -52,7 +52,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
  let active=0
  async function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return /^[a-f0-9]{64}$/.test(token||'')?await store.getSession(digest(token)):null}
  return async(req,res,path)=>{
-  if(path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
+  if(path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
   if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
   active++
   try{
@@ -66,6 +66,10 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     reply(res,200,'OK'+data.invoice,true);return true
    }
    const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated')
+   if(path==='/api/commerce/account'){
+    if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
+    reply(res,200,await store.commerceAccount(user.id));return true
+   }
    if(!user.admin)throw new ProjectError(403,'admin_required')
    if(path==='/api/store/orders'&&req.method==='GET'){reply(res,200,{orders:await store.testOrders(user.id),mode:'test'});return true}
    if(path==='/api/store/finance'&&req.method==='GET'){reply(res,200,{...await store.testFinance(user.id),mode:'test'});return true}
