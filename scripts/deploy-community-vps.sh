@@ -115,7 +115,7 @@ echo "=== START RELEASE ==="
 docker compose up -d --no-deps --no-build --wait --wait-timeout 120 bricklab
 curl -fsS http://127.0.0.1:8080/api/health
 curl -fsS https://bricklab-3d.ru/api/health
-curl -fsS https://bricklab-3d.ru/ | grep -F 'signature-artwork.css?v=art-1' >/dev/null
+curl -fsS https://bricklab-3d.ru/ | grep -F 'fullscreen-workshop.css?v=fullscreen-1' >/dev/null
 curl -fsS 'https://bricklab-3d.ru/api/community/builds?sort=popular&week=1' >/dev/null
 trap - ERR
 echo
