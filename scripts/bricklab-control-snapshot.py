@@ -105,6 +105,20 @@ def collect():
         'build_reports',(SELECT count(*) FROM bricklab.community_build_reports WHERE resolved_at IS NULL),
         'comment_reports',(SELECT count(*) FROM bricklab.community_comment_reports WHERE resolved_at IS NULL),
         'bugs',(SELECT count(*) FROM bricklab.operator_bug_reports WHERE created_at>now()-interval '24 hours'));""")
+    data["analytics"] = query("""SELECT json_build_object(
+        'days',(SELECT json_agg(x ORDER BY x.day) FROM
+          (SELECT d::date AS day,
+             (SELECT count(*) FROM bricklab.users u WHERE u.created_at >= d AND u.created_at < d+interval '1 day') AS users,
+             (SELECT count(*) FROM bricklab.public_builds b WHERE b.published_at >= d AND b.published_at < d+interval '1 day') AS builds
+           FROM generate_series(date_trunc('day',now())-interval '6 days',date_trunc('day',now()),interval '1 day') d) x),
+        'likes',(SELECT count(*) FROM bricklab.community_likes),
+        'views',(SELECT count(*) FROM bricklab.community_events WHERE kind='view'),
+        'downloads',(SELECT count(*) FROM bricklab.community_events WHERE kind='download'),
+        'follows',(SELECT count(*) FROM bricklab.community_follows),
+        'parts',(SELECT coalesce(sum(part_count),0) FROM bricklab.public_builds),
+        'categories',(SELECT coalesce(json_agg(x),'[]'::json) FROM
+           (SELECT category, count(*) AS count FROM bricklab.public_builds GROUP BY category ORDER BY count DESC LIMIT 8) x)
+        );""")
     data["admin"] = query("""SELECT json_build_object(
         'users', (SELECT coalesce(json_agg(x),'[]'::json) FROM
           (SELECT id, created_at::date AS day, email_verified_at IS NOT NULL AS verified, blocked_at IS NOT NULL AS blocked

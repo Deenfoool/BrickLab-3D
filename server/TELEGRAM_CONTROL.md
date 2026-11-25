@@ -36,3 +36,17 @@ Off by default to avoid duplicating existing monitoring. Toggle in Automation, s
 
 ### Optional recovery timer
 Off on a fresh installation. Only after checking existing monitor recovery policies and testing the new service on a non-production instance, enable via `sudo systemctl enable --now bricklab-control-recovery.timer`. The root-owned collector must observe three distinct recent snapshots (running app, failed local API, SQL OK). Recovery takes the same lock as the release script, rechecks that the app is running, PostgreSQL is ready and API is still failing, and invokes only the existing fixed restart broker. Attempts at most hourly (manual restart cooldown also applies), persisted before execution; no retries, no startup of stopped services, no DB restarts. To pause before manual work: `sudo touch /etc/bricklab-backup/control-recovery.pause`; resume by removing the file. To disable: `sudo systemctl disable --now bricklab-control-recovery.timer`; an already running operation may finish. The quiet mode in Telegram is notification-only and does NOT pause recovery. Review recovery journal and shared action audit (Telegram and automatic recovery are distinguished). Run `python3 -B tests/telegram_control_recovery_test.py`. No independent external uptime monitor is provisioned here.
+
+
+## Phase 6: analytics
+Seven calendar days in database timezone, registration counts and current public builds grouped by their publication date (not historical publication event counts). Totals for likes, downloads/views recorded by community events, follows and parts. No invented online counts or editor telemetry.
+
+## Phase 7: Mini App (read-only, opt-in)
+After install, configure the existing HTTPS reverse proxy with a route for /control/ to http://127.0.0.1:8091/control/ (preserve path and X-Telegram-Init-Data; do not log this header). For nginx inside the existing site server block:
+    location ^~ /control/ {
+        proxy_pass http://127.0.0.1:8091;
+        proxy_set_header Host $host;
+        proxy_read_timeout 10s;
+        access_log off;
+    }
+Review existing proxy CSP and frame headers so they do not block the Telegram web client. Do not expose port 8091 publicly. Start with sudo systemctl enable --now bricklab-control-miniapp.service. Verify an unauthenticated request to /control/api returns 403. Only after HTTPS route works, add Environment=BRICKLAB_MINIAPP_ENABLED=1 in a systemd drop-in for bricklab-control.service, daemon-reload and restart. The bot shows a private web_app button. The backend checks Telegram HMAC, owner ID and five-minute auth_date on every data request; reopen the Mini App when authorization expires. Dashboard only reads aggregate snapshots. No admin writes, no token in browser, no private report bodies. Disable by removing that Environment and stopping/disabling the miniapp service. Test with python3 -B tests/telegram_control_miniapp_test.py.

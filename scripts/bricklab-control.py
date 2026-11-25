@@ -18,7 +18,7 @@ MENUS = {
              ("🧱 Сообщество", "community"), ("💾 Бэкапы", "backup"), ("🔔 События", "events"),
              ("🚀 Версия", "release"), ("📋 Диагностика логов", "logs"), ("🛡 Журнал действий", "audit"), ("👥 Пользователи", "users"),
              ("🧱 Публикации", "builds"), ("🚩 Жалобы", "reports"), ("🐞 Баг-репорты", "bugs"),
-             ("🐙 GitHub", "github"), ("⚙ Автоматизация", "automation")],
+             ("🐙 GitHub", "github"), ("⚙ Автоматизация", "automation"), ("📈 Аналитика 7 дней", "analytics")],
 }
 LINKS = {
     "community": [("Администрирование", "/#account/admin/overview"),
@@ -62,7 +62,7 @@ def broker(action, ident):
     except (OSError, UnicodeError):
         return "unknown"
 
-PAGES = {"home", "vps", "docker", "stats", "community", "backup", "events", "release", "logs", "audit", "users", "builds", "reports", "bugs", "github", "automation"}
+PAGES = {"home", "vps", "docker", "stats", "community", "backup", "events", "release", "logs", "audit", "users", "builds", "reports", "bugs", "github", "automation", "analytics"}
 
 class ApiError(Exception):
     def __init__(self, code, delay=0):
@@ -162,6 +162,9 @@ def render(page, data):
                 label += " · деталей: " + str(row.get("parts",0))
             output.append(label)
         return "\n".join(output) or "Нет записей."
+    trend = data.get("analytics",{}).get("days")
+    trend_text = "Нет данных." if not isinstance(trend,list) else "\n".join(
+        str(row["day"])[5:10] + " · " + str(row["users"]) + " / " + str(row["builds"]) for row in trend)
     bodies = {
         "home": "BrickLab Control Center\nAPI: " + value("vps", "api") + "\nВыберите раздел.",
         "vps": "🖥 VPS\n" + lines("vps", [("API локально", "api"), ("HTTPS извне (проверка с VPS)", "https"),
@@ -181,6 +184,7 @@ def render(page, data):
         "reports": "🚩 Неразобранные жалобы\n" + lines("stats", [("На сборки", "build_reports"), ("На комментарии", "comment_reports")]) + "\nРешение жалоб — в веб-админке.",
         "bugs": "🐞 Последние баг-репорты\n" + records("bugs") + "\nОписание, логи и личные данные не отправляются в Telegram.",
         "github": "🐙 GitHub / релиз\n" + lines("release", [("Checkout", "commit"), ("Последний локально полученный origin", "tracking"), ("Отставание (коммитов)", "behind"), ("Рабочее дерево", "worktree")]) + "\nGitHub SHA: " + github.get("remote","нет данных") + "\nCI для GitHub SHA: " + github.get("ci","нет данных") + "\nGitHub обновляется не чаще раза в 5 минут. Развёртывание из Telegram не включено.",
+        "analytics": "📈 Аналитика за 7 календарных дней (часовой пояс БД)\nДата · аккаунты / текущие сборки по дате публикации\n" + trend_text + "\n\n" + lines("analytics",[("Реакции всего","likes"),("Просмотры (учтённые события)","views"),("Скачивания (учтённые события)","downloads"),("Подписки","follows"),("Деталей в публичных сборках","parts")]),
         "automation": "⚙ Автоматизация\n" + automation_description() + "\nАвтовосстановление: " + value("automation","recovery") + "\nНе меняет существующие службы мониторинга и Events.",
         "audit": "🛡 Последние операции VPS\n" + history,
         "logs": "📋 Диагностика логов (последние 200 строк за 1 ч)\n" + lines("logs", [("Строки", "lines"), ("С ошибками", "errors"), ("С предупреждениями", "warnings")]) + "\nСодержимое логов не передаётся в Telegram.",
@@ -207,6 +211,8 @@ def render(page, data):
     if page == "automation":
         buttons.extend([[{"text": name, "callback_data": "pref:" + key}] for name,key in
                         [("Выключить уведомления" if preferences().get("enabled") else "Включить уведомления", "off" if preferences().get("enabled") else "on"), ("Тишина на 1 час", "quiet"), ("Снять тишину", "resume")]])
+    if page == "home" and os.environ.get("BRICKLAB_MINIAPP_ENABLED") == "1":
+        buttons.append([{"text":"📱 Панель управления", "web_app":{"url":ORIGIN+"/control/"}}])
     if page == "release":
         buttons.append([{"text": "GitHub", "url": "https://github.com/Deenfoool/BrickLab-3D"}])
     if actions_enabled() and page in ("docker", "backup"):

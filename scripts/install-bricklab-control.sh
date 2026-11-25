@@ -24,7 +24,7 @@ fi
 test "$(id -gn bricklab-control)" = bricklab-control
 test "$(id -nG bricklab-control)" = bricklab-control
 install -d -m 0755 /usr/local/lib/bricklab-control
-install -m 0644 scripts/bricklab-control.py scripts/bricklab-control-snapshot.py scripts/bricklab-control-actions.py scripts/bricklab-control-recovery.py /usr/local/lib/bricklab-control/
+install -m 0644 scripts/bricklab-control.py scripts/bricklab-control-snapshot.py scripts/bricklab-control-actions.py scripts/bricklab-control-recovery.py scripts/bricklab-control-miniapp.py scripts/miniapp.html scripts/miniapp.js scripts/miniapp.css /usr/local/lib/bricklab-control/
 python3 -m py_compile /usr/local/lib/bricklab-control/*.py
 cat >/etc/systemd/system/bricklab-control-snapshot.service <<'UNIT'
 [Unit]
@@ -149,6 +149,25 @@ PY
 else
   rm -f /etc/systemd/system/bricklab-control.service.d/10-github.conf
 fi
+cat >/etc/systemd/system/bricklab-control-miniapp.service <<'UNIT'
+[Unit]
+Description=BrickLab read-only Telegram Mini App (loopback)
+After=network-online.target
+[Service]
+User=bricklab-control
+Group=bricklab-control
+LoadCredential=telegram.json:/etc/bricklab-backup/telegram.json
+ExecStart=/usr/bin/python3 /usr/local/lib/bricklab-control/bricklab-control-miniapp.py
+Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+CapabilityBoundingSet=
+InaccessiblePaths=-/run/docker.sock -/var/run/docker.sock -/opt/bricklab-cloud -/etc/bricklab-backup -/run/bricklab-control-actions.sock
+[Install]
+WantedBy=multi-user.target
+UNIT
 systemctl daemon-reload
 if [[ "${1:-}" == --enable-actions ]]; then
   systemctl enable --now bricklab-control-actions.socket

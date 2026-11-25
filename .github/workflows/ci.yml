@@ -22,13 +22,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check Telegram worker syntax and security regression tests
         run: |
-          python3 -m py_compile scripts/bricklab-control.py scripts/bricklab-control-snapshot.py scripts/bricklab-control-actions.py scripts/bricklab-control-recovery.py
+          python3 -m py_compile scripts/bricklab-control.py scripts/bricklab-control-snapshot.py scripts/bricklab-control-actions.py scripts/bricklab-control-recovery.py scripts/bricklab-control-miniapp.py
           bash -n scripts/install-bricklab-control.sh
           python3 -B tests/telegram_events_test.py
           python3 -B tests/telegram_control_test.py
           python3 -B tests/telegram_control_actions_test.py
           python3 -B tests/telegram_control_automation_test.py
           python3 -B tests/telegram_control_recovery_test.py
+          python3 -B tests/telegram_control_miniapp_test.py
 
   test:
     runs-on: ubuntu-latest
