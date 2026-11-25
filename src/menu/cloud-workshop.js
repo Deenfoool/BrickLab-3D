@@ -1,3 +1,4 @@
+import {renderWorkshopOverview} from './workshop-overview.js?v=fullscreen-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 import { badges, ranks, rankFor } from './workshop-model.js?v=activity-1'
@@ -32,12 +33,12 @@ function metrics(items){const g=el('div','workshop-metric-grid');for(const [k,v]
 export function workshopSummary(local,remote){
  return {local:local.length,cloud:remote.length,revisions:remote.reduce((n,p)=>n+(Number.isSafeInteger(p.revision)&&p.revision>0?p.revision:0),0)}
 }
-export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bureauPanel,adminPanel,revokeOthers,profileData,saveProfile,uploadMedia,removeMedia,activityData,publicCard,publicLoaded,publicBuilds=[],loadPublic,publishPublic,unpublishPublic,publishBuild,unpublishBuild,refreshActivity,readActivity,toggleFavorite,openFavorite}){
+export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bureauPanel,adminPanel,revokeOthers,profileData,saveProfile,uploadMedia,removeMedia,activityData,publicCard,publicLoaded,publicBuilds=[],loadPublic,publishPublic,unpublishPublic,publishBuild,unpublishBuild,refreshActivity,readActivity,toggleFavorite,openFavorite,logout,createBuild,openLocal,fetchCloud,signal,previewsEnabled,noticeNodes=[]}){
  const t={...workshopCopy[lang],...extra[lang],admin:lang==='ru'?'Администрирование':'Administration',revokeOthers:lang==='ru'?'Завершить остальные сессии':'End other sessions'},summary=workshopSummary(local,remote)
  const profile=profileData?.profile,progress=profileData?.progress,rank=progress?rankFor(progress.xp):null
  const layout=el('div','workshop-layout cosmetic-'+(profile?.background??'default')),nav=el('nav','workshop-nav'),content=el('div','workshop-content')
  applySignature(layout,profile?.background)
- nav.setAttribute('aria-label',t.workshop)
+ const ru=lang==='ru',sidebar=el('aside','workshop-sidebar'),sideHead=el('div','workshop-sidebar-heading'),sideFoot=el('div','workshop-sidebar-footer');sideHead.append(el('span','workshop-sidebar-kicker','BRICKLAB CLOUD'),el('strong',null,ru?'Личный кабинет':'Workspace'));nav.setAttribute('aria-label',t.workshop)
  for(const [key,symbol] of [...sections,...(user.admin===true?[['admin','icon-shield']]:[])]){
   const b=key==='cloud'?el('a','workspace-action',t[key]):button(t[key],()=>go(key),busy);if(key==='cloud')b.href='#projects';b.prepend(icon(symbol));if(key!=='cloud')b.setAttribute('aria-pressed',String(section===key))
   if(section===key)b.setAttribute('aria-current','page')
@@ -45,7 +46,8 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
   if(key==='notifications'){const n=activityData?.notifications.filter(x=>!x.read).length??0,badge=el('small','workshop-unread',n);badge.dataset.notificationNavCount='';badge.hidden=!n;b.append(badge)}
   nav.append(b)
  }
- content.append(el('h2','workshop-section-title',t[section]))
+ const exit=button(ru?'Выйти из аккаунта':'Sign out',logout,busy);sideFoot.append(exit);sidebar.append(sideHead,nav,sideFoot)
+ if(section!=='workshop')content.append(el('h2','workshop-section-title',t[section]))
  if(section==='bureau'&&bureauPanel)content.append(bureauPanel())
  else if(section==='admin'&&user.admin===true&&adminPanel)content.append(adminPanel())
  else if(section==='workshop'){
@@ -54,13 +56,13 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
   emblem.prepend(icon('layers'));cover.append(emblem);if(profile?.coverUrl){const image=el('img','profile-cover-image');image.src=profile.coverUrl;image.alt='';cover.prepend(image)}
   mountThemeCover(cover,profile?.background,{custom:!!profile?.coverUrl})
   const identity=el('div','workshop-hero-inner'),person=el('div','workshop-identity'),name=el('div')
-  name.append(el('h2',null,user.displayName),el('p','account-muted',t.active));const badge=themeBadge(profile?.background,lang);if(badge)name.append(badge)
-  const avatar=el('div','workshop-avatar',Array.from(user.displayName).slice(0,2).join('').toUpperCase());if(profile?.avatarUrl){const img=el('img','profile-avatar-image');img.src=profile.avatarUrl;img.alt='';avatar.replaceChildren(img)}person.append(avatar,name);identity.append(person)
+  name.append(el('h2',null,user.displayName),el('p','account-muted',user.admin===true?(ru?'Администратор · BrickLab Cloud':'Administrator · BrickLab Cloud'):t.active));const badge=themeBadge(profile?.background,lang);if(badge)name.append(badge)
+  const avatar=el('div','workshop-avatar',Array.from(user.displayName).slice(0,2).join('').toUpperCase());if(profile?.avatarUrl){const img=el('img','profile-avatar-image');img.src=profile.avatarUrl;img.alt='';avatar.replaceChildren(img)}person.append(avatar,name);identity.append(person);const heroActions=el('div','workshop-hero-actions');heroActions.append(button(ru?'Сменить тему':'Change theme',()=>go('cosmetics'),busy),button(ru?'Редактировать профиль':'Edit profile',()=>go('settings'),busy));if(publicCard){const publicLink=el('a','workspace-action',t.visitCard);publicLink.href='#community/profile/'+publicCard.id;heroActions.append(publicLink)}identity.append(heroActions)
   hero.append(cover,identity);if(profile?.bio)hero.append(el('p','workshop-bio',profile.bio));hero.append(metrics([[t.local,summary.local],[t.cloud,summary.cloud],[t.revisions,summary.revisions],[t.xp,progress?.xp??'—'],[t.title,rank?t[rank.id]:'—']]))
-  const actions=card(t.welcome),quick=el('div','workshop-shortcuts')
-  for(const key of ['cloud','storage','favorites','security'])quick.append(button(t[key],()=>go(key),busy))
-  actions.append(el('p','account-muted',t.manual),quick)
-  content.append(hero,actions)
+  const actions=el('div','workshop-quickbar'),quick=el('div','workshop-shortcuts'),create=button(ru?'Новая сборка':'New build',createBuild,busy);create.classList.add('primary');create.prepend(icon('plus'));quick.append(create)
+  for(const key of ['cloud','storage','favorites','cosmetics'])quick.append(button(t[key],()=>go(key),busy))
+  actions.append(el('span','workshop-quick-label',ru?'Быстрые действия':'Quick actions'),quick)
+  content.append(hero,actions,renderWorkshopOverview({lang,user,local,remote,busy,signal,previewsEnabled,createBuild,openLocal,openCloud:openFavorite,fetchCloud,go,activityData,publicLoaded,publicCard,publicBuilds,loadPublic,progress}))
   appendPublicProfile()
  }else if(section==='achievements'){
   const c=card(t.achievements),grid=el('div','workshop-badges');c.append(el('p','account-muted',t.progressHint));const first=el('div','workshop-badge'+(progress?.awards.some(a=>a.award==='firstCloudSave')?' earned':''));first.append(el('strong',null,t.firstCloudSave),el('p','account-muted',t.firstCloudSaveDesc),el('small',null,progress?progress.awards.some(a=>a.award==='firstCloudSave')?t.awarded:t.locked:t.profileMissing));grid.append(first)
@@ -141,5 +143,6 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
     content.append(builds)
   }
  }
- layout.append(nav,content);return layout
+ if(noticeNodes.length){const notices=el('div','workshop-notices');notices.append(...noticeNodes);content.prepend(notices)}
+ layout.append(sidebar,content);return layout
 }
