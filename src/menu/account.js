@@ -165,6 +165,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    email.input.value=emailDraft;if(name)form.append(name.wrap)
    if(reg)form.append(node('p','account-muted',s.closed))
    form.append(email.wrap)
+   if(reg||verify||reset||resetConfirm){const privacy=node('p','account-muted',lang==='ru'?'Как обрабатываются данные: ':'How data is processed: '),a=node('a',null,lang==='ru'?'Политика конфиденциальности':'Privacy policy');a.href='/privacy';a.target='_blank';a.rel='noopener';privacy.append(a);form.append(privacy)}
    if(code){code.input.minLength=48;code.input.autocapitalize='none';code.input.spellcheck=false;form.append(code.wrap)}
    if(password){if(reg||finish){password.input.minLength=12;form.append(node('p','account-muted',s.passwordHelp))}form.append(password.wrap)}
    for(const f of [name,email,password,code])if(f)f.input.disabled=busy
