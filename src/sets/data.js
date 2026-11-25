@@ -67,6 +67,16 @@ export function mapInventory(inventory, catalog) {
     return { ...item, design: result.design, model: result.model ?? null, resolution: result.status }
   })
 }
+// Coverage counts actual regular pieces, not distinct inventory rows.
+export function auditInventory(items) {
+  const counts = { exact: 0, alias: 0, external: 0, ambiguous: 0, missing: 0 }
+  for (const item of items) {
+    if (item.spare || !Number.isInteger(item.quantity) || item.quantity < 1) continue
+    const status = Object.hasOwn(counts, item.resolution) ? item.resolution : 'missing'
+    counts[status] += item.quantity
+  }
+  return counts
+}
 export function inventoryUsage(items, parts) {
   const counts = new Map()
   for (const part of parts) {
