@@ -1,0 +1,138 @@
+/* Workspace 2.1 — scoped to the mounted editor, preserving the legacy panel layout. */
+.editor[data-workspace-layout]{
+  --workspace-bg:#181a1e;--workspace-panel:#1d2025;--workspace-line:#343840;
+  --workspace-accent:#ffb01b;--workspace-rail:42px;
+  --workspace-lw:min(var(--workspace-left,300px),30vw);
+  --workspace-rw:min(var(--workspace-right,290px),36vw);
+  grid-template-rows:auto auto minmax(0,1fr) auto;
+  min-width:0;
+}
+.editor[data-workspace-layout] .editor-bar{min-height:44px;padding:5px 10px;gap:8px;position:relative;z-index:12;background:var(--workspace-bg)}
+.editor[data-workspace-layout] .editor-back{flex:none}
+.editor[data-workspace-layout] .editor-back img{width:28px;height:28px}
+.workspace-back-label{display:none}
+.workspace-menu{position:relative;min-width:0;flex:none}
+.workspace-project{max-width:clamp(115px,18vw,270px)}
+.workspace-menu>summary{display:flex;align-items:center;gap:6px;cursor:pointer;list-style:none;min-height:30px;padding:4px 7px;border-radius:5px;color:inherit;font-size:13px;font-weight:600;white-space:nowrap}
+.workspace-menu>summary::-webkit-details-marker{display:none}
+.workspace-menu>summary:hover,.workspace-menu[open]>summary{background:#2d3239}
+.workspace-menu .icon,.workspace-context .icon{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.workspace-name-label{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.workspace-menu-items{position:absolute;top:calc(100% + 6px);left:0;display:grid;gap:6px;min-width:220px;padding:8px;background:var(--workspace-panel);border:1px solid #454a53;border-radius:7px;box-shadow:0 8px 24px #0006;z-index:20}
+.workspace-menu:not([open])>.workspace-menu-items{display:none}
+.workspace-name-field{display:grid;gap:6px;font-size:12px;color:#aeb5c0}
+.editor .workspace-name-field .editor-name{width:100%;max-width:none;box-sizing:border-box}
+.workspace-home-link{color:inherit;font-size:13px;padding:7px;text-decoration:none;border-radius:4px}
+.workspace-home-link:hover{background:#30353d}
+.workspace-save-state{font-size:15px;color:#939ba7;min-width:12px;text-align:center;cursor:default}
+.workspace-save-state[data-state=saved]{color:#91ba9d}
+.workspace-save-state[data-state=error]{color:#ff9c9c}
+.editor[data-workspace-layout] .editor-modes{border:0;background:transparent;padding:0;gap:2px}
+.editor[data-workspace-layout] .editor-modes button{font-size:12px;padding:6px 10px;border-radius:5px;white-space:nowrap}
+.editor[data-workspace-layout] .editor-modes button[aria-pressed=true]{color:#ffd376;background:#3b301c}
+.editor[data-workspace-layout] .editor-actions{align-items:center;gap:4px;flex:none}
+.editor[data-workspace-layout] .editor-actions button{min-height:30px;padding:5px 9px;border-radius:5px;font-size:12px}
+.editor[data-workspace-layout] .editor-actions .editor-square{width:30px;padding:0;font-size:19px;background:transparent;border-color:transparent}
+.editor[data-workspace-layout] .editor-actions .editor-square:hover{background:#30353c}
+.editor[data-workspace-layout] .workspace-share-title{color:#171410;background:var(--workspace-accent);font-size:12px;padding-inline:9px}
+.editor[data-workspace-layout] .workspace-share-title:hover{background:#ffc04e}
+.workspace-share .workspace-menu-items{left:auto;right:0;min-width:170px}
+.workspace-share .workspace-menu-items button{text-align:left}
+.workspace-context{display:flex;align-items:center;justify-content:space-between;gap:5px;min-height:32px;padding:3px 7px;background:var(--workspace-panel);border-bottom:1px solid var(--workspace-line);position:relative;z-index:10;min-width:0}
+.workspace-context-group{display:flex;align-items:center;gap:3px;min-width:0;flex-wrap:wrap}
+.workspace-options{flex:1}
+.workspace-tool-name{color:#a4acb7;font-size:11px;white-space:nowrap;margin-inline:4px}
+.editor .workspace-context button{display:flex;align-items:center;justify-content:center;gap:5px;min-height:26px;min-width:27px;padding:3px 6px;background:transparent;border:1px solid transparent;border-radius:4px;font-size:11px}
+.editor .workspace-context button:hover:not(:disabled){background:#30353d}
+.editor .workspace-context button[aria-pressed=true]{color:#ffd376;background:#3b301c;border-color:transparent}
+.workspace-context select{max-width:155px;color:inherit;background:#24282f;border:1px solid var(--workspace-line);border-radius:4px;padding:3px 5px;font-size:11px}
+.workspace-status{display:flex;align-items:center;gap:12px;min-height:22px;padding:2px 9px;background:var(--workspace-panel);border-top:1px solid var(--workspace-line);font-size:11px;color:#a8b0ba;min-width:0}
+.workspace-count{white-space:nowrap;font-variant-numeric:tabular-nums}
+.editor .workspace-status .editor-hint{position:static;transform:none;max-width:none;width:auto;flex:1;min-width:0;margin:0;padding:0;background:transparent;border:0;box-shadow:none;text-align:right;font-size:11px;line-height:1.4}
+.editor[data-workspace-layout] .editor-panel[data-workspace-hidden]{display:none!important}
+.editor[data-workspace-layout=dock] .editor-overlay{inset:0;display:block;pointer-events:none}
+.editor[data-workspace-layout=dock] .editor-panel-layer{position:absolute;inset:0}
+.editor[data-workspace-layout=dock] .editor-viewport{left:var(--workspace-rail);right:0}
+.editor[data-workspace-layout=dock][data-workspace-left] .editor-viewport{left:calc(var(--workspace-rail) + var(--workspace-lw))}
+.editor[data-workspace-layout=dock][data-workspace-right] .editor-viewport{right:var(--workspace-rw)}
+.editor[data-workspace-layout=dock][data-workspace-focus] .editor-viewport,
+.editor[data-workspace-layout=dock][data-workspace-mode=testDrive] .editor-viewport{left:0;right:0}
+.editor[data-workspace-layout=dock] .editor-panel-layer .editor-panel{
+  position:absolute;top:0!important;bottom:0!important;height:auto!important;max-height:100%!important;
+  min-width:0!important;max-width:none!important;border-radius:0;box-shadow:none;border:0;
+  background:var(--workspace-panel);
+}
+.editor[data-workspace-layout=dock] .editor-panel-layer .editor-catalog{
+  left:var(--workspace-rail)!important;right:auto!important;width:var(--workspace-lw)!important;border-right:1px solid var(--workspace-line)
+}
+.editor[data-workspace-layout=dock] .editor-panel-layer :is(.editor-inspector,.editor-scene-parts,.instruction-panel){
+  left:auto!important;right:0!important;width:var(--workspace-rw)!important;border-left:1px solid var(--workspace-line)
+}
+.editor[data-workspace-layout=dock] .editor-panel-header h2{cursor:default;font-weight:600;padding:7px 9px}
+.editor[data-workspace-layout=dock] .editor-panel-header h2::before{display:none}
+.editor[data-workspace-layout=dock] .editor-panel-resizer{display:none!important}
+.editor[data-workspace-layout=dock] .editor-panel-body{flex:1;min-height:0}
+.editor[data-workspace-layout=dock] .editor-dock{
+  position:absolute;inset:0 auto 0 0;width:var(--workspace-rail);max-width:none;background:var(--workspace-panel);border-right:1px solid var(--workspace-line);pointer-events:auto
+}
+.editor[data-workspace-layout=dock] :is(.editor-viewport-tools,.editor-paint-tools){
+  flex-direction:column;flex-wrap:nowrap;justify-content:flex-start;gap:3px;align-items:center;padding:5px 3px;
+  border:0;border-radius:0;box-shadow:none;background:transparent;
+}
+.editor[data-workspace-layout=dock] .editor-viewport-tools button,
+.editor[data-workspace-layout=dock] .editor-connection-tools>summary{width:32px;min-width:32px;min-height:32px;padding:4px;border-color:transparent;border-radius:5px;background:transparent}
+.editor[data-workspace-layout=dock] .editor-viewport-tools button:hover:not(:disabled),
+.editor[data-workspace-layout=dock] .editor-connection-tools>summary:hover{background:#30353c}
+.editor[data-workspace-layout=dock] .editor-viewport-tools button[aria-pressed=true],
+.editor[data-workspace-layout=dock] .editor-connection-tools[data-active]>summary{background:#3b301c;color:#ffd376}
+.editor[data-workspace-layout=dock] :is(.editor-dock-snap-all,[data-el=groupSelection]){font-size:0}
+.editor[data-workspace-layout=dock] [data-el=groupSelection]::after{content:"+";font-size:19px}
+.editor[data-workspace-layout=dock] .editor-connection-tools{position:relative}
+.editor[data-workspace-layout=dock] .editor-dock-chevron{display:none}
+.editor[data-workspace-layout=dock] .editor-connection-menu{left:calc(100% + 5px);top:0;bottom:auto;transform:none}
+.editor[data-workspace-layout=dock] .editor-connection-menu button{width:auto;min-width:110px;font-size:12px;justify-content:flex-start}
+.editor[data-workspace-layout=dock] .editor-paint-swatches{flex-direction:column;align-items:center;gap:4px}
+.editor[data-workspace-layout=dock] .editor-paint-custom{font-size:0}
+.editor[data-workspace-layout=dock] .editor-paint-custom input{width:29px;height:29px}
+.editor[data-workspace-layout=dock] .editor-paint-tools>[data-el=paintFrame]{font-size:0;width:30px;padding:4px}
+.editor[data-workspace-layout=dock] .editor-paint-tools>[data-el=paintFrame]::after{content:"↗";font-size:19px}
+.editor[data-workspace-focus] .editor-overlay,
+.editor[data-workspace-mode=testDrive][data-workspace-layout=dock] .editor-dock{display:none}
+.editor[data-workspace-presentation] .editor-coordinates{display:none}
+.workspace-divider{position:absolute;top:0;bottom:0;width:8px;z-index:4;cursor:ew-resize;touch-action:none}
+.workspace-divider:hover{background:#ffb01b38}
+.workspace-divider-left{left:calc(var(--workspace-rail) + var(--workspace-lw) - 4px)}
+.workspace-divider-right{right:calc(var(--workspace-rw) - 4px)}
+.editor[data-workspace-layout=dock] .editor-load-notice{max-width:min(70%,42rem)}
+.editor[data-workspace-layout=dock] .editor-parts{gap:6px}
+.editor[data-workspace-layout=dock] .editor-part-card{border-radius:5px}
+.editor[data-workspace-layout=dock] .editor-library-controls,.editor[data-workspace-layout=dock] .editor-library-scroll{padding:8px}
+@media(max-width:1200px){
+  .editor[data-workspace-layout] .editor-bar{flex-wrap:nowrap}
+  .editor[data-workspace-layout] .editor-modes{order:0;width:auto;margin-inline:auto}
+  .editor[data-workspace-layout] .editor-modes button{padding:5px 6px;font-size:11px}
+}
+@media(max-width:900px){
+  .editor[data-workspace-layout] .editor-bar{flex-wrap:wrap}
+  .editor[data-workspace-layout] .editor-modes{order:4;width:100%;margin:0}
+  .editor[data-workspace-layout] .editor-actions{margin-left:auto}
+  .workspace-project{max-width:30vw}
+  .workspace-context{flex-wrap:wrap}
+  .workspace-tool-name{display:none}
+  .workspace-status{gap:6px;flex-wrap:wrap}
+  .editor .workspace-status .editor-hint{text-align:left;min-width:130px}
+  .workspace-context .workspace-control span{display:none}
+}
+
+.editor[data-workspace-layout] .editor-actions .editor-primary{color:inherit;background:transparent;border-color:#454a53;font-weight:600}
+.editor[data-workspace-layout] .editor-actions .editor-primary:hover{background:#30353d}
+.workspace-quick{border-left:1px solid var(--workspace-line);padding-left:5px}
+.editor .workspace-quick [data-workspace-control=delete]:hover{color:#ff9c9c}
+.editor[data-workspace-focus] .workspace-quick,.editor[data-workspace-focus] .workspace-options{display:none}
+.editor[data-workspace-presentation] .workspace-context :is(.workspace-context-group):first-child,
+.editor[data-workspace-presentation] .workspace-context .workspace-control:not([data-workspace-control=focus],[data-workspace-control=presentation]),
+.editor[data-workspace-presentation] .workspace-context :is([data-el=wires],[data-el=editCable]){display:none}
+.editor[data-workspace-presentation] .workspace-context{justify-content:flex-end}
+
+.editor[data-workspace-presentation] :is(.editor-axle-handles,.editor-selection-frame,.editor-empty,.workspace-status,.part-context){display:none!important}
+.editor[data-workspace-presentation]{grid-template-rows:auto auto minmax(0,1fr)}
