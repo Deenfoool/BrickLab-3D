@@ -22,6 +22,8 @@ const types = {
 }
 
 function publicPath(name) {
+  // Precomputed annotations must pass through the access-checked API.
+  if(/^catalog\/sets\/(?:instruction-part-index|\d+(?:-\d+)?-parts-by-page)\.json$/.test(name))return false
   const segments = name.split('/')
   return name === 'index.html' || (segments.length > 1 && directories.has(segments[0]) &&
     segments.every(part => part && !part.startsWith('.')) &&
