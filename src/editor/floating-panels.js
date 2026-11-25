@@ -39,6 +39,7 @@ export function mountFloatingPanels(layer, labels, signal) {
   }
 
   function syncPanel(panel) {
+    if (layer.closest('.editor')?.dataset.workspaceLayout === 'dock') return
     if (!layer.clientWidth || !layer.clientHeight || panel.hasAttribute('data-dragging') ||
         panel.hasAttribute('data-resizing')) return
     const layout = layouts[panel.dataset.panel]
@@ -138,6 +139,7 @@ export function mountFloatingPanels(layer, labels, signal) {
     function bindGrip(handle, active, update) {
       let drag
       on(handle, 'pointerdown', event => {
+        if (layer.closest('.editor')?.dataset.workspaceLayout === 'dock') return
         if (!event.isPrimary || event.button !== 0 || drag) return
         event.preventDefault()
         handle.focus({ preventScroll: true })
@@ -173,6 +175,7 @@ export function mountFloatingPanels(layer, labels, signal) {
       on(handle, 'pointercancel', event => end(event, true))
       on(handle, 'lostpointercapture', event => end(event, true))
       on(handle, 'keydown', event => {
+        if (layer.closest('.editor')?.dataset.workspaceLayout === 'dock') return
         const direction = arrows[event.key]
         if (!direction || event.ctrlKey || event.metaKey || event.altKey) return
         event.preventDefault()
