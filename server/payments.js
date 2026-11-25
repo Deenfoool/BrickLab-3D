@@ -49,7 +49,7 @@ async function body(req,type){
  for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>8192){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
  return Buffer.concat(chunks).toString('utf8')
 }
-export function createPaymentsHandler({store,origin,config=paymentConfig(),logger=console,instructionRelease=false,yookassa=null,regions=null}){
+export function createPaymentsHandler({store,origin,config=paymentConfig(),logger=console,instructionRelease=false,instructionPolicy=null,yookassa=null,regions=null}){
  const cookieName=new URL(origin).protocol==='https:'?'__Host-bricklab_session':'bricklab_session'
  let active=0
  async function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return /^[a-f0-9]{64}$/.test(token||'')?await store.getSession(digest(token)):null}
@@ -78,17 +78,17 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     const q=new URL(req.url,'http://localhost').searchParams,setId=q.get('set'),pdfId=q.get('pdf'),page=Number(q.get('page'))
     if(!/^\d{3,7}-\d{1,2}$/.test(setId??'')||!/^\d{1,12}$/.test(pdfId??'')||!Number.isInteger(page)||page<1||page>5000||q.size!==3)throw new ProjectError(400,'invalid_instruction')
     const viewer=instructionRelease?await session(req):null,account=viewer?await store.commerceAccount(viewer.id):null
-    const policy=instructionAccess({setId,book:'https://www.lego.com/biassets/bi/'+pdfId+'.pdf',page,account,release:instructionRelease})
+    const policy=(instructionPolicy?.access??instructionAccess)({setId,book:'https://www.lego.com/biassets/bi/'+pdfId+'.pdf',page,account,release:instructionRelease})
     if(!policy.interactive)throw new ProjectError(403,'interactive_locked')
-    reply(res,200,{regions:regions?await regions(setId,pdfId,page):[]});return true
+    const audited=instructionPolicy?.regions(setId,pdfId,page);reply(res,200,{regions:policy.supported?(audited??[]):regions?await regions(setId,pdfId,page):[]});return true
    }
    if(path==='/api/commerce/instruction-access'){
     if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
     const q=new URL(req.url,'http://localhost').searchParams,setId=q.get('set'),book=canonicalInstructionUrl(q.get('book')),page=Number(q.get('page'))
-    if(!/^\\d{3,7}-\\d{1,2}$/.test(setId??'')||!book||!Number.isInteger(page)||page<1||page>5000||q.size!==3)throw new ProjectError(400,'invalid_instruction')
+    if(!/^\d{3,7}-\d{1,2}$/.test(setId??'')||!book||!Number.isInteger(page)||page<1||page>5000||q.size!==3)throw new ProjectError(400,'invalid_instruction')
     const viewer=instructionRelease?await session(req):null
     const account=viewer?await store.commerceAccount(viewer.id):null
-    reply(res,200,instructionAccess({setId,book,page,account,release:instructionRelease}));return true
+    reply(res,200,(instructionPolicy?.access??instructionAccess)({setId,book,page,account,release:instructionRelease}));return true
    }
    const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated')
    if(path==='/api/commerce/account'){
