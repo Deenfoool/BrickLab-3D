@@ -116,7 +116,7 @@ def message(event):
         add("Статистика",ORIGIN+"/#account/admin/overview")
     elif kind == "daily":
         body = f"📊 BrickLab · сводка за {clean(p.get('day'),10)}\n"
-        body += f"Новые аккаунты: {n('newUsers')}\nВсего аккаунтов: {n('totalUsers')}\nПодтверждено: {n('verified')}\nПубличные профили: {n('profiles')}\nПубличные сборки: {n('builds')}\nНовые сборки: {n('newBuilds')}\nКомментарии: {n('comments')}\nНеразобранные жалобы: {n('reports')}\nТестовые оплаты: {n('testPaid')}"
+        body += f"Новые аккаунты: {n('newUsers')}\nВсего аккаунтов: {n('totalUsers')}\nПодтверждено: {n('verified')}\nПубличные профили: {n('profiles')}\nПубличные сборки: {n('builds')}\nНовые сборки: {n('newBuilds')}\nКомментарии: {n('comments')}\nНеразобранные жалобы: {n('reports')}\nТестовые оплаты: {n('testPaid')}\nВсего уникальных реакций: {n('likes')}\nПросмотров: {n('views')} · скачиваний: {n('downloads')}\nПодписок: {n('follows')}"
         add("Администрирование",ORIGIN+"/#account/admin/overview")
     else:
         raise RuntimeError("unknown_event")
@@ -176,8 +176,12 @@ def run(c):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--test",action="store_true")
+    parser.add_argument("--status",action="store_true")
     args=parser.parse_args()
     try:
+        if args.status:
+            print(db("SELECT json_build_object('pending',count(*) FILTER (WHERE sent_at IS NULL),'delivered',count(*) FILTER (WHERE sent_at IS NOT NULL AND last_error IS NULL),'disabled',count(*) FILTER (WHERE last_error='disabled'),'retrying',count(*) FILTER (WHERE sent_at IS NULL AND attempts>0),'oldestPending',min(created_at) FILTER (WHERE sent_at IS NULL)) FROM bricklab.notification_outbox;"))
+            return 0
         c=config()
         with open("/run/lock/bricklab-events.lock","a") as lock:
             try: fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
