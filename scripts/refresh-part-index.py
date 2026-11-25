@@ -106,7 +106,7 @@ def identity_target(text):
         return None
     if any("INVERTNEXT" in line.upper() or "!TEXMAP" in line.upper() for line in lines):
         return None
-    geometry = [line.split() for line in lines if not line.startswith("0 ")]
+    geometry = [line.split() for line in lines if line.split()[0] != "0"]
     if len(geometry) != 1 or len(geometry[0]) != 15:
         return None
     fields = geometry[0]
