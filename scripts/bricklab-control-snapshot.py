@@ -7,6 +7,7 @@ import pathlib
 import re
 import shutil
 import sqlite3
+from contextlib import closing
 import datetime
 import subprocess
 import time
@@ -61,7 +62,7 @@ def audit():
     if not path.exists():
         return {"recent": []}
     try:
-        with sqlite3.connect("file:"+str(path)+"?mode=ro", uri=True, timeout=2) as db:
+        with closing(sqlite3.connect("file:"+str(path)+"?mode=ro", uri=True, timeout=2)) as db:
             source = "source" if "source" in {r[1] for r in db.execute("PRAGMA table_info(audit)")} else "'telegram'"
             rows = db.execute("SELECT action,started,result,"+source+" FROM audit ORDER BY started DESC,rowid DESC LIMIT 8").fetchall()
         return {"recent": [{"action": a, "date": datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%d.%m %H:%M UTC"), "result": r, "source": "recovery" if origin=="recovery" else "telegram"}

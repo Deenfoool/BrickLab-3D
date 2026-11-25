@@ -9,10 +9,19 @@ spec = importlib.util.spec_from_file_location("control", path)
 control = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(control)
 
+original_snapshot = control.snapshot
+
 def msg(uid=42, typ="private", chat=42):
     return {"chat": {"type": typ, "id": chat}, "from": {"id": uid}, "text": "/menu", "message_id": 1}
 
 class Control(unittest.TestCase):
+    def setUp(self):
+        # Never read live VPS snapshots or credentials in unit tests.
+        for name, value in (("snapshot", {}), ("issue_token", None), ("preferences", {}), ("actions_enabled", False)):
+            p = patch.object(control, name, return_value=value)
+            p.start()
+            self.addCleanup(p.stop)
+
     def test_owner_only(self):
         for m in (msg(43), msg(42, "group"), msg(42, chat=43)):
             calls = []
@@ -47,7 +56,8 @@ class Control(unittest.TestCase):
             p = pathlib.Path(d)/"snapshot"
             p.write_text('{"timestamp":1}')
             with patch.object(control,"SNAPSHOT",p):
-                self.assertEqual(control.snapshot(),{})
+                # Test the original reader, rather than the setUp mock.
+                self.assertEqual(original_snapshot(),{})
         for page in control.PAGES:
             with patch.object(control,"github_status",return_value={}):
                 result=control.render(page,{})

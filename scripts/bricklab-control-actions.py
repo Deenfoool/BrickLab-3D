@@ -8,6 +8,7 @@ import pwd
 import re
 import socket
 import sqlite3
+from contextlib import closing
 import struct
 import subprocess
 import sys
@@ -91,7 +92,7 @@ def dispatch(request, state=STATE, lock=LOCK, precondition=None, source="telegra
             return "busy"
         if precondition is not None and not precondition():
             return "not_running"
-        with sqlite3.connect(state, timeout=5) as db:
+        with closing(sqlite3.connect(state, timeout=5)) as db, db:
             db.execute("CREATE TABLE IF NOT EXISTS audit (id TEXT PRIMARY KEY, action TEXT NOT NULL, started INTEGER NOT NULL, result TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'telegram')")
             if "source" not in {r[1] for r in db.execute("PRAGMA table_info(audit)")}:
                 db.execute("ALTER TABLE audit ADD COLUMN source TEXT NOT NULL DEFAULT 'telegram'")

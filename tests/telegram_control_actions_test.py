@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import sqlite3
+from contextlib import closing
 import fcntl
 
 path=pathlib.Path(__file__).resolve().parents[1]/"scripts/bricklab-control-actions.py"
@@ -24,7 +25,7 @@ class Actions(unittest.TestCase):
             self.assertEqual(req("restart","b"*24),"cooldown")
             self.assertEqual(req("backup","c"*24),"ok")
             self.assertEqual(execute.call_count,2)
-            with sqlite3.connect(db) as c:
+            with closing(sqlite3.connect(db)) as c:
                 self.assertEqual(c.execute("select count(*) from audit where result='ok'").fetchone()[0],2)
             with open(lock,"a") as guard:
                 fcntl.flock(guard,fcntl.LOCK_EX)
