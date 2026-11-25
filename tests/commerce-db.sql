@@ -14,7 +14,7 @@ DO $$
 BEGIN
  BEGIN
   INSERT INTO bricklab.commerce_grants(order_id,user_id,kind,sku)
-  VALUES ('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','storage','slots-20');
+  VALUES ('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','storage','slots-100');
   RAISE EXCEPTION 'cross-owner grant accepted';
  EXCEPTION WHEN foreign_key_violation THEN NULL;
  END;
