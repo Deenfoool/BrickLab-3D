@@ -351,8 +351,27 @@ test('instruction previews map verified book pages and never frame official LEGO
   assert.equal(instructionPagePreview('910037-1', designer, 3).frame, `${designer}#page=3&view=FitH`)
 })
 
-test('Ford parts are tied to their verified book and normalized page locations', async () => {
+// Use the real HTTP endpoint and real catalog data, not a mocked annotation response.
+async function annotationClient(t) {
+  const { fileURLToPath } = await import('node:url')
+  const { createBrickLabServer } = await import('../server/http.js')
+  const { createPaymentsHandler } = await import('../server/payments.js')
+  const { createInstructionRegions } = await import('../server/instruction-regions.js')
   const { instructionPartRegions } = await import('../src/sets/instruction-parts.js')
+  const root = fileURLToPath(new URL('../', import.meta.url))
+  const regions = createInstructionRegions(fileURLToPath(new URL('../catalog/sets/', import.meta.url)))
+  const server = createBrickLabServer({root, payments:createPaymentsHandler({
+    store:{}, origin:'http://localhost', config:{enabled:false}, regions
+  })})
+  await new Promise(resolve => server.listen(0,'127.0.0.1',resolve))
+  t.after(() => new Promise(resolve => server.close(resolve)))
+  const base = 'http://127.0.0.1:' + server.address().port
+  const fetcher = (path,options) => fetch(new URL(path,base),options)
+  return (set,pdf,page) => instructionPartRegions(set,pdf,page,{fetcher})
+}
+
+test('Ford parts are tied to their verified book and normalized page locations', async (t) => {
+  const instructionPartRegions = await annotationClient(t)
   const [ford] = await (await import('../src/sets/instruction-sources.js'))
     .discoverBooks('42223-1', new AbortController().signal)
   const { instructionPagePreview } = await import('../src/sets/instruction-sources.js')
@@ -372,8 +391,8 @@ test('Ford parts are tied to their verified book and normalized page locations',
   assert.deepEqual(await instructionPartRegions('42215-1', display.pdfId, 34), [])
 })
 
-test('Ford GT 42154 loads earlier and newly recognized details on the same page', async () => {
-  const { instructionPartRegions } = await import('../src/sets/instruction-parts.js')
+test('Ford GT 42154 loads earlier and newly recognized details on the same page', async (t) => {
+  const instructionPartRegions = await annotationClient(t)
   const { instructionPagePreview } = await import('../src/sets/instruction-sources.js')
   const set = '42154-1'
   const pdf = 'https://www.lego.com/cdn/product-assets/product.bi.core.pdf/6456541.pdf'
@@ -387,8 +406,8 @@ test('Ford GT 42154 loads earlier and newly recognized details on the same page'
   assert.ok(overlapping.some((region) => region[4] === '3743' && region[5] === '0'))
 })
 
-test('Volvo book-local pages retrieve part regions from the correct volume', async () => {
-  const { instructionPartRegions } = await import('../src/sets/instruction-parts.js')
+test('Volvo book-local pages retrieve part regions from the correct volume', async (t) => {
+  const instructionPartRegions = await annotationClient(t)
   const { instructionPagePreview } = await import('../src/sets/instruction-sources.js')
   const { books } = validateSet(inventory)
   const first = instructionPagePreview('42215-1', books[0].url, 14)
@@ -402,8 +421,8 @@ test('Volvo book-local pages retrieve part regions from the correct volume', asy
   assert.deepEqual(await instructionPartRegions('42215-1', second.pdfId, 1), [])
 })
 
-test('Ferrari part regions are available for both verified instruction volumes', async () => {
-  const { instructionPartRegions } = await import('../src/sets/instruction-parts.js')
+test('Ferrari part regions are available for both verified instruction volumes', async (t) => {
+  const instructionPartRegions = await annotationClient(t)
   const { discoverBooks, instructionPagePreview } = await import('../src/sets/instruction-sources.js')
   const set = '42143-1'
   const [first, second] = await discoverBooks(set, new AbortController().signal)
