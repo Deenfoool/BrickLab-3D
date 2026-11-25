@@ -76,3 +76,19 @@ export function discountedPrice(kopecks,plus){
  if(!Number.isSafeInteger(kopecks)||kopecks<0)throw new RangeError('invalid_amount');
  return plus===true?Math.round(kopecks*(100-PLUS_DISCOUNT_PERCENT)/100):kopecks;
 }
+
+export const PLUS_THEME_CHANGE_MS=30*86400000;
+export function plusLoyalty(grants=[],now=Date.now()){
+ const spans=grants.filter(g=>productById(g?.sku)?.kind==='subscription'&&g.revoked!==true&&Number.isFinite(g.grantedAt)&&Number.isFinite(g.expiresAt)&&g.grantedAt<Math.min(g.expiresAt,now))
+ .map(g=>[g.grantedAt,Math.min(g.expiresAt,now)]).sort((a,b)=>a[0]-b[0]);
+ let total=0,start=0,end=0;
+ for(const [a,b] of spans){if(a>end){total+=end-start;start=a;end=b}else end=Math.max(end,b)}
+ total+=end-start;
+ const days=Math.floor(total/86400000);
+ return {days,milestones:[1,3,6,12].filter(m=>days>=m*30)};
+}
+export function plusThemeState(account,selection,now=Date.now()){
+ const chosen=account.plus&&Object.hasOwn(themePrices,selection?.theme??'')?selection.theme:null;
+ const changedAt=chosen?new Date(selection.changedAt).getTime():0;
+ return {chosen,nextChangeAt:chosen&&Number.isFinite(changedAt)?changedAt+PLUS_THEME_CHANGE_MS:0};
+}
