@@ -34,9 +34,11 @@ LINKS = {
 }
 ACTION_SOCKET = pathlib.Path("/run/bricklab-control-actions.sock")
 ACTIONS = {"restart": ("Перезапустить BrickLab", "Приложение будет кратковременно недоступно."),
-           "backup": ("Создать резервные копии", "Запустятся существующие службы бэкапа БД и конфигурации.")}
+           "backup": ("Создать резервные копии", "Запустятся существующие службы бэкапа БД и конфигурации."),
+           "deploy": ("Запустить утверждённый релиз", "Будет запущена проверка и установка заранее утверждённого на VPS SHA.")}
 PENDING = {}
-RESULTS = {"ok": "✅ Операция завершена.", "failed": "❌ Операция завершилась ошибкой.",
+RESULTS = {"approval_required": "⚠ Нет утверждённого релиза. Требуется отдельное подтверждение на VPS.",
+           "queued": "⏳ Запуск службы запрошен. Это не успешный релиз; результат в разделе Версия.", "ok": "✅ Операция завершена.", "failed": "❌ Операция завершилась ошибкой.",
            "health_failed": "⚠ Перезапуск выполнен, но API не прошёл проверку.",
            "not_running": "⚠ Приложение не запущено. Перезапуск отменён.",
            "busy": "⏳ Уже выполняется операция или развёртывание.",
@@ -183,13 +185,13 @@ def render(page, data):
         "builds": "🧱 Последние публичные сборки\n" + records("builds"),
         "reports": "🚩 Неразобранные жалобы\n" + lines("stats", [("На сборки", "build_reports"), ("На комментарии", "comment_reports")]) + "\nРешение жалоб — в веб-админке.",
         "bugs": "🐞 Последние баг-репорты\n" + records("bugs") + "\nОписание, логи и личные данные не отправляются в Telegram.",
-        "github": "🐙 GitHub / релиз\n" + lines("release", [("Checkout", "commit"), ("Последний локально полученный origin", "tracking"), ("Отставание (коммитов)", "behind"), ("Рабочее дерево", "worktree")]) + "\nGitHub SHA: " + github.get("remote","нет данных") + "\nCI для GitHub SHA: " + github.get("ci","нет данных") + "\nGitHub обновляется не чаще раза в 5 минут. Развёртывание из Telegram не включено.",
+        "github": "🐙 GitHub / релиз\n" + lines("release", [("Checkout", "commit"), ("Последний локально полученный origin", "tracking"), ("Отставание (коммитов)", "behind"), ("Рабочее дерево", "worktree")]) + "\nGitHub SHA: " + github.get("remote","нет данных") + "\nCI для GitHub SHA: " + github.get("ci","нет данных") + "\nGitHub обновляется не чаще раза в 5 минут. Развёртывание — только утверждённого SHA в разделе Версия.",
         "analytics": "📈 Аналитика за 7 календарных дней (часовой пояс БД)\nДата · аккаунты / текущие сборки по дате публикации\n" + trend_text + "\n\n" + lines("analytics",[("Реакции всего","likes"),("Просмотры (учтённые события)","views"),("Скачивания (учтённые события)","downloads"),("Подписки","follows"),("Деталей в публичных сборках","parts")]),
         "automation": "⚙ Автоматизация\n" + automation_description() + "\nАвтовосстановление: " + value("automation","recovery") + "\nНе меняет существующие службы мониторинга и Events.",
         "audit": "🛡 Последние операции VPS\n" + history,
         "logs": "📋 Диагностика логов (последние 200 строк за 1 ч)\n" + lines("logs", [("Строки", "lines"), ("С ошибками", "errors"), ("С предупреждениями", "warnings")]) + "\nСодержимое логов не передаётся в Telegram.",
         "release": "🚀 Развёрнутая версия (checkout)\n" + value("release", "commit")
-                     + "\nСмена версии и откат пока доступны только через проверенный VPS-процесс.",
+                     + "\nУтверждённый SHA: " + value("release","approved") + "\nСлужба релиза: " + value("release","job") + "\nОткат только по проверенной процедуре VPS.",
     }
     text = bodies[page]
     if not data:
@@ -215,8 +217,8 @@ def render(page, data):
         buttons.append([{"text":"📱 Панель управления", "web_app":{"url":ORIGIN+"/control/"}}])
     if page == "release":
         buttons.append([{"text": "GitHub", "url": "https://github.com/Deenfoool/BrickLab-3D"}])
-    if actions_enabled() and page in ("docker", "backup"):
-        action = "restart" if page == "docker" else "backup"
+    if actions_enabled() and page in ("docker", "backup", "release"):
+        action = {"docker":"restart","backup":"backup","release":"deploy"}[page]
         buttons.append([{"text": ACTIONS[action][0], "callback_data": "act:" + action}])
     buttons.append([{"text": "🔄 Обновить", "callback_data": "cc:" + page}])
     if page != "home":
@@ -274,7 +276,7 @@ def handle_action(data, cb, msg, owner, call):
     action = pending[0]
     if kind == "no":
         call("editMessageText", {"chat_id": owner, "message_id": msg["message_id"],
-                                 **render("docker" if action == "restart" else "backup", snapshot())})
+                                 **render({"restart":"docker","backup":"backup","deploy":"release"}[action], snapshot())})
         return
     call("editMessageText", {"chat_id": owner, "message_id": msg["message_id"],
                              "text": "⏳ Выполняется: " + ACTIONS[action][0],

@@ -65,7 +65,7 @@ def audit():
             source = "source" if "source" in {r[1] for r in db.execute("PRAGMA table_info(audit)")} else "'telegram'"
             rows = db.execute("SELECT action,started,result,"+source+" FROM audit ORDER BY started DESC,rowid DESC LIMIT 8").fetchall()
         return {"recent": [{"action": a, "date": datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%d.%m %H:%M UTC"), "result": r, "source": "recovery" if origin=="recovery" else "telegram"}
-                           for a,t,r,origin in rows if a in ("restart","backup") and r in ("started","ok","failed","unknown","not_running","health_failed")]}
+                           for a,t,r,origin in rows if a in ("restart","backup","deploy") and r in ("started","ok","failed","unknown","not_running","health_failed","queued","approval_required")]}
     except (sqlite3.Error, ValueError, OSError, OverflowError):
         return {}
 
@@ -137,6 +137,13 @@ def collect():
     data["backup"] = {"db": unit("bricklab-backup.service"), "config": unit("bricklab-config-backup.service")}
     commit = run(["git", "rev-parse", "HEAD"])
     data["release"] = {"commit": commit if commit and re.fullmatch(r"[0-9a-f]{40}", commit) else "нет данных"}
+    data["release"]["job"] = unit("bricklab-control-release.service")
+    try:
+        approved = pathlib.Path("/etc/bricklab-backup/control-release.approved").read_text().strip().split()
+        if len(approved)==2 and re.fullmatch(r"[a-f0-9]{40}",approved[0]) and int(approved[1])>time.time():
+            data["release"]["approved"] = approved[0]
+    except (OSError,ValueError):
+        pass
     tracking = run(["git", "rev-parse", "--verify", "refs/remotes/origin/feature/cloud-migration"])
     if tracking and re.fullmatch(r"[0-9a-f]{40}", tracking):
         data["release"]["tracking"] = tracking

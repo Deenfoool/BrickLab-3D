@@ -24,12 +24,15 @@ jobs:
         run: |
           python3 -m py_compile scripts/bricklab-control.py scripts/bricklab-control-snapshot.py scripts/bricklab-control-actions.py scripts/bricklab-control-recovery.py scripts/bricklab-control-miniapp.py
           bash -n scripts/install-bricklab-control.sh
+          bash -n scripts/bricklab-control-release.sh
+          bash -n scripts/bricklab-control-approve.sh
           python3 -B tests/telegram_events_test.py
           python3 -B tests/telegram_control_test.py
           python3 -B tests/telegram_control_actions_test.py
           python3 -B tests/telegram_control_automation_test.py
           python3 -B tests/telegram_control_recovery_test.py
           python3 -B tests/telegram_control_miniapp_test.py
+          python3 -B tests/telegram_control_release_test.py
 
   test:
     runs-on: ubuntu-latest

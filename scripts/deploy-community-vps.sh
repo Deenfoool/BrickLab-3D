@@ -48,6 +48,7 @@ docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /te
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_automation_test.py
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_recovery_test.py
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_miniapp_test.py
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_release_test.py
 
 echo "=== ISOLATED DATABASE TESTS ==="
 export POSTGRES_PASSWORD="$(openssl rand -hex 32)"

@@ -16,7 +16,8 @@ import urllib.request
 ROOT = "/opt/bricklab-cloud"
 STATE = "/var/lib/bricklab-control-actions/audit.sqlite3"
 LOCK = "/run/bricklab-deploy.lock"
-LIMITS = {"restart": 600, "backup": 1800}
+LIMITS = {"restart": 600, "backup": 1800, "deploy": 1800}
+APPROVAL = "/etc/bricklab-backup/control-release.approved"
 COMMANDS = {
     "restart": ["/usr/bin/docker", "compose", "restart", "--timeout", "15", "bricklab"],
     "backup": ["/usr/bin/systemctl", "start", "bricklab-backup.service", "bricklab-config-backup.service"],
@@ -43,6 +44,12 @@ def healthy():
     return False
 
 def execute(action):
+    if action == "deploy":
+        # The unit acquires the shared release lock itself; do not wait while holding it.
+        if not os.path.isfile(APPROVAL):
+            return "approval_required"
+        rc, _ = run(["/usr/bin/systemctl", "start", "--no-block", "bricklab-control-release.service"], 15)
+        return "queued" if rc == 0 else "failed" if rc is not None else "unknown"
     if action == "restart":
         rc, out = run(["/usr/bin/docker", "compose", "ps", "--status", "running", "-q", "bricklab"], 10)
         if rc != 0 or not out.strip():

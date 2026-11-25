@@ -24,7 +24,7 @@ fi
 test "$(id -gn bricklab-control)" = bricklab-control
 test "$(id -nG bricklab-control)" = bricklab-control
 install -d -m 0755 /usr/local/lib/bricklab-control
-install -m 0644 scripts/bricklab-control.py scripts/bricklab-control-snapshot.py scripts/bricklab-control-actions.py scripts/bricklab-control-recovery.py scripts/bricklab-control-miniapp.py scripts/miniapp.html scripts/miniapp.js scripts/miniapp.css /usr/local/lib/bricklab-control/
+install -m 0644 scripts/bricklab-control.py scripts/bricklab-control-snapshot.py scripts/bricklab-control-actions.py scripts/bricklab-control-recovery.py scripts/bricklab-control-miniapp.py scripts/miniapp.html scripts/miniapp.js scripts/miniapp.css scripts/bricklab-control-release.sh scripts/bricklab-control-approve.sh scripts/deploy-community-vps.sh /usr/local/lib/bricklab-control/
 python3 -m py_compile /usr/local/lib/bricklab-control/*.py
 cat >/etc/systemd/system/bricklab-control-snapshot.service <<'UNIT'
 [Unit]
@@ -167,6 +167,19 @@ CapabilityBoundingSet=
 InaccessiblePaths=-/run/docker.sock -/var/run/docker.sock -/opt/bricklab-cloud -/etc/bricklab-backup -/run/bricklab-control-actions.sock
 [Install]
 WantedBy=multi-user.target
+UNIT
+cat >/etc/systemd/system/bricklab-control-release.service <<'UNIT'
+[Unit]
+Description=BrickLab independently approved exact release
+After=docker.service network-online.target
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/bin/bash /usr/local/lib/bricklab-control/bricklab-control-release.sh
+TimeoutStartSec=45min
+NoNewPrivileges=true
+PrivateTmp=true
 UNIT
 systemctl daemon-reload
 if [[ "${1:-}" == --enable-actions ]]; then
