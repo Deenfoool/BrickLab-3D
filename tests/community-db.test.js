@@ -53,7 +53,7 @@ test('admin can equip and publish all premium themes without a payment', {skip:p
  const initial=await store.getProfile(uid)
  assert.equal(initial.inventory.filter(i=>i.adminAccess===true&&i.owned).length,6)
  assert.equal(initial.inventory.find(i=>i.id==='first-build').owned,false)
- assert.deepEqual(await store.testOrders(uid),[])
+ assert.equal((await store.testOrders(uid)).length,0)
  await store.publishCard(uid,{displayName:'Test admin theme',bio:'',showBackground:true})
  for(const id of themeIds){
   await store.saveProfile(uid,{bio:'',cover:'amber',background:id})
@@ -63,5 +63,5 @@ test('admin can equip and publish all premium themes without a payment', {skip:p
  await store.publishCard(uid,{displayName:'Test admin theme',bio:'',showBackground:false})
  await store.saveProfile(uid,{bio:'',cover:'amber',background:'carbon'})
  assert.equal((await store.getOwnCard(uid)).backgroundTheme,null)
- assert.deepEqual(await store.testOrders(uid),[])
+ assert.equal((await store.testOrders(uid)).length,0)
 })
