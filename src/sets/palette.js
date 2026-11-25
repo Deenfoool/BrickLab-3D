@@ -1,3 +1,4 @@
+import { resolvePart } from '../catalog/part-resolver.js?v=catalog-engine-1'
 import { elementNumber, lookupElement } from '../editor/element-index.js'
 import {
   previewColumns,
@@ -10,7 +11,7 @@ import {
   inventoryUsage,
   normalizeQuery,
   inventoryKey,
-} from './data.js'
+} from './data.js?v=catalog-engine-1'
 export function mountSetPalette(
   root,
   set,
@@ -80,13 +81,18 @@ export function mountSetPalette(
     scrollPosition = root.scrollTop
     const terms = normalizeQuery(search.value).split(/\s+/).filter(Boolean)
     const element = elementNumber(search.value)
+    const queryDesign = resolvePart(search.value, catalog).design
+    const exactDesign = exactPart && resolvePart(exactPart, catalog).design
+    const hasExact = exactPart && items.some(item => item.partNum === exactPart && (!exactColor || item.colorId === exactColor))
     const filtered = used.filter(item => {
       if (color.value && item.colorId !== color.value || group.value && item.model?.group !== group.value) return false
-      if (exactPart) return item.partNum === exactPart && (!exactColor || item.colorId === exactColor)
+      if (exactPart) return (!exactColor || item.colorId === exactColor) &&
+        (hasExact ? item.partNum === exactPart : exactDesign ? item.design === exactDesign : item.partNum === exactPart)
+      if (queryDesign && item.design === queryDesign) return true
       if (element && (item.elementId === element || item.image.endsWith('/' + element + '.jpg') ||
           (resolved?.partNum === item.partNum && resolved.colorId === item.colorId))) return true
       const text = normalizeQuery([item.name, item.partNum, item.elementId, item.design, ...item.ldraw,
-        item.model?.ru, item.colorName].join(' '))
+        item.model?.ru, ...(item.model?.aliases ?? []), item.colorName].join(' '))
       return terms.every(term => text.includes(term))
     })
     if (!filtered.length && !color.value && !group.value && (resolved || exactPart || printed.has(element))) {
@@ -142,7 +148,7 @@ export function mountSetPalette(
       swatch.style.backgroundColor = item.color
       swatch.title = item.colorName
       const name = item.model?.[language] ?? item.name
-      take.title = name
+      take.title = item.design && item.design !== item.partNum ? name + ' · ' + item.partNum + ' → ' + item.design : name
       take.append(
         image,
         fallback,
@@ -202,7 +208,7 @@ export function mountSetPalette(
     },
     describe(partNum, colorId) {
       const item = byKey.get(`${partNum}/${colorId}`)
-      const name = item?.model?.[language] ?? item?.name ?? catalog[partNum]?.[language]
+      const name = item?.model?.[language] ?? item?.name ?? resolvePart(partNum, catalog).model?.[language]
       return ru ? name?.split(' · ', 1)[0] : name
     },
     update(parts) {
