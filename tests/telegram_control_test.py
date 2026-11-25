@@ -41,7 +41,8 @@ class Control(unittest.TestCase):
             with self.assertRaises(ValueError):
                 control.config(p)
 
-    def test_stale_snapshot(self):
+    @patch.object(control, "actions_enabled", return_value=False)
+    def test_stale_snapshot(self, _enabled):
         with tempfile.TemporaryDirectory() as d:
             p = pathlib.Path(d)/"snapshot"
             p.write_text('{"timestamp":1}')
@@ -57,6 +58,42 @@ class Control(unittest.TestCase):
                         self.assertIn(button["callback_data"][3:],control.PAGES)
                     else:
                         self.assertTrue(button["url"].startswith("https://"))
+
+    @patch.object(control, "actions_enabled", return_value=True)
+    @patch.object(control, "broker", return_value="ok")
+    def test_confirmation_one_use(self, execute, _enabled):
+        control.PENDING.clear()
+        calls = []
+        def click(data, uid=42, mid=1):
+            m = msg()
+            m["message_id"] = mid
+            control.handle({"callback_query":{"id":"x","from":{"id":uid},"message":m,"data":data}}, 42,
+                           lambda *args: calls.append(args))
+        click("act:restart", uid=43)
+        self.assertFalse(control.PENDING)
+        click("act:restart")
+        nonce = next(iter(control.PENDING))
+        click("yes:"+nonce, mid=2)
+        execute.assert_not_called()
+        click("yes:"+nonce)
+        click("yes:"+nonce)
+        execute.assert_called_once_with("restart",nonce)
+
+    @patch.object(control, "actions_enabled", return_value=True)
+    @patch.object(control, "broker")
+    def test_expired_and_cancel(self, execute, _enabled):
+        control.PENDING.clear()
+        def click(data):
+            control.handle({"callback_query":{"id":"x","from":{"id":42},"message":msg(),"data":data}},42,lambda *a:None)
+        click("act:backup")
+        nonce = next(iter(control.PENDING))
+        control.PENDING[nonce] = ("backup",1,0)
+        click("yes:"+nonce)
+        click("act:backup")
+        nonce = next(iter(control.PENDING))
+        click("no:"+nonce)
+        click("yes:"+nonce)
+        execute.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()

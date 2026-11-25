@@ -3,6 +3,11 @@ set -Eeuo pipefail
 umask 077
 cd /opt/bricklab-cloud
 test "$(id -u)" = 0
+case "${1:-}" in
+  ""|--enable-actions) ;;
+  *) echo "Usage: $0 [--enable-actions]" >&2; exit 2 ;;
+esac
+test "$#" -le 1
 CONFIG=/etc/bricklab-backup/telegram.json
 python3 - "$CONFIG" <<'PY'
 import json, os, re, stat, sys
@@ -13,8 +18,13 @@ c=json.load(open(p))
 assert re.fullmatch(r'[1-9][0-9]{0,18}',str(c.get('chat_id',''))), 'Private owner chat required'
 assert re.fullmatch(r'[0-9]+:[A-Za-z0-9_-]{20,}',str(c.get('token','')))
 PY
+if ! id bricklab-control >/dev/null 2>&1; then
+  useradd --system --user-group --no-create-home --shell /usr/sbin/nologin bricklab-control
+fi
+test "$(id -gn bricklab-control)" = bricklab-control
+test "$(id -nG bricklab-control)" = bricklab-control
 install -d -m 0755 /usr/local/lib/bricklab-control
-install -m 0644 scripts/bricklab-control.py scripts/bricklab-control-snapshot.py /usr/local/lib/bricklab-control/
+install -m 0644 scripts/bricklab-control.py scripts/bricklab-control-snapshot.py scripts/bricklab-control-actions.py /usr/local/lib/bricklab-control/
 python3 -m py_compile /usr/local/lib/bricklab-control/*.py
 cat >/etc/systemd/system/bricklab-control-snapshot.service <<'UNIT'
 [Unit]
@@ -49,7 +59,8 @@ After=network-online.target bricklab-control-snapshot.service
 Wants=network-online.target bricklab-control-snapshot.timer
 [Service]
 Type=simple
-DynamicUser=true
+User=bricklab-control
+Group=bricklab-control
 StateDirectory=bricklab-control-bot
 LoadCredential=telegram.json:/etc/bricklab-backup/telegram.json
 ExecStart=/usr/bin/python3 /usr/local/lib/bricklab-control/bricklab-control.py
@@ -70,7 +81,43 @@ InaccessiblePaths=-/var/run/docker.sock -/run/docker.sock -/opt/bricklab-cloud -
 [Install]
 WantedBy=multi-user.target
 UNIT
+cat >/etc/systemd/system/bricklab-control-actions.socket <<'UNIT'
+[Unit]
+Description=BrickLab fixed privileged actions (opt-in)
+[Socket]
+ListenStream=/run/bricklab-control-actions.sock
+SocketUser=root
+SocketGroup=bricklab-control
+SocketMode=0660
+Accept=yes
+MaxConnections=2
+RemoveOnStop=yes
+[Install]
+WantedBy=sockets.target
+UNIT
+cat >/etc/systemd/system/bricklab-control-actions@.service <<'UNIT'
+[Unit]
+Description=BrickLab restricted operator action
+[Service]
+Type=exec
+User=root
+UMask=0077
+StateDirectory=bricklab-control-actions
+StateDirectoryMode=0700
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+ExecStart=/usr/bin/python3 /usr/local/lib/bricklab-control/bricklab-control-actions.py
+RuntimeMaxSec=280
+NoNewPrivileges=true
+PrivateTmp=true
+UNIT
 systemctl daemon-reload
+if [[ "${1:-}" == --enable-actions ]]; then
+  systemctl enable --now bricklab-control-actions.socket
+else
+  systemctl disable --now bricklab-control-actions.socket
+fi
 systemctl start bricklab-control-snapshot.service
 systemctl enable --now bricklab-control-snapshot.timer
 systemctl enable --now bricklab-control.service

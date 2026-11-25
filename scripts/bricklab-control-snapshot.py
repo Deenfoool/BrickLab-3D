@@ -96,6 +96,11 @@ def collect():
     data["backup"] = {"db": unit("bricklab-backup.service"), "config": unit("bricklab-config-backup.service")}
     commit = run(["git", "rev-parse", "HEAD"])
     data["release"] = {"commit": commit if commit and re.fullmatch(r"[0-9a-f]{40}", commit) else "нет данных"}
+    raw = run(["docker", "compose", "logs", "--no-color", "--tail", "200", "--since", "1h", "bricklab"])
+    if raw is not None:
+        lines = raw.splitlines()
+        data["logs"] = {"lines": len(lines), "errors": sum(bool(re.search(r"\b(?:error|fatal|exception)\b", line, re.I)) for line in lines),
+                        "warnings": sum(bool(re.search(r"\b(?:warn|warning)\b", line, re.I)) for line in lines)}
     data["timestamp"] = time.time()
     return data
 

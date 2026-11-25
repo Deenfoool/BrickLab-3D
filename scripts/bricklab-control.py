@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Private, read-only Telegram operator interface. No subprocess or Docker access."""
+"""Private Telegram operator interface with a fixed-action local broker. No subprocess or Docker access."""
 import json
 import os
 import pathlib
 import re
+import secrets
+import socket
+import stat
 import time
 import urllib.request
 import urllib.error
@@ -13,7 +16,7 @@ SNAPSHOT = pathlib.Path("/run/bricklab-control/snapshot.json")
 MENUS = {
     "home": [("🖥 VPS", "vps"), ("🐳 Docker", "docker"), ("📊 Статистика", "stats"),
              ("🧱 Сообщество", "community"), ("💾 Бэкапы", "backup"), ("🔔 События", "events"),
-             ("🚀 Версия", "release")],
+             ("🚀 Версия", "release"), ("📋 Диагностика логов", "logs")],
 }
 LINKS = {
     "community": [("Администрирование", "/#account/admin/overview"),
@@ -23,7 +26,37 @@ LINKS = {
     "stats": [("Открыть статистику", "/#account/admin/overview")],
     "events": [("Администрирование", "/#account/admin/overview")],
 }
-PAGES = {"home", "vps", "docker", "stats", "community", "backup", "events", "release"}
+ACTION_SOCKET = pathlib.Path("/run/bricklab-control-actions.sock")
+ACTIONS = {"restart": ("Перезапустить BrickLab", "Приложение будет кратковременно недоступно."),
+           "backup": ("Создать резервные копии", "Запустятся существующие службы бэкапа БД и конфигурации.")}
+PENDING = {}
+RESULTS = {"ok": "✅ Операция завершена.", "failed": "❌ Операция завершилась ошибкой.",
+           "health_failed": "⚠ Перезапуск выполнен, но API не прошёл проверку.",
+           "not_running": "⚠ Приложение не запущено. Перезапуск отменён.",
+           "busy": "⏳ Уже выполняется операция или развёртывание.",
+           "cooldown": "⏳ Ограничение частоты. Повторите позже.",
+           "duplicate": "⚠ Запрос уже обработан или начат ранее.",
+           "unknown": "⚠ Результат неизвестен. Проверьте состояние и журнал; автоматического повтора нет."}
+
+def actions_enabled():
+    try:
+        return stat.S_ISSOCK(ACTION_SOCKET.stat().st_mode)
+    except OSError:
+        return False
+
+def broker(action, ident):
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+            conn.settimeout(250)
+            conn.connect(str(ACTION_SOCKET))
+            conn.sendall((json.dumps({"action": action, "id": ident}) + "\n").encode())
+            with conn.makefile("rb") as reader:
+                result = reader.readline(64).decode().strip()
+            return result if result in RESULTS else "unknown"
+    except (OSError, UnicodeError):
+        return "unknown"
+
+PAGES = {"home", "vps", "docker", "stats", "community", "backup", "events", "release", "logs"}
 
 class ApiError(Exception):
     def __init__(self, code, delay=0):
@@ -73,6 +106,7 @@ def render(page, data):
                   + "\nСтатус systemd, не доказательство восстановления копии.",
         "events": "🔔 BrickLab Events\n" + lines("events", [("В очереди", "pending"), ("Повторные попытки", "retrying"),
                      ("Доставлено (хранится до 30 дней)", "delivered"), ("Таймер", "timer")]),
+        "logs": "📋 Диагностика логов (последние 200 строк за 1 ч)\n" + lines("logs", [("Строки", "lines"), ("С ошибками", "errors"), ("С предупреждениями", "warnings")]) + "\nСодержимое логов не передаётся в Telegram.",
         "release": "🚀 Развёрнутая версия (checkout)\n" + value("release", "commit")
                      + "\nСмена версии и откат пока доступны только через проверенный VPS-процесс.",
     }
@@ -84,6 +118,9 @@ def render(page, data):
     buttons += [[{"text": label, "url": ORIGIN + path}] for label, path in LINKS.get(page, [])]
     if page == "release":
         buttons.append([{"text": "GitHub", "url": "https://github.com/Deenfoool/BrickLab-3D"}])
+    if actions_enabled() and page in ("docker", "backup"):
+        action = "restart" if page == "docker" else "backup"
+        buttons.append([{"text": ACTIONS[action][0], "callback_data": "act:" + action}])
     buttons.append([{"text": "🔄 Обновить", "callback_data": "cc:" + page}])
     if page != "home":
         buttons.append([{"text": "⬅ Меню", "callback_data": "cc:home"}])
@@ -111,6 +148,45 @@ def api(token, method, payload, timeout=15):
     except (OSError, ValueError):
         raise ApiError("network") from None
 
+def handle_action(data, cb, msg, owner, call):
+    kind, key = data.split(":", 1)
+    now = time.monotonic()
+    for nonce, pending in list(PENDING.items()):
+        if pending[2] < now:
+            del PENDING[nonce]
+    if not actions_enabled():
+        return
+    if kind == "act":
+        if key not in ACTIONS:
+            return
+        call("answerCallbackQuery", {"callback_query_id": cb["id"]})
+        PENDING.clear()
+        nonce = secrets.token_hex(12)
+        PENDING[nonce] = (key, msg["message_id"], now + 60)
+        call("editMessageText", {"chat_id": owner, "message_id": msg["message_id"],
+             "text": ACTIONS[key][0] + "\n" + ACTIONS[key][1] + "\nПодтвердите в течение 60 секунд.",
+             "reply_markup": {"inline_keyboard": [[{"text": "Подтвердить", "callback_data": "yes:" + nonce},
+                                                       {"text": "Отмена", "callback_data": "no:" + nonce}]]}})
+        return
+    pending = PENDING.get(key)
+    if not pending or pending[1] != msg["message_id"]:
+        call("answerCallbackQuery", {"callback_query_id": cb["id"], "text": "Подтверждение истекло."})
+        return
+    del PENDING[key]
+    call("answerCallbackQuery", {"callback_query_id": cb["id"]})
+    action = pending[0]
+    if kind == "no":
+        call("editMessageText", {"chat_id": owner, "message_id": msg["message_id"],
+                                 **render("docker" if action == "restart" else "backup", snapshot())})
+        return
+    call("editMessageText", {"chat_id": owner, "message_id": msg["message_id"],
+                             "text": "⏳ Выполняется: " + ACTIONS[action][0],
+                             "reply_markup": {"inline_keyboard": []}})
+    result = broker(action, key)
+    call("editMessageText", {"chat_id": owner, "message_id": msg["message_id"],
+                             "text": ACTIONS[action][0] + "\n" + RESULTS[result],
+                             "reply_markup": {"inline_keyboard": [[{"text": "⬅ Меню", "callback_data": "cc:home"}]]}})
+
 def handle(update, owner, call):
     if "callback_query" in update:
         cb = update["callback_query"]
@@ -118,7 +194,12 @@ def handle(update, owner, call):
         if not authorized(msg, cb.get("from", {}), owner):
             return
         data = cb.get("data", "")
-        if not isinstance(data, str) or not data.startswith("cc:") or data[3:] not in PAGES:
+        if not isinstance(data, str):
+            return
+        if data.startswith(("act:", "yes:", "no:")):
+            handle_action(data, cb, msg, owner, call)
+            return
+        if not data.startswith("cc:") or data[3:] not in PAGES:
             return
         call("answerCallbackQuery", {"callback_query_id": cb["id"]})
         try:

@@ -5,6 +5,9 @@ if [[ ! -f "${BASH_SOURCE[0]}" ]]; then echo 'Run a saved script file, not bash 
 exec </dev/null
 umask 077
 cd /opt/bricklab-cloud
+# Shared with the Telegram action broker; keep fd open throughout this release.
+exec 9>>/run/lock/bricklab-deploy.lock
+flock -n 9 || { echo "Another BrickLab operation is running" >&2; exit 1; }
 TARGET="${1:?Supply an exact release commit SHA}"
 [[ "$TARGET" =~ ^[0-9a-f]{40}$ ]]
 test "$(git branch --show-current)" = feature/cloud-migration
