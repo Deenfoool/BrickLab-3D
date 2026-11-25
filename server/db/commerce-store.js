@@ -5,7 +5,7 @@ export async function commerceEntitlements(tx,uid){
      from bricklab.commerce_grants g
      join bricklab.commerce_orders o on o.id=g.order_id and o.user_id=g.user_id
      where g.user_id=${uid} and o.environment='live' and o.status='succeeded'
-       and g.revoked_at is null and g.granted_at<=now()
+       and g.revoked_at is null and (g.kind='subscription' or g.granted_at<=now())
        and (g.kind='subscription' or g.expires_at is null or g.expires_at>now())
      order by g.granted_at,g.id`;
     const grants=rows.map(g=>({id:g.id,kind:g.kind,sku:g.sku,
@@ -20,6 +20,9 @@ export async function commerceEntitlements(tx,uid){
 // payment acceptance. Test orders can never confer real entitlements.
 export function commerceStore(scope){
  return {
+  async createCommerceTestOrder(uid,sku){return scope(uid,async tx=>{const [row]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",idempotency_key as "idempotencyKey",payment_id as "paymentId",created_at as "createdAt" from bricklab.commerce_create_test_order(${sku})`;return row})},
+  async attachCommercePayment(id,paymentId,environment){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_attach_payment(${id}::uuid,${paymentId},${environment}) as ok`;return r.ok})},
+  async fulfillCommercePayment(id,paymentId,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_fulfill(${id}::uuid,${paymentId},${environment},${amount}::integer) as ok`;return r.ok})},
   async commerceAccount(uid){
    return scope(uid,async tx=>{
     const account=await commerceEntitlements(tx,uid);
