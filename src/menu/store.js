@@ -54,7 +54,7 @@ export function mountStore(root,{language='ru',signal}){
    const history=await api('/api/store/orders',signal).catch(e=>{if(e.status===401||e.status===403)return null;throw e})
    if(signal.aborted||version!==serial)return
    const admin=history!==null,items=history?.orders??[]
-   let profileData=await profiles.get().catch(e=>{if(e.status===401||e.status===403)return null;throw e})
+   let profileData=await profiles.get().catch(e=>{if(!admin||e.status===401||e.status===403)return null;throw e})
    if(signal.aborted||version!==serial)return
    message.textContent=(admin?(ru?'Все платные темы доступны администратору бесплатно. ':'All paid themes are free for administrators. '):'')+(catalog.mode==='test'?t.test:t.disabled)
    grid.replaceChildren()
