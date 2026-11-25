@@ -10,6 +10,7 @@ identity_target = worker["identity_target"]
 redirects_from = worker["redirects_from"]
 resolve_redirects = worker["resolve_redirects"]
 atomic_json = worker["atomic_json"]
+audit_inventories = worker["audit_inventories"]
 
 def alias(target, transform="0 0 0 1 0 0 0 1 0 0 0 1"):
     return f"0 =Official Alias\n0 !LDRAW_ORG Part Alias\n0\n1 16 {transform} {target}.dat\n"
@@ -31,6 +32,18 @@ class CatalogRefreshTests(unittest.TestCase):
                 archive.writestr("ldraw/parts/s/sub.dat", alias("6628"))
             redirects = redirects_from(path)
             self.assertEqual(resolve_redirects(redirects, {"6628", "existing"}), {"66906": "6628", "older": "6628"})
+    def test_weighted_inventory_audit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            (folder / "test.json").write_text(json.dumps({"number": "1-1", "inventory": [
+                {"partNum": "66906", "quantity": 3},
+                {"partNum": "6628", "quantity": 4},
+                {"partNum": "outside", "quantity": 2, "ldraw": ["6628", "a"]},
+                {"partNum": "missing", "quantity": 5},
+                {"partNum": "6628", "quantity": 8, "spare": True}
+            ]}))
+            result = audit_inventories(folder, {"6628", "a"}, {"66906": "6628"})
+            self.assertEqual(result["1-1"], dict(exact=4, alias=3, external=0, ambiguous=2, missing=5))
     def test_atomic_snapshot_replacement(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "public/aliases.json"
