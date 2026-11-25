@@ -1,6 +1,7 @@
 import {createProfileClient} from './profile-client.js?v=cloud-profile-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
+import {commerceProducts,themePrices} from './commerce-catalog.js?v=commerce-plus-2'
 import {mountCommercePreview} from './commerce-preview.js?v=commerce-1'
 const labels={
  ru:{title:'BrickLab Store',intro:'Оформление мастерской. Основные функции редактора остаются бесплатными.',disabled:'Продажи пока закрыты. Здесь представлен каталог будущих покупок.',test:'Тестовый режим · реальные деньги не списываются. Покупки доступны только администратору.',login:'Войти в аккаунт',buy:'Тестовая покупка',owned:'Получено в тестовом инвентаре',resume:'Продолжить тестовую оплату',consent:'Подтверждаю, что это тестовая оплата без реального списания и без выдачи платного товара.',history:'Мои тестовые заказы',finance:'BrickLab Finance · тестовый режим',financeNote:'Суммы ниже — виртуальные тестовые операции, не выручка.',total:'Заказов',paid:'Подтверждено',amount:'Тестовый оборот',pending:'Ожидает подтверждения',complete:'Подтверждён',refresh:'Обновить статус',error:'Не удалось выполнить запрос. Попробуй ещё раз.',wait:'Если оплата завершена, дождись уведомления Robokassa и обнови статус.',profile:'Мой инвентарь',carbon:'Карбон',neon:'Неоновая мастерская',noOrders:'Заказов пока нет',loading:'Загрузка…'},
@@ -40,6 +41,26 @@ export function mountStore(root,{language='ru',signal}){
  const message=el('p','account-muted',t.loading),grid=el('div','store-grid'),ordersPanel=el('section','store-orders'),financePanel=el('section','store-orders')
  message.setAttribute('role','status');root.replaceChildren(banner,el('p','account-muted',t.intro),message,grid,ordersPanel,financePanel)
  mountCommercePreview(root,{language})
+ const sandbox=el('section','store-orders');sandbox.hidden=true;root.append(sandbox)
+ void api('/api/commerce/test-status',signal).then(status=>{
+  if(signal.aborted||!status.enabled)return
+  sandbox.hidden=false;sandbox.append(el('h2',null,ru?'ЮKassa · тестовая оплата':'YooKassa · sandbox checkout'),el('p','account-muted',ru?'Только администратор. Реальных списаний и прав доступа нет.':'Admin only. No real charges or access rights.'))
+  const selector=el('select','account-field'),consent=el('input'),notice=el('p','account-muted');consent.type='checkbox';notice.setAttribute('role','status')
+  for(const p of [...commerceProducts,...Object.entries(themePrices).map(([id,priceKopecks])=>({id,title:themeFor(id)?.[language]??id,priceKopecks}))]){const option=el('option',null,p.title+' · '+money(p.priceKopecks));option.value=p.id;selector.append(option)}
+  const label=el('label','store-consent');label.append(consent,el('span',null,t.consent))
+  const checkout=button(ru?'Проверить ЮKassa':'Test YooKassa',async()=>{
+   if(!consent.checked||signal.aborted)return
+   checkout.disabled=true
+   try{const result=await api('/api/commerce/test-checkout',signal,{sku:selector.value,testConsent:true})
+    if(signal.aborted)return
+    if(result.mode!=='test')throw Error('Unexpected payment mode')
+    if(result.checkoutUrl){const u=new URL(result.checkoutUrl);if(u.protocol!=='https:'||!['yoomoney.ru','yookassa.ru','www.yoomoney.ru','www.yookassa.ru'].includes(u.hostname)||u.username||u.password||u.port)throw Error('Invalid checkout URL');location.assign(u.href)}
+    else notice.textContent=ru?'Тестовый заказ подтверждён. Реальные права не изменены.':'Test order confirmed. Live entitlements unchanged.'
+   }catch{if(!signal.aborted)notice.textContent=t.error}finally{checkout.disabled=!consent.checked}
+  });checkout.disabled=true;consent.onchange=()=>checkout.disabled=!consent.checked
+  sandbox.append(selector,label,checkout,notice)
+ }).catch(()=>{})
+
  let serial=0,busy=false
  const profiles=createProfileClient()
  function ordersList(panel,title,orders){
