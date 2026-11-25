@@ -31,7 +31,8 @@ Unit=bricklab-events.service
 [Install]
 WantedBy=timers.target
 UNIT
-# Verify credentials and connectivity before enabling the new timer.
+# Verify the database migration, credentials and connectivity before enabling the new timer.
+/usr/bin/python3 /usr/local/sbin/bricklab-events --status
 # Existing monitoring timer remains unchanged.
  /usr/bin/python3 /usr/local/sbin/bricklab-events --test
 systemctl daemon-reload
