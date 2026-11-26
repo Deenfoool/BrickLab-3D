@@ -139,7 +139,7 @@ function pdfWords(items, styles, viewport) {
   }
   // PDF producers may emit 2 and x, or individual digits of an element ID, separately.
   // Join only adjacent fragments on the same baseline, with a small glyph-relative gap.
-  const sorted=fragments.sort((a,b)=>a.box[0]-b.box[0]||a.box[1]-b.box[1])
+  const sorted=fragments.slice(0,3000).sort((a,b)=>a.box[0]-b.box[0]||a.box[1]-b.box[1])
   for(const first of sorted){
     if(!/^\d{1,5}$/.test(first.text))continue
     let joined=first.text,box=[...first.box]
@@ -148,12 +148,10 @@ function pdfWords(items, styles, viewport) {
       const h=box[3]-box[1],next=sorted.find(f=>!used.has(f)&&f.box[0]>=box[2]-.35&&f.box[0]-box[2]<=Math.max(1,h*.32)&&Math.abs(f.box[3]-box[3])<=Math.max(1,h*.3)&&Math.abs(f.box[1]-box[1])<=Math.max(1,h*.45))
       if(!next)break
       joined+=next.text;used.add(next);box=[Math.min(box[0],next.box[0]),Math.min(box[1],next.box[1]),Math.max(box[2],next.box[2]),Math.max(box[3],next.box[3])]
-      if(quantity.test(joined)||element.test(joined)){
-        words.set(JSON.stringify([joined,...box.map(Math.round)]),{text:joined,box})
-        if(quantity.test(joined))break
-      }
+      if(quantity.test(joined))break
       if(joined.length>=8||/[x×]/i.test(joined))break
     }
+    if(used.size>1&&(quantity.test(joined)||element.test(joined)))words.set(JSON.stringify([joined,...box.map(Math.round)]),{text:joined,box})
   }
   return { words: [...words.values()], dimensions: [...dimensions.values()] }
 }
