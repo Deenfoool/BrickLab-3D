@@ -9,7 +9,7 @@ import {
 } from './instruction-sources.js?v=browser-recognition'
 import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=commerce-regions-1'
 import { canonicalInstructionUrl } from './instruction-url.js'
-import { createInstructionPdfReader } from './instruction-pdf.js?v=same-origin-pdf'
+import { createInstructionPdfReader } from './instruction-pdf.js?v=instruction-artwork-v5'
 
 const maxUnknownPages = 5000
 const pageWait = 6000
