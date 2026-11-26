@@ -34,7 +34,7 @@ function makeContactShadow() {
   return { geometry, material, texture }
 }
 
-function fitCamera(camera, bounds, width, height, view) {
+function fitCamera(camera, bounds, width, height, view, padding=.53) {
   const size = bounds.getSize(new THREE.Vector3())
   const center = bounds.getCenter(new THREE.Vector3())
   camera.position.copy(center).addScaledVector(view, Math.max(1, size.length()) * 2)
@@ -49,7 +49,7 @@ function fitCamera(camera, bounds, width, height, view) {
     }
   }
   projection.getSize(size)
-  const frame = Math.max(1, size.x, size.y * width / height) * .53
+  const frame = Math.max(1, size.x, size.y * width / height) * padding
   camera.left = -frame
   camera.right = frame
   camera.top = frame * height / width
@@ -61,7 +61,7 @@ function fitCamera(camera, bounds, width, height, view) {
 export function createProjectPreviewRenderer(options={}) {
   const width=Number.isInteger(options.width)?Math.max(256,Math.min(2048,options.width)):768
   const height=Number.isInteger(options.height)?Math.max(256,Math.min(2048,options.height)):448
-  const direction=options.angle==='front'?new THREE.Vector3(0,.3,1).normalize():options.angle==='side'?new THREE.Vector3(1,.25,0).normalize():options.angle==='top'?new THREE.Vector3(.01,1,.01).normalize():view
+  const directionFor=angle=>angle==='front'?new THREE.Vector3(0,.3,1).normalize():angle==='side'?new THREE.Vector3(1,.25,0).normalize():angle==='top'?new THREE.Vector3(.01,1,.01).normalize():angle==='rear'?new THREE.Vector3(-1.35,.92,-1.6).normalize():angle==='left'?new THREE.Vector3(-1,.25,0).normalize():view
   const format=options.format==='png'?'image/png':'image/webp'
   const lightPreset=options.lighting==='cool'?[[0xd5e9ff,2.8,[1,2.7,1.6]],[0xb3caff,1.6,[-2,1.3,-1.5]]]:options.lighting==='warm'?[[0xffcf99,3,[1,2.7,1.6]],[0xffe5ca,1.2,[-2,1.3,-1.5]]]:[[0xffe5ca,2.6,[1,2.7,1.6]],[0xaacbff,1.8,[-2,1.3,-1.5]]]
   const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true })
@@ -79,7 +79,7 @@ export function createProjectPreviewRenderer(options={}) {
   const models = new Map()
 
   return {
-    async render(document, signal) {
+    async render(document, signal, shot={}) {
       const source = upgradeInlineEngineFan(promoteLegacyBelts(expandComponents(document, parts)))
       const designs = [...new Set(source.parts.map(part => String(part?.design ?? '')))]
         .filter(design => !models.has(design) && Object.hasOwn(parts, design))
@@ -112,7 +112,7 @@ export function createProjectPreviewRenderer(options={}) {
         belts.set(assembleBelts(byId, source.belts).map(({ record }) => record))
         const bounds = new THREE.Box3().setFromObject(solids)
         if (bounds.isEmpty()) return null
-        fitCamera(camera, bounds, width, height, direction)
+        fitCamera(camera, bounds, width, height, directionFor(shot.angle??options.angle),options.framing==='wide'?.63:options.framing==='close'?.51:.53)
         const size = bounds.getSize(new THREE.Vector3())
         const center = bounds.getCenter(new THREE.Vector3())
         const shadow = new THREE.Mesh(contactShadow.geometry, contactShadow.material)
@@ -121,7 +121,7 @@ export function createProjectPreviewRenderer(options={}) {
         shadow.position.set(center.x, bounds.min.y - Math.max(size.y, .5) * .035, center.z)
         shadow.renderOrder = -1
         shadow.name = 'preview-contact-shadow'
-        world.add(shadow)
+        if(options.shadow!==false)world.add(shadow)
         try {
           renderer.render(world, camera)
           return await new Promise(resolve => renderer.domElement.toBlob(resolve, format, .87))
