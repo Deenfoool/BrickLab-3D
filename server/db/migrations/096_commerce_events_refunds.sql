@@ -17,6 +17,9 @@ CREATE FUNCTION bricklab.commerce_record_event() RETURNS trigger LANGUAGE plpgsq
  RETURN NEW;
  END $$;
 CREATE TRIGGER commerce_record_event AFTER UPDATE OF status ON bricklab.commerce_orders FOR EACH ROW EXECUTE FUNCTION bricklab.commerce_record_event();
+-- Include the recent successful sandbox payment used to validate the existing integration.
+INSERT INTO bricklab.commerce_events(order_id,event)
+ SELECT id,'succeeded' FROM bricklab.commerce_orders WHERE environment='test' AND status='succeeded' AND paid_at>=now()-interval '1 day' ON CONFLICT DO NOTHING;
 CREATE FUNCTION bricklab.commerce_claim_events() RETURNS TABLE(id bigint,event text,order_id uuid,user_id uuid,title text,amount_kopecks integer,environment text)
  LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
  WITH due AS (SELECT e.id FROM bricklab.commerce_events e WHERE e.sent_at IS NULL AND e.next_attempt_at<=now() ORDER BY e.id LIMIT 5 FOR UPDATE SKIP LOCKED),
