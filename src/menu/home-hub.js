@@ -91,7 +91,7 @@ export async function mountHomeHub(root,{language,signal}){
  const locale=language==='en'?'en':'ru',dateFormat=new Intl.DateTimeFormat(locale,{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'})
  const entryTitle=e=>e[locale==='en'?4:2],entryText=e=>e[locale==='en'?5:3]
  const closeHistory=()=>dialog.close()
- dialog.append(title,button(t.close,closeHistory))
+ dialog.append(title,node('p','hub-muted',locale==='en'?'Dates indicate source commits or merged changes, not necessarily deployment.':'Даты соответствуют коммитам и объединённым изменениям, а не обязательно публикации на сайте.'),button(t.close,closeHistory))
  for(const entry of releaseHistory){
   const article=node('article','hub-info-card'),date=node('time','hub-muted',dateFormat.format(new Date(entry[0]+'T00:00:00Z')))
   date.dateTime=entry[0]
