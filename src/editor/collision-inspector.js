@@ -4,7 +4,7 @@ import {evaluateSpurMesh} from '../mechanics/gears.js'
 // A conservative surface-crossing detector. Not solid containment, swept-volume
 // collision, contact response or a claim that an unflagged model is collision-free.
 const EPS=.015 // LDraw units; ignore exact touching and near-coplanar contacts.
-const MAX_TRIANGLES=60000, MAX_PARTS=5000, MAX_PAIRS=2500, MAX_NODES=1000000
+const MAX_TRIANGLES=60000, MAX_BUILD_TRIANGLES=240000, MAX_PARTS=5000, MAX_PAIRS=2500, MAX_NODES=1000000
 const trees=new WeakMap()
 const pairKey=(a,b)=>JSON.stringify(a<b?[a,b]:[b,a])
 const point=(attr,i)=>new Vector3().fromBufferAttribute(attr,i)
@@ -17,11 +17,13 @@ function buildTree(items){
  const mid=items.length>>1
  return {box,left:buildTree(items.slice(0,mid)),right:buildTree(items.slice(mid))}
 }
-function geometryTree(model){
+function geometryTree(model,budget){
  if(trees.has(model))return trees.get(model)
  let count=0
  for(const g of model.meshes){const p=g.getAttribute('position');count+=Math.floor((g.index?.count??p?.count??0)/3)}
  if(count>MAX_TRIANGLES||!count){trees.set(model,null);return null}
+ if(budget.built+count>MAX_BUILD_TRIANGLES||performance.now()>budget.deadline){budget.buildLimited=true;return null}
+ budget.built+=count
  const items=[]
  for(const g of model.meshes){
   const p=g.getAttribute('position'),idx=g.index
@@ -40,7 +42,7 @@ function geometryTree(model){
 function strictOverlap(a,b){
  return ['x','y','z'].every(k=>Math.min(a.max[k],b.max[k])-Math.max(a.min[k],b.min[k])>EPS)
 }
-function matrix(p){return new Matrix4().compose(new Vector3().fromArray(p.position),new Quaternion().fromArray(p.rotation).normalize(),new Vector3(p.mirrored?-1:1,1,1))}
+function matrix(p){return new Matrix4().compose(new Vector3().fromArray(p.position),new Quaternion().fromArray(p.rotation).normalize(),new Vector3().fromArray(p.previewScale??[1,1,1]).multiply(new Vector3(p.mirrored?-1:1,1,1)))}
 function worldBox(node,m,cache){
  if(!cache.has(node))cache.set(node,node.box.clone().applyMatrix4(m))
  return cache.get(node)
@@ -87,7 +89,7 @@ export async function inspectCollisions({parts,models,connections=[],movingIds=n
  if(parts.length>MAX_PARTS){result.limited=true;return result}
  const exempt=new Set(connections.map(l=>pairKey(l.shaft?.part,l.socket?.part)))
  const gears=new Map(gearPoses(parts).map(g=>[g.part,g]))
- const entries=[],budget={nodes:0,deadline:performance.now()+3000}
+ const entries=[],budget={nodes:0,built:0,buildLimited:false,deadline:performance.now()+3000}
  for(const p of parts){
   signal?.throwIfAborted()
   if(!models.get(p.design)?.bounds||!Array.isArray(p.position)||!Array.isArray(p.rotation)){result.unavailable++;continue}
@@ -108,7 +110,8 @@ export async function inspectCollisions({parts,models,connections=[],movingIds=n
    if(++candidates>MAX_PAIRS){result.limited=true;return result}
    signal?.throwIfAborted()
    if(performance.now()-lastYield>12){await yieldUI();signal?.throwIfAborted();lastYield=performance.now()}
-   a.tree??=geometryTree(models.get(a.p.design));b.tree??=geometryTree(models.get(b.p.design))
+   a.tree??=geometryTree(models.get(a.p.design),budget);b.tree??=geometryTree(models.get(b.p.design),budget)
+   if(budget.buildLimited){result.limited=true;return result}
    if(!a.tree||!b.tree){result.unavailable++;continue}
    const hit=intersectTrees(a,b,budget)
    if(hit.limited){result.limited=true;return result}
