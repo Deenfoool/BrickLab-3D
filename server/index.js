@@ -34,12 +34,13 @@ if (process.env.PGPASSWORD) {
     const instructionRelease=process.env.BRICKLAB_INSTRUCTIONS_RELEASE==='true'
     if(instructionRelease&&!instructionPolicy.count)throw Error('Paid instructions require a nonempty private audit')
     legal=await loadApprovedLegal({directory:fileURLToPath(new URL('../assets/legal/',import.meta.url)),approvalFile:process.env.BRICKLAB_COMMERCE_APPROVAL_FILE||''})
+    const commerceMode=process.env.BRICKLAB_COMMERCE_MODE||'test'
+    if(!['test','live'].includes(commerceMode))throw Error('Invalid commerce mode')
     const liveConfig=liveCommerceConfig(process.env,legal)
-    // Live HTTP checkout remains disabled in this revision pending refund and receipt reconciliation tests.
-    const liveYookassa=createYookassaAdapter({store,origin,config:{...liveConfig,enabled:false}})
+    const liveYookassa=createYookassaAdapter({store,origin,config:liveConfig})
     const testYookassa=createYookassaAdapter({store,origin})
     const fullCatalog=!!legal&&process.env.BRICKLAB_COMMERCE_FULL_CATALOG_OFFER_VERSION===legal.version
-    payments=createPaymentsHandler({store,origin,config:paymentConfig(),legal,fullCatalog,liveYookassa,instructionPolicy,instructionRelease,yookassa:testYookassa,regions:createInstructionRegions(fileURLToPath(new URL('../catalog/sets/',import.meta.url)))})
+    payments=createPaymentsHandler({store,origin,config:paymentConfig(),legal,fullCatalog,commerceMode,liveYookassa,instructionPolicy,instructionRelease,yookassa:testYookassa,regions:createInstructionRegions(fileURLToPath(new URL('../catalog/sets/',import.meta.url)))})
     security=createAccountSecurityHandler({store,origin,registrationEnabled,mail:createMailer()})
     auth = createAuthHandler({ store, origin: process.env.PUBLIC_ORIGIN || 'http://localhost:8080',
       registrationEnabled: registrationEnabled && new URL(origin).protocol==='http:',
