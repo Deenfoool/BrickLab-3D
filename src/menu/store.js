@@ -42,7 +42,7 @@ export function mountStore(root,{language='ru',signal}){
  const tabs=new Map(),header=el('div','store-banner'),heading=el('div'),art=el('div','store-banner-art')
  heading.append(el('span','store-kicker','BRICKLAB STORE'),el('h2',null,tr('Расширь свою мастерскую','Expand your workshop')),el('p',null,tr('Темы, облачное пространство, коллекции и Plus. Основной редактор бесплатный.','Themes, cloud space, collections and Plus. The core editor is free.')))
  for(const id of ['carbon','neon','aurora'])art.append(themePreview(themeFor(id),language));header.append(heading,art)
- let selected='all',catalog=null,profile=null,account=null,sandbox=null,testMode=false,busy=false,serial=0
+ let selected='all',catalog=null,profile=null,account=null,sandbox=null,testMode=false,busy=false,serial=0,initialized=false
  const toggle=button(tr('Тестовый контур','Sandbox'),()=>{testMode=!testMode;render()});toggle.hidden=true
  const refreshButton=button(tr('Обновить покупки','Refresh purchases'),()=>refresh())
  for(const [id,label] of categories){const b=button(label,()=>{selected=id;render()});tabs.set(id,b);nav.append(b)}
@@ -58,10 +58,11 @@ export function mountStore(root,{language='ru',signal}){
   if(p.kind==='theme'){const theme=themeFor(p.id);return tr(theme.descriptionRu,theme.descriptionEn)}
   if(p.kind==='storage')return tr('Дополнительно '+p.slots+' проектов и '+p.storageMiB+' МиБ хранения. Разовая покупка.','Adds '+p.slots+' projects and '+p.storageMiB+' MiB storage. One-time purchase.')
   if(p.kind==='subscription')return tr('+40 проектов, +128 МиБ, 40 версий, значок Plus, одна тема на выбор, скидки. Продление вручную.','+40 projects, +128 MiB, 40 revisions, Plus badge, one theme and discounts. Manual renewal.')
+  if(p.kind==='instruction')return tr('Тест доступа к подсказкам набора Volvo 42215. В ОБТ остаётся бесплатным.','Sandbox access fixture for Volvo 42215. Free in open beta.')
   if(p.kind==='themeBundle')return tr('Все шесть тем мастерской.','All six workshop themes.')
   return tr('Коллекционный значок поддержки. Можно выбрать для публичного профиля.','Collectible supporter badge for your public profile.')
  }
- function owned(p,a){return p.kind==='theme'?a?.themes?.includes(p.id):p.kind==='badge'?a?.badges?.includes(p.id):p.kind==='themeBundle'?Object.keys(themePrices).every(id=>a?.themes?.includes(id)):false}
+ function owned(p,a){return p.kind==='theme'?a?.themes?.includes(p.id):p.kind==='badge'?a?.badges?.includes(p.id):p.kind==='instruction'?a?.instructions?.includes('42215-1'):p.kind==='themeBundle'?Object.keys(themePrices).every(id=>a?.themes?.includes(id)):false}
  function showCheckout(p){
   if(busy||signal.aborted)return
   busy=true
@@ -84,10 +85,10 @@ export function mountStore(root,{language='ru',signal}){
  }
  function render(){
   if(!catalog||signal.aborted)return
-  const a=testMode?sandbox:account,products=[...catalog.products.map(p=>({id:p.sku,kind:'theme',title:p.title,priceKopecks:p.amountKopecks})),...commerceProducts]
+  const a=testMode?sandbox:account,products=[...catalog.products.map(p=>({id:p.sku,kind:'theme',title:p.title,priceKopecks:p.amountKopecks})),...commerceProducts,...(testMode?[{id:'instruction-42215-1',kind:'instruction',title:'Volvo 42215 · '+tr('интерактивные подсказки','interactive hints'),priceKopecks:17900}]:[])]
   for(const [id,b] of tabs){b.classList.toggle('primary',selected===id);b.setAttribute('aria-pressed',String(selected===id))}
   toggle.hidden=!sandbox;toggle.classList.toggle('primary',testMode);toggle.setAttribute('aria-pressed',String(testMode))
-  notice.textContent=testMode?tr('ТЕСТ · Все 19 товаров доступны для проверки. Реальный аккаунт не меняется.','TEST · All 19 products available. Live account unchanged.'):catalog.live?tr('Оплата через ЮKassa.','Payment via YooKassa.'):tr('Оплата пока закрыта. Темы — первый ассортимент; остальные товары готовятся к выпуску.','Checkout closed. Themes are the first assortment; other products are in preparation.')
+  notice.textContent=testMode?tr('ТЕСТ · Все товары доступны для проверки. Реальный аккаунт не меняется.','TEST · All products available. Live account unchanged.'):catalog.live?tr('Оплата через ЮKassa.','Payment via YooKassa.'):tr('Оплата пока закрыта. Темы — первый ассортимент; остальные товары готовятся к выпуску.','Checkout closed. Themes are the first assortment; other products are in preparation.')
   grid.replaceChildren();summary.replaceChildren();summary.hidden=!a
   if(a){summary.append(el('h2',null,testMode?tr('Тестовый инвентарь','Sandbox inventory'):tr('Мой аккаунт','My account')),el('p',null,tr('Проекты: ','Projects: ')+a.limits.projects+' · '+tr('Хранилище: ','Storage: ')+a.limits.storageMiB+' MiB · '+tr('Версии: ','Revisions: ')+a.limits.versions),el('p','account-muted','Plus: '+(a.plus?tr('до ','until ')+new Date(a.plusUntil).toLocaleDateString(language):tr('не активен','inactive'))+' · '+tr('Темы: ','Themes: ')+a.themes.length+' · '+tr('Значки: ','Badges: ')+a.badges.length))}
   if(selected==='orders'){
@@ -96,7 +97,7 @@ export function mountStore(root,{language='ru',signal}){
    if(!(a.orders??[]).length)grid.append(el('p','account-muted',t.noOrders))
    if(!testMode)grid.append(link(tr('Перейти в мастерскую','Open workshop'),'#account'));return
   }
-  const ordered=['subscription','theme','themeBundle','storage','badge']
+  const ordered=['subscription','theme','themeBundle','storage','badge',...(testMode?['instruction']:[])]
   for(const kind of ordered){if(selected!=='all'&&selected!==kind)continue
    const section=el('section','store-orders'),items=el('div','store-grid');section.append(el('h2',null,categories.find(c=>c[0]===kind)[1]),items);section.style.gridColumn='1 / -1';grid.append(section)
    for(const p of products.filter(x=>x.kind===kind)){
@@ -121,7 +122,9 @@ export function mountStore(root,{language='ru',signal}){
  }
  async function refresh(){
   const v=++serial;notice.textContent=t.loading
-  try{const [c,a,st,p]=await Promise.all([api('/api/store/catalog',signal),optional('/api/commerce/account'),optional('/api/commerce/test-status'),profiles.get().catch(()=>null)]);const sb=st?.enabled?await optional('/api/commerce/test-account'):null;if(signal.aborted||v!==serial)return;catalog=c;account=a;sandbox=sb;profile=p;if(!sandbox)testMode=false;render()}catch{if(!signal.aborted&&v===serial)notice.textContent=t.error}
+  try{const [c,a,st,p]=await Promise.all([api('/api/store/catalog',signal),optional('/api/commerce/account'),optional('/api/commerce/test-status'),profiles.get().catch(()=>null)]);const sb=st?.enabled?await optional('/api/commerce/test-account'):null;if(signal.aborted||v!==serial)return;catalog=c;account=a;sandbox=sb;profile=p;if(!initialized){testMode=!!sandbox;initialized=true}if(!sandbox)testMode=false;render()}catch{if(!signal.aborted&&v===serial)notice.textContent=t.error}
  }
+ const timer=setInterval(()=>{if(!busy&&testMode&&sandbox?.orders?.some(o=>o.status==='pending'&&o.paymentId||o.status==='succeeded'&&o.refundRequestedAt))void refresh()},15000)
+ signal.addEventListener('abort',()=>clearInterval(timer),{once:true})
  void refresh()
 }
