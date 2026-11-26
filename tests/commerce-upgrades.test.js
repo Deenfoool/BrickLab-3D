@@ -267,3 +267,29 @@ test('real PostgreSQL enforces extended quota, collection ownership and badge pr
 
  }finally{await store.close();await db.end()}
 })
+
+test('welcome activations are permanent, idempotent, capped at three and isolated from payments',{skip:!enabled},async()=>{
+ assert.equal(process.env.PGDATABASE,'bricklab_commerce_check')
+ const db=postgres({host:process.env.PGHOST,port:Number(process.env.PGPORT||5432),database:process.env.PGDATABASE,username:'bricklab_admin',password:process.env.COMMERCE_ADMIN_PASSWORD,max:1})
+ const store=connectAuthStore(),uid='31000000-0000-4000-8000-000000000001',other='31000000-0000-4000-8000-000000000002'
+ try{
+  for(const [id,email] of [[uid,'welcome-a@example.invalid'],[other,'welcome-b@example.invalid']]){
+   await db`insert into bricklab.users(id,email,display_name,password_hash) values(${id},${email},'Welcome fixture',${'scrypt$'+'0'.repeat(32)+'$'+'0'.repeat(128)})`
+  }
+  assert.equal((await store.commerceAccount(uid)).welcomeRemaining,3)
+  await assert.rejects(store.claimInstructionWelcome(uid,'12341-1'),/verified_account_required/)
+  await db`update bricklab.users set email_verified_at=now() where id=${uid}`
+  const repeats=await Promise.all(Array.from({length:5},()=>store.claimInstructionWelcome(uid,'12341-1')))
+  assert.ok(repeats.every(a=>a.welcomeRemaining===2&&a.instructions.includes('12341-1')))
+  const attempts=await Promise.allSettled(['12342-1','12343-1','12344-1'].map(set=>store.claimInstructionWelcome(uid,set)))
+  assert.equal(attempts.filter(a=>a.status==='fulfilled').length,2)
+  assert.equal(attempts.filter(a=>a.status==='rejected'&&/welcome_exhausted/.test(a.reason.message)).length,1)
+  const account=await store.commerceAccount(uid)
+  assert.equal(account.welcomeRemaining,0);assert.equal(account.welcomeInstructions.length,3);assert.equal(account.orders.length,0)
+  assert.deepEqual((await store.commerceAccount(other)).instructions,[])
+  assert.equal((await store.commerceTestAccount(uid)).instructions.length,0)
+  await assert.rejects(store.quoteCommerce(uid,'instruction-12341-1','a'.repeat(64),false,'live',{setId:'12341-1',title:'Fixture',partCount:601}),/already_owned/)
+  const [r]=await db`select has_table_privilege('bricklab_app','bricklab.instruction_welcome_grants','INSERT') as allowed`
+  assert.equal(r.allowed,false)
+ }finally{await store.close();await db.end()}
+})
