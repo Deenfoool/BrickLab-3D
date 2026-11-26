@@ -6,6 +6,8 @@ ALTER TABLE bricklab.commerce_orders
  ADD COLUMN fiscal_next_at timestamptz NOT NULL DEFAULT now(),
  ADD COLUMN fiscal_receipt_uuid text CHECK(fiscal_receipt_uuid IS NULL OR fiscal_receipt_uuid ~ '^[A-Za-z0-9_-]{1,80}$'),
  ADD COLUMN fiscal_operation_at timestamptz;
+ALTER TABLE bricklab.commerce_events DROP CONSTRAINT commerce_events_event_check;
+ALTER TABLE bricklab.commerce_events ADD CONSTRAINT commerce_events_event_check CHECK(event IN ('succeeded','canceled','refunded','receipt_issued','receipt_canceled'));
 CREATE UNIQUE INDEX commerce_fiscal_uuid ON bricklab.commerce_orders(fiscal_receipt_uuid) WHERE fiscal_receipt_uuid IS NOT NULL;
 CREATE FUNCTION bricklab.commerce_claim_fiscal(p_since timestamptz)
  RETURNS TABLE(id uuid,order_number bigint,title text,amount_kopecks integer,payment_id text,paid_at timestamptz,status text,action text,receipt_uuid text)
@@ -45,8 +47,10 @@ CREATE FUNCTION bricklab.commerce_fiscal_finish(p_order uuid,p_action text,p_uui
   WHERE o.id=p_order AND o.environment='live' AND o.status='refunded' AND o.fiscal_state='cancel_unknown'
     AND o.fiscal_receipt_uuid=p_uuid AND o.receipt_correction_pending;
  ELSE RETURN false; END IF;
- RETURN FOUND;
- END $$;
+ IF NOT FOUND THEN RETURN false; END IF;
+ INSERT INTO bricklab.commerce_events(order_id,event) VALUES(p_order,CASE p_action WHEN 'issue' THEN 'receipt_issued' ELSE 'receipt_canceled' END) ON CONFLICT DO NOTHING;
+ RETURN true;
+ END $;
 -- A failure before the fiscal request can safely release the claim. Unknown
 -- responses NEVER release it; only read-only reconciliation or operator review.
 CREATE FUNCTION bricklab.commerce_fiscal_release(p_order uuid,p_action text)
