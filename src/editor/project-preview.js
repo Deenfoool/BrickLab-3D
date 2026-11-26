@@ -34,7 +34,7 @@ function makeContactShadow() {
   return { geometry, material, texture }
 }
 
-function fitCamera(camera, bounds) {
+function fitCamera(camera, bounds, width, height, view) {
   const size = bounds.getSize(new THREE.Vector3())
   const center = bounds.getCenter(new THREE.Vector3())
   camera.position.copy(center).addScaledVector(view, Math.max(1, size.length()) * 2)
@@ -58,13 +58,18 @@ function fitCamera(camera, bounds) {
   camera.updateProjectionMatrix()
 }
 
-export function createProjectPreviewRenderer() {
+export function createProjectPreviewRenderer(options={}) {
+  const width=Number.isInteger(options.width)?Math.max(256,Math.min(2048,options.width)):768
+  const height=Number.isInteger(options.height)?Math.max(256,Math.min(2048,options.height)):448
+  const direction=options.angle==='front'?new THREE.Vector3(0,.3,1).normalize():options.angle==='side'?new THREE.Vector3(1,.25,0).normalize():options.angle==='top'?new THREE.Vector3(.01,1,.01).normalize():view
+  const format=options.format==='png'?'image/png':'image/webp'
+  const lightPreset=options.lighting==='cool'?[[0xd5e9ff,2.8,[1,2.7,1.6]],[0xb3caff,1.6,[-2,1.3,-1.5]]]:options.lighting==='warm'?[[0xffcf99,3,[1,2.7,1.6]],[0xffe5ca,1.2,[-2,1.3,-1.5]]]:[[0xffe5ca,2.6,[1,2.7,1.6]],[0xaacbff,1.8,[-2,1.3,-1.5]]]
   const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true })
   renderer.setSize(width, height, false)
   renderer.setClearColor(0, 0)
   const world = new THREE.Scene()
   world.add(new THREE.HemisphereLight(0xe3efff, 0x4c5260, 2.15))
-  for (const [color, intensity, position] of [[0xffe5ca, 2.6, [1, 2.7, 1.6]], [0xaacbff, 1.8, [-2, 1.3, -1.5]]]) {
+  for (const [color, intensity, position] of lightPreset) {
     const light = new THREE.DirectionalLight(color, intensity)
     light.position.fromArray(position)
     world.add(light)
@@ -107,7 +112,7 @@ export function createProjectPreviewRenderer() {
         belts.set(assembleBelts(byId, source.belts).map(({ record }) => record))
         const bounds = new THREE.Box3().setFromObject(solids)
         if (bounds.isEmpty()) return null
-        fitCamera(camera, bounds)
+        fitCamera(camera, bounds, width, height, direction)
         const size = bounds.getSize(new THREE.Vector3())
         const center = bounds.getCenter(new THREE.Vector3())
         const shadow = new THREE.Mesh(contactShadow.geometry, contactShadow.material)
@@ -119,7 +124,7 @@ export function createProjectPreviewRenderer() {
         world.add(shadow)
         try {
           renderer.render(world, camera)
-          return await new Promise(resolve => renderer.domElement.toBlob(resolve, 'image/webp', .87))
+          return await new Promise(resolve => renderer.domElement.toBlob(resolve, format, .87))
         } finally {
           world.remove(shadow)
         }
