@@ -23,7 +23,7 @@ import { createCommunityHandler } from './community.js'
 const host = process.env.HOST || '0.0.0.0'
 const port = Number(process.env.PORT || 8080)
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer from 1 to 65535')
-let store, auth, projects, profile, activity, community, bureau, security, payments, cleanup, legal, reconciliation, telegram
+let store, auth, projects, profile, activity, community, bureau, security, payments, cleanup, legal, reconciliation, liveReconciliation, telegram
 if (process.env.PGPASSWORD) {
   const { connectAuthStore } = await import('./db/auth-store.js')
   store = connectAuthStore()
@@ -38,7 +38,8 @@ if (process.env.PGPASSWORD) {
     // Live HTTP checkout remains disabled in this revision pending refund and receipt reconciliation tests.
     const liveYookassa=createYookassaAdapter({store,origin,config:{...liveConfig,enabled:false}})
     const testYookassa=createYookassaAdapter({store,origin})
-    payments=createPaymentsHandler({store,origin,config:paymentConfig(),legal,liveYookassa,instructionPolicy,instructionRelease,yookassa:testYookassa,regions:createInstructionRegions(fileURLToPath(new URL('../catalog/sets/',import.meta.url)))})
+    const fullCatalog=!!legal&&process.env.BRICKLAB_COMMERCE_FULL_CATALOG_OFFER_VERSION===legal.version
+    payments=createPaymentsHandler({store,origin,config:paymentConfig(),legal,fullCatalog,liveYookassa,instructionPolicy,instructionRelease,yookassa:testYookassa,regions:createInstructionRegions(fileURLToPath(new URL('../catalog/sets/',import.meta.url)))})
     security=createAccountSecurityHandler({store,origin,registrationEnabled,mail:createMailer()})
     auth = createAuthHandler({ store, origin: process.env.PUBLIC_ORIGIN || 'http://localhost:8080',
       registrationEnabled: registrationEnabled && new URL(origin).protocol==='http:',
@@ -49,6 +50,7 @@ if (process.env.PGPASSWORD) {
     community = createCommunityHandler({store,origin:process.env.PUBLIC_ORIGIN || 'http://localhost:8080',enabled:process.env.BRICKLAB_COMMUNITY_ENABLED==='true'})
     bureau=createBureauHandler({store,origin:process.env.PUBLIC_ORIGIN||'http://localhost:8080',enabled:process.env.BRICKLAB_COMMUNITY_ENABLED==='true'})
     reconciliation=startTestPaymentReconciliation({store,adapter:testYookassa})
+    liveReconciliation=startTestPaymentReconciliation({store,adapter:liveYookassa,environment:'live'})
     telegram=startCommerceTelegram({store})
     cleanup = setInterval(() => store.cleanup().catch(error => console.error('Session cleanup failed:', error.code || error.name)), 3600_000).unref()
   } catch (error) {
@@ -63,11 +65,11 @@ const server = createBrickLabServer({ root: fileURLToPath(new URL('../', import.
 server.on('error', async error => {
   console.error('Unable to start BrickLab:', error.message)
   clearInterval(cleanup)
-  await Promise.all([reconciliation?.stop(),telegram?.stop()])
+  await Promise.all([reconciliation?.stop(),liveReconciliation?.stop(),telegram?.stop()])
   await store?.close()
   process.exitCode = 1
 })
-server.listen(port, host, () => {console.log(`BrickLab listening on ${host}:${port}`);reconciliation?.tick();telegram?.tick()})
+server.listen(port, host, () => {console.log(`BrickLab listening on ${host}:${port}`);reconciliation?.tick();liveReconciliation?.tick();telegram?.tick()})
 let stopping = false
 function shutdown() {
   if (stopping) return
@@ -77,7 +79,7 @@ function shutdown() {
   server.close(async error => {
     clearTimeout(timeout)
     await instructionFetch.close()
-    await Promise.all([reconciliation?.stop(),telegram?.stop()])
+    await Promise.all([reconciliation?.stop(),liveReconciliation?.stop(),telegram?.stop()])
     await store?.close()
     if (error) process.exitCode = 1
   })
