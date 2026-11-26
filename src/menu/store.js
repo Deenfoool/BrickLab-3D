@@ -10,7 +10,7 @@ const button=(text,fn)=>{const b=el('button','workspace-action',text);b.type='bu
 const link=(text,href)=>{const a=el('a','workspace-action',text);a.href=href;return a}
 async function api(path,signal,data){
  const response=await fetch(path,{signal,credentials:'same-origin',cache:'no-store',redirect:'error',...(data===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})})
- if(!response.ok)throw Object.assign(Error('Store request failed'),{status:response.status})
+ if(!response.ok){const d=await response.json().catch(()=>null);throw Object.assign(Error('Store request failed'),{status:response.status,code:d?.error})}
  return response.json()
 }
 function themePreview(theme,language,large=false){
@@ -36,6 +36,8 @@ function communityExamples(theme,language){
 }
 export function mountStore(root,{language='ru',signal}){
  const ru=language==='ru',t=labels[language]??labels.ru,tr=(a,b)=>ru?a:b,money=n=>(Number(n)/100).toLocaleString(ru?'ru-RU':'en-US',{style:'currency',currency:'RUB',maximumFractionDigits:2})
+ const orderNo=n=>'BL-'+String(n??'').padStart(6,'0')
+ const errorText=e=>({verified_account_required:tr('Подтверди электронную почту перед покупкой.','Verify your email before purchasing.'),invalid_receipt_url:tr('Нужна ссылка на чек из «Мой налог».','Use an official My Tax receipt link.'),receipt_already_used:tr('Чек уже привязан к другому заказу.','Receipt already used.'),checkout_pending:tr('Заверши предыдущую оплату.','Finish the previous payment.')})[e.code]??t.error+' ('+(e.status??'network')+')'
  const profiles=createProfileClient(),nav=el('div','commerce-preview-nav'),grid=el('div','store-grid'),notice=el('p','account-muted'),summary=el('section','store-orders')
  notice.setAttribute('role','status')
  const categories=[['all',tr('Все товары','All products')],['subscription','BrickLab Plus'],['theme',tr('Темы','Themes')],['themeBundle',tr('Коллекции','Collections')],['storage',tr('Облачные проекты','Cloud projects')],['badge',tr('Значки','Badges')],['instruction',tr('Инструкции','Instructions')],['orders',tr('Мои покупки','My purchases')],['ledger',tr('Финансы','Finance')]]
@@ -75,12 +77,12 @@ export function mountStore(root,{language='ru',signal}){
     const result=await api('/api/commerce/checkout',signal,{sku:p.id,amountKopecks:quote.amountKopecks,offerVersion:quote.offerVersion,accepted:true,mode})
     if(result.mode!==mode)throw Error('mode');if(result.checkoutUrl){const url=safeUrl(result.checkoutUrl);try{sessionStorage.setItem('bricklab-commerce-return','1')}catch{}location.assign(url);return}
     status.textContent=result.status==='succeeded'?tr('Оплата подтверждена.','Payment confirmed.'):tr('Платёж отменён.','Payment canceled.');await refresh()
-   }catch(e){status.textContent=t.error+' ('+(e.status??'network')+')';pay.disabled=!accept.checked}
+   }catch(e){status.textContent=errorText(e);pay.disabled=!accept.checked}
   })
   pay.disabled=true;accept.onchange=()=>pay.disabled=!accept.checked||!quote
   const close=button(tr('Закрыть','Close'),()=>dialog.close())
   dialog.append(el('h2',null,productTitle(p)),price,label,pay,close,status)
-  {const a=link(tr('Оферта','Offer'),'/offer');a.target='_blank';a.rel='noopener';dialog.append(a);void api('/api/commerce/quote?sku='+encodeURIComponent(p.id),signal).then(q=>{if(q.mode!==mode)throw Error('mode_changed');quote=q;price.textContent=money(q.amountKopecks);pay.disabled=!accept.checked}).catch(e=>status.textContent=t.error+' ('+(e.status??'network')+')')}
+  {const a=link(tr('Оферта','Offer'),'/offer');a.target='_blank';a.rel='noopener';dialog.append(a);void api('/api/commerce/quote?sku='+encodeURIComponent(p.id),signal).then(q=>{if(q.mode!==mode)throw Error('mode_changed');quote=q;price.textContent=money(q.amountKopecks);pay.disabled=!accept.checked}).catch(e=>status.textContent=errorText(e))}
   dialog.addEventListener('close',()=>{busy=false;dialog.remove()},{once:true});signal.addEventListener('abort',()=>{if(dialog.open)dialog.close()},{once:true});root.append(dialog);dialog.showModal()
  }
  function render(){
@@ -93,19 +95,27 @@ export function mountStore(root,{language='ru',signal}){
   if(a){summary.append(el('h2',null,tr('Мой аккаунт','My account')),el('p',null,tr('Проекты: ','Projects: ')+a.limits.projects+' · '+tr('Хранилище: ','Storage: ')+a.limits.storageMiB+' MiB · '+tr('Версии: ','Revisions: ')+a.limits.versions),el('p','account-muted','Plus: '+(a.plus?tr('до ','until ')+new Date(a.plusUntil).toLocaleDateString(language):tr('не активен','inactive'))+' · '+tr('Темы: ','Themes: ')+a.themes.length+' · '+tr('Значки: ','Badges: ')+a.badges.length))}
   if(selected==='ledger'){
    if(!ledger)return
-   const total=ledger.orders.filter(o=>o.status==='succeeded').reduce((sum,o)=>sum+o.amount_kopecks,0)
-   grid.append(el('h2',null,(testMode?tr('Тестовые оплаты (последние 100 записей): ','Sandbox payments (last 100 records): '):tr('Подтверждённые оплаты (последние 100 записей, до комиссии): ','Confirmed payments (last 100 records, before fees): '))+money(total)))
+   const totals=ledger.totals
+   if(totals){
+    const metrics=el('section','store-orders');metrics.style.gridColumn='1 / -1'
+    metrics.append(el('h2',null,(testMode?tr('Тестовый оборот · ','Sandbox volume · '):tr('Оборот · ','Daily volume · '))+totals.day+' · МСК'))
+    const values=el('div','store-grid')
+    for(const [label,value] of [[tr('Оплаты','Payments')+' · '+totals.paid_count,totals.paid_kopecks],[tr('Возвраты','Refunds')+' · '+totals.refund_count,totals.refunded_kopecks],[tr('Итого до комиссий','Net before fees'),Number(totals.paid_kopecks)-Number(totals.refunded_kopecks)]]){
+     const metric=el('article','commerce-preview-card');metric.append(el('p','account-muted',label),el('strong','store-price',money(value)));values.append(metric)
+    }
+    metrics.append(values);grid.append(metrics)
+   }
    for(const o of ledger.orders){
-    const card=el('article','commerce-preview-card');card.append(el('h3',null,o.title),el('strong','store-price',money(o.amount_kopecks)),el('p','account-muted',o.display_name+' · '+o.email),el('small','account-muted',o.user_id),el('p',null,o.status),el('small','account-muted',o.id))
+    const card=el('article','commerce-preview-card');card.append(el('h3',null,o.title),el('strong','store-price',money(o.amount_kopecks)),el('p','account-muted',o.display_name+' · '+o.email),el('p',null,o.status),el('small','account-muted',orderNo(o.order_number)))
     if(checkoutStatus?.enabled&&o.status==='succeeded'){
-     const refund=button(tr('Полный возврат','Full refund'),async()=>{if(!window.confirm((testMode?tr('Тестовый возврат ','Test refund '):tr('Вернуть реальные деньги ','Refund real money '))+money(o.amount_kopecks)+'?'))return;refund.disabled=true;try{const result=await api('/api/commerce/refund',signal,{orderId:o.id,confirm:true,mode:checkoutStatus.mode});await refresh();notice.textContent=tr('Возврат: ','Refund: ')+result.status}catch(e){notice.textContent=t.error+' ('+(e.status??'network')+')';refund.disabled=false}});card.append(refund)
+     const refund=button(tr('Полный возврат','Full refund'),async()=>{if(!window.confirm((testMode?tr('Тестовый возврат ','Test refund '):tr('Вернуть реальные деньги ','Refund real money '))+money(o.amount_kopecks)+'?'))return;refund.disabled=true;try{const result=await api('/api/commerce/refund',signal,{orderId:o.id,confirm:true,mode:checkoutStatus.mode});await refresh();notice.textContent=tr('Возврат: ','Refund: ')+result.status}catch(e){notice.textContent=errorText(e);refund.disabled=false}});card.append(refund)
     }
     if(!testMode&&o.status==='succeeded'&&o.receipt_status==='pending'){
-     card.append(el('p','account-muted',tr('Нужно сформировать чек в «Мой налог» и передать покупателю.','Create an NPD receipt externally and deliver it to the customer.')))
-     const input=el('input','account-field');input.placeholder=tr('Номер или ссылка чека','Receipt number or URL');input.maxLength=250
-     const confirm=button(tr('Чек выдан и отправлен','Receipt issued and sent'),async()=>{if(!input.value.trim()||!window.confirm(tr('Подтверждаешь, что реальный чек уже сформирован и передан покупателю?','Confirm that an actual receipt has been issued and delivered?')))return;confirm.disabled=true;try{await api('/api/commerce/admin-receipt',signal,{orderId:o.id,reference:input.value.trim(),confirm:true});await refresh()}catch{notice.textContent=t.error;confirm.disabled=false}})
+     card.append(el('p','account-muted',tr('Сформируй чек в «Мой налог» на указанную сумму, вставь ссылку. BrickLab отправит её покупателю.','Create an NPD receipt in My Tax and paste the link. BrickLab emails it to the customer.')))
+     const input=el('input','account-field');input.placeholder='https://lknpd.nalog.ru/api/v1/receipt/…/print';input.maxLength=250
+     const confirm=button(tr('Отправить чек покупателю','Send receipt to customer'),async()=>{if(!input.value.trim()||!window.confirm(tr('Подтверждаешь, что чек сформирован в ФНС и соответствует заказу и сумме?','Confirm the FNS receipt matches the order and amount?')))return;confirm.disabled=true;try{await api('/api/commerce/admin-register-receipt',signal,{orderId:o.id,url:input.value.trim(),confirm:true});await refresh()}catch(e){notice.textContent=errorText(e);confirm.disabled=false}})
      card.append(input,confirm)
-    }else if(!testMode)card.append(el('p','account-muted',tr('Чек: ','Receipt: ')+o.receipt_status))
+    }else if(!testMode)card.append(el('p','account-muted',tr('Чек: ','Receipt: ')+(o.receipt_delivery_url?(o.receipt_delivery_sent_at?tr('Письмо принято почтовым сервисом','Email accepted'):tr('Ожидает отправки','Queued')):o.receipt_status)))
     if(!testMode&&o.receipt_correction_pending){
      card.append(el('p','account-muted',tr('После возврата требуется корректировка расчёта в «Мой налог».','Correct the fiscal record after the refund.')))
      const input=el('input','account-field');input.placeholder=tr('Номер или основание корректировки','Correction reference');input.maxLength=250
@@ -119,7 +129,7 @@ export function mountStore(root,{language='ru',signal}){
   }
   if(selected==='orders'){
    if(!a){grid.append(link(t.login,'#account'));return}
-   for(const o of a.orders??[]){const card=el('article','commerce-preview-card'),p=products.find(p=>p.id===o.sku);card.append(el('h3',null,p?productTitle(p):o.title),el('strong','store-price',money(o.amountKopecks)),el('p','account-muted',({pending:tr('Ожидает оплаты','Pending'),succeeded:tr('Оплачено','Paid'),canceled:tr('Отменено','Canceled'),refunded:tr('Возвращено','Refunded')})[o.status]??o.status),el('small','account-muted',o.id));if(o.status==='pending'&&p&&checkoutStatus?.enabled&&checkoutStatus.skus.includes(p.id))card.append(button(tr('Продолжить оплату','Resume checkout'),()=>showCheckout(p)));if(testMode&&o.status==='succeeded'){const refund=button(o.refundRequestedAt?tr('Проверить возврат','Check refund'):tr('Тестовый возврат','Test refund'),async()=>{if(!o.refundRequestedAt&&!window.confirm(tr('Вернуть всю тестовую сумму и отозвать приобретение?','Refund the full test amount and revoke the entitlement?')))return;refund.disabled=true;try{const result=await api('/api/commerce/refund',signal,{orderId:o.id,confirm:true,mode:checkoutStatus.mode});await refresh();notice.textContent=tr('Возврат: ','Refund: ')+result.status}catch(e){notice.textContent=t.error+' ('+(e.status??'network')+')';refund.disabled=false}});card.append(refund)}grid.append(card)}
+   for(const o of a.orders??[]){const card=el('article','commerce-preview-card'),p=products.find(p=>p.id===o.sku);card.append(el('h3',null,p?productTitle(p):o.title),el('strong','store-price',money(o.amountKopecks)),el('p','account-muted',({pending:tr('Ожидает оплаты','Pending'),succeeded:tr('Оплачено','Paid'),canceled:tr('Отменено','Canceled'),refunded:tr('Возвращено','Refunded')})[o.status]??o.status),el('small','account-muted',orderNo(o.orderNumber)));if(!testMode&&o.receiptStatus==='pending')card.append(el('p','account-muted',tr('Чек формируется','Receipt pending')));if(!testMode&&o.receiptUrl&&/^https:\/\/lknpd\.nalog\.ru\/api\/v1\/receipt\/[0-9]{12}\/[A-Za-z0-9_-]{1,80}\/print$/.test(o.receiptUrl)){const receipt=link(tr('Чек НПД','NPD receipt'),o.receiptUrl);receipt.target='_blank';receipt.rel='noopener noreferrer';card.append(receipt)}if(o.status==='pending'&&p&&checkoutStatus?.enabled&&checkoutStatus.skus.includes(p.id))card.append(button(tr('Продолжить оплату','Resume checkout'),()=>showCheckout(p)));if(testMode&&o.status==='succeeded'){const refund=button(o.refundRequestedAt?tr('Проверить возврат','Check refund'):tr('Тестовый возврат','Test refund'),async()=>{if(!o.refundRequestedAt&&!window.confirm(tr('Вернуть всю тестовую сумму и отозвать приобретение?','Refund the full test amount and revoke the entitlement?')))return;refund.disabled=true;try{const result=await api('/api/commerce/refund',signal,{orderId:o.id,confirm:true,mode:checkoutStatus.mode});await refresh();notice.textContent=tr('Возврат: ','Refund: ')+result.status}catch(e){notice.textContent=errorText(e);refund.disabled=false}});card.append(refund)}grid.append(card)}
    if(!(a.orders??[]).length)grid.append(el('p','account-muted',t.noOrders))
    grid.append(link(tr('Перейти в мастерскую','Open workshop'),'#account'));return
   }

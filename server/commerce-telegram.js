@@ -1,14 +1,30 @@
-// Telegram sees only the internal account/order identifiers, not email or card data.
+// Private operator chat receives display name and order number, not email or card data.
 // The database outbox is written atomically with the order transition.
 export function commerceTelegramConfig(env=process.env){
  const token=env.BRICKLAB_COMMERCE_TELEGRAM_TOKEN??'',chat=env.BRICKLAB_COMMERCE_TELEGRAM_CHAT_ID??''
  return {enabled:env.BRICKLAB_COMMERCE_TELEGRAM_ENABLED==='true'&&/^\d{5,15}:[A-Za-z0-9_-]{20,100}$/.test(token)&&/^-?\d{1,20}$/.test(chat),token,chat}
 }
 export function commerceEventText(e){
- const titles={succeeded:'Оплата подтверждена',canceled:'Платёж отменён',refunded:'Возврат выполнен'}
- const clean=value=>String(value??'').replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,200)
- return ['BrickLab 3D · '+(e.environment==='test'?'ТЕСТ (не выручка)':'РЕАЛЬНАЯ ОПЕРАЦИЯ'),titles[e.event]??'Операция',
-  'Товар: '+clean(e.title),'Сумма: '+(Number(e.amount_kopecks)/100).toFixed(2)+' ₽','Аккаунт: '+clean(e.user_id),'Заказ: '+clean(e.order_id),'Событие: '+clean(e.id)].join('\n')
+ const titles={succeeded:'✅ Оплата подтверждена',canceled:'⚪ Платёж отменён',refunded:'↩ Возврат выполнен',receipt_issued:'🧾 Чек НПД сформирован',receipt_canceled:'🧾 Чек НПД аннулирован'}
+ const clean=value=>String(value??'').replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g,' ').trim().slice(0,200)
+ const name=clean(e.buyer_name)
+ const amount=value=>(Number(value)/100).toFixed(2)+' ₽'
+ const num=e.order_number!=null?'BL-'+String(e.order_number).padStart(6,'0'):clean(e.order_id)
+ const lines=['BrickLab 3D · '+(e.environment==='test'?'ТЕСТ (не выручка)':'РЕАЛЬНАЯ ОПЕРАЦИЯ'),titles[e.event]??'Операция','',
+  'Товар: '+clean(e.title),'Сумма: '+amount(e.amount_kopecks),'Покупатель: '+(name&&!/[^\s@]+@[^\s@]+\.[^\s@]+/.test(name)?name:'Аккаунт '+clean(e.user_id).slice(0,8)),'Заказ: '+num]
+ if(e.occurred_at)lines.push('Время: '+new Date(e.occurred_at).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'})+' МСК')
+ if(e.day!=null){
+  lines.push('','Сегодня ('+clean(e.day)+', МСК; до комиссий):',
+   'Оплаты: '+amount(e.paid_kopecks)+' ('+clean(e.paid_count)+')',
+   'Возвраты: '+amount(e.refunded_kopecks)+' ('+clean(e.refund_count)+')',
+   'Итого: '+amount(Number(e.paid_kopecks)-Number(e.refunded_kopecks)))
+ }
+ if(e.environment==='live'){
+  if(e.receipt_correction_pending&&e.event!=='receipt_canceled')lines.push('','⚠ Требуется корректировка чека НПД')
+  else if(e.event==='succeeded'&&e.receipt_status==='pending')lines.push('','⚠ Сформируйте чек НПД в «Мой налог» и добавьте ссылку в Финансы.')
+ }
+ lines.push('','Событие: '+clean(e.id))
+ return lines.join('\n')
 }
 export function startCommerceTelegram({store,config=commerceTelegramConfig(),fetcher=fetch,logger=console,intervalMs=60000}){
  let active=null,stopped=false

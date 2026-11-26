@@ -31,7 +31,11 @@ for name in names:
 version = hashlib.sha256(":".join(manifest["files"][name] for name in names).encode()).hexdigest()
 if not re.search(r"(?m)^BRICKLAB_COMMERCE_FULL_CATALOG_OFFER_VERSION="+version+r"$", text):
     raise SystemExit("Сначала утвердите оферту расширенного магазина (publish-catalog).")
-if input("Договор подписан, ЮKassa разрешила приём платежей и выдача чеков НПД настроена? Введите ПОДТВЕРЖДАЮ: ").strip() != "ПОДТВЕРЖДАЮ":
+if "Для контроля платежей и возвратов в закрытый чат оператора Telegram" not in (legal / "privacy.html").read_text(encoding="utf-8"):
+    raise SystemExit("Сначала утвердите новую политику конфиденциальности через prepare-catalog и publish-catalog.")
+if any(not re.search(r"(?m)^"+key+r"=.+$", text) for key in ("BRICKLAB_MAIL_USER","BRICKLAB_MAIL_KEY","BRICKLAB_MAIL_FROM")):
+    raise SystemExit("Для отправки чеков сначала настройте почтовый сервис.")
+if input("Договор подписан, ЮKassa разрешила приём платежей, есть возможность своевременно формировать чеки НПД и отправлять покупателям? Введите ПОДТВЕРЖДАЮ: ").strip() != "ПОДТВЕРЖДАЮ":
     raise SystemExit("Переключение отменено.")
 shop = input("Shop ID боевого магазина: ").strip()
 secret = getpass("Боевой секретный ключ: ").strip()
