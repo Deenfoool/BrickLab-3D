@@ -22,6 +22,7 @@ export const instructionTiers=Object.freeze([
  [600,0],[1000,7900],[2000,12900],[4000,17900],[Number.MAX_SAFE_INTEGER,24900]
 ].map(Object.freeze));
 export const FREE_INSTRUCTION_STEPS=10;
+export function trialStepLimit(totalSteps){return Math.max(10,Math.min(30,Math.floor((Number.isSafeInteger(totalSteps)?totalSteps:0)/10)))}
 export const themePrices=Object.freeze({carbon:9900,neon:14900,blueprint:12900,titanium:17900,ember:19900,aurora:19900});
 export const PLUS_DISCOUNT_PERCENT=10;
 export function instructionPrice(partCount){
@@ -67,9 +68,9 @@ export function projectAccount(grants=[],now=Date.now()){
 }
 // During OBT access stays unchanged; after release only supported sets with
 // audited interactive metadata may be locked. The PDF is never restricted.
-export function canUseInteractive({account,setId,step,beta=true,supported=false}={}){
+export function canUseInteractive({account,setId,step,beta=true,supported=false,trialSteps=FREE_INSTRUCTION_STEPS}={}){
  if(beta||!supported)return true;
- return Number.isInteger(step)&&step>=1&&step<=FREE_INSTRUCTION_STEPS||account?.plus===true||account?.instructions?.includes(setId)===true;
+ return Number.isInteger(step)&&step>=1&&step<=trialSteps||account?.plus===true||account?.instructions?.includes(setId)===true;
 }
 
 // These helpers are pricing proposals for a future server-authoritative order quote.
