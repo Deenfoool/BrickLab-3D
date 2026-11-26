@@ -58,7 +58,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
  for(const [id,p] of auditedProducts)instructionCatalog.set(id,p)
  const liveInstructionProducts=instructionRelease&&fullCatalog?auditedProducts:new Map()
  const instructionFor=sku=> (commerceMode==='live'?liveInstructionProducts:instructionCatalog).get(sku)
- const instructionLocked=setId=>instructionRelease&&liveInstructionProducts.has('instruction-'+setId)
+ const instructionLocked=setId=>commerceMode==='live'&&instructionRelease&&liveInstructionProducts.has('instruction-'+setId)
  const liveSkus=[...themeIds,...releasedProducts.map(p=>p.id),...liveInstructionProducts.keys()]
  const testSkus=[...themeIds,...commerceProducts.filter(p=>!p.betaOnly||!instructionRelease).map(p=>p.id),...instructionCatalog.keys()]
  const adapter=commerceMode==='live'?liveYookassa:yookassa
@@ -108,7 +108,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(!/^\d{3,7}-\d{1,2}$/.test(setId??'')||!book||!Number.isInteger(page)||page<1||page>5000||q.size!==3)throw new ProjectError(400,'invalid_instruction')
     const viewer=instructionRelease?await session(req):null
     const account=viewer?await store.commerceAccount(viewer.id):null
-    reply(res,200,(instructionPolicy?.access??instructionAccess)({setId,book,page,account,release:instructionRelease}));return true
+    reply(res,200,(instructionPolicy?.access??instructionAccess)({setId,book,page,account,release:instructionLocked(setId)}));return true
    }
    const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated')
    if(path==='/api/commerce/status'&&req.method==='GET'){
@@ -163,7 +163,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
      if(!liveSkus.includes(data.sku))throw new ProjectError(404,'unknown_product')
      const offered=themeIds.includes(data.sku)?(await store.storeCatalog()).find(p=>p.sku===data.sku):(productById(data.sku)??instructionFor(data.sku));if(!offered)throw new ProjectError(404,'unknown_product')
      if(!fullCatalog&&offered.amountKopecks!==data.amountKopecks)throw new ProjectError(409,'quote_changed')
-     reply(res,200,await liveYookassa.checkout(user.id,data.sku,{amountKopecks:data.amountKopecks,offerVersion:legal.version,beta:!instructionRelease}));return true
+     reply(res,200,await liveYookassa.checkout(user.id,data.sku,{amountKopecks:data.amountKopecks,offerVersion:legal.version,beta:!instructionRelease,...(instructionFor(data.sku)?{instructionProduct:instructionFor(data.sku)}:{})}));return true
     }
     throw new ProjectError(405,'method_not_allowed')
    }
