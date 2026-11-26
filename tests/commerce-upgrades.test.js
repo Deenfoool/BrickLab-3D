@@ -159,6 +159,9 @@ test('real PostgreSQL enforces extended quota, collection ownership and badge pr
   assert.deepEqual(events.map(e=>e.event),['succeeded','refunded'])
   const claimed=await store.claimCommerceEvents()
   assert.ok(claimed.length>0&&claimed.length<=5)
+  assert.ok(claimed.every(e=>e.order_number!=null&&typeof e.buyer_name==='string'&&typeof e.day==='string'))
+  assert.ok(claimed.every(e=>!Object.hasOwn(e,'email')))
+
   assert.equal(await store.ackCommerceEvent(claimed[0].id),true)
   const [ack]=await db`select sent_at from bricklab.commerce_events where id=${claimed[0].id}`
   assert.ok(ack.sent_at)
@@ -189,12 +192,45 @@ test('real PostgreSQL enforces extended quota, collection ownership and badge pr
   const livePayment=crypto.randomUUID()
   assert.equal(await store.attachCommercePayment(commonLive.id,livePayment,'live'),true)
   assert.equal(await store.fulfillCommercePayment(commonLive.id,livePayment,'live',liveQuote2.amountKopecks),true)
+  // Official-looking fixture only: no mail or fiscal provider is contacted.
+  const receiptUrl='https://lknpd.nalog.ru/api/v1/receipt/000000000000/testreceipt/print'
+  assert.equal(await store.registerCommerceReceipt(uid,future.id,receiptUrl),false)
+  await assert.rejects(store.registerCommerceReceipt(other,commonLive.id,receiptUrl),/admin_required/)
+  assert.equal(await store.registerCommerceReceipt(uid,commonLive.id,'https://evil.example/receipt'),false)
+  assert.equal(await store.registerCommerceReceipt(uid,commonLive.id,receiptUrl),true)
+  assert.equal(await store.registerCommerceReceipt(uid,commonLive.id,receiptUrl),false)
+  const receiptJobs=await store.claimCommerceReceiptDeliveries()
+  assert.equal(receiptJobs.length,1)
+  assert.equal(receiptJobs[0].id,commonLive.id)
+  assert.equal(receiptJobs[0].receipt_url,receiptUrl)
+  assert.equal((await store.claimCommerceReceiptDeliveries()).length,0)
+  assert.equal(await store.ackCommerceReceiptDelivery(commonLive.id,'https://evil.example'),false)
+  assert.equal(await store.ackCommerceReceiptDelivery(commonLive.id,receiptUrl),true)
+  assert.equal((await store.claimCommerceReceiptDeliveries()).length,0)
+  const ownReceipt=(await store.commerceAccount(uid)).orders.find(x=>x.id===commonLive.id)
+  assert.equal(ownReceipt.receiptUrl,receiptUrl);assert.ok(ownReceipt.receiptSentAt)
+  assert.equal(String(ownReceipt.orderNumber),String(receiptJobs[0].order_number))
+  assert.ok(!(await store.commerceAccount(other)).orders.some(x=>x.id===commonLive.id))
   const refundRequest=await store.requestCommerceRefund(uid,commonLive.id,'live')
   assert.equal(refundRequest.paymentId,livePayment)
   assert.equal(await store.attachCommerceRefund(commonLive.id,crypto.randomUUID(),'live'),true)
   assert.equal(await store.refundCommercePayment(livePayment,'live',liveQuote2.amountKopecks),true)
   const [correction]=await db`select receipt_correction_pending from bricklab.commerce_orders where id=${commonLive.id}`
   assert.equal(correction.receipt_correction_pending,true)
+  assert.equal((await store.commerceAccount(uid)).orders.find(x=>x.id===commonLive.id).receiptUrl,null)
+  const liveTotals=await store.commerceAdminDayTotals(uid,'live')
+  const testTotals=await store.commerceAdminDayTotals(uid,'test')
+  assert.equal(Number(liveTotals.refunded_kopecks),liveQuote2.amountKopecks)
+  assert.equal(Number(testTotals.refunded_kopecks),future.amountKopecks)
+  assert.ok(Number(liveTotals.paid_kopecks)>=9900+liveQuote2.amountKopecks)
+  assert.ok(Number(testTotals.paid_kopecks)>Number(testTotals.refunded_kopecks))
+  await assert.rejects(store.commerceAdminDayTotals(other,'test'),/admin_required/)
+  const ledger=(await store.commerceAdminLedger(uid,'live')).find(x=>x.id===commonLive.id)
+  assert.equal(String(ledger.order_number),String(ownReceipt.orderNumber))
+  assert.equal(ledger.receipt_delivery_url,receiptUrl)
+  const numbers=await db`select count(*)::int as n,count(distinct order_number)::int as unique_n from bricklab.commerce_orders`
+  assert.equal(numbers[0].n,numbers[0].unique_n)
+
   assert.equal((await store.getActivity(uid)).limits.projects,60)
 
 
