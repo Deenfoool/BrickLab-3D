@@ -1,6 +1,6 @@
 import {sendPostbox} from './mail.js'
 
-export const validNpdReceiptUrl=value=>typeof value==='string'&&/^https:\/\/lknpd\.nalog\.ru\/api\/v1\/receipt\/[0-9]{12}\/[A-Za-z0-9_-]{1,80}\/print$/.test(value)
+export const validNpdReceiptUrl=value=>typeof value==='string'&&!/[\r\n]/.test(value)&&/^https:\/\/lknpd\.nalog\.ru\/api\/v1\/receipt\/[0-9]{12}\/[A-Za-z0-9_-]{1,80}\/print$/.test(value)
 
 export function createReceiptMailer(env=process.env,transport=sendPostbox){
  const username=env.BRICKLAB_MAIL_USER,password=env.BRICKLAB_MAIL_KEY,from=env.BRICKLAB_MAIL_FROM
