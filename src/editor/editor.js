@@ -20,7 +20,9 @@ import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=sys
 import { mountLibrary } from './library.js?v=catalog-engine-1'
 import { createScene } from './scene.js?v=collision-1'
 import {mountTransmissionMap,transmissionMap,transmissionCodes} from './transmission-map.js'
-import {mountCollisionPanel} from './collision-panel.js'
+import {mountCollisionPanel} from './collision-panel.js?v=engineering-2'
+import {mountDriveEstimate} from './drive-estimate-panel.js'
+import {engineeringReport,downloadEngineeringReport} from './engineering-report.js'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=volvo-spur-gears'
@@ -188,6 +190,8 @@ export async function mountEditor(root, { document, projectId, language, save, d
                 <button type="button" data-el="applyHinge" hidden>${t.applyHinge}</button>
               </div>
               <section class="editor-transmission-map" data-el="transmissionMap" hidden></section>
+              <section class="editor-drive-estimate" data-el="driveEstimate" hidden></section>
+              <button data-el="engineeringReport" type="button" hidden>${language==='ru'?'Скачать инженерный отчёт':'Download engineering report'}</button>
               <section class="editor-collision-panel" data-el="collisionPanel" hidden></section>
               <section class="editor-diagnostic-issues" data-el="diagnosticIssues" hidden></section>
               <button type="button" data-el="clutchTest" hidden></button>
@@ -366,7 +370,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   let clutchTest
   let runningMotor
   let transmission
-  let mappedParts=new Map(),lastMotionPoses=[],lastMapUpdate=0,collisionIds=[],locatingCollision=false
+  let mappedParts=new Map(),lastMotionPoses=[],lastMapUpdate=0,collisionIds=[],locatingCollision=false,driveReport=null,collisionReport=null
   let hinge
   let pointerDown
   let boxSelection
@@ -378,7 +382,9 @@ export async function mountEditor(root, { document, projectId, language, save, d
   let snappingScene = false
   let pendingPart
   const mapUI=mountTransmissionMap(el('transmissionMap'),{language,signal,onChange:()=>{refreshTransmissionMap();updateHighlights()},onFocus:ids=>scene.focus(ids)})
-  const collisionUI=mountCollisionPanel(el('collisionPanel'),{language,signal,onScan:scanCollisionPoses,onLocate:locateCollision,onClear:()=>{collisionIds=[];scene.markCollision(null);scene.select(mode==='paint'?undefined:selected);updateHighlights()}})
+  const collisionUI=mountCollisionPanel(el('collisionPanel'),{language,signal,onScan:scanCollisionPoses,onLocate:locateCollision,onReport:value=>{collisionReport=value},onClear:()=>{collisionIds=[];scene.markCollision(null);scene.select(mode==='paint'?undefined:selected);updateHighlights()}})
+  const estimateUI=mountDriveEstimate(el('driveEstimate'),{language,signal,onFocus:ids=>scene.focus(ids),onReport:value=>{driveReport=value}})
+  on(el('engineeringReport'),'click',()=>downloadEngineeringReport(engineeringReport({name:currentDocument().name,driver:selected,parts:state.parts.length,connections:links.length,belts:state.belts.length,hidden:hidden.size,importIssues:initialIssues,motion:transmission,drive:driveReport,collisions:collisionReport})))
   const audio = createEditorAudio(signal)
   function updateSoundControl() {
     const button = el('sound')
@@ -949,6 +955,8 @@ export async function mountEditor(root, { document, projectId, language, save, d
 
   function render() {
     collisionUI.render(mode==='kinematics',Boolean(hinge?.ok||transmission?.ok))
+    estimateUI.render(mode==='kinematics'?transmission:null,state.parts)
+    el('engineeringReport').hidden=mode!=='kinematics'
     const part = selectedPart()
     const selectedLinks = part ? links.filter(link => link.shaft.part === part.id || link.socket.part === part.id) : []
     el('selection').textContent = additional.size ? t.selectedCount(selectionIds().length)
@@ -1400,7 +1408,8 @@ export async function mountEditor(root, { document, projectId, language, save, d
     }else scene.highlight(activeJoint?.moving ?? additional, 0xffb01b, false)
   }
 
-  async function scanCollisionPoses(sweep,request,progress){
+  async function scanCollisionPoses(count,request,progress){
+    const sweep=count>1,deadline=performance.now()+15000
     stopAnimation();releaseMotor()
     locatingCollision=true
     try{scene.setParts(state.parts);showMotion()}finally{locatingCollision=false}
@@ -1411,14 +1420,15 @@ export async function mountEditor(root, { document, projectId, language, save, d
     let values=[angle]
     if(sweep&&hinge?.ok){
       const d=hinge.detents.map(x=>x*180/Math.PI)
-      values=[...new Set(Array.from({length:Math.min(9,d.length)},(_,i)=>d[Math.round(i*(d.length-1)/Math.max(1,Math.min(9,d.length)-1))]))]
+      values=[...new Set(Array.from({length:Math.min(count,d.length)},(_,i)=>d[Math.round(i*(d.length-1)/Math.max(1,Math.min(count,d.length)-1))]))]
     }else if(sweep&&transmission?.ok){
       const [min,max]=transmission.range??[-1080,1080]
       const span=linear?40:360,lo=Math.max(min,Math.min(angle-span/2,max-span)),hi=Math.min(max,lo+span)
-      values=[...new Set(Array.from({length:9},(_,i)=>lo+(hi-lo)*i/8))]
+      values=[...new Set(Array.from({length:count},(_,i)=>lo+(hi-lo)*i/(count-1)))]
     }
     const samples=[]
     for(const [i,value] of values.entries()){
+      if(performance.now()>deadline)break
       request.throwIfAborted();progress(i+1,values.length)
       await new Promise(resolve=>setTimeout(resolve,0))
       request.throwIfAborted()
@@ -1428,10 +1438,10 @@ export async function mountEditor(root, { document, projectId, language, save, d
       const placed=base.map(p=>byId.get(p.id)??p)
       // For sweep checks, keep every pair involving a solver-driven part, even at rest.
       const movingIds=sweep?new Set(hinge?.ok?hinge.moving:poses.map(p=>p.id)):null
-      const result=await inspectCollisions({parts:placed,models,connections:links,movingIds,signal:request})
+      const result=await inspectCollisions({parts:placed,models,connections:links,movingIds,signal:request,deadline})
       samples.push({...result,value})
     }
-    return {samples,linear}
+    return {samples,linear,requested:values.length,truncated:samples.length<values.length}
   }
   function locateCollision(hit){
     if(mode!=='kinematics')return
