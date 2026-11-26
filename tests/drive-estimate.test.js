@@ -25,10 +25,10 @@ test('nonlinear and linear drives are not treated as constant ratios',()=>{
  assert.deepEqual(driveOutputs({ok:true,spins,solve:()=>[]}),[])
  assert.equal(sourceFromMotion({supply:{powered:false,speed:100,torque:.18,power:100}}).stallTorque,0)
 })
-test('engineering export describes incomplete coverage and omits geometry',()=>{
+test('engineering export omits removed collision diagnostics and geometry',()=>{
  const report=engineeringReport({name:'fixture',driver:'a',parts:2,connections:1,belts:0,hidden:0,importIssues:[],motion:{ok:true,spins:new Map([['a',{ratio:1}]])},drive:null,collisions:{truncated:true,samples:[]}})
  assert.equal(report.format,'bricklab-engineering-report')
- assert.ok(report.recommendations.some(s=>s.includes('incomplete')))
+ assert.equal(Object.hasOwn(report,'collisionInspection'),false)
  assert.equal(report.scope.parts,2)
  assert.equal(report.kinematics.spins[0].ratio,1)
 })

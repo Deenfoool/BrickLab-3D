@@ -6,7 +6,7 @@ import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'
 import { mountCablePanel } from './cable-panel.js'
 import { mountFloatingPanels } from './floating-panels.js?v=workspace-21'
-import { mountWorkspace } from './workspace.js?v=workspace-21'
+import { mountWorkspace } from './workspace.js?v=feedback-1'
 import { createEditorAudio } from './audio.js?v=editor-sound'
 import { mountMotorPanel } from './motor-panel.js'
 import { Plane, Quaternion, Vector3 } from 'three'
@@ -282,6 +282,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   const workspaceUI = mountWorkspace(root, { language, scene, signal,
     grid: readPreference('grid') !== 'off', axes: readPreference('axes') !== 'off', changePreference: writePreference,
     hideSelection: () => setPartsHidden(selectionIds(), true),
+    openPhotoStudio:async()=>{if(dragActive()||moving||pendingPart)return;stopAnimation();releaseMotor();try{const {openPhotoStudio}=await import('./photo-studio.js');if(!signal.aborted)openPhotoStudio({document:currentDocument(),models,hidden,language,signal})}catch{setMessage(language==='ru'?'Не удалось открыть фотостудию: проверь загрузку деталей и WebGL.':'Could not open Photo Studio: check geometry and WebGL.');render()}},
   })
   const visibleParts = loadParts(source, models)
   const shown = new Set(visibleParts.map(part => part.id))
