@@ -1,3 +1,4 @@
+import {commerceBadge} from './commerce-visuals.js?v=merch-1'
 import {applySignature,themeBadge,themePlate,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {filterPortfolio,calendarDays,portfolioUuid} from './portfolio-model.js'
 import {productById} from './commerce-catalog.js'
@@ -25,7 +26,7 @@ export function renderUnifiedHero({lang,identity,owner=false,actions=[],metrics=
  mountThemeCover(cover,theme,{custom:!!coverUrl});applySignature(hero,theme)
  const body=ui('div','workshop-hero-inner'),person=ui('div','workshop-identity'),avatar=ui('div','workshop-avatar',Array.from(identity.displayName||'?').slice(0,2).join('').toUpperCase()),name=ui('div')
  if(avatarUrl){const img=ui('img','profile-avatar-image');img.src=avatarUrl;img.alt='';avatar.replaceChildren(img)}
- name.append(ui('h2',null,identity.displayName));if(identity.subtitle)name.append(ui('p','account-muted',identity.subtitle));const badge=themeBadge(theme,lang);if(badge)name.append(badge);if(identity.plus===true)name.append(ui('span','commerce-support-badge support-gold-builder','BrickLab Plus'));const support=productById(identity.supportBadge);if(support?.kind==='badge')name.append(ui('span','commerce-support-badge support-'+support.id,support.title))
+ name.append(ui('h2',null,identity.displayName));if(identity.subtitle)name.append(ui('p','account-muted',identity.subtitle));const badge=themeBadge(theme,lang);if(badge)name.append(badge);if(identity.plus===true)name.append(commerceBadge('plus'));const support=productById(identity.supportBadge);if(support?.kind==='badge')name.append(commerceBadge(support.id))
  person.append(avatar,name);body.append(person)
  if(actions.length){const a=ui('div','workshop-hero-actions');a.append(...actions);body.append(a)}
  hero.append(cover,body)
