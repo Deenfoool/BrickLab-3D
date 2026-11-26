@@ -21,6 +21,7 @@ import { mountLibrary } from './library.js?v=catalog-engine-1'
 import { createScene } from './scene.js?v=collision-1'
 import {mountTransmissionMap,transmissionMap,transmissionCodes} from './transmission-map.js'
 import {mountCollisionPanel} from './collision-panel.js?v=engineering-2'
+import {mountMotorBench} from './motor-bench-panel.js'
 import {mountDriveEstimate} from './drive-estimate-panel.js'
 import {engineeringReport,downloadEngineeringReport} from './engineering-report.js'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
@@ -191,6 +192,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
               </div>
               <section class="editor-transmission-map" data-el="transmissionMap" hidden></section>
               <section class="editor-drive-estimate" data-el="driveEstimate" hidden></section>
+              <section class="editor-drive-estimate" data-el="motorBench" hidden></section>
               <button data-el="engineeringReport" type="button" hidden>${language==='ru'?'Скачать инженерный отчёт':'Download engineering report'}</button>
               <section class="editor-collision-panel" data-el="collisionPanel" hidden></section>
               <section class="editor-diagnostic-issues" data-el="diagnosticIssues" hidden></section>
@@ -370,7 +372,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   let clutchTest
   let runningMotor
   let transmission
-  let mappedParts=new Map(),lastMotionPoses=[],lastMapUpdate=0,collisionIds=[],locatingCollision=false,driveReport=null,collisionReport=null
+  let mappedParts=new Map(),lastMotionPoses=[],lastMapUpdate=0,collisionIds=[],locatingCollision=false,driveReport=null,collisionReport=null,motorBenchReport=null
   let hinge
   let pointerDown
   let boxSelection
@@ -384,7 +386,8 @@ export async function mountEditor(root, { document, projectId, language, save, d
   const mapUI=mountTransmissionMap(el('transmissionMap'),{language,signal,onChange:()=>{refreshTransmissionMap();updateHighlights()},onFocus:ids=>scene.focus(ids)})
   const collisionUI=mountCollisionPanel(el('collisionPanel'),{language,signal,onScan:scanCollisionPoses,onLocate:locateCollision,onReport:value=>{collisionReport=value},onClear:()=>{collisionIds=[];scene.markCollision(null);scene.select(mode==='paint'?undefined:selected);updateHighlights()}})
   const estimateUI=mountDriveEstimate(el('driveEstimate'),{language,signal,onFocus:ids=>scene.focus(ids),onReport:value=>{driveReport=value}})
-  on(el('engineeringReport'),'click',()=>downloadEngineeringReport(engineeringReport({name:currentDocument().name,driver:selected,parts:state.parts.length,connections:links.length,belts:state.belts.length,hidden:hidden.size,importIssues:initialIssues,motion:transmission,drive:driveReport,collisions:collisionReport})))
+  const benchUI=mountMotorBench(el('motorBench'),{language,signal,onReport:value=>{motorBenchReport=value},onRun:async(motorId,seconds,request,onProgress)=>{const {runMotorBench}=await import('./motor-bench.js');request.throwIfAborted();return runMotorBench({parts:state.parts.filter(p=>!hidden.has(p.id)),links:state.links,models,motorId,seconds,signal:request,onProgress})}})
+  on(el('engineeringReport'),'click',()=>downloadEngineeringReport(engineeringReport({name:currentDocument().name,driver:selected,parts:state.parts.length,connections:links.length,belts:state.belts.length,hidden:hidden.size,importIssues:initialIssues,motion:transmission,drive:driveReport,collisions:collisionReport,motorBench:motorBenchReport})))
   const audio = createEditorAudio(signal)
   function updateSoundControl() {
     const button = el('sound')
@@ -740,6 +743,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }
 
   function refreshLayerVisibility() {
+    benchUI.clear()
     collisionUI.reset()
     if (isolation && !state.parts.some(part => isolation.has(part.id))) isolation = undefined
     hidden = hiddenSceneParts(state.layers, state.parts, isolation)
@@ -809,6 +813,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }
 
   function setSelection(id) {
+    benchUI.clear()
     collisionUI.reset()
     stopAnimation()
     audio.resetRotation()
@@ -956,6 +961,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   function render() {
     collisionUI.render(mode==='kinematics',Boolean(hinge?.ok||transmission?.ok))
     estimateUI.render(mode==='kinematics'?transmission:null,state.parts)
+    benchUI.render(selectedPart(),mode==='kinematics'&&!hidden.has(selected))
     el('engineeringReport').hidden=mode!=='kinematics'
     const part = selectedPart()
     const selectedLinks = part ? links.filter(link => link.shaft.part === part.id || link.socket.part === part.id) : []
