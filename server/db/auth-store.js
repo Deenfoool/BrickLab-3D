@@ -23,6 +23,15 @@ export function connectAuthStore(env = process.env) {
     await tx`select set_config('bricklab.user_id', ${uid}, true)`
     return fn(tx)
   })
+  // Test purchases exercise the actual private profile and quota code only
+  // for an administrator while the sandbox is the active provider.
+  async function effectiveCommerce(tx,uid){
+    if(env.BRICKLAB_COMMERCE_MODE==='test'&&env.BRICKLAB_YOOKASSA_TEST_ENABLED==='true'){
+      const [row]=await tx`select bricklab.is_admin() as admin`
+      if(row?.admin===true)return commerceEntitlements(tx,uid,'test')
+    }
+    return commerceEntitlements(tx,uid)
+  }
   const lock = (tx, uid) => tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text, 312042))`
   async function quota(tx, doc, creating, limits) {
     const [count] = await tx`select count(*)::int as n from bricklab.projects`
@@ -77,7 +86,7 @@ export function connectAuthStore(env = process.env) {
     },
     async createProject(uid,doc) {
       return scope(uid, async tx => {
-        await lock(tx,uid); const {limits}=await commerceEntitlements(tx,uid); await quota(tx,doc,true,limits)
+        await lock(tx,uid); const {limits}=await effectiveCommerce(tx,uid); await quota(tx,doc,true,limits)
         const [p]=await tx`insert into bricklab.projects (owner_id,name) values (${uid},${doc.name}) returning id,name,head_revision as revision,created_at as "createdAt",updated_at as "updatedAt"`
         await tx`insert into bricklab.project_revisions (project_id,revision,author_id,document) values (${p.id},1,${uid},${tx.json(doc)})`
         await tx`insert into bricklab.workshop_awards(user_id,award) values(${uid},'firstCloudSave') on conflict do nothing`
@@ -93,7 +102,7 @@ export function connectAuthStore(env = process.env) {
         if(p.revision!==expected)throw new ProjectError(409,'revision_conflict',{currentRevision:p.revision})
         const [same]=await tx`select document=${tx.json(doc)}::jsonb as equal from bricklab.project_revisions where project_id=${id} and revision=${expected}`
         if(same?.equal)return p
-        const {limits}=await commerceEntitlements(tx,uid)
+        const {limits}=await effectiveCommerce(tx,uid)
         if(p.revision>=limits.versions)throw new ProjectError(409,'revision_limit')
         await quota(tx,doc,false,limits)
         const next=p.revision+1
@@ -122,7 +131,7 @@ export function connectAuthStore(env = process.env) {
         const awards=await tx`select award,awarded_at as "awardedAt" from bricklab.workshop_awards where user_id=${uid} order by awarded_at`
         const media=await tx`select kind,version from bricklab.profile_media where user_id=${uid}`
         const legacyEntitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
-        const commerce=await commerceEntitlements(tx,uid)
+        const commerce=await effectiveCommerce(tx,uid)
         const [plusChoice]=await tx`select theme,changed_at as "changedAt" from bricklab.commerce_plus_theme where user_id=${uid}`
         const plusTheme=plusThemeState(commerce,plusChoice)
         const entitlements=[...legacyEntitlements,...commerce.themes.map(item=>({item})),...(plusTheme.chosen?[{item:plusTheme.chosen}]:[])]
@@ -139,7 +148,7 @@ export function connectAuthStore(env = process.env) {
       return scope(uid,async tx=>{
         await lock(tx,uid)
         if(p.plusTheme!==undefined){
-          const commerce=await commerceEntitlements(tx,uid)
+          const commerce=await effectiveCommerce(tx,uid)
           if(!commerce.plus)throw new ProjectError(403,'plus_required')
           const [choice]=await tx`select theme,changed_at as "changedAt" from bricklab.commerce_plus_theme where user_id=${uid}`
           const state=plusThemeState(commerce,choice)
@@ -149,7 +158,7 @@ export function connectAuthStore(env = process.env) {
           }
         }
         if(p.supportBadge!==undefined){
-          const commerce=await commerceEntitlements(tx,uid)
+          const commerce=await effectiveCommerce(tx,uid)
           if(p.supportBadge!==null&&!commerce.badges.includes(p.supportBadge))throw new ProjectError(403,'badge_locked')
           await tx`insert into bricklab.commerce_badge_selection(user_id,badge) values(${uid},${p.supportBadge}) on conflict(user_id) do update set badge=excluded.badge`
         }
@@ -159,7 +168,7 @@ export function connectAuthStore(env = process.env) {
         if(p.background!==undefined){
           const awards=await tx`select award from bricklab.workshop_awards where user_id=${uid}`
           const legacyEntitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
-        const commerce=await commerceEntitlements(tx,uid)
+        const commerce=await effectiveCommerce(tx,uid)
         const [plusChoice]=await tx`select theme,changed_at as "changedAt" from bricklab.commerce_plus_theme where user_id=${uid}`
         const plusTheme=plusThemeState(commerce,plusChoice)
         const entitlements=[...legacyEntitlements,...commerce.themes.map(item=>({item})),...(plusTheme.chosen?[{item:plusTheme.chosen}]:[])]
@@ -181,7 +190,7 @@ export function connectAuthStore(env = process.env) {
         const notifications=await tx`select a.award,a.awarded_at as "at",(r.award is not null) as read from bricklab.workshop_awards a left join bricklab.award_reads r on r.user_id=a.user_id and r.award=a.award where a.user_id=${uid} order by a.awarded_at desc,a.award`
         const [size]=await tx`select coalesce(sum(octet_length(document::text)),0)::bigint as bytes from bricklab.project_revisions`
         const calendar=await tx`select (r.created_at at time zone 'UTC')::date::text as day,count(*)::int as count from bricklab.project_revisions r join bricklab.projects p on p.id=r.project_id where p.owner_id=${uid} and r.created_at>=now()-interval '365 days' group by 1 order by 1`
-        const {limits,plus,plusUntil}=await commerceEntitlements(tx,uid)
+        const {limits,plus,plusUntil}=await effectiveCommerce(tx,uid)
         return {favorites,events,notifications,calendar,bytes:Number(size.bytes),limits,plus,plusUntil}
       })
     },
