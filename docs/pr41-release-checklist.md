@@ -41,3 +41,8 @@ This branch is an unreleased development candidate. Do not deploy it, merge it i
 - [ ] Photo Studio: all aspect ratios, six angles, framing, shadow switch, four-view sheet, title caption, complete model geometry, output dimension and cancellation.
 - [ ] Migrations 106–107: dollar-quoted function delimiters repaired; still require actual SQL execution.
 - [ ] Bundle pricing prototype and invariants documented; no payment SKU, API or UI enabled. See docs/instruction-bundles.md.
+
+## Release candidate scope freeze
+- [ ] Migration 108: sandbox pack lines, three distinct sets, idempotent creation, reservation conflict with individual orders, verified test payment, three atomic grants, repeat notification and full revocation; no live creation path.
+- [ ] Access offers: no paid restriction if live legal/checkout configuration is unavailable; never spend welcome activation during open beta.
+- [ ] Verify all previously listed release gates before merging. Full dynamic gear/belt contact physics, validated materials/strength, continuous swept collisions and live bundle fiscal support are research or later-release scope, not completed features.
