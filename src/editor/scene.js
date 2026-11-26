@@ -128,13 +128,15 @@ export function createScene(host, models) {
 
   let onViewChange
   canvas.addEventListener('webglcontextrestored', invalidate)
+  let remoteFrameTime=0
   function invalidate() {
     if (!active || frame !== null) return
-    frame = requestAnimationFrame(() => {
+    frame = requestAnimationFrame(now => {
       frame = null
       if (!active || renderer.getContext().isContextLost()) return
+      const remoteMoving=animateRemote(Math.min(50,now-(remoteFrameTime||now-16)));remoteFrameTime=now
       if (presenting) {
-        const helpers=[marker,frontArrow,gizmo.getHelper(),ghost].filter(Boolean)
+        const helpers=[marker,frontArrow,gizmo.getHelper(),ghost,...[...remoteMeshes.values()].map(r=>r.mesh)].filter(Boolean)
         const visibility=helpers.map(object=>object.visible)
         try { for(const object of helpers)object.visible=false;renderer.render(world,camera) }
         finally { helpers.forEach((object,index)=>object.visible=visibility[index]) }
@@ -143,6 +145,7 @@ export function createScene(host, models) {
         outlines.render(camera, selectedId, highlights)
       }
       onViewChange?.()
+      if(remoteMoving)invalidate()
     })
   }
 
@@ -191,8 +194,10 @@ export function createScene(host, models) {
     invalidate()
   }
 
+  const remoteMeshes=new Map()
+  const remoteHidden=new Set()
   function syncVisibility(id, object) {
-    object.visible = !hidden.has(id) && id !== movingId
+    object.visible = !hidden.has(id) && id !== movingId && !remoteHidden.has(id)
   }
 
   function setHidden(ids) {
@@ -203,6 +208,32 @@ export function createScene(host, models) {
     invalidate()
   }
 
+  function remotePreview(entries,localIds=[]){
+    const local=new Set(localIds),keep=new Set(),claimed=new Set()
+    remoteHidden.clear()
+    for(const {client,preview} of entries)for(const p of preview??[]){
+      if(local.has(p.id)||claimed.has(p.id)||hidden.has(p.id)||!models.has(p.design))continue
+      claimed.add(p.id)
+      const k=client+':'+p.id
+      let r=remoteMeshes.get(k)
+      if(r&&r.design!==p.design){world.remove(r.mesh);r.mesh.userData.finish.dispose();remoteMeshes.delete(k);r=null}
+      if(!r){const mesh=partMesh(models.get(p.design),p.color??parts[p.design].color,true);const original=objects.get(p.id);mesh.position.copy(original?.position??new THREE.Vector3(...p.position));mesh.quaternion.copy(original?.quaternion??new THREE.Quaternion(...p.rotation));world.add(mesh);r={mesh,design:p.design};remoteMeshes.set(k,r)}
+      keep.add(k);r.position=new THREE.Vector3(...p.position);r.rotation=new THREE.Quaternion(...p.rotation).normalize();r.mesh.scale.x=p.mirrored?-1:1;r.mesh.userData.finish.color.set(p.color??parts[p.design].color)
+      if(objects.has(p.id))remoteHidden.add(p.id)
+    }
+    for(const [k,r] of remoteMeshes)if(!keep.has(k)){world.remove(r.mesh);r.mesh.userData.finish.dispose();remoteMeshes.delete(k)}
+    for(const [id,o] of objects)syncVisibility(id,o)
+    invalidate()
+  }
+  function animateRemote(dt){
+    let moving=false
+    for(const r of remoteMeshes.values()){
+      const alpha=1-Math.exp(-dt/55)
+      r.mesh.position.lerp(r.position,alpha);r.mesh.quaternion.slerp(r.rotation,alpha)
+      if(r.mesh.position.distanceToSquared(r.position)>.0001||r.mesh.quaternion.angleTo(r.rotation)>.0001)moving=true
+    }
+    return moving
+  }
   function select(id) {
     selectedId = id
     invalidate()
@@ -474,6 +505,7 @@ export function createScene(host, models) {
   }
 
   function dispose() {
+    remotePreview([])
     active = false
     canvas.removeEventListener('webglcontextrestored', invalidate)
     if (frame !== null) cancelAnimationFrame(frame)
@@ -497,7 +529,7 @@ export function createScene(host, models) {
 
   function capturePublication(){
     if(!active||!canvas.width||!canvas.height)return null
-    const helpers=[floor,axes,frontArrow,marker,gizmo.getHelper(),ghost].filter(o=>o&&typeof o.visible==='boolean')
+    const helpers=[floor,axes,frontArrow,marker,gizmo.getHelper(),ghost,...[...remoteMeshes.values()].map(r=>r.mesh)].filter(o=>o&&typeof o.visible==='boolean')
     const visibility=helpers.map(o=>o.visible)
     try{
       for(const o of helpers)o.visible=false
@@ -524,5 +556,5 @@ export function createScene(host, models) {
     showGrid = grid; showAxes = axis
     floor.visible = !driveMap && showGrid; axes.visible = !driveMap && showAxes
     invalidate()
-  }, setWiresVisible(value) { motorCables.visible(value); invalidate() }, canvas, camera, gizmo, belts, snapProjector, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, selectInRect, enableBoxSelect, setGhost, setGroupGhost, setMoving, resetView, dispose }
+  }, setWiresVisible(value) { motorCables.visible(value); invalidate() }, canvas, camera, gizmo, belts, snapProjector, project, focus, highlight, remotePreview, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, selectInRect, enableBoxSelect, setGhost, setGroupGhost, setMoving, resetView, dispose }
 }

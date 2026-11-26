@@ -32,15 +32,16 @@ export function createCollaborationHandler({store,origin,clock=Date.now}){
  const reply=(res,status,data)=>{const value=JSON.stringify(data);res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Content-Length':Buffer.byteLength(value)});res.end(value)}
  async function read(req){if(req.headers['content-type']?.split(';')[0].trim()!=='application/json')throw new ProjectError(415,'json_required');let size=0;const chunks=[];for await(const c of req.iterator({destroyOnReturn:false})){size+=c.length;if(size>maxBody){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(c)}try{const d=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(!d||typeof d!=='object'||Array.isArray(d))throw Error();return d}catch{throw new ProjectError(400,'invalid_json')}}
  function clean(now){for(const [id,r] of rooms)if(now-r.created>lifetime||now-r.touched>idle)rooms.delete(id)}
- function view(room,user,client,now,doc=true){return {roomId:room.id,code:room.code,owner:room.owner===user.id,revision:room.revision,...(doc?{document:room.document}:{}),participants:[...room.clients.values()].filter(p=>now-p.last<presence).map(p=>({client:p.client,name:p.name,cursor:p.cursor,self:p.client===client,owner:p.userId===room.owner}))}}
- function touch(room,user,client,data,now){
+ function view(room,user,client,now,doc=true){return {roomId:room.id,code:room.code,owner:room.owner===user.id,revision:room.revision,...(doc?{document:room.document}:{}),participants:[...room.clients.values()].filter(p=>now-p.last<presence).map(p=>({client:p.client,name:p.name,cursor:p.cursor,preview:now-(p.lastPreview??0)<1200?p.preview??[]:[],self:p.client===client,owner:p.userId===room.owner}))}}
+ function touch(room,user,client,data,now,fast=false){
   for(const [id,p] of room.clients)if(now-p.last>presence)room.clients.delete(id)
   const current=room.clients.get(client)
   if(current&&current.userId!==user.id)throw new ProjectError(403,'not_member')
   if(!current&&room.clients.size>=8)throw new ProjectError(409,'room_full')
-  if(current&&now-current.last<250)throw new ProjectError(429,'too_many_attempts')
+  if(current&&now-(fast?current.lastPreview??0:current.lastSync??0)<(fast?55:150))throw new ProjectError(429,'too_many_attempts')
   const cursor=Array.isArray(data.cursor)&&data.cursor.length===3&&data.cursor.every(v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<1e7)?data.cursor:null
-  room.clients.set(client,{userId:user.id,client,name:String(user.displayName??'Builder').slice(0,80),cursor,last:now});room.touched=now
+  const preview=Array.isArray(data.preview)?data.preview.slice(0,64).filter(p=>p&&typeof p.id==='string'&&p.id.length<=100&&typeof p.design==='string'&&p.design.length<=80&&Array.isArray(p.position)&&p.position.length===3&&Array.isArray(p.rotation)&&p.rotation.length===4&&[...p.position,...p.rotation].every(v=>typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<1e7)&&Math.hypot(...p.rotation)>1e-8).map(p=>({id:p.id,design:p.design,position:p.position,rotation:p.rotation,mirrored:p.mirrored===true,...(/^#[0-9a-f]{6}$/i.test(p.color??'')?{color:p.color}:{})})):current?.preview??[]
+  room.clients.set(client,{...current,userId:user.id,client,name:String(user.displayName??'Builder').slice(0,80),cursor:fast?cursor:current?.cursor??cursor,preview,last:now,...(fast?{lastPreview:now}:{lastSync:now})});room.touched=now
  }
  return async(req,res,path)=>{
   if(!path.startsWith('/api/collaboration/'))return false
@@ -72,6 +73,7 @@ export function createCollaborationHandler({store,origin,clock=Date.now}){
    if(!room||!room.members.has(user.id))throw new ProjectError(404,'room_not_found')
    if(action==='close'){if(room.owner!==user.id)throw new ProjectError(403,'owner_required');rooms.delete(room.id);reply(res,200,{closed:true});return true}
    if(action==='leave'){if(room.clients.get(client)?.userId===user.id)room.clients.delete(client);reply(res,200,{left:true});return true}
+   if(action==='presence'){touch(room,user,client,data,now,true);reply(res,200,view(room,user,client,now,false));return true}
    if(action!=='sync')throw new ProjectError(404,'not_found')
    touch(room,user,client,data,now)
    if(!Number.isSafeInteger(data.revision)||data.revision<1||data.revision>room.revision)throw new ProjectError(400,'invalid_revision')

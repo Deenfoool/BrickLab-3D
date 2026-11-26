@@ -18,10 +18,10 @@ import { nearestDetent } from '../mechanics/axial.js?v=torque-clutch'
 import { nearbyConnections, translationSnaps } from './snap.js?v=volvo-spur-gears'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=system-complete'
 import { mountLibrary } from './library.js?v=catalog-engine-1'
-import { createScene } from './scene.js?v=feedback-2'
+import { createScene } from './scene.js?v=live-polish-1'
 import {mountTransmissionMap,transmissionMap,transmissionCodes} from './transmission-map.js'
 import {mountMotorBench} from './motor-bench-panel.js'
-import {mountCollaboration} from './collaboration-client.js'
+import {mountCollaboration} from './collaboration-client.js?v=live-polish-1'
 import {sharedDelta} from './shared-document.js'
 import {mountDriveEstimate} from './drive-estimate-panel.js?v=feedback-2'
 import {engineeringReport,downloadEngineeringReport} from './engineering-report.js'
@@ -2182,8 +2182,14 @@ export async function mountEditor(root, { document, projectId, language, save, d
       if (gear) setSelection(gear.id)
     }
   }
+  const collaborationPreview=()=>{
+    if(moving&&pose)return [pose,...(pastedGroup?groupTransforms(pastedGroup.items,pastedGroup.anchor,pose):[])]
+    if(resize?.pose)return [resize.pose]
+    if(gizmoPart&&gizmoRaw){const p=gizmoSnap?.pose?{...gizmoRaw,...gizmoSnap.pose}:gizmoRaw;const followers=activeJoint?.moving??additional;return [p,...groupTransforms(state.parts.filter(x=>x.id!==gizmoPart.id&&followers.has(x.id)),gizmoPart,p)]}
+    return []
+  }
   const collaborationIdle=()=>!signal.aborted&&!dragActive()&&!pendingPart&&!snappingScene&&!frame&&!runningMotor&&!clutchTest&&mode!=='testDrive'&&!window.document.querySelector('dialog[open]:not(.collaboration-dialog)')
-  collaborationUI=mountCollaboration(root,{language,scene,signal,initial:collaboration,onJoin:onJoinCollaboration,read:currentDocument,idle:collaborationIdle,apply:async(next,expected)=>{
+  collaborationUI=mountCollaboration(root,{language,scene,signal,initial:collaboration,onJoin:onJoinCollaboration,read:currentDocument,preview:collaborationPreview,loadPreview:async designs=>{await Promise.allSettled(designs.filter(id=>Object.hasOwn(parts,id)&&!models.has(id)).map(id=>prepareModel(parts[id])))},idle:collaborationIdle,apply:async(next,expected)=>{
     if(!collaborationIdle())return false
     if(hiddenParts.length||next.parts.some(p=>!parts[p.design]))throw Error('invalid_shared_geometry')
     const missing=[...new Set(next.parts.map(p=>p.design))].filter(id=>!models.has(id))
