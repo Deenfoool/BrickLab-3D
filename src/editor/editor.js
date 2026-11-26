@@ -294,11 +294,11 @@ export async function mountEditor(root, { document, projectId, language, save, d
   const discardedBelts = beltRecords.length - state.belts.length - hiddenBelts.length
   const discardedLinks = source.connections.length - assembly.connections.length - unknownLinks.length
   const connectionKey=link=>JSON.stringify([link?.shaft?.part,link?.shaft?.port,link?.socket?.part,link?.socket?.port])
-  const acceptedKeys=new Map()
+  const acceptedKeys=new Map(),unavailableLinks=new Set(unknownLinks)
   for(const link of assembly.connections){const k=connectionKey(link);acceptedKeys.set(k,(acceptedKeys.get(k)??0)+1)}
   const initialIssues=[]
   for(const link of source.connections){
-    if(unknownLinks.includes(link))continue
+    if(unavailableLinks.has(link))continue
     const k=connectionKey(link),count=acceptedKeys.get(k)??0
     if(count)acceptedKeys.set(k,count-1)
     else initialIssues.push({kind:'connection',a:link?.shaft?.part,b:link?.socket?.part,portA:link?.shaft?.port,portB:link?.socket?.port})
