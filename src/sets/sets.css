@@ -128,3 +128,5 @@
 .set-recommendation-grid button span{display:grid;gap:4px;min-width:0}
 .set-recommendation-grid strong{font-size:12px;overflow-wrap:anywhere}.set-recommendation-grid small{font-size:10px;opacity:.75}
 @media(max-width:720px){.set-demo{grid-template-columns:1fr 1fr}.set-demo-copy{grid-column:1/-1}.set-recommendation-grid{grid-template-columns:1fr}}
+
+.set-sandbox-pack:not([hidden]){margin:0 0 14px;padding:12px;border:1px solid #536074;border-radius:10px}.set-sandbox-pack details[open]{display:grid;gap:8px}.set-sandbox-pack summary{cursor:pointer;font-size:13px;font-weight:650}.set-sandbox-pack select{width:100%;min-width:0}.set-sandbox-pack p{font-size:12px;margin:4px 0}.set-sandbox-pack label{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px}
