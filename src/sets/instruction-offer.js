@@ -65,7 +65,7 @@ export async function mountInstructionOffer(root,{set,language,signal,onStart,st
   const legal=make('a',tr('Оферта','Offer'));legal.href='/offer';legal.target='_blank';legal.rel='noopener noreferrer';terms.append(legal);consent.append(check,terms)
   let quote=null,plusQuote=null
   async function checkout(q,sku){
-   const result=await api('/api/commerce/checkout',signal,{sku,amountKopecks:q.amountKopecks,offerVersion:q.offerVersion,accepted:true,mode:offer.mode})
+   const result=await api('/api/commerce/checkout',signal,{sku,amountKopecks:q.amountKopecks,offerVersion:q.offerVersion,accepted:true,mode:offer.mode,...(sku==='plus-1'?{returnToSets:true}:{})})
    if(!current())return
    if(result.mode!==offer.mode)throw Error('mode_changed')
    if(result.checkoutUrl){const url=safeCheckoutUrl(result.checkoutUrl);if(!url)throw Error('unsafe_checkout');try{sessionStorage.setItem('bricklab-instruction-return',setId)}catch{}location.assign(url);return}
