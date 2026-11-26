@@ -23,7 +23,7 @@ test('explicit sandbox refund reuses stored order idempotency key and verifies f
  requestCommerceTestRefund:async()=>({id,paymentId:payment,amountKopecks:24900,requestedAt:new Date()}),
  attachCommerceTestRefund:async(...args)=>{calls.push(args);return true},
  refundCommercePayment:async(...args)=>{calls.push(args);return true}
- },fetcher:async(url,opts)=>{requests.push([url,opts.method]);if(opts.method==='POST'){assert.equal(opts.headers['Idempotence-Key'],id);assert.deepEqual(JSON.parse(opts.body),{payment_id:payment,amount:{currency:'RUB',value:'249.00'}});return Response.json(returned)}return Response.json(url.endsWith(refund)?returned:paid)}})
+ },fetcher:async(url,opts)=>{requests.push([url,opts.method]);if(opts.method==='POST'){assert.equal(opts.headers['Idempotence-Key'],id);assert.deepEqual(JSON.parse(opts.body),{payment_id:payment,amount:{currency:'RUB',value:'249.00'}});return Response.json(returned)}return Response.json(url.endsWith(refund)?returned:requests.some(x=>x[1]==='POST')?paid:{...paid,refunded_amount:{currency:'RUB',value:'0.00'}})}})
  assert.equal((await a.requestTestRefund(id,id)).status,'succeeded')
  assert.equal(requests.filter(x=>x[1]==='POST').length,1)
  assert.deepEqual(calls,[[id,refund],[payment,'test',24900]])
