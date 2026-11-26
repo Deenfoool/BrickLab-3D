@@ -58,7 +58,7 @@ export function mountSetFilters(form, themes, { language, signal, change }) {
   setOrderings.forEach((value, i) => order.add(new Option(titles[i], value)))
   const selects = make('div', undefined, 'set-filter-selects')
   selects.append(theme, order)
-  panel.append(selects)
+  form.append(selects)
   function range(name, caption, low, high, unlimited = false) {
     const field = make('fieldset', undefined, 'set-filter-range')
     field.append(make('legend', caption))
