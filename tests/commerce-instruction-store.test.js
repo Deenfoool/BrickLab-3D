@@ -1,10 +1,10 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {createServer} from 'node:http'
-import {createInstructionPolicy} from '../server/instruction-access.js'
+import {createInstructionPolicy,completedInstructionSet} from '../server/instruction-access.js'
 import {createPaymentsHandler} from '../server/payments.js'
 import {instructionOrderQuote} from '../server/db/commerce-store.js'
-import {instructionProduct} from '../src/menu/commerce-catalog.js'
+import {instructionProduct,trialStepLimit} from '../src/menu/commerce-catalog.js'
 const pages=[{step:11,regions:[[1,2,10,10,'3001']]}]
 const audit=createInstructionPolicy({
  '12345-1':{metadata:{title:'New large model',partCount:601,complete:true},'111':pages},
@@ -54,7 +54,7 @@ test('sandbox lists multiple SKUs; live checkout accepts completed large audit o
 })
 
 test('contextual activation is authorized by the released set and does not accept client prices',async t=>{
- const origin='https://bricklab.test',terms='a'.repeat(64),account={instructions:[],plus:false,welcomeRemaining:3,orders:[]}
+ const origin='https://bricklab.test',terms='a'.repeat(64),account={instructions:[],plus:false,welcomeRemaining:1,orders:[]}
  let calls=0
  const store={getSession:async()=>({id:'fixture',admin:true}),commerceAccount:async()=>account,commerceTestAccount:async()=>account,claimInstructionWelcome:async(uid,setId)=>{calls++;if(!account.instructions.includes(setId)){account.instructions.push(setId);account.welcomeRemaining--}return account}}
  const handler=createPaymentsHandler({store,origin,config:{enabled:false},legal:{version:terms},fullCatalog:true,commerceMode:'live',instructionRelease:true,instructionPolicy:audit,liveYookassa:{enabled:true}})
@@ -72,5 +72,16 @@ test('contextual activation is authorized by the released set and does not accep
  assert.equal(calls,0)
  assert.equal((await(await post({setId:'12345-1'})).json()).state,'owned')
  assert.equal((await(await get(path)).json()).state,'owned')
- assert.equal(account.welcomeRemaining,2)
+ assert.equal(account.welcomeRemaining,0)
+})
+
+test('trial is 10 percent with 10 and 30 step bounds; first build checks saved audited milestone',()=>{
+ assert.deepEqual([20,100,200,500].map(trialStepLimit),[10,10,20,30])
+ const policy=createInstructionPolicy({'12345-1':{metadata:{title:'Large',partCount:601,complete:true},'111':[{step:20,regions:[[1,2,10,10,'3001']]},{step:200,regions:[]}]}})
+ assert.equal(policy.trialSteps('12345-1'),20)
+ const doc={buildingSet:{set:{number:'12345-1',books:[{url:'https://www.lego.com/biassets/bi/111.pdf'}]},book:0,page:2},parts:Array.from({length:601},(_,i)=>({id:String(i),design:'3001'}))}
+ assert.equal(completedInstructionSet(doc,policy),'12345-1')
+ assert.equal(completedInstructionSet({...doc,parts:doc.parts.slice(1)},policy),null)
+ assert.equal(completedInstructionSet({...doc,buildingSet:{...doc.buildingSet,page:1}},policy),null)
+ assert.equal(completedInstructionSet({...doc,parts:Array(601).fill(doc.parts[0])},policy),null)
 })
