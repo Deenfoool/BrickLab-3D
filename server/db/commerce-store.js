@@ -61,6 +61,7 @@ export function commerceStore(scope){
   async attachCommerceRefund(id,refund,environment){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_attach_refund(${id}::uuid,${refund},${environment}) as ok`;return r.ok})},
   async claimCommerceRefunds(environment){return scope('',tx=>tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks",provider_refund_id as "refundId" from bricklab.commerce_claim_refunds(${environment})`)},
   async commerceAdminLedger(uid,environment){return scope(uid,tx=>tx`select * from bricklab.commerce_admin_ledger(${environment})`)},
+  async confirmCommerceReceiptCorrection(uid,id,reference){return scope(uid,async tx=>{const [r]=await tx`select bricklab.commerce_confirm_receipt_correction(${id}::uuid,${reference}) as ok`;return r.ok})},
   async confirmCommerceReceipt(uid,id,reference){return scope(uid,async tx=>{const [r]=await tx`select bricklab.commerce_confirm_receipt(${id}::uuid,${reference}) as ok`;return r.ok})},
   async requestCommerceTestRefund(uid,id){return scope(uid,async tx=>{const [r]=await tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks",refund_requested_at as "requestedAt",provider_refund_id as "refundId" from bricklab.commerce_request_test_refund(${id}::uuid)`;return r})},
   async attachCommerceTestRefund(id,refund){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_attach_test_refund(${id}::uuid,${refund}) as ok`;return r.ok})},
