@@ -3,10 +3,15 @@ import {commerceQuote} from '../commerce-quote.js'
 import {ProjectError} from '../projects.js'
 
 export async function commerceEntitlements(tx,uid,environment='live'){
-    const rows=await tx`select g.id,g.kind,g.sku,g.target,g.granted_at as "grantedAt",g.expires_at as "expiresAt"
+    const rows=environment==='test'?await tx`select g.id,g.kind,g.sku,g.target,g.granted_at as "grantedAt",g.expires_at as "expiresAt"
+     from bricklab.commerce_grants g join bricklab.commerce_orders o on o.id=g.order_id and o.user_id=g.user_id
+     where g.user_id=${uid} and o.environment='test' and o.status='succeeded'
+       and g.revoked_at is null and (g.kind='subscription' or g.granted_at<=now())
+       and (g.kind='subscription' or g.expires_at is null or g.expires_at>now())
+     order by g.granted_at,g.id`:await tx`select g.id,g.kind,g.sku,g.target,g.granted_at as "grantedAt",g.expires_at as "expiresAt"
      from bricklab.commerce_grants g
      join bricklab.commerce_orders o on o.id=g.order_id and o.user_id=g.user_id
-     where g.user_id=${uid} and o.environment=${environment} and o.status='succeeded'
+     where g.user_id=${uid} and o.environment='live' and o.status='succeeded'
        and g.revoked_at is null and (g.kind='subscription' or g.granted_at<=now())
        and (g.kind='subscription' or g.expires_at is null or g.expires_at>now())
      order by g.granted_at,g.id`;
