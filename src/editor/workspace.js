@@ -236,7 +236,7 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     scene.setWorkspaceHelpers(gridOn&&!presentation,axesOn&&!presentation)
     scene.setWorkspacePresentation(presentation)
     const active={library:left,inspector:rightIds.includes('inspector'),'scene-parts':rightIds.includes('scene-parts'),instruction:rightIds.includes('instruction'),grid:gridOn,axes:axesOn,connections:pointsOn,wireframe:wireframeOn,perspective:scene.cameraMode==='perspective',orthographic:scene.cameraMode==='orthographic',fullscreen:Boolean(doc.fullscreenElement)}
-    for(const [id,b] of viewButtons){pressed(b,active[id]);b.disabled=['library','inspector','scene-parts','instruction'].includes(id)&&!panelMode||['perspective','orthographic','connections','wireframe'].includes(id)&&mode==='testDrive'}
+    for(const [id,b] of viewButtons){pressed(b,active[id]);b.disabled=['library','inspector','scene-parts','instruction'].includes(id)&&!panelMode||['perspective','orthographic','connections','wireframe'].includes(id)&&(mode==='testDrive'||!canPresent)}
   }
   function openPanel(id){
     if(!panels[id])return

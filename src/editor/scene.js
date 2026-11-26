@@ -203,10 +203,11 @@ export function createScene(host, models) {
   }
 
   const connectorPoints=new THREE.Group();world.add(connectorPoints)
+  const wireMaterial=new THREE.MeshBasicMaterial({color:0xb6c4d6,wireframe:true});
   const pointGeometry=new THREE.SphereGeometry(1.7,8,6),pointMale=new THREE.MeshBasicMaterial({color:0x55c4ff,depthTest:true}),pointFemale=new THREE.MeshBasicMaterial({color:0xffbe55,depthTest:true});let pointsVisible=false,wireframe=false
-  function refreshConnectorPoints(){connectorPoints.clear();if(!pointsVisible)return;let count=0;for(const [id,o] of objects){if(!o.visible)continue;for(const p of portsFor(o.userData.design)){if(p.legacy||p.role==='gear'||!Array.isArray(p.start))continue;if(++count>1500)return;const mesh=new THREE.Mesh(pointGeometry,p.gender==='M'?pointMale:pointFemale);mesh.position.fromArray(p.start).applyMatrix4(o.matrixWorld);connectorPoints.add(mesh)}}}
+  function refreshConnectorPoints(){for(const mesh of connectorPoints.children)mesh.dispose?.();connectorPoints.clear();if(!pointsVisible)return;const groups=[[],[]];let count=0;outer:for(const o of objects.values()){if(!o.visible)continue;for(const p of portsFor(o.userData.design)){if(p.legacy||p.role==='gear'||!Array.isArray(p.start))continue;if(++count>1500)break outer;groups[p.gender==='M'?0:1].push(new THREE.Vector3(...p.start).applyMatrix4(o.matrixWorld))}}for(const [i,points] of groups.entries()){if(!points.length)continue;const mesh=new THREE.InstancedMesh(pointGeometry,i===0?pointMale:pointFemale,points.length);points.forEach((v,n)=>mesh.setMatrixAt(n,new THREE.Matrix4().makeTranslation(v.x,v.y,v.z)));mesh.instanceMatrix.needsUpdate=true;connectorPoints.add(mesh)}}
   function setConnectorPoints(value){pointsVisible=!!value;refreshConnectorPoints();invalidate()}
-  function setWireframe(value){wireframe=!!value;for(const o of objects.values())o.traverse(child=>{if(child.isMesh)for(const m of Array.isArray(child.material)?child.material:[child.material])if(m&&'wireframe' in m)m.wireframe=wireframe});invalidate()}
+  function setWireframe(value){wireframe=!!value;for(const o of objects.values())o.traverse(child=>{if(child.isMesh){if(wireframe){if(!child.userData.solidMaterial)child.userData.solidMaterial=child.material;child.material=wireMaterial}else if(child.userData.solidMaterial){child.material=child.userData.solidMaterial;delete child.userData.solidMaterial}}});invalidate()}
   const remoteMeshes=new Map()
   const remoteHidden=new Set()
   function syncVisibility(id, object) {
@@ -521,7 +522,7 @@ export function createScene(host, models) {
 
   function dispose() {
     remotePreview([])
-    connectorPoints.clear();pointGeometry.dispose();pointMale.dispose();pointFemale.dispose()
+    for(const mesh of connectorPoints.children)mesh.dispose?.();connectorPoints.clear();wireMaterial.dispose();pointGeometry.dispose();pointMale.dispose();pointFemale.dispose()
     active = false
     canvas.removeEventListener('webglcontextrestored', invalidate)
     if (frame !== null) cancelAnimationFrame(frame)

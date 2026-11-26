@@ -18,14 +18,14 @@ import { nearestDetent } from '../mechanics/axial.js?v=torque-clutch'
 import { nearbyConnections, translationSnaps } from './snap.js?v=volvo-spur-gears'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=system-complete'
 import { mountLibrary } from './library.js?v=catalog-engine-1'
-import { createScene } from './scene.js?v=menu-studio-1'
+import { createScene } from './scene.js?v=menu-studio-2'
 import {mountTransmissionMap,transmissionMap,transmissionCodes} from './transmission-map.js?v=menu-studio-1'
 import {mountMotorBench} from './motor-bench-panel.js'
 import {mountCollaboration} from './collaboration-client.js?v=live-polish-1'
 import {sharedDelta} from './shared-document.js'
 import {mountDriveEstimate} from './drive-estimate-panel.js?v=feedback-2'
 import {engineeringReport,downloadEngineeringReport} from './engineering-report.js'
-import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
+import { mountScenePartsPanel } from './scene-parts-panel.js?v=menu-studio-2'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=menu-studio-1'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=volvo-spur-gears'
 import { mountBeltPanel } from './belt-panel.js?v=belt-drive'
@@ -440,6 +440,8 @@ export async function mountEditor(root, { document, projectId, language, save, d
     selectPart: (id, toggle) => selectClick(id, toggle),
     selectGroup: (id, toggle) => selectParts(state.layers.groups.find(group => group.id === id).partIds, toggle),
     createGroup,
+    lockLabel:id=>locked(id)?tr('Разблокировать','Unlock'):tr('Заблокировать','Lock'),
+    toggleLock:id=>{const ids=new Set(state.layers.lockedPartIds??[]);ids.has(id)?ids.delete(id):ids.add(id);commitLayers({lockedPartIds:[...ids]})},
     togglePart: id => setPartsHidden([id], isolation ? !hidden.has(id) : !state.layers.hiddenPartIds.includes(id)),
     deletePart: id => removeParts([id]),
     toggleGroup: id => {
@@ -522,7 +524,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   function currentDocument() {
     return {
       ...source,
-      ...(customInstructions!==undefined?{customInstructions}:{}),
+      customInstructions,
       ...(buildingSet && { buildingSet }),
       ...(driveConfig && { testDrive: driveConfig }),
       name: el('name').value.trim() || source.name,
@@ -549,7 +551,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   function toggleLocked(){if(!editing()||!selectionIds().length)return;const ids=new Set(state.layers.lockedPartIds??[]),unlock=selectionIds().every(id=>ids.has(id));for(const id of selectionIds())unlock?ids.delete(id):ids.add(id);commitLayers({lockedPartIds:[...ids]})}
   function selectMatching(byColor=false){if(!editing()||!selectedPart())return;const p=selectedPart(),color=x=>String(x.color??parts[x.design]?.color).toLowerCase();selectParts(state.parts.filter(x=>!hidden.has(x.id)&&(byColor?color(x)===color(p):x.design===p.design)).map(x=>x.id))}
   function focusSelection(){scene.focus(selectionIds())}
-  function openInstruction(){if(!editing()||!state.parts.length)return;void import('./instruction-studio.js').then(({openInstructionStudio})=>{if(!signal.aborted)openInstructionStudio({document:currentDocument(),selection:selectionIds(),language,signal,partsCatalog:parts,save:steps=>{customInstructions=structuredClone(steps);return persist(true)}})}).catch(()=>{setMessage(tr('Не удалось открыть студию инструкций.','Could not open Instruction Studio.'));render()})}
+  function openInstruction(){if(!editing()||!state.parts.length)return;void import('./instruction-studio.js?v=menu-studio-2').then(({openInstructionStudio})=>{if(!signal.aborted)openInstructionStudio({document:currentDocument(),selection:selectionIds(),language,signal,partsCatalog:parts,save:steps=>{customInstructions=structuredClone(steps);return persist(true)}})}).catch(()=>{setMessage(tr('Не удалось открыть студию инструкций.','Could not open Instruction Studio.'));render()})}
   function showPowerFlow(play=false){if(!selectedPart()||dragActive())return;if(mode!=='kinematics')setMode('kinematics');workspaceUI.openPanel('inspector');if(transmission?.ok){if(!mapUI.enabled)el('transmissionMap').querySelector('button').click();if(play&&!el('play').hidden&&!el('play').disabled)el('play').click()}else if(hinge?.ok){setMessage(tr('Для этого соединения доступен угол поворота.','This joint has an angle control.'));render()}else{setMessage(tr('Передача вращения не обнаружена.','No rotational transmission detected.'));render()}}
   function choiceDialog(title,fill){if(window.document.querySelector('dialog[open]'))return;const d=window.document,dialog=d.createElement('dialog');dialog.className='bricklab-choice';const h=d.createElement('h2');h.textContent=title;const status=d.createElement('p');status.setAttribute('role','status');const body=d.createElement('div');body.className='bricklab-choice-body';const close=d.createElement('button');close.type='button';close.textContent=tr('Закрыть','Close');close.onclick=()=>dialog.close();dialog.append(h,status,body,close);dialog.addEventListener('close',()=>{scene.setGhost(null);dialog.remove()},{once:true});signal.addEventListener('abort',()=>dialog.remove(),{once:true});d.body.append(dialog);dialog.showModal();fill({dialog,body,status,button:(label,run)=>{const b=d.createElement('button');b.type='button';b.textContent=label;b.onclick=run;return b}})}
   async function openSmartConnect(){if(!editing()||selectionIds().length!==2)return;if(state.parts.length>2000){setMessage(tr('Smart Connect доступен до 2000 деталей.','Smart Connect supports up to 2000 parts.'));render();return}const before=state,[a,b]=selectionIds().map(id=>state.parts.find(p=>p.id===id));const loose=p=>!locked(p.id)&&!state.links.some(l=>l.shaft.part===p.id||l.socket.part===p.id)&&!state.belts.some(l=>l.a.part===p.id||l.b.part===p.id);const moving=a&&b?(loose(a)?a:loose(b)?b:null):null,fixed=moving===a?b:a;if(!moving){setMessage(tr('Для Smart Connect одна деталь должна быть свободной и незаблокированной.','Smart Connect needs one loose, unlocked part.'));render();return}
@@ -836,6 +838,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
 
   function removeParts(partIds = selectionIds(), groupId) {
     if (mode !== 'build' || dragActive() || (!partIds.length && !groupId)) return
+    if(partIds.some(locked)){setMessage(tr('Сначала разблокируй детали.','Unlock the parts first.'));render();return}
     const ids = new Set(partIds.filter(id => !hiddenIds.has(id)))
     const layers = {
       groups: moveToSceneGroup(state.layers.groups.filter(group => group.id !== groupId), ids),

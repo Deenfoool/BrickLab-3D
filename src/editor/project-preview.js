@@ -100,8 +100,10 @@ export function createProjectPreviewRenderer(options={}) {
 
       const solids = new THREE.Group()
       world.add(solids)
+      const emphasized=Array.isArray(shot.highlightIds)?new Set(shot.highlightIds):null
       for (const part of visible) {
         const object = partMesh(models.get(part.design), part.color ?? parts[part.design].color)
+        if(emphasized&&!emphasized.has(part.id))object.userData.finish.color.lerp(new THREE.Color('#a5adb7'),.75)
         object.position.fromArray(part.position)
         object.quaternion.fromArray(part.rotation)
         object.scale.x = part.mirrored ? -1 : 1
