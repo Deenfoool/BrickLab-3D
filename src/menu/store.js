@@ -1,7 +1,7 @@
 import {createProfileClient} from './profile-client.js?v=cloud-profile-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
-import {commerceProducts,themePrices,instructionTiers,productById} from './commerce-catalog.js?v=commerce-plus-2'
+import {commerceProducts,themePrices,instructionTiers,productById} from './commerce-catalog.js?v=instruction-store-1'
 import {commerceBadge,productArtwork,factsPanel,planSaving} from './commerce-visuals.js?v=merch-2'
 const labels={
  ru:{title:'BrickLab Store',intro:'Оформление мастерской. Основные функции редактора остаются бесплатными.',disabled:'Темы доступны для просмотра. Оплата откроется после подключения платёжной системы ЮKassa.',test:'Тестовый режим · реальные деньги не списываются. Покупки доступны только администратору.',login:'Войти в аккаунт',buy:'Тестовая покупка',owned:'Получено в тестовом инвентаре',resume:'Продолжить тестовую оплату',consent:'Подтверждаю, что это тестовая оплата без реального списания и без выдачи платного товара.',history:'Мои тестовые заказы',finance:'BrickLab Finance · тестовый режим',financeNote:'Суммы ниже — виртуальные тестовые операции, не выручка.',total:'Заказов',paid:'Подтверждено',amount:'Тестовый оборот',pending:'Ожидает подтверждения',complete:'Подтверждён',refresh:'Обновить статус',error:'Не удалось выполнить запрос. Попробуй ещё раз.',wait:'Если оплата завершена, дождись уведомления Robokassa и обнови статус.',profile:'Мой инвентарь',carbon:'Карбон',neon:'Неоновая мастерская',noOrders:'Заказов пока нет',loading:'Загрузка…'},
@@ -48,12 +48,12 @@ export function mountStore(root,{language='ru',signal}){
   themeBundle:tr('Все шесть фирменных оформлений в одном наборе.','All six signature styles in one collection.'),
   storage:tr('Расширяй облачное пространство разовыми покупками.','Expand your cloud space with one-time purchases.'),
   badge:tr('Коллекционные эмблемы поддержки — от первого значка до Founder’s Club.','Collectible supporter insignia, from the first badge to Founder’s Club.'),
-  instruction:tr('Интерактивные подсказки для поддерживаемых наборов.','Interactive hints for supported sets.')
+  instruction:tr('Подсказки для наборов от 601 детали.','Hints for sets with 601 or more pieces.')
  }
  const tabs=new Map(),header=el('div','store-banner'),heading=el('div'),art=el('div','store-banner-art')
  heading.append(el('span','store-kicker','BRICKLAB STORE'),el('h2',null,tr('Расширь свою мастерскую','Expand your workshop')),el('p',null,tr('Темы, облачное пространство, коллекции и Plus. Основной редактор бесплатный.','Themes, cloud space, collections and Plus. The core editor is free.')))
  for(const id of ['carbon','neon','aurora'])art.append(themePreview(themeFor(id),language));header.append(heading,art)
- let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,testMode=false,busy=false,serial=0
+ let instructionSearch='';let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,testMode=false,busy=false,serial=0
  try{if(sessionStorage.getItem('bricklab-commerce-return')==='1'){selected='orders';sessionStorage.removeItem('bricklab-commerce-return')}}catch{}
  const refreshButton=button(tr('Обновить покупки','Refresh purchases'),()=>refresh())
  for(const [id,label] of categories){const b=button(label,()=>{selected=id;render()});tabs.set(id,b);nav.append(b)}
@@ -75,11 +75,11 @@ export function mountStore(root,{language='ru',signal}){
   if(p.kind==='theme'){const theme=themeFor(p.id);return tr(theme.descriptionRu,theme.descriptionEn)}
   if(p.kind==='storage')return tr('Дополнительно '+p.slots+' проектов и '+p.storageMiB+' МиБ хранения. Разовая покупка.','Adds '+p.slots+' projects and '+p.storageMiB+' MiB storage. One-time purchase.')
   if(p.kind==='subscription')return tr('+40 проектов, +128 МиБ, 40 версий, значок Plus, одна тема на выбор, скидки. Продление вручную.','+40 projects, +128 MiB, 40 revisions, Plus badge, one theme and discounts. Manual renewal.')
-  if(p.kind==='instruction')return tr('Тест доступа к подсказкам набора Volvo 42215. В ОБТ остаётся бесплатным.','Sandbox access fixture for Volvo 42215. Free in open beta.')
+  if(p.kind==='instruction')return p.setId+' · '+p.partCount.toLocaleString(language)+tr(' деталей. Интерактивные подсказки BrickLab; PDF бесплатен.',' pieces. BrickLab interactive hints; the PDF is free.')
   if(p.kind==='themeBundle')return tr('Все шесть тем мастерской.','All six workshop themes.')
   return tr('Коллекционный значок поддержки. Можно выбрать для публичного профиля.','Collectible supporter badge for your public profile.')
  }
- function owned(p,a){return p.kind==='theme'?a?.themes?.includes(p.id):p.kind==='badge'?a?.badges?.includes(p.id):p.kind==='instruction'?a?.instructions?.includes('42215-1'):p.kind==='themeBundle'?Object.keys(themePrices).every(id=>a?.themes?.includes(id)):false}
+ function owned(p,a){return p.kind==='theme'?a?.themes?.includes(p.id):p.kind==='badge'?a?.badges?.includes(p.id):p.kind==='instruction'?a?.instructions?.includes(p.setId):p.kind==='themeBundle'?Object.keys(themePrices).every(id=>a?.themes?.includes(id)):false}
  function collectionArt(){
   const art=el('div','commerce-collection-art')
   for(const id of Object.keys(themePrices))art.append(themePreview(themeFor(id),language))
@@ -110,7 +110,7 @@ export function mountStore(root,{language='ru',signal}){
  }
  function render(){
   if(!catalog||signal.aborted)return
-  const a=account,products=[...catalog.products.map(p=>({id:p.sku,kind:'theme',title:p.title,priceKopecks:p.amountKopecks})),...commerceProducts,...(testMode?[{id:'instruction-42215-1',kind:'instruction',title:'Volvo 42215 · '+tr('интерактивные подсказки','interactive hints'),priceKopecks:17900}]:[])]
+  const a=account,products=[...catalog.products.map(p=>({id:p.sku,kind:'theme',title:p.title,priceKopecks:p.amountKopecks})),...commerceProducts,...(catalog.instructions??[])]
   for(const [id,b] of tabs){b.classList.toggle('primary',selected===id);b.setAttribute('aria-pressed',String(selected===id))}
   const adminTab=tabs.get('ledger');if(adminTab)adminTab.hidden=!ledger;
   notice.textContent=testMode?tr('ТЕСТ · Оплата без списания. Тестовые права администратора действуют до переключения кассы в боевой режим.','TEST · No charge. Administrator test entitlements apply until switching to live.'):catalog.live?tr('Оплата через ЮKassa.','Payment via YooKassa.'):tr('Оплата пока закрыта. Темы — первый ассортимент; остальные товары готовятся к выпуску.','Checkout closed. Themes are the first assortment; other products are in preparation.')
@@ -167,7 +167,7 @@ export function mountStore(root,{language='ru',signal}){
    if(!(a.orders??[]).length)grid.append(el('p','account-muted',t.noOrders))
    grid.append(link(tr('Перейти в мастерскую','Open workshop'),'#account'));return
   }
-  const ordered=['subscription','theme','themeBundle','storage','badge',...(testMode?['instruction']:[])]
+  const ordered=['subscription','theme','themeBundle','storage','badge']
   for(const kind of ordered){if(selected!=='all'&&selected!==kind)continue
    const section=el('section','store-orders commerce-store-section'),items=el('div','store-grid'),head=el('div','commerce-section-heading'),heading=el('div')
    const assortment=products.filter(p=>p.kind===kind)
