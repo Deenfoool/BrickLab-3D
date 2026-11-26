@@ -43,7 +43,7 @@ if (process.env.PGPASSWORD) {
     const testYookassa=createYookassaAdapter({store,origin})
     const fullCatalog=!!legal&&process.env.BRICKLAB_COMMERCE_FULL_CATALOG_OFFER_VERSION===legal.version
     payments=createPaymentsHandler({store,origin,config:paymentConfig(),legal,fullCatalog,commerceMode,liveYookassa,instructionPolicy,instructionRelease,yookassa:testYookassa,regions:createInstructionRegions(fileURLToPath(new URL('../catalog/sets/',import.meta.url)))})
-    security=createAccountSecurityHandler({store,origin,registrationEnabled,mail:createMailer()})
+    security=createAccountSecurityHandler({store,origin,registrationEnabled,mail:createMailer(),codeSecret:process.env.BRICKLAB_MAIL_KEY||undefined})
     auth = createAuthHandler({ store, origin: process.env.PUBLIC_ORIGIN || 'http://localhost:8080',
       registrationEnabled: registrationEnabled && new URL(origin).protocol==='http:',
       trustedProxyIp: process.env.BRICKLAB_TRUSTED_PROXY_IP || '' })
