@@ -1,4 +1,4 @@
-import {commerceBadge} from './commerce-visuals.js?v=merch-1'
+import {commerceBadge} from './commerce-visuals.js?v=merch-2'
 import {applySignature,themeBadge,themePlate,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {filterPortfolio,calendarDays,portfolioUuid} from './portfolio-model.js'
 import {productById} from './commerce-catalog.js'
