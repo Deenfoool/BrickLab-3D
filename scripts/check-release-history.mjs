@@ -63,21 +63,32 @@ function sourceAt(ref) {
   }
 }
 
-export function changedFiles(base, head) {
-  const status = git('diff','--no-renames','--name-status','-z',base,head).split('\0').filter(Boolean)
+export function parseChangedFiles(numstat, nameStatus) {
+  const status = nameStatus.split('\0').filter(Boolean)
   const added = new Set()
   for (let i=0;i<status.length;i+=2) if (status[i] === 'A') added.add(status[i+1])
-  return git('diff','--no-renames','--numstat','-z',base,head).split('\0').filter(Boolean).map(row => {
+  return numstat.split('\0').filter(Boolean).map(row => {
     const [a,d,...parts] = row.split('\t')
     const path = parts.join('\t')
     return {path, lines:(Number(a)||0)+(Number(d)||0), added:added.has(path)}
   })
 }
 
+export function changedFiles(base, head) {
+  return parseChangedFiles(git('diff','--no-renames','--numstat','-z',base,head),git('diff','--no-renames','--name-status','-z',base,head))
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const [base, head] = process.argv.slice(2)
-    if (base && head) {
+    if (base === '--snapshot') {
+      const [, previous, numstat, status] = process.argv.slice(2)
+      if (!previous || !numstat || !status) throw new Error('Usage: --snapshot BEFORE NUMSTAT STATUS')
+      const before = parseHistory(readFileSync(previous,'utf8'),{allowMissing:true})
+      const after = parseHistory(readFileSync(new URL('../'+historyPath,import.meta.url),'utf8'))
+      const count = checkChange(before,after,parseChangedFiles(readFileSync(numstat,'utf8'),readFileSync(status,'utf8')))
+      console.log('Release history check passed: '+count+' new entries')
+    } else if (base && head) {
       const before = parseHistory(sourceAt(base),{allowMissing:true})
       const after = parseHistory(sourceAt(head))
       const count = checkChange(before, after, changedFiles(base,head))
