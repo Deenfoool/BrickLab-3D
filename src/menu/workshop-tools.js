@@ -26,10 +26,15 @@ export function renderWorkshopTools({lang,local,remote,fetchCloud,signal}){
  for(const p of local)if(p.document?.parts?.length)select.add(new Option(p.document.name+' · '+tr('на устройстве','local'),'local:'+p.id))
  for(const p of remote)select.add(new Option(p.name+' · '+tr('облако','cloud'),'cloud:'+p.id))
  const option=(label,items)=>{const wrap=el('label'),s=el('select');wrap.append(el('span',null,label),s);for(const [value,title] of items)s.add(new Option(title,value));return {wrap,s}}
- const angle=option(tr('Ракурс','Angle'),[['iso',tr('Три четверти','Three quarters')],['front',tr('Спереди','Front')],['side',tr('Сбоку','Side')],['top',tr('Сверху','Top')]])
+ const angle=option(tr('Ракурс','Angle'),[['iso',tr('Три четверти','Three quarters')],['front',tr('Спереди','Front')],['side',tr('Сбоку','Side')],['top',tr('Сверху','Top')],['rear',tr('Сзади','Rear three quarters')],['left',tr('Слева','Left')]])
  const light=option(tr('Свет','Lighting'),[['studio',tr('Студийный','Studio')],['warm',tr('Тёплый','Warm')],['cool',tr('Холодный','Cool')]])
  const bg=option(tr('Фон','Background'),[['transparent',tr('Прозрачный','Transparent')],['dark',tr('Тёмная студия','Dark studio')],['light',tr('Светлая студия','Light studio')],['blue',tr('Чертёжный синий','Blueprint blue')]])
- const size=option(tr('Размер','Size'),[['1280','1280 × 720'],['1920','1920 × 1080']])
+ const size=option(tr('Длинная сторона','Long edge'),[['1280','1280 px'],['1920','1920 px']])
+ const aspect=option(tr('Формат кадра','Aspect ratio'),[['16:9','16:9'],['1:1','1:1'],['4:5','4:5'],['9:16','9:16'],['3:2','3:2']])
+ const framing=option(tr('Кадрирование','Framing'),[['normal',tr('Стандартное','Standard')],['close',tr('Крупно','Close')],['wide',tr('С отступом','Wide')]])
+ const layout=option(tr('Композиция','Layout'),[['single',tr('Один ракурс','Single view')],['sheet',tr('Лист из 4 ракурсов','Four-view sheet')]])
+ const shadowLabel=el('label'),shadow=el('input');shadow.type='checkbox';shadow.checked=true;shadowLabel.append(el('span',null,tr('Мягкая тень','Contact shadow')),shadow)
+ const captionLabel=el('label'),caption=el('input');caption.type='checkbox';captionLabel.append(el('span',null,tr('Название и число деталей','Title and part count')),caption)
  const button=(label,fn)=>{const b=el('button','workspace-action',label);b.type='button';b.onclick=fn;return b}
  let active=false,url=null
  function clear(){if(url){URL.revokeObjectURL(url);url=null}output.replaceChildren()}
@@ -43,25 +48,41 @@ export function renderWorkshopTools({lang,local,remote,fetchCloud,signal}){
  async function run(action){
   if(active||!select.value||signal.aborted)return
   active=true;photo.disabled=diagnose.disabled=select.disabled=true
+  for(const c of controls.querySelectorAll('select,input'))c.disabled=true
   clear();status.textContent=tr('Обрабатываем сборку…','Processing build…')
   try{const doc=await getDoc();if(!doc?.parts?.length)throw Error('empty');if(signal.aborted||!root.isConnected)return;await action(doc);if(!signal.aborted)status.textContent=''}
   catch{if(!signal.aborted)status.textContent=tr('Не удалось обработать сборку. Проверь наличие деталей и поддержку WebGL.','Could not process the build. Check its parts and WebGL support.')}
-  finally{active=false;select.disabled=false;photo.disabled=diagnose.disabled=!select.value}
+  finally{active=false;for(const c of controls.querySelectorAll('select,input'))c.disabled=false;photo.disabled=diagnose.disabled=!select.value}
  }
  const photo=button(tr('Создать фото','Create photo'),()=>run(async doc=>{
-  const w=Number(size.s.value),h=w*9/16
-  const {createProjectPreviewRenderer}=await import('../editor/project-preview.js?v=photo-studio-1')
-  if(signal.aborted)return
-  const renderer=createProjectPreviewRenderer({width:w,height:h,angle:angle.s.value,lighting:light.s.value,format:'png'})
+  const edge=Number(size.s.value),[aw,ah]=aspect.s.value.split(':').map(Number),w=Math.round(edge*aw/Math.max(aw,ah)),h=Math.round(edge*ah/Math.max(aw,ah)),sheet=layout.s.value==='sheet'
+  const tw=sheet?Math.floor(w/2):w,th=sheet?Math.floor(h/2):h
+  const {loadPartIndex,normalizeDocumentDesigns}=await import('../catalog/part-resolver.js?v=catalog-engine-1')
+  const {parts}=await import('../editor/parts.js?v=system-complete')
+  await loadPartIndex();signal.throwIfAborted()
+  const source=normalizeDocumentDesigns(doc,parts)
+  const {createProjectPreviewRenderer}=await import('../editor/project-preview.js?v=photo-studio-2')
+  signal.throwIfAborted()
+  const renderer=createProjectPreviewRenderer({width:tw,height:th,angle:angle.s.value,lighting:light.s.value,format:'png',shadow:shadow.checked,framing:framing.s.value})
+  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h
+  const ctx=canvas.getContext('2d')
+  const colors={dark:['#3b465b','#12161e'],light:['#fff','#cdd5e1'],blue:['#376185','#122843']}
+  if(bg.s.value!=='transparent'){const g=ctx.createLinearGradient(0,0,w,h),c=colors[bg.s.value]??colors.light;g.addColorStop(0,c[0]);g.addColorStop(1,c[1]);ctx.fillStyle=g;ctx.fillRect(0,0,w,h)}
+  const shots=sheet?['iso','front','side','top']:[angle.s.value]
+  const labels={iso:tr('Перспектива','Three quarters'),front:tr('Спереди','Front'),side:tr('Сбоку','Side'),top:tr('Сверху','Top')}
   let blob
-  try{blob=await renderer.render(doc,signal)}finally{renderer.dispose()}
-  if(!blob)throw Error('empty')
-  if(bg.s.value!=='transparent'){
-   const bitmap=await createImageBitmap(blob),canvas=document.createElement('canvas');canvas.width=w;canvas.height=h
-   try{const ctx=canvas.getContext('2d'),g=ctx.createLinearGradient(0,0,w,h),colors={dark:['#3b465b','#12161e'],light:['#fff','#cdd5e1'],blue:['#376185','#122843']}[bg.s.value]??['#fff','#ddd']
-    g.addColorStop(0,colors[0]);g.addColorStop(1,colors[1]);ctx.fillStyle=g;ctx.fillRect(0,0,w,h);ctx.drawImage(bitmap,0,0,w,h);blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'))
-   }finally{bitmap.close()}
-  }
+  try{
+   for(const [i,view] of shots.entries()){
+    signal.throwIfAborted();status.textContent=tr('Рендер кадра ','Rendering shot ')+(i+1)+'/'+shots.length
+    const image=await renderer.render(source,signal,{angle:view})
+    if(!image)throw Error('empty')
+    const bitmap=await createImageBitmap(image),x=sheet?(i%2)*tw:0,y=sheet?Math.floor(i/2)*th:0
+    try{ctx.drawImage(bitmap,x,y,tw,th)}finally{bitmap.close()}
+    if(sheet){ctx.font='600 '+Math.max(13,Math.round(edge/85))+'px system-ui';ctx.fillStyle=bg.s.value==='light'?'#243142':'#f5f7fa';ctx.strokeStyle=bg.s.value==='light'?'#fff':'#18202b';ctx.lineWidth=3;ctx.strokeText(labels[view],x+12,y+24);ctx.fillText(labels[view],x+12,y+24)}
+   }
+   if(caption.checked){const font=Math.max(15,Math.round(edge/65)),bar=font*2.7;ctx.fillStyle='rgba(20,26,34,.83)';ctx.fillRect(0,h-bar,w,bar);ctx.fillStyle='#fff';ctx.font='600 '+font+'px system-ui';ctx.fillText(String(source.name??'BrickLab').slice(0,100),font,h-bar+font*1.15,w-2*font);ctx.font=Math.round(font*.7)+'px system-ui';ctx.fillText('BRICKLAB · '+source.parts.length+' '+tr('деталей в проекте','parts in project'),font,h-font*.35,w-2*font)}
+   blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'))
+  }finally{renderer.dispose()}
   if(!blob||signal.aborted||!root.isConnected)return
   url=URL.createObjectURL(blob)
   const img=el('img','workshop-photo-preview');img.src=url;img.alt=doc.name
@@ -115,6 +136,6 @@ export function renderWorkshopTools({lang,local,remote,fetchCloud,signal}){
  }))
  photo.disabled=diagnose.disabled=true
  select.onchange=()=>{clear();status.textContent='';photo.disabled=diagnose.disabled=!select.value}
- controls.append(select,angle.wrap,light.wrap,bg.wrap,size.wrap,photo,diagnose)
+ controls.append(select,layout.wrap,angle.wrap,light.wrap,bg.wrap,size.wrap,aspect.wrap,framing.wrap,shadowLabel,captionLabel,photo,diagnose)
  root.append(controls,status,output);return root
 }
