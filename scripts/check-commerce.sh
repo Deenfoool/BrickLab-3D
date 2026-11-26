@@ -4,6 +4,8 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 REF="${1:-HEAD}"
 SHA=$(git rev-parse --verify "$REF^{commit}")
+BASE=$(git rev-parse --verify "${2:-HEAD}^{commit}")
+git merge-base --is-ancestor "$BASE" "$SHA"
 TMP=$(mktemp -d /tmp/bricklab-commerce-XXXXXX)
 DB="bricklab-commerce-check-$$"
 trap 'docker rm -f "$DB" >/dev/null 2>&1 || true; rm -rf -- "$TMP"' EXIT
@@ -11,6 +13,20 @@ git archive "$SHA" | tar -x -C "$TMP"
 chown -R 1000:1000 "$TMP"
 chmod 755 "$TMP"
 echo "=== TEST COMMIT: $SHA ==="
+echo "=== RELEASE HISTORY CHECK ==="
+mkdir -p "$TMP/.release-check"
+if git cat-file -e "$BASE:src/menu/home-hub.js" 2>/dev/null; then
+ git show "$BASE:src/menu/home-hub.js" > "$TMP/.release-check/before.js"
+else
+ : > "$TMP/.release-check/before.js"
+fi
+git diff --no-renames --numstat -z "$BASE" "$SHA" > "$TMP/.release-check/numstat"
+git diff --no-renames --name-status -z "$BASE" "$SHA" > "$TMP/.release-check/status"
+chmod 755 "$TMP/.release-check"
+chmod 644 "$TMP/.release-check/"*
+docker run --rm --network none --user 1000:1000 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local node scripts/check-release-history.mjs --snapshot .release-check/before.js .release-check/numstat .release-check/status
+rm -rf -- "$TMP/.release-check"
+
 python3 -m py_compile "$TMP/scripts/publish-legal.py" "$TMP/scripts/configure-commerce-telegram.py" "$TMP/scripts/configure-commerce-live.py" "$TMP/scripts/npd/configure.py" "$TMP/scripts/npd/worker.py" "$TMP/scripts/npd/operation.py" "$TMP/scripts/npd/test_operation.py"
 docker run --rm --user 1000:1000 -e npm_config_cache=/tmp/npm-cache -v "$TMP:/tests" -w /tests bricklab-test-runner:local sh -ec '
  npm ci --include=dev --ignore-scripts --no-audit --no-fund
