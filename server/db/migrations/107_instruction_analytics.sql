@@ -19,7 +19,7 @@ CREATE FUNCTION bricklab.record_instruction_activity(p_set text,p_event text) RE
  PERFORM pg_advisory_xact_lock(hashtextextended(uid::text,312043));
  IF (SELECT count(*) FROM bricklab.instruction_activity WHERE user_id=uid AND day=today)>=250 THEN RETURN; END IF;
  INSERT INTO bricklab.instruction_activity(user_id,set_id,event) VALUES(uid,p_set,p_event) ON CONFLICT DO NOTHING;
- END; $;
+ END; $$;
 CREATE FUNCTION bricklab.instruction_analytics() RETURNS jsonb
  LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
  DECLARE uid uuid; result jsonb;
@@ -44,6 +44,6 @@ CREATE FUNCTION bricklab.instruction_analytics() RETURNS jsonb
  'netKopecks',coalesce((SELECT sum(amount_kopecks) FROM paid WHERE status='succeeded'),0)
  ) INTO result;
  RETURN result;
- END; $;
+ END; $$;
 REVOKE ALL ON FUNCTION bricklab.record_instruction_activity(text,text),bricklab.instruction_analytics() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION bricklab.record_instruction_activity(text,text),bricklab.instruction_analytics() TO bricklab_app;
