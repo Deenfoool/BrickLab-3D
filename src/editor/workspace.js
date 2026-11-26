@@ -48,6 +48,7 @@ export function readWorkspace(raw, guided = false) {
   }
   return out
 }
+export const defaultRightPanels=guided=>[...(guided?['instruction']:[]),'inspector','scene-parts']
 export function mountWorkspace(root, { language, scene, signal, grid, axes, changePreference, hideSelection, openPhotoStudio, openCollaboration }) {
   const ru = language === 'ru'
   const tr = (r,e) => ru ? r : e
@@ -60,7 +61,7 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
   let raw
   try { raw=localStorage.getItem(KEY) } catch {}
   const settings=readWorkspace(raw,Boolean(panels.instruction))
-  const allRight= ['instruction','inspector','scene-parts'].filter(id=>panels[id])
+  const allRight=defaultRightPanels(Boolean(panels.instruction)).filter(id=>panels[id])
   settings.floating=false
   for(const m of ['build','kinematics'])settings.modes[m].floatRight=[...allRight]
   let mode='build', focus=false, presentation=false, gridOn=grid, axesOn=axes, saveState='initial', canPresent=true

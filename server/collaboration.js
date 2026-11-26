@@ -1,7 +1,9 @@
 import {createHash,randomBytes} from 'node:crypto'
 import {ProjectError,validateDocument,maxBody} from './projects.js'
+import {createAssembly} from '../src/editor/model.js?v=volvo-spur-gears'
 import {mergeShared,validateShared} from '../src/editor/shared-document.js'
 const hex=n=>randomBytes(n).toString('hex'),tokenPattern=/^[a-f0-9]{32}$/
+function verifiedGeometry(doc){const assembly=createAssembly(doc.parts,doc.connections,{belts:doc.belts??[]});if(assembly.connections.length!==doc.connections.length||assembly.belts.length!==(doc.belts??[]).length)throw Error('edit_conflict');return doc}
 const lifetime=8*3600000,idle=60*60000,presence=8000
 export function createCollaborationHandler({store,origin,clock=Date.now}){
  const rooms=new Map(),cookieName=new URL(origin).protocol==='https:'?'__Host-bricklab_session':'bricklab_session'
@@ -34,7 +36,7 @@ export function createCollaborationHandler({store,origin,clock=Date.now}){
    let room
    if(action==='create'){
     if(rooms.size>=12||[...rooms.values()].some(r=>r.owner===user.id))throw new ProjectError(409,'room_limit')
-    const document=validateShared(validateDocument(data.document))
+    const document=verifiedGeometry(validateShared(validateDocument(data.document)))
     room={id:hex(16),code:hex(16),owner:user.id,members:new Set([user.id]),clients:new Map(),document,revision:1,created:now,touched:now}
     touch(room,user,client,data,now);rooms.set(room.id,room);reply(res,201,view(room,user,client,now));return true
    }
@@ -53,9 +55,9 @@ export function createCollaborationHandler({store,origin,clock=Date.now}){
    touch(room,user,client,data,now)
    if(!Number.isSafeInteger(data.revision)||data.revision<1||data.revision>room.revision)throw new ProjectError(400,'invalid_revision')
    if(!Array.isArray(data.operations))throw new ProjectError(400,'invalid_change')
-   if(data.operations.length){const next=validateDocument(mergeShared(room.document,data.operations));room.document=next;room.revision++}
+   if(data.operations.length){const next=validateDocument(mergeShared(room.document,data.operations));if(data.operations.some(o=>['parts','connections','belts'].includes(o.field)))verifiedGeometry(next);room.document=next;room.revision++}
    reply(res,200,view(room,user,client,now,data.revision!==room.revision))
-  }catch(e){if(e instanceof ProjectError)reply(res,e.status,{error:e.message});else if(['edit_conflict','too_many_changes','invalid_change','invalid_shared_records','invalid_part'].includes(e.message))reply(res,e.message==='edit_conflict'?409:400,{error:e.message});else reply(res,503,{error:'collaboration_unavailable'})}
+  }catch(e){if(e instanceof ProjectError)reply(res,e.status,{error:e.message});else if(['edit_conflict','too_many_changes','invalid_change','invalid_shared_records','invalid_part','room_model_limit'].includes(e.message))reply(res,e.message==='edit_conflict'?409:400,{error:e.message});else reply(res,503,{error:'collaboration_unavailable'})}
   finally{active--}
   return true
  }

@@ -1,3 +1,4 @@
+import {parts as catalog} from './parts.js?v=system-complete'
 import {driveOutputs,estimateDrive,sourceFromMotion} from '../mechanics/drive-estimate.js'
 export function mountDriveEstimate(root,{language,signal,onFocus,onReport}){
  const ru=language==='ru',tr=(a,b)=>ru?a:b
@@ -8,7 +9,9 @@ export function mountDriveEstimate(root,{language,signal,onFocus,onReport}){
  const rpm=field(tr('Обороты входа, об/мин','Input no-load rpm'),100,-100000,100000,1),torque=field(tr('Макс. момент, Н·м','Input stall torque, N·m'),.18,0,10000,.01),eff=field(tr('КПД, %','Overall efficiency, %'),85,1,100,1)
  const source=el('p',undefined,'editor-transmission-note'),loadList=el('div',undefined,'editor-drive-loads')
  const button=(txt,fn)=>{const b=el('button',txt);b.type='button';b.addEventListener('click',fn,{signal});return b}
- const invalidate=()=>{if(last){last=null;onReport(null);result.replaceChildren(el('p',tr('Параметры изменены. Нажми «Рассчитать».','Parameters changed. Calculate again.')))}}
+ let timer
+ const invalidate=()=>{last=null;onReport(null);clearTimeout(timer);timer=setTimeout(calculate,160)}
+ signal.addEventListener('abort',()=>clearTimeout(timer),{once:true})
  form.addEventListener('input',invalidate,{signal});form.addEventListener('change',invalidate,{signal})
  const add=button(tr('Добавить нагрузку','Add load'),()=>{if(rows.length<8){addRow();calculate()}})
  const calc=button(tr('Рассчитать','Calculate'),calculate)
@@ -37,7 +40,7 @@ export function mountDriveEstimate(root,{language,signal,onFocus,onReport}){
    const list=el('div',undefined,'editor-drive-output-list')
    for(const p of last.outputs.slice(0,300)){
     const b=button((names.get(p.id)??p.id)+' · '+fmt(p.loadedRpm,1)+' '+tr('об/мин','rpm')+' · '+fmt(p.singleOutputStallTorque,3)+' N·m',()=>onFocus([p.id]))
-    b.title=tr('Оценка момента остановки при нагрузке только на этот выход','Estimated stall torque when only this output is loaded')
+    b.title=tr('Максимальный расчётный момент при остановке, если нагружена только эта деталь.','Estimated stall torque when only this output is loaded')
     list.append(b)
    }
    result.append(el('p',tr('Детали: скорость / макс. момент (по одной детали)','Outputs: loaded speed / single-output stall torque'),'editor-transmission-note'),list)
@@ -50,7 +53,7 @@ export function mountDriveEstimate(root,{language,signal,onFocus,onReport}){
   if(next===motion){root.hidden=!outputs.length;return}
   const available=driveOutputs(next)
   root.hidden=!available.length
-  motion=next;outputs=available;names=new Map(parts.map(p=>[p.id,p.design+' · '+p.id]));rows=[];loadList.replaceChildren();result.replaceChildren();last=null;onReport(null)
+  motion=next;outputs=available;names=new Map(parts.map((p,i)=>[p.id,(catalog[p.design]?.[language]??p.design)+' · №'+(i+1)]));rows=[];loadList.replaceChildren();result.replaceChildren();last=null;onReport(null)
   const motor=sourceFromMotion(motion)
   rpm.input.disabled=torque.input.disabled=Boolean(motor)
   rpm.wrap.hidden=torque.wrap.hidden=Boolean(motor)

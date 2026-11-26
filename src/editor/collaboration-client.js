@@ -12,14 +12,15 @@ export function mountCollaboration(root,{language,scene,signal,initial,onJoin,re
  const colors=['#7dcaff','#ffd476','#a8efb2','#e2a9ff','#ff9b9b','#86eee4','#f8d2a6','#b6b8ff']
  function renderCursors(){overlay.replaceChildren();if(!room||paused)return;const rect=scene.canvas.getBoundingClientRect();for(const p of participants){if(p.self||!p.cursor)continue;const point=scene.project(new Vector3(...p.cursor));if(!point.visible||point.clientX<rect.left||point.clientX>rect.right||point.clientY<rect.top||point.clientY>rect.bottom)continue;const marker=el('div','collaboration-cursor');marker.style.left=point.clientX+'px';marker.style.top=point.clientY+'px';marker.style.setProperty('--cursor-color',colors[parseInt(p.client.slice(0,2),16)%colors.length]);marker.append(el('span',null,p.name));overlay.append(marker)}}
  let raf
- function draw(){if(closed)return;if(room)renderCursors();raf=requestAnimationFrame(draw)}
- raf=requestAnimationFrame(draw)
+ let lastDraw=0
+ function draw(now){if(closed||!room)return;if(now-lastDraw>80){lastDraw=now;renderCursors()}raf=requestAnimationFrame(draw)}
+ function startDrawing(){cancelAnimationFrame(raf);raf=requestAnimationFrame(draw)}
  scene.canvas.addEventListener('pointermove',e=>{if(!room)return;try{const p=scene.pointer(e,false).ground;cursor=p?.toArray()??null}catch{cursor=null}},{signal})
  scene.canvas.addEventListener('pointerleave',()=>cursor=null,{signal})
  async function api(action,data={}){const response=await fetch('/api/collaboration/'+action,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},signal:AbortSignal.any([signal,AbortSignal.timeout(7000)]),body:JSON.stringify({client,...data})});const result=await response.json();if(!response.ok)throw Object.assign(Error(result.error??'unavailable'),{status:response.status});return result}
- function attach(value){room=value;baseline=value.document;revision=value.revision;participants=value.participants??[];paused=false;pending=null;updateBadge();schedule()}
+ function attach(value){room=value;baseline=value.document;revision=value.revision;participants=value.participants??[];paused=false;pending=null;updateBadge();startDrawing();schedule()}
  function pause(reason){paused=true;clearTimeout(timer);badge.title=reason;updateBadge();badge.title=reason;overlay.replaceChildren()}
- function schedule(delay=850){clearTimeout(timer);if(!closed&&room&&!paused)timer=setTimeout(tick,delay)}
+ function schedule(delay=500){clearTimeout(timer);if(!closed&&room&&!paused)timer=setTimeout(tick,delay)}
  async function tick(){
   if(closed||!room||paused||busy)return
   busy=true
@@ -38,7 +39,7 @@ export function mountCollaboration(root,{language,scene,signal,initial,onJoin,re
      const current=read(),merged=mergeShared(pending.document,sharedDelta(pending.sent,current))
      if(!sharedDelta(current,merged).length||await apply(merged,current)){baseline=pending.document;revision=pending.revision;pending=null}
    }}
-  }catch(e){if(!closed&&(e.status===409||e.status===404||e.status===401||['edit_conflict','invalid_part','invalid_shared_geometry','invalid_shared_records'].includes(e.message)))pause(tr('Конфликт или сессия недоступна. Локальная сборка сохранена. Выйди из сессии и присоединись заново.','Conflict or unavailable room. Local build retained. Leave and rejoin.'));else if(!closed){badge.textContent=tr('Связь потеряна…','Reconnecting…')}}
+  }catch(e){if(!closed&&(e.status===409||e.status===404||e.status===401||e.status===400||e.status===413||['edit_conflict','invalid_part','invalid_shared_geometry','invalid_shared_records'].includes(e.message)))pause(tr('Конфликт или сессия недоступна. Локальная сборка сохранена. Выйди из сессии и присоединись заново.','Conflict or unavailable room. Local build retained. Leave and rejoin.'));else if(!closed){badge.textContent=tr('Связь потеряна…','Reconnecting…')}}
   finally{busy=false;schedule()}
  }
  async function leave(closeRoom=false){
@@ -61,7 +62,7 @@ export function mountCollaboration(root,{language,scene,signal,initial,onJoin,re
     body.append(b(tr('Выйти из сессии','Leave session'),async()=>{await leave();dialog.close()}))
     if(room.owner)body.append(b(tr('Завершить для всех','End for everyone'),async()=>{if(!confirm(tr('Завершить сессию для всех участников?','End this session for everyone?')))return;try{await leave(true);dialog.close()}catch{status.textContent=tr('Не удалось завершить.','Could not end room.')}}))
    }else{
-    body.append(el('h3',null,tr('Совместная сборка','Collaborative build')),el('p',null,tr('Вход в аккаунт обязателен. Сессия временная; каждый участник сохраняет локальную копию.','Sign-in required. Rooms are temporary; each participant keeps a local copy.')))
+    body.append(el('h3',null,tr('Совместная сборка','Collaborative build')),el('p',null,tr('Вход в аккаунт обязателен. До 8 участников и 2000 деталей. Сессия временная; у каждого локальная копия.','Sign-in required. Up to 8 participants and 2000 parts. Temporary room; each participant keeps a local copy.')))
     const start=b(tr('Создать сессию из этой сборки','Start room from this build'),async()=>{start.disabled=true;try{if(!idle())throw Error('busy');attach(await api('create',{document:read()}));build()}catch(e){status.textContent=e.status===401?tr('Сначала войди в аккаунт.','Sign in first.'):tr('Не удалось создать сессию: ','Could not create room: ')+e.message}finally{start.disabled=false}})
     const input=el('input');input.placeholder=tr('Код приглашения','Invite code');input.maxLength=32
     const join=b(tr('Присоединиться в новой копии','Join in a new copy'),async()=>{join.disabled=true;try{const value=await api('join',{code:input.value.trim().toLowerCase()});if(!closed){dialog.close();onJoin(value.document,{room:value,client})}}catch(e){status.textContent=e.status===401?tr('Сначала войди в аккаунт.','Sign in first.'):tr('Не удалось войти в сессию. Проверь код.','Could not join. Check the code.');join.disabled=false}})
@@ -72,7 +73,7 @@ export function mountCollaboration(root,{language,scene,signal,initial,onJoin,re
   signal.addEventListener('abort',()=>dialog.remove(),{once:true})
  }
  badge.onclick=open
- if(room){participants=room.participants??[];updateBadge();schedule(850)}
+ if(room){participants=room.participants??[];updateBadge();startDrawing();schedule(850)}
  signal.addEventListener('abort',()=>{closed=true;clearTimeout(timer);cancelAnimationFrame(raf);overlay.remove();badge.remove()},{once:true})
  return {open}
 }

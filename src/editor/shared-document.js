@@ -35,6 +35,7 @@ export function mergeShared(document,operations){
  validateShared(next);return next
 }
 export function validateShared(doc){
+ if(doc.parts.length>2000||doc.connections.length>6000||(doc.belts??[]).length>100)throw Error('room_model_limit')
  const parts=mapOf('parts',doc.parts),links=mapOf('connections',doc.connections),belts=mapOf('belts',doc.belts??[]),gears=mapOf('gears',doc.gears??[])
  const vector=(v,n)=>Array.isArray(v)&&v.length===n&&v.every(x=>typeof x==='number'&&Number.isFinite(x)&&Math.abs(x)<1e7)
  for(const p of parts.values())if(typeof p.design!=='string'||p.design.length>80||!vector(p.position,3)||!vector(p.rotation,4)||p.rotation.every(x=>x===0))throw Error('invalid_part')

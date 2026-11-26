@@ -604,7 +604,7 @@ async function openSets() {
   const root = byId('sets-panel')
   root.textContent = strings().loadingLibrary
   try {
-    const { mountSetCatalog } = await import('../sets/catalog.js?v=feedback-1')
+    const { mountSetCatalog } = await import('../sets/catalog.js?v=feedback-3')
     if (controller.signal.aborted) return
     let initialQuery=pendingSetQuery;pendingSetQuery=''
     try{const target=sessionStorage.getItem('bricklab-instruction-return');if(/^\d{3,7}-\d{1,2}$/.test(target??'')){initialQuery=target;sessionStorage.removeItem('bricklab-instruction-return')}}catch{}
@@ -692,7 +692,7 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=feedback-2')
+    const { mountEditor } = await import('../editor/editor.js?v=feedback-3')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

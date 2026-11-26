@@ -6,7 +6,7 @@ import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'
 import { mountCablePanel } from './cable-panel.js'
 import { mountFloatingPanels } from './floating-panels.js?v=workspace-21'
-import { mountWorkspace } from './workspace.js?v=feedback-1'
+import { mountWorkspace } from './workspace.js?v=feedback-2'
 import { createEditorAudio } from './audio.js?v=editor-sound'
 import { mountMotorPanel } from './motor-panel.js'
 import { Plane, Quaternion, Vector3 } from 'three'
@@ -18,12 +18,12 @@ import { nearestDetent } from '../mechanics/axial.js?v=torque-clutch'
 import { nearbyConnections, translationSnaps } from './snap.js?v=volvo-spur-gears'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=system-complete'
 import { mountLibrary } from './library.js?v=catalog-engine-1'
-import { createScene } from './scene.js?v=collision-1'
+import { createScene } from './scene.js?v=feedback-2'
 import {mountTransmissionMap,transmissionMap,transmissionCodes} from './transmission-map.js'
 import {mountMotorBench} from './motor-bench-panel.js'
 import {mountCollaboration} from './collaboration-client.js'
 import {sharedDelta} from './shared-document.js'
-import {mountDriveEstimate} from './drive-estimate-panel.js'
+import {mountDriveEstimate} from './drive-estimate-panel.js?v=feedback-2'
 import {engineeringReport,downloadEngineeringReport} from './engineering-report.js'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
@@ -1563,7 +1563,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   function stepAnimation(time) {
     if (!frame) return
     if (!stepAnimation.previous) stepAnimation.previous = time
-    const speed = transmission?.playback ?? (transmission?.belts?.length || transmission?.tracks?.length ? 90 : 1.5)
+    const speed = transmission?.playback ?? 90
     angle += Math.min(50, time - stepAnimation.previous) * speed * motionSpeed / 1000
     stepAnimation.previous = time
     const limit = Number(el('angle').max)
@@ -2189,7 +2189,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     const missing=[...new Set(next.parts.map(p=>p.design))].filter(id=>!models.has(id))
     for(let i=0;i<missing.length;i+=4){await Promise.all(missing.slice(i,i+4).map(id=>prepareModel(parts[id])));if(signal.aborted)return false}
     if(!collaborationIdle()||sharedDelta(expected,currentDocument()).length)return false
-    const placed=loadParts(next,models),rebuilt=createAssembly(placed,next.connections,{belts:next.belts??[]})
+    const placed=next.parts,rebuilt=createAssembly(placed,next.connections,{belts:next.belts??[]})
     if(placed.length!==next.parts.length||rebuilt.connections.length!==next.connections.length||rebuilt.belts.length!==(next.belts??[]).length)throw Error('invalid_shared_geometry')
     undo.length=redo.length=0;el('name').value=next.name;driveConfig=next.testDrive
     applyState({parts:placed,links:next.connections,belts:next.belts??[],layers:readSceneLayers(next.sceneLayers,new Set(placed.map(p=>p.id)))})

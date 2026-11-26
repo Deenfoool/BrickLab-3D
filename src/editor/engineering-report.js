@@ -1,12 +1,11 @@
 // Export a reproducible, local-only engineering snapshot. No project geometry or account data.
-export function engineeringReport({name,driver,parts,connections,belts,hidden,importIssues,motion,drive,collisions,motorBench}){
+export function engineeringReport({name,driver,parts,connections,belts,hidden,importIssues,motion,drive,motorBench}){
  const spins=[...(motion?.spins??motion?.rotation?.spins??[])].map(([id,s])=>({id,ratio:Number.isFinite(s.ratio)?s.ratio:null,nonlinear:typeof s.angleAt==='function'}))
  const recommendations=[]
  if(importIssues.length)recommendations.push('Review rejected import records; they describe the original load, not the current model.')
  if(motion&&!motion.ok)recommendations.push('Review the solver constraint and connector alignment before applying power.')
  if(drive?.stalled)recommendations.push('Reduce assumed resistance or select a lower output speed ratio. Check motor power and efficiency.')
  if(drive&&!drive.sourceAvailable)recommendations.push('Check the selected motor supply and power, or manual source assumptions.')
- if(collisions?.samples.some(s=>s.pairs.length))recommendations.push('Locate suspect crossings and inspect clearances at those sampled positions.')
 
  return {format:'bricklab-engineering-report',version:1,createdAt:new Date().toISOString(),name,driver:driver??null,scope:{parts,connections,belts,hidden},importIssues,
   kinematics:motion?{ok:motion.ok===true,kind:motion.kind??'rotation',reason:motion.reason??null,range:motion.range??null,unit:motion.unit??'degree',spins}:null,

@@ -11,7 +11,7 @@ import { safeImage, validateSet } from './data.js?v=browser-recognition'
 import {
   discoverBooks, indexedBooks,
   instructionSources,
-} from './instruction-sources.js?v=browser-recognition'
+} from './instruction-sources.js?v=feedback-2'
 import {mountSandboxPack} from './sandbox-pack.js'
 import {instructionEvent} from './instruction-events.js'
 import { mountInstructionOffer } from './instruction-offer.js?v=welcome-1'
@@ -341,7 +341,7 @@ export async function mountSetCatalog(
     recommended.append(title,cards);recommended.hidden=false
   }
   const verifiedBooks=new Map()
-  async function withInstructions(items,request){
+  async function withInstructions(items,request,onBatch){
     const result=[]
     for(let offset=0;offset<items.length;offset+=4){
       request.throwIfAborted()
@@ -349,11 +349,11 @@ export async function mountSetCatalog(
         let books=sets.get(item.number)?.books??item.books
         if(!books?.length)books=verifiedBooks.get(item.number)
         if(!books?.length){try{books=await indexedBooks(item.number,request)}catch{request.throwIfAborted();books=[]}}
-        if(!books?.length){try{books=await discoverBooks(item.number,request)}catch{request.throwIfAborted();return null}}
+        if(!books?.length){try{books=await discoverBooks(item.number,AbortSignal.any([request,AbortSignal.timeout(10000)]))}catch{request.throwIfAborted();return null}}
         if(!books?.length)return null
         verifiedBooks.set(item.number,books);return {...item,books}
       }))
-      result.push(...batch.filter(Boolean))
+      const found=batch.filter(Boolean);result.push(...found);onBatch?.(found)
     }
     return result
   }
@@ -415,11 +415,11 @@ export async function mountSetCatalog(
     status.textContent = t.loading
     updateMore()
     let failed = false
+    const appendVerified=items=>{if(!signal.aborted&&generation===listGeneration){appendItems(items);resultCount.textContent=tr('Показано: ','Shown: ')+formatCount(displayed.size)}}
     try {
       if (localOffset < localItems.length) {
-        const items=await withInstructions(localItems.slice(localOffset,localOffset+pageSize),listController.signal)
+        await withInstructions(localItems.slice(localOffset,localOffset+pageSize),listController.signal,appendVerified)
         if(signal.aborted||generation!==listGeneration)return
-        appendItems(items)
         localOffset += pageSize
       } else if (hasRebrickable() && (!remoteStarted || nextPage)) {
         const cursor = nextPage
@@ -430,9 +430,8 @@ export async function mountSetCatalog(
           activeFilters,
         )
         if (signal.aborted || generation !== listGeneration) return
-        const items=await withInstructions(page.items,listController.signal)
+        await withInstructions(page.items,listController.signal,appendVerified)
         if(signal.aborted||generation!==listGeneration)return
-        appendItems(items)
         if (cursor) pages.add(cursor)
         nextPage = page.next && !pages.has(page.next) ? page.next : null
         remoteStarted = true
