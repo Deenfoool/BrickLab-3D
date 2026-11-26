@@ -8,7 +8,7 @@ CREATE FUNCTION bricklab.commerce_admin_ledger(p_environment text)
  BEGIN
  IF NOT bricklab.is_admin() THEN RAISE EXCEPTION 'admin_required'; END IF;
  IF p_environment NOT IN ('test','live') THEN RAISE EXCEPTION 'invalid_environment'; END IF;
- RETURN QUERY SELECT o.id,o.user_id,u.display_name,u.email,o.sku,o.title,o.amount_kopecks,o.status,o.receipt_status,o.receipt_reference,o.created_at,o.paid_at
+ RETURN QUERY SELECT o.id,o.user_id,u.display_name::text,u.email::text,o.sku,o.title,o.amount_kopecks,o.status,o.receipt_status,o.receipt_reference,o.created_at,o.paid_at
  FROM bricklab.commerce_orders o JOIN bricklab.users u ON u.id=o.user_id
  WHERE o.environment=p_environment ORDER BY o.created_at DESC LIMIT 100;
  END $$;
