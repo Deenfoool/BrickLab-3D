@@ -102,7 +102,7 @@ export function createInstructionRecognition(reader, set, signal) {
     const bookSignal = AbortSignal.any([controller.signal, signal])
     const key = Promise.all([reader.fingerprint(source), version]).then(([fingerprint, hash]) => {
       if (!fingerprint || !hash) return
-      return JSON.stringify(['regions-v3', set.number, hash, fingerprint])
+      return JSON.stringify(['regions-v4', set.number, hash, fingerprint])
     })
     active = { source, controller, signal: bookSignal, key, pages }
     return active
@@ -136,12 +136,16 @@ export function createInstructionRecognition(reader, set, signal) {
     const geometry = await reader.inspect(source, page, request)
     let surface = canvas
     const hasWords = () => geometry.words.some(({ text }) => mode ? element.test(text) : quantity.test(text))
-    if (!hasWords() && !geometry.wideScan) return []
+    // Inventory labels may be raster artwork even when the PDF also has vector text.
+    if (!hasWords() && !geometry.wideScan && !mode) return []
     if (!surface) {
       surface = document.createElement('canvas')
       await reader.render(source, page, surface, request)
     }
-    if (!hasWords()) geometry.words = await readText(surface, geometry, request)
+    if (!hasWords()) {
+      const recognized=await readText(surface,geometry,request)
+      geometry.words=[...geometry.words,...recognized.filter(word=>!geometry.words.some(old=>old.text===word.text&&Math.abs(old.box[0]-word.box[0])<3&&Math.abs(old.box[1]-word.box[1])<3))]
+    }
     if (!hasWords()) return []
     request.throwIfAborted()
     const bitmap = await createImageBitmap(surface)
@@ -163,7 +167,7 @@ export function createInstructionRecognition(reader, set, signal) {
     }
     const templates = []
     let emptyAfterInventory = 0
-    for (let page = book.pages; page > Math.max(0, book.pages - 24); page--) {
+    for (let page = book.pages; page > Math.max(0, book.pages - 36); page--) {
       book.signal.throwIfAborted()
       const items = await extract(book.source, page, null, true, book.signal)
       templates.push(...items)
