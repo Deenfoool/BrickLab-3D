@@ -2,8 +2,13 @@ import {projectAccount,plusLoyalty} from '../../src/menu/commerce-catalog.js'
 import {commerceQuote} from '../commerce-quote.js'
 import {ProjectError} from '../projects.js'
 
-export async function commerceEntitlements(tx,uid){
-    const rows=await tx`select g.id,g.kind,g.sku,g.target,g.granted_at as "grantedAt",g.expires_at as "expiresAt"
+export async function commerceEntitlements(tx,uid,environment='live'){
+    const rows=environment==='test'?await tx`select g.id,g.kind,g.sku,g.target,g.granted_at as "grantedAt",g.expires_at as "expiresAt"
+     from bricklab.commerce_grants g join bricklab.commerce_orders o on o.id=g.order_id and o.user_id=g.user_id
+     where g.user_id=${uid} and o.environment='test' and o.status='succeeded'
+       and g.revoked_at is null and (g.kind='subscription' or g.granted_at<=now())
+       and (g.kind='subscription' or g.expires_at is null or g.expires_at>now())
+     order by g.granted_at,g.id`:await tx`select g.id,g.kind,g.sku,g.target,g.granted_at as "grantedAt",g.expires_at as "expiresAt"
      from bricklab.commerce_grants g
      join bricklab.commerce_orders o on o.id=g.order_id and o.user_id=g.user_id
      where g.user_id=${uid} and o.environment='live' and o.status='succeeded'
@@ -27,8 +32,50 @@ async function liveQuote(tx,uid,sku,offerVersion,beta){
  const payments=await tx`select o.sku,o.amount_kopecks as "amountKopecks" from bricklab.commerce_orders o join bricklab.commerce_grants g on g.order_id=o.id and g.user_id=o.user_id where o.user_id=${uid} and o.environment='live' and o.status='succeeded' and g.kind='badge' and g.revoked_at is null`
  return {...commerceQuote(sku,account,payments,{beta}),offerVersion}
 }
+async function orderQuote(tx,uid,sku,offerVersion,beta,environment){
+ if(environment==='live')return liveQuote(tx,uid,sku,offerVersion,beta)
+ if(environment!=='test')throw new ProjectError(400,'invalid_environment')
+ const [admin]=await tx`select bricklab.is_admin() as ok`
+ if(!admin.ok)throw new ProjectError(403,'admin_required')
+ const [pending]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",offer_version as "offerVersion" from bricklab.commerce_orders where user_id=${uid} and environment='test' and status='pending' and sku=${sku} order by created_at desc limit 1`
+ if(pending){if(pending.offerVersion&&pending.offerVersion!==offerVersion)throw new ProjectError(409,'checkout_pending');return {...pending,offerVersion}}
+ const account=await commerceEntitlements(tx,uid,'test')
+ if(sku==='instruction-42215-1'){
+  if(account.instructions.includes('42215-1'))throw new ProjectError(409,'already_owned')
+  return {sku,title:'Интерактивные инструкции · Volvo 42215',amountKopecks:17900,offerVersion}
+ }
+ const payments=await tx`select o.sku,o.amount_kopecks as "amountKopecks" from bricklab.commerce_orders o join bricklab.commerce_grants g on g.order_id=o.id and g.user_id=o.user_id where o.user_id=${uid} and o.environment='test' and o.status='succeeded' and g.kind='badge' and g.revoked_at is null`
+ return {...commerceQuote(sku,account,payments,{beta}),offerVersion}
+}
 export function commerceStore(scope){
  return {
+  async quoteCommerce(uid,sku,offerVersion,beta,environment){return scope(uid,tx=>orderQuote(tx,uid,sku,offerVersion,beta,environment))},
+  async createCommerceOrder(uid,sku,amount,offerVersion,beta,environment){return scope(uid,async tx=>{
+   await tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text,312042))`
+   const quote=await orderQuote(tx,uid,sku,offerVersion,beta,environment)
+   if(quote.amountKopecks!==amount)throw new ProjectError(409,'quote_changed')
+   const [row]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",idempotency_key as "idempotencyKey",payment_id as "paymentId",created_at as "createdAt" from bricklab.commerce_create_order(${sku},${quote.title},${amount}::integer,${offerVersion},${environment})`
+   return row
+  })},
+  async requestCommerceRefund(uid,id,environment){return scope(uid,async tx=>{const [r]=await tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks",refund_requested_at as "requestedAt",provider_refund_id as "refundId" from bricklab.commerce_request_refund(${id}::uuid,${environment})`;return r})},
+  async attachCommerceRefund(id,refund,environment){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_attach_refund(${id}::uuid,${refund},${environment}) as ok`;return r.ok})},
+  async claimCommerceRefunds(environment){return scope('',tx=>tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks",provider_refund_id as "refundId" from bricklab.commerce_claim_refunds(${environment})`)},
+  async commerceAdminLedger(uid,environment){return scope(uid,tx=>tx`select * from bricklab.commerce_admin_ledger(${environment})`)},
+  async confirmCommerceReceiptCorrection(uid,id,reference){return scope(uid,async tx=>{const [r]=await tx`select bricklab.commerce_confirm_receipt_correction(${id}::uuid,${reference}) as ok`;return r.ok})},
+  async confirmCommerceReceipt(uid,id,reference){return scope(uid,async tx=>{const [r]=await tx`select bricklab.commerce_confirm_receipt(${id}::uuid,${reference}) as ok`;return r.ok})},
+  async requestCommerceTestRefund(uid,id){return scope(uid,async tx=>{const [r]=await tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks",refund_requested_at as "requestedAt",provider_refund_id as "refundId" from bricklab.commerce_request_test_refund(${id}::uuid)`;return r})},
+  async attachCommerceTestRefund(id,refund){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_attach_test_refund(${id}::uuid,${refund}) as ok`;return r.ok})},
+  async claimCommerceTestRefunds(){return scope('',tx=>tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks",provider_refund_id as "refundId" from bricklab.commerce_claim_test_refunds()`)},
+  async claimCommerceEvents(){return scope('',tx=>tx`select * from bricklab.commerce_claim_events()`)},
+  async ackCommerceEvent(id){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_ack_event(${id}::bigint) as ok`;return r.ok})},
+  async refundCommercePayment(payment,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_refund_full(${payment},${environment},${amount}::integer) as ok`;return r.ok})},
+  async commerceTestAccount(uid){return scope(uid,async tx=>{
+   const account=await commerceEntitlements(tx,uid,'test')
+   const orders=await tx`select id,sku,title,amount_kopecks as "amountKopecks",status,payment_id as "paymentId",refund_requested_at as "refundRequestedAt",provider_refund_id as "refundId",created_at as "createdAt",paid_at as "paidAt" from bricklab.commerce_orders where user_id=${uid} and environment='test' order by created_at desc limit 50`
+   return {...account,orders}
+  })},
+  async claimCommerceLivePayments(){return scope('',tx=>tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks" from bricklab.commerce_claim_live_payments()`)},
+  async claimCommerceTestPayments(){return scope('',tx=>tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks" from bricklab.commerce_claim_test_payments()`)},
   async quoteCommerceLive(uid,sku,offerVersion,beta=true){return scope(uid,tx=>liveQuote(tx,uid,sku,offerVersion,beta))},
   async createCommerceLiveOrder(uid,sku,expectedAmount,offerVersion,beta=true){return scope(uid,async tx=>{
    await tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text,312042))`
@@ -44,7 +91,7 @@ export function commerceStore(scope){
    return scope(uid,async tx=>{
     const account=await commerceEntitlements(tx,uid);
     const orders=await tx`select id,sku,title,amount_kopecks as "amountKopecks",status,
-     created_at as "createdAt",paid_at as "paidAt",refunded_at as "refundedAt"
+     created_at as "createdAt",paid_at as "paidAt",refunded_at as "refundedAt",payment_id as "paymentId",refund_requested_at as "refundRequestedAt"
      from bricklab.commerce_orders where user_id=${uid} and environment='live'
      order by created_at desc,id limit 50`;
     return {...account,orders};

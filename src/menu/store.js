@@ -1,8 +1,7 @@
 import {createProfileClient} from './profile-client.js?v=cloud-profile-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
-import {commerceProducts,themePrices} from './commerce-catalog.js?v=commerce-plus-2'
-import {mountCommercePreview} from './commerce-preview.js?v=commerce-1'
+import {commerceProducts,themePrices,instructionTiers,productById} from './commerce-catalog.js?v=commerce-plus-2'
 const labels={
  ru:{title:'BrickLab Store',intro:'Оформление мастерской. Основные функции редактора остаются бесплатными.',disabled:'Темы доступны для просмотра. Оплата откроется после подключения платёжной системы ЮKassa.',test:'Тестовый режим · реальные деньги не списываются. Покупки доступны только администратору.',login:'Войти в аккаунт',buy:'Тестовая покупка',owned:'Получено в тестовом инвентаре',resume:'Продолжить тестовую оплату',consent:'Подтверждаю, что это тестовая оплата без реального списания и без выдачи платного товара.',history:'Мои тестовые заказы',finance:'BrickLab Finance · тестовый режим',financeNote:'Суммы ниже — виртуальные тестовые операции, не выручка.',total:'Заказов',paid:'Подтверждено',amount:'Тестовый оборот',pending:'Ожидает подтверждения',complete:'Подтверждён',refresh:'Обновить статус',error:'Не удалось выполнить запрос. Попробуй ещё раз.',wait:'Если оплата завершена, дождись уведомления Robokassa и обнови статус.',profile:'Мой инвентарь',carbon:'Карбон',neon:'Неоновая мастерская',noOrders:'Заказов пока нет',loading:'Загрузка…'},
  en:{title:'BrickLab Store',intro:'Customize your workshop. Core editor features stay free.',disabled:'Themes are available to preview. Checkout opens after YooKassa is connected.',test:'Test mode · no real charges. Only administrators can test checkout.',login:'Sign in',buy:'Test purchase',owned:'Received in test inventory',resume:'Resume test payment',consent:'I understand this is a test transaction with no real charge or paid product delivery.',history:'My test orders',finance:'BrickLab Finance · test mode',financeNote:'Amounts below are simulated transactions, not revenue.',total:'Orders',paid:'Confirmed',amount:'Test volume',pending:'Awaiting confirmation',complete:'Confirmed',refresh:'Refresh status',error:'Request failed. Please try again.',wait:'If you completed payment, wait for Robokassa confirmation and refresh.',profile:'My inventory',carbon:'Carbon',neon:'Neon workshop',noOrders:'No orders yet',loading:'Loading…'}}
@@ -36,123 +35,122 @@ function communityExamples(theme,language){
  }return grid
 }
 export function mountStore(root,{language='ru',signal}){
- const t=labels[language]??labels.ru,ru=language==='ru',money=n=>(Number(n)/100).toLocaleString(language==='ru'?'ru-RU':'en-US',{style:'currency',currency:'RUB'})
- const banner=el('div','store-banner'),bannerText=el('div'),bannerArt=el('div','store-banner-art');bannerText.append(el('span','store-kicker','BRICKLAB / COLLECTION 01'),el('h2',null,ru?'Твоя мастерская. Твой стиль.':'Your workshop. Your style.'),el('p',null,ru?'Шесть уникальных тем для оформления профиля и публичной мастерской.':'Six distinct themes for your profile and public workshop.'));for(const id of ['carbon','neon','aurora'])bannerArt.append(themePreview(themeFor(id),language));banner.append(bannerText,bannerArt);
- const message=el('p','account-muted',t.loading),grid=el('div','store-grid'),ordersPanel=el('section','store-orders'),financePanel=el('section','store-orders')
- message.setAttribute('role','status');root.replaceChildren(banner,el('p','account-muted',t.intro),message,grid,ordersPanel,financePanel)
- const delivery=el('section','store-orders store-delivery');delivery.append(el('h2',null,ru?'Получение цифровой услуги':'Digital delivery'),el('p',null,ru?'Одна тема — одна разовая покупка. Доступ привязывается к аккаунту BrickLab 3D после подтверждения оплаты. Физической доставки нет. Купленную тему можно выбрать в разделе «Моя мастерская → Магазин и инвентарь» и применять повторно без новой оплаты.':'Each theme is a one-time purchase. Access is linked to your BrickLab 3D account after payment confirmation. No physical delivery. Choose your purchased theme in My workshop → Shop and inventory and reuse it without another payment.'),el('p','account-muted',ru?'Если заказ не появился в аккаунте, обратитесь в поддержку по реквизитам, указав номер заказа.':'If a purchase is missing, contact support using the seller details and provide the order number.'));
- const legalLinks=el('div','commerce-preview-nav');for(const [title,path] of [[ru?'Условия покупки':'Purchase terms','/offer'],[ru?'Получение и возврат':'Delivery and refunds','/refund'],[ru?'Конфиденциальность':'Privacy','/privacy'],[ru?'Контакты и реквизиты':'Seller details','/requisites']]){const a=link(title,path);a.target='_blank';a.rel='noopener';legalLinks.append(a)}delivery.append(legalLinks);root.append(delivery);
- const future=el('section');future.hidden=true;root.append(future)
- const sandbox=el('section','store-orders');sandbox.hidden=true;root.append(sandbox)
- void api('/api/commerce/test-status',signal).then(status=>{
-  if(signal.aborted||!status.enabled)return
-  sandbox.hidden=false;sandbox.append(el('h2',null,ru?'ЮKassa · тестовая оплата':'YooKassa · sandbox checkout'),el('p','account-muted',ru?'Только администратор. Реальных списаний и прав доступа нет.':'Admin only. No real charges or access rights.'))
-  const selector=el('select','account-field'),consent=el('input'),notice=el('p','account-muted');consent.type='checkbox';notice.setAttribute('role','status')
-  for(const p of [...commerceProducts,...Object.entries(themePrices).map(([id,priceKopecks])=>({id,title:themeFor(id)?.[language]??id,priceKopecks}))]){const option=el('option',null,p.title+' · '+money(p.priceKopecks));option.value=p.id;selector.append(option)}
-  const label=el('label','store-consent');label.append(consent,el('span',null,t.consent))
-  const checkout=button(ru?'Проверить ЮKassa':'Test YooKassa',async()=>{
-   if(!consent.checked||signal.aborted)return
-   checkout.disabled=true
-   try{const result=await api('/api/commerce/test-checkout',signal,{sku:selector.value,testConsent:true})
-    if(signal.aborted)return
-    if(result.mode!=='test')throw Error('Unexpected payment mode')
-    if(result.checkoutUrl){const u=new URL(result.checkoutUrl);if(u.protocol!=='https:'||!['yoomoney.ru','yookassa.ru','www.yoomoney.ru','www.yookassa.ru'].includes(u.hostname)||u.username||u.password||u.port)throw Error('Invalid checkout URL');location.assign(u.href)}
-    else notice.textContent=ru?'Тестовый заказ подтверждён. Реальные права не изменены.':'Test order confirmed. Live entitlements unchanged.'
-   }catch{if(!signal.aborted)notice.textContent=t.error}finally{checkout.disabled=!consent.checked}
-  });checkout.disabled=true;consent.onchange=()=>checkout.disabled=!consent.checked
-  sandbox.append(selector,label,checkout,notice)
- }).catch(()=>{})
+ const ru=language==='ru',t=labels[language]??labels.ru,tr=(a,b)=>ru?a:b,money=n=>(Number(n)/100).toLocaleString(ru?'ru-RU':'en-US',{style:'currency',currency:'RUB',maximumFractionDigits:2})
+ const profiles=createProfileClient(),nav=el('div','commerce-preview-nav'),grid=el('div','store-grid'),notice=el('p','account-muted'),summary=el('section','store-orders')
+ notice.setAttribute('role','status')
+ const categories=[['all',tr('Все товары','All products')],['subscription','BrickLab Plus'],['theme',tr('Темы','Themes')],['themeBundle',tr('Коллекции','Collections')],['storage',tr('Облачные проекты','Cloud projects')],['badge',tr('Значки','Badges')],['instruction',tr('Инструкции','Instructions')],['orders',tr('Мои покупки','My purchases')],['ledger',tr('Финансы','Finance')]]
+ const tabs=new Map(),header=el('div','store-banner'),heading=el('div'),art=el('div','store-banner-art')
+ heading.append(el('span','store-kicker','BRICKLAB STORE'),el('h2',null,tr('Расширь свою мастерскую','Expand your workshop')),el('p',null,tr('Темы, облачное пространство, коллекции и Plus. Основной редактор бесплатный.','Themes, cloud space, collections and Plus. The core editor is free.')))
+ for(const id of ['carbon','neon','aurora'])art.append(themePreview(themeFor(id),language));header.append(heading,art)
+ let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,testMode=false,busy=false,serial=0
+ try{if(sessionStorage.getItem('bricklab-commerce-return')==='1'){selected='orders';sessionStorage.removeItem('bricklab-commerce-return')}}catch{}
+ const refreshButton=button(tr('Обновить покупки','Refresh purchases'),()=>refresh())
+ for(const [id,label] of categories){const b=button(label,()=>{selected=id;render()});tabs.set(id,b);nav.append(b)}
+ nav.append(refreshButton)
+ const legal=el('section','store-orders'),links=el('div','commerce-preview-nav')
+ legal.append(el('h2',null,tr('Получение и условия','Delivery and terms')),el('p',null,tr('Цифровые покупки закрепляются за аккаунтом после подтверждения оплаты. Физической доставки нет. Доступ и историю заказов можно посмотреть в мастерской.','Digital purchases are linked to your account after confirmation. No physical delivery. View purchases in your workshop.')))
+ for(const [title,path] of [[tr('Оферта','Offer'),'/offer'],[tr('Получение и возврат','Refunds'),'/refund'],[tr('Конфиденциальность','Privacy'),'/privacy'],[tr('Реквизиты','Seller details'),'/requisites']]){const a=link(title,path);a.target='_blank';a.rel='noopener';links.append(a)}legal.append(links)
+ root.replaceChildren(header,nav,notice,summary,grid,legal)
+ const optional=path=>api(path,signal).catch(e=>{if(e.status===401||e.status===403)return null;throw e})
+ const safeUrl=value=>{const u=new URL(value);if(u.protocol!=='https:'||u.username||u.password||u.port||!['yoomoney.ru','yookassa.ru','www.yoomoney.ru','www.yookassa.ru'].includes(u.hostname))throw Error('checkout_url');return u.href}
+ function productTitle(p){return p.kind==='theme'?themeFor(p.id)?.[language]??p.id:p.kind==='storage'?tr(p.title,'+'+p.slots+' projects'):p.kind==='subscription'?'BrickLab Plus · '+p.months+tr(' мес.',' mo.'):p.title}
+ function description(p){
+  if(p.kind==='theme'){const theme=themeFor(p.id);return tr(theme.descriptionRu,theme.descriptionEn)}
+  if(p.kind==='storage')return tr('Дополнительно '+p.slots+' проектов и '+p.storageMiB+' МиБ хранения. Разовая покупка.','Adds '+p.slots+' projects and '+p.storageMiB+' MiB storage. One-time purchase.')
+  if(p.kind==='subscription')return tr('+40 проектов, +128 МиБ, 40 версий, значок Plus, одна тема на выбор, скидки. Продление вручную.','+40 projects, +128 MiB, 40 revisions, Plus badge, one theme and discounts. Manual renewal.')
+  if(p.kind==='instruction')return tr('Тест доступа к подсказкам набора Volvo 42215. В ОБТ остаётся бесплатным.','Sandbox access fixture for Volvo 42215. Free in open beta.')
+  if(p.kind==='themeBundle')return tr('Все шесть тем мастерской.','All six workshop themes.')
+  return tr('Коллекционный значок поддержки. Можно выбрать для публичного профиля.','Collectible supporter badge for your public profile.')
+ }
+ function owned(p,a){return p.kind==='theme'?a?.themes?.includes(p.id):p.kind==='badge'?a?.badges?.includes(p.id):p.kind==='instruction'?a?.instructions?.includes('42215-1'):p.kind==='themeBundle'?Object.keys(themePrices).every(id=>a?.themes?.includes(id)):false}
+ function showCheckout(p){
+  if(busy||signal.aborted)return
+  busy=true
+  const dialog=el('dialog','store-preview-dialog'),label=el('label','store-consent'),accept=el('input'),status=el('p','account-muted'),price=el('strong','store-price',money(p.priceKopecks))
+  accept.type='checkbox';label.append(accept,el('span',null,testMode?tr('Принимаю условия проверки. Тестовая оплата без списания; доступ только в режиме проверки.','I accept the test conditions. No charge; access only during testing.'):tr('Принимаю оферту и условия возврата.','I accept the offer and refund terms.')))
+  const mode=testMode?'test':'live';let quote=null
+  const pay=button(tr('Перейти к оплате','Proceed to payment'),async()=>{
+   if(!accept.checked||!quote)return;pay.disabled=true
+   try{
+    const result=await api('/api/commerce/checkout',signal,{sku:p.id,amountKopecks:quote.amountKopecks,offerVersion:quote.offerVersion,accepted:true,mode})
+    if(result.mode!==mode)throw Error('mode');if(result.checkoutUrl){const url=safeUrl(result.checkoutUrl);try{sessionStorage.setItem('bricklab-commerce-return','1')}catch{}location.assign(url);return}
+    status.textContent=result.status==='succeeded'?tr('Оплата подтверждена.','Payment confirmed.'):tr('Платёж отменён.','Payment canceled.');await refresh()
+   }catch(e){status.textContent=t.error+' ('+(e.status??'network')+')';pay.disabled=!accept.checked}
+  })
+  pay.disabled=true;accept.onchange=()=>pay.disabled=!accept.checked||!quote
+  const close=button(tr('Закрыть','Close'),()=>dialog.close())
+  dialog.append(el('h2',null,productTitle(p)),price,label,pay,close,status)
+  {const a=link(tr('Оферта','Offer'),'/offer');a.target='_blank';a.rel='noopener';dialog.append(a);void api('/api/commerce/quote?sku='+encodeURIComponent(p.id),signal).then(q=>{if(q.mode!==mode)throw Error('mode_changed');quote=q;price.textContent=money(q.amountKopecks);pay.disabled=!accept.checked}).catch(e=>status.textContent=t.error+' ('+(e.status??'network')+')')}
+  dialog.addEventListener('close',()=>{busy=false;dialog.remove()},{once:true});signal.addEventListener('abort',()=>{if(dialog.open)dialog.close()},{once:true});root.append(dialog);dialog.showModal()
+ }
+ function render(){
+  if(!catalog||signal.aborted)return
+  const a=account,products=[...catalog.products.map(p=>({id:p.sku,kind:'theme',title:p.title,priceKopecks:p.amountKopecks})),...commerceProducts,...(testMode?[{id:'instruction-42215-1',kind:'instruction',title:'Volvo 42215 · '+tr('интерактивные подсказки','interactive hints'),priceKopecks:17900}]:[])]
+  for(const [id,b] of tabs){b.classList.toggle('primary',selected===id);b.setAttribute('aria-pressed',String(selected===id))}
+  const adminTab=tabs.get('ledger');if(adminTab)adminTab.hidden=!ledger;
+  notice.textContent=testMode?tr('ТЕСТ · Оплата без списания. Тестовые права администратора действуют до переключения кассы в боевой режим.','TEST · No charge. Administrator test entitlements apply until switching to live.'):catalog.live?tr('Оплата через ЮKassa.','Payment via YooKassa.'):tr('Оплата пока закрыта. Темы — первый ассортимент; остальные товары готовятся к выпуску.','Checkout closed. Themes are the first assortment; other products are in preparation.')
+  grid.replaceChildren();summary.replaceChildren();summary.hidden=!a
+  if(a){summary.append(el('h2',null,tr('Мой аккаунт','My account')),el('p',null,tr('Проекты: ','Projects: ')+a.limits.projects+' · '+tr('Хранилище: ','Storage: ')+a.limits.storageMiB+' MiB · '+tr('Версии: ','Revisions: ')+a.limits.versions),el('p','account-muted','Plus: '+(a.plus?tr('до ','until ')+new Date(a.plusUntil).toLocaleDateString(language):tr('не активен','inactive'))+' · '+tr('Темы: ','Themes: ')+a.themes.length+' · '+tr('Значки: ','Badges: ')+a.badges.length))}
+  if(selected==='ledger'){
+   if(!ledger)return
+   const total=ledger.orders.filter(o=>o.status==='succeeded').reduce((sum,o)=>sum+o.amount_kopecks,0)
+   grid.append(el('h2',null,(testMode?tr('Тестовые оплаты (последние 100 записей): ','Sandbox payments (last 100 records): '):tr('Подтверждённые оплаты (последние 100 записей, до комиссии): ','Confirmed payments (last 100 records, before fees): '))+money(total)))
+   for(const o of ledger.orders){
+    const card=el('article','commerce-preview-card');card.append(el('h3',null,o.title),el('strong','store-price',money(o.amount_kopecks)),el('p','account-muted',o.display_name+' · '+o.email),el('small','account-muted',o.user_id),el('p',null,o.status),el('small','account-muted',o.id))
+    if(checkoutStatus?.enabled&&o.status==='succeeded'){
+     const refund=button(tr('Полный возврат','Full refund'),async()=>{if(!window.confirm((testMode?tr('Тестовый возврат ','Test refund '):tr('Вернуть реальные деньги ','Refund real money '))+money(o.amount_kopecks)+'?'))return;refund.disabled=true;try{const result=await api('/api/commerce/refund',signal,{orderId:o.id,confirm:true,mode:checkoutStatus.mode});await refresh();notice.textContent=tr('Возврат: ','Refund: ')+result.status}catch(e){notice.textContent=t.error+' ('+(e.status??'network')+')';refund.disabled=false}});card.append(refund)
+    }
+    if(!testMode&&o.status==='succeeded'&&o.receipt_status==='pending'){
+     card.append(el('p','account-muted',tr('Нужно сформировать чек в «Мой налог» и передать покупателю.','Create an NPD receipt externally and deliver it to the customer.')))
+     const input=el('input','account-field');input.placeholder=tr('Номер или ссылка чека','Receipt number or URL');input.maxLength=250
+     const confirm=button(tr('Чек выдан и отправлен','Receipt issued and sent'),async()=>{if(!input.value.trim()||!window.confirm(tr('Подтверждаешь, что реальный чек уже сформирован и передан покупателю?','Confirm that an actual receipt has been issued and delivered?')))return;confirm.disabled=true;try{await api('/api/commerce/admin-receipt',signal,{orderId:o.id,reference:input.value.trim(),confirm:true});await refresh()}catch{notice.textContent=t.error;confirm.disabled=false}})
+     card.append(input,confirm)
+    }else if(!testMode)card.append(el('p','account-muted',tr('Чек: ','Receipt: ')+o.receipt_status))
+    if(!testMode&&o.receipt_correction_pending){
+     card.append(el('p','account-muted',tr('После возврата требуется корректировка расчёта в «Мой налог».','Correct the fiscal record after the refund.')))
+     const input=el('input','account-field');input.placeholder=tr('Номер или основание корректировки','Correction reference');input.maxLength=250
+     const confirm=button(tr('Корректировка выполнена','Correction completed'),async()=>{if(!input.value.trim()||!window.confirm(tr('Подтвердить фактически выполненную корректировку в «Мой налог»?','Confirm that the fiscal correction is complete?')))return;confirm.disabled=true;try{await api('/api/commerce/admin-receipt-correction',signal,{orderId:o.id,reference:input.value.trim(),confirm:true});await refresh()}catch{notice.textContent=t.error;confirm.disabled=false}})
+     card.append(input,confirm)
+    }
 
- let serial=0,busy=false
- const profiles=createProfileClient()
- function ordersList(panel,title,orders){
-  panel.replaceChildren(el('h2',null,title))
-  if(!orders.length)panel.append(el('p','account-muted',t.noOrders))
-  for(const order of orders){const row=el('div','store-order-row');row.append(el('strong',null,'#'+order.invoice+' · '+(themeFor(order.sku)?.[language]??order.sku)),el('span',null,money(order.amountKopecks)),el('span','account-muted',order.status==='paid'?t.complete:t.pending));panel.append(row)}
+    grid.append(card)
+   }
+   return
+  }
+  if(selected==='orders'){
+   if(!a){grid.append(link(t.login,'#account'));return}
+   for(const o of a.orders??[]){const card=el('article','commerce-preview-card'),p=products.find(p=>p.id===o.sku);card.append(el('h3',null,p?productTitle(p):o.title),el('strong','store-price',money(o.amountKopecks)),el('p','account-muted',({pending:tr('Ожидает оплаты','Pending'),succeeded:tr('Оплачено','Paid'),canceled:tr('Отменено','Canceled'),refunded:tr('Возвращено','Refunded')})[o.status]??o.status),el('small','account-muted',o.id));if(o.status==='pending'&&p&&checkoutStatus?.enabled&&checkoutStatus.skus.includes(p.id))card.append(button(tr('Продолжить оплату','Resume checkout'),()=>showCheckout(p)));if(testMode&&o.status==='succeeded'){const refund=button(o.refundRequestedAt?tr('Проверить возврат','Check refund'):tr('Тестовый возврат','Test refund'),async()=>{if(!o.refundRequestedAt&&!window.confirm(tr('Вернуть всю тестовую сумму и отозвать приобретение?','Refund the full test amount and revoke the entitlement?')))return;refund.disabled=true;try{const result=await api('/api/commerce/refund',signal,{orderId:o.id,confirm:true,mode:checkoutStatus.mode});await refresh();notice.textContent=tr('Возврат: ','Refund: ')+result.status}catch(e){notice.textContent=t.error+' ('+(e.status??'network')+')';refund.disabled=false}});card.append(refund)}grid.append(card)}
+   if(!(a.orders??[]).length)grid.append(el('p','account-muted',t.noOrders))
+   grid.append(link(tr('Перейти в мастерскую','Open workshop'),'#account'));return
+  }
+  const ordered=['subscription','theme','themeBundle','storage','badge',...(testMode?['instruction']:[])]
+  for(const kind of ordered){if(selected!=='all'&&selected!==kind)continue
+   const section=el('section','store-orders'),items=el('div','store-grid');section.append(el('h2',null,categories.find(c=>c[0]===kind)[1]),items);section.style.gridColumn='1 / -1';grid.append(section)
+   for(const p of products.filter(x=>x.kind===kind)){
+    const card=el('article','store-product'),copy=el('div','store-product-body')
+    if(kind==='theme')card.append(themePreview(themeFor(p.id),language));else if(kind==='themeBundle'){const previews=el('div','store-banner-art');for(const id of ['carbon','neon','aurora'])previews.append(themePreview(themeFor(id),language));card.append(previews)}
+    if(kind==='badge')copy.append(el('span','commerce-support-badge support-'+p.id,p.title))
+    copy.append(el('h3',null,productTitle(p)),el('p','account-muted',description(p)),el('strong','store-price',money(p.priceKopecks)))
+    if(kind==='theme'){const theme=themeFor(p.id),dialog=el('dialog','store-preview-dialog');dialog.append(el('h2',null,productTitle(p)),themePreview(theme,language,true),communityExamples(theme,language),button(tr('Закрыть','Close'),()=>dialog.close()));copy.append(button(tr('Примерить','Preview'),()=>dialog.showModal()),dialog)}
+    const has=owned(p,a),available=checkoutStatus?.enabled&&checkoutStatus.skus.includes(p.id)||!a&&catalog.live&&catalog.liveSkus?.includes(p.id)
+    if(has)copy.append(el('p','account-muted',tr('Приобретено','Owned')))
+    if(kind==='theme'&&profile?.inventory?.some(i=>i.id===p.id&&i.owned)){const equip=button(tr('Применить','Equip'),async()=>{equip.disabled=true;try{const current=await profiles.get();await profiles.save({bio:current.profile.bio,cover:current.profile.cover,background:p.id});await refresh()}catch{notice.textContent=t.error;equip.disabled=false}});copy.append(equip)}
+    if(has&&kind!=='theme')copy.append(link(tr('Открыть мастерскую','Open workshop'),'#account'))
+    if(available&&(!has||kind==='storage'||kind==='subscription'))copy.append(button(tr('Купить','Buy'),()=>{if(!a){location.hash='#account';return}showCheckout(p)}))
+    else if(!available&&!has)copy.append(el('small','account-muted',kind==='theme'?tr('Оплата скоро','Checkout coming soon'):tr('Подготовка к выпуску','In preparation')))
+    card.append(copy);items.append(card)
+   }
+  }
+  if(selected==='all'||selected==='instruction'){
+   const section=el('section','store-orders');section.style.gridColumn='1 / -1';section.append(el('h2',null,tr('Интерактивные инструкции','Interactive instructions')),el('p','account-muted',tr('Во время ОБТ бесплатно. PDF и ручной поиск останутся бесплатными. Продажа отдельных наборов начнётся после проверки распознавания.','Free during open beta. PDF and manual search remain free. Individual sets launch after recognition audit.')))
+   let min=1;for(const [max,price] of instructionTiers){const row=el('div','commerce-preview-tier');row.append(el('span',null,min+'–'+(max===Number.MAX_SAFE_INTEGER?'∞':max)),el('strong',null,money(price)));section.append(row);min=max+1}grid.append(section)
+  }
  }
  async function refresh(){
-  const version=++serial;message.textContent=t.loading
-  try{
-   const catalog=await api('/api/store/catalog',signal)
-   const history=await api('/api/store/orders',signal).catch(e=>{if(e.status===401||e.status===403)return null;throw e})
-   if(signal.aborted||version!==serial)return
-   const admin=history!==null,items=history?.orders??[]
-   future.hidden=!admin;if(admin&&!future.childElementCount)mountCommercePreview(future,{language})
-   let profileData=await profiles.get().catch(e=>{if(!admin||e.status===401||e.status===403)return null;throw e})
-   if(signal.aborted||version!==serial)return
-   message.textContent=(admin?(ru?'Все платные темы доступны администратору бесплатно. ':'All paid themes are free for administrators. '):'')+(admin&&catalog.mode==='test'?t.test:catalog.live?(ru?'Оплата через ЮKassa.':'Payment via YooKassa.'):t.disabled)
-   grid.replaceChildren()
-   const consent=el('input');consent.type='checkbox'
-   const consentLabel=el('label','store-consent');consentLabel.append(consent,el('span',null,t.consent))
-   if(admin&&catalog.mode==='test')grid.append(consentLabel)
-   const controls=[],equipControls=[]
-   for(const product of catalog.products){
-    const theme=themeFor(product.sku);if(!theme)continue
-    const card=el('article','store-product'),preview=themePreview(theme,language),copy=el('div','store-product-body')
-    const order=items.find(o=>o.sku===product.sku)
-    const name=theme[language]??theme.en
-    const details=el('div','store-product-details');details.append(el('span','store-kicker',ru?'ТЕМА МАСТЕРСКОЙ':'WORKSHOP THEME'),el('h2',null,name),el('p','account-muted',ru?theme.descriptionRu:theme.descriptionEn),el('p','account-muted',signatureFor(theme.id)[language]??signatureFor(theme.id).en))
-    const dialog=el('dialog','store-preview-dialog'),header=el('div','store-preview-heading');header.append(el('h2',null,name),button(ru?'Закрыть':'Close',()=>dialog.close()))
-    dialog.append(header,themePreview(theme,language,true),el('p','account-muted',ru?'Демонстрационный профиль и условные показатели. Тема меняет обложку, рамку, статистику, карточки и бейдж автора. Публичный показ можно отключить. 3D-редактор не меняется.':'Sample profile and illustrative statistics. The theme changes the cover, frame, metrics, cards and author badge. Public display is optional. The 3D editor is unchanged.'),communityExamples(theme,language))
-    dialog.setAttribute('aria-label',name);signal.addEventListener('abort',()=>{if(dialog.open)dialog.close()},{once:true})
-    const owned=profileData?.inventory?.some(i=>i.id===product.sku&&i.owned===true),free=profileData?.inventory?.some(i=>i.id===product.sku&&i.adminAccess===true&&i.owned===true)
-    copy.append(details,button(ru?'Примерить тему':'Preview theme',()=>dialog.showModal()),el('strong','store-price',money(product.amountKopecks)),el('p','account-muted',ru?'Разовый доступ к оформлению аккаунта · без подписки':'One-time account theme access · no subscription'),dialog)
-    if(free)copy.append(el('p','account-muted',ru?'Доступ администратора':'Administrator access'))
-    if(owned){
-     const equip=button(ru?'Применить тему':'Equip theme',async()=>{
-      if(busy||signal.aborted)return
-      busy=true;equipControls.forEach(b=>b.disabled=true);controls.forEach(b=>b.disabled=true)
-      try{
-       const current=await profiles.get()
-       if(!current.inventory?.some(i=>i.id===product.sku&&i.owned===true))throw Error('Theme access unavailable')
-       if(signal.aborted)return
-       profileData=await profiles.save({bio:current.profile.bio,cover:current.profile.cover,background:product.sku})
-       if(!signal.aborted)await refresh()
-      }catch(e){if(!signal.aborted){message.textContent=t.error;equipControls.forEach(b=>b.disabled=b.dataset.equipped==='true');controls.forEach(b=>b.disabled=!consent.checked)}}finally{busy=false}
-     })
-     equip.classList.add('primary');equip.dataset.equipped=String(profileData.profile.background===product.sku);equip.disabled=equip.dataset.equipped==='true'
-     if(equip.disabled)equip.textContent=ru?'Тема применена':'Equipped'
-     equipControls.push(equip);copy.append(equip)
-    }
-    if(owned&&!free)copy.append(el('p','account-muted',ru?'В вашем инвентаре':'In your inventory'))
-    if(catalog.live&&!owned){
-     if(!profileData)copy.append(link(ru?'Войти для покупки':'Sign in to buy','#account'))
-     else {const pay=button(ru?'Купить тему':'Buy theme',async()=>{
-      if(busy||signal.aborted)return;busy=true;pay.disabled=true
-      try{const quote=await api('/api/commerce/live-quote?sku='+encodeURIComponent(product.sku),signal);if(signal.aborted)return;
-       const confirmation=el('dialog','store-preview-dialog'),label=el('label','store-consent'),accept=el('input');accept.type='checkbox';const price=el('strong','store-price',money(quote.amountKopecks));const confirm=button(ru?'Перейти к оплате':'Proceed to payment',async()=>{
-        if(!accept.checked||signal.aborted)return;confirm.disabled=true;try{const result=await api('/api/commerce/live-checkout',signal,{sku:product.sku,amountKopecks:quote.amountKopecks,offerVersion:quote.offerVersion,accepted:true});if(signal.aborted)return;if(result.mode!=='live')throw Error('Unexpected payment mode');if(result.checkoutUrl){const u=new URL(result.checkoutUrl);if(u.protocol!=='https:'||!['yoomoney.ru','yookassa.ru','www.yoomoney.ru','www.yookassa.ru'].includes(u.hostname)||u.username||u.password||u.port)throw Error('Invalid checkout URL');location.assign(u.href)}else{confirmation.close();await refresh()}}catch{message.textContent=t.error;confirm.disabled=!accept.checked}
-       });confirm.disabled=true;accept.onchange=()=>confirm.disabled=!accept.checked;label.append(accept,el('span',null,ru?'Принимаю условия оферты и порядок получения и возврата.':'I accept the offer and delivery/refund terms.'));const terms=el('div','commerce-preview-nav');for(const [title,path] of [[ru?'Оферта':'Offer','/offer'],[ru?'Возвраты':'Refunds','/refund']]){const a=link(title,path);a.target='_blank';a.rel='noopener';terms.append(a)}confirmation.append(el('h2',null,name),price,terms,label,confirm,button(ru?'Отмена':'Cancel',()=>confirmation.close()));confirmation.addEventListener('close',()=>{confirmation.remove();busy=false;pay.disabled=false},{once:true});signal.addEventListener('abort',()=>{if(confirmation.open)confirmation.close()},{once:true});root.append(confirmation);confirmation.showModal()
-      }catch{message.textContent=t.error;busy=false;pay.disabled=false}
-     });pay.classList.add('primary');copy.append(pay)}
-    }
-    if(order?.status==='paid')copy.append(el('p','account-muted',t.owned))
-    else if(admin&&catalog.mode==='test'){
-     const buy=button(order?t.resume:(ru?'Проверить тестовую оплату':'Test checkout'),async()=>{
-      if(busy||!consent.checked)return;busy=true;controls.forEach(b=>b.disabled=true)
-      try{
-       const result=await api('/api/store/orders',signal,{sku:product.sku,testConsent:true})
-       if(signal.aborted)return
-       if(result.checkoutUrl){const url=new URL(result.checkoutUrl);if(url.origin!=='https://auth.robokassa.ru'||url.pathname!=='/Merchant/Index.aspx'||url.searchParams.get('IsTest')!=='1')throw Error('Invalid test checkout');location.assign(url.href)}
-       else await refresh()
-      }catch(e){if(!signal.aborted)message.textContent=t.error}finally{busy=false;controls.forEach(b=>b.disabled=!consent.checked)}
-     });buy.disabled=true;controls.push(buy);copy.append(buy)
-    }
-    card.append(preview,copy);grid.append(card)
-   }
-   consent.onchange=()=>controls.forEach(b=>b.disabled=busy||!consent.checked)
-   ordersPanel.hidden=!admin;financePanel.hidden=!admin
-   if(admin){
-    ordersList(ordersPanel,t.history,items);ordersPanel.append(el('p','account-muted',t.wait),button(t.refresh,refresh),link(t.profile,'#account'))
-    const finance=await api('/api/store/finance',signal)
-    if(signal.aborted||version!==serial)return
-    financePanel.replaceChildren(el('h2',null,t.finance),el('p','account-muted',t.financeNote))
-    const metrics=el('div','store-metrics')
-    for(const [label,value] of [[t.total,finance.stats.total],[t.paid,finance.stats.paid],[t.amount,money(finance.stats.testKopecks)]]){const metric=el('div','store-metric');metric.append(el('span','account-muted',label),el('strong',null,value));metrics.append(metric)}
-    financePanel.append(metrics)
-    const list=el('div');ordersList(list,t.history,finance.orders);financePanel.append(list)
-   }else {ordersPanel.replaceChildren();financePanel.replaceChildren();if(!profileData)grid.append(link(t.login,'#account'))}
-  }catch(e){if(!signal.aborted&&version===serial){message.textContent=t.error;ordersPanel.hidden=true;financePanel.hidden=true;grid.replaceChildren(button(t.refresh,refresh))}}
+  const v=++serial;notice.textContent=t.loading
+  try{const [c,a,st,p]=await Promise.all([api('/api/store/catalog',signal),optional('/api/commerce/account'),optional('/api/commerce/status'),profiles.get().catch(()=>null)]);const adminLedger=st?.admin?await optional('/api/commerce/admin-ledger?environment='+st.mode):null;if(signal.aborted||v!==serial)return;catalog=c;account=a;checkoutStatus=st;profile=p;ledger=adminLedger;testMode=st?.mode==='test'&&st?.admin===true;if(selected==='ledger'&&!ledger)selected='all';render()}catch{if(!signal.aborted&&v===serial)notice.textContent=t.error}
  }
+ const timer=setInterval(()=>{if(!busy&&account?.orders?.some(o=>o.status==='pending'&&o.paymentId||o.status==='succeeded'&&o.refundRequestedAt))void refresh()},15000)
+ signal.addEventListener('abort',()=>clearInterval(timer),{once:true})
  void refresh()
 }

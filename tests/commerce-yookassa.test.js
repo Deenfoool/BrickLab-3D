@@ -44,3 +44,20 @@ test('hosted region files are no longer directly public',async t=>{
  assert.deepEqual(await regions('0-1','0',1),[])
  assert.ok(Array.isArray(await regions('42215-1','6592888',1)))
 })
+
+test('reconciliation uses GET only and verifies all order fields before fulfillment',async()=>{
+ const calls=[];let current=verified
+ const adapter=createYookassaAdapter({config,origin:'https://bricklab.test',store:{
+ fulfillCommercePayment:async(...args)=>{calls.push(['paid',...args]);return true},
+ cancelCommercePayment:async(...args)=>{calls.push(['cancel',...args]);return true}
+ },fetcher:async(url,opts)=>{assert.equal(opts.method,'GET');assert.equal(url,'https://api.yookassa.ru/v3/payments/'+payment);return Response.json(current)}})
+ const order={id,paymentId:payment,amountKopecks:24900}
+ current={...verified,status:'pending',paid:false};assert.equal(await adapter.reconcileTestPayment(order),'pending')
+ for(const invalid of [{...verified,test:false},{...verified,paid:false},{...verified,metadata:{order_id:payment}},{...verified,amount:{value:'1.00',currency:'RUB'}}]){
+ current=invalid;await assert.rejects(adapter.reconcileTestPayment(order))
+ }
+ assert.equal(calls.length,0)
+ current=verified;assert.equal(await adapter.reconcileTestPayment(order),'succeeded')
+ current={...verified,status:'canceled',paid:false};assert.equal(await adapter.reconcileTestPayment(order),'canceled')
+ assert.deepEqual(calls,[['paid',id,payment,'test',24900],['cancel',id,payment,'test',24900]])
+})

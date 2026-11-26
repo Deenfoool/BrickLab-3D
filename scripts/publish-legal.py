@@ -69,13 +69,32 @@ def prepare():
     print("Документы подготовлены для проверки:", REVIEW)
     print("Публикация и включение платежей не выполнены.")
 
-def publish():
+def prepare_catalog():
+    # Preserve the already-approved privacy/requisites, including VPS-only data.
+    manifest = json.loads((PRIVATE / 'approval.json').read_text(encoding='utf-8'))
+    if manifest.get('approved') is not True:
+        raise SystemExit('Сначала утвердите действующие документы.')
+    REVIEW.mkdir(mode=0o700, parents=True, exist_ok=True)
+    REVIEW.chmod(0o700)
+    for name in NAMES:
+        data = (LEGAL / (name + '.html')).read_bytes()
+        if hashlib.sha256(data).hexdigest() != manifest['files'][name]:
+            raise SystemExit('Контрольная сумма действующего документа не совпадает: ' + name)
+        if name in ('offer', 'refund'):
+            text = (ROOT / 'docs/legal-release' / (name + '.html')).read_text(encoding='utf-8')
+            data = text.replace('{{EFFECTIVE_DATE}}', datetime.now().strftime('%d.%m.%Y')).encode()
+        atomic(REVIEW / (name + '.html'), data, 0o600)
+    print('Расширенная оферта и возврат подготовлены:', REVIEW)
+
+def publish(full_catalog=False):
     pages = {}
     for name in NAMES:
         text = (REVIEW / (name + ".html")).read_text(encoding="utf-8")
         if not text.strip() or re.search(r"\{\{[A-Z_]+\}\}|ПРОЕКТ · НЕ УТВЕРЖДЕНО|не является действующей офертой", text, re.I):
             raise SystemExit("Нельзя публиковать незавершенный документ: " + name)
         pages[name] = text.encode()
+    if full_catalog and not all(x in pages["offer"].decode() for x in ("Signature Collection", "BrickLab Plus", "Founder’s Club", "Дополнительные облачные проекты")):
+        raise SystemExit("Расширенная оферта не подготовлена.")
     if input("После проверки всех четырех документов введите УТВЕРЖДАЮ: ").strip() != "УТВЕРЖДАЮ":
         raise SystemExit("Публикация отменена.")
     if not ENV.is_file():
@@ -105,6 +124,7 @@ def publish():
     updates = {
         "BRICKLAB_COMMERCE_APPROVAL_FILE": "/app/private-commerce/approval.json",
         "BRICKLAB_YOOKASSA_LIVE_ENABLED": "false",
+        "BRICKLAB_COMMERCE_FULL_CATALOG_OFFER_VERSION": hashlib.sha256(":".join(manifest["files"][name] for name in NAMES).encode()).hexdigest() if full_catalog else "",
     }
     for key, value in updates.items():
         env = re.sub(r"(?m)^\s*(?:export\s+)?" + re.escape(key) + r"\s*=.*\n?", "", env)
@@ -115,8 +135,15 @@ def publish():
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("action", choices=["prepare", "publish"])
+    p.add_argument("action", choices=["prepare", "publish", "prepare-catalog", "publish-catalog"])
     a = p.parse_args()
     if os.geteuid() != 0:
         raise SystemExit("Запустите от root на VPS.")
-    (prepare if a.action == "prepare" else publish)()
+    if a.action == "prepare-catalog":
+        prepare_catalog()
+    elif a.action == "publish-catalog":
+        publish(full_catalog=True)
+    elif a.action == "prepare":
+        prepare()
+    else:
+        publish()
