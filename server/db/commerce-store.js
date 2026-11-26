@@ -47,6 +47,7 @@ export function commerceStore(scope){
    const orders=await tx`select id,sku,title,amount_kopecks as "amountKopecks",status,payment_id as "paymentId",refund_requested_at as "refundRequestedAt",provider_refund_id as "refundId",created_at as "createdAt",paid_at as "paidAt" from bricklab.commerce_orders where user_id=${uid} and environment='test' order by created_at desc limit 50`
    return {...account,orders}
   })},
+  async claimCommerceLivePayments(){return scope('',tx=>tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks" from bricklab.commerce_claim_live_payments()`)},
   async claimCommerceTestPayments(){return scope('',tx=>tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks" from bricklab.commerce_claim_test_payments()`)},
   async quoteCommerceLive(uid,sku,offerVersion,beta=true){return scope(uid,tx=>liveQuote(tx,uid,sku,offerVersion,beta))},
   async createCommerceLiveOrder(uid,sku,expectedAmount,offerVersion,beta=true){return scope(uid,async tx=>{
