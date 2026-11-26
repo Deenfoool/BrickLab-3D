@@ -8,6 +8,8 @@ export function mountDriveEstimate(root,{language,signal,onFocus,onReport}){
  const rpm=field(tr('Обороты входа, об/мин','Input no-load rpm'),100,-100000,100000,1),torque=field(tr('Момент остановки, Н·м','Input stall torque, N·m'),.18,0,10000,.01),eff=field(tr('Общий КПД, %','Overall efficiency, %'),85,1,100,1)
  const source=el('p',undefined,'editor-transmission-note'),loadList=el('div',undefined,'editor-drive-loads')
  const button=(txt,fn)=>{const b=el('button',txt);b.type='button';b.addEventListener('click',fn,{signal});return b}
+ const invalidate=()=>{if(last){last=null;onReport(null);result.replaceChildren(el('p',tr('Параметры изменены. Нажми «Рассчитать».','Parameters changed. Calculate again.')))}}
+ form.addEventListener('input',invalidate,{signal});form.addEventListener('change',invalidate,{signal})
  const add=button(tr('Добавить нагрузку','Add load'),()=>{if(rows.length<8){addRow();calculate()}})
  const calc=button(tr('Рассчитать','Calculate'),calculate)
  function addRow(){
@@ -45,9 +47,9 @@ export function mountDriveEstimate(root,{language,signal,onFocus,onReport}){
  form.append(source,rpm.wrap,torque.wrap,eff.wrap,loadList,add,calc)
  details.append(summary,form,result,note);root.append(details)
  return {render(next,parts){
+  if(next===motion){root.hidden=!outputs.length;return}
   const available=driveOutputs(next)
   root.hidden=!available.length
-  if(next===motion)return
   motion=next;outputs=available;names=new Map(parts.map(p=>[p.id,p.design+' · '+p.id]));rows=[];loadList.replaceChildren();result.replaceChildren();last=null;onReport(null)
   const motor=sourceFromMotion(motion)
   rpm.input.disabled=torque.input.disabled=Boolean(motor)
