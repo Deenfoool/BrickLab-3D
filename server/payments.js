@@ -56,9 +56,10 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
  const instructionCatalog=new Map(indexedInstructionProducts.map(p=>[p.id,p]))
  const auditedProducts=new Map((instructionPolicy?.products??[]).map(p=>[p.id,p]))
  for(const [id,p] of auditedProducts)instructionCatalog.set(id,p)
- const liveInstructionProducts=instructionRelease&&fullCatalog?auditedProducts:new Map()
+ const effectiveInstructionRelease=commerceMode==='live'&&instructionRelease&&fullCatalog&&liveYookassa?.enabled===true&&!!legal?.version
+ const liveInstructionProducts=effectiveInstructionRelease?auditedProducts:new Map()
  const instructionFor=sku=> (commerceMode==='live'?liveInstructionProducts:instructionCatalog).get(sku)
- const instructionLocked=setId=>commerceMode==='live'&&instructionRelease&&liveInstructionProducts.has('instruction-'+setId)
+ const instructionLocked=setId=>effectiveInstructionRelease&&liveInstructionProducts.has('instruction-'+setId)
  const liveSkus=[...themeIds,...releasedProducts.map(p=>p.id),...liveInstructionProducts.keys()]
  const testSkus=[...themeIds,...commerceProducts.filter(p=>!p.betaOnly||!instructionRelease).map(p=>p.id),...instructionCatalog.keys()]
  const adapter=commerceMode==='live'?liveYookassa:yookassa
@@ -71,7 +72,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
   if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
   active++
   try{
-   if(path==='/api/store/catalog'&&req.method==='GET'){reply(res,200,{products:await store.storeCatalog(),instructions:[...instructionCatalog.values()],instructionRelease,mode:config.enabled?'test':'disabled',live:commerceMode==='live'&&liveYookassa?.enabled===true,liveSkus:commerceMode==='live'&&liveYookassa?.enabled===true?liveSkus:[]});return true}
+   if(path==='/api/store/catalog'&&req.method==='GET'){reply(res,200,{products:await store.storeCatalog(),instructions:[...instructionCatalog.values()],instructionRelease:effectiveInstructionRelease,mode:config.enabled?'test':'disabled',live:commerceMode==='live'&&liveYookassa?.enabled===true,liveSkus:commerceMode==='live'&&liveYookassa?.enabled===true?liveSkus:[]});return true}
    if(path==='/api/payments/robokassa/result'){
     if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
     if(!config.enabled)throw new ProjectError(503,'payments_disabled')
@@ -119,7 +120,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
      const viewer=commerceMode==='test'&&product?await session(req):null
      const test=viewer?.admin===true&&adapter?.enabled===true&&!!legal?.version
      const account=test?await store.commerceTestAccount(viewer.id):null
-     reply(res,200,{state:'free',beta:!instructionRelease,mode:commerceMode,product:test?product:null,canBuy:test&&!account?.instructions?.includes(setId),testOwned:account?.instructions?.includes(setId)===true});return true
+     reply(res,200,{state:'free',beta:!effectiveInstructionRelease,mode:commerceMode,product:test?product:null,canBuy:test&&!account?.instructions?.includes(setId),testOwned:account?.instructions?.includes(setId)===true});return true
     }
     const viewer=await session(req)
     if(!viewer){reply(res,200,{state:'signin',mode:commerceMode,product,trialSteps:instructionPolicy?.trialSteps?.(setId)??10});return true}
@@ -154,7 +155,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
     if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
     const viewer=await session(req);if(!viewer)throw new ProjectError(401,'unauthenticated')
-    if(commerceMode!=='live'||!instructionRelease)throw new ProjectError(409,'welcome_not_released')
+    if(!effectiveInstructionRelease)throw new ProjectError(409,'welcome_not_released')
     let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
     if(!data||Object.keys(data).length!==1||!(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.projectId??'')))throw new ProjectError(400,'invalid_project')
     const account=await store.earnFirstBuilder(viewer.id,data.projectId,doc=>{const id=completedInstructionSet(doc,instructionPolicy);return id&&instructionLocked(id)?id:null})
