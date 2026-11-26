@@ -1,16 +1,17 @@
-// Shared original vector insignia. Rendering only: ownership stays server-authoritative.
+// Shared vector insignia with official Lucide support glyphs. Rendering only: ownership stays server-authoritative.
 import {productById} from './commerce-catalog.js'
+import {supportIcons} from './commerce-lucide.js?v=merch-2'
 const NS='http://www.w3.org/2000/svg'
 const node=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
 const svgNode=(tag,attrs={})=>{const n=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,String(v));return n}
 const path=(d,cls)=>svgNode('path',{d,class:cls})
 const specs=Object.freeze({
- supporter:{code:'01',shape:'M32 4 55 17v30L32 60 9 47V17Z',mark:'M32 19 45 26v14L32 47 19 40V26Z M19 26l13 8 13-8 M32 34v13'},
- 'bronze-builder':{code:'02',shape:'M32 3 56 12v25Q53 51 32 61 11 51 8 37V12Z',mark:'M21 39h22v8H21z M17 30h30v8H17z M23 22h7v7h-7z M34 22h7v7h-7z'},
- 'silver-builder':{code:'03',shape:'M32 3 59 19v26L32 61 5 45V19Z',mark:'M19 42l13-24 13 24H19z M25 32h14 M32 18v24'},
- 'gold-builder':{code:'04',shape:'M32 2 42 9l13 2 3 13 4 8-4 8-3 13-13 2-10 7-10-7-13-2-3-13-4-8 4-8 3-13 13-2Z',mark:'M18 43 16 24l10 8 6-15 6 15 10-8-2 19Z M21 48h22'},
- 'diamond-patron':{code:'05',shape:'M32 2 61 22 51 49 32 62 13 49 3 22Z',mark:'M20 23h24l8 12-20 19-20-19z M20 23l12 31 12-31 M12 35h40 M26 23l-6 12m18-12 6 12'},
- 'founders-club':{code:'OBT',shape:'M32 2 45 8 58 8v14l4 10-4 10v14H45l-13 6-13-6H6V42L2 32l4-10V8h13Z',mark:'M32 15 36 26l12 2-9 8 3 12-10-6-10 6 3-12-9-8 12-2Z M15 51h8 M41 51h8'},
+ supporter:{code:'01',shape:'M32 4 55 17v30L32 60 9 47V17Z',icon:'heart-handshake'},
+ 'bronze-builder':{code:'02',shape:'M32 3 56 12v25Q53 51 32 61 11 51 8 37V12Z',icon:'hammer'},
+ 'silver-builder':{code:'03',shape:'M32 3 59 19v26L32 61 5 45V19Z',icon:'medal'},
+ 'gold-builder':{code:'04',shape:'M32 2 42 9l13 2 3 13 4 8-4 8-3 13-13 2-10 7-10-7-13-2-3-13-4-8 4-8 3-13 13-2Z',icon:'trophy'},
+ 'diamond-patron':{code:'05',shape:'M32 2 61 22 51 49 32 62 13 49 3 22Z',icon:'gem'},
+ 'founders-club':{code:'OBT',shape:'M32 2 45 8 58 8v14l4 10-4 10v14H45l-13 6-13-6H6V42L2 32l4-10V8h13Z',icon:'crown'},
  plus:{code:'PLUS',shape:'M32 3 57 17v30L32 61 7 47V17Z',mark:'M27 17h10v10h10v10H37v10H27V37H17V27h10Z'}
 })
 export function insigniaSpec(id){return Object.hasOwn(specs,id)?specs[id]:null}
@@ -23,7 +24,12 @@ export function insignia(id){
  for(const [offset,cls] of [['0%','metal-dark'],['23%','metal-highlight'],['43%','metal-accent'],['46%','metal-dark'],['80%','metal-accent'],['100%','metal-dark']])gradient.append(svgNode('stop',{offset,class:cls}))
  defs.append(gradient)
  const outer=path(spec.shape,'insignia-outer');outer.setAttribute('style','fill:url(#'+gradientId+')')
- svg.append(defs,outer,svgNode('path',{d:spec.shape,transform:'translate(5.12 5.12) scale(.84)',class:'insignia-inner'}),path('M12 18 32 7 52 18 M12 46 32 57 52 46','insignia-rim'),path(spec.mark,'insignia-glyph'))
+ svg.append(defs,outer,svgNode('path',{d:spec.shape,transform:'translate(3.84 3.84) scale(.88)',class:'insignia-inner'}))
+ if(spec.icon){
+  const glyph=svgNode('g',{class:'insignia-lucide',transform:'translate(14 14) scale(1.5)','data-icon':spec.icon,fill:'none',stroke:'currentColor','stroke-width':2,'stroke-linecap':'round','stroke-linejoin':'round'})
+  for(const [tag,attrs] of supportIcons[spec.icon])glyph.append(svgNode(tag,attrs))
+  svg.append(glyph)
+ }else svg.append(path(spec.mark,'insignia-glyph'))
  return svg
 }
 export function commerceBadge(id){
