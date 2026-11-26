@@ -13,7 +13,7 @@ import {
   instructionSources,
 } from './instruction-sources.js?v=browser-recognition'
 import {instructionEvent} from './instruction-events.js'
-import { mountInstructionOffer } from './instruction-offer.js?v=sets-refresh-1'
+import { mountInstructionOffer } from './instruction-offer.js?v=welcome-1'
 const storageKey = 'bricklab.sets.v1'
 export const setStrings = (language) =>
   language === 'ru'
