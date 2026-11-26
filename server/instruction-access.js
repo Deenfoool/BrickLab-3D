@@ -10,6 +10,14 @@ function bookId(book){
  const canonical=canonicalInstructionUrl(book)
  return canonical?new URL(canonical).pathname.match(/\/(\d+)\.pdf$/)?.[1]??null:null
 }
+// Checks a saved project against the audited finishing milestone, not geometry correctness.
+export function completedInstructionSet(doc,policy){
+ const progress=doc?.buildingSet,set=progress?.set,rule=policy?.completion?.(set?.number)
+ if(!rule||!Array.isArray(doc.parts)||!Number.isInteger(progress.book)||!Array.isArray(set.books)||progress.book!==set.books.length-1)return null
+ if(bookId(set.books[progress.book]?.url)!==rule.book||!Number.isInteger(progress.page)||progress.page<rule.page)return null
+ const ids=new Set(doc.parts.filter(p=>p&&typeof p.id==='string'&&p.id&&typeof p.design==='string'&&p.design).map(p=>p.id))
+ return ids.size>=rule.partCount?set.number:null
+}
 export function createInstructionPolicy(audit={}){
  const books=new Map(),products=[],limits=new Map(),completion=new Map()
  for(const [set,volumes] of Object.entries(audit)){
