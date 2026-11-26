@@ -6,6 +6,7 @@ import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'
 import { mountCablePanel } from './cable-panel.js'
 import { mountFloatingPanels } from './floating-panels.js?v=workspace-21'
+import { bindPartContextInput } from './part-context-input.js?v=context-pages-1'
 import { mountWorkspace } from './workspace.js?v=menu-studio-2'
 import { createEditorAudio } from './audio.js?v=editor-sound'
 import { mountMotorPanel } from './motor-panel.js'
@@ -362,7 +363,6 @@ export async function mountEditor(root, { document, projectId, language, save, d
   let snapEnabled = readPreference('snap') !== 'off'
   let steppedRotation = readPreference('rotationSnap') !== 'off'
   let grab
-  let rightDown
   let gizmoPart
   let ignoreGizmoClick = false
   let movesExisting = false
@@ -551,7 +551,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   function toggleLocked(){if(!editing()||!selectionIds().length)return;const ids=new Set(state.layers.lockedPartIds??[]),unlock=selectionIds().every(id=>ids.has(id));for(const id of selectionIds())unlock?ids.delete(id):ids.add(id);commitLayers({lockedPartIds:[...ids]})}
   function selectMatching(byColor=false){if(!editing()||!selectedPart())return;const p=selectedPart(),color=x=>String(x.color??parts[x.design]?.color).toLowerCase();selectParts(state.parts.filter(x=>!hidden.has(x.id)&&(byColor?color(x)===color(p):x.design===p.design)).map(x=>x.id))}
   function focusSelection(){scene.focus(selectionIds())}
-  function openInstruction(){if(!editing()||!state.parts.length)return;void import('./instruction-studio.js?v=installation-1').then(({openInstructionStudio})=>{if(!signal.aborted)openInstructionStudio({document:currentDocument(),selection:selectionIds(),language,signal,partsCatalog:parts,models,save:steps=>{customInstructions=structuredClone(steps);return persist(true)}})}).catch(()=>{setMessage(tr('Не удалось открыть студию инструкций. Проверь загрузку геометрии (до 2000 деталей).','Could not open Instruction Studio. Check geometry loading (up to 2000 parts).'));render()})}
+  function openInstruction(){if(!editing()||!state.parts.length)return;void import('./instruction-studio.js?v=context-pages-1').then(({openInstructionStudio})=>{if(!signal.aborted)openInstructionStudio({document:currentDocument(),selection:selectionIds(),language,signal,partsCatalog:parts,models,save:steps=>{customInstructions=structuredClone(steps);return persist(true)}})}).catch(()=>{setMessage(tr('Не удалось открыть студию инструкций. Проверь загрузку геометрии (до 2000 деталей).','Could not open Instruction Studio. Check geometry loading (up to 2000 parts).'));render()})}
   function showPowerFlow(play=false){if(!selectedPart()||dragActive())return;if(mode!=='kinematics')setMode('kinematics');workspaceUI.openPanel('inspector');if(transmission?.ok){if(!mapUI.enabled)el('transmissionMap').querySelector('button').click();if(play&&!el('play').hidden&&!el('play').disabled)el('play').click()}else if(hinge?.ok){setMessage(tr('Для этого соединения доступен угол поворота.','This joint has an angle control.'));render()}else{setMessage(tr('Передача вращения не обнаружена.','No rotational transmission detected.'));render()}}
   function choiceDialog(title,fill){if(window.document.querySelector('dialog[open]'))return;const d=window.document,dialog=d.createElement('dialog');dialog.className='bricklab-choice';const h=d.createElement('h2');h.textContent=title;const status=d.createElement('p');status.setAttribute('role','status');const body=d.createElement('div');body.className='bricklab-choice-body';const close=d.createElement('button');close.type='button';close.textContent=tr('Закрыть','Close');close.onclick=()=>dialog.close();dialog.append(h,status,body,close);dialog.addEventListener('close',()=>{scene.setGhost(null);dialog.remove()},{once:true});signal.addEventListener('abort',()=>dialog.remove(),{once:true});d.body.append(dialog);dialog.showModal();fill({dialog,body,status,button:(label,run)=>{const b=d.createElement('button');b.type='button';b.textContent=label;b.onclick=run;return b}})}
   async function openSmartConnect(){if(!editing()||selectionIds().length!==2)return;if(state.parts.length>2000){setMessage(tr('Smart Connect доступен до 2000 деталей.','Smart Connect supports up to 2000 parts.'));render();return}const before=state,[a,b]=selectionIds().map(id=>state.parts.find(p=>p.id===id));const loose=p=>!locked(p.id)&&!state.links.some(l=>l.shaft.part===p.id||l.socket.part===p.id)&&!state.belts.some(l=>l.a.part===p.id||l.b.part===p.id);const moving=a&&b?(loose(a)?a:loose(b)?b:null):null,fixed=moving===a?b:a;if(!moving){setMessage(tr('Для Smart Connect одна деталь должна быть свободной и незаблокированной.','Smart Connect needs one loose, unlocked part.'));render();return}
@@ -1731,7 +1731,24 @@ export async function mountEditor(root, { document, projectId, language, save, d
       event.stopImmediatePropagation()
     }
   }, true)
-  on(scene.canvas, 'contextmenu', event => event.preventDefault())
+  function openPartContext(event) {
+    if(mode!=='build'||dragActive()||pendingPart)return false
+    const hit=scene.pointer(event).hit
+    if(!hit)return false
+    if(!selectionIds().includes(hit))selectClick(hit)
+    // Keep the basic menu usable even if an optional engineering command fails.
+    context.hidden=false;mirrorAxes.hidden=true
+    context.querySelector('[data-action=mirror]')?.setAttribute('aria-expanded','false')
+    try{refreshContext()}catch(error){context.querySelectorAll('[data-smart-context]').forEach(n=>n.remove());console.error('Part context:',error)}
+    positionContext(event.clientX,event.clientY)
+    context.querySelector('button:not(:disabled)')?.focus({preventScroll:true})
+    return true
+  }
+  bindPartContextInput({root,viewport:el('viewport'),menu:context,events:window,signal,
+    enabled:()=>!simulating(mode)&&!root.hasAttribute('data-workspace-presentation'),
+    open:openPartContext,
+    release:(event,click)=>{if(click){if(!openPartContext(event)){cancelGizmo();cancelPlacement()}}else if(moving)updatePointer(event)}
+  })
   on(context, 'click', event => {
     const button = event.target.closest('button')
     if (!button) return
@@ -1881,15 +1898,10 @@ export async function mountEditor(root, { document, projectId, language, save, d
   })
   on(scene.canvas, 'pointermove', event => {
     if (!simulating(mode)) pointer = event
-    if (rightDown && Math.hypot(event.clientX - rightDown[0], event.clientY - rightDown[1]) >= 5) rightDown = null
   }, true)
   on(scene.canvas, 'pointerdown', event => {
     if (simulating(mode) || root.hasAttribute('data-workspace-presentation')) return
-    if (event.button === 2) {
-      cancelBoxSelection()
-      rightDown = [event.clientX, event.clientY]
-      return
-    }
+    if (event.button === 2) { cancelBoxSelection(); return }
     if (event.button !== 0) return
     if (!gizmoPart) ignoreGizmoClick = false
     scene.canvas.focus({ preventScroll: true })
@@ -1957,26 +1969,6 @@ export async function mountEditor(root, { document, projectId, language, save, d
   })
   on(scene.canvas, 'pointerup', event => {
     if (simulating(mode) || root.hasAttribute('data-workspace-presentation')) return
-    if (event.button === 2) {
-      if (rightDown && Math.hypot(event.clientX - rightDown[0], event.clientY - rightDown[1]) < 5) {
-        const hit = scene.pointer(event).hit
-        if (mode === 'build' && !dragActive() && !pendingPart && hit) {
-          if(!selectionIds().includes(hit))selectClick(hit)
-          refreshContext()
-          context.hidden = false
-          mirrorAxes.hidden = true
-          context.querySelector('[data-action=mirror]').setAttribute('aria-expanded', 'false')
-          positionContext(event.clientX, event.clientY)
-          context.querySelector('button:not(:disabled)')?.focus()
-          rightDown = null
-          return
-        }
-        cancelGizmo()
-        cancelPlacement()
-      } else if (moving) updatePointer(event)
-      rightDown = null
-      return
-    }
     if (event.button !== 0) return
     if (boxSelection?.pointerId === event.pointerId) {
       const bounds = updateSelectionFrame(event)
@@ -2031,7 +2023,6 @@ export async function mountEditor(root, { document, projectId, language, save, d
   on(scene.canvas, 'pointercancel', () => {
     if (simulating(mode)) return
     pointerDown = null
-    rightDown = null
     drag = null
     ignoreGizmoClick = false
     cancelGizmo()

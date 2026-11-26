@@ -4,7 +4,7 @@ import { safeImage } from '../sets/data.js?v=catalog-engine-1'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
 import { locales } from './locale.js?v=store-1'
 import {mountStore} from './store.js?v=welcome-1'
-import { mountHomeHub, mountHubSearch } from './home-hub.js?v=release-history-30'
+import { mountHomeHub, mountHubSearch } from './home-hub.js?v=context-pages-1'
 import { createAuthClient } from './auth-client.js?v=live-polish-1'
 import { createCommunityClient } from './community-client.js?v=community-options-1'
 import { createProjectsClient,cloudLink,mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
@@ -694,7 +694,7 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=installation-1')
+    const { mountEditor } = await import('../editor/editor.js?v=context-pages-1')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
