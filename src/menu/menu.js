@@ -3,10 +3,10 @@ import { mountBugReport } from '../feedback/dialog.js?v=events-1'
 import { safeImage } from '../sets/data.js?v=catalog-engine-1'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
 import { locales } from './locale.js?v=store-1'
-import {mountStore} from './store.js?v=sets-refresh-1'
+import {mountStore} from './store.js?v=welcome-1'
 import { mountHomeHub, mountHubSearch } from './home-hub.js?v=signature-art-1'
 import { mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=merch-2'
+import { createCloudAccount } from './account.js?v=welcome-1'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -602,7 +602,7 @@ async function openSets() {
   const root = byId('sets-panel')
   root.textContent = strings().loadingLibrary
   try {
-    const { mountSetCatalog } = await import('../sets/catalog.js?v=sets-refresh-1')
+    const { mountSetCatalog } = await import('../sets/catalog.js?v=welcome-1')
     if (controller.signal.aborted) return
     let initialQuery=pendingSetQuery;pendingSetQuery=''
     try{const target=sessionStorage.getItem('bricklab-instruction-return');if(/^\d{3,7}-\d{1,2}$/.test(target??'')){initialQuery=target;sessionStorage.removeItem('bricklab-instruction-return')}}catch{}
