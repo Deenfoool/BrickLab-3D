@@ -50,7 +50,7 @@ CREATE FUNCTION bricklab.commerce_fiscal_finish(p_order uuid,p_action text,p_uui
  IF NOT FOUND THEN RETURN false; END IF;
  INSERT INTO bricklab.commerce_events(order_id,event) VALUES(p_order,CASE p_action WHEN 'issue' THEN 'receipt_issued' ELSE 'receipt_canceled' END) ON CONFLICT DO NOTHING;
  RETURN true;
- END $;
+ END $$;
 -- A failure before the fiscal request can safely release the claim. Unknown
 -- responses NEVER release it; only read-only reconciliation or operator review.
 CREATE FUNCTION bricklab.commerce_fiscal_release(p_order uuid,p_action text)
