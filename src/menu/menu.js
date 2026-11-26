@@ -6,7 +6,7 @@ import { locales } from './locale.js?v=store-1'
 import {mountStore} from './store.js?v=welcome-1'
 import { mountHomeHub, mountHubSearch } from './home-hub.js?v=signature-art-1'
 import { mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=mechanics-inspection-1'
+import { createCloudAccount } from './account.js?v=photo-studio-2'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -690,7 +690,7 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=engineering-2')
+    const { mountEditor } = await import('../editor/editor.js?v=engineering-3')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
