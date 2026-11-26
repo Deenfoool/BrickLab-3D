@@ -31,13 +31,18 @@ function anchors(captions, images, inventory) {
   return [...assigned].map(([i, j]) => {
     const anchor = images[j]
     const box = [...anchor]
-    for (const [index, fragment] of images.entries()) {
-      if (used.has(index) || !overlaps(anchor, fragment) || fragment[3] > anchor[3] + 1 ||
+    const merged=new Set([j])
+    for(let pass=0;pass<3;pass++)for (const [index, fragment] of images.entries()) {
+      if (merged.has(index)||used.has(index) || !overlaps(box, fragment) || fragment[3] > anchor[3] + 1 ||
           widthOf(fragment) * heightOf(fragment) > 2 * widthOf(anchor) * heightOf(anchor)) continue
       // Consecutive rows sometimes overlap by one raster pixel.
       if (fragment[1] < anchor[1] && fragment[3] - anchor[1] < .15 * heightOf(fragment)) continue
       if (Math.abs(fragment[0] - anchor[0]) <= 2 ||
-          (Math.abs(fragment[3] - anchor[3]) <= 2 && fragment[0] >= anchor[0])) {
+          (Math.abs(fragment[3] - anchor[3]) <= 2 && fragment[0] >= anchor[0]) ||
+          (Math.abs(fragment[2]-box[2])<=2 && fragment[1]>=anchor[1]-heightOf(anchor)*.25)) {
+        const union=[Math.min(box[0],fragment[0]),Math.min(box[1],fragment[1]),Math.max(box[2],fragment[2]),Math.max(box[3],fragment[3])]
+        if(widthOf(union)>widthOf(anchor)*2||heightOf(union)>heightOf(anchor)*1.6)continue
+        merged.add(index)
         box[0] = Math.min(box[0], fragment[0])
         box[1] = Math.min(box[1], fragment[1])
         box[2] = Math.max(box[2], fragment[2])
@@ -265,13 +270,13 @@ function extract({ bitmap, geometry, labels, inventory }) {
   const { width, height, words } = geometry
   const raster = { data: pixels.data, width: surface.width, height: surface.height,
     x: surface.width / width, y: surface.height / height }
-  const elements = words.filter(({ text }) => element.test(text))
+  const elements = words.filter(({ text }) => element.test(text) && Object.hasOwn(labels,text))
   const quantities = words.filter(({ text }) => quantity.test(text))
   const labeled = inventoryCaptions(elements, quantities)
   const inventoryPage = labeled.filter((entry, i) => entry !== elements[i]).length >= 2
   const readInventory = inventory || inventoryPage
   const captions = readInventory ? labeled : quantities
-  if (inventory && !inventoryPage) return []
+  if (inventory && !labeled.length) return []
   const images = geometry.images.filter(box => widthOf(box) >= 5 && heightOf(box) >= 3 &&
     widthOf(box) < .45 * width && heightOf(box) < .35 * height)
   const candidates = anchors(captions, images, readInventory)
@@ -351,9 +356,11 @@ function badgeMatch(scores, sample) {
 
 function rank({ samples, templates }) {
   return samples.flatMap(sample => {
-    if (sample.item) return [[...sample.region, ...sample.item]]
+    if (sample.item?.[0]) return [[...sample.region, ...sample.item]]
+    if(!sample.pixels)return []
     const scores = []
     for (const reference of templates) {
+      if(!reference.item?.[0]||!reference.pixels)continue
       const aspect = .18 * Math.abs(sample.aspect - reference.aspect)
       if (aspect > .17) continue
       scores.push({ reference, aspect, score: aspect + pixelDistance(sample.pixels, reference.pixels) })
@@ -370,7 +377,7 @@ function rank({ samples, templates }) {
     }
     if (!item && sample.embedded) {
       const drawing = sample.drawing ?? sample
-      const scores = templates.map(reference => {
+      const scores = templates.filter(reference=>reference.item?.[0]&&reference.pixels).map(reference => {
         const other = reference.drawing ?? reference
         return { reference, score: .18 * Math.abs(drawing.aspect - other.aspect) +
           pixelDistance(drawing.pixels, other.pixels) }
