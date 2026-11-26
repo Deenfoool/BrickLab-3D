@@ -67,7 +67,10 @@ export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeB
    if(!p.collections.length){if(!owner)continue;c.append(ui('p','account-muted',t.noCollections))}
    for(const group of p.collections){const box=ui('section','portfolio-collection'),grid=ui('div','portfolio-collection-links');box.append(ui('h3',null,group.title));for(const id of group.ids){const b=byId.get(id);if(b)grid.append(anchor(b.title,'#community/build/'+b.id))}box.append(grid);c.append(box)}
   }else if(key==='awards'){
-   if((profile?.awards??[]).includes('firstCloudSave')){const badge=ui('div','portfolio-earned');badge.append(icon('icon-trophy'),ui('strong',null,t.firstAward),ui('span','account-muted','30 XP'));c.append(badge)}else c.append(ui('p','account-muted',t.noAwards))
+   const awards=profile?.awards??[]
+   if(awards.includes('firstCloudSave')){const badge=ui('div','portfolio-earned');badge.append(icon('icon-trophy'),ui('strong',null,t.firstAward),ui('span','account-muted','30 XP'));c.append(badge)}
+   if(awards.includes('firstBuilder')){const badge=ui('div','portfolio-earned');badge.append(icon('icon-trophy'),ui('strong',null,'First Builder'),ui('span','account-muted',lang==='ru'?'Первая подарочная сборка':'First gifted build'));c.append(badge)}
+   if(!awards.some(a=>['firstCloudSave','firstBuilder'].includes(a)))c.append(ui('p','account-muted',t.noAwards))
   }else if(key==='activity'){
    const days=valid.filter(b=>typeof b.publishedAt==='string').map(b=>({day:b.publishedAt.slice(0,10),count:1}))
    c.append(activityCalendar(lang,days,{publicOnly:true}))
