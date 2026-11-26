@@ -6,7 +6,7 @@ export function mountCollisionPanel(root,{language,signal,onScan,onLocate,onClea
  const strictLabel=el('label'),strict=el('input');strict.type='checkbox';strictLabel.append(strict,el('span',tr('Включить штатные соединения (возможны ложные срабатывания)','Include mating pairs (false positives possible)')))
  const density=el('select');density.setAttribute('aria-label',tr('Число контрольных положений','Sample count'));for(const n of [9,17,25])density.append(new Option(String(n),String(n)))
  const buttons=el('div',undefined,'editor-collision-actions'),status=el('p',undefined,'editor-transmission-note'),list=el('div',undefined,'editor-collision-results')
- const note=el('p',tr('Поиск пересечений поверхностей видимых деталей. Штатные соединения исключены; касания и полное вложение могут не обнаруживаться.','Surface crossings of visible parts. Mating pairs are excluded; touching and complete containment may be missed.'),'editor-transmission-note')
+ const note=el('p',tr('Поиск пересечений поверхностей видимых деталей. По умолчанию штатные пары исключены; касания и полное вложение могут не обнаруживаться.','Surface crossings of visible parts. Mating pairs are excluded by default; touching and complete containment may be missed.'),'editor-transmission-note')
  let controller=null,enabled=false,canRange=false
  for(const b of [current,range,clear])b.type='button'
  status.setAttribute('role','status')
