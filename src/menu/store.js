@@ -41,7 +41,7 @@ export function mountStore(root,{language='ru',signal}){
  const errorText=e=>({verified_account_required:tr('Подтверди электронную почту перед покупкой.','Verify your email before purchasing.'),invalid_receipt_url:tr('Нужна ссылка на чек из «Мой налог».','Use an official My Tax receipt link.'),receipt_already_used:tr('Чек уже привязан к другому заказу.','Receipt already used.'),checkout_pending:tr('Заверши предыдущую оплату.','Finish the previous payment.')})[e.code]??t.error+' ('+(e.status??'network')+')'
  const profiles=createProfileClient(),nav=el('div','commerce-preview-nav'),grid=el('div','store-grid'),notice=el('p','account-muted'),summary=el('section','store-orders')
  notice.setAttribute('role','status')
- const categories=[['all',tr('Все товары','All products')],['subscription','BrickLab Plus'],['theme',tr('Темы','Themes')],['themeBundle',tr('Коллекции','Collections')],['storage',tr('Облачные проекты','Cloud projects')],['badge',tr('Значки','Badges')],['orders',tr('Мои покупки','My purchases')],['ledger',tr('Финансы','Finance')]]
+ const categories=[['all',tr('Все товары','All products')],['subscription','BrickLab Plus'],['theme',tr('Темы','Themes')],['themeBundle',tr('Коллекции','Collections')],['storage',tr('Облачные проекты','Cloud projects')],['badge',tr('Значки','Badges')],['orders',tr('Мои покупки','My purchases')],['ledger',tr('Финансы','Finance')],['analytics',tr('Аналитика','Analytics')]]
  const sectionCopy={
   subscription:tr('Больше возможностей для твоей мастерской на выбранный срок.','More room and tools for your workshop for a chosen term.'),
   theme:tr('Индивидуальный стиль профиля и мастерской.','A personal look for your profile and workshop.'),
@@ -52,7 +52,7 @@ export function mountStore(root,{language='ru',signal}){
  const tabs=new Map(),header=el('div','store-banner'),heading=el('div'),art=el('div','store-banner-art')
  heading.append(el('span','store-kicker','BRICKLAB STORE'),el('h2',null,tr('Расширь свою мастерскую','Expand your workshop')),el('p',null,tr('Темы, облачное пространство, коллекции и Plus. Основной редактор бесплатный.','Themes, cloud space, collections and Plus. The core editor is free.')))
  for(const id of ['carbon','neon','aurora'])art.append(themePreview(themeFor(id),language));header.append(heading,art)
- let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,testMode=false,busy=false,serial=0
+ let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,analytics=null,testMode=false,busy=false,serial=0
  try{if(sessionStorage.getItem('bricklab-commerce-return')==='1'){selected='orders';sessionStorage.removeItem('bricklab-commerce-return')}}catch{}
  const refreshButton=button(tr('Обновить покупки','Refresh purchases'),()=>refresh())
  for(const [id,label] of categories){const b=button(label,()=>{selected=id;render()});tabs.set(id,b);nav.append(b)}
@@ -111,7 +111,7 @@ export function mountStore(root,{language='ru',signal}){
   if(!catalog||signal.aborted)return
   const a=account,products=[...catalog.products.map(p=>({id:p.sku,kind:'theme',title:p.title,priceKopecks:p.amountKopecks})),...commerceProducts,...(catalog.instructions??[])]
   for(const [id,b] of tabs){b.classList.toggle('primary',selected===id);b.setAttribute('aria-pressed',String(selected===id))}
-  const adminTab=tabs.get('ledger');if(adminTab)adminTab.hidden=!ledger;
+  const adminTab=tabs.get('ledger');if(adminTab)adminTab.hidden=!ledger;tabs.get('analytics').hidden=!checkoutStatus?.admin;
   notice.textContent=testMode?tr('ТЕСТ · Оплата без списания. Тестовые права администратора действуют до переключения кассы в боевой режим.','TEST · No charge. Administrator test entitlements apply until switching to live.'):catalog.live?tr('Оплата через ЮKassa.','Payment via YooKassa.'):tr('Оплата пока закрыта. Темы — первый ассортимент; остальные товары готовятся к выпуску.','Checkout closed. Themes are the first assortment; other products are in preparation.')
   grid.replaceChildren();summary.replaceChildren();summary.hidden=!a
   if(a){
@@ -125,6 +125,21 @@ export function mountStore(root,{language='ru',signal}){
    }
    summary.append(head,limits)
    if(a.plus===true)summary.append(el('small','account-muted',tr('Plus активен до ','Plus active until ')+new Date(a.plusUntil).toLocaleDateString(language)))
+  }
+  if(selected==='analytics'){
+   const panel=el('section','store-orders');panel.style.gridColumn='1 / -1';
+   panel.append(el('h2',null,tr('Интерактивность · последние 90 дней','Interactive access · last 90 days')),el('p','account-muted',tr('Авторизованные пользователи, без администратора. События: один пользователь, набор, действие и день. Покупки — только реальные, не тестовые.','Signed-in users, excluding admins from activity. Events: one user, set, action and day. Real purchases only.')));
+   if(!analytics){panel.append(el('p','account-muted',tr('Данные недоступны','Data unavailable')));grid.append(panel);return}
+   const stats=el('div','store-grid')
+   for(const [label,value] of [[tr('Активные аккаунты','Active accounts'),analytics.activeUsers],[tr('Подарочные доступы','Welcome grants'),analytics.welcomeClaims],[tr('First Builder','First Builder'),analytics.firstBuilders],[tr('Покупатели','Buyers'),analytics.buyers],[tr('Оплаченные наборы без возврата','Non-refunded purchases'),analytics.paidOrders],[tr('Повторные покупатели','Repeat buyers'),analytics.repeatBuyers],[tr('Возвращённые покупки','Refunded purchases'),analytics.refundedOrders],[tr('Выручка до комиссий, без возвратов','Revenue before fees, excluding refunds'),money(analytics.netKopecks)],[tr('Выручка на активный аккаунт','Revenue per active account'),analytics.activeUsers?money(Number(analytics.netKopecks)/Number(analytics.activeUsers)):'—']]){
+    const c=el('article','commerce-preview-card');c.append(el('p','account-muted',label),el('strong','store-price',String(value)));stats.append(c)
+   }
+   panel.append(stats,el('h3',null,tr('Воронка взаимодействия','Engagement funnel')));
+   for(const [id,ruLabel,enLabel] of [['set_open','Открыли набор','Opened set'],['build_start','Начали сборку','Started build'],['hint_use','Использовали подсказку','Used hint'],['offer_view','Увидели оплату','Saw offer'],['checkout_click','Перешли к оплате','Clicked checkout']]){
+    const v=analytics.events.find(e=>e.event===id);panel.append(el('p',null,tr(ruLabel,enLabel)+': '+(v?.users??0)+' · '+tr('событий ','events ')+(v?.interactions??0)))
+   }
+   panel.append(el('h3',null,tr('Популярные наборы','Popular sets')));for(const row of analytics.popular)panel.append(el('p',null,row.set_id+' · '+row.users))
+   grid.append(panel);return
   }
   if(selected==='ledger'){
    if(!ledger)return
@@ -203,7 +218,7 @@ export function mountStore(root,{language='ru',signal}){
  }
  async function refresh(){
   const v=++serial;notice.textContent=t.loading
-  try{const [c,a,st,p]=await Promise.all([api('/api/store/catalog',signal),optional('/api/commerce/account'),optional('/api/commerce/status'),profiles.get().catch(()=>null)]);const adminLedger=st?.admin?await optional('/api/commerce/admin-ledger?environment='+st.mode):null;if(signal.aborted||v!==serial)return;catalog=c;account=a;checkoutStatus=st;profile=p;ledger=adminLedger;testMode=st?.mode==='test'&&st?.admin===true;if(selected==='ledger'&&!ledger)selected='all';render()}catch{if(!signal.aborted&&v===serial)notice.textContent=t.error}
+  try{const [c,a,st,p]=await Promise.all([api('/api/store/catalog',signal),optional('/api/commerce/account'),optional('/api/commerce/status'),profiles.get().catch(()=>null)]);const [adminLedger,adminAnalytics]=st?.admin?await Promise.all([optional('/api/commerce/admin-ledger?environment='+st.mode),optional('/api/commerce/instruction-analytics').catch(()=>null)]):[null,null];if(signal.aborted||v!==serial)return;catalog=c;account=a;checkoutStatus=st;profile=p;ledger=adminLedger;analytics=adminAnalytics;testMode=st?.mode==='test'&&st?.admin===true;if(selected==='ledger'&&!ledger)selected='all';render()}catch{if(!signal.aborted&&v===serial)notice.textContent=t.error}
  }
  const timer=setInterval(()=>{if(!busy&&account?.orders?.some(o=>o.status==='pending'&&o.paymentId||o.status==='succeeded'&&o.refundRequestedAt))void refresh()},15000)
  signal.addEventListener('abort',()=>clearInterval(timer),{once:true})
