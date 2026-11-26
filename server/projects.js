@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import {createCollaborationHandler} from './collaboration.js'
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export const maxBody = 2 * 1024 * 1024
 export class ProjectError extends Error {
@@ -41,9 +42,11 @@ function reply(res,status,data){
  res.end(value)
 }
 export function createProjectsHandler({store,origin,logger=console}){
+ const collaboration=createCollaborationHandler({store,origin})
  const cookieName=new URL(origin).protocol==='https:'?'__Host-bricklab_session':'bricklab_session'
  let activeWrites=0
  return async function projects(req,res,path){
+  if(path.startsWith('/api/collaboration/'))return collaboration(req,res,path)
   if(path!=='/api/projects'&&!path.startsWith('/api/projects/'))return false
   try{
    const segments=path.split('/').slice(3)
