@@ -3,6 +3,7 @@ import {createPaymentsHandler,paymentConfig} from './payments.js'
 import {createYookassaAdapter} from './yookassa.js'
 import {startTestPaymentReconciliation} from './payment-reconciliation.js'
 import {startCommerceTelegram} from './commerce-telegram.js'
+import {startReceiptDelivery,createReceiptMailer} from './receipt-delivery.js'
 import {createInstructionRegions} from './instruction-regions.js'
 import {loadInstructionPolicy} from './instruction-access.js'
 import {loadApprovedLegal,liveCommerceConfig} from './legal-release.js'
@@ -23,7 +24,7 @@ import { createCommunityHandler } from './community.js'
 const host = process.env.HOST || '0.0.0.0'
 const port = Number(process.env.PORT || 8080)
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer from 1 to 65535')
-let store, auth, projects, profile, activity, community, bureau, security, payments, cleanup, legal, reconciliation, liveReconciliation, telegram
+let store, auth, projects, profile, activity, community, bureau, security, payments, cleanup, legal, reconciliation, liveReconciliation, telegram, receiptDelivery
 if (process.env.PGPASSWORD) {
   const { connectAuthStore } = await import('./db/auth-store.js')
   store = connectAuthStore()
@@ -36,8 +37,9 @@ if (process.env.PGPASSWORD) {
     legal=await loadApprovedLegal({directory:fileURLToPath(new URL('../assets/legal/',import.meta.url)),approvalFile:process.env.BRICKLAB_COMMERCE_APPROVAL_FILE||''})
     const commerceMode=process.env.BRICKLAB_COMMERCE_MODE||'test'
     if(!['test','live'].includes(commerceMode))throw Error('Invalid commerce mode')
+    const receiptMailer=createReceiptMailer()
     const liveConfig=liveCommerceConfig(process.env,legal)
-    const liveYookassa=createYookassaAdapter({store,origin,config:liveConfig})
+    const liveYookassa=createYookassaAdapter({store,origin,config:{...liveConfig,enabled:liveConfig.enabled&&!!receiptMailer}})
     const testYookassa=createYookassaAdapter({store,origin})
     const fullCatalog=!!legal&&process.env.BRICKLAB_COMMERCE_FULL_CATALOG_OFFER_VERSION===legal.version
     payments=createPaymentsHandler({store,origin,config:paymentConfig(),legal,fullCatalog,commerceMode,liveYookassa,instructionPolicy,instructionRelease,yookassa:testYookassa,regions:createInstructionRegions(fileURLToPath(new URL('../catalog/sets/',import.meta.url)))})
@@ -53,6 +55,7 @@ if (process.env.PGPASSWORD) {
     reconciliation=startTestPaymentReconciliation({store,adapter:testYookassa})
     liveReconciliation=startTestPaymentReconciliation({store,adapter:liveYookassa,environment:'live'})
     telegram=startCommerceTelegram({store})
+    receiptDelivery=startReceiptDelivery({store,mailer:receiptMailer})
     cleanup = setInterval(() => store.cleanup().catch(error => console.error('Session cleanup failed:', error.code || error.name)), 3600_000).unref()
   } catch (error) {
     await store.close()
@@ -66,11 +69,11 @@ const server = createBrickLabServer({ root: fileURLToPath(new URL('../', import.
 server.on('error', async error => {
   console.error('Unable to start BrickLab:', error.message)
   clearInterval(cleanup)
-  await Promise.all([reconciliation?.stop(),liveReconciliation?.stop(),telegram?.stop()])
+  await Promise.all([reconciliation?.stop(),liveReconciliation?.stop(),telegram?.stop(),receiptDelivery?.stop()])
   await store?.close()
   process.exitCode = 1
 })
-server.listen(port, host, () => {console.log(`BrickLab listening on ${host}:${port}`);reconciliation?.tick();liveReconciliation?.tick();telegram?.tick()})
+server.listen(port, host, () => {console.log(`BrickLab listening on ${host}:${port}`);reconciliation?.tick();liveReconciliation?.tick();telegram?.tick();receiptDelivery?.tick()})
 let stopping = false
 function shutdown() {
   if (stopping) return
@@ -80,7 +83,7 @@ function shutdown() {
   server.close(async error => {
     clearTimeout(timeout)
     await instructionFetch.close()
-    await Promise.all([reconciliation?.stop(),liveReconciliation?.stop(),telegram?.stop()])
+    await Promise.all([reconciliation?.stop(),liveReconciliation?.stop(),telegram?.stop(),receiptDelivery?.stop()])
     await store?.close()
     if (error) process.exitCode = 1
   })
