@@ -62,8 +62,20 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
    }
    return 'pending'
   },
+  async reconcileTestRefund(refundId){
+   if(!config.enabled||environment!=='test'||!uuid.test(refundId??''))throw new ProjectError(400,'invalid_refund')
+   const refund=await call('refunds/'+refundId)
+   if(refund?.id!==refundId||refund.status!=='succeeded'||!paymentId.test(refund.payment_id??'')||refund.amount?.currency!=='RUB'||amountKopecks(refund.amount.value)===null)throw new ProjectError(409,'refund_unverified')
+   const paid=await call('payments/'+refund.payment_id)
+   if(!validPayment(paid,refund.payment_id,'test')||paid.status!=='succeeded'||paid.paid!==true)throw new ProjectError(409,'refund_unverified')
+   const amount=amountKopecks(paid.amount.value)
+   if(paid.refunded_amount?.currency!=='RUB'||amountKopecks(paid.refunded_amount.value)!==amount)throw new ProjectError(409,'partial_refund_requires_review')
+   if(!await store.refundCommercePayment(paid.id,'test',amount))throw new ProjectError(409,'refund_mismatch')
+   return {ok:true}
+  },
   async notification(event){
    if(!config.enabled)throw new ProjectError(503,'yookassa_test_disabled')
+   if(event?.event==='refund.succeeded'&&environment==='test')return this.reconcileTestRefund(event.object?.id)
    if(!['payment.succeeded','payment.canceled'].includes(event?.event)||!paymentId.test(event.object?.id??''))throw new ProjectError(400,'invalid_notification')
    // Do not trust any notification fields other than the lookup identifier.
    const verified=await call('payments/'+event.object.id)
