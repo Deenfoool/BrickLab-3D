@@ -180,7 +180,10 @@ export function mountStore(root,{language='ru',signal}){
     const visual=kind==='theme'?themePreview(themeFor(p.id),language):kind==='themeBundle'?collectionArt():productArtwork(p,language)
     if(visual)card.append(visual)
     copy.append(el('h3',null,productTitle(p)),el('p','account-muted',description(p)))
-    if(kind==='badge')copy.append(el('small','account-muted',p.betaOnly?tr('Коллекционная серия ОБТ','Open beta collection'):tr('Уровень поддержки '+p.rank,'Support tier '+p.rank)))
+    if(kind==='badge'){
+     copy.append(el('small','account-muted',p.betaOnly?tr('Коллекционная серия ОБТ','Open beta collection'):tr('Уровень поддержки '+p.rank,'Support tier '+p.rank)))
+     const sample=el('div','commerce-badge-preview');sample.append(el('small','account-muted',tr('В профиле','In profile')),commerceBadge(p.id));copy.append(sample)
+    }
     const facts=factsPanel(p,language);if(facts)copy.append(facts)
     if(kind==='subscription'&&planSaving(p)>0)copy.append(el('small','commerce-plan-saving',tr('На '+planSaving(p)+'% меньше, чем помесячно','Save '+planSaving(p)+'% vs monthly list price')))
     const has=owned(p,a),available=checkoutStatus?.enabled&&checkoutStatus.skus.includes(p.id)||!a&&catalog.live&&catalog.liveSkus?.includes(p.id)
