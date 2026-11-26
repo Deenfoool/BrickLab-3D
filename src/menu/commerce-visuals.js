@@ -14,10 +14,16 @@ const specs=Object.freeze({
  plus:{code:'PLUS',shape:'M32 3 57 17v30L32 61 7 47V17Z',mark:'M27 17h10v10h10v10H37v10H27V37H17V27h10Z'}
 })
 export function insigniaSpec(id){return Object.hasOwn(specs,id)?specs[id]:null}
+let serial=0
 export function insignia(id){
  const spec=insigniaSpec(id);if(!spec)return null
  const svg=svgNode('svg',{viewBox:'0 0 64 64',class:'commerce-insignia insignia-'+id,'aria-hidden':'true',focusable:'false'})
- svg.append(path(spec.shape,'insignia-outer'),svgNode('path',{d:spec.shape,transform:'translate(5.12 5.12) scale(.84)',class:'insignia-inner'}),path('M12 18 32 7 52 18 M12 46 32 57 52 46','insignia-rim'),path(spec.mark,'insignia-glyph'))
+ const gradientId='bricklab-insignia-metal-'+(++serial)
+ const defs=svgNode('defs'),gradient=svgNode('linearGradient',{id:gradientId,x1:'0%',y1:'0%',x2:'100%',y2:'100%'})
+ for(const [offset,cls] of [['0%','metal-dark'],['23%','metal-highlight'],['43%','metal-accent'],['46%','metal-dark'],['80%','metal-accent'],['100%','metal-dark']])gradient.append(svgNode('stop',{offset,class:cls}))
+ defs.append(gradient)
+ const outer=path(spec.shape,'insignia-outer');outer.setAttribute('style','fill:url(#'+gradientId+')')
+ svg.append(defs,outer,svgNode('path',{d:spec.shape,transform:'translate(5.12 5.12) scale(.84)',class:'insignia-inner'}),path('M12 18 32 7 52 18 M12 46 32 57 52 46','insignia-rim'),path(spec.mark,'insignia-glyph'))
  return svg
 }
 export function commerceBadge(id){
