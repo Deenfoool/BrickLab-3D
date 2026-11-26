@@ -2,7 +2,7 @@
 export function mountCollisionPanel(root,{language,signal,onScan,onLocate,onClear}){
  const ru=language==='ru',tr=(a,b)=>ru?a:b
  const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n}
- const current=el('button',tr('Проверить положение','Check current pose')),range=el('button',tr('Проверить 9 положений','Check 9 poses')),clear=el('button',tr('Сбросить','Clear'))
+ const current=el('button',tr('Проверить положение','Check current pose')),range=el('button',tr('Проверить диапазон (до 9)','Sample range (up to 9)')),clear=el('button',tr('Сбросить','Clear'))
  const buttons=el('div',undefined,'editor-collision-actions'),status=el('p',undefined,'editor-transmission-note'),list=el('div',undefined,'editor-collision-results')
  const note=el('p',tr('Поиск пересечений поверхностей видимых деталей. Штатные соединения исключены; касания и полное вложение могут не обнаруживаться.','Surface crossings of visible parts. Mating pairs are excluded; touching and complete containment may be missed.'),'editor-transmission-note')
  let controller=null,enabled=false,canRange=false
@@ -10,7 +10,7 @@ export function mountCollisionPanel(root,{language,signal,onScan,onLocate,onClea
  status.setAttribute('role','status')
  buttons.append(current,range,clear);root.append(el('strong',tr('Проверка коллизий','Collision inspection')),buttons,note,status,list)
  function controls(){current.disabled=!enabled||!!controller;range.disabled=!enabled||!canRange||!!controller;clear.disabled=!controller&&!list.childElementCount&&!status.textContent}
- function reset(){controller?.abort();controller=null;list.replaceChildren();status.textContent='';onClear();controls()}
+ function reset(){if(!controller&&!list.childElementCount&&!status.textContent)return;controller?.abort();controller=null;list.replaceChildren();status.textContent='';onClear();controls()}
  async function run(sweep){
   reset()
   const request=new AbortController();controller=request;controls()
@@ -18,7 +18,7 @@ export function mountCollisionPanel(root,{language,signal,onScan,onLocate,onClea
   try{
    const result=await onScan(sweep,linked,(i,n)=>{if(!linked.aborted)status.textContent=tr('Проверяем положение ','Checking pose ')+i+'/'+n})
    if(linked.aborted)return
-   const limited=result.samples.some(s=>s.limited||s.unavailable||s.unsolved)
+   const limited=result.samples.length===0||result.samples.some(s=>s.limited||s.unavailable||s.unsolved)
    const hits=result.samples.flatMap(s=>s.pairs.map(p=>({...p,value:s.value})))
    const unique=new Set(hits.map(p=>JSON.stringify([p.a,p.b].sort())))
    const checked=result.samples.reduce((n,s)=>n+s.checked,0),excluded=result.samples.reduce((n,s)=>n+s.excluded,0)
