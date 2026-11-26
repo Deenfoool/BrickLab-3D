@@ -43,6 +43,7 @@ export function mountStore(root,{language='ru',signal}){
  heading.append(el('span','store-kicker','BRICKLAB STORE'),el('h2',null,tr('Расширь свою мастерскую','Expand your workshop')),el('p',null,tr('Темы, облачное пространство, коллекции и Plus. Основной редактор бесплатный.','Themes, cloud space, collections and Plus. The core editor is free.')))
  for(const id of ['carbon','neon','aurora'])art.append(themePreview(themeFor(id),language));header.append(heading,art)
  let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,testMode=false,busy=false,serial=0
+ try{if(sessionStorage.getItem('bricklab-commerce-return')==='1'){selected='orders';sessionStorage.removeItem('bricklab-commerce-return')}}catch{}
  const refreshButton=button(tr('Обновить покупки','Refresh purchases'),()=>refresh())
  for(const [id,label] of categories){const b=button(label,()=>{selected=id;render()});tabs.set(id,b);nav.append(b)}
  nav.append(refreshButton)
@@ -72,7 +73,7 @@ export function mountStore(root,{language='ru',signal}){
    if(!accept.checked||!quote)return;pay.disabled=true
    try{
     const result=await api('/api/commerce/checkout',signal,{sku:p.id,amountKopecks:quote.amountKopecks,offerVersion:quote.offerVersion,accepted:true,mode})
-    if(result.mode!==mode)throw Error('mode');if(result.checkoutUrl){location.assign(safeUrl(result.checkoutUrl));return}
+    if(result.mode!==mode)throw Error('mode');if(result.checkoutUrl){const url=safeUrl(result.checkoutUrl);try{sessionStorage.setItem('bricklab-commerce-return','1')}catch{}location.assign(url);return}
     status.textContent=result.status==='succeeded'?tr('Оплата подтверждена.','Payment confirmed.'):tr('Платёж отменён.','Payment canceled.');await refresh()
    }catch(e){status.textContent=t.error+' ('+(e.status??'network')+')';pay.disabled=!accept.checked}
   })
@@ -93,7 +94,7 @@ export function mountStore(root,{language='ru',signal}){
   if(selected==='ledger'){
    if(!ledger)return
    const total=ledger.orders.filter(o=>o.status==='succeeded').reduce((sum,o)=>sum+o.amount_kopecks,0)
-   grid.append(el('h2',null,(testMode?tr('Тестовый оборот: ','Sandbox volume: '):tr('Подтверждённые оплаты (до комиссии): ','Confirmed payments (before fees): '))+money(total)))
+   grid.append(el('h2',null,(testMode?tr('Тестовые оплаты (последние 100 записей): ','Sandbox payments (last 100 records): '):tr('Подтверждённые оплаты (последние 100 записей, до комиссии): ','Confirmed payments (last 100 records, before fees): '))+money(total)))
    for(const o of ledger.orders){
     const card=el('article','commerce-preview-card');card.append(el('h3',null,o.title),el('strong','store-price',money(o.amount_kopecks)),el('p','account-muted',o.display_name+' · '+o.email),el('small','account-muted',o.user_id),el('p',null,o.status),el('small','account-muted',o.id))
     if(checkoutStatus?.enabled&&o.status==='succeeded'){
