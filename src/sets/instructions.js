@@ -1,4 +1,5 @@
 import {instructionEvent} from './instruction-events.js'
+import {mountInstructionOffer} from './instruction-offer.js?v=welcome-1'
 import { node, control, setStrings } from './catalog.js?v=browser-recognition'
 import { safeBook, validateSet } from './data.js?v=browser-recognition'
 import {
@@ -132,6 +133,18 @@ export function mountInstructions(
   const recognitionStatus = node('p', undefined, 'instruction-recognition-status')
   recognitionStatus.setAttribute('role', 'status')
   recognitionStatus.hidden = true
+  const unlock=control(ru?'Открыть интерактивность':'Unlock hints',()=>{
+    const dialog=node('dialog',undefined,'set-dialog set-details-dialog'),offer=node('section',undefined,'set-instruction-offer')
+    const close=control(ru?'Вернуться к сборке':'Back to build',()=>dialog.close(),signal)
+    const own=new AbortController(),request=AbortSignal.any([signal,own.signal])
+    dialog.append(node('h2',progress.set.name),node('p',ru?'Перед переходом к оплате сохрани текущую сборку.':'Save your current build before going to checkout.'),offer,close)
+    dialog.addEventListener('close',()=>{own.abort();dialog.remove();if(!signal.aborted)renderPreview(currentEntry())},{once:true})
+    request.addEventListener('abort',()=>{if(dialog.open)dialog.close();dialog.remove()},{once:true})
+    document.body.append(dialog);dialog.showModal()
+    const start=node('button')
+    void mountInstructionOffer(offer,{set:progress.set,language,signal:request,onStart:()=>dialog.close(),start})
+  },signal)
+  unlock.hidden=true
   const file = node('input')
   file.type = 'file'
   file.accept = '.pdf,application/pdf'
@@ -209,7 +222,7 @@ export function mountInstructions(
     { signal },
   )
   actions.append(choosePdf, credit, add)
-  body.append(actions, status, retry, previewStatus, recovery, file, preview, recognitionStatus)
+  body.append(actions, status, retry, previewStatus, recovery, file, preview, recognitionStatus, unlock)
   panel.append(header, body)
   layer.append(panel)
   function setMoreOpen(open) {
@@ -247,6 +260,7 @@ export function mountInstructions(
     preview.hidden = true
     previewStatus.hidden = true
     recognitionStatus.hidden = true
+    unlock.hidden=true
     recovery.hidden = true
     retryPage.hidden = false
     officialPdf.hidden = true
@@ -272,7 +286,7 @@ export function mountInstructions(
     previewStatus.textContent = ru ? 'Загружаем страницу…' : 'Loading page…'
     const pageNumber = progress.page
     // Access is checked only for canonical remote books. User PDFs and OBT remain free.
-    let interactive=true,serverOnly=false
+    let interactive=true,serverOnly=false,locked=false
     const canonicalBook=canonicalInstructionUrl(entry.url)
     const privatePdfId=canonicalBook?new URL(canonicalBook).pathname.match(/\/(\d+)\.pdf$/)?.[1]:null
     if(!local&&canonicalBook&&findPart){
@@ -281,11 +295,11 @@ export function mountInstructions(
       try{
         const query=new URLSearchParams({set:progress.set.number,book:entry.url,page:String(pageNumber)})
         const response=await fetch('/api/commerce/instruction-access?'+query,{signal:AbortSignal.any([signal,AbortSignal.timeout(3000)]),credentials:'same-origin',cache:'no-store'})
-        if(response.ok){const policy=await response.json();interactive=policy.interactive===true;serverOnly=policy.supported===true}
+        if(response.ok){const policy=await response.json();interactive=policy.interactive===true;serverOnly=policy.supported===true;locked=policy.mode==='release'&&policy.supported===true&&!interactive}
       }catch{/* The original PDF is still available. Retry restores overlays when the API recovers. */}
     }
     if(signal.aborted)return
-    if(!interactive){recognitionStatus.textContent=ru?'Интерактивность недоступна. PDF и ручной поиск остаются доступны.':'Interactive access unavailable. PDF and manual search remain available.';recognitionStatus.hidden=false}
+    if(!interactive){unlock.hidden=!locked;recognitionStatus.textContent=ru?'Интерактивность недоступна. PDF и ручной поиск остаются доступны.':'Interactive access unavailable. PDF and manual search remain available.';recognitionStatus.hidden=false}
     const pageLabel = number => ru ? `Страница ${number} инструкции` : `Instruction page ${number}`
     if (!local && display?.image) {
       const { image, decoded, regions } = prepared?.image ? prepared : prepareInstructionPage(progress)
