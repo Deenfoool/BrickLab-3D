@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readWorkspace } from '../src/editor/workspace.js'
+import { readWorkspace, defaultRightPanels } from '../src/editor/workspace.js'
 
 test('workspace defaults keep the build library and a single dock open', () => {
   const value = readWorkspace(null)
@@ -46,4 +46,9 @@ test('invalid browser preferences are sanitized without blocking editor startup'
   assert.equal(result.modes.build.library, true)
   assert.equal(result.modes.build.right, 'scene-parts')
   assert.deepEqual(result.modes.build.floatRight, ['inspector'])
+})
+
+test('new editor opens every available right dock in top-to-bottom order',()=>{
+ assert.deepEqual(defaultRightPanels(false),['inspector','scene-parts'])
+ assert.deepEqual(defaultRightPanels(true),['instruction','inspector','scene-parts'])
 })

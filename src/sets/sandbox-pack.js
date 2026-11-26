@@ -17,11 +17,11 @@ export async function mountSandboxPack(root,{language,signal}){
   const choices=Array.from({length:3},(_,i)=>{const s=el('select');s.setAttribute('aria-label',tr('Набор ','Set ')+(i+1));s.append(new Option(tr('Выбери набор','Choose set'),''));for(const p of available)s.append(new Option(p.setId+' · '+p.title,p.setId));return s})
   const quoteButton=el('button',tr('Рассчитать пакет','Quote pack')),pay=el('button',tr('Тестовая оплата','Sandbox checkout')),consent=el('label'),check=el('input'),result=el('div'),message=el('p')
   check.type='checkbox';const legal=el('a',tr('Оферта','Offer'));legal.href='/offer';legal.target='_blank';legal.rel='noopener noreferrer';consent.append(check,el('span',tr('Согласен на тестовую покупку. ','I accept sandbox checkout. ')),legal)
-  quoteButton.type=pay.type='button';pay.disabled=true;message.setAttribute('role','status')
+  quoteButton.type=pay.type='button';pay.disabled=true;check.disabled=true;message.setAttribute('role','status')
   let q=null,busy=false,revision=0
   const money=n=>(n/100).toLocaleString(ru?'ru-RU':'en-US',{style:'currency',currency:'RUB'})
-  function invalidate(){revision++;q=null;result.replaceChildren();pay.disabled=true;check.checked=false;message.textContent=''}
-  function controls(){for(const s of choices)s.disabled=busy;quoteButton.disabled=busy;check.disabled=busy;pay.disabled=busy||!q||!check.checked}
+  function invalidate(){revision++;q=null;result.replaceChildren();pay.disabled=true;check.disabled=true;check.checked=false;message.textContent=''}
+  function controls(){for(const s of choices)s.disabled=busy;quoteButton.disabled=busy;check.disabled=busy||!q;pay.disabled=busy||!q||!check.checked}
   for(const s of choices)s.onchange=invalidate
   check.onchange=controls
   quoteButton.onclick=async()=>{
@@ -33,7 +33,7 @@ export async function mountSandboxPack(root,{language,signal}){
     q=value
     for(const line of q.lines)result.append(el('p',line.setId+' · '+line.title+' · '+money(line.amount)))
     result.append(el('strong',money(q.amountKopecks)+' · '+tr('Экономия ','Saving ')+money(q.subtotalKopecks-q.amountKopecks)))
-   }catch(e){message.textContent=tr('Пакет недоступен: ','Pack unavailable: ')+e.message}
+   }catch(e){message.textContent=({bundle_unavailable:tr('Тестовый пакет сейчас недоступен.','Sandbox pack unavailable.'),bundle_set_unavailable:tr('Один из наборов уже приобретён. Выбери другой.','One set is already owned. Choose another.'),checkout_pending:tr('Сначала заверши предыдущую оплату.','Finish the previous payment first.')})[e.message]??tr('Не удалось рассчитать пакет.','Could not quote the pack.')}
    finally{busy=false;controls()}
   }
   pay.onclick=async()=>{

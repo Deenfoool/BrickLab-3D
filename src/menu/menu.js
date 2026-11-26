@@ -6,7 +6,7 @@ import { locales } from './locale.js?v=store-1'
 import {mountStore} from './store.js?v=welcome-1'
 import { mountHomeHub, mountHubSearch } from './home-hub.js?v=signature-art-1'
 import { mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=photo-studio-2'
+import { createCloudAccount } from './account.js?v=feedback-2'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -116,9 +116,11 @@ function openProject(id) {
   else location.hash = hash
 }
 
-function addProject(data, tutorialMode = null, cloud = null) {
+const collaborationJoins=new Map()
+function addProject(data, tutorialMode = null, cloud = null, collaboration = null) {
   const record = makeRecord(data)
   if (cloud) record.cloud = cloud
+  if(collaboration)collaborationJoins.set(record.id,collaboration)
   updateProjects([record, ...projects])
   if (tutorialMode) startTutorial(record.id, tutorialMode)
   openProject(record.id)
@@ -602,7 +604,7 @@ async function openSets() {
   const root = byId('sets-panel')
   root.textContent = strings().loadingLibrary
   try {
-    const { mountSetCatalog } = await import('../sets/catalog.js?v=release-candidate-1')
+    const { mountSetCatalog } = await import('../sets/catalog.js?v=feedback-3')
     if (controller.signal.aborted) return
     let initialQuery=pendingSetQuery;pendingSetQuery=''
     try{const target=sessionStorage.getItem('bricklab-instruction-return');if(/^\d{3,7}-\d{1,2}$/.test(target??'')){initialQuery=target;sessionStorage.removeItem('bricklab-instruction-return')}}catch{}
@@ -690,11 +692,13 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=release-candidate-1')
+    const { mountEditor } = await import('../editor/editor.js?v=feedback-3')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
       document: project.document, projectId: project.id, language, signal: controller.signal,
+      collaboration:collaborationJoins.get(project.id),
+      onJoinCollaboration:(document,session)=>addProject(document,null,null,session),
       download: downloadProject,
       async publish(document,capture) {
         if(controller.signal.aborted)return
@@ -716,6 +720,7 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
         return !storageWarning
       },
     })
+    collaborationJoins.delete(project.id)
     if (!controller.signal.aborted) await transition?.finish()
   } catch (error) {
     if (controller.signal.aborted) return

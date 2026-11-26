@@ -14,3 +14,9 @@ test('bundle preview rejects owned, duplicate, unverified and unreleased sets',(
  for(const opts of [{release:false},{account:{plus:true}},{account:{instructions:[setIds[0]]}},{setIds:[setIds[0],setIds[0],setIds[1]]},{auditedProducts:auditedProducts.slice(1)}])
   assert.throws(()=>quoteInstructionBundle({setIds,auditedProducts,account,release:true,...opts}))
 })
+
+test('sandbox pack is testable even with sandbox Plus active',()=>{
+ const q=quoteInstructionBundle({setIds,auditedProducts,account:{plus:true,instructions:[]},release:true,sandbox:true})
+ assert.equal(q.lines.length,3)
+ assert.throws(()=>quoteInstructionBundle({setIds,auditedProducts,account:{plus:true,instructions:[setIds[0]]},release:true,sandbox:true}))
+})

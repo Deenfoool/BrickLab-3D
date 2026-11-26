@@ -9,11 +9,10 @@ import {
 } from './rebrickable.js?v=browser-recognition'
 import { safeImage, validateSet } from './data.js?v=browser-recognition'
 import {
-  discoverBooks,
+  discoverBooks, indexedBooks,
   instructionSources,
-} from './instruction-sources.js?v=browser-recognition'
+} from './instruction-sources.js?v=feedback-2'
 import {mountSandboxPack} from './sandbox-pack.js'
-import {renderInteractiveDemo} from './interactive-demo.js'
 import {instructionEvent} from './instruction-events.js'
 import { mountInstructionOffer } from './instruction-offer.js?v=welcome-1'
 const storageKey = 'bricklab.sets.v1'
@@ -153,11 +152,10 @@ export async function mountSetCatalog(
   const listHead=node('div',undefined,'set-catalog-list-head'),resultCount=node('span',undefined,'set-result-count')
   listHead.append(node('h3',tr('Каталог наборов','Set catalog')),resultCount)
   credit.classList.add('set-catalog-credit')
-  const demo=renderInteractiveDemo({language,signal,onPractice:practice})
   const recommended=node('section',undefined,'set-recommendations')
   recommended.hidden=true
   const sandboxPack=node('section',undefined,'set-sandbox-pack');sandboxPack.hidden=true
-  root.replaceChildren(header,demo,recommended,sandboxPack,form,listHead,status,grid,more,credit)
+  root.replaceChildren(header,recommended,sandboxPack,form,listHead,status,grid,more,credit)
   void mountSandboxPack(sandboxPack,{language,signal})
   const pageSize = 24
   let localItems = []
@@ -333,7 +331,7 @@ export async function mountSetCatalog(
     for(const item of selection){
       const b=control('',async()=>{
         const id=++requestId;b.disabled=true
-        try{const set=sets.get(item.number)??await importSet(item.number,signal);if(signal.aborted||id!==requestId)return;sets.set(set.number,set);saveCache();showDetails(set)}
+        try{const set=sets.get(item.number)??await importSet(item.number,signal);if(signal.aborted||id!==requestId)return;const verified={...set,books:item.books?.length?item.books:set.books};sets.set(verified.number,verified);saveCache();showDetails(verified)}
         catch{if(!signal.aborted)status.textContent=t.error}finally{b.disabled=false}
       },signal)
       const image=node('img');image.src=safeImage(item.image);image.alt='';image.loading='lazy'
@@ -341,6 +339,23 @@ export async function mountSetCatalog(
       b.append(image,info);cards.append(b)
     }
     recommended.append(title,cards);recommended.hidden=false
+  }
+  const verifiedBooks=new Map()
+  async function withInstructions(items,request,onBatch){
+    const result=[]
+    for(let offset=0;offset<items.length;offset+=4){
+      request.throwIfAborted()
+      const batch=await Promise.all(items.slice(offset,offset+4).map(async item=>{
+        let books=sets.get(item.number)?.books??item.books
+        if(!books?.length)books=verifiedBooks.get(item.number)
+        if(!books?.length){try{books=await indexedBooks(item.number,request)}catch{request.throwIfAborted();books=[]}}
+        if(!books?.length){try{books=await discoverBooks(item.number,AbortSignal.any([request,AbortSignal.timeout(10000)]))}catch{request.throwIfAborted();return null}}
+        if(!books?.length)return null
+        verifiedBooks.set(item.number,books);return {...item,books}
+      }))
+      const found=batch.filter(Boolean);result.push(...found);onBatch?.(found)
+    }
+    return result
   }
   function appendItems(items) {
     recommend(items)
@@ -370,10 +385,11 @@ export async function mountSetCatalog(
           const set =
             sets.get(item.number) ?? (await importSet(item.number, signal))
           if (signal.aborted || id !== requestId) return
-          sets.set(set.number, set)
+          const verified={...set,books:item.books?.length?item.books:set.books}
+          sets.set(verified.number, verified)
           status.textContent = ''
           saveCache()
-          showDetails(set)
+          showDetails(verified)
         } catch (error) {
           if (!signal.aborted && id === requestId) status.textContent = t.error
         } finally {
@@ -390,7 +406,7 @@ export async function mountSetCatalog(
       (!hasRebrickable() || (remoteStarted && !nextPage))
     more.disabled = loading
     more.textContent = loading ? t.loading : retry ? t.retry : t.more
-    if (!more.hidden && !loading && !retry) observer.observe(more)
+    if (!more.hidden && !loading && !retry && displayed.size) observer.observe(more)
   }
   async function loadMore() {
     if (loading || signal.aborted || more.hidden) return
@@ -399,9 +415,11 @@ export async function mountSetCatalog(
     status.textContent = t.loading
     updateMore()
     let failed = false
+    const appendVerified=items=>{if(!signal.aborted&&generation===listGeneration){appendItems(items);resultCount.textContent=tr('Показано: ','Shown: ')+formatCount(displayed.size)}}
     try {
       if (localOffset < localItems.length) {
-        appendItems(localItems.slice(localOffset, localOffset + pageSize))
+        await withInstructions(localItems.slice(localOffset,localOffset+pageSize),listController.signal,appendVerified)
+        if(signal.aborted||generation!==listGeneration)return
         localOffset += pageSize
       } else if (hasRebrickable() && (!remoteStarted || nextPage)) {
         const cursor = nextPage
@@ -412,7 +430,8 @@ export async function mountSetCatalog(
           activeFilters,
         )
         if (signal.aborted || generation !== listGeneration) return
-        appendItems(page.items)
+        await withInstructions(page.items,listController.signal,appendVerified)
+        if(signal.aborted||generation!==listGeneration)return
         if (cursor) pages.add(cursor)
         nextPage = page.next && !pages.has(page.next) ? page.next : null
         remoteStarted = true
@@ -422,7 +441,7 @@ export async function mountSetCatalog(
         ? !hasRebrickable()
           ? t.connectHint
           : ''
-        : t.empty
+        : tr('Нет подтверждённых инструкций на этой странице. Продолжи поиск.','No confirmed instructions on this page. Continue searching.')
     } catch (error) {
       if (signal.aborted || generation !== listGeneration) return
       failed = true
@@ -443,7 +462,6 @@ export async function mountSetCatalog(
     loading = false
     activeQuery = query.value.trim()
     recommended.hidden=Boolean(activeQuery)||!recommended.childElementCount
-    demo.hidden=Boolean(activeQuery)
     activeFilters = filters.read()
     // Let the server order the full catalog, without a locally cached prefix.
     localItems = hasRebrickable()
