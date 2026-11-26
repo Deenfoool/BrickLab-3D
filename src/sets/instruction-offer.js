@@ -40,14 +40,14 @@ export async function mountInstructionOffer(root,{set,language,signal,onStart,st
    root.append(features);return
   }else{
    start.textContent=basic;start.classList.add('set-basic-action')
-   desc.textContent=tr('Открой подсказки для всего набора. PDF и первые 10 шагов остаются доступны без оплаты.','Unlock hints for the entire set. PDF and the first 10 steps remain free.')
+   desc.textContent=tr('Открой подсказки для всего набора. PDF и первые '+(offer.trialSteps??10)+' шагов остаются доступны без оплаты.','Unlock hints for the entire set. PDF and the first '+(offer.trialSteps??10)+' steps remain free.')
    root.append(features)
    if(offer.state==='signin'){
     const sign=make('a',tr('Войти для активации','Sign in to activate'),'workspace-action');sign.href='#account';root.append(sign);return
    }
    if(offer.state==='welcome'){
     const gift=make('div',undefined,'set-offer-gift')
-    gift.append(make('strong',tr('Подарок: осталось '+offer.remaining+' из 3 активаций','Gift: '+offer.remaining+' of 3 activations left')),make('p',tr('Один набор навсегда. Активация списывается только после нажатия.','One set forever. A credit is used only after confirmation.')))
+    gift.append(make('strong',tr('Welcome Pack · осталось '+offer.remaining+' активаций','Welcome Pack · '+offer.remaining+' activations left')),make('p',tr('Один набор навсегда. Заверши первую подарочную сборку, сохрани её в облаке и получи второй набор.','One set forever. Complete your first gifted build, save it to the cloud and earn a second set.')))
     const claim=button(tr('Активировать бесплатно и начать','Activate free and start'),async()=>{
      claim.disabled=true
      try{const r=await api('/api/commerce/instruction-activate',signal,{setId});if(!current())return;if(!['owned','plus'].includes(r.state))throw Error('unavailable');onStart()}catch(e){showError(e);claim.disabled=false}
@@ -63,21 +63,34 @@ export async function mountInstructionOffer(root,{set,language,signal,onStart,st
   const consent=make('label',undefined,'set-offer-consent'),check=make('input'),terms=make('span',offer.mode==='test'?tr('Согласен на тестовую оплату без списания. ','I accept sandbox checkout with no charge. '):tr('Принимаю условия покупки и возврата. ','I accept purchase and refund terms. '))
   check.type='checkbox'
   const legal=make('a',tr('Оферта','Offer'));legal.href='/offer';legal.target='_blank';legal.rel='noopener noreferrer';terms.append(legal);consent.append(check,terms)
-  let quote=null
+  let quote=null,plusQuote=null
+  async function checkout(q,sku){
+   const result=await api('/api/commerce/checkout',signal,{sku,amountKopecks:q.amountKopecks,offerVersion:q.offerVersion,accepted:true,mode:offer.mode})
+   if(!current())return
+   if(result.mode!==offer.mode)throw Error('mode_changed')
+   if(result.checkoutUrl){const url=safeCheckoutUrl(result.checkoutUrl);if(!url)throw Error('unsafe_checkout');try{sessionStorage.setItem('bricklab-instruction-return',setId)}catch{}location.assign(url);return}
+   if(result.status==='succeeded'){await retry();return}
+   throw Error('payment_not_confirmed')
+  }
   const pay=button(offer.pending?tr('Продолжить оплату','Resume checkout'):offer.mode==='test'?tr('Тестовая покупка','Sandbox purchase'):tr('Купить интерактивность','Unlock interactive hints'),async()=>{
    if(!quote||!check.checked||!current())return
    pay.disabled=true
    try{
-    const result=await api('/api/commerce/checkout',signal,{sku:p.id,amountKopecks:quote.amountKopecks,offerVersion:quote.offerVersion,accepted:true,mode:offer.mode})
-    if(!current())return
-    if(result.mode!==offer.mode)throw Error('mode_changed')
-    if(result.checkoutUrl){const url=safeCheckoutUrl(result.checkoutUrl);if(!url)throw Error('unsafe_checkout');try{sessionStorage.setItem('bricklab-instruction-return',setId)}catch{}location.assign(url);return}
-    if(result.status==='succeeded'){await retry();return}
-    throw Error('payment_not_confirmed')
+    await checkout(quote,p.id)
    }catch(e){showError(e);pay.disabled=!check.checked}
   },true)
-  pay.disabled=true;check.onchange=()=>pay.disabled=!quote||!check.checked
-  root.append(priceRow,consent,pay,status)
+  pay.disabled=true
+  let plusPay=null
+  root.append(priceRow,pay)
+  if(offer.plusProduct&&offer.mode==='live'){
+   const plus=make('div',undefined,'set-offer-gift'),plusPrice=make('strong',money(offer.plusProduct.priceKopecks))
+   plus.append(make('h3','BrickLab Plus'),plusPrice,make('p',tr('1 месяц · все поддерживаемые наборы, 60 облачных проектов, расширенная история. Без автопродления.','1 month · all supported sets, 60 cloud projects, more revisions. No auto-renewal.')))
+   plusPay=button(tr('Выбрать BrickLab Plus','Choose BrickLab Plus'),async()=>{if(!plusQuote||!check.checked)return;plusPay.disabled=true;try{await checkout(plusQuote,offer.plusProduct.id)}catch(e){showError(e);plusPay.disabled=!check.checked}},true)
+   plusPay.disabled=true;plus.append(plusPay);root.append(plus)
+   void api('/api/commerce/quote?sku='+encodeURIComponent(offer.plusProduct.id),signal).then(q=>{if(current()&&q.mode===offer.mode&&Number.isSafeInteger(q.amountKopecks)&&q.amountKopecks>0){plusQuote=q;plusPrice.textContent=money(q.amountKopecks);plusPay.disabled=!check.checked}}).catch(()=>{})
+  }
+  check.onchange=()=>{pay.disabled=!quote||!check.checked;if(plusPay)plusPay.disabled=!plusQuote||!check.checked}
+  root.append(consent,status)
   try{
    const q=await api('/api/commerce/quote?sku='+encodeURIComponent(p.id),signal)
    if(!current())return
