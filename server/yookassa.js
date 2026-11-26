@@ -62,6 +62,32 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
    }
    return 'pending'
   },
+  async requestTestRefund(uid,orderId){
+   if(!config.enabled||environment!=='test'||!uuid.test(orderId??''))throw new ProjectError(400,'invalid_refund')
+   const order=await store.requestCommerceTestRefund(uid,orderId)
+   if(!order)throw new ProjectError(404,'refundable_order_not_found')
+   let refund
+   if(order.refundId)refund=await call('refunds/'+order.refundId)
+   else{
+    if(Date.now()-new Date(order.requestedAt).getTime()>23*3600000)throw new ProjectError(409,'refund_reconciliation_required')
+    const paid=await call('payments/'+order.paymentId)
+    if(!validPayment(paid,order.paymentId,'test')||paid.metadata.order_id!==order.id||paid.status!=='succeeded'||paid.paid!==true||amountKopecks(paid.amount.value)!==order.amountKopecks)throw new ProjectError(409,'payment_mismatch')
+    // A previous refund may have succeeded before its response reached us.
+    // Replay only the same idempotency key, never generate a new refund key.
+    refund=await call('refunds',{payment_id:order.paymentId,amount:{currency:'RUB',value:(order.amountKopecks/100).toFixed(2)}},order.id)
+   }
+   if(!uuid.test(refund?.id??'')||refund.payment_id!==order.paymentId||refund.amount?.currency!=='RUB'||amountKopecks(refund.amount.value)!==order.amountKopecks||order.refundId&&refund.id!==order.refundId)throw new ProjectError(409,'refund_mismatch')
+   if(!await store.attachCommerceTestRefund(order.id,refund.id))throw new ProjectError(409,'refund_mismatch')
+   if(refund.status==='succeeded')await this.reconcileTestRefund(refund.id)
+   return {status:refund.status,mode:'test'}
+  },
+  async pollTestRefund(order){
+   if(!config.enabled||environment!=='test'||!uuid.test(order?.refundId??''))throw new ProjectError(400,'invalid_refund')
+   const refund=await call('refunds/'+order.refundId)
+   if(refund?.id!==order.refundId||refund.payment_id!==order.paymentId||refund.amount?.currency!=='RUB'||amountKopecks(refund.amount.value)!==order.amountKopecks)throw new ProjectError(409,'refund_mismatch')
+   if(refund.status==='succeeded')await this.reconcileTestRefund(refund.id)
+   return refund.status
+  },
   async reconcileTestRefund(refundId){
    if(!config.enabled||environment!=='test'||!uuid.test(refundId??''))throw new ProjectError(400,'invalid_refund')
    const refund=await call('refunds/'+refundId)
