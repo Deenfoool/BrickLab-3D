@@ -1,4 +1,5 @@
 import {projectAccount,plusLoyalty,instructionProduct,discountedPrice} from '../../src/menu/commerce-catalog.js'
+import {quoteInstructionBundle} from '../../src/menu/instruction-bundle-pricing.js'
 import {commerceQuote} from '../commerce-quote.js'
 import {ProjectError} from '../projects.js'
 
@@ -62,6 +63,14 @@ async function orderQuote(tx,uid,sku,offerVersion,beta,environment,product){
 }
 export function commerceStore(scope){
  return {
+  async quoteSandboxPack(uid,setIds,products,offerVersion){return scope(uid,tx=>sandboxPackQuote(tx,uid,setIds,products,offerVersion))},
+  async createSandboxPack(uid,setIds,products,amount,offerVersion){return scope(uid,async tx=>{
+   await tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text,312042))`
+   const q=await sandboxPackQuote(tx,uid,setIds,products,offerVersion)
+   if(q.amountKopecks!==amount)throw new ProjectError(409,'quote_changed')
+   const [row]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",idempotency_key as "idempotencyKey",payment_id as "paymentId",created_at as "createdAt" from bricklab.commerce_create_test_pack(${q.sku},${q.title},${amount}::integer,${offerVersion},${tx.json(q.lines)})`
+   return row
+  })},
   async recordInstructionActivity(uid,set,event){return scope(uid,tx=>tx`select bricklab.record_instruction_activity(${set},${event})`)},
   async instructionAnalytics(uid){return scope(uid,async tx=>{const [r]=await tx`select bricklab.instruction_analytics() as data`;return r.data})},
   async earnFirstBuilder(uid,projectId,checkCompletion){return scope(uid,async tx=>{
