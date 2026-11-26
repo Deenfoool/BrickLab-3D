@@ -20,7 +20,7 @@ import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=sys
 import { mountLibrary } from './library.js?v=catalog-engine-1'
 import { createScene } from './scene.js?v=collision-1'
 import {mountTransmissionMap,transmissionMap,transmissionCodes} from './transmission-map.js'
-import {mountCollisionPanel} from './collision-panel.js?v=engineering-2'
+import {mountCollisionPanel} from './collision-panel.js?v=engineering-3'
 import {mountMotorBench} from './motor-bench-panel.js'
 import {mountDriveEstimate} from './drive-estimate-panel.js'
 import {engineeringReport,downloadEngineeringReport} from './engineering-report.js'
@@ -1414,7 +1414,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     }else scene.highlight(activeJoint?.moving ?? additional, 0xffb01b, false)
   }
 
-  async function scanCollisionPoses(count,request,progress){
+  async function scanCollisionPoses(count,includeMated,request,progress){
     const sweep=count>1,deadline=performance.now()+15000
     stopAnimation();releaseMotor()
     locatingCollision=true
@@ -1444,10 +1444,10 @@ export async function mountEditor(root, { document, projectId, language, save, d
       const placed=base.map(p=>byId.get(p.id)??p)
       // For sweep checks, keep every pair involving a solver-driven part, even at rest.
       const movingIds=sweep?new Set(hinge?.ok?hinge.moving:poses.map(p=>p.id)):null
-      const result=await inspectCollisions({parts:placed,models,connections:links,movingIds,signal:request,deadline})
+      const result=await inspectCollisions({parts:placed,models,connections:links,movingIds,signal:request,deadline,includeMated})
       samples.push({...result,value})
     }
-    return {samples,linear,requested:values.length,truncated:samples.length<values.length}
+    return {samples,linear,includeMated,requested:values.length,truncated:samples.length<values.length}
   }
   function locateCollision(hit){
     if(mode!=='kinematics')return
