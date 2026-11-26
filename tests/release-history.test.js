@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs'
 import { historyPath, parseHistory, validateHistory, isMajorChange, checkChange } from '../scripts/check-release-history.mjs'
 const source = readFileSync(new URL('../'+historyPath,import.meta.url),'utf8')
 const history = parseHistory(source)
-const entry = ['2026-11-27','pull/999','Новый инструмент','Добавлен новый инструмент для работы с деталями.','New tool','A new tool for building with parts is available.']
+const nextDate = new Date(Date.parse(history[0][0]) + 86400000).toISOString().slice(0,10)
+const entry = [nextDate,'pull/999999999','Тестовая запись истории обновлений','Добавлен тестовый инструмент для работы с деталями.','Synthetic release history entry','A synthetic tool for building with parts is available.']
 const major = [{path:'src/editor/new-tool.js',lines:80,added:true}]
 const small = [{path:'src/editor/editor.js',lines:12,added:false}]
 
