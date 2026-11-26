@@ -86,6 +86,9 @@ export function createScene(host, models) {
   marker.renderOrder = 5
   marker.visible = false
   world.add(marker)
+  const collisionMarker=new THREE.Mesh(new THREE.SphereGeometry(2.2,12,8),new THREE.MeshBasicMaterial({color:0xff5555,depthTest:false,depthWrite:false}))
+  collisionMarker.renderOrder=6;collisionMarker.visible=false;world.add(collisionMarker)
+  function markCollision(point){collisionMarker.visible=Array.isArray(point)&&point.length===3&&point.every(Number.isFinite);if(collisionMarker.visible)collisionMarker.position.fromArray(point);invalidate()}
   const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0))
   const ray = new THREE.Raycaster()
   let driveMap
@@ -134,7 +137,7 @@ export function createScene(host, models) {
       frame = null
       if (!active || renderer.getContext().isContextLost()) return
       if (presenting) {
-        const helpers=[marker,frontArrow,gizmo.getHelper(),ghost].filter(Boolean)
+        const helpers=[marker,collisionMarker,frontArrow,gizmo.getHelper(),ghost].filter(Boolean)
         const visibility=helpers.map(object=>object.visible)
         try { for(const object of helpers)object.visible=false;renderer.render(world,camera) }
         finally { helpers.forEach((object,index)=>object.visible=visibility[index]) }
@@ -484,7 +487,7 @@ export function createScene(host, models) {
     setGhost(null)
     setGroupGhost([])
     for (const object of objects.values()) object.userData.finish.dispose()
-    for (const object of [floor, axes, marker]) {
+    for (const object of [floor, axes, marker, collisionMarker]) {
       object.geometry.dispose()
       object.material.dispose()
     }
@@ -495,7 +498,7 @@ export function createScene(host, models) {
 
   function capturePublication(){
     if(!active||!canvas.width||!canvas.height)return null
-    const helpers=[floor,axes,frontArrow,marker,gizmo.getHelper(),ghost].filter(o=>o&&typeof o.visible==='boolean')
+    const helpers=[floor,axes,frontArrow,marker,collisionMarker,gizmo.getHelper(),ghost].filter(o=>o&&typeof o.visible==='boolean')
     const visibility=helpers.map(o=>o.visible)
     try{
       for(const o of helpers)o.visible=false
@@ -522,5 +525,5 @@ export function createScene(host, models) {
     showGrid = grid; showAxes = axis
     floor.visible = !driveMap && showGrid; axes.visible = !driveMap && showAxes
     invalidate()
-  }, setWiresVisible(value) { motorCables.visible(value); invalidate() }, canvas, camera, gizmo, belts, snapProjector, project, focus, highlight, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, selectInRect, enableBoxSelect, setGhost, setGroupGhost, setMoving, resetView, dispose }
+  }, setWiresVisible(value) { motorCables.visible(value); invalidate() }, canvas, camera, gizmo, belts, snapProjector, project, focus, highlight, markCollision, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, selectInRect, enableBoxSelect, setGhost, setGroupGhost, setMoving, resetView, dispose }
 }
