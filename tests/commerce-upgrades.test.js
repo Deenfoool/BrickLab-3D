@@ -230,6 +230,37 @@ test('real PostgreSQL enforces extended quota, collection ownership and badge pr
   assert.equal(ledger.receipt_delivery_url,receiptUrl)
   const numbers=await db`select count(*)::int as n,count(distinct order_number)::int as unique_n from bricklab.commerce_orders`
   assert.equal(numbers[0].n,numbers[0].unique_n)
+  // Isolated database only: claim, ambiguous write, replay and full correction.
+  const qFiscal=await store.quoteCommerce(uid,'aurora',terms,true,'live')
+  const fiscal=await store.createCommerceOrder(uid,'aurora',qFiscal.amountKopecks,terms,true,'live')
+  const fiscalPayment=crypto.randomUUID()
+  assert.equal(await store.attachCommercePayment(fiscal.id,fiscalPayment,'live'),true)
+  assert.equal(await store.fulfillCommercePayment(fiscal.id,fiscalPayment,'live',qFiscal.amountKopecks),true)
+  const since=new Date(Date.now()-60000)
+  const [job]=await db`select * from bricklab.commerce_claim_fiscal(${since})`
+  assert.equal(job.id,fiscal.id);assert.equal(job.action,'issue')
+  assert.equal((await db`select * from bricklab.commerce_claim_fiscal(${since})`).length,0)
+  await assert.rejects(store.registerCommerceReceipt(uid,fiscal.id,'https://lknpd.nalog.ru/api/v1/receipt/000000000000/manual/print'),/fiscal_reconciliation_required/)
+  await db`update bricklab.commerce_orders set fiscal_next_at=now() where id=${fiscal.id}`
+  const [replay]=await db`select * from bricklab.commerce_claim_fiscal(${since})`
+  assert.equal(replay.action,'reconcile_issue')
+  const url='https://lknpd.nalog.ru/api/v1/receipt/000000000000/autoReceipt/print'
+  const [done]=await db`select bricklab.commerce_fiscal_finish(${fiscal.id}::uuid,'issue','autoReceipt',${url},now()) as ok`
+  assert.equal(done.ok,true)
+  assert.equal((await store.commerceAccount(uid)).orders.find(o=>o.id===fiscal.id).receiptUrl,url)
+  assert.equal(await store.refundCommercePayment(fiscalPayment,'live',qFiscal.amountKopecks),true)
+  const [cancel]=await db`select * from bricklab.commerce_claim_fiscal(${since})`
+  assert.equal(cancel.id,fiscal.id);assert.equal(cancel.action,'cancel')
+  await db`update bricklab.commerce_orders set fiscal_next_at=now() where id=${fiscal.id}`
+  const [cancelReplay]=await db`select * from bricklab.commerce_claim_fiscal(${since})`
+  assert.equal(cancelReplay.action,'reconcile_cancel')
+  const [cancelDone]=await db`select bricklab.commerce_fiscal_finish(${fiscal.id}::uuid,'cancel','autoReceipt',${url},now()) as ok`
+  assert.equal(cancelDone.ok,true)
+  const [fiscalFinal]=await db`select fiscal_state,receipt_correction_pending from bricklab.commerce_orders where id=${fiscal.id}`
+  assert.equal(fiscalFinal.fiscal_state,'canceled');assert.equal(fiscalFinal.receipt_correction_pending,false)
+  const [rights]=await db`select has_function_privilege('bricklab_app','bricklab.commerce_claim_fiscal(timestamptz)','EXECUTE') as allowed`
+  assert.equal(rights.allowed,false)
+
 
   assert.equal((await store.getActivity(uid)).limits.projects,60)
 
