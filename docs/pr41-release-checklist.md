@@ -32,7 +32,7 @@ This branch is an unreleased development candidate. Do not deploy it, merge it i
 ## Remaining work (not represented as completed)
 - Continuous swept collision detection, closed-solid containment and interference within mated pairs; actual dynamic force distribution, validated material/strength models, thermal limits, friction and motor calibration.
 - Geometry-verified first-build completion and broader per-set instruction audits.
-- Full paid credit bundle design, purchase/refund/entitlement accounting; no new SKU enabled yet.
+- Live Build Pack fiscal support and release authorization; admin sandbox order and refund path added.
 - Real browser profiling, accessibility and language review, measured recognition accuracy, end-to-end tests and production release.
 
 ## Added engineering / studio review
@@ -40,7 +40,7 @@ This branch is an unreleased development candidate. Do not deploy it, merge it i
 - [ ] Advanced collision mode: exact coincident duplicates, default mated-pair skip, opt-in mated-pair false positives, result classification and reset.
 - [ ] Photo Studio: all aspect ratios, six angles, framing, shadow switch, four-view sheet, title caption, complete model geometry, output dimension and cancellation.
 - [ ] Migrations 106–107: dollar-quoted function delimiters repaired; still require actual SQL execution.
-- [ ] Bundle pricing prototype and invariants documented; no payment SKU, API or UI enabled. See docs/instruction-bundles.md.
+- [ ] Build Pack sandbox pricing, order and refund invariants documented; no live SKU enabled. See docs/instruction-bundles.md.
 
 ## Release candidate scope freeze
 - [ ] Migration 108: sandbox pack lines, three distinct sets, idempotent creation, reservation conflict with individual orders, verified test payment, three atomic grants, repeat notification and full revocation; no live creation path.
