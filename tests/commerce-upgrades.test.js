@@ -340,3 +340,29 @@ test('sandbox pack atomically grants and refunds exactly three sets',{skip:!enab
   assert.equal(r.n,3)
  }finally{await store.close();await db.end()}
 })
+
+test('username migration and coauthor credit resolve only published profiles; code attempts persist',{skip:!enabled},async()=>{
+ assert.equal(process.env.PGDATABASE,'bricklab_commerce_check')
+ const db=postgres({host:process.env.PGHOST,port:Number(process.env.PGPORT||5432),database:process.env.PGDATABASE,username:'bricklab_admin',password:process.env.COMMERCE_ADMIN_PASSWORD,max:1})
+ const store=connectAuthStore()
+ try{
+  const uid='39000000-0000-4000-8000-000000000001',other='39000000-0000-4000-8000-000000000002'
+  for(const [id,email,name] of [[uid,'polish-a@example.invalid','PolishAlice'],[other,'polish-b@example.invalid','PolishBob']])await db`insert into bricklab.users(id,email,display_name,password_hash) values(${id},${email},${name},'fixture')`
+  assert.equal((await store.findUser('polishalice')).id,uid)
+  assert.equal((await store.findUser('polish-a@example.invalid')).username,'polishalice')
+  for(const id of [uid,other])await store.publishCard(id,{displayName:'Builder',bio:''})
+  const bob=await store.getOwnCard(other);assert.equal((await store.getPublicCard('polishbob')).id,bob.id)
+  const p=await store.createProject(uid,{format:'bricklab-3d',version:1,name:'Coauthor fixture',parts:[{id:'a',design:'32316',position:[0,0,0],rotation:[0,0,0,1]}],connections:[]})
+  await store.publishBuild(uid,p.id,{revision:p.revision,description:'',coauthors:['polishbob']})
+  const [published]=await store.listOwnBuilds(uid)
+  assert.equal(published.coauthors[0].username,'polishbob')
+  assert.equal((await store.getPublicBuild(published.id)).coauthors[0].id,bob.id)
+  await assert.rejects(store.publishBuild(uid,p.id,{revision:p.revision,description:'',coauthors:['polishalice']}),/unknown_coauthor/)
+  const email='polish-code@example.invalid',hash='a'.repeat(64)
+  assert.equal(await store.issueAccountToken(email,'register',hash),true)
+  for(let i=0;i<5;i++)assert.equal(await store.finishAccountToken(email,'register','b'.repeat(64),'fixture','NewBuilder','newbuilder'),false)
+  assert.equal(await store.finishAccountToken(email,'register',hash,'fixture','NewBuilder','newbuilder'),false)
+  const [token]=await db`select failed_attempts from bricklab.account_tokens where email=${email}`
+  assert.equal(token.failed_attempts,5)
+ }finally{await store.close();await db.end()}
+})

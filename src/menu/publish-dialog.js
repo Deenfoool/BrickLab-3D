@@ -1,4 +1,4 @@
-import {createAuthClient} from './auth-client.js?v=security-1'
+import {createAuthClient} from './auth-client.js?v=live-polish-1'
 import {createProjectsClient,cloudLink} from './projects-client.js?v=profile-gallery-1'
 import {createCommunityClient} from './community-client.js?v=community-options-1'
 
@@ -115,7 +115,7 @@ export async function openPublishDialog({record,language='ru',signal,linkLocal,c
     notice.textContent=t.done+(saved.linked?'':' '+t.linkFailed);form.remove();cancel.textContent=t.close
     const a=el('a','workspace-action primary',t.view);a.href='#community/build/'+published.id;footer.append(a)
     try{onPublished()}catch{}
-   }catch(err){if(!closed)notice.textContent=err.code==='revision_conflict'?t.conflict:err.code==='remix_disabled'?t.remixDisabled:err.message==='unauthenticated'?t.signin:saved?t.partial:t.failed}
+   }catch(err){if(!closed)notice.textContent=err.code==='unknown_coauthor'?(language==='ru'?'Соавтор не найден, заблокирован или не опубликовал профиль. Проверь логины и повтори.':'Coauthor not found or has no public profile. Check usernames and retry.'):err.code==='revision_conflict'?t.conflict:err.code==='remix_disabled'?t.remixDisabled:err.message==='unauthenticated'?t.signin:saved?t.partial:t.failed}
    finally{busy=false;if(!closed){cancel.disabled=false;for(const control of form.elements)control.disabled=false;if(source)type.disabled=true;sync();drawImages()}}
   }
  }catch(e){if(!closed)notice.textContent=e.code==='unauthenticated'?t.signin:t.failed}

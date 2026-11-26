@@ -24,7 +24,7 @@ test('registration creates no session, code is hashed and one-use; recovery uses
  assert.equal(r.status,202);assert.equal(r.headers.get('set-cookie'),null);assert.deepEqual(await r.json(),{pending:true});assert.equal(finished.length,0)
  assert.equal(codes.length,1);assert.match(codes[0].code,/^\d{6}$/);assert.match(tokens.get(email+':register'),/^[a-f0-9]{64}$/);assert.notEqual(tokens.get(email+':register'),digest(codes[0].code));assert.notEqual(tokens.get(email+':register'),codes[0].code)
  assert.equal((await api('auth/verify',{body:{email,code:'0'.repeat(48),password,displayName:'Builder'}})).status,400)
- const valid={email,code:codes[0].code,password,displayName:'Builder'}
+ const valid={email,code:codes[0].code.slice(0,3)+'-'+codes[0].code.slice(3),password,displayName:'Builder'}
  assert.equal((await api('auth/verify',{body:valid})).status,200)
  assert.equal((await api('auth/verify',{body:valid})).status,400)
  assert.equal(finished[0].name,'Builder');assert.equal(await verifyPassword(password,finished[0].hash),true)

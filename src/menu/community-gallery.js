@@ -1,5 +1,5 @@
 import {commerceBadge} from './commerce-visuals.js?v=merch-2'
-import {renderUnifiedHero,renderPortfolio} from './unified-profile.js?v=welcome-2'
+import {renderUnifiedHero,renderPortfolio} from './unified-profile.js?v=live-polish-1'
 import {productById} from './commerce-catalog.js'
 import {applySignature,decorateAuthor,themeBadge,themePlate,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {backgroundIds} from './store-themes.js?v=themes-2'
@@ -182,6 +182,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   if(b.authorId!==social.ownId)actions.append(button(t.reportBuild,()=>{if(!social.signedIn){location.hash='#account';return}reportForm.hidden=!reportForm.hidden}))
   actions.append(reportForm)
   const credit=el('div','community-model-credit')
+  if(b.coauthors?.length){const row=el('div','community-coauthors');row.append(el('strong',null,language==='ru'?'Соавторы (указаны автором)':'Coauthors (credited by author)'));for(const p of b.coauthors)row.append(link('@'+p.username,'#community/profile/'+p.username));credit.append(row)}
   if(b.attribution){credit.append(el('p','account-muted',t.attribution+': '+b.attribution));if(b.originId&&uuid.test(b.originId))credit.append(link(t.attribution,'#community/build/'+b.originId))}
   credit.append(el('p','account-muted',b.allowRemix?t.remixAllowed:t.remixForbidden))
   info.append(authorBar,meta,el('h3',null,t.aboutModel),el('p','community-description',b.description||t.noDescription),credit,stats,actions,notice)

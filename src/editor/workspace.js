@@ -82,10 +82,10 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
   projectItems.append(label)
   const home=back.cloneNode(true)
   home.className='workspace-home-link'
-  home.replaceChildren(doc.createTextNode(tr('Мои сборки','My builds')))
+  home.replaceChildren(doc.createRange().createContextualFragment(svg('library')),doc.createTextNode(tr('Мои сборки','My builds')))
   projectItems.append(home)
-  const studio=create('button','workspace-home-link');studio.type='button';studio.textContent=tr('Фотостудия','Photo Studio');projectItems.append(studio);on(studio,'click',()=>{project.open=false;openPhotoStudio?.()})
-  if(openCollaboration){const collaboration=create('button','workspace-home-link');collaboration.type='button';collaboration.textContent=tr('Совместная сессия','Live collaboration');projectItems.append(collaboration);on(collaboration,'click',()=>{project.open=false;openCollaboration()})}
+  const studio=create('button','workspace-home-link');studio.type='button';studio.innerHTML=svg('camera')+'<span>'+tr('Фотостудия','Photo Studio')+'</span>';projectItems.append(studio);on(studio,'click',()=>{project.open=false;openPhotoStudio?.()})
+  if(openCollaboration){const collaboration=create('button','workspace-home-link');collaboration.type='button';collaboration.innerHTML=svg('layers')+'<span>'+tr('Совместная сессия','Live collaboration')+'</span>';projectItems.append(collaboration);on(collaboration,'click',()=>{project.open=false;openCollaboration()})}
   project.append(projectItems)
   back.after(project,status)
   const share=create('details','workspace-menu workspace-share')
@@ -95,6 +95,8 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
   shareItems.append(el('export'),el('publish'))
   share.append(shareTitle,shareItems)
   actions.append(share)
+  on(doc,'pointerdown',e=>{for(const menu of [project,share])if(menu.open&&!menu.contains(e.target))menu.open=false})
+  on(doc,'keydown',e=>{if(e.key==='Escape')for(const menu of [project,share])if(menu.open){menu.open=false;menu.querySelector('summary')?.focus()}})
   const context=create('div','workspace-context')
   const leftTools=create('div','workspace-context-group')
   const rightTools=create('div','workspace-context-group')
