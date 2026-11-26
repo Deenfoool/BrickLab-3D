@@ -1,7 +1,7 @@
 import {ProjectError} from './projects.js'
 import {amountKopecks} from './payments.js'
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const paymentId=/^[0-9a-f-]{36}$/i
+const paymentId=uuid
 const apiBase='https://api.yookassa.ru/v3/'
 export function yookassaConfig(env=process.env){
  const shopId=env.BRICKLAB_YOOKASSA_TEST_SHOP_ID??'',secret=env.BRICKLAB_YOOKASSA_TEST_SECRET??''
@@ -49,6 +49,18 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
    const url=checkoutUrl(payment.confirmation?.confirmation_url)
    if(payment.status!=='pending'||!url)throw new ProjectError(409,'checkout_unavailable')
    return {orderId:order.id,status:'pending',checkoutUrl:url,mode:environment}
+  },
+  async reconcileTestPayment(order){
+   if(!config.enabled||environment!=='test')throw new ProjectError(503,'yookassa_test_disabled')
+   if(!uuid.test(order?.id??'')||!paymentId.test(order?.paymentId??'')||!Number.isSafeInteger(order.amountKopecks))throw new ProjectError(409,'invalid_order')
+   const verified=await call('payments/'+order.paymentId)
+   if(!validPayment(verified,order.paymentId,'test')||verified.metadata.order_id!==order.id||amountKopecks(verified.amount.value)!==order.amountKopecks)throw new ProjectError(409,'payment_mismatch')
+   if(verified.status==='succeeded'){await settle(verified);return 'succeeded'}
+   if(verified.status==='canceled'){
+    if(!await store.cancelCommercePayment(order.id,order.paymentId,'test',order.amountKopecks))throw new ProjectError(409,'payment_mismatch')
+    return 'canceled'
+   }
+   return 'pending'
   },
   async notification(event){
    if(!config.enabled)throw new ProjectError(503,'yookassa_test_disabled')
