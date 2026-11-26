@@ -231,8 +231,8 @@ test('real PostgreSQL enforces extended quota, collection ownership and badge pr
   const numbers=await db`select count(*)::int as n,count(distinct order_number)::int as unique_n from bricklab.commerce_orders`
   assert.equal(numbers[0].n,numbers[0].unique_n)
   // Isolated database only: claim, ambiguous write, replay and full correction.
-  const qFiscal=await store.quoteCommerce(uid,'aurora',terms,true,'live')
-  const fiscal=await store.createCommerceOrder(uid,'aurora',qFiscal.amountKopecks,terms,true,'live')
+  const qFiscal=await store.quoteCommerce(uid,'plus-1',terms,true,'live')
+  const fiscal=await store.createCommerceOrder(uid,'plus-1',qFiscal.amountKopecks,terms,true,'live')
   const fiscalPayment=crypto.randomUUID()
   assert.equal(await store.attachCommercePayment(fiscal.id,fiscalPayment,'live'),true)
   assert.equal(await store.fulfillCommercePayment(fiscal.id,fiscalPayment,'live',qFiscal.amountKopecks),true)
