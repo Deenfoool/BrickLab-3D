@@ -29,9 +29,10 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
  }
  return {
   enabled:config.enabled,
+  environment,
   async checkout(uid,sku,quote){
    if(!config.enabled)throw new ProjectError(503,'yookassa_test_disabled')
-   const order=environment==='live'?await store.createCommerceLiveOrder(uid,sku,quote?.amountKopecks,quote?.offerVersion,quote?.beta):await store.createCommerceTestOrder(uid,sku)
+   const order=quote?.unified===true?await store.createCommerceOrder(uid,sku,quote.amountKopecks,quote.offerVersion,quote.beta,environment):environment==='live'?await store.createCommerceLiveOrder(uid,sku,quote?.amountKopecks,quote?.offerVersion,quote?.beta):await store.createCommerceTestOrder(uid,sku)
    let payment
    if(order.paymentId)payment=await call('payments/'+order.paymentId)
    else{
@@ -66,20 +67,20 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
    if(environment!=='test')throw new ProjectError(503,'yookassa_test_disabled')
    return this.reconcilePayment(order)
   },
-  async requestTestRefund(uid,orderId){
-   if(!config.enabled||environment!=='test'||!uuid.test(orderId??''))throw new ProjectError(400,'invalid_refund')
-   const order=await store.requestCommerceTestRefund(uid,orderId)
+  async requestRefund(uid,orderId,{legacy=false}={}){
+   if(!config.enabled||!uuid.test(orderId??''))throw new ProjectError(400,'invalid_refund')
+   const order=await (legacy?store.requestCommerceTestRefund(uid,orderId):store.requestCommerceRefund(uid,orderId,environment))
    if(!order)throw new ProjectError(404,'refundable_order_not_found')
    let refund
    if(order.refundId)refund=await call('refunds/'+order.refundId)
    else{
     if(Date.now()-new Date(order.requestedAt).getTime()>23*3600000)throw new ProjectError(409,'refund_reconciliation_required')
     const paid=await call('payments/'+order.paymentId)
-    if(!validPayment(paid,order.paymentId,'test')||paid.metadata.order_id!==order.id||paid.status!=='succeeded'||paid.paid!==true||amountKopecks(paid.amount.value)!==order.amountKopecks)throw new ProjectError(409,'payment_mismatch')
+    if(!validPayment(paid,order.paymentId,environment)||paid.metadata.order_id!==order.id||paid.status!=='succeeded'||paid.paid!==true||amountKopecks(paid.amount.value)!==order.amountKopecks)throw new ProjectError(409,'payment_mismatch')
     const alreadyRefunded=paid.refunded_amount?.currency==='RUB'?amountKopecks(paid.refunded_amount.value):null
     if(alreadyRefunded===order.amountKopecks){
-     if(!await store.refundCommercePayment(order.paymentId,'test',order.amountKopecks))throw new ProjectError(409,'refund_mismatch')
-     return {status:'succeeded',mode:'test'}
+     if(!await store.refundCommercePayment(order.paymentId,environment,order.amountKopecks))throw new ProjectError(409,'refund_mismatch')
+     return {status:'succeeded',mode:environment}
     }
     if(alreadyRefunded!==null&&alreadyRefunded>0)throw new ProjectError(409,'partial_refund_requires_review')
     // A previous refund may have succeeded before its response reached us.
@@ -87,16 +88,24 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
     refund=await call('refunds',{payment_id:order.paymentId,amount:{currency:'RUB',value:(order.amountKopecks/100).toFixed(2)}},order.id)
    }
    if(!uuid.test(refund?.id??'')||refund.payment_id!==order.paymentId||refund.amount?.currency!=='RUB'||amountKopecks(refund.amount.value)!==order.amountKopecks||order.refundId&&refund.id!==order.refundId)throw new ProjectError(409,'refund_mismatch')
-   if(!await store.attachCommerceTestRefund(order.id,refund.id))throw new ProjectError(409,'refund_mismatch')
-   if(refund.status==='succeeded')await this.reconcileTestRefund(refund.id)
-   return {status:refund.status,mode:'test'}
+   if(!await (legacy?store.attachCommerceTestRefund(order.id,refund.id):store.attachCommerceRefund(order.id,refund.id,environment)))throw new ProjectError(409,'refund_mismatch')
+   if(refund.status==='succeeded')await this.reconcileRefund(refund.id)
+   return {status:refund.status,mode:environment}
   },
-  async pollTestRefund(order){
+  async pollRefund(order){
    if(!config.enabled||environment!=='test'||!uuid.test(order?.refundId??''))throw new ProjectError(400,'invalid_refund')
    const refund=await call('refunds/'+order.refundId)
    if(refund?.id!==order.refundId||refund.payment_id!==order.paymentId||refund.amount?.currency!=='RUB'||amountKopecks(refund.amount.value)!==order.amountKopecks)throw new ProjectError(409,'refund_mismatch')
-   if(refund.status==='succeeded')await this.reconcileTestRefund(refund.id)
+   if(refund.status==='succeeded')await this.reconcileRefund(refund.id)
    return refund.status
+  },
+  async requestTestRefund(uid,id){
+   if(environment!=='test')throw new ProjectError(503,'yookassa_test_disabled')
+   return this.requestRefund(uid,id,{legacy:true})
+  },
+  async pollTestRefund(order){
+   if(environment!=='test')throw new ProjectError(503,'yookassa_test_disabled')
+   return this.pollRefund(order)
   },
   async reconcileRefund(refundId){
    if(!config.enabled||!uuid.test(refundId??''))throw new ProjectError(400,'invalid_refund')
