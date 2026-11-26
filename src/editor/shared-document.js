@@ -1,6 +1,6 @@
 // Shared fields only. Per-record compare-and-swap; disjoint edits commute.
 const keys={parts:p=>p.id,connections:p=>JSON.stringify([p.shaft?.part,p.shaft?.port,p.socket?.part,p.socket?.port]),belts:p=>p.id,gears:p=>p.part}
-const fields=['name','sceneLayers','testDrive']
+const fields=['name','sceneLayers','testDrive','customInstructions']
 const canonical=v=>v===undefined?'undefined':v===null||typeof v!=='object'?JSON.stringify(v):Array.isArray(v)?'['+v.map(canonical).join(',')+']':'{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canonical(v[k])).join(',')+'}'
 export const equal=(a,b)=>canonical(a)===canonical(b)
 function mapOf(field,items){if(!Array.isArray(items))throw Error('invalid_shared_records');const m=new Map();for(const item of items){if(!item||typeof item!=='object')throw Error('invalid_shared_records');const key=keys[field](item);if(typeof key!=='string'||!key||key.length>500||m.has(key))throw Error('invalid_shared_records');m.set(key,item)}return m}

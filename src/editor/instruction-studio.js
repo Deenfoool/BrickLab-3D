@@ -1,7 +1,7 @@
 import {createProjectPreviewRenderer} from './project-preview.js'
 export function normalizeSteps(value,parts){
  const valid=new Set(parts.map(p=>p.id)),seen=new Set(),steps=[]
- for(const raw of Array.isArray(value)?value.slice(0,99):[]){const ids=(Array.isArray(raw?.ids)?raw.ids:[]).filter(id=>valid.has(id)&&!seen.has(id)&&(seen.add(id),true));if(ids.length)steps.push({ids,note:String(raw.note??'').slice(0,400),angle:['iso','front','rear','left','right','top'].includes(raw.angle)?raw.angle:'iso'})}
+ for(const raw of Array.isArray(value)?value.slice(0,99):[]){const ids=(Array.isArray(raw?.ids)?raw.ids:[]).filter(id=>valid.has(id)&&!seen.has(id)&&(seen.add(id),true));if(ids.length)steps.push({ids,note:String(raw.note??'').slice(0,400),angle:['iso','front','rear','left','side','top'].includes(raw.angle)?raw.angle:'iso'})}
  const rest=parts.filter(p=>!seen.has(p.id)).map(p=>p.id);if(rest.length)steps.push({ids:rest,note:'',angle:'iso'})
  return steps
 }
@@ -12,7 +12,7 @@ export function openInstructionStudio({document:build,selection,language,signal,
  const dialog=el('dialog','instruction-studio'),header=el('header','studio-header'),side=el('aside','instruction-studio-side'),main=el('main','instruction-studio-main'),stage=el('img','instruction-studio-image'),notice=el('p','studio-status'),stepList=el('div','instruction-steps'),partList=el('div','instruction-part-list'),note=el('textarea'),angle=el('select')
  stage.alt=tr('Предпросмотр шага','Step preview')
  const btn=(txt,fn)=>{const b=el('button','workspace-action',txt);b.type='button';b.onclick=fn;return b}
- const close=btn(tr('Назад','Back'),()=>dialog.close()),store=btn(tr('Сохранить этапы','Save steps'),()=>{save(steps);notice.textContent=tr('Этапы сохранены в проекте.','Steps saved in project.')})
+ const close=btn(tr('Назад','Back'),()=>dialog.close()),store=btn(tr('Сохранить этапы','Save steps'),()=>{notice.textContent=save(steps)?tr('Этапы сохранены в проекте.','Steps saved in project.'):tr('Не удалось сохранить этапы.','Could not save steps.')})
  const pdf=btn(tr('Печать / PDF','Print / PDF'),printSteps)
  header.append(el('strong',null,'Instruction Studio · '+build.name),store,pdf,close)
  const selected=new Set(selection),chosen=new Set(),byId=new Map(build.parts.map(p=>[p.id,p]))
@@ -20,7 +20,7 @@ export function openInstructionStudio({document:build,selection,language,signal,
  const move=(delta)=>{const n=index+delta;if(busy||n<0||n>=steps.length)return;[steps[index],steps[n]]=[steps[n],steps[index]];index=n;refresh()}
  const split=btn(tr('Выбрать выделение редактора','Use editor selection'),()=>{chosen.clear();for(const id of selected)chosen.add(id);refreshParts()})
  side.append(el('h3',null,tr('Этапы сборки','Assembly steps')),stepList,btn('↑',()=>move(-1)),btn('↓',()=>move(1)),el('h3',null,tr('Детали нового этапа','Parts for new step')),split,partList,add)
- for(const [v,t] of [['iso','3/4'],['front',tr('Спереди','Front')],['right',tr('Справа','Right')],['left',tr('Слева','Left')],['rear',tr('Сзади','Rear')],['top',tr('Сверху','Top')]]){const o=el('option',null,t);o.value=v;angle.append(o)}
+ for(const [v,t] of [['iso','3/4'],['front',tr('Спереди','Front')],['side',tr('Справа','Right')],['left',tr('Слева','Left')],['rear',tr('Сзади','Rear')],['top',tr('Сверху','Top')]]){const o=el('option',null,t);o.value=v;angle.append(o)}
  note.maxLength=400;note.placeholder=tr('Комментарий к шагу','Step note');note.oninput=()=>steps[index].note=note.value;angle.onchange=()=>{steps[index].angle=angle.value;void preview()}
  main.append(stage,angle,note,notice);dialog.append(header,side,main)
  function subset(i){const ids=new Set(steps.slice(0,i+1).flatMap(s=>s.ids));return {...build,parts:build.parts.filter(p=>ids.has(p.id)),connections:build.connections.filter(l=>ids.has(l.shaft.part)&&ids.has(l.socket.part)),belts:(build.belts??[]).filter(b=>ids.has(b.a.part)&&ids.has(b.b.part)),sceneLayers:{groups:[],hiddenPartIds:[]}}}
