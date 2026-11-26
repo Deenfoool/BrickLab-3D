@@ -102,5 +102,5 @@ export function planInstallation(build,steps,models,{maxChecks=2500000}={}){
 }
 export function sampleInstallation(track,progress){
  const t=Math.max(0,Math.min(1,Number.isFinite(progress)?progress:0)),smooth=t*t*(3-2*t)
- return {visible:track.kind!=='manual'||t>=1,position:track.from.map((v,i)=>v+(track.to[i]-v)*smooth)}
+ return {visible:track.kind!=='manual'||t>=1,position:t===0?[...track.from]:t===1?[...track.to]:track.from.map((v,i)=>v+(track.to[i]-v)*smooth)}
 }

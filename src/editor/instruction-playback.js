@@ -12,7 +12,7 @@ export function createInstructionPlayback(host,{build,models,catalog}){
  world.add(solids,new THREE.HemisphereLight(0xe3efff,0x4c5260,2.15))
  for(const [color,intensity,position] of [[0xffe5ca,2.6,[1,2.7,1.6]],[0xaacbff,1.8,[-2,1.3,-1.5]]]){const light=new THREE.DirectionalLight(color,intensity);light.position.fromArray(position);world.add(light)}
  const orbit=new OrbitControls(camera,canvas);orbit.enableDamping=false
- const arrow=new THREE.ArrowHelper(new THREE.Vector3(0,1,0),new THREE.Vector3(),1,0xe68a12);arrow.visible=false;world.add(arrow)
+ const arrow=new THREE.ArrowHelper(new THREE.Vector3(0,1,0),new THREE.Vector3(),1,0xe68a12);arrow.visible=false;arrow.line.material.depthTest=false;arrow.cone.material.depthTest=false;arrow.line.renderOrder=10;arrow.cone.renderOrder=10;world.add(arrow)
  const byId=new Map(build.parts.map(p=>[p.id,p])),objects=new Map(),shown=new Set(),bounds=new THREE.Box3()
  let tracks=[],previous=[],stepBelts=[],lastCompleted=-1,view='iso',closed=false,frame=0,aspect=1,arrows=true
  const belts=createBeltScene(world,id=>shown.has(id)?byId.get(id):undefined,()=>{})
@@ -23,9 +23,9 @@ export function createInstructionPlayback(host,{build,models,catalog}){
  function objectFor(id){if(objects.has(id))return objects.get(id);const p=byId.get(id),m=models.get(p.design);if(!m)return null;const o=partMesh(m,p.color??catalog[p.design]?.color??'#9ca3af');o.quaternion.fromArray(p.rotation);o.scale.x=p.mirrored?-1:1;solids.add(o);objects.set(id,o);return o}
  function configure(before,next,angle){
   previous=[...before];tracks=next;view=angle;lastCompleted=-1;shown.clear();bounds.makeEmpty()
-  const keep=new Set([...previous,...tracks.map(t=>t.id)])
+  const old=new Set(previous),keep=new Set([...previous,...tracks.map(t=>t.id)])
   for(const [id,o] of objects)if(!keep.has(id)){solids.remove(o);o.userData.finish.dispose();objects.delete(id)}
-  for(const id of keep){const p=byId.get(id),o=objectFor(id);if(!o)continue;o.position.fromArray(p.position);o.userData.finish.color.set(p.color??catalog[p.design]?.color??'#9ca3af');if(previous.includes(id))o.userData.finish.color.lerp(new THREE.Color('#a5adb7'),.75);o.visible=false;const b=installationBounds(p,models.get(p.design));if(b)bounds.union(b)}
+  for(const id of keep){const p=byId.get(id),o=objectFor(id);if(!o)continue;o.position.fromArray(p.position);o.userData.finish.color.set(p.color??catalog[p.design]?.color??'#9ca3af');if(old.has(id))o.userData.finish.color.lerp(new THREE.Color('#a5adb7'),.75);o.visible=false;const b=installationBounds(p,models.get(p.design));if(b)bounds.union(b)}
   for(const t of tracks){if(t.kind==='manual')continue;const p=byId.get(t.id),b=installationBounds(p,models.get(p.design));if(b)bounds.union(b.translate(new THREE.Vector3(...t.from).sub(new THREE.Vector3(...t.to))))}
   stepBelts=(build.belts??[]).filter(b=>keep.has(b.a.part)&&keep.has(b.b.part));if(!bounds.isEmpty())fit();seek(tracks.length)
  }

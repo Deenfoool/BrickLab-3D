@@ -17,13 +17,14 @@ export function instructionPdf(pages){
  const xref=length;append('xref\n0 '+offsets.length+'\n0000000000 65535 f \n'+offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size '+offsets.length+' /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n')
  return new Blob(chunks,{type:'application/pdf'})
 }
-export async function renderInstructionPage({name,index,total,note,inventory,blob,language}){
+export async function renderInstructionPage({name,index,total,note,inventory,blob,language,unresolved=0}){
  const canvas=document.createElement('canvas');canvas.width=1240;canvas.height=1754
  const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,1240,1754);ctx.fillStyle='#172334';ctx.fillRect(0,0,1240,130);ctx.fillStyle='#ffb448';ctx.font='bold 34px sans-serif';ctx.fillText('BRICKLAB 3D',65,60);ctx.fillStyle='#fff';ctx.font='bold 30px sans-serif';ctx.fillText(String(name).slice(0,120),65,106,1110)
  const ru=language==='ru';ctx.fillStyle='#192330';ctx.font='bold 45px sans-serif';ctx.fillText((ru?'ШАГ ':'STEP ')+(index+1)+' / '+total,65,215)
  const bitmap=await createImageBitmap(blob)
  try{const scale=Math.min(1110/bitmap.width,880/bitmap.height);ctx.drawImage(bitmap,(1240-bitmap.width*scale)/2,260+(880-bitmap.height*scale)/2,bitmap.width*scale,bitmap.height*scale)}finally{bitmap.close()}
  let y=1200
+ if(unresolved){ctx.fillStyle='#92530d';ctx.font='22px sans-serif';ctx.fillText((ru?'Требуют ручной установки: ':'Manual placement required: ')+unresolved,65,1165)}
  function wrapped(text,size,maxLines){ctx.font=size+'px sans-serif';let line='',count=0;for(const word of String(text).split(/\s+/)){const next=line?line+' '+word:word;if(ctx.measureText(next).width>1110&&line){ctx.fillText(line,65,y,1110);y+=size*1.35;count++;line=word;if(count>=maxLines)return}else line=next}if(line&&count<maxLines){ctx.fillText(line,65,y,1110);y+=size*1.35}}
  ctx.fillStyle='#172334';ctx.font='bold 30px sans-serif';ctx.fillText(ru?'Детали этапа':'Parts in this step',65,y);y+=47
  wrapped(inventory,22,10);y+=20
