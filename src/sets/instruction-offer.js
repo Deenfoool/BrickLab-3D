@@ -17,7 +17,7 @@ export async function mountInstructionOffer(root,{set,language,signal,onStart,st
  const money=n=>(n/100).toLocaleString(ru?'ru-RU':'en-US',{style:'currency',currency:'RUB',maximumFractionDigits:2})
  const normal=tr('Начать сборку','Start building'),basic=tr('Продолжить с PDF','Continue with PDF')
  const status=make('p',tr('Проверяем доступ…','Checking access…'));status.setAttribute('role','status')
- root.replaceChildren(status);start.textContent=normal
+ root.replaceChildren(status);start.textContent=normal;start.classList.remove('set-basic-action')
  const button=(text,action,primary=false)=>{const b=make('button',text,primary?'set-primary-action':'secondary');b.type='button';b.onclick=action;return b}
  const error=e=>({verified_account_required:tr('Подтверди электронную почту в аккаунте.','Verify your account email.'),checkout_pending:tr('Сначала заверши ожидающую оплату.','Finish the pending payment first.'),welcome_exhausted:tr('Бесплатные активации закончились. Обнови окно.','Welcome activations exhausted. Reopen the dialog.'),already_owned:tr('Доступ уже получен. Открой набор повторно.','Access is already unlocked. Reopen the set.')})[e.message]||tr('Не удалось выполнить запрос. Повтори попытку.','Request failed. Please try again.')
  const showError=e=>{if(current()){status.className='set-offer-error';status.textContent=error(e)}}
@@ -39,7 +39,7 @@ export async function mountInstructionOffer(root,{set,language,signal,onStart,st
    desc.textContent=offer.state==='owned'?tr('Постоянный доступ уже открыт.','Permanent access unlocked.'):tr('Доступ включён в BrickLab Plus.','Included with BrickLab Plus.')
    root.append(features);return
   }else{
-   start.textContent=basic
+   start.textContent=basic;start.classList.add('set-basic-action')
    desc.textContent=tr('Открой подсказки для всего набора. PDF и первые 10 шагов остаются доступны без оплаты.','Unlock hints for the entire set. PDF and the first 10 steps remain free.')
    root.append(features)
    if(offer.state==='signin'){
@@ -84,5 +84,5 @@ export async function mountInstructionOffer(root,{set,language,signal,onStart,st
    if(q.mode!==offer.mode||!Number.isSafeInteger(q.amountKopecks)||q.amountKopecks<1)throw Error('invalid_quote')
    quote=q;price.textContent=money(q.amountKopecks);pay.disabled=!check.checked
   }catch(e){showError(e)}
- }catch(e){if(current()){start.textContent=basic;root.replaceChildren(status,button(tr('Повторить проверку','Retry access check'),retry));showError(e)}}
+ }catch(e){if(current()){start.textContent=basic;start.classList.add('set-basic-action');root.replaceChildren(status,button(tr('Повторить проверку','Retry access check'),retry));showError(e)}}
 }
