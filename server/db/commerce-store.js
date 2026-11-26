@@ -23,7 +23,8 @@ export async function commerceEntitlements(tx,uid,environment='live'){
     const account=projectAccount(grants)
     const welcome=environment==='live'?await tx`select set_id as "setId" from bricklab.instruction_welcome_grants where user_id=${uid} order by slot`:[]
     if(environment==='live')account.instructions=[...new Set([...account.instructions,...welcome.map(g=>g.setId)])]
-    return {...account,loyalty:plusLoyalty(grants),welcomeInstructions:welcome.map(g=>g.setId),welcomeRemaining:environment==='live'?Math.max(0,3-welcome.length):0};
+    const first=environment==='live'?(await tx`select set_id as "setId" from bricklab.instruction_first_build where user_id=${uid}`)[0]:null
+    return {...account,loyalty:plusLoyalty(grants),welcomeInstructions:welcome.map(g=>g.setId),firstBuilder:!!first,welcomeRemaining:environment==='live'?Math.max(0,(first?2:1)-welcome.length):0};
 }
 
 // Only trusted server adapters may invoke the security-definer write functions.
@@ -61,6 +62,17 @@ async function orderQuote(tx,uid,sku,offerVersion,beta,environment,product){
 }
 export function commerceStore(scope){
  return {
+  async earnFirstBuilder(uid,projectId,checkCompletion){return scope(uid,async tx=>{
+   await tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text,312042))`
+   const account=await commerceEntitlements(tx,uid)
+   if(account.firstBuilder)return account
+   const [p]=await tx`select r.document from bricklab.projects p join bricklab.project_revisions r on r.project_id=p.id and r.revision=p.head_revision where p.id=${projectId}::uuid and p.owner_id=${uid}`
+   const setId=p&&checkCompletion(p.document)
+   if(!setId||!account.welcomeInstructions.includes(setId))throw new ProjectError(409,'build_not_complete')
+   const [r]=await tx`select bricklab.earn_instruction_first_build(${setId}) as ok`
+   if(!r.ok)throw new ProjectError(409,'build_not_complete')
+   return commerceEntitlements(tx,uid)
+  })},
   async claimInstructionWelcome(uid,setId){return scope(uid,async tx=>{
    await tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text,312042))`
    const before=await commerceEntitlements(tx,uid)
