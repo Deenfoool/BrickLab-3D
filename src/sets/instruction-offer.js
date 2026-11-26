@@ -65,8 +65,11 @@ export async function mountInstructionOffer(root,{set,language,signal,onStart,st
   const consent=make('label',undefined,'set-offer-consent'),check=make('input'),terms=make('span',offer.mode==='test'?tr('Согласен на тестовую оплату без списания. ','I accept sandbox checkout with no charge. '):tr('Принимаю условия покупки и возврата. ','I accept purchase and refund terms. '))
   check.type='checkbox'
   const legal=make('a',tr('Оферта','Offer'));legal.href='/offer';legal.target='_blank';legal.rel='noopener noreferrer';terms.append(legal);consent.append(check,terms)
-  let quote=null,plusQuote=null
+  let quote=null,plusQuote=null,checkoutBusy=false
   async function checkout(q,sku){
+   if(checkoutBusy)return
+   checkoutBusy=true;check.disabled=true;pay.disabled=true;if(plusPay)plusPay.disabled=true
+   try{
    if(offer.mode==='live')instructionEvent(setId,'checkout_click')
    const result=await api('/api/commerce/checkout',signal,{sku,amountKopecks:q.amountKopecks,offerVersion:q.offerVersion,accepted:true,mode:offer.mode,...(sku==='plus-1'?{returnToSets:true}:{})})
    if(!current())return
@@ -74,13 +77,14 @@ export async function mountInstructionOffer(root,{set,language,signal,onStart,st
    if(result.checkoutUrl){const url=safeCheckoutUrl(result.checkoutUrl);if(!url)throw Error('unsafe_checkout');try{sessionStorage.setItem('bricklab-instruction-return',setId)}catch{}location.assign(url);return}
    if(result.status==='succeeded'){await retry();return}
    throw Error('payment_not_confirmed')
+   }finally{checkoutBusy=false;if(current()){check.disabled=false;check.onchange()}}
   }
   const pay=button(offer.pending?tr('Продолжить оплату','Resume checkout'):offer.mode==='test'?tr('Тестовая покупка','Sandbox purchase'):tr('Купить интерактивность','Unlock interactive hints'),async()=>{
    if(!quote||!check.checked||!current())return
    pay.disabled=true
    try{
     await checkout(quote,p.id)
-   }catch(e){showError(e);pay.disabled=!check.checked}
+   }catch(e){showError(e);pay.disabled=checkoutBusy||!check.checked}
   },true)
   pay.disabled=true
   let plusPay=null
@@ -88,11 +92,11 @@ export async function mountInstructionOffer(root,{set,language,signal,onStart,st
   if(offer.plusProduct&&offer.mode==='live'){
    const plus=make('div',undefined,'set-offer-gift'),plusPrice=make('strong',money(offer.plusProduct.priceKopecks))
    plus.append(make('h3','BrickLab Plus'),plusPrice,make('p',tr('1 месяц · все поддерживаемые наборы, 60 облачных проектов, расширенная история. Без автопродления.','1 month · all supported sets, 60 cloud projects, more revisions. No auto-renewal.')))
-   plusPay=button(tr('Выбрать BrickLab Plus','Choose BrickLab Plus'),async()=>{if(!plusQuote||!check.checked)return;plusPay.disabled=true;try{await checkout(plusQuote,offer.plusProduct.id)}catch(e){showError(e);plusPay.disabled=!check.checked}},true)
+   plusPay=button(tr('Выбрать BrickLab Plus','Choose BrickLab Plus'),async()=>{if(!plusQuote||!check.checked)return;plusPay.disabled=true;try{await checkout(plusQuote,offer.plusProduct.id)}catch(e){showError(e);plusPay.disabled=checkoutBusy||!check.checked}},true)
    plusPay.disabled=true;plus.append(plusPay);root.append(plus)
    void api('/api/commerce/quote?sku='+encodeURIComponent(offer.plusProduct.id),signal).then(q=>{if(current()&&q.mode===offer.mode&&Number.isSafeInteger(q.amountKopecks)&&q.amountKopecks>0){plusQuote=q;plusPrice.textContent=money(q.amountKopecks);plusPay.disabled=!check.checked}}).catch(()=>{})
   }
-  check.onchange=()=>{pay.disabled=!quote||!check.checked;if(plusPay)plusPay.disabled=!plusQuote||!check.checked}
+  check.onchange=()=>{pay.disabled=checkoutBusy||!quote||!check.checked;if(plusPay)plusPay.disabled=checkoutBusy||!plusQuote||!check.checked}
   root.append(consent,status)
   try{
    const q=await api('/api/commerce/quote?sku='+encodeURIComponent(p.id),signal)
