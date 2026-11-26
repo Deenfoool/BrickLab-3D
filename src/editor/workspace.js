@@ -112,7 +112,7 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
   const gridBtn=makeButton(rightTools,'grid','grid',tr('Сетка','Grid'))
   const axesBtn=makeButton(rightTools,'axes','axes',tr('Оси координат','Axes'))
   const tabs={}
-  for(const [id,icon,label] of [['scene-parts','layers',tr('Слои','Layers')],['inspector','inspector',tr('Свойства','Properties')],['instruction','instruction',tr('Инструкция','Instructions')]]){
+  for(const [id,icon,label] of [['scene-parts','layers',tr('Детали сцены','Scene parts')],['inspector','inspector',tr('Инспектор','Inspector')],['instruction','instruction',tr('Инструкция','Instructions')]]){
     if(panels[id])tabs[id]=makeButton(rightTools,id,icon,label)
   }
   const focusBtn=makeButton(rightTools,'focus','focus',tr('Фокусировка (Alt+Shift+F)','Focus (Alt+Shift+F)'))

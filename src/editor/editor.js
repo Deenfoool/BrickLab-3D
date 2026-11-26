@@ -21,6 +21,8 @@ import { mountLibrary } from './library.js?v=catalog-engine-1'
 import { createScene } from './scene.js?v=collision-1'
 import {mountTransmissionMap,transmissionMap,transmissionCodes} from './transmission-map.js'
 import {mountMotorBench} from './motor-bench-panel.js'
+import {mountCollaboration} from './collaboration-client.js'
+import {sharedDelta} from './shared-document.js'
 import {mountDriveEstimate} from './drive-estimate-panel.js'
 import {engineeringReport,downloadEngineeringReport} from './engineering-report.js'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
@@ -54,7 +56,7 @@ const simulating = mode => mode === 'testDrive'
 const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
-export async function mountEditor(root, { document, projectId, language, save, download, publish, signal, reportLoad }) {
+export async function mountEditor(root, { document, projectId, language, save, download, publish, signal, reportLoad, collaboration, onJoinCollaboration }) {
   await loadPartIndex()
   if (signal.aborted) return
   const source = upgradeInlineEngineFan(promoteLegacyBelts(expandComponents(normalizeDocumentDesigns(document, parts), parts)))
@@ -279,9 +281,11 @@ export async function mountEditor(root, { document, projectId, language, save, d
     describePart: (partNum, colorId) => setPalette?.describe(partNum, colorId),
   })
   mountFloatingPanels(el('panelLayer'), t, signal)
+  let collaborationUI
   const workspaceUI = mountWorkspace(root, { language, scene, signal,
     grid: readPreference('grid') !== 'off', axes: readPreference('axes') !== 'off', changePreference: writePreference,
     hideSelection: () => setPartsHidden(selectionIds(), true),
+    openCollaboration:()=>collaborationUI?.open(),
     openPhotoStudio:async()=>{if(dragActive()||moving||pendingPart)return;stopAnimation();releaseMotor();try{const {openPhotoStudio}=await import('./photo-studio.js');if(!signal.aborted)openPhotoStudio({document:currentDocument(),models,hidden,language,signal})}catch{setMessage(language==='ru'?'Не удалось открыть фотостудию: проверь загрузку деталей и WebGL.':'Could not open Photo Studio: check geometry and WebGL.');render()}},
   })
   const visibleParts = loadParts(source, models)
@@ -2178,6 +2182,19 @@ export async function mountEditor(root, { document, projectId, language, save, d
       if (gear) setSelection(gear.id)
     }
   }
+  const collaborationIdle=()=>!signal.aborted&&!dragActive()&&!pendingPart&&!snappingScene&&!frame&&!runningMotor&&!clutchTest&&mode!=='testDrive'&&!window.document.querySelector('dialog[open]:not(.collaboration-dialog)')
+  collaborationUI=mountCollaboration(root,{language,scene,signal,initial:collaboration,onJoin:onJoinCollaboration,read:currentDocument,idle:collaborationIdle,apply:async(next,expected)=>{
+    if(!collaborationIdle())return false
+    if(hiddenParts.length||next.parts.some(p=>!parts[p.design]))throw Error('invalid_shared_geometry')
+    const missing=[...new Set(next.parts.map(p=>p.design))].filter(id=>!models.has(id))
+    for(let i=0;i<missing.length;i+=4){await Promise.all(missing.slice(i,i+4).map(id=>prepareModel(parts[id])));if(signal.aborted)return false}
+    if(!collaborationIdle()||sharedDelta(expected,currentDocument()).length)return false
+    const placed=loadParts(next,models),rebuilt=createAssembly(placed,next.connections,{belts:next.belts??[]})
+    if(placed.length!==next.parts.length||rebuilt.connections.length!==next.connections.length||rebuilt.belts.length!==(next.belts??[]).length)throw Error('invalid_shared_geometry')
+    undo.length=redo.length=0;el('name').value=next.name;driveConfig=next.testDrive
+    applyState({parts:placed,links:next.connections,belts:next.belts??[],layers:readSceneLayers(next.sceneLayers,new Set(placed.map(p=>p.id)))})
+    return true
+  }})
   reportLoad?.('scene', true)
   if (instructionReady) await instructionReady
 }
