@@ -12,6 +12,7 @@ import {
   discoverBooks,
   instructionSources,
 } from './instruction-sources.js?v=browser-recognition'
+import {mountSandboxPack} from './sandbox-pack.js'
 import {renderInteractiveDemo} from './interactive-demo.js'
 import {instructionEvent} from './instruction-events.js'
 import { mountInstructionOffer } from './instruction-offer.js?v=welcome-1'
@@ -155,7 +156,9 @@ export async function mountSetCatalog(
   const demo=renderInteractiveDemo({language,signal,onPractice:practice})
   const recommended=node('section',undefined,'set-recommendations')
   recommended.hidden=true
-  root.replaceChildren(header,demo,recommended,form,listHead,status,grid,more,credit)
+  const sandboxPack=node('section',undefined,'set-sandbox-pack');sandboxPack.hidden=true
+  root.replaceChildren(header,demo,recommended,sandboxPack,form,listHead,status,grid,more,credit)
+  void mountSandboxPack(sandboxPack,{language,signal})
   const pageSize = 24
   let localItems = []
   let localOffset = 0
