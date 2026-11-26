@@ -166,6 +166,37 @@ test('real PostgreSQL enforces extended quota, collection ownership and badge pr
   assert.equal(await store.confirmCommerceReceipt(uid,live.id,'fixture-receipt'),true)
   assert.equal(await store.confirmCommerceReceipt(uid,live.id,'second'),false)
   assert.equal(await store.confirmCommerceReceipt(uid,future.id,'invalid-test'),false)
+  // Both environments now create orders through the same priced consent path.
+  const sku='slots-20',testQuote=await store.quoteCommerce(uid,sku,terms,true,'test')
+  assert.equal(testQuote.amountKopecks,8910)
+  const common=await store.createCommerceOrder(uid,sku,testQuote.amountKopecks,terms,true,'test')
+  assert.equal((await store.createCommerceOrder(uid,sku,testQuote.amountKopecks,terms,true,'test')).id,common.id)
+  const [testTerms]=await db`select environment,offer_version,accepted_at from bricklab.commerce_orders where id=${common.id}`
+  assert.equal(testTerms.environment,'test');assert.equal(testTerms.offer_version,terms);assert.ok(testTerms.accepted_at)
+  await assert.rejects(store.quoteCommerce(other,sku,terms,true,'test'),/admin_required/)
+  const previewStore=connectAuthStore({...process.env,BRICKLAB_COMMERCE_MODE:'test',BRICKLAB_YOOKASSA_TEST_ENABLED:'true'})
+  try{
+   assert.equal((await previewStore.getProfile(uid)).plus,true)
+   assert.equal((await previewStore.getActivity(uid)).limits.projects,(await previewStore.commerceTestAccount(uid)).limits.projects)
+   await previewStore.saveProfile(uid,{...base,supportBadge:'diamond-patron'})
+   assert.equal((await previewStore.getProfile(uid)).supportBadge,'diamond-patron')
+   assert.equal((await store.getPublicCard(card.id)).supportBadge,null)
+   assert.equal((await previewStore.getProfile(other)).plus,false)
+   assert.equal((await store.getProfile(uid)).plus,false)
+  }finally{await previewStore.close()}
+  const liveQuote2=await store.quoteCommerce(uid,'slots-30',terms,true,'live')
+  const commonLive=await store.createCommerceOrder(uid,'slots-30',liveQuote2.amountKopecks,terms,true,'live')
+  const livePayment=crypto.randomUUID()
+  assert.equal(await store.attachCommercePayment(commonLive.id,livePayment,'live'),true)
+  assert.equal(await store.fulfillCommercePayment(commonLive.id,livePayment,'live',liveQuote2.amountKopecks),true)
+  const refundRequest=await store.requestCommerceRefund(uid,commonLive.id,'live')
+  assert.equal(refundRequest.paymentId,livePayment)
+  assert.equal(await store.attachCommerceRefund(commonLive.id,crypto.randomUUID(),'live'),true)
+  assert.equal(await store.refundCommercePayment(livePayment,'live',liveQuote2.amountKopecks),true)
+  const [correction]=await db`select receipt_correction_pending from bricklab.commerce_orders where id=${commonLive.id}`
+  assert.equal(correction.receipt_correction_pending,true)
+  assert.equal((await store.getActivity(uid)).limits.projects,60)
+
 
  }finally{await store.close();await db.end()}
 })
