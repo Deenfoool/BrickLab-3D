@@ -602,7 +602,7 @@ async function openSets() {
   const root = byId('sets-panel')
   root.textContent = strings().loadingLibrary
   try {
-    const { mountSetCatalog } = await import('../sets/catalog.js?v=hub-1')
+    const { mountSetCatalog } = await import('../sets/catalog.js?v=sets-refresh-1')
     if (controller.signal.aborted) return
     const initialQuery=pendingSetQuery;pendingSetQuery=''
     await mountSetCatalog(root, { language, signal: controller.signal, initialQuery, projects: () => projects,
