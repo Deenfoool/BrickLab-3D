@@ -3,10 +3,10 @@ import { mountBugReport } from '../feedback/dialog.js?v=events-1'
 import { safeImage } from '../sets/data.js?v=catalog-engine-1'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
 import { locales } from './locale.js?v=store-1'
-import {mountStore} from './store.js?v=commerce-finance-1'
+import {mountStore} from './store.js?v=merch-1'
 import { mountHomeHub, mountHubSearch } from './home-hub.js?v=signature-art-1'
 import { mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=legal-publication-1'
+import { createCloudAccount } from './account.js?v=merch-1'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -587,7 +587,7 @@ async function openCommunity(){
  closeCommunity()
  const controller=new AbortController();communitySession={key,controller}
  const root=byId('community-panel');root.textContent=strings().loadingLibrary
- try{const {mountCommunity}=await import('./community-gallery.js?v=commerce-plus-2');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
+ try{const {mountCommunity}=await import('./community-gallery.js?v=merch-1');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
  catch(e){if(!controller.signal.aborted)root.textContent=language==='ru'?'Не удалось открыть сообщество.':'Could not open community.'}
 }
 function closeSets() {
