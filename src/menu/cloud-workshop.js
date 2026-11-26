@@ -1,4 +1,4 @@
-import {renderWorkshopTools} from './workshop-tools.js?v=mechanics-inspection-1'
+import {renderWorkshopTools} from './workshop-tools.js?v=photo-studio-2'
 import {renderInstructionCollection} from './instruction-collection.js'
 import {commerceBadge,productArtwork,factsPanel,loyaltyBadge} from './commerce-visuals.js?v=merch-2'
 import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=welcome-2'
