@@ -225,3 +225,10 @@
 .workshop-tools-output:empty{display:none}
 .workshop-photo-preview{width:100%;height:auto;display:block;border-radius:10px;background:repeating-conic-gradient(#29313a 0% 25%,#343d48 0% 50%) 0 0/24px 24px;max-height:560px;object-fit:contain}
 .workshop-tools-output>a{justify-self:start}
+
+.workshop-mechanism-report,.workshop-drive-report{display:grid;gap:9px;min-width:0}
+.workshop-mechanism-report h3{margin:8px 0 0}
+.workshop-mechanism-report details{border:1px solid color-mix(in srgb,currentColor 18%,transparent);border-radius:8px;padding:9px;overflow-wrap:anywhere}
+.workshop-mechanism-report summary{cursor:pointer;font-weight:600;font-size:13px}
+.workshop-mechanism-report details p,.workshop-drive-report p{font-size:12px;margin:5px 0}
+.workshop-mechanism-report>button{justify-self:start}
