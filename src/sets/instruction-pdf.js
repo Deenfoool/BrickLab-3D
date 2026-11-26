@@ -114,11 +114,11 @@ const dimension = /^[1-9]\d?(?:[,.]\d)?$/
 
 function pdfWords(items, styles, viewport) {
   const words = new Map()
-  const dimensions = new Map()
+  const dimensions = new Map(), fragments=[]
   for (const item of items) {
     const text = item.str?.trim()
     const isDimension = dimension.test(text) && item.height >= 5 && item.height <= 12
-    if (!isDimension && !quantity.test(text) && !element.test(text)) continue
+    if (!isDimension && !quantity.test(text) && !element.test(text) && !/^(?:\d{1,8}|[x×])$/i.test(text??'')) continue
     const [a, b, c, d, x, y] = item.transform
     const length = Math.hypot(a, b)
     if (!length || item.width <= 0) continue
@@ -131,8 +131,29 @@ function pdfWords(items, styles, viewport) {
       Math.min(top[0], bottom[0]), Math.min(top[1], bottom[1]),
       Math.max(top[0], bottom[0]), Math.max(top[1], bottom[1]),
     ]
-    const destination = isDimension ? dimensions : words
-    destination.set(JSON.stringify([text, ...box.map(Math.round)]), { text, box })
+    if (/^(?:\d{1,8}|[x×])$/i.test(text)) fragments.push({text,box})
+    if(isDimension || quantity.test(text) || element.test(text)){
+      const destination = isDimension ? dimensions : words
+      destination.set(JSON.stringify([text, ...box.map(Math.round)]), { text, box })
+    }
+  }
+  // PDF producers may emit 2 and x, or individual digits of an element ID, separately.
+  // Join only adjacent fragments on the same baseline, with a small glyph-relative gap.
+  const sorted=fragments.sort((a,b)=>a.box[0]-b.box[0]||a.box[1]-b.box[1])
+  for(const first of sorted){
+    if(!/^\d{1,5}$/.test(first.text))continue
+    let joined=first.text,box=[...first.box]
+    const used=new Set([first])
+    for(let i=0;i<8;i++){
+      const h=box[3]-box[1],next=sorted.find(f=>!used.has(f)&&f.box[0]>=box[2]-.35&&f.box[0]-box[2]<=Math.max(1,h*.32)&&Math.abs(f.box[3]-box[3])<=Math.max(1,h*.3)&&Math.abs(f.box[1]-box[1])<=Math.max(1,h*.45))
+      if(!next)break
+      joined+=next.text;used.add(next);box=[Math.min(box[0],next.box[0]),Math.min(box[1],next.box[1]),Math.max(box[2],next.box[2]),Math.max(box[3],next.box[3])]
+      if(quantity.test(joined)||element.test(joined)){
+        words.set(JSON.stringify([joined,...box.map(Math.round)]),{text:joined,box})
+        if(quantity.test(joined))break
+      }
+      if(joined.length>=8||/[x×]/i.test(joined))break
+    }
   }
   return { words: [...words.values()], dimensions: [...dimensions.values()] }
 }
