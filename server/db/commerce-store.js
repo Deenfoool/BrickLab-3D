@@ -61,6 +61,23 @@ async function orderQuote(tx,uid,sku,offerVersion,beta,environment,product){
  const payments=await tx`select o.sku,o.amount_kopecks as "amountKopecks" from bricklab.commerce_orders o join bricklab.commerce_grants g on g.order_id=o.id and g.user_id=o.user_id where o.user_id=${uid} and o.environment='test' and o.status='succeeded' and g.kind='badge' and g.revoked_at is null`
  return {...commerceQuote(sku,account,payments,{beta}),offerVersion}
 }
+async function sandboxPackQuote(tx,uid,setIds,products,offerVersion){
+ const [admin]=await tx`select bricklab.is_admin() as ok`
+ if(!admin.ok)throw new ProjectError(403,'admin_required')
+ if(!Array.isArray(setIds)||setIds.length!==3||new Set(setIds).size!==3||!setIds.every(id=>typeof id==='string'&&/^\d{3,7}-\d{1,2}$/.test(id)))throw new ProjectError(400,'invalid_bundle')
+ const sku='instruction-pack:'+setIds.slice().sort().join(',')
+ const [pending]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",offer_version as "offerVersion" from bricklab.commerce_orders where user_id=${uid} and environment='test' and sku=${sku} and status='pending' limit 1`
+ if(pending){
+  if(pending.offerVersion!==offerVersion)throw new ProjectError(409,'checkout_pending')
+  const lines=await tx`select set_id as "setId",title,base_kopecks as base,amount_kopecks as amount from bricklab.instruction_pack_lines where order_id=${pending.id} order by set_id collate "C"`
+  if(lines.length!==3)throw new ProjectError(409,'invalid_quote')
+  return {...pending,lines,subtotalKopecks:lines.reduce((n,l)=>n+l.base,0),discountPercent:15}
+ }
+ let q
+ try{q=quoteInstructionBundle({setIds,auditedProducts:products,account:await commerceEntitlements(tx,uid,'test'),release:true})}
+ catch(e){throw new ProjectError(409,e.message)}
+ return {...q,sku,title:'BrickLab Build Pack (тест) · '+setIds.slice().sort().join(', '),offerVersion}
+}
 export function commerceStore(scope){
  return {
   async quoteSandboxPack(uid,setIds,products,offerVersion){return scope(uid,tx=>sandboxPackQuote(tx,uid,setIds,products,offerVersion))},
