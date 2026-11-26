@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url'
 import {createPaymentsHandler,paymentConfig} from './payments.js'
 import {createYookassaAdapter} from './yookassa.js'
 import {startTestPaymentReconciliation} from './payment-reconciliation.js'
+import {startCommerceTelegram} from './commerce-telegram.js'
 import {createInstructionRegions} from './instruction-regions.js'
 import {loadInstructionPolicy} from './instruction-access.js'
 import {loadApprovedLegal,liveCommerceConfig} from './legal-release.js'
@@ -22,7 +23,7 @@ import { createCommunityHandler } from './community.js'
 const host = process.env.HOST || '0.0.0.0'
 const port = Number(process.env.PORT || 8080)
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer from 1 to 65535')
-let store, auth, projects, profile, activity, community, bureau, security, payments, cleanup, legal, reconciliation
+let store, auth, projects, profile, activity, community, bureau, security, payments, cleanup, legal, reconciliation, telegram
 if (process.env.PGPASSWORD) {
   const { connectAuthStore } = await import('./db/auth-store.js')
   store = connectAuthStore()
@@ -48,6 +49,7 @@ if (process.env.PGPASSWORD) {
     community = createCommunityHandler({store,origin:process.env.PUBLIC_ORIGIN || 'http://localhost:8080',enabled:process.env.BRICKLAB_COMMUNITY_ENABLED==='true'})
     bureau=createBureauHandler({store,origin:process.env.PUBLIC_ORIGIN||'http://localhost:8080',enabled:process.env.BRICKLAB_COMMUNITY_ENABLED==='true'})
     reconciliation=startTestPaymentReconciliation({store,adapter:testYookassa})
+    telegram=startCommerceTelegram({store})
     cleanup = setInterval(() => store.cleanup().catch(error => console.error('Session cleanup failed:', error.code || error.name)), 3600_000).unref()
   } catch (error) {
     await store.close()
@@ -61,11 +63,11 @@ const server = createBrickLabServer({ root: fileURLToPath(new URL('../', import.
 server.on('error', async error => {
   console.error('Unable to start BrickLab:', error.message)
   clearInterval(cleanup)
-  await reconciliation?.stop()
+  await Promise.all([reconciliation?.stop(),telegram?.stop()])
   await store?.close()
   process.exitCode = 1
 })
-server.listen(port, host, () => {console.log(`BrickLab listening on ${host}:${port}`);reconciliation?.tick()})
+server.listen(port, host, () => {console.log(`BrickLab listening on ${host}:${port}`);reconciliation?.tick();telegram?.tick()})
 let stopping = false
 function shutdown() {
   if (stopping) return
@@ -75,7 +77,7 @@ function shutdown() {
   server.close(async error => {
     clearTimeout(timeout)
     await instructionFetch.close()
-    await reconciliation?.stop()
+    await Promise.all([reconciliation?.stop(),telegram?.stop()])
     await store?.close()
     if (error) process.exitCode = 1
   })
