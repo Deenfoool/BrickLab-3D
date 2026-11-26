@@ -115,10 +115,10 @@ export async function inspectCollisions({parts,models,connections=[],movingIds=n
    if(++candidates>MAX_PAIRS){result.limited=true;return result}
    signal?.throwIfAborted()
    if(performance.now()-lastYield>12){await yieldUI();signal?.throwIfAborted();lastYield=performance.now()}
-   a.tree??=await geometryTree(models.get(a.p.design),budget,cache,signal);b.tree??=await geometryTree(models.get(b.p.design),budget,cache,signal)
+   const treeA=await geometryTree(models.get(a.p.design),budget,cache,signal),treeB=await geometryTree(models.get(b.p.design),budget,cache,signal)
    if(budget.buildLimited){result.limited=true;return result}
-   if(!a.tree||!b.tree){result.unavailable++;continue}
-   const hit=await intersectTrees(a,b,budget,signal)
+   if(!treeA||!treeB){result.unavailable++;continue}
+   const hit=await intersectTrees({...a,tree:treeA},{...b,tree:treeB},budget,signal)
    if(hit.limited){result.limited=true;return result}
    result.checked++
    if(hit.point){result.pairs.push({a:a.p.id,b:b.p.id,point:hit.point});if(result.pairs.length>=100){result.limited=true;return result}}
