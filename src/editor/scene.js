@@ -5,6 +5,7 @@ import { partMesh, parts } from './parts.js?v=system-complete'
 import { createBeltScene } from './belt-scene.js?v=belt-drive'
 import { createMotorCables } from './motor-cables.js?v=system-complete'
 import { createPartOutlines } from './part-outlines.js?v=transmission-map-1'
+import { portsFor } from '../mechanics/catalog.js?v=volvo-spur-gears'
 import { snapGrid } from './model.js?v=belt-drive'
 import { readPreference } from '../menu/preferences.js?v=full-settings'
 
@@ -19,7 +20,12 @@ export function createScene(host, models) {
   const trackFog = new THREE.FogExp2(trackSky, .000023)
   world.background = editorSky
   world.fog = editorFog
-  const camera = new THREE.PerspectiveCamera(42, 1, 1, 14000)
+  const perspectiveCamera = new THREE.PerspectiveCamera(42, 1, 1, 14000)
+  const orthographicCamera = new THREE.OrthographicCamera(-1,1,1,-1,1,14000)
+  let camera=perspectiveCamera,orthoHalf=100,aspect=1
+  const perspectiveHalf=distance=>Math.tan(THREE.MathUtils.degToRad(21))*distance
+  function updateProjection(){perspectiveCamera.aspect=aspect;perspectiveCamera.updateProjectionMatrix();orthographicCamera.aspect=aspect;orthographicCamera.left=-orthoHalf*aspect;orthographicCamera.right=orthoHalf*aspect;orthographicCamera.top=orthoHalf;orthographicCamera.bottom=-orthoHalf;orthographicCamera.updateProjectionMatrix()}
+  function fitOrthographic(){if(camera===orthographicCamera){orthoHalf=perspectiveHalf(camera.position.distanceTo(controls.target));camera.zoom=1;updateProjection()}}
   let renderer
   try {
     renderer = new THREE.WebGLRenderer({ antialias: true })
@@ -100,8 +106,7 @@ export function createScene(host, models) {
   const resize = new ResizeObserver(() => {
     const { clientWidth: width, clientHeight: height } = host
     if (!width || !height) return
-    camera.aspect = width / height
-    camera.updateProjectionMatrix()
+    aspect=width/height;updateProjection()
     renderer.setSize(width, height, false)
     // Opening a dock changes the viewport size, not the user's camera pose.
     viewportMeasured = true
@@ -136,7 +141,7 @@ export function createScene(host, models) {
       if (!active || renderer.getContext().isContextLost()) return
       const remoteMoving=animateRemote(Math.min(50,now-(remoteFrameTime||now-16)));remoteFrameTime=now
       if (presenting) {
-        const helpers=[marker,frontArrow,gizmo.getHelper(),ghost,...[...remoteMeshes.values()].map(r=>r.mesh)].filter(Boolean)
+        const helpers=[marker,frontArrow,gizmo.getHelper(),ghost,connectorPoints,...[...remoteMeshes.values()].map(r=>r.mesh)].filter(Boolean)
         const visibility=helpers.map(object=>object.visible)
         try { for(const object of helpers)object.visible=false;renderer.render(world,camera) }
         finally { helpers.forEach((object,index)=>object.visible=visibility[index]) }
@@ -149,6 +154,7 @@ export function createScene(host, models) {
     })
   }
 
+  function setCameraMode(mode){const next=mode==='orthographic'?orthographicCamera:perspectiveCamera;if(next===camera||gizmo.dragging)return;const distance=camera.position.distanceTo(controls.target);next.position.copy(camera.position);next.quaternion.copy(camera.quaternion);if(next===orthographicCamera){orthoHalf=perspectiveHalf(distance);next.zoom=1}else{const desired=orthoHalf/Math.max(.001,camera.zoom)/Math.tan(THREE.MathUtils.degToRad(21));next.position.copy(controls.target).addScaledVector(camera.position.clone().sub(controls.target).normalize(),desired)}camera=next;controls.object=camera;gizmo.camera=camera;updateProjection();controls.update();invalidate()}
   function resetView() {
     solids.updateWorldMatrix(true, true)
     const bounds = new THREE.Box3()
@@ -158,7 +164,7 @@ export function createScene(host, models) {
     const distance = Math.max(175, size * 1.65 / Math.min(1, camera.aspect))
     controls.target.copy(center)
     camera.position.copy(center).add(new THREE.Vector3(1, .83, 1.35).normalize().multiplyScalar(distance))
-    controls.update()
+    fitOrthographic();controls.update()
     fitted = viewportMeasured
     invalidate()
   }
@@ -190,10 +196,17 @@ export function createScene(host, models) {
       syncVisibility(part.id, object)
     }
     motorCables.set(list)
+    if(wireframe)setWireframe(true)
+    refreshConnectorPoints()
     belts.update()
     invalidate()
   }
 
+  const connectorPoints=new THREE.Group();world.add(connectorPoints)
+  const pointGeometry=new THREE.SphereGeometry(1.7,8,6),pointMale=new THREE.MeshBasicMaterial({color:0x55c4ff,depthTest:true}),pointFemale=new THREE.MeshBasicMaterial({color:0xffbe55,depthTest:true});let pointsVisible=false,wireframe=false
+  function refreshConnectorPoints(){connectorPoints.clear();if(!pointsVisible)return;let count=0;for(const [id,o] of objects){if(!o.visible)continue;for(const p of portsFor(o.userData.design)){if(p.legacy||p.role==='gear'||!Array.isArray(p.start))continue;if(++count>1500)return;const mesh=new THREE.Mesh(pointGeometry,p.gender==='M'?pointMale:pointFemale);mesh.position.fromArray(p.start).applyMatrix4(o.matrixWorld);connectorPoints.add(mesh)}}}
+  function setConnectorPoints(value){pointsVisible=!!value;refreshConnectorPoints();invalidate()}
+  function setWireframe(value){wireframe=!!value;for(const o of objects.values())o.traverse(child=>{if(child.isMesh)for(const m of Array.isArray(child.material)?child.material:[child.material])if(m&&'wireframe' in m)m.wireframe=wireframe});invalidate()}
   const remoteMeshes=new Map()
   const remoteHidden=new Set()
   function syncVisibility(id, object) {
@@ -203,6 +216,7 @@ export function createScene(host, models) {
   function setHidden(ids) {
     hidden = ids
     for (const [id, object] of objects) syncVisibility(id, object)
+    refreshConnectorPoints()
     motorCables.update()
     belts.update()
     invalidate()
@@ -395,7 +409,7 @@ export function createScene(host, models) {
     const size = bounds.getSize(new THREE.Vector3()).length()
     camera.position.copy(controls.target).addScaledVector(direction,
       Math.min(controls.maxDistance, Math.max(48, size * 1.65 / Math.min(1, camera.aspect))))
-    controls.update()
+    fitOrthographic();controls.update()
     invalidate()
   }
 
@@ -468,6 +482,7 @@ export function createScene(host, models) {
   }
 
   function setDriveMap(group) {
+    if(group)setCameraMode('perspective')
     if (driveMap) world.remove(driveMap)
     driveMap = group
     if (group) world.add(group)
@@ -506,6 +521,7 @@ export function createScene(host, models) {
 
   function dispose() {
     remotePreview([])
+    connectorPoints.clear();pointGeometry.dispose();pointMale.dispose();pointFemale.dispose()
     active = false
     canvas.removeEventListener('webglcontextrestored', invalidate)
     if (frame !== null) cancelAnimationFrame(frame)
@@ -529,7 +545,7 @@ export function createScene(host, models) {
 
   function capturePublication(){
     if(!active||!canvas.width||!canvas.height)return null
-    const helpers=[floor,axes,frontArrow,marker,gizmo.getHelper(),ghost,...[...remoteMeshes.values()].map(r=>r.mesh)].filter(o=>o&&typeof o.visible==='boolean')
+    const helpers=[floor,axes,frontArrow,marker,gizmo.getHelper(),ghost,connectorPoints,...[...remoteMeshes.values()].map(r=>r.mesh)].filter(o=>o&&typeof o.visible==='boolean')
     const visibility=helpers.map(o=>o.visible)
     try{
       for(const o of helpers)o.visible=false
@@ -556,5 +572,5 @@ export function createScene(host, models) {
     showGrid = grid; showAxes = axis
     floor.visible = !driveMap && showGrid; axes.visible = !driveMap && showAxes
     invalidate()
-  }, setWiresVisible(value) { motorCables.visible(value); invalidate() }, canvas, camera, gizmo, belts, snapProjector, project, focus, highlight, remotePreview, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, selectInRect, enableBoxSelect, setGhost, setGroupGhost, setMoving, resetView, dispose }
+  }, setWiresVisible(value) { motorCables.visible(value); invalidate() }, canvas, get camera(){return camera},get cameraMode(){return camera===orthographicCamera?'orthographic':'perspective'},setCameraMode,setConnectorPoints,setWireframe,gizmo, belts, snapProjector, project, focus, highlight, remotePreview, watchView(callback) { onViewChange = callback }, gizmoPose, previewParts, driveArrow, setDriveMap, driveTransform, clearDriveTransform, cancelGizmo, setTool, pointer, pixelDistance, setParts, setHidden, select, selectInRect, enableBoxSelect, setGhost, setGroupGhost, setMoving, resetView, dispose }
 }
