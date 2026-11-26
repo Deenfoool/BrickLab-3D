@@ -104,3 +104,8 @@
 @media(max-width:720px){.set-catalog-header{padding:15px;gap:10px;flex-wrap:wrap}.set-catalog-tip{max-width:none;padding:7px 10px}.set-catalog-header h2{font-size:24px}#sets-panel .set-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,145px),1fr));gap:9px}.set-card-body{padding:9px}.set-card-body strong{font-size:12px}.set-dialog-content{grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:9px}.set-details-dialog{padding:14px}}
 @media(max-width:400px){.set-dialog-content{grid-template-columns:1fr}.set-dialog-art{max-height:155px}.set-dialog-art img{max-height:155px}.set-card-foot{display:none}}
 @media(prefers-reduced-motion:reduce){#sets-panel .set-card{transition:none}#sets-panel .set-card:hover{transform:none}}
+
+.set-dialog .set-primary-action.set-basic-action{background:#252c37;border-color:#515b6b;color:#e8edf5;font-weight:600}
+.set-details-dialog .set-actions:empty{display:none}
+#sets-panel .set-filter-selects{gap:8px}
+#sets-panel .set-filter-selects select{padding:9px 11px;font-size:13px}
