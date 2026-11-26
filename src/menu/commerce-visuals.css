@@ -17,7 +17,6 @@
 .commerce-emblem-label{min-width:0;overflow-wrap:anywhere}
 .commerce-emblem.support-plus{border-radius:999px;letter-spacing:.025em}
 .commerce-product-art{--support-accent:#8bbbe9;--support-dark:#132c42;--support-light:#e1f2ff;position:relative;isolation:isolate;display:grid;grid-template-rows:auto 1fr auto;justify-items:center;align-items:center;gap:7px;min-width:0;min-height:156px;aspect-ratio:16/10;overflow:hidden;padding:13px 14px;color:#eef4ff;background:radial-gradient(ellipse at 50% 40%,color-mix(in srgb,var(--support-accent) 22%,#101827),transparent 68%),linear-gradient(150deg,#192337,#0e1420 75%);border-bottom:1px solid color-mix(in srgb,var(--support-accent) 35%,transparent)}
-.commerce-product-art:is(.support-supporter,.support-bronze-builder,.support-silver-builder,.support-gold-builder,.support-diamond-patron,.support-founders-club,.support-plus){--support-accent:inherit}
 .commerce-product-art::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(90deg,#ffffff08 1px,transparent 1px),linear-gradient(#ffffff08 1px,transparent 1px);background-size:21px 21px;mask-image:radial-gradient(ellipse,#000 15%,transparent 80%)}
 .commerce-product-art::after{content:"";position:absolute;inset:8px;border:1px solid #ffffff0e;z-index:-1;pointer-events:none;clip-path:polygon(0 0,32% 0,32% 1px,68% 1px,68% 0,100% 0,100% 100%,68% 100%,68% calc(100% - 1px),32% calc(100% - 1px),32% 100%,0 100%)}
 .commerce-product-art .commerce-insignia{width:clamp(65px,9vw,104px);height:clamp(65px,9vw,104px);filter:drop-shadow(0 7px 10px #0009) drop-shadow(0 0 14px color-mix(in srgb,var(--support-accent) 25%,transparent))}
@@ -92,3 +91,18 @@
 .commerce-instruction-prices .commerce-preview-tier strong{font-size:20px}
 @media(max-width:640px){.commerce-store-section{padding:10px}.commerce-store-section .store-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:10px}.commerce-store-section[data-kind="themeBundle"] .commerce-merch{display:flex}.commerce-product-art{min-height:145px}.commerce-merch .store-product-body{padding:12px}.commerce-plus-panel .art-subscription{min-height:140px}.commerce-loyalty-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(prefers-reduced-motion:reduce){.store-product.commerce-merch{transition:none}}
+
+/* Fit the illustration and its labels without overlap, even at phone widths. */
+.commerce-product-art{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr) auto;min-height:185px;aspect-ratio:16/10}
+.commerce-product-art .art-eyebrow{grid-column:1;grid-row:1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.commerce-product-art .art-serial{position:static;grid-column:2;grid-row:1;justify-self:end;text-align:right}
+.commerce-product-art :is(.commerce-insignia,.commerce-blueprint-graphic){grid-column:1/-1;grid-row:2;max-height:100%;width:auto;max-width:80%}
+.commerce-product-art .art-caption{grid-row:3;grid-column:1/-1}
+.commerce-plus-panel .art-subscription,.commerce-guide-banner{min-height:160px;max-height:210px;aspect-ratio:5/1;border-radius:11px}
+.commerce-checkout-art{border-radius:10px;max-height:230px}
+.commerce-checkout-art.commerce-collection-art{max-height:none}
+.commerce-merch .commerce-product-art+.store-product-body{padding-top:14px}
+.commerce-badge-preview{display:flex;align-items:center;gap:7px;flex-wrap:wrap;border:1px solid color-mix(in srgb,currentColor 10%,transparent);padding:8px;border-radius:9px}
+.commerce-badge-preview .commerce-emblem{font-size:10px}
+.commerce-merch:hover{transform:none}
+@media(max-width:640px){.commerce-product-art{min-height:170px}.commerce-product-art .art-eyebrow,.commerce-product-art .art-serial{font-size:8px}.commerce-plus-panel .art-subscription,.commerce-guide-banner{min-height:150px}.commerce-product-art .commerce-insignia{height:74px}}
