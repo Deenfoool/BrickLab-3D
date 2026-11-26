@@ -67,8 +67,8 @@ export function mountScenePartsPanel(body, t, actions, signal) {
     design.textContent = part.design
     pick.append(swatch, title, design)
     const isLocked=snapshot.layers.lockedPartIds?.includes(part.id)===true;item.toggleAttribute('data-layer-locked',isLocked)
-    const lock=control('toggleLock',actions.lockLabel(part.id),isLocked?'lock':'unlock');lock.setAttribute('aria-pressed',String(isLocked))
-    item.append(eye,pick,lock,control('deletePart',`${t.delete} · ${name}`,'remove'))
+    const lock=control('toggleLock',actions.lockLabel?.(part.id)??(isLocked?'Unlock':'Lock'),isLocked?'lock':'unlock');lock.setAttribute('aria-pressed',String(isLocked))
+    item.append(eye,pick,...(actions.toggleLock?[lock]:[]),control('deletePart',`${t.delete} · ${name}`,'remove'))
     return item
   }
 

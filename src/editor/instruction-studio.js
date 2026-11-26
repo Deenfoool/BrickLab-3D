@@ -1,11 +1,7 @@
 import {instructionPdf,renderInstructionPage} from './instruction-export.js'
 import {createProjectPreviewRenderer} from './project-preview.js'
-export function normalizeSteps(value,parts){
- const valid=new Set(parts.map(p=>p.id)),seen=new Set(),steps=[]
- for(const raw of Array.isArray(value)?value.slice(0,100):[]){const ids=(Array.isArray(raw?.ids)?raw.ids:[]).filter(id=>valid.has(id)&&!seen.has(id)&&(seen.add(id),true));if(ids.length)steps.push({ids,note:String(raw.note??'').slice(0,400),angle:['iso','front','rear','left','side','top'].includes(raw.angle)?raw.angle:'iso'})}
- const rest=parts.filter(p=>!seen.has(p.id)).map(p=>p.id);if(rest.length){if(steps.length>=100)steps.at(-1).ids.push(...rest);else steps.push({ids:rest,note:'',angle:'iso'})}
- return steps
-}
+import {normalizeSteps} from './instruction-steps.js'
+export {normalizeSteps} from './instruction-steps.js'
 export function openInstructionStudio({document:build,selection,language,signal,save,partsCatalog}){
  const d=document,ru=language==='ru',tr=(a,b)=>ru?a:b,el=(tag,cls,txt)=>{const n=d.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n}
  if(!build.parts.length||build.parts.length>2000)throw Error('instruction_limit')
