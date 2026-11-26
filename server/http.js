@@ -59,7 +59,8 @@ export function createBrickLabServer({ root, logger = console, auth, projects, p
       if (payments && await payments(req,res,pathname)) return
       if (pathname==='/payment/success'||pathname==='/payment/fail') {
         if(req.method!=='GET')return send(req,res,405,'Method not allowed')
-        res.writeHead(303,{'Location':'/#store','Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end();return
+        const instruction=new URL(req.url,'http://localhost').searchParams.get('kind')==='instruction'
+        res.writeHead(303,{'Location':instruction?'/#sets':'/#store','Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end();return
       }
       if (rebrickable && await rebrickable(req,res,pathname)) return
       if (instructions && await instructions(req,res,pathname)) return
