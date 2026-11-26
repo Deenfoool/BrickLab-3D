@@ -300,3 +300,15 @@ body:has(.editor:not([hidden])){overflow:hidden}
 .editor-collision-results:not(:empty){display:grid;gap:4px;max-height:200px;overflow:auto}
 .editor-collision-results button{text-align:left;overflow-wrap:anywhere;border-left:2px solid #ff6666}
 .editor-collision-results p{font-size:11px;margin:0}
+
+.editor-drive-estimate:not([hidden]){display:grid;gap:7px;border-top:1px solid color-mix(in srgb,currentColor 16%,transparent);padding:8px 0}
+.editor-drive-estimate summary{cursor:pointer;font-weight:650;font-size:12px}
+.editor-drive-estimate-form,.editor-drive-estimate-result,.editor-drive-loads{display:grid;gap:6px;margin-top:7px}
+.editor-drive-estimate-form label{display:grid;gap:3px;font-size:11px}
+.editor-drive-estimate input,.editor-drive-estimate select,.editor-collision-actions select{max-width:100%;min-width:0;font:inherit}
+.editor-drive-load-row{display:grid;gap:4px;grid-template-columns:minmax(0,1fr) auto;align-items:end;padding:6px;border:1px solid color-mix(in srgb,currentColor 16%,transparent);border-radius:6px}
+.editor-drive-load-row select{grid-column:1/-1}
+.editor-drive-estimate-result p{margin:0;font-size:11px}
+.editor-drive-warning{color:#ff7777}
+.editor-drive-output-list{display:grid;gap:4px;max-height:180px;overflow:auto}
+.editor-drive-output-list button{font-size:10px;text-align:left;overflow-wrap:anywhere}
