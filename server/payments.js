@@ -2,6 +2,7 @@ import {themeIds} from '../src/menu/store-themes.js'
 import {commerceProducts,productById} from '../src/menu/commerce-catalog.js'
 import {createHash,timingSafeEqual} from 'node:crypto'
 import {ProjectError} from './projects.js'
+import {validNpdReceiptUrl} from './receipt-delivery.js'
 import {instructionAccess} from './instruction-access.js'
 import {canonicalInstructionUrl} from '../src/sets/instruction-url.js'
 const checkout='https://auth.robokassa.ru/Merchant/Index.aspx'
@@ -60,7 +61,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
  let active=0
  async function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return /^[a-f0-9]{64}$/.test(token||'')?await store.getSession(digest(token)):null}
  return async(req,res,path)=>{
-  if(!['/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
+  if(!['/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
   if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
   active++
   try{
@@ -164,7 +165,14 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
    if(path==='/api/commerce/admin-ledger'&&req.method==='GET'){
     const q=new URL(req.url,'http://localhost').searchParams,environment=q.get('environment')
     if(q.size!==1||!['test','live'].includes(environment))throw new ProjectError(400,'invalid_environment')
-    reply(res,200,{orders:await store.commerceAdminLedger(user.id,environment)});return true
+    const [orders,totals]=await Promise.all([store.commerceAdminLedger(user.id,environment),store.commerceAdminDayTotals(user.id,environment)]);reply(res,200,{orders,totals});return true
+   }
+   if(path==='/api/commerce/admin-register-receipt'&&req.method==='POST'){
+    if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
+    let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
+    if(!data||typeof data.orderId!=='string'||!(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.orderId))||!validNpdReceiptUrl(data.url)||data.confirm!==true||Object.keys(data).some(k=>!['orderId','url','confirm'].includes(k)))throw new ProjectError(400,'invalid_receipt_url')
+    if(!await store.registerCommerceReceipt(user.id,data.orderId,data.url))throw new ProjectError(409,'receipt_not_pending')
+    reply(res,200,{ok:true,delivery:'queued'});return true
    }
    if((path==='/api/commerce/admin-receipt'||path==='/api/commerce/admin-receipt-correction')&&req.method==='POST'){
     if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
@@ -203,7 +211,13 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     reply(res,200,{order,checkoutUrl:order.status==='pending'?makeTestCheckout(config,order,product.title):null,mode:'test'});return true
    }
    throw new ProjectError(405,'method_not_allowed')
-  }catch(e){if(e instanceof ProjectError)reply(res,e.status,{error:e.message});else{logger.error('Store operation failed:',e.code||e.name);reply(res,503,{error:'store_unavailable'})}}
+  }catch(e){
+   const expected={verified_account_required:403,admin_required:403,checkout_pending:409,unknown_product:404,invalid_quote:400,invalid_environment:400}
+   if(e instanceof ProjectError)reply(res,e.status,{error:e.message})
+   else if(e.code==='P0001'&&Object.hasOwn(expected,e.message))reply(res,expected[e.message],{error:e.message})
+   else if(e.code==='23505'&&e.constraint_name==='commerce_receipt_unique_url')reply(res,409,{error:'receipt_already_used'})
+   else{logger.error('Store operation failed:',path,e.code||e.name);reply(res,503,{error:'store_unavailable'})}
+  }
   finally{active--}
   return true
  }
