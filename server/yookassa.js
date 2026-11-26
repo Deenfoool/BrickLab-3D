@@ -32,7 +32,7 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
   environment,
   async checkout(uid,sku,quote){
    if(!config.enabled)throw new ProjectError(503,'yookassa_test_disabled')
-   const order=quote?.unified===true?await store.createCommerceOrder(uid,sku,quote.amountKopecks,quote.offerVersion,quote.beta,environment):environment==='live'?await store.createCommerceLiveOrder(uid,sku,quote?.amountKopecks,quote?.offerVersion,quote?.beta):await store.createCommerceTestOrder(uid,sku)
+   const order=quote?.unified===true?await store.createCommerceOrder(uid,sku,quote.amountKopecks,quote.offerVersion,quote.beta,environment,...(quote.instructionProduct?[quote.instructionProduct]:[])):environment==='live'?await store.createCommerceLiveOrder(uid,sku,quote?.amountKopecks,quote?.offerVersion,quote?.beta,...(quote?.instructionProduct?[quote.instructionProduct]:[])):await store.createCommerceTestOrder(uid,sku)
    let payment
    if(order.paymentId)payment=await call('payments/'+order.paymentId)
    else{
