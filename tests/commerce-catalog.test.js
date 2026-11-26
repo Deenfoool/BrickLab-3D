@@ -21,7 +21,7 @@ test('badges and purchased access are retained without plus',()=>{
  assert.deepEqual(a.badges,['supporter']);assert.deepEqual(a.instructions,['42215-1']);assert.deepEqual(a.themes,['carbon']);
 });
 test('instruction tier boundaries and invalid counts',()=>{
- for(const [n,p] of [[1,2900],[200,2900],[201,4900],[501,7900],[1001,12900],[2001,17900],[4001,24900]])assert.equal(instructionPrice(n),p);
+ for(const [n,p] of [[1,0],[200,0],[201,0],[501,0],[600,0],[601,7900],[1000,7900],[1001,12900],[2001,17900],[4001,24900]])assert.equal(instructionPrice(n),p);
  for(const n of [0,-1,NaN,1.5,'200'])assert.throws(()=>instructionPrice(n),RangeError);
 });
 test('beta remains free, paid release supported set only after trial',()=>{
