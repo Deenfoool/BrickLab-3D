@@ -5,7 +5,8 @@ import {evaluateSpurMesh} from '../mechanics/gears.js'
 // collision, contact response or a claim that an unflagged model is collision-free.
 const EPS=.015 // LDraw units; ignore exact touching and near-coplanar contacts.
 const MAX_TRIANGLES=60000, MAX_BUILD_TRIANGLES=240000, MAX_PARTS=5000, MAX_PAIRS=2500, MAX_NODES=1000000
-const trees=new WeakMap()
+const treeCaches=new WeakMap()
+function cacheFor(models){let c=treeCaches.get(models);if(!c){c={entries:new Map(),triangles:0};treeCaches.set(models,c)}return c}
 const pairKey=(a,b)=>JSON.stringify(a<b?[a,b]:[b,a])
 const point=(attr,i)=>new Vector3().fromBufferAttribute(attr,i)
 function buildTree(items){
@@ -17,18 +18,20 @@ function buildTree(items){
  const mid=items.length>>1
  return {box,left:buildTree(items.slice(0,mid)),right:buildTree(items.slice(mid))}
 }
-function geometryTree(model,budget){
- if(trees.has(model))return trees.get(model)
+async function geometryTree(model,budget,cache,signal){
+ if(cache.entries.has(model)){const item=cache.entries.get(model);cache.entries.delete(model);cache.entries.set(model,item);return item.tree}
  let count=0
  for(const g of model.meshes){const p=g.getAttribute('position');count+=Math.floor((g.index?.count??p?.count??0)/3)}
- if(count>MAX_TRIANGLES||!count){trees.set(model,null);return null}
+ if(count>MAX_TRIANGLES||!count){return null}
  if(budget.built+count>MAX_BUILD_TRIANGLES||performance.now()>budget.deadline){budget.buildLimited=true;return null}
  budget.built+=count
  const items=[]
+ let processed=0
  for(const g of model.meshes){
   const p=g.getAttribute('position'),idx=g.index
   if(!p)continue
   for(let i=0;i+2<(idx?.count??p.count);i+=3){
+   if(++processed%4096===0){await yieldUI();signal?.throwIfAborted();if(performance.now()>budget.deadline){budget.buildLimited=true;return null}}
    const v=[0,1,2].map(k=>point(p,idx?idx.getX(i+k):i+k))
    if(!v.every(x=>[x.x,x.y,x.z].every(Number.isFinite)))continue
    const n=new Vector3().subVectors(v[1],v[0]).cross(new Vector3().subVectors(v[2],v[0]))
@@ -37,7 +40,8 @@ function geometryTree(model,budget){
   }
  }
  const tree=items.length?buildTree(items):null
- trees.set(model,tree);return tree
+ if(tree){while(cache.triangles+count>MAX_BUILD_TRIANGLES&&cache.entries.size){const key=cache.entries.keys().next().value;cache.triangles-=cache.entries.get(key).count;cache.entries.delete(key)}cache.entries.set(model,{tree,count});cache.triangles+=count}
+ return tree
 }
 function strictOverlap(a,b){
  return ['x','y','z'].every(k=>Math.min(a.max[k],b.max[k])-Math.max(a.min[k],b.min[k])>EPS)
@@ -63,10 +67,11 @@ function crossing(a,b){
  }
  return null
 }
-function intersectTrees(a,b,budget){
+async function intersectTrees(a,b,budget,signal){
  const ca=new WeakMap(),cb=new WeakMap(),stack=[[a.tree,b.tree]]
  while(stack.length){
   if(++budget.nodes>MAX_NODES||performance.now()>budget.deadline)return {limited:true}
+  if(budget.nodes%256===0){await yieldUI();signal?.throwIfAborted()}
   const [x,y]=stack.pop()
   // Triangle boxes may be flat: use inclusive AABB for the narrow traversal.
   if(!worldBox(x,a.matrix,ca).intersectsBox(worldBox(y,b.matrix,cb)))continue
@@ -89,7 +94,7 @@ export async function inspectCollisions({parts,models,connections=[],movingIds=n
  if(parts.length>MAX_PARTS){result.limited=true;return result}
  const exempt=new Set(connections.map(l=>pairKey(l.shaft?.part,l.socket?.part)))
  const gears=new Map(gearPoses(parts).map(g=>[g.part,g]))
- const entries=[],budget={nodes:0,built:0,buildLimited:false,deadline:Math.min(deadline,performance.now()+3000)}
+ const cache=cacheFor(models),entries=[],budget={nodes:0,built:0,buildLimited:false,deadline:Math.min(deadline,performance.now()+3000)}
  for(const p of parts){
   signal?.throwIfAborted()
   if(!models.get(p.design)?.bounds||!Array.isArray(p.position)||!Array.isArray(p.rotation)){result.unavailable++;continue}
@@ -110,10 +115,10 @@ export async function inspectCollisions({parts,models,connections=[],movingIds=n
    if(++candidates>MAX_PAIRS){result.limited=true;return result}
    signal?.throwIfAborted()
    if(performance.now()-lastYield>12){await yieldUI();signal?.throwIfAborted();lastYield=performance.now()}
-   a.tree??=geometryTree(models.get(a.p.design),budget);b.tree??=geometryTree(models.get(b.p.design),budget)
+   a.tree??=await geometryTree(models.get(a.p.design),budget,cache,signal);b.tree??=await geometryTree(models.get(b.p.design),budget,cache,signal)
    if(budget.buildLimited){result.limited=true;return result}
    if(!a.tree||!b.tree){result.unavailable++;continue}
-   const hit=intersectTrees(a,b,budget)
+   const hit=await intersectTrees(a,b,budget,signal)
    if(hit.limited){result.limited=true;return result}
    result.checked++
    if(hit.point){result.pairs.push({a:a.p.id,b:b.p.id,point:hit.point});if(result.pairs.length>=100){result.limited=true;return result}}
