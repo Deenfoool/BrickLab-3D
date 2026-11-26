@@ -79,7 +79,7 @@ export function createInstructionRecognition(reader, set, signal) {
   function analyze(action, input, transfer = []) {
     signal.throwIfAborted()
     if (!worker) {
-      worker = new Worker(new URL('./instruction-recognition-worker.js?v=instruction-artwork-v3', import.meta.url), { type: 'module' })
+      worker = new Worker(new URL('./instruction-recognition-worker.js?v=instruction-artwork-v5', import.meta.url), { type: 'module' })
       worker.onmessage = ({ data }) => {
         const job = jobs.get(data.id)
         jobs.delete(data.id)
@@ -102,7 +102,7 @@ export function createInstructionRecognition(reader, set, signal) {
     const bookSignal = AbortSignal.any([controller.signal, signal])
     const key = Promise.all([reader.fingerprint(source), version]).then(([fingerprint, hash]) => {
       if (!fingerprint || !hash) return
-      return JSON.stringify(['regions-v4', set.number, hash, fingerprint])
+      return JSON.stringify(['regions-v5', set.number, hash, fingerprint])
     })
     active = { source, controller, signal: bookSignal, key, pages }
     return active
@@ -142,7 +142,8 @@ export function createInstructionRecognition(reader, set, signal) {
       surface = document.createElement('canvas')
       await reader.render(source, page, surface, request)
     }
-    if (!hasWords()) {
+    const knownElements=()=>geometry.words.filter(({text})=>element.test(text)&&Object.hasOwn(labels,text)).length
+    if (!hasWords() || (mode&&knownElements()<2)) {
       const recognized=await readText(surface,geometry,request)
       geometry.words=[...geometry.words,...recognized.filter(word=>!geometry.words.some(old=>old.text===word.text&&Math.abs(old.box[0]-word.box[0])<3&&Math.abs(old.box[1]-word.box[1])<3))]
     }
@@ -190,7 +191,7 @@ export function createInstructionRecognition(reader, set, signal) {
     const samples = await extract(source, page, canvas, false, request)
     request.throwIfAborted()
     if (!samples.length) return []
-    if (samples.every(sample => sample.item)) {
+    if (samples.every(sample => sample.item?.[0])) {
       const regions = samples.map(({ region, item }) => [...region, ...item])
       void cache(pageKey, regions)
       return regions
@@ -205,7 +206,7 @@ export function createInstructionRecognition(reader, set, signal) {
     const templates = typeof source === 'string'
       ? [...books].filter(([volume]) => typeof volume === 'string').flatMap(([, items]) => items)
       : books.get(source)
-    if (!templates.length) return []
+    if (!templates.length) return samples.filter(s=>s.item?.[0]).map(s=>[...s.region,...s.item])
     const regions = await analyze('rank', { samples, templates })
     if (regions.length) void cache(pageKey, regions)
     request.throwIfAborted()
