@@ -1,7 +1,7 @@
 import {createProfileClient} from './profile-client.js?v=cloud-profile-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
-import {commerceProducts,themePrices,instructionTiers,productById} from './commerce-catalog.js?v=instruction-store-1'
+import {commerceProducts,themePrices,productById} from './commerce-catalog.js?v=instruction-store-1'
 import {commerceBadge,productArtwork,factsPanel,planSaving} from './commerce-visuals.js?v=merch-2'
 const labels={
  ru:{title:'BrickLab Store',intro:'Оформление мастерской. Основные функции редактора остаются бесплатными.',disabled:'Темы доступны для просмотра. Оплата откроется после подключения платёжной системы ЮKassa.',test:'Тестовый режим · реальные деньги не списываются. Покупки доступны только администратору.',login:'Войти в аккаунт',buy:'Тестовая покупка',owned:'Получено в тестовом инвентаре',resume:'Продолжить тестовую оплату',consent:'Подтверждаю, что это тестовая оплата без реального списания и без выдачи платного товара.',history:'Мои тестовые заказы',finance:'BrickLab Finance · тестовый режим',financeNote:'Суммы ниже — виртуальные тестовые операции, не выручка.',total:'Заказов',paid:'Подтверждено',amount:'Тестовый оборот',pending:'Ожидает подтверждения',complete:'Подтверждён',refresh:'Обновить статус',error:'Не удалось выполнить запрос. Попробуй ещё раз.',wait:'Если оплата завершена, дождись уведомления Robokassa и обнови статус.',profile:'Мой инвентарь',carbon:'Карбон',neon:'Неоновая мастерская',noOrders:'Заказов пока нет',loading:'Загрузка…'},
@@ -202,9 +202,37 @@ export function mountStore(root,{language='ru',signal}){
    }
   }
   if(selected==='all'||selected==='instruction'){
-   const section=el('section','store-orders');section.style.gridColumn='1 / -1';section.append(el('h2',null,tr('Интерактивные инструкции','Interactive instructions')),el('p','account-muted',tr('Во время ОБТ бесплатно. PDF и ручной поиск останутся бесплатными. Продажа отдельных наборов начнётся после проверки распознавания.','Free during open beta. PDF and manual search remain free. Individual sets launch after recognition audit.')))
-   const guide=productArtwork({kind:'instruction'},language);guide.classList.add('commerce-guide-banner');section.append(guide)
-   const prices=el('div','commerce-instruction-prices');let min=1;for(const [max,price] of instructionTiers){const row=el('div','commerce-preview-tier');row.append(el('span',null,min+'–'+(max===Number.MAX_SAFE_INTEGER?'∞':max)+tr(' деталей',' parts')),el('strong',null,money(price)));prices.append(row);min=max+1}section.append(prices);grid.append(section)
+   const section=el('section','store-orders commerce-instruction-section');section.style.gridColumn='1 / -1';
+   const list=products.filter(p=>p.kind==='instruction').sort((a,b)=>a.partCount-b.partCount||a.setId.localeCompare(b.setId));
+   const heading=el('div','commerce-instruction-heading'),copy=el('div');
+   copy.append(el('h2',null,tr('Инструкции','Instructions')),el('p','account-muted',tr('До 600 деталей — бесплатно. PDF и ручной поиск всегда бесплатны.','Up to 600 pieces free. PDF and manual search are always free.')));
+   heading.append(copy);
+   if(selected==='all')heading.append(button(tr('Все инструкции','All instructions')+' · '+list.length,()=>{selected='instruction';render()}));
+   section.append(heading);
+   if(selected==='instruction'){
+    const search=el('input','commerce-instruction-search');search.type='search';search.placeholder=tr('Название или номер набора','Set name or number');search.setAttribute('aria-label',search.placeholder);search.value=instructionSearch;
+    const rows=el('div','commerce-instruction-list');
+    const note=el('p','account-muted',testMode?tr('Тестовые покупки без списаний. В ОБТ интерактивность бесплатна.','Sandbox purchases, no charges. Interactive hints are free during beta.'):catalog.instructionRelease?tr('Продажа доступна после проверки интерактивных подсказок каждого набора.','Checkout is available after each set’s hints have been audited.'):tr('В ОБТ интерактивность бесплатна. Цены показаны для будущего релиза.','Interactive hints are free during beta. Prices are for the future release.'));
+    function paintInstructions(){
+     rows.replaceChildren();
+     const q=instructionSearch.trim().toLowerCase(),matched=list.filter(p=>!q||[p.title,p.setId].some(v=>v.toLowerCase().includes(q)));
+     for(const p of matched){
+      const row=el('article','commerce-instruction-row'),info=el('div','commerce-instruction-info'),actions=el('div','commerce-instruction-actions'),has=owned(p,a),available=checkoutStatus?.enabled&&checkoutStatus.skus.includes(p.id)||!a&&catalog.live&&catalog.liveSkus?.includes(p.id);
+      const tile=el('span','commerce-instruction-number',p.setId.split('-')[0]);tile.setAttribute('aria-hidden','true');
+      info.append(el('strong',null,p.title),el('small','account-muted',p.setId+' · '+p.partCount.toLocaleString(language)+tr(' деталей',' pieces')));
+      if(has)actions.append(el('small','commerce-owned',tr('Приобретено','Owned')));
+      else{
+       actions.append(el('strong','commerce-instruction-price',money(p.priceKopecks)));
+       if(available){const buy=button(testMode?tr('Тест','Test'):tr('Купить','Buy'),()=>{if(!a){location.hash='#account';return}showCheckout(p)});buy.classList.add('primary');actions.append(buy)}
+       else actions.append(el('small','account-muted',tr('Не в продаже','Not on sale')));
+      }
+      row.append(tile,info,actions);rows.append(row);
+     }
+     if(!matched.length)rows.append(el('p','account-muted',tr('Наборы не найдены','No sets found')));
+    }
+    search.oninput=()=>{instructionSearch=search.value;paintInstructions()};section.append(note,search,rows);paintInstructions();
+   }
+   grid.append(section);
   }
  }
  async function refresh(){
