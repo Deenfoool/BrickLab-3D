@@ -41,19 +41,18 @@ export function mountStore(root,{language='ru',signal}){
  const errorText=e=>({verified_account_required:tr('Подтверди электронную почту перед покупкой.','Verify your email before purchasing.'),invalid_receipt_url:tr('Нужна ссылка на чек из «Мой налог».','Use an official My Tax receipt link.'),receipt_already_used:tr('Чек уже привязан к другому заказу.','Receipt already used.'),checkout_pending:tr('Заверши предыдущую оплату.','Finish the previous payment.')})[e.code]??t.error+' ('+(e.status??'network')+')'
  const profiles=createProfileClient(),nav=el('div','commerce-preview-nav'),grid=el('div','store-grid'),notice=el('p','account-muted'),summary=el('section','store-orders')
  notice.setAttribute('role','status')
- const categories=[['all',tr('Все товары','All products')],['subscription','BrickLab Plus'],['theme',tr('Темы','Themes')],['themeBundle',tr('Коллекции','Collections')],['storage',tr('Облачные проекты','Cloud projects')],['badge',tr('Значки','Badges')],['instruction',tr('Инструкции','Instructions')],['orders',tr('Мои покупки','My purchases')],['ledger',tr('Финансы','Finance')]]
+ const categories=[['all',tr('Все товары','All products')],['subscription','BrickLab Plus'],['theme',tr('Темы','Themes')],['themeBundle',tr('Коллекции','Collections')],['storage',tr('Облачные проекты','Cloud projects')],['badge',tr('Значки','Badges')],['orders',tr('Мои покупки','My purchases')],['ledger',tr('Финансы','Finance')]]
  const sectionCopy={
   subscription:tr('Больше возможностей для твоей мастерской на выбранный срок.','More room and tools for your workshop for a chosen term.'),
   theme:tr('Индивидуальный стиль профиля и мастерской.','A personal look for your profile and workshop.'),
   themeBundle:tr('Все шесть фирменных оформлений в одном наборе.','All six signature styles in one collection.'),
   storage:tr('Расширяй облачное пространство разовыми покупками.','Expand your cloud space with one-time purchases.'),
-  badge:tr('Коллекционные эмблемы поддержки — от первого значка до Founder’s Club.','Collectible supporter insignia, from the first badge to Founder’s Club.'),
-  instruction:tr('Подсказки для наборов от 601 детали.','Hints for sets with 601 or more pieces.')
+  badge:tr('Коллекционные эмблемы поддержки — от первого значка до Founder’s Club.','Collectible supporter insignia, from the first badge to Founder’s Club.')
  }
  const tabs=new Map(),header=el('div','store-banner'),heading=el('div'),art=el('div','store-banner-art')
  heading.append(el('span','store-kicker','BRICKLAB STORE'),el('h2',null,tr('Расширь свою мастерскую','Expand your workshop')),el('p',null,tr('Темы, облачное пространство, коллекции и Plus. Основной редактор бесплатный.','Themes, cloud space, collections and Plus. The core editor is free.')))
  for(const id of ['carbon','neon','aurora'])art.append(themePreview(themeFor(id),language));header.append(heading,art)
- let instructionSearch='';let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,testMode=false,busy=false,serial=0
+ let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,testMode=false,busy=false,serial=0
  try{if(sessionStorage.getItem('bricklab-commerce-return')==='1'){selected='orders';sessionStorage.removeItem('bricklab-commerce-return')}}catch{}
  const refreshButton=button(tr('Обновить покупки','Refresh purchases'),()=>refresh())
  for(const [id,label] of categories){const b=button(label,()=>{selected=id;render()});tabs.set(id,b);nav.append(b)}
@@ -163,7 +162,7 @@ export function mountStore(root,{language='ru',signal}){
   }
   if(selected==='orders'){
    if(!a){grid.append(link(t.login,'#account'));return}
-   for(const o of a.orders??[]){const card=el('article','commerce-preview-card'),p=products.find(p=>p.id===o.sku);card.append(orderIdentity(p,p?productTitle(p):o.title),el('strong','store-price',money(o.amountKopecks)),el('p','account-muted',({pending:tr('Ожидает оплаты','Pending'),succeeded:tr('Оплачено','Paid'),canceled:tr('Отменено','Canceled'),refunded:tr('Возвращено','Refunded')})[o.status]??o.status),el('small','account-muted',orderNo(o.orderNumber)));if(!testMode&&o.receiptStatus==='pending')card.append(el('p','account-muted',tr('Чек формируется','Receipt pending')));if(!testMode&&o.receiptUrl&&/^https:\/\/lknpd\.nalog\.ru\/api\/v1\/receipt\/[0-9]{12}\/[A-Za-z0-9_-]{1,80}\/print$/.test(o.receiptUrl)){const receipt=link(tr('Чек НПД','NPD receipt'),o.receiptUrl);receipt.target='_blank';receipt.rel='noopener noreferrer';card.append(receipt)}if(o.status==='pending'&&p&&checkoutStatus?.enabled&&checkoutStatus.skus.includes(p.id))card.append(button(tr('Продолжить оплату','Resume checkout'),()=>showCheckout(p)));if(testMode&&o.status==='succeeded'){const refund=button(o.refundRequestedAt?tr('Проверить возврат','Check refund'):tr('Тестовый возврат','Test refund'),async()=>{if(!o.refundRequestedAt&&!window.confirm(tr('Вернуть всю тестовую сумму и отозвать приобретение?','Refund the full test amount and revoke the entitlement?')))return;refund.disabled=true;try{const result=await api('/api/commerce/refund',signal,{orderId:o.id,confirm:true,mode:checkoutStatus.mode});await refresh();notice.textContent=tr('Возврат: ','Refund: ')+result.status}catch(e){notice.textContent=errorText(e);refund.disabled=false}});card.append(refund)}grid.append(card)}
+   for(const o of a.orders??[]){const card=el('article','commerce-preview-card'),p=products.find(p=>p.id===o.sku);card.append(orderIdentity(p,p?productTitle(p):o.title),el('strong','store-price',money(o.amountKopecks)),el('p','account-muted',({pending:tr('Ожидает оплаты','Pending'),succeeded:tr('Оплачено','Paid'),canceled:tr('Отменено','Canceled'),refunded:tr('Возвращено','Refunded')})[o.status]??o.status),el('small','account-muted',orderNo(o.orderNumber)));if(!testMode&&o.receiptStatus==='pending')card.append(el('p','account-muted',tr('Чек формируется','Receipt pending')));if(!testMode&&o.receiptUrl&&/^https:\/\/lknpd\.nalog\.ru\/api\/v1\/receipt\/[0-9]{12}\/[A-Za-z0-9_-]{1,80}\/print$/.test(o.receiptUrl)){const receipt=link(tr('Чек НПД','NPD receipt'),o.receiptUrl);receipt.target='_blank';receipt.rel='noopener noreferrer';card.append(receipt)}if(p?.kind==='instruction'&&['pending','succeeded'].includes(o.status))card.append(button(tr('Открыть набор','Open set'),()=>{try{sessionStorage.setItem('bricklab-instruction-return',p.setId)}catch{}location.hash='#sets'}));else if(o.status==='pending'&&p&&checkoutStatus?.enabled&&checkoutStatus.skus.includes(p.id))card.append(button(tr('Продолжить оплату','Resume checkout'),()=>showCheckout(p)));if(testMode&&o.status==='succeeded'){const refund=button(o.refundRequestedAt?tr('Проверить возврат','Check refund'):tr('Тестовый возврат','Test refund'),async()=>{if(!o.refundRequestedAt&&!window.confirm(tr('Вернуть всю тестовую сумму и отозвать приобретение?','Refund the full test amount and revoke the entitlement?')))return;refund.disabled=true;try{const result=await api('/api/commerce/refund',signal,{orderId:o.id,confirm:true,mode:checkoutStatus.mode});await refresh();notice.textContent=tr('Возврат: ','Refund: ')+result.status}catch(e){notice.textContent=errorText(e);refund.disabled=false}});card.append(refund)}grid.append(card)}
    if(!(a.orders??[]).length)grid.append(el('p','account-muted',t.noOrders))
    grid.append(link(tr('Перейти в мастерскую','Open workshop'),'#account'));return
   }
@@ -200,39 +199,6 @@ export function mountStore(root,{language='ru',signal}){
     }else if(!available&&!has)footer.append(el('small','account-muted',kind==='theme'?tr('Оплата скоро','Checkout coming soon'):tr('Подготовка к выпуску','In preparation')))
     copy.append(footer);card.append(copy);items.append(card)
    }
-  }
-  if(selected==='all'||selected==='instruction'){
-   const section=el('section','store-orders commerce-instruction-section');section.style.gridColumn='1 / -1';
-   const list=products.filter(p=>p.kind==='instruction').sort((a,b)=>a.partCount-b.partCount||a.setId.localeCompare(b.setId));
-   const heading=el('div','commerce-instruction-heading'),copy=el('div');
-   copy.append(el('h2',null,tr('Инструкции','Instructions')),el('p','account-muted',tr('До 600 деталей — бесплатно. PDF и ручной поиск всегда бесплатны.','Up to 600 pieces free. PDF and manual search are always free.')));
-   heading.append(copy);
-   if(selected==='all')heading.append(button(tr('Все инструкции','All instructions')+' · '+list.length,()=>{selected='instruction';render()}));
-   section.append(heading);
-   if(selected==='instruction'){
-    const search=el('input','commerce-instruction-search');search.type='search';search.placeholder=tr('Название или номер набора','Set name or number');search.setAttribute('aria-label',search.placeholder);search.value=instructionSearch;
-    const rows=el('div','commerce-instruction-list');
-    const note=el('p','account-muted',testMode?tr('Тестовые покупки без списаний. В ОБТ интерактивность бесплатна.','Sandbox purchases, no charges. Interactive hints are free during beta.'):catalog.instructionRelease?tr('Продажа доступна после проверки интерактивных подсказок каждого набора.','Checkout is available after each set’s hints have been audited.'):tr('В ОБТ интерактивность бесплатна. Цены показаны для будущего релиза.','Interactive hints are free during beta. Prices are for the future release.'));
-    function paintInstructions(){
-     rows.replaceChildren();
-     const q=instructionSearch.trim().toLowerCase(),matched=list.filter(p=>!q||[p.title,p.setId].some(v=>v.toLowerCase().includes(q)));
-     for(const p of matched){
-      const row=el('article','commerce-instruction-row'),info=el('div','commerce-instruction-info'),actions=el('div','commerce-instruction-actions'),has=owned(p,a),available=checkoutStatus?.enabled&&checkoutStatus.skus.includes(p.id)||!a&&catalog.live&&catalog.liveSkus?.includes(p.id);
-      const tile=el('span','commerce-instruction-number',p.setId.split('-')[0]);tile.setAttribute('aria-hidden','true');
-      info.append(el('strong',null,p.title),el('small','account-muted',p.setId+' · '+p.partCount.toLocaleString(language)+tr(' деталей',' pieces')));
-      if(has)actions.append(el('small','commerce-owned',tr('Приобретено','Owned')));
-      else{
-       actions.append(el('strong','commerce-instruction-price',money(p.priceKopecks)));
-       if(available){const buy=button(testMode?tr('Тест','Test'):tr('Купить','Buy'),()=>{if(!a){location.hash='#account';return}showCheckout(p)});buy.classList.add('primary');actions.append(buy)}
-       else actions.append(el('small','account-muted',tr('Не в продаже','Not on sale')));
-      }
-      row.append(tile,info,actions);rows.append(row);
-     }
-     if(!matched.length)rows.append(el('p','account-muted',tr('Наборы не найдены','No sets found')));
-    }
-    search.oninput=()=>{instructionSearch=search.value;paintInstructions()};section.append(note,search,rows);paintInstructions();
-   }
-   grid.append(section);
   }
  }
  async function refresh(){
