@@ -1,4 +1,4 @@
-// Candidate pricing only. Not registered as a purchasable SKU.
+// Server-authoritative quote for the isolated admin sandbox. No live SKU.
 // A bundle is three named permanent set unlocks, never transferable credit.
 import {instructionProduct} from './commerce-catalog.js'
 export function quoteInstructionBundle({setIds,auditedProducts,account,release=false}){
