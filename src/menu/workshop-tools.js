@@ -1,5 +1,6 @@
 import {modelPassport} from './workshop-model.js?v=activity-1'
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=String(text);return n}
+function addOption(select,label,value){const option=el('option',null,label);option.value=value;select.append(option)}
 // Structural inspection is deliberately separate from physical or kinematic validation.
 export function inspectModel(document){
  const base=modelPassport(document)
@@ -22,10 +23,10 @@ export function renderWorkshopTools({lang,local,remote,fetchCloud,signal}){
  const ru=lang==='ru',tr=(a,b)=>ru?a:b
  const root=el('section','account-card workshop-card workshop-tools'),controls=el('div','workshop-tools-controls'),output=el('div','workshop-tools-output'),status=el('p','account-muted')
  root.append(el('h2',null,tr('Инструменты мастерской','Workshop tools')),el('p','account-muted',tr('Создавай изображения модели и проверяй структуру сохранённых сборок. В ОБТ бесплатно.','Create model images and inspect saved builds. Free during open beta.')))
- const select=el('select');select.setAttribute('aria-label',tr('Сборка','Build'));select.add(new Option(tr('Выбери сборку','Choose a build'),''))
- for(const p of local)if(p.document?.parts?.length)select.add(new Option(p.document.name+' · '+tr('на устройстве','local'),'local:'+p.id))
- for(const p of remote)select.add(new Option(p.name+' · '+tr('облако','cloud'),'cloud:'+p.id))
- const option=(label,items)=>{const wrap=el('label'),s=el('select');wrap.append(el('span',null,label),s);for(const [value,title] of items)s.add(new Option(title,value));return {wrap,s}}
+ const select=el('select');select.setAttribute('aria-label',tr('Сборка','Build'));addOption(select,tr('Выбери сборку','Choose a build'),'')
+ for(const p of local)if(p.document?.parts?.length)addOption(select,p.document.name+' · '+tr('на устройстве','local'),'local:'+p.id)
+ for(const p of remote)addOption(select,p.name+' · '+tr('облако','cloud'),'cloud:'+p.id)
+ const option=(label,items)=>{const wrap=el('label'),s=el('select');wrap.append(el('span',null,label),s);for(const [value,title] of items)addOption(s,title,value);return {wrap,s}}
  const angle=option(tr('Ракурс','Angle'),[['iso',tr('Три четверти','Three quarters')],['front',tr('Спереди','Front')],['side',tr('Сбоку','Side')],['top',tr('Сверху','Top')],['rear',tr('Сзади','Rear three quarters')],['left',tr('Слева','Left')]])
  const light=option(tr('Свет','Lighting'),[['studio',tr('Студийный','Studio')],['warm',tr('Тёплый','Warm')],['cool',tr('Холодный','Cool')]])
  const bg=option(tr('Фон','Background'),[['transparent',tr('Прозрачный','Transparent')],['dark',tr('Тёмная студия','Dark studio')],['light',tr('Светлая студия','Light studio')],['blue',tr('Чертёжный синий','Blueprint blue')]])
@@ -109,8 +110,8 @@ export function renderWorkshopTools({lang,local,remote,fetchCloud,signal}){
   if(state.meshes.length){const d=el('details');d.append(el('summary',null,tr('Обнаруженные зацепления','Detected gear meshes')+' · '+state.meshes.length));for(const m of state.meshes.slice(0,100))d.append(el('p',null,name(m.a)+' → '+name(m.b)+' · '+m.ratio.toFixed(3)));panel.append(d)}
   const drive=el('select'),report=el('div','workshop-drive-report')
   drive.setAttribute('aria-label',tr('Ведущая деталь','Driver part'))
-  drive.add(new Option(tr('Выбери ведущую деталь','Choose a driver'),''))
-  for(const p of state.drivers.slice(0,5000))drive.add(new Option(name(p.id),p.id))
+  addOption(drive,tr('Выбери ведущую деталь','Choose a driver'),'')
+  for(const p of state.drivers.slice(0,5000))addOption(drive,name(p.id),p.id)
   const runDrive=button(tr('Проверить движение','Check motion'),()=>{
    report.replaceChildren()
    const result=inspectDrive(state,drive.value)
