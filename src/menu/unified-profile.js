@@ -26,7 +26,7 @@ export function renderUnifiedHero({lang,identity,owner=false,actions=[],metrics=
  mountThemeCover(cover,theme,{custom:!!coverUrl});applySignature(hero,theme)
  const body=ui('div','workshop-hero-inner'),person=ui('div','workshop-identity'),avatar=ui('div','workshop-avatar',Array.from(identity.displayName||'?').slice(0,2).join('').toUpperCase()),name=ui('div')
  if(avatarUrl){const img=ui('img','profile-avatar-image');img.src=avatarUrl;img.alt='';avatar.replaceChildren(img)}
- name.append(ui('h2',null,identity.displayName));if(identity.subtitle)name.append(ui('p','account-muted',identity.subtitle));const badge=themeBadge(theme,lang);if(badge)name.append(badge);if(identity.plus===true)name.append(commerceBadge('plus'));const support=productById(identity.supportBadge);if(support?.kind==='badge')name.append(commerceBadge(support.id))
+ name.append(ui('h2',null,identity.displayName));if(identity.username)name.append(ui('p','account-muted','@'+identity.username));if(identity.subtitle)name.append(ui('p','account-muted',identity.subtitle));const badge=themeBadge(theme,lang);if(badge)name.append(badge);if(identity.plus===true)name.append(commerceBadge('plus'));const support=productById(identity.supportBadge);if(support?.kind==='badge')name.append(commerceBadge(support.id))
  person.append(avatar,name);body.append(person)
  if(actions.length){const a=ui('div','workshop-hero-actions');a.append(...actions);body.append(a)}
  hero.append(cover,body)
@@ -89,7 +89,7 @@ export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeB
 export function profileLinkControls(lang,profile){
  const t=tr(lang),root=ui('div','portfolio-link-controls')
  if(!safePublicId(profile?.id))return root
- const href='/#community/profile/'+profile.id,notice=ui('span','account-muted');notice.setAttribute('role','status')
+ const href='/#community/profile/'+(profile.username??profile.id),notice=ui('span','account-muted');notice.setAttribute('role','status')
  root.append(anchor(t.preview,href),action(t.copy,async()=>{const value=new URL(href,location.origin).href;try{await navigator.clipboard.writeText(value);notice.textContent=t.copied}catch{notice.textContent=t.copyFailed+' '+value}}),notice);return root
 }
 export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic}){

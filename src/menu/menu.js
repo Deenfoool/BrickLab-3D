@@ -6,7 +6,7 @@ import { locales } from './locale.js?v=store-1'
 import {mountStore} from './store.js?v=welcome-1'
 import { mountHomeHub, mountHubSearch } from './home-hub.js?v=signature-art-1'
 import { mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=feedback-2'
+import { createCloudAccount } from './account.js?v=live-polish-1'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -589,7 +589,7 @@ async function openCommunity(){
  closeCommunity()
  const controller=new AbortController();communitySession={key,controller}
  const root=byId('community-panel');root.textContent=strings().loadingLibrary
- try{const {mountCommunity}=await import('./community-gallery.js?v=welcome-2');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
+ try{const {mountCommunity}=await import('./community-gallery.js?v=live-polish-1');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
  catch(e){if(!controller.signal.aborted)root.textContent=language==='ru'?'Не удалось открыть сообщество.':'Could not open community.'}
 }
 function closeSets() {
@@ -692,7 +692,7 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=feedback-3')
+    const { mountEditor } = await import('../editor/editor.js?v=live-polish-1')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
@@ -704,7 +704,7 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
         if(controller.signal.aborted)return
         const record=projects.find(item=>item.id===project.id)
         if(!record)return
-        const {openPublishDialog}=await import('./publish-dialog.js?v=community-options-1')
+        const {openPublishDialog}=await import('./publish-dialog.js?v=live-polish-1')
         if(controller.signal.aborted)return
         await openPublishDialog({record:{...record,document},language,signal:controller.signal,linkLocal:linkCloudProject,capture,onPublished:()=>{void cloudAccount.refreshProjects()}})
       },
