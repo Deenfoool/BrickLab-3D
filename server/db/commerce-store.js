@@ -60,6 +60,10 @@ export function commerceStore(scope){
   async requestCommerceRefund(uid,id,environment){return scope(uid,async tx=>{const [r]=await tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks",refund_requested_at as "requestedAt",provider_refund_id as "refundId" from bricklab.commerce_request_refund(${id}::uuid,${environment})`;return r})},
   async attachCommerceRefund(id,refund,environment){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_attach_refund(${id}::uuid,${refund},${environment}) as ok`;return r.ok})},
   async claimCommerceRefunds(environment){return scope('',tx=>tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks",provider_refund_id as "refundId" from bricklab.commerce_claim_refunds(${environment})`)},
+  async commerceAdminDayTotals(uid,environment){return scope(uid,async tx=>{const [r]=await tx`select * from bricklab.commerce_admin_day_totals(${environment})`;return r})},
+  async registerCommerceReceipt(uid,id,url){return scope(uid,async tx=>{const [r]=await tx`select bricklab.commerce_register_receipt(${id}::uuid,${url}) as ok`;return r.ok})},
+  async claimCommerceReceiptDeliveries(){return scope('',tx=>tx`select * from bricklab.commerce_claim_receipt_deliveries()`)},
+  async ackCommerceReceiptDelivery(id,url){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_ack_receipt_delivery(${id}::uuid,${url}) as ok`;return r.ok})},
   async commerceAdminLedger(uid,environment){return scope(uid,tx=>tx`select * from bricklab.commerce_admin_ledger(${environment})`)},
   async confirmCommerceReceiptCorrection(uid,id,reference){return scope(uid,async tx=>{const [r]=await tx`select bricklab.commerce_confirm_receipt_correction(${id}::uuid,${reference}) as ok`;return r.ok})},
   async confirmCommerceReceipt(uid,id,reference){return scope(uid,async tx=>{const [r]=await tx`select bricklab.commerce_confirm_receipt(${id}::uuid,${reference}) as ok`;return r.ok})},
@@ -71,7 +75,7 @@ export function commerceStore(scope){
   async refundCommercePayment(payment,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_refund_full(${payment},${environment},${amount}::integer) as ok`;return r.ok})},
   async commerceTestAccount(uid){return scope(uid,async tx=>{
    const account=await commerceEntitlements(tx,uid,'test')
-   const orders=await tx`select id,sku,title,amount_kopecks as "amountKopecks",status,payment_id as "paymentId",refund_requested_at as "refundRequestedAt",provider_refund_id as "refundId",created_at as "createdAt",paid_at as "paidAt" from bricklab.commerce_orders where user_id=${uid} and environment='test' order by created_at desc limit 50`
+   const orders=await tx`select id,order_number as "orderNumber",sku,title,amount_kopecks as "amountKopecks",status,payment_id as "paymentId",refund_requested_at as "refundRequestedAt",provider_refund_id as "refundId",created_at as "createdAt",paid_at as "paidAt" from bricklab.commerce_orders where user_id=${uid} and environment='test' order by created_at desc limit 50`
    return {...account,orders}
   })},
   async claimCommerceLivePayments(){return scope('',tx=>tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks" from bricklab.commerce_claim_live_payments()`)},
@@ -90,8 +94,8 @@ export function commerceStore(scope){
   async commerceAccount(uid){
    return scope(uid,async tx=>{
     const account=await commerceEntitlements(tx,uid);
-    const orders=await tx`select id,sku,title,amount_kopecks as "amountKopecks",status,
-     created_at as "createdAt",paid_at as "paidAt",refunded_at as "refundedAt",payment_id as "paymentId",refund_requested_at as "refundRequestedAt"
+    const orders=await tx`select id,order_number as "orderNumber",sku,title,amount_kopecks as "amountKopecks",status,
+     created_at as "createdAt",paid_at as "paidAt",refunded_at as "refundedAt",receipt_status as "receiptStatus",case when status='succeeded' then receipt_delivery_url else null end as "receiptUrl",receipt_delivery_sent_at as "receiptSentAt",payment_id as "paymentId",refund_requested_at as "refundRequestedAt"
      from bricklab.commerce_orders where user_id=${uid} and environment='live'
      order by created_at desc,id limit 50`;
     return {...account,orders};
