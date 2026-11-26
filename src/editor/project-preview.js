@@ -92,6 +92,7 @@ export function createProjectPreviewRenderer(options={}) {
       }
       signal.throwIfAborted()
       const poses = loadParts(source, models)
+      if(options.requireAll===true&&poses.length!==source.parts.length)throw Error('incomplete_model_geometry')
       const layers = readSceneLayers(source.sceneLayers, new Set(poses.map(part => part.id)))
       const hidden = hiddenSceneParts(layers, poses)
       const visible = poses.filter(part => !hidden.has(part.id))
