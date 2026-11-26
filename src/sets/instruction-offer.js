@@ -1,3 +1,4 @@
+import {instructionEvent} from './instruction-events.js'
 // Contextual purchase and welcome activation; the server is authoritative.
 const make=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n}
 const generations=new WeakMap()
@@ -58,6 +59,7 @@ export async function mountInstructionOffer(root,{set,language,signal,onStart,st
   }
   const p=offer.product
   if(!p||!offer.canBuy)return
+  if(offer.mode==='live')instructionEvent(setId,'offer_view')
   const priceRow=make('div',undefined,'set-offer-price'),price=make('strong',money(p.priceKopecks))
   priceRow.append(make('span',offer.mode==='test'?tr('Тестовая стоимость','Sandbox price'):tr('Доступ навсегда','Permanent access')),price)
   const consent=make('label',undefined,'set-offer-consent'),check=make('input'),terms=make('span',offer.mode==='test'?tr('Согласен на тестовую оплату без списания. ','I accept sandbox checkout with no charge. '):tr('Принимаю условия покупки и возврата. ','I accept purchase and refund terms. '))
@@ -65,6 +67,7 @@ export async function mountInstructionOffer(root,{set,language,signal,onStart,st
   const legal=make('a',tr('Оферта','Offer'));legal.href='/offer';legal.target='_blank';legal.rel='noopener noreferrer';terms.append(legal);consent.append(check,terms)
   let quote=null,plusQuote=null
   async function checkout(q,sku){
+   if(offer.mode==='live')instructionEvent(setId,'checkout_click')
    const result=await api('/api/commerce/checkout',signal,{sku,amountKopecks:q.amountKopecks,offerVersion:q.offerVersion,accepted:true,mode:offer.mode,...(sku==='plus-1'?{returnToSets:true}:{})})
    if(!current())return
    if(result.mode!==offer.mode)throw Error('mode_changed')
