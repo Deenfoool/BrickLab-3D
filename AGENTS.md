@@ -7,3 +7,7 @@ For every substantial user-visible update, include a real bilingual (RU/EN) rele
 Read [docs/release-history.md](docs/release-history.md) for the format, source links, cache refresh and checks. The history is rendered on the home page and the latest entry becomes “What's new”. Do not invent version numbers, deployment dates, payment availability or unverified capabilities. Mark experimental work and limits accurately.
 
 Run `node scripts/check-release-history.mjs` and `node --test tests/release-history.test.js` before submitting changes. For a large change also run `node scripts/check-release-history.mjs BASE HEAD` against the actual comparison refs. Do not remove historical entries merely to satisfy the check.
+
+## Testing and releases
+
+GitHub Actions are unavailable for this account. Do not introduce or rely on GitHub Actions, CI status checks or branch protection that depends on them. Run local tests and the existing isolated VPS checks; use the approved VPS release process and verify the exact target SHA. Do not claim successful deployment until verified.
