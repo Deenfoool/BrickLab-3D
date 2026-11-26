@@ -106,6 +106,13 @@ export function mountStore(root,{language='ru',signal}){
      const confirm=button(tr('Чек выдан и отправлен','Receipt issued and sent'),async()=>{if(!input.value.trim()||!window.confirm(tr('Подтверждаешь, что реальный чек уже сформирован и передан покупателю?','Confirm that an actual receipt has been issued and delivered?')))return;confirm.disabled=true;try{await api('/api/commerce/admin-receipt',signal,{orderId:o.id,reference:input.value.trim(),confirm:true});await refresh()}catch{notice.textContent=t.error;confirm.disabled=false}})
      card.append(input,confirm)
     }else if(!testMode)card.append(el('p','account-muted',tr('Чек: ','Receipt: ')+o.receipt_status))
+    if(!testMode&&o.receipt_correction_pending){
+     card.append(el('p','account-muted',tr('После возврата требуется корректировка расчёта в «Мой налог».','Correct the fiscal record after the refund.')))
+     const input=el('input','account-field');input.placeholder=tr('Номер или основание корректировки','Correction reference');input.maxLength=250
+     const confirm=button(tr('Корректировка выполнена','Correction completed'),async()=>{if(!input.value.trim()||!window.confirm(tr('Подтвердить фактически выполненную корректировку в «Мой налог»?','Confirm that the fiscal correction is complete?')))return;confirm.disabled=true;try{await api('/api/commerce/admin-receipt-correction',signal,{orderId:o.id,reference:input.value.trim(),confirm:true});await refresh()}catch{notice.textContent=t.error;confirm.disabled=false}})
+     card.append(input,confirm)
+    }
+
     grid.append(card)
    }
    return
