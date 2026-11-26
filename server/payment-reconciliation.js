@@ -10,6 +10,13 @@ export function startTestPaymentReconciliation({store,adapter,logger=console,int
     if(status!=='pending')logger.info('YooKassa test reconciliation:',status)
    }catch(e){logger.warn('YooKassa test reconciliation failed:',e.code||e.name)}
   }
+  if(!stopped){
+   for(const order of await store.claimCommerceTestRefunds()){
+    if(stopped)break
+    try{const status=await adapter.pollTestRefund(order);if(status!=='pending')logger.info('YooKassa test refund reconciliation:',status)}
+    catch(e){logger.warn('YooKassa test refund reconciliation failed:',e.code||e.name)}
+   }
+  }
  }
  function tick(){
   if(stopped||active||!adapter.enabled)return
