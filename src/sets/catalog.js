@@ -12,6 +12,7 @@ import {
   discoverBooks,
   instructionSources,
 } from './instruction-sources.js?v=browser-recognition'
+import {renderInteractiveDemo} from './interactive-demo.js'
 import {instructionEvent} from './instruction-events.js'
 import { mountInstructionOffer } from './instruction-offer.js?v=welcome-1'
 const storageKey = 'bricklab.sets.v1'
@@ -100,7 +101,7 @@ function storedSets() {
 }
 export async function mountSetCatalog(
   root,
-  { language, signal, projects, begin, resume, initialQuery = '' },
+  { language, signal, projects, begin, resume, practice, initialQuery = '' },
 ) {
   const t = setStrings(language)
   const ru = language === 'ru', tr = (a,b) => ru ? a : b
@@ -151,7 +152,10 @@ export async function mountSetCatalog(
   const listHead=node('div',undefined,'set-catalog-list-head'),resultCount=node('span',undefined,'set-result-count')
   listHead.append(node('h3',tr('Каталог наборов','Set catalog')),resultCount)
   credit.classList.add('set-catalog-credit')
-  root.replaceChildren(header,form,listHead,status,grid,more,credit)
+  const demo=renderInteractiveDemo({language,signal,onPractice:practice})
+  const recommended=node('section',undefined,'set-recommendations')
+  recommended.hidden=true
+  root.replaceChildren(header,demo,recommended,form,listHead,status,grid,more,credit)
   const pageSize = 24
   let localItems = []
   let localOffset = 0
@@ -311,7 +315,32 @@ export async function mountSetCatalog(
     dialog.showModal()
     lookupBooks()
   }
+  // Recommendations use only actual catalog results and local build history.
+  const existing=projects().map(p=>p.document?.buildingSet?.set).filter(Boolean)
+  const seenSets=new Set(existing.map(s=>s.number))
+  const recent=existing[0],favoriteTheme=recent?.themeId
+  function recommend(items){
+    if(activeQuery||recommended.childElementCount||signal.aborted)return
+    const eligible=items.filter(i=>!seenSets.has(i.number)&&partCount(i)>0)
+    const matched=eligible.filter(i=>favoriteTheme&&String(i.themeId)===String(favoriteTheme))
+    const selection=(matched.length?matched:eligible).sort((a,b)=>Math.abs(partCount(a)-(recent?partCount(recent):300))-Math.abs(partCount(b)-(recent?partCount(recent):300))).slice(0,3)
+    if(!selection.length)return
+    const title=node('h3',matched.length?tr('В твоём стиле','In your style'):recent?tr('Следующие идеи','Next ideas'):tr('С чего начать','Start here'))
+    const cards=node('div',undefined,'set-recommendation-grid')
+    for(const item of selection){
+      const b=control('',async()=>{
+        const id=++requestId;b.disabled=true
+        try{const set=sets.get(item.number)??await importSet(item.number,signal);if(signal.aborted||id!==requestId)return;sets.set(set.number,set);saveCache();showDetails(set)}
+        catch{if(!signal.aborted)status.textContent=t.error}finally{b.disabled=false}
+      },signal)
+      const image=node('img');image.src=safeImage(item.image);image.alt='';image.loading='lazy'
+      const info=node('span');info.append(node('strong',item.name),node('small',formatCount(partCount(item))+' '+t.pieces))
+      b.append(image,info);cards.append(b)
+    }
+    recommended.append(title,cards);recommended.hidden=false
+  }
   function appendItems(items) {
+    recommend(items)
     for (const item of items) {
       if (displayed.has(item.number)) continue
       displayed.add(item.number)
@@ -410,6 +439,8 @@ export async function mountSetCatalog(
     requestId++
     loading = false
     activeQuery = query.value.trim()
+    recommended.hidden=Boolean(activeQuery)||!recommended.childElementCount
+    demo.hidden=Boolean(activeQuery)
     activeFilters = filters.read()
     // Let the server order the full catalog, without a locally cached prefix.
     localItems = hasRebrickable()
