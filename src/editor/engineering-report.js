@@ -11,7 +11,7 @@ export function engineeringReport({name,driver,parts,connections,belts,hidden,im
  return {format:'bricklab-engineering-report',version:1,createdAt:new Date().toISOString(),name,driver:driver??null,scope:{parts,connections,belts,hidden},importIssues,
   kinematics:motion?{ok:motion.ok===true,kind:motion.kind??'rotation',reason:motion.reason??null,range:motion.range??null,unit:motion.unit??'degree',spins}:null,
   driveEstimate:drive??null,motorBench:motorBench??null,collisionInspection:collisions??null,recommendations,
-  limitations:['Approximate single-source steady-state model, with user-assumed loads and efficiency.','Collision checks are discrete surface-crossing samples, excluding accepted mating pairs; not a continuous or solid containment check.','Motor bench uses approximate native joints, cuboid colliders and conditional contact filtering; gears/belts are not dynamically driven.','No physical strength, safety, fatigue, or load certification.']}
+  limitations:['Approximate single-source steady-state model, with user-assumed loads and efficiency.','Collision checks are discrete surface-crossing samples, excluding accepted mating pairs by default; optional mating-pair results can be false positives. Not a continuous or solid containment check.','Motor bench uses approximate native joints, cuboid colliders and conditional contact filtering; gears/belts are not dynamically driven.','No physical strength, safety, fatigue, or load certification.']}
 }
 export function downloadEngineeringReport(report){
  const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a')
