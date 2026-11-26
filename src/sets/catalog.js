@@ -12,6 +12,7 @@ import {
   discoverBooks,
   instructionSources,
 } from './instruction-sources.js?v=browser-recognition'
+import {instructionEvent} from './instruction-events.js'
 import { mountInstructionOffer } from './instruction-offer.js?v=sets-refresh-1'
 const storageKey = 'bricklab.sets.v1'
 export const setStrings = (language) =>
@@ -194,6 +195,7 @@ export async function mountSetCatalog(
     }
   }
   function showDetails(set) {
+    instructionEvent(set.number,'set_open')
     const describe = () => {
       const count = set.inventory
         .filter((item) => !item.spare)
@@ -219,7 +221,7 @@ export async function mountSetCatalog(
     const actions = node('div', undefined, 'set-actions')
     const start = control(t.start, () => {
       dialog.close()
-      begin(set)
+      instructionEvent(set.number,'build_start');begin(set)
     }, lookupSignal)
     start.classList.add('set-primary-action')
     if (last)
@@ -265,7 +267,7 @@ export async function mountSetCatalog(
     const detail=node('div',undefined,'set-dialog-content'),art=node('div',undefined,'set-dialog-art'),identity=node('div',undefined,'set-dialog-identity'),offer=node('section',undefined,'set-instruction-offer')
     art.append(image);identity.append(node('span',set.number,'set-catalog-kicker'),title,description,booksStatus,retryBooks)
     detail.append(art,identity);dialog.classList.add('set-details-dialog');dialog.append(closeIcon,detail,offer,start,actions)
-    const refreshOffer=()=>mountInstructionOffer(offer,{set,language,signal:lookupSignal,onStart:()=>{dialog.close();begin(set)},start})
+    const refreshOffer=()=>mountInstructionOffer(offer,{set,language,signal:lookupSignal,onStart:()=>{dialog.close();instructionEvent(set.number,'build_start');begin(set)},start})
     void refreshOffer()
     function lookupBooks() {
       retryBooks.hidden = true
