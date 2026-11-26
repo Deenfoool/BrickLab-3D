@@ -63,7 +63,7 @@ export function renderWorkshopTools({lang,local,remote,fetchCloud,signal}){
   const source=normalizeDocumentDesigns(doc,parts)
   const {createProjectPreviewRenderer}=await import('../editor/project-preview.js?v=photo-studio-2')
   signal.throwIfAborted()
-  const renderer=createProjectPreviewRenderer({width:tw,height:th,angle:angle.s.value,lighting:light.s.value,format:'png',shadow:shadow.checked,framing:framing.s.value})
+  const renderer=createProjectPreviewRenderer({width:tw,height:th,angle:angle.s.value,lighting:light.s.value,format:'png',requireAll:true,shadow:shadow.checked,framing:framing.s.value})
   const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h
   const ctx=canvas.getContext('2d')
   const colors={dark:['#3b465b','#12161e'],light:['#fff','#cdd5e1'],blue:['#376185','#122843']}
