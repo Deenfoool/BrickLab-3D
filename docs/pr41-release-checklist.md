@@ -34,3 +34,10 @@ This branch is an unreleased development candidate. Do not deploy it, merge it i
 - Geometry-verified first-build completion and broader per-set instruction audits.
 - Full paid credit bundle design, purchase/refund/entitlement accounting; no new SKU enabled yet.
 - Real browser profiling, accessibility and language review, measured recognition accuracy, end-to-end tests and production release.
+
+## Added engineering / studio review
+- [ ] Motor bench: Rapier availability, detached simulation, motor output, fixed housing, stop/cancel, no changes to saved model, telemetry/export, 400-part cap and unsupported joint reporting. Existing approximate scale/mass and excluded gear/belt dynamics explicitly disclosed.
+- [ ] Advanced collision mode: exact coincident duplicates, default mated-pair skip, opt-in mated-pair false positives, result classification and reset.
+- [ ] Photo Studio: all aspect ratios, six angles, framing, shadow switch, four-view sheet, title caption, complete model geometry, output dimension and cancellation.
+- [ ] Migrations 106–107: dollar-quoted function delimiters repaired; still require actual SQL execution.
+- [ ] Bundle pricing prototype and invariants documented; no payment SKU, API or UI enabled. See docs/instruction-bundles.md.
