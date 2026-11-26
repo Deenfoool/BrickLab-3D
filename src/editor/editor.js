@@ -378,7 +378,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   let snappingScene = false
   let pendingPart
   const mapUI=mountTransmissionMap(el('transmissionMap'),{language,signal,onChange:()=>{refreshTransmissionMap();updateHighlights()},onFocus:ids=>scene.focus(ids)})
-  const collisionUI=mountCollisionPanel(el('collisionPanel'),{language,signal,onScan:scanCollisionPoses,onLocate:locateCollision,onClear:()=>{collisionIds=[];scene.markCollision(null);updateHighlights()}})
+  const collisionUI=mountCollisionPanel(el('collisionPanel'),{language,signal,onScan:scanCollisionPoses,onLocate:locateCollision,onClear:()=>{collisionIds=[];scene.markCollision(null);scene.select(mode==='paint'?undefined:selected);updateHighlights()}})
   const audio = createEditorAudio(signal)
   function updateSoundControl() {
     const button = el('sound')
@@ -1438,7 +1438,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     stopAnimation();releaseMotor()
     locatingCollision=true
     try{angle=hit.value;scene.setParts(state.parts);showMotion()}finally{locatingCollision=false}
-    collisionIds=[hit.a,hit.b];scene.markCollision(hit.point);updateHighlights();scene.focus(collisionIds);render()
+    collisionIds=[hit.a,hit.b];scene.select(undefined);scene.markCollision(hit.point);updateHighlights();scene.focus(collisionIds);render()
   }
 
   function positionHandles() {
