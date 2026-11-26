@@ -34,12 +34,15 @@ async function liveQuote(tx,uid,sku,offerVersion,beta){
 }
 export function commerceStore(scope){
  return {
+  async requestCommerceTestRefund(uid,id){return scope(uid,async tx=>{const [r]=await tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks",refund_requested_at as "requestedAt",provider_refund_id as "refundId" from bricklab.commerce_request_test_refund(${id}::uuid)`;return r})},
+  async attachCommerceTestRefund(id,refund){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_attach_test_refund(${id}::uuid,${refund}) as ok`;return r.ok})},
+  async claimCommerceTestRefunds(){return scope('',tx=>tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks",provider_refund_id as "refundId" from bricklab.commerce_claim_test_refunds()`)},
   async claimCommerceEvents(){return scope('',tx=>tx`select * from bricklab.commerce_claim_events()`)},
   async ackCommerceEvent(id){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_ack_event(${id}::bigint) as ok`;return r.ok})},
   async refundCommercePayment(payment,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_refund_full(${payment},${environment},${amount}::integer) as ok`;return r.ok})},
   async commerceTestAccount(uid){return scope(uid,async tx=>{
    const account=await commerceEntitlements(tx,uid,'test')
-   const orders=await tx`select id,sku,title,amount_kopecks as "amountKopecks",status,payment_id as "paymentId",created_at as "createdAt",paid_at as "paidAt" from bricklab.commerce_orders where user_id=${uid} and environment='test' order by created_at desc limit 50`
+   const orders=await tx`select id,sku,title,amount_kopecks as "amountKopecks",status,payment_id as "paymentId",refund_requested_at as "refundRequestedAt",provider_refund_id as "refundId",created_at as "createdAt",paid_at as "paidAt" from bricklab.commerce_orders where user_id=${uid} and environment='test' order by created_at desc limit 50`
    return {...account,orders}
   })},
   async claimCommerceTestPayments(){return scope('',tx=>tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks" from bricklab.commerce_claim_test_payments()`)},
