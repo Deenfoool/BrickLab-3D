@@ -67,7 +67,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
  let active=0
  async function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return /^[a-f0-9]{64}$/.test(token||'')?await store.getSession(digest(token)):null}
  return async(req,res,path)=>{
-  if(!['/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions','/api/commerce/instruction-offer','/api/commerce/instruction-activate','/api/commerce/instruction-complete','/api/commerce/instruction-event','/api/commerce/instruction-analytics'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
+  if(!['/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions','/api/commerce/instruction-offer','/api/commerce/instruction-activate','/api/commerce/instruction-complete','/api/commerce/instruction-event','/api/commerce/instruction-analytics','/api/commerce/instruction-pack-quote','/api/commerce/instruction-pack-checkout'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
   if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
   active++
   try{
@@ -161,6 +161,20 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     reply(res,200,{firstBuilder:account.firstBuilder,remaining:account.welcomeRemaining});return true
    }
    const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated')
+   if(path==='/api/commerce/instruction-pack-quote'||path==='/api/commerce/instruction-pack-checkout'){
+    if(commerceMode!=='test'||!user.admin)throw new ProjectError(403,'bundle_unavailable')
+    if(!adapter?.enabled||!legal?.version)throw new ProjectError(503,'payments_disabled')
+    if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
+    if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
+    let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
+    const checkout=path.endsWith('-checkout'),allowed=checkout?['setIds','amountKopecks','offerVersion','accepted','mode']:['setIds']
+    if(!data||Object.keys(data).some(k=>!allowed.includes(k))||!Array.isArray(data.setIds)||data.setIds.length!==3||new Set(data.setIds).size!==3||!data.setIds.every(id=>typeof id==='string'&&instructionCatalog.has('instruction-'+id)))throw new ProjectError(400,'invalid_bundle')
+    const products=data.setIds.map(id=>instructionCatalog.get('instruction-'+id))
+    const q=await store.quoteSandboxPack(user.id,data.setIds,products,legal.version)
+    if(!checkout){reply(res,200,{...q,mode:'test'});return true}
+    if(data.mode!=='test'||data.accepted!==true||data.offerVersion!==legal.version||!Number.isSafeInteger(data.amountKopecks)||data.amountKopecks!==q.amountKopecks)throw new ProjectError(409,'quote_changed')
+    reply(res,200,await adapter.checkout(user.id,q.sku,{sandboxPack:{setIds:data.setIds,products},amountKopecks:q.amountKopecks,offerVersion:legal.version}));return true
+   }
    if(path==='/api/commerce/status'&&req.method==='GET'){
     const allowed=commerceMode==='live'||user.admin===true
     reply(res,200,{mode:commerceMode,enabled:allowed&&adapter?.enabled===true&&!!legal?.version,skus:allowed?activeSkus:[],offerVersion:legal?.version??null,admin:user.admin===true});return true
@@ -268,7 +282,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
    }
    throw new ProjectError(405,'method_not_allowed')
   }catch(e){
-   const expected={verified_account_required:403,admin_required:403,checkout_pending:409,fiscal_reconciliation_required:409,unknown_product:404,invalid_quote:400,invalid_environment:400}
+   const expected={verified_account_required:403,admin_required:403,checkout_pending:409,fiscal_reconciliation_required:409,unknown_product:404,already_owned:409,invalid_quote:400,invalid_environment:400}
    if(e instanceof ProjectError)reply(res,e.status,{error:e.message})
    else if(e.code==='P0001'&&Object.hasOwn(expected,e.message))reply(res,expected[e.message],{error:e.message})
    else if(e.code==='23505'&&e.constraint_name==='commerce_receipt_unique_url')reply(res,409,{error:'receipt_already_used'})
