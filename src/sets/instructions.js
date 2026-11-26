@@ -1,3 +1,4 @@
+import {instructionEvent} from './instruction-events.js'
 import { node, control, setStrings } from './catalog.js?v=browser-recognition'
 import { safeBook, validateSet } from './data.js?v=browser-recognition'
 import {
@@ -346,7 +347,7 @@ export function mountInstructions(
       ? await instructionPartRegions(progress.set.number, pdfId, page).catch(() => [])
       : []
     if (request.aborted) return []
-    if (ready.length) addInstructionParts(preview, ready, { language, describe: describePart, find: findPart })
+    if (ready.length) addInstructionParts(preview, ready, { language, describe: describePart, find: (...args)=>{instructionEvent(progress.set.number,'hint_use');return findPart(...args)} })
     recognitionStatus.textContent = ru ? 'Распознаём детали…' : 'Recognizing parts…'
     recognitionStatus.hidden = false
     try {
@@ -370,7 +371,7 @@ export function mountInstructions(
     preview.hidden = false
     previewStatus.hidden = true
     if (findPart && regions) regions.then(parts => {
-      if (!signal.aborted) addInstructionParts(preview, parts, { language, describe: describePart, find: findPart })
+      if (!signal.aborted) addInstructionParts(preview, parts, { language, describe: describePart, find: (...args)=>{instructionEvent(progress.set.number,'hint_use');return findPart(...args)} })
     })
   }
   async function lookupBooks() {
