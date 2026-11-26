@@ -50,17 +50,21 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
    if(payment.status!=='pending'||!url)throw new ProjectError(409,'checkout_unavailable')
    return {orderId:order.id,status:'pending',checkoutUrl:url,mode:environment}
   },
-  async reconcileTestPayment(order){
-   if(!config.enabled||environment!=='test')throw new ProjectError(503,'yookassa_test_disabled')
+  async reconcilePayment(order){
+   if(!config.enabled)throw new ProjectError(503,'payments_disabled')
    if(!uuid.test(order?.id??'')||!paymentId.test(order?.paymentId??'')||!Number.isSafeInteger(order.amountKopecks))throw new ProjectError(409,'invalid_order')
    const verified=await call('payments/'+order.paymentId)
-   if(!validPayment(verified,order.paymentId,'test')||verified.metadata.order_id!==order.id||amountKopecks(verified.amount.value)!==order.amountKopecks)throw new ProjectError(409,'payment_mismatch')
+   if(!validPayment(verified,order.paymentId,environment)||verified.metadata.order_id!==order.id||amountKopecks(verified.amount.value)!==order.amountKopecks)throw new ProjectError(409,'payment_mismatch')
    if(verified.status==='succeeded'){await settle(verified);return 'succeeded'}
    if(verified.status==='canceled'){
-    if(!await store.cancelCommercePayment(order.id,order.paymentId,'test',order.amountKopecks))throw new ProjectError(409,'payment_mismatch')
+    if(!await store.cancelCommercePayment(order.id,order.paymentId,environment,order.amountKopecks))throw new ProjectError(409,'payment_mismatch')
     return 'canceled'
    }
    return 'pending'
+  },
+  async reconcileTestPayment(order){
+   if(environment!=='test')throw new ProjectError(503,'yookassa_test_disabled')
+   return this.reconcilePayment(order)
   },
   async requestTestRefund(uid,orderId){
    if(!config.enabled||environment!=='test'||!uuid.test(orderId??''))throw new ProjectError(400,'invalid_refund')
@@ -88,20 +92,24 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
    if(refund.status==='succeeded')await this.reconcileTestRefund(refund.id)
    return refund.status
   },
-  async reconcileTestRefund(refundId){
-   if(!config.enabled||environment!=='test'||!uuid.test(refundId??''))throw new ProjectError(400,'invalid_refund')
+  async reconcileRefund(refundId){
+   if(!config.enabled||!uuid.test(refundId??''))throw new ProjectError(400,'invalid_refund')
    const refund=await call('refunds/'+refundId)
    if(refund?.id!==refundId||refund.status!=='succeeded'||!paymentId.test(refund.payment_id??'')||refund.amount?.currency!=='RUB'||amountKopecks(refund.amount.value)===null)throw new ProjectError(409,'refund_unverified')
    const paid=await call('payments/'+refund.payment_id)
-   if(!validPayment(paid,refund.payment_id,'test')||paid.status!=='succeeded'||paid.paid!==true)throw new ProjectError(409,'refund_unverified')
+   if(!validPayment(paid,refund.payment_id,environment)||paid.status!=='succeeded'||paid.paid!==true)throw new ProjectError(409,'refund_unverified')
    const amount=amountKopecks(paid.amount.value)
    if(paid.refunded_amount?.currency!=='RUB'||amountKopecks(paid.refunded_amount.value)!==amount)throw new ProjectError(409,'partial_refund_requires_review')
-   if(!await store.refundCommercePayment(paid.id,'test',amount))throw new ProjectError(409,'refund_mismatch')
+   if(!await store.refundCommercePayment(paid.id,environment,amount))throw new ProjectError(409,'refund_mismatch')
    return {ok:true}
+  },
+  async reconcileTestRefund(refundId){
+   if(environment!=='test')throw new ProjectError(503,'yookassa_test_disabled')
+   return this.reconcileRefund(refundId)
   },
   async notification(event){
    if(!config.enabled)throw new ProjectError(503,'yookassa_test_disabled')
-   if(event?.event==='refund.succeeded'&&environment==='test')return this.reconcileTestRefund(event.object?.id)
+   if(event?.event==='refund.succeeded')return this.reconcileRefund(event.object?.id)
    if(!['payment.succeeded','payment.canceled'].includes(event?.event)||!paymentId.test(event.object?.id??''))throw new ProjectError(400,'invalid_notification')
    // Do not trust any notification fields other than the lookup identifier.
    const verified=await call('payments/'+event.object.id)
