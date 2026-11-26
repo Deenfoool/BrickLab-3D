@@ -83,6 +83,16 @@ def prepare_catalog():
         if name in ('offer', 'refund'):
             text = (ROOT / 'docs/legal-release' / (name + '.html')).read_text(encoding='utf-8')
             data = text.replace('{{EFFECTIVE_DATE}}', datetime.now().strftime('%d.%m.%Y')).encode()
+        elif name == 'privacy':
+            text = data.decode('utf-8')
+            text = text.replace("Письма подтверждения и восстановления доступа: Yandex Cloud Postbox", "Письма подтверждения, восстановления доступа и доставки чеков НПД: Yandex Cloud Postbox")
+            notice = "<p>Для контроля платежей и возвратов в закрытый чат оператора Telegram передаются отображаемое имя покупателя, номер заказа, товар, сумма, статус и время операции, а также агрегированные финансовые показатели. Адрес электронной почты и реквизиты карты в таких уведомлениях не передаются.</p>"
+            marker = '<p>Условия локализации и трансграничной передачи:'
+            if notice not in text:
+                if marker not in text:
+                    raise SystemExit('Обновите политику конфиденциальности через prepare.')
+                text = text.replace(marker, notice + marker, 1)
+            data = text.encode()
         atomic(REVIEW / (name + '.html'), data, 0o600)
     print('Расширенная оферта и возврат подготовлены:', REVIEW)
 
