@@ -2,11 +2,11 @@ import {projectAccount,plusLoyalty} from '../../src/menu/commerce-catalog.js'
 import {commerceQuote} from '../commerce-quote.js'
 import {ProjectError} from '../projects.js'
 
-export async function commerceEntitlements(tx,uid){
+export async function commerceEntitlements(tx,uid,environment='live'){
     const rows=await tx`select g.id,g.kind,g.sku,g.target,g.granted_at as "grantedAt",g.expires_at as "expiresAt"
      from bricklab.commerce_grants g
      join bricklab.commerce_orders o on o.id=g.order_id and o.user_id=g.user_id
-     where g.user_id=${uid} and o.environment='live' and o.status='succeeded'
+     where g.user_id=${uid} and o.environment=${environment} and o.status='succeeded'
        and g.revoked_at is null and (g.kind='subscription' or g.granted_at<=now())
        and (g.kind='subscription' or g.expires_at is null or g.expires_at>now())
      order by g.granted_at,g.id`;
@@ -29,6 +29,14 @@ async function liveQuote(tx,uid,sku,offerVersion,beta){
 }
 export function commerceStore(scope){
  return {
+  async claimCommerceEvents(){return scope('',tx=>tx`select * from bricklab.commerce_claim_events()`)},
+  async ackCommerceEvent(id){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_ack_event(${id}::bigint) as ok`;return r.ok})},
+  async refundCommercePayment(payment,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_refund_full(${payment},${environment},${amount}::integer) as ok`;return r.ok})},
+  async commerceTestAccount(uid){return scope(uid,async tx=>{
+   const account=await commerceEntitlements(tx,uid,'test')
+   const orders=await tx`select id,sku,title,amount_kopecks as "amountKopecks",status,payment_id as "paymentId",created_at as "createdAt",paid_at as "paidAt" from bricklab.commerce_orders where user_id=${uid} and environment='test' order by created_at desc limit 50`
+   return {...account,orders}
+  })},
   async claimCommerceTestPayments(){return scope('',tx=>tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks" from bricklab.commerce_claim_test_payments()`)},
   async quoteCommerceLive(uid,sku,offerVersion,beta=true){return scope(uid,tx=>liveQuote(tx,uid,sku,offerVersion,beta))},
   async createCommerceLiveOrder(uid,sku,expectedAmount,offerVersion,beta=true){return scope(uid,async tx=>{
