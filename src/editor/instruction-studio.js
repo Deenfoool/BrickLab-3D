@@ -51,10 +51,10 @@ export function openInstructionStudio({document:build,selection,language,signal,
  function tick(now){if(closed||!playing)return;const dt=lastTime?Math.min(100,now-lastTime):0;lastTime=now;seek(progress+dt/650*Number(speed.value));if(progress>=current().length){if(!playAll||index>=steps.length-1){stop();return}index++;refresh(false);lastTime=now}animationFrame=requestAnimationFrame(tick)}
  let queue=Promise.resolve()
  function shot(doc,angle,highlightIds,installationTracks){const run=queue.then(()=>{if(closed)throw Error('closed');renderer??=createProjectPreviewRenderer({width:1000,height:700,format:'png',requireAll:true,shadow:false,models});return renderer.render(doc,signal,{angle,highlightIds,installationTracks})});queue=run.catch(()=>{});return run}
- async function printSteps(){if(busy)return;stop();busy=true;pdf.disabled=true;store.disabled=true;replan();const snapshot=structuredClone(steps),snapshotPlans=plans,pages=[];try{
+ async function printSteps(){if(busy)return;stop();busy=true;pdf.disabled=true;store.disabled=true;replan();const snapshot=structuredClone(steps),snapshotPlans=plans,includeArrows=arrow.checked,pages=[];try{
   for(let i=0;i<snapshot.length;i++){signal.throwIfAborted();if(closed)return;notice.textContent=tr('Подготовка страницы ','Preparing page ')+(i+1)+' / '+snapshot.length
    const s=snapshot[i],ids=new Set(snapshot.slice(0,i+1).flatMap(v=>v.ids)),doc={...build,parts:build.parts.filter(p=>ids.has(p.id)),connections:build.connections.filter(l=>ids.has(l.shaft.part)&&ids.has(l.socket.part)),belts:(build.belts??[]).filter(b=>ids.has(b.a.part)&&ids.has(b.b.part)),sceneLayers:{groups:[],hiddenPartIds:[]}}
-   const tracks=snapshotPlans[i],blob=await shot(doc,s.angle,s.ids,arrow.checked?tracks:[]);if(!blob||closed)throw Error('preview')
+   const tracks=snapshotPlans[i],blob=await shot(doc,s.angle,s.ids,includeArrows?tracks:[]);if(!blob||closed)throw Error('preview')
    const counts=new Map();for(const id of s.ids){const p=byId.get(id),key=p.design+' · '+(p.color??partsCatalog[p.design]?.color??'');counts.set(key,(counts.get(key)??0)+1)}
    const unresolved=tracks.filter(t=>t.kind==='manual').length
    pages.push(await renderInstructionPage({name:build.name,index:i,total:snapshot.length,note:s.note,inventory:[...counts].map(([key,n])=>n+' × '+key).join(' | '),blob,language,unresolved}))
