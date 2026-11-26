@@ -98,6 +98,13 @@ test('real PostgreSQL enforces extended quota, collection ownership and badge pr
    assert.equal(g.n,1)
    return o.id
   }
+  const [queued]=await db`insert into bricklab.commerce_orders(user_id,sku,title,amount_kopecks,provider,environment,payment_id)
+    values(${uid},'aurora','Aurora',19900,'yookassa','test',gen_random_uuid()::text) returning id,payment_id`
+  const batch=await store.claimCommerceTestPayments()
+  assert.deepEqual(batch.map(x=>[x.id,x.paymentId,x.amountKopecks]),[[queued.id,queued.payment_id,19900]])
+  assert.equal((await store.claimCommerceTestPayments()).length,0)
+  assert.equal(await store.cancelCommercePayment(queued.id,queued.payment_id,'test',19900),true)
+  assert.equal((await store.claimCommerceTestPayments()).length,0)
   const p1=await pendingTest('plus-1',24900),p2=await pendingTest('plus-3',64900)
   const [g1]=await db`select expires_at from bricklab.commerce_grants where order_id=${p1}`
   const [g2]=await db`select granted_at,expires_at from bricklab.commerce_grants where order_id=${p2}`
