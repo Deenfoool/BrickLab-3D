@@ -11,7 +11,7 @@ git archive "$SHA" | tar -x -C "$TMP"
 chown -R 1000:1000 "$TMP"
 chmod 755 "$TMP"
 echo "=== TEST COMMIT: $SHA ==="
-python3 -m py_compile "$TMP/scripts/publish-legal.py" "$TMP/scripts/configure-commerce-telegram.py"
+python3 -m py_compile "$TMP/scripts/publish-legal.py" "$TMP/scripts/configure-commerce-telegram.py" "$TMP/scripts/configure-commerce-live.py"
 docker run --rm --user 1000:1000 -e npm_config_cache=/tmp/npm-cache -v "$TMP:/tests" -w /tests bricklab-test-runner:local sh -ec '
  npm ci --include=dev --ignore-scripts --no-audit --no-fund
  for f in server/index.js server/payments.js server/yookassa.js server/db/commerce-store.js server/db/auth-store.js server/payment-reconciliation.js server/commerce-telegram.js src/menu/store.js; do node --check "$f"; done
