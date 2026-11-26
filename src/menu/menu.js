@@ -3,10 +3,10 @@ import { mountBugReport } from '../feedback/dialog.js?v=events-1'
 import { safeImage } from '../sets/data.js?v=catalog-engine-1'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
 import { locales } from './locale.js?v=store-1'
-import {mountStore} from './store.js?v=merch-2'
+import {mountStore} from './store.js?v=welcome-1'
 import { mountHomeHub, mountHubSearch } from './home-hub.js?v=signature-art-1'
 import { mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=merch-2'
+import { createCloudAccount } from './account.js?v=photo-studio-2'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -587,7 +587,7 @@ async function openCommunity(){
  closeCommunity()
  const controller=new AbortController();communitySession={key,controller}
  const root=byId('community-panel');root.textContent=strings().loadingLibrary
- try{const {mountCommunity}=await import('./community-gallery.js?v=merch-2');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
+ try{const {mountCommunity}=await import('./community-gallery.js?v=welcome-2');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
  catch(e){if(!controller.signal.aborted)root.textContent=language==='ru'?'Не удалось открыть сообщество.':'Could not open community.'}
 }
 function closeSets() {
@@ -602,11 +602,13 @@ async function openSets() {
   const root = byId('sets-panel')
   root.textContent = strings().loadingLibrary
   try {
-    const { mountSetCatalog } = await import('../sets/catalog.js?v=hub-1')
+    const { mountSetCatalog } = await import('../sets/catalog.js?v=release-candidate-1')
     if (controller.signal.aborted) return
-    const initialQuery=pendingSetQuery;pendingSetQuery=''
+    let initialQuery=pendingSetQuery;pendingSetQuery=''
+    try{const target=sessionStorage.getItem('bricklab-instruction-return');if(/^\d{3,7}-\d{1,2}$/.test(target??'')){initialQuery=target;sessionStorage.removeItem('bricklab-instruction-return')}}catch{}
     await mountSetCatalog(root, { language, signal: controller.signal, initialQuery, projects: () => projects,
       resume: openProject,
+      practice:()=>beginTutorial('quick'),
       begin(set) {
         const data = newProject(set.name)
         data.buildingSet = { set, book: 0, page: 1 }
@@ -688,7 +690,7 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=commerce-plus-2')
+    const { mountEditor } = await import('../editor/editor.js?v=release-candidate-1')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

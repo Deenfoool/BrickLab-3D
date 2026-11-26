@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {BASE_LIMITS,commerceProducts,projectAccount,instructionPrice,canUseInteractive,badgeUpgradePrice,bundlePrice,discountedPrice,themePrices} from '../src/menu/commerce-catalog.js';
+import {BASE_LIMITS,commerceProducts,projectAccount,instructionPrice,canUseInteractive,badgeUpgradePrice,bundlePrice,discountedPrice,themePrices,instructionProduct,indexedInstructionProducts} from '../src/menu/commerce-catalog.js';
 test('catalog uses distinct SKUs and positive integer kopecks',()=>{
  assert.equal(new Set(commerceProducts.map(p=>p.id)).size,commerceProducts.length);
  assert.ok(commerceProducts.every(p=>Number.isSafeInteger(p.priceKopecks)&&p.priceKopecks>0));
@@ -21,7 +21,7 @@ test('badges and purchased access are retained without plus',()=>{
  assert.deepEqual(a.badges,['supporter']);assert.deepEqual(a.instructions,['42215-1']);assert.deepEqual(a.themes,['carbon']);
 });
 test('instruction tier boundaries and invalid counts',()=>{
- for(const [n,p] of [[1,2900],[200,2900],[201,4900],[501,7900],[1001,12900],[2001,17900],[4001,24900]])assert.equal(instructionPrice(n),p);
+ for(const [n,p] of [[1,0],[200,0],[201,0],[501,0],[600,0],[601,7900],[1000,7900],[1001,12900],[2001,17900],[4001,24900]])assert.equal(instructionPrice(n),p);
  for(const n of [0,-1,NaN,1.5,'200'])assert.throws(()=>instructionPrice(n),RangeError);
 });
 test('beta remains free, paid release supported set only after trial',()=>{
@@ -50,4 +50,13 @@ test('plus discount uses integer kopecks',()=>{
  assert.equal(discountedPrice(12900,true),11610);
  assert.equal(discountedPrice(12900,false),12900);
  assert.throws(()=>discountedPrice(-1,true),RangeError);
+});
+
+test('all initial instruction products have more than 600 pieces and individual IDs',()=>{
+ assert.equal(indexedInstructionProducts.length,13);
+ assert.equal(new Set(indexedInstructionProducts.map(p=>p.id)).size,13);
+ assert.ok(indexedInstructionProducts.every(p=>p.partCount>600&&p.priceKopecks===instructionPrice(p.partCount)));
+ assert.equal(instructionProduct('12345-1','Small',600),null);
+ assert.equal(instructionProduct('12345-1','Large',601).priceKopecks,7900);
+ assert.equal(instructionProduct('invalid','Large',601),null);
 });

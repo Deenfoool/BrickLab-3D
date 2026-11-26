@@ -19,15 +19,31 @@ export const commerceProducts=Object.freeze([
  product('plus-12','subscription','BrickLab Plus · 12 месяцев',2490,{months:12})
 ]);
 export const instructionTiers=Object.freeze([
- [200,2900],[500,4900],[1000,7900],[2000,12900],[4000,17900],[Number.MAX_SAFE_INTEGER,24900]
+ [600,0],[1000,7900],[2000,12900],[4000,17900],[Number.MAX_SAFE_INTEGER,24900]
 ].map(Object.freeze));
 export const FREE_INSTRUCTION_STEPS=10;
+export function trialStepLimit(totalSteps){return Math.max(10,Math.min(30,Math.floor((Number.isSafeInteger(totalSteps)?totalSteps:0)/10)))}
 export const themePrices=Object.freeze({carbon:9900,neon:14900,blueprint:12900,titanium:17900,ember:19900,aurora:19900});
 export const PLUS_DISCOUNT_PERCENT=10;
 export function instructionPrice(partCount){
  if(!Number.isSafeInteger(partCount)||partCount<1)throw new RangeError('invalid_part_count');
  return instructionTiers.find(([max])=>partCount<=max)[1];
 }
+export const MIN_PAID_INSTRUCTION_PARTS=601;
+export function instructionProduct(setId,title,partCount){
+ if(typeof setId!=='string'||!/^\d{3,7}-\d{1,2}$/.test(setId)||typeof title!=='string'||!title.trim()||!Number.isSafeInteger(partCount)||partCount<MIN_PAID_INSTRUCTION_PARTS)return null;
+ return Object.freeze({id:'instruction-'+setId,kind:'instruction',setId,title:title.trim().slice(0,150),partCount,priceKopecks:instructionPrice(partCount)});
+}
+// Initial inventory: indexed BrickLab sets; advertised piece counts from official LEGO set pages.
+// Future audited sets can supply their own trusted metadata without changing this list.
+export const indexedInstructionProducts=Object.freeze([
+ ['10300-1','Back to the Future Time Machine',1872],['10307-1','Eiffel Tower',10001],
+ ['10316-1','Rivendell',6167],['42143-1','Ferrari Daytona SP3',3778],
+ ['42154-1','Ford GT',1468],['42171-1','Mercedes-AMG F1 W14',1643],
+ ['42206-1','Oracle Red Bull Racing RB20 F1',1639],['42210-1','Nissan Skyline GT-R (R34)',1410],
+ ['42215-1','Volvo EC500 Hybrid Excavator',2359],['42222-1','Bugatti Chiron Pur Sport',771],
+ ['42223-1','1966 Ford GT40 MKII',793],['75313-1','AT-AT',6785],['76419-1','Hogwarts Castle and Grounds',2660]
+].map(args=>instructionProduct(...args)));
 export function productById(id){return commerceProducts.find(p=>p.id===id)}
 // A grant ID is the unique persisted entitlement ID, not a SKU. Repeated
 // purchases of storage therefore accumulate, but replaying one grant does not.
@@ -52,9 +68,9 @@ export function projectAccount(grants=[],now=Date.now()){
 }
 // During OBT access stays unchanged; after release only supported sets with
 // audited interactive metadata may be locked. The PDF is never restricted.
-export function canUseInteractive({account,setId,step,beta=true,supported=false}={}){
+export function canUseInteractive({account,setId,step,beta=true,supported=false,trialSteps=FREE_INSTRUCTION_STEPS}={}){
  if(beta||!supported)return true;
- return Number.isInteger(step)&&step>=1&&step<=FREE_INSTRUCTION_STEPS||account?.plus===true||account?.instructions?.includes(setId)===true;
+ return Number.isInteger(step)&&step>=1&&step<=trialSteps||account?.plus===true||account?.instructions?.includes(setId)===true;
 }
 
 // These helpers are pricing proposals for a future server-authoritative order quote.

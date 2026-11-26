@@ -1,9 +1,9 @@
 import {themeIds} from '../src/menu/store-themes.js'
-import {commerceProducts,productById} from '../src/menu/commerce-catalog.js'
+import {commerceProducts,productById,indexedInstructionProducts} from '../src/menu/commerce-catalog.js'
 import {createHash,timingSafeEqual} from 'node:crypto'
 import {ProjectError} from './projects.js'
 import {validNpdReceiptUrl} from './receipt-delivery.js'
-import {instructionAccess} from './instruction-access.js'
+import {instructionAccess,completedInstructionSet} from './instruction-access.js'
 import {canonicalInstructionUrl} from '../src/sets/instruction-url.js'
 const checkout='https://auth.robokassa.ru/Merchant/Index.aspx'
 export function paymentConfig(env=process.env){
@@ -53,19 +53,26 @@ async function body(req,type){
 }
 export function createPaymentsHandler({store,origin,config=paymentConfig(),logger=console,instructionRelease=false,instructionPolicy=null,yookassa=null,liveYookassa=null,legal=null,regions=null,fullCatalog=false,commerceMode='test'}){
  const releasedProducts=fullCatalog?commerceProducts.filter(p=>!p.betaOnly||!instructionRelease):[]
- const liveSkus=[...themeIds,...releasedProducts.map(p=>p.id)]
- const testSkus=[...themeIds,...commerceProducts.filter(p=>!p.betaOnly||!instructionRelease).map(p=>p.id),'instruction-42215-1']
+ const instructionCatalog=new Map(indexedInstructionProducts.map(p=>[p.id,p]))
+ const auditedProducts=new Map((instructionPolicy?.products??[]).map(p=>[p.id,p]))
+ for(const [id,p] of auditedProducts)instructionCatalog.set(id,p)
+ const effectiveInstructionRelease=commerceMode==='live'&&instructionRelease&&fullCatalog&&liveYookassa?.enabled===true&&!!legal?.version
+ const liveInstructionProducts=effectiveInstructionRelease?auditedProducts:new Map()
+ const instructionFor=sku=> (commerceMode==='live'?liveInstructionProducts:instructionCatalog).get(sku)
+ const instructionLocked=setId=>effectiveInstructionRelease&&liveInstructionProducts.has('instruction-'+setId)
+ const liveSkus=[...themeIds,...releasedProducts.map(p=>p.id),...liveInstructionProducts.keys()]
+ const testSkus=[...themeIds,...commerceProducts.filter(p=>!p.betaOnly||!instructionRelease).map(p=>p.id),...instructionCatalog.keys()]
  const adapter=commerceMode==='live'?liveYookassa:yookassa
  const activeSkus=commerceMode==='live'?liveSkus:testSkus
  const cookieName=new URL(origin).protocol==='https:'?'__Host-bricklab_session':'bricklab_session'
  let active=0
  async function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return /^[a-f0-9]{64}$/.test(token||'')?await store.getSession(digest(token)):null}
  return async(req,res,path)=>{
-  if(!['/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
+  if(!['/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions','/api/commerce/instruction-offer','/api/commerce/instruction-activate','/api/commerce/instruction-complete','/api/commerce/instruction-event','/api/commerce/instruction-analytics','/api/commerce/instruction-pack-quote','/api/commerce/instruction-pack-checkout'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
   if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
   active++
   try{
-   if(path==='/api/store/catalog'&&req.method==='GET'){reply(res,200,{products:await store.storeCatalog(),mode:config.enabled?'test':'disabled',live:commerceMode==='live'&&liveYookassa?.enabled===true,liveSkus:commerceMode==='live'&&liveYookassa?.enabled===true?liveSkus:[]});return true}
+   if(path==='/api/store/catalog'&&req.method==='GET'){reply(res,200,{products:await store.storeCatalog(),instructions:[...instructionCatalog.values()],instructionRelease:effectiveInstructionRelease,mode:config.enabled?'test':'disabled',live:commerceMode==='live'&&liveYookassa?.enabled===true,liveSkus:commerceMode==='live'&&liveYookassa?.enabled===true?liveSkus:[]});return true}
    if(path==='/api/payments/robokassa/result'){
     if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
     if(!config.enabled)throw new ProjectError(503,'payments_disabled')
@@ -92,7 +99,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     const q=new URL(req.url,'http://localhost').searchParams,setId=q.get('set'),pdfId=q.get('pdf'),page=Number(q.get('page'))
     if(!/^\d{3,7}-\d{1,2}$/.test(setId??'')||!/^\d{1,12}$/.test(pdfId??'')||!Number.isInteger(page)||page<1||page>5000||q.size!==3)throw new ProjectError(400,'invalid_instruction')
     const viewer=instructionRelease?await session(req):null,account=viewer?await store.commerceAccount(viewer.id):null
-    const policy=(instructionPolicy?.access??instructionAccess)({setId,book:'https://www.lego.com/biassets/bi/'+pdfId+'.pdf',page,account,release:instructionRelease})
+    const policy=(instructionPolicy?.access??instructionAccess)({setId,book:'https://www.lego.com/biassets/bi/'+pdfId+'.pdf',page,account,release:instructionLocked(setId)})
     if(!policy.interactive)throw new ProjectError(403,'interactive_locked')
     const audited=instructionPolicy?.regions(setId,pdfId,page);reply(res,200,{regions:policy.supported?(audited??[]):regions?await regions(setId,pdfId,page):[]});return true
    }
@@ -102,9 +109,73 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(!/^\d{3,7}-\d{1,2}$/.test(setId??'')||!book||!Number.isInteger(page)||page<1||page>5000||q.size!==3)throw new ProjectError(400,'invalid_instruction')
     const viewer=instructionRelease?await session(req):null
     const account=viewer?await store.commerceAccount(viewer.id):null
-    reply(res,200,(instructionPolicy?.access??instructionAccess)({setId,book,page,account,release:instructionRelease}));return true
+    reply(res,200,(instructionPolicy?.access??instructionAccess)({setId,book,page,account,release:instructionLocked(setId)}));return true
+   }
+   if(path==='/api/commerce/instruction-offer'){
+    if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
+    const q=new URL(req.url,'http://localhost').searchParams,setId=q.get('set')
+    if(q.size!==1||!/^\d{3,7}-\d{1,2}$/.test(setId??''))throw new ProjectError(400,'invalid_instruction')
+    const sku='instruction-'+setId,product=instructionCatalog.get(sku)
+    if(!instructionLocked(setId)){
+     const viewer=commerceMode==='test'&&product?await session(req):null
+     const test=viewer?.admin===true&&adapter?.enabled===true&&!!legal?.version
+     const account=test?await store.commerceTestAccount(viewer.id):null
+     reply(res,200,{state:'free',beta:!effectiveInstructionRelease,mode:commerceMode,product:test?product:null,canBuy:test&&!account?.instructions?.includes(setId),testOwned:account?.instructions?.includes(setId)===true});return true
+    }
+    const viewer=await session(req)
+    if(!viewer){reply(res,200,{state:'signin',mode:commerceMode,product,trialSteps:instructionPolicy?.trialSteps?.(setId)??10});return true}
+    const account=await store.commerceAccount(viewer.id),pending=account.orders?.some(o=>o.sku===sku&&o.status==='pending')===true
+    const state=account.instructions.includes(setId)?'owned':account.plus?'plus':pending?'purchase':account.welcomeRemaining>0?'welcome':'purchase'
+    reply(res,200,{state,mode:commerceMode,product,remaining:account.welcomeRemaining??0,firstBuilder:account.firstBuilder===true,trialSteps:instructionPolicy?.trialSteps?.(setId)??10,pending,canBuy:!!legal?.version&&adapter?.enabled===true,plusProduct:!pending&&liveSkus.includes('plus-1')?productById('plus-1'):null});return true
+   }
+   if(path==='/api/commerce/instruction-activate'){
+    if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
+    if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
+    const viewer=await session(req);if(!viewer)throw new ProjectError(401,'unauthenticated')
+    let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
+    if(!data||typeof data.setId!=='string'||Object.keys(data).length!==1||!instructionLocked(data.setId))throw new ProjectError(404,'unknown_product')
+    const account=await store.claimInstructionWelcome(viewer.id,data.setId)
+    reply(res,200,{state:account.instructions.includes(data.setId)?'owned':account.plus?'plus':'unavailable',remaining:account.welcomeRemaining});return true
+   }
+   if(path==='/api/commerce/instruction-event'){
+    if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
+    if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
+    let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
+    if(!data||Object.keys(data).length!==2||typeof data.setId!=='string'||!/^\d{3,7}-\d{1,2}$/.test(data.setId)||!['set_open','build_start','hint_use','offer_view','checkout_click'].includes(data.event))throw new ProjectError(400,'invalid_instruction_event')
+    const viewer=await session(req)
+    if(viewer&&!viewer.admin)await store.recordInstructionActivity(viewer.id,data.setId,data.event)
+    reply(res,200,{ok:true});return true
+   }
+   if(path==='/api/commerce/instruction-analytics'){
+    if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
+    const viewer=await session(req);if(!viewer?.admin)throw new ProjectError(403,'admin_required')
+    reply(res,200,await store.instructionAnalytics(viewer.id));return true
+   }
+   if(path==='/api/commerce/instruction-complete'){
+    if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
+    if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
+    const viewer=await session(req);if(!viewer)throw new ProjectError(401,'unauthenticated')
+    if(!effectiveInstructionRelease)throw new ProjectError(409,'welcome_not_released')
+    let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
+    if(!data||Object.keys(data).length!==1||!(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.projectId??'')))throw new ProjectError(400,'invalid_project')
+    const account=await store.earnFirstBuilder(viewer.id,data.projectId,doc=>{const id=completedInstructionSet(doc,instructionPolicy);return id&&instructionLocked(id)?id:null})
+    reply(res,200,{firstBuilder:account.firstBuilder,remaining:account.welcomeRemaining});return true
    }
    const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated')
+   if(path==='/api/commerce/instruction-pack-quote'||path==='/api/commerce/instruction-pack-checkout'){
+    if(commerceMode!=='test'||!user.admin)throw new ProjectError(403,'bundle_unavailable')
+    if(!adapter?.enabled||!legal?.version)throw new ProjectError(503,'payments_disabled')
+    if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
+    if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
+    let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
+    const checkout=path.endsWith('-checkout'),allowed=checkout?['setIds','amountKopecks','offerVersion','accepted','mode']:['setIds']
+    if(!data||Object.keys(data).some(k=>!allowed.includes(k))||!Array.isArray(data.setIds)||data.setIds.length!==3||new Set(data.setIds).size!==3||!data.setIds.every(id=>typeof id==='string'&&instructionCatalog.has('instruction-'+id)))throw new ProjectError(400,'invalid_bundle')
+    const products=data.setIds.map(id=>instructionCatalog.get('instruction-'+id))
+    const q=await store.quoteSandboxPack(user.id,data.setIds,products,legal.version)
+    if(!checkout){reply(res,200,{...q,mode:'test'});return true}
+    if(data.mode!=='test'||data.accepted!==true||data.offerVersion!==legal.version||!Number.isSafeInteger(data.amountKopecks)||data.amountKopecks!==q.amountKopecks)throw new ProjectError(409,'quote_changed')
+    reply(res,200,await adapter.checkout(user.id,q.sku,{sandboxPack:{setIds:data.setIds,products},amountKopecks:q.amountKopecks,offerVersion:legal.version}));return true
+   }
    if(path==='/api/commerce/status'&&req.method==='GET'){
     const allowed=commerceMode==='live'||user.admin===true
     reply(res,200,{mode:commerceMode,enabled:allowed&&adapter?.enabled===true&&!!legal?.version,skus:allowed?activeSkus:[],offerVersion:legal?.version??null,admin:user.admin===true});return true
@@ -115,16 +186,16 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(path.endsWith('quote')&&req.method==='GET'){
      const q=new URL(req.url,'http://localhost').searchParams,sku=q.get('sku')
      if(q.size!==1||!activeSkus.includes(sku))throw new ProjectError(404,'unknown_product')
-     const quote=await store.quoteCommerce(user.id,sku,legal.version,!instructionRelease,commerceMode)
+     const quote=await store.quoteCommerce(user.id,sku,legal.version,!instructionRelease,commerceMode,...(instructionFor(sku)?[instructionFor(sku)]:[]))
      if(commerceMode==='live'&&!fullCatalog){const offered=(await store.storeCatalog()).find(p=>p.sku===sku);if(!offered||offered.amountKopecks!==quote.amountKopecks)throw new ProjectError(409,'catalog_price_mismatch')}
      reply(res,200,{...quote,mode:commerceMode});return true
     }
     if(path.endsWith('checkout')&&req.method==='POST'){
      if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
      let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
-     if(!data||!activeSkus.includes(data.sku)||!Number.isSafeInteger(data.amountKopecks)||data.amountKopecks<1||data.offerVersion!==legal.version||data.accepted!==true||data.mode!==commerceMode||Object.keys(data).some(k=>!['sku','amountKopecks','offerVersion','accepted','mode'].includes(k)))throw new ProjectError(400,'invalid_order')
+     if(!data||!activeSkus.includes(data.sku)||!Number.isSafeInteger(data.amountKopecks)||data.amountKopecks<1||data.offerVersion!==legal.version||data.accepted!==true||data.mode!==commerceMode||(data.returnToSets!==undefined&&(data.returnToSets!==true||data.sku!=='plus-1'))||Object.keys(data).some(k=>!['sku','amountKopecks','offerVersion','accepted','mode','returnToSets'].includes(k)))throw new ProjectError(400,'invalid_order')
      if(commerceMode==='live'&&!fullCatalog){const offered=(await store.storeCatalog()).find(p=>p.sku===data.sku);if(!offered||offered.amountKopecks!==data.amountKopecks)throw new ProjectError(409,'quote_changed')}
-     reply(res,200,await adapter.checkout(user.id,data.sku,{unified:true,amountKopecks:data.amountKopecks,offerVersion:legal.version,beta:!instructionRelease}));return true
+     reply(res,200,await adapter.checkout(user.id,data.sku,{unified:true,amountKopecks:data.amountKopecks,offerVersion:legal.version,beta:!instructionRelease,...(data.returnToSets===true?{returnToSets:true}:{}),...(instructionFor(data.sku)?{instructionProduct:instructionFor(data.sku)}:{})}));return true
     }
     throw new ProjectError(405,'method_not_allowed')
    }
@@ -146,8 +217,8 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(path.endsWith('quote')&&req.method==='GET'){
      const q=new URL(req.url,'http://localhost').searchParams,sku=q.get('sku');if(q.size!==1||!(/^[a-z0-9-]{1,60}$/.test(sku??'')))throw new ProjectError(400,'invalid_order')
      if(!liveSkus.includes(sku))throw new ProjectError(404,'unknown_product')
-     const offered=themeIds.includes(sku)?(await store.storeCatalog()).find(p=>p.sku===sku):productById(sku);if(!offered)throw new ProjectError(404,'unknown_product')
-     const quote=await store.quoteCommerceLive(user.id,sku,legal.version,!instructionRelease);if(!fullCatalog&&quote.amountKopecks!==offered.amountKopecks)throw new ProjectError(409,'catalog_price_mismatch')
+     const offered=themeIds.includes(sku)?(await store.storeCatalog()).find(p=>p.sku===sku):(productById(sku)??instructionFor(sku));if(!offered)throw new ProjectError(404,'unknown_product')
+     const quote=await store.quoteCommerceLive(user.id,sku,legal.version,!instructionRelease,...(instructionFor(sku)?[instructionFor(sku)]:[]));if(!fullCatalog&&quote.amountKopecks!==offered.amountKopecks)throw new ProjectError(409,'catalog_price_mismatch')
      reply(res,200,quote);return true
     }
     if(path.endsWith('checkout')&&req.method==='POST'){
@@ -155,9 +226,9 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
      let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
      if(!data||typeof data.sku!=='string'||!(/^[a-z0-9-]{1,60}$/.test(data.sku))||!Number.isSafeInteger(data.amountKopecks)||data.amountKopecks<1||data.offerVersion!==legal.version||data.accepted!==true||Object.keys(data).some(k=>!['sku','amountKopecks','offerVersion','accepted'].includes(k)))throw new ProjectError(400,'invalid_order')
      if(!liveSkus.includes(data.sku))throw new ProjectError(404,'unknown_product')
-     const offered=themeIds.includes(data.sku)?(await store.storeCatalog()).find(p=>p.sku===data.sku):productById(data.sku);if(!offered)throw new ProjectError(404,'unknown_product')
+     const offered=themeIds.includes(data.sku)?(await store.storeCatalog()).find(p=>p.sku===data.sku):(productById(data.sku)??instructionFor(data.sku));if(!offered)throw new ProjectError(404,'unknown_product')
      if(!fullCatalog&&offered.amountKopecks!==data.amountKopecks)throw new ProjectError(409,'quote_changed')
-     reply(res,200,await liveYookassa.checkout(user.id,data.sku,{amountKopecks:data.amountKopecks,offerVersion:legal.version,beta:!instructionRelease}));return true
+     reply(res,200,await liveYookassa.checkout(user.id,data.sku,{amountKopecks:data.amountKopecks,offerVersion:legal.version,beta:!instructionRelease,...(instructionFor(data.sku)?{instructionProduct:instructionFor(data.sku)}:{})}));return true
     }
     throw new ProjectError(405,'method_not_allowed')
    }
@@ -212,7 +283,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
    }
    throw new ProjectError(405,'method_not_allowed')
   }catch(e){
-   const expected={verified_account_required:403,admin_required:403,checkout_pending:409,fiscal_reconciliation_required:409,unknown_product:404,invalid_quote:400,invalid_environment:400}
+   const expected={verified_account_required:403,admin_required:403,checkout_pending:409,fiscal_reconciliation_required:409,unknown_product:404,already_owned:409,invalid_quote:400,invalid_environment:400}
    if(e instanceof ProjectError)reply(res,e.status,{error:e.message})
    else if(e.code==='P0001'&&Object.hasOwn(expected,e.message))reply(res,expected[e.message],{error:e.message})
    else if(e.code==='23505'&&e.constraint_name==='commerce_receipt_unique_url')reply(res,409,{error:'receipt_already_used'})

@@ -32,7 +32,8 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
   environment,
   async checkout(uid,sku,quote){
    if(!config.enabled)throw new ProjectError(503,'yookassa_test_disabled')
-   const order=quote?.unified===true?await store.createCommerceOrder(uid,sku,quote.amountKopecks,quote.offerVersion,quote.beta,environment):environment==='live'?await store.createCommerceLiveOrder(uid,sku,quote?.amountKopecks,quote?.offerVersion,quote?.beta):await store.createCommerceTestOrder(uid,sku)
+   if(quote?.sandboxPack&&environment!=='test')throw new ProjectError(403,'bundle_unavailable')
+   const order=quote?.sandboxPack?await store.createSandboxPack(uid,quote.sandboxPack.setIds,quote.sandboxPack.products,quote.amountKopecks,quote.offerVersion):quote?.unified===true?await store.createCommerceOrder(uid,sku,quote.amountKopecks,quote.offerVersion,quote.beta,environment,...(quote.instructionProduct?[quote.instructionProduct]:[])):environment==='live'?await store.createCommerceLiveOrder(uid,sku,quote?.amountKopecks,quote?.offerVersion,quote?.beta,...(quote?.instructionProduct?[quote.instructionProduct]:[])):await store.createCommerceTestOrder(uid,sku)
    let payment
    if(order.paymentId)payment=await call('payments/'+order.paymentId)
    else{
@@ -40,7 +41,7 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
     // for an old order with an uncertain upstream outcome.
     if(Date.now()-new Date(order.createdAt).getTime()>23*3600000)throw new ProjectError(409,'order_reconciliation_required')
     payment=await call('payments',{amount:{value:(order.amountKopecks/100).toFixed(2),currency:'RUB'},capture:true,
-     confirmation:{type:'redirect',return_url:new URL('/payment/success',origin).href},
+     confirmation:{type:'redirect',return_url:new URL(/^instruction-\d{3,7}-\d{1,2}$/.test(sku)||quote?.sandboxPack||quote?.returnToSets===true?'/payment/success?kind=instruction':'/payment/success',origin).href},
      description:order.title,metadata:{order_id:order.id}},order.idempotencyKey)
    }
    if(!validPayment(payment,order.paymentId,environment)||payment.metadata.order_id!==order.id||amountKopecks(payment.amount.value)!==order.amountKopecks)throw new ProjectError(409,'payment_mismatch')

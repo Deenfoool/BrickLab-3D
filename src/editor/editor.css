@@ -280,3 +280,37 @@ body:has(.editor:not([hidden])){overflow:hidden}
 .editor .editor-publish{border-color:#b98025;background:#392d1d;color:#ffd28a;font-weight:650;white-space:nowrap}
 .editor .editor-publish:hover:not(:disabled){background:#55401f}
 .editor-actions{flex-wrap:wrap;justify-content:flex-end}
+
+/* Live solver overlay and import issue locator */
+.editor-transmission-map:not([hidden]),.editor-diagnostic-issues:not([hidden]){display:grid;gap:6px;padding:8px 0;border-top:1px solid color-mix(in srgb,currentColor 16%,transparent)}
+.editor-transmission-map [aria-pressed="true"]{border-color:#36d399}
+.editor-transmission-legend:not([hidden]){display:grid;gap:4px}
+.editor-transmission-row{display:flex;align-items:center;gap:7px;text-align:left;font-size:11px}
+.editor-transmission-row span:nth-child(2){flex:1}
+.editor-transmission-dot{flex:none;width:9px;height:9px;border-radius:50%}
+.editor-transmission-note,.editor-diagnostic-issues p{font-size:11px;line-height:1.4;opacity:.8;margin:0}
+.editor-diagnostic-issues summary{cursor:pointer;font-size:12px;font-weight:650}
+.editor-diagnostic-issues details[open]{display:grid;gap:5px}
+.editor-diagnostic-issues details button{display:block;width:100%;margin-top:5px;font-size:11px;text-align:left;overflow-wrap:anywhere}
+
+.editor-collision-panel:not([hidden]){display:grid;gap:7px;padding:9px 0;border-top:1px solid color-mix(in srgb,currentColor 16%,transparent)}
+.editor-collision-panel>strong{font-size:12px}
+.editor-collision-actions{display:flex;gap:5px;flex-wrap:wrap}
+.editor-collision-actions button,.editor-collision-results button{font-size:11px}
+.editor-collision-results:not(:empty){display:grid;gap:4px;max-height:200px;overflow:auto}
+.editor-collision-results button{text-align:left;overflow-wrap:anywhere;border-left:2px solid #ff6666}
+.editor-collision-results p{font-size:11px;margin:0}
+
+.editor-drive-estimate:not([hidden]){display:grid;gap:7px;border-top:1px solid color-mix(in srgb,currentColor 16%,transparent);padding:8px 0}
+.editor-drive-estimate summary{cursor:pointer;font-weight:650;font-size:12px}
+.editor-drive-estimate-form,.editor-drive-estimate-result,.editor-drive-loads{display:grid;gap:6px;margin-top:7px}
+.editor-drive-estimate-form label{display:grid;gap:3px;font-size:11px}
+.editor-drive-estimate input,.editor-drive-estimate select,.editor-collision-actions select{max-width:100%;min-width:0;font:inherit}
+.editor-drive-load-row{display:grid;gap:4px;grid-template-columns:minmax(0,1fr) auto;align-items:end;padding:6px;border:1px solid color-mix(in srgb,currentColor 16%,transparent);border-radius:6px}
+.editor-drive-load-row select{grid-column:1/-1}
+.editor-drive-estimate-result p{margin:0;font-size:11px}
+.editor-drive-warning{color:#ff7777}
+.editor-drive-output-list{display:grid;gap:4px;max-height:180px;overflow:auto}
+.editor-drive-output-list button{font-size:10px;text-align:left;overflow-wrap:anywhere}
+
+.editor-bench-results{max-height:220px;overflow:auto;font-size:11px}.editor-bench-results table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}.editor-bench-results th,.editor-bench-results td{padding:5px 3px;text-align:left;border-bottom:1px solid color-mix(in srgb,currentColor 15%,transparent)}

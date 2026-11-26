@@ -16,6 +16,10 @@ const fragmentShader = `
   uniform vec2 pixelSize;
   uniform vec3 selectionColor;
   uniform vec3 highlightColor;
+  uniform vec3 positiveColor;
+  uniform vec3 negativeColor;
+  uniform vec3 nonlinearColor;
+  uniform vec3 movingColor;
   varying vec2 screenUv;
 
   float orderOf(vec3 entry) {
@@ -40,7 +44,8 @@ const fragmentShader = `
     }
 
     if (edge == 0.0) discard;
-    gl_FragColor = vec4(edge > 0.75 ? selectionColor : highlightColor, min(opacity, 1.0));
+    vec3 color = edge > .9 ? selectionColor : edge > .73 ? movingColor : edge > .58 ? nonlinearColor : edge > .43 ? highlightColor : edge > .27 ? negativeColor : positiveColor;
+    gl_FragColor = vec4(color, min(opacity, 1.0));
     #include <colorspace_fragment>
   }
 `
@@ -64,6 +69,10 @@ export function createPartOutlines(renderer) {
       pixelSize: { value: new Vector2() },
       selectionColor: { value: new Color(selectionColor) },
       highlightColor: { value: new Color() },
+      positiveColor: { value: new Color(0x36d399) },
+      negativeColor: { value: new Color(0x60a5fa) },
+      nonlinearColor: { value: new Color(0xc084fc) },
+      movingColor: { value: new Color(0xf4b95e) },
     },
   })
   const quad = new Mesh(new PlaneGeometry(2, 2), material)
@@ -89,11 +98,11 @@ export function createPartOutlines(renderer) {
     parts.delete(id)
   }
 
-  function maskMaterial(index, primary, throughParts) {
+  function maskMaterial(index, primary, throughParts, category) {
     const value = encoded[index] ??= new MeshBasicMaterial({ fog: false, toneMapped: false })
     // Reserve black for unselected parts. The other channels identify each outlined part.
     const id = index + 1
-    value.color.setRGB(primary ? 1 : .5, (id % 256) / 255, Math.floor(id / 256) / 255)
+    value.color.setRGB(primary ? 1 : category ?? .5, (id % 256) / 255, Math.floor(id / 256) / 255)
     value.depthTest = value.depthWrite = !throughParts
     return value
   }
@@ -107,7 +116,7 @@ export function createPartOutlines(renderer) {
       const primary = id === selected
       const highlighted = highlights.ids.has(id)
       const throughParts = !primary && highlighted && highlights.throughParts
-      const paint = part.visible && (primary || highlighted) ? maskMaterial(index++, primary, throughParts) : blocker
+      const paint = part.visible && (primary || highlighted) ? maskMaterial(index++, primary, throughParts, highlights.codes?.get(id)) : blocker
       for (const mesh of meshes) {
         mesh.visible = part.visible
         mesh.renderOrder = throughParts ? 1 : 0

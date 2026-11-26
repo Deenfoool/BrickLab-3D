@@ -79,7 +79,7 @@ export function createInstructionRecognition(reader, set, signal) {
   function analyze(action, input, transfer = []) {
     signal.throwIfAborted()
     if (!worker) {
-      worker = new Worker(new URL('./instruction-recognition-worker.js?v=instruction-artwork-v3', import.meta.url), { type: 'module' })
+      worker = new Worker(new URL('./instruction-recognition-worker.js?v=instruction-artwork-v5', import.meta.url), { type: 'module' })
       worker.onmessage = ({ data }) => {
         const job = jobs.get(data.id)
         jobs.delete(data.id)
@@ -102,7 +102,7 @@ export function createInstructionRecognition(reader, set, signal) {
     const bookSignal = AbortSignal.any([controller.signal, signal])
     const key = Promise.all([reader.fingerprint(source), version]).then(([fingerprint, hash]) => {
       if (!fingerprint || !hash) return
-      return JSON.stringify(['regions-v3', set.number, hash, fingerprint])
+      return JSON.stringify(['regions-v5', set.number, hash, fingerprint])
     })
     active = { source, controller, signal: bookSignal, key, pages }
     return active
@@ -136,12 +136,17 @@ export function createInstructionRecognition(reader, set, signal) {
     const geometry = await reader.inspect(source, page, request)
     let surface = canvas
     const hasWords = () => geometry.words.some(({ text }) => mode ? element.test(text) : quantity.test(text))
-    if (!hasWords() && !geometry.wideScan) return []
+    // Inventory labels may be raster artwork even when the PDF also has vector text.
+    if (!hasWords() && !geometry.wideScan && !mode) return []
     if (!surface) {
       surface = document.createElement('canvas')
       await reader.render(source, page, surface, request)
     }
-    if (!hasWords()) geometry.words = await readText(surface, geometry, request)
+    const knownElements=()=>geometry.words.filter(({text})=>element.test(text)&&Object.hasOwn(labels,text)).length
+    if (!hasWords() || (mode&&knownElements()<2)) {
+      const recognized=await readText(surface,geometry,request)
+      geometry.words=[...geometry.words,...recognized.filter(word=>!geometry.words.some(old=>old.text===word.text&&Math.abs(old.box[0]-word.box[0])<3&&Math.abs(old.box[1]-word.box[1])<3))]
+    }
     if (!hasWords()) return []
     request.throwIfAborted()
     const bitmap = await createImageBitmap(surface)
@@ -163,7 +168,7 @@ export function createInstructionRecognition(reader, set, signal) {
     }
     const templates = []
     let emptyAfterInventory = 0
-    for (let page = book.pages; page > Math.max(0, book.pages - 24); page--) {
+    for (let page = book.pages; page > Math.max(0, book.pages - 36); page--) {
       book.signal.throwIfAborted()
       const items = await extract(book.source, page, null, true, book.signal)
       templates.push(...items)
@@ -186,7 +191,7 @@ export function createInstructionRecognition(reader, set, signal) {
     const samples = await extract(source, page, canvas, false, request)
     request.throwIfAborted()
     if (!samples.length) return []
-    if (samples.every(sample => sample.item)) {
+    if (samples.every(sample => sample.item?.[0])) {
       const regions = samples.map(({ region, item }) => [...region, ...item])
       void cache(pageKey, regions)
       return regions
@@ -201,7 +206,7 @@ export function createInstructionRecognition(reader, set, signal) {
     const templates = typeof source === 'string'
       ? [...books].filter(([volume]) => typeof volume === 'string').flatMap(([, items]) => items)
       : books.get(source)
-    if (!templates.length) return []
+    if (!templates.length) return samples.filter(s=>s.item?.[0]).map(s=>[...s.region,...s.item])
     const regions = await analyze('rank', { samples, templates })
     if (regions.length) void cache(pageKey, regions)
     request.throwIfAborted()

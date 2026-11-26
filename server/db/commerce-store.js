@@ -1,4 +1,5 @@
-import {projectAccount,plusLoyalty} from '../../src/menu/commerce-catalog.js'
+import {projectAccount,plusLoyalty,instructionProduct,discountedPrice} from '../../src/menu/commerce-catalog.js'
+import {quoteInstructionBundle} from '../../src/menu/instruction-bundle-pricing.js'
 import {commerceQuote} from '../commerce-quote.js'
 import {ProjectError} from '../projects.js'
 
@@ -20,26 +21,39 @@ export async function commerceEntitlements(tx,uid,environment='live'){
      ...(g.kind==='instruction'?{setId:g.target}:{}),
      ...(g.grantedAt?{grantedAt:new Date(g.grantedAt).getTime()}:{}),
      ...(g.expiresAt?{expiresAt:new Date(g.expiresAt).getTime()}:{})}));
-    return {...projectAccount(grants),loyalty:plusLoyalty(grants)};
+    const account=projectAccount(grants)
+    const welcome=environment==='live'?await tx`select set_id as "setId" from bricklab.instruction_welcome_grants where user_id=${uid} order by slot`:[]
+    if(environment==='live')account.instructions=[...new Set([...account.instructions,...welcome.map(g=>g.setId)])]
+    const first=environment==='live'?(await tx`select set_id as "setId" from bricklab.instruction_first_build where user_id=${uid}`)[0]:null
+    return {...account,loyalty:plusLoyalty(grants),welcomeInstructions:welcome.map(g=>g.setId),firstBuilder:!!first,welcomeRemaining:environment==='live'?Math.max(0,(first?2:1)-welcome.length):0};
 }
 
 // Only trusted server adapters may invoke the security-definer write functions.
 // Direct app-role INSERT/UPDATE/DELETE on the ledger remains denied.
-async function liveQuote(tx,uid,sku,offerVersion,beta){
+// The optional merchandise record is resolved by the server, never supplied by the browser.
+export function instructionOrderQuote(sku,account,product){
+ const p=product&&instructionProduct(product.setId,product.title,product.partCount);
+ if(!p||p.id!==sku)throw new ProjectError(404,'unknown_product');
+ if(account.instructions.includes(p.setId))throw new ProjectError(409,'already_owned');
+ return {sku,title:'BrickLab · '+p.setId+' · '+p.title,amountKopecks:discountedPrice(p.priceKopecks,account.plus)};
+}
+async function liveQuote(tx,uid,sku,offerVersion,beta,product){
  const [pending]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",offer_version as "offerVersion" from bricklab.commerce_orders where user_id=${uid} and environment='live' and status='pending' limit 1`
  if(pending){if(pending.sku!==sku||pending.offerVersion!==offerVersion)throw new ProjectError(409,'checkout_pending');return pending}
  const account=await commerceEntitlements(tx,uid)
+ if(product&&!beta)return {...instructionOrderQuote(sku,account,product),offerVersion}
  const payments=await tx`select o.sku,o.amount_kopecks as "amountKopecks" from bricklab.commerce_orders o join bricklab.commerce_grants g on g.order_id=o.id and g.user_id=o.user_id where o.user_id=${uid} and o.environment='live' and o.status='succeeded' and g.kind='badge' and g.revoked_at is null`
  return {...commerceQuote(sku,account,payments,{beta}),offerVersion}
 }
-async function orderQuote(tx,uid,sku,offerVersion,beta,environment){
- if(environment==='live')return liveQuote(tx,uid,sku,offerVersion,beta)
+async function orderQuote(tx,uid,sku,offerVersion,beta,environment,product){
+ if(environment==='live')return liveQuote(tx,uid,sku,offerVersion,beta,product)
  if(environment!=='test')throw new ProjectError(400,'invalid_environment')
  const [admin]=await tx`select bricklab.is_admin() as ok`
  if(!admin.ok)throw new ProjectError(403,'admin_required')
  const [pending]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",offer_version as "offerVersion" from bricklab.commerce_orders where user_id=${uid} and environment='test' and status='pending' and sku=${sku} order by created_at desc limit 1`
  if(pending){if(pending.offerVersion&&pending.offerVersion!==offerVersion)throw new ProjectError(409,'checkout_pending');return {...pending,offerVersion}}
  const account=await commerceEntitlements(tx,uid,'test')
+ if(product)return {...instructionOrderQuote(sku,account,product),offerVersion}
  if(sku==='instruction-42215-1'){
   if(account.instructions.includes('42215-1'))throw new ProjectError(409,'already_owned')
   return {sku,title:'Интерактивные инструкции · Volvo 42215',amountKopecks:17900,offerVersion}
@@ -47,12 +61,58 @@ async function orderQuote(tx,uid,sku,offerVersion,beta,environment){
  const payments=await tx`select o.sku,o.amount_kopecks as "amountKopecks" from bricklab.commerce_orders o join bricklab.commerce_grants g on g.order_id=o.id and g.user_id=o.user_id where o.user_id=${uid} and o.environment='test' and o.status='succeeded' and g.kind='badge' and g.revoked_at is null`
  return {...commerceQuote(sku,account,payments,{beta}),offerVersion}
 }
+async function sandboxPackQuote(tx,uid,setIds,products,offerVersion){
+ const [admin]=await tx`select bricklab.is_admin() as ok`
+ if(!admin.ok)throw new ProjectError(403,'admin_required')
+ if(!Array.isArray(setIds)||setIds.length!==3||new Set(setIds).size!==3||!setIds.every(id=>typeof id==='string'&&/^\d{3,7}-\d{1,2}$/.test(id)))throw new ProjectError(400,'invalid_bundle')
+ const sku='instruction-pack:'+setIds.slice().sort().join(',')
+ const [pending]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",offer_version as "offerVersion" from bricklab.commerce_orders where user_id=${uid} and environment='test' and sku=${sku} and status='pending' limit 1`
+ if(pending){
+  if(pending.offerVersion!==offerVersion)throw new ProjectError(409,'checkout_pending')
+  const lines=await tx`select set_id as "setId",title,base_kopecks as base,amount_kopecks as amount from bricklab.instruction_pack_lines where order_id=${pending.id} order by set_id collate "C"`
+  if(lines.length!==3)throw new ProjectError(409,'invalid_quote')
+  return {...pending,lines,subtotalKopecks:lines.reduce((n,l)=>n+l.base,0),discountPercent:15}
+ }
+ let q
+ try{q=quoteInstructionBundle({setIds,auditedProducts:products,account:await commerceEntitlements(tx,uid,'test'),release:true})}
+ catch(e){throw new ProjectError(409,e.message)}
+ return {...q,sku,title:'BrickLab Build Pack (тест) · '+setIds.slice().sort().join(', '),offerVersion}
+}
 export function commerceStore(scope){
  return {
-  async quoteCommerce(uid,sku,offerVersion,beta,environment){return scope(uid,tx=>orderQuote(tx,uid,sku,offerVersion,beta,environment))},
-  async createCommerceOrder(uid,sku,amount,offerVersion,beta,environment){return scope(uid,async tx=>{
+  async quoteSandboxPack(uid,setIds,products,offerVersion){return scope(uid,tx=>sandboxPackQuote(tx,uid,setIds,products,offerVersion))},
+  async createSandboxPack(uid,setIds,products,amount,offerVersion){return scope(uid,async tx=>{
    await tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text,312042))`
-   const quote=await orderQuote(tx,uid,sku,offerVersion,beta,environment)
+   const q=await sandboxPackQuote(tx,uid,setIds,products,offerVersion)
+   if(q.amountKopecks!==amount)throw new ProjectError(409,'quote_changed')
+   const [row]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",idempotency_key as "idempotencyKey",payment_id as "paymentId",created_at as "createdAt" from bricklab.commerce_create_test_pack(${q.sku},${q.title},${amount}::integer,${offerVersion},${tx.json(q.lines)})`
+   return row
+  })},
+  async recordInstructionActivity(uid,set,event){return scope(uid,tx=>tx`select bricklab.record_instruction_activity(${set},${event})`)},
+  async instructionAnalytics(uid){return scope(uid,async tx=>{const [r]=await tx`select bricklab.instruction_analytics() as data`;return r.data})},
+  async earnFirstBuilder(uid,projectId,checkCompletion){return scope(uid,async tx=>{
+   await tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text,312042))`
+   const account=await commerceEntitlements(tx,uid)
+   if(account.firstBuilder)return account
+   const [p]=await tx`select r.document from bricklab.projects p join bricklab.project_revisions r on r.project_id=p.id and r.revision=p.head_revision where p.id=${projectId}::uuid and p.owner_id=${uid}`
+   const setId=p&&checkCompletion(p.document)
+   if(!setId||!account.welcomeInstructions.includes(setId))throw new ProjectError(409,'build_not_complete')
+   const [r]=await tx`select bricklab.earn_instruction_first_build(${setId}) as ok`
+   if(!r.ok)throw new ProjectError(409,'build_not_complete')
+   return commerceEntitlements(tx,uid)
+  })},
+  async claimInstructionWelcome(uid,setId){return scope(uid,async tx=>{
+   await tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text,312042))`
+   const before=await commerceEntitlements(tx,uid)
+   if(before.plus||before.instructions.includes(setId))return before
+   const [r]=await tx`select bricklab.claim_instruction_welcome(${setId}) as ok`
+   if(!r.ok)throw new ProjectError(409,'welcome_exhausted')
+   return commerceEntitlements(tx,uid)
+  })},
+  async quoteCommerce(uid,sku,offerVersion,beta,environment,product){return scope(uid,tx=>orderQuote(tx,uid,sku,offerVersion,beta,environment,product))},
+  async createCommerceOrder(uid,sku,amount,offerVersion,beta,environment,product){return scope(uid,async tx=>{
+   await tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text,312042))`
+   const quote=await orderQuote(tx,uid,sku,offerVersion,beta,environment,product)
    if(quote.amountKopecks!==amount)throw new ProjectError(409,'quote_changed')
    const [row]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",idempotency_key as "idempotencyKey",payment_id as "paymentId",created_at as "createdAt" from bricklab.commerce_create_order(${sku},${quote.title},${amount}::integer,${offerVersion},${environment})`
    return row
@@ -80,10 +140,10 @@ export function commerceStore(scope){
   })},
   async claimCommerceLivePayments(){return scope('',tx=>tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks" from bricklab.commerce_claim_live_payments()`)},
   async claimCommerceTestPayments(){return scope('',tx=>tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks" from bricklab.commerce_claim_test_payments()`)},
-  async quoteCommerceLive(uid,sku,offerVersion,beta=true){return scope(uid,tx=>liveQuote(tx,uid,sku,offerVersion,beta))},
-  async createCommerceLiveOrder(uid,sku,expectedAmount,offerVersion,beta=true){return scope(uid,async tx=>{
+  async quoteCommerceLive(uid,sku,offerVersion,beta=true,product){return scope(uid,tx=>liveQuote(tx,uid,sku,offerVersion,beta,product))},
+  async createCommerceLiveOrder(uid,sku,expectedAmount,offerVersion,beta=true,product){return scope(uid,async tx=>{
    await tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text,312042))`
-   const quote=await liveQuote(tx,uid,sku,offerVersion,beta)
+   const quote=await liveQuote(tx,uid,sku,offerVersion,beta,product)
    if(quote.amountKopecks!==expectedAmount)throw new ProjectError(409,'quote_changed')
    const [row]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",idempotency_key as "idempotencyKey",payment_id as "paymentId",created_at as "createdAt" from bricklab.commerce_create_live_order(${sku},${quote.title},${quote.amountKopecks}::integer,${offerVersion})`;return row
   })},

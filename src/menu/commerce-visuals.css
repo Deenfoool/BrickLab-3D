@@ -120,3 +120,20 @@
 .commerce-insignia:not(.insignia-plus) .insignia-outer{stroke-width:1.15}
 .commerce-insignia:not(.insignia-plus) .metal-highlight{stop-color:var(--support-accent,#b6c1d5)}
 .commerce-emblem .insignia-lucide{stroke-width:2.2}
+
+/* Instructions use dense product rows rather than a full-width illustration. */
+.commerce-instruction-section{display:grid;gap:10px;padding:12px 14px;min-width:0}
+.commerce-instruction-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.commerce-instruction-heading h2{font-size:17px;line-height:1.25;margin:0 0 3px}
+.commerce-instruction-section p{font-size:12px;margin:0;line-height:1.45}
+.commerce-instruction-search{width:min(100%,360px);box-sizing:border-box;min-height:34px;padding:7px 10px;border:1px solid color-mix(in srgb,currentColor 20%,transparent);border-radius:8px;background:transparent;color:inherit;font:inherit}
+.commerce-instruction-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:8px}
+.commerce-instruction-row{display:grid;grid-template-columns:52px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px;border:1px solid color-mix(in srgb,currentColor 14%,transparent);border-radius:10px;min-width:0}
+.commerce-instruction-number{display:grid;place-items:center;height:42px;border-radius:7px;background:linear-gradient(145deg,#493d2b,#222b36);color:#ffdfa6;font:700 11px ui-monospace,monospace}
+.commerce-instruction-info,.commerce-instruction-actions{display:grid;gap:4px;min-width:0}
+.commerce-instruction-info strong{font-size:13px;line-height:1.3;overflow-wrap:anywhere}
+.commerce-instruction-info small,.commerce-instruction-actions small{font-size:11px;line-height:1.2}
+.commerce-instruction-actions{text-align:right;justify-items:end}
+.commerce-instruction-price{font-size:14px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.commerce-instruction-actions .workspace-action{padding:5px 9px;min-height:28px;font-size:11px}
+@media(max-width:420px){.commerce-instruction-row{grid-template-columns:42px minmax(0,1fr) auto;gap:7px;padding:8px}.commerce-instruction-number{font-size:10px}.commerce-instruction-section{padding:10px}}

@@ -1,7 +1,7 @@
 import {createProfileClient} from './profile-client.js?v=cloud-profile-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
-import {commerceProducts,themePrices,instructionTiers,productById} from './commerce-catalog.js?v=commerce-plus-2'
+import {commerceProducts,themePrices,productById} from './commerce-catalog.js?v=instruction-store-1'
 import {commerceBadge,productArtwork,factsPanel,planSaving} from './commerce-visuals.js?v=merch-2'
 const labels={
  ru:{title:'BrickLab Store',intro:'Оформление мастерской. Основные функции редактора остаются бесплатными.',disabled:'Темы доступны для просмотра. Оплата откроется после подключения платёжной системы ЮKassa.',test:'Тестовый режим · реальные деньги не списываются. Покупки доступны только администратору.',login:'Войти в аккаунт',buy:'Тестовая покупка',owned:'Получено в тестовом инвентаре',resume:'Продолжить тестовую оплату',consent:'Подтверждаю, что это тестовая оплата без реального списания и без выдачи платного товара.',history:'Мои тестовые заказы',finance:'BrickLab Finance · тестовый режим',financeNote:'Суммы ниже — виртуальные тестовые операции, не выручка.',total:'Заказов',paid:'Подтверждено',amount:'Тестовый оборот',pending:'Ожидает подтверждения',complete:'Подтверждён',refresh:'Обновить статус',error:'Не удалось выполнить запрос. Попробуй ещё раз.',wait:'Если оплата завершена, дождись уведомления Robokassa и обнови статус.',profile:'Мой инвентарь',carbon:'Карбон',neon:'Неоновая мастерская',noOrders:'Заказов пока нет',loading:'Загрузка…'},
@@ -41,19 +41,18 @@ export function mountStore(root,{language='ru',signal}){
  const errorText=e=>({verified_account_required:tr('Подтверди электронную почту перед покупкой.','Verify your email before purchasing.'),invalid_receipt_url:tr('Нужна ссылка на чек из «Мой налог».','Use an official My Tax receipt link.'),receipt_already_used:tr('Чек уже привязан к другому заказу.','Receipt already used.'),checkout_pending:tr('Заверши предыдущую оплату.','Finish the previous payment.')})[e.code]??t.error+' ('+(e.status??'network')+')'
  const profiles=createProfileClient(),nav=el('div','commerce-preview-nav'),grid=el('div','store-grid'),notice=el('p','account-muted'),summary=el('section','store-orders')
  notice.setAttribute('role','status')
- const categories=[['all',tr('Все товары','All products')],['subscription','BrickLab Plus'],['theme',tr('Темы','Themes')],['themeBundle',tr('Коллекции','Collections')],['storage',tr('Облачные проекты','Cloud projects')],['badge',tr('Значки','Badges')],['instruction',tr('Инструкции','Instructions')],['orders',tr('Мои покупки','My purchases')],['ledger',tr('Финансы','Finance')]]
+ const categories=[['all',tr('Все товары','All products')],['subscription','BrickLab Plus'],['theme',tr('Темы','Themes')],['themeBundle',tr('Коллекции','Collections')],['storage',tr('Облачные проекты','Cloud projects')],['badge',tr('Значки','Badges')],['orders',tr('Мои покупки','My purchases')],['ledger',tr('Финансы','Finance')],['analytics',tr('Аналитика','Analytics')]]
  const sectionCopy={
   subscription:tr('Больше возможностей для твоей мастерской на выбранный срок.','More room and tools for your workshop for a chosen term.'),
   theme:tr('Индивидуальный стиль профиля и мастерской.','A personal look for your profile and workshop.'),
   themeBundle:tr('Все шесть фирменных оформлений в одном наборе.','All six signature styles in one collection.'),
   storage:tr('Расширяй облачное пространство разовыми покупками.','Expand your cloud space with one-time purchases.'),
-  badge:tr('Коллекционные эмблемы поддержки — от первого значка до Founder’s Club.','Collectible supporter insignia, from the first badge to Founder’s Club.'),
-  instruction:tr('Интерактивные подсказки для поддерживаемых наборов.','Interactive hints for supported sets.')
+  badge:tr('Коллекционные эмблемы поддержки — от первого значка до Founder’s Club.','Collectible supporter insignia, from the first badge to Founder’s Club.')
  }
  const tabs=new Map(),header=el('div','store-banner'),heading=el('div'),art=el('div','store-banner-art')
  heading.append(el('span','store-kicker','BRICKLAB STORE'),el('h2',null,tr('Расширь свою мастерскую','Expand your workshop')),el('p',null,tr('Темы, облачное пространство, коллекции и Plus. Основной редактор бесплатный.','Themes, cloud space, collections and Plus. The core editor is free.')))
  for(const id of ['carbon','neon','aurora'])art.append(themePreview(themeFor(id),language));header.append(heading,art)
- let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,testMode=false,busy=false,serial=0
+ let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,analytics=null,testMode=false,busy=false,serial=0
  try{if(sessionStorage.getItem('bricklab-commerce-return')==='1'){selected='orders';sessionStorage.removeItem('bricklab-commerce-return')}}catch{}
  const refreshButton=button(tr('Обновить покупки','Refresh purchases'),()=>refresh())
  for(const [id,label] of categories){const b=button(label,()=>{selected=id;render()});tabs.set(id,b);nav.append(b)}
@@ -75,11 +74,11 @@ export function mountStore(root,{language='ru',signal}){
   if(p.kind==='theme'){const theme=themeFor(p.id);return tr(theme.descriptionRu,theme.descriptionEn)}
   if(p.kind==='storage')return tr('Дополнительно '+p.slots+' проектов и '+p.storageMiB+' МиБ хранения. Разовая покупка.','Adds '+p.slots+' projects and '+p.storageMiB+' MiB storage. One-time purchase.')
   if(p.kind==='subscription')return tr('+40 проектов, +128 МиБ, 40 версий, значок Plus, одна тема на выбор, скидки. Продление вручную.','+40 projects, +128 MiB, 40 revisions, Plus badge, one theme and discounts. Manual renewal.')
-  if(p.kind==='instruction')return tr('Тест доступа к подсказкам набора Volvo 42215. В ОБТ остаётся бесплатным.','Sandbox access fixture for Volvo 42215. Free in open beta.')
+  if(p.kind==='instruction')return p.setId+' · '+p.partCount.toLocaleString(language)+tr(' деталей. Интерактивные подсказки BrickLab; PDF бесплатен.',' pieces. BrickLab interactive hints; the PDF is free.')
   if(p.kind==='themeBundle')return tr('Все шесть тем мастерской.','All six workshop themes.')
   return tr('Коллекционный значок поддержки. Можно выбрать для публичного профиля.','Collectible supporter badge for your public profile.')
  }
- function owned(p,a){return p.kind==='theme'?a?.themes?.includes(p.id):p.kind==='badge'?a?.badges?.includes(p.id):p.kind==='instruction'?a?.instructions?.includes('42215-1'):p.kind==='themeBundle'?Object.keys(themePrices).every(id=>a?.themes?.includes(id)):false}
+ function owned(p,a){return p.kind==='theme'?a?.themes?.includes(p.id):p.kind==='badge'?a?.badges?.includes(p.id):p.kind==='instruction'?a?.instructions?.includes(p.setId):p.kind==='themeBundle'?Object.keys(themePrices).every(id=>a?.themes?.includes(id)):false}
  function collectionArt(){
   const art=el('div','commerce-collection-art')
   for(const id of Object.keys(themePrices))art.append(themePreview(themeFor(id),language))
@@ -110,9 +109,9 @@ export function mountStore(root,{language='ru',signal}){
  }
  function render(){
   if(!catalog||signal.aborted)return
-  const a=account,products=[...catalog.products.map(p=>({id:p.sku,kind:'theme',title:p.title,priceKopecks:p.amountKopecks})),...commerceProducts,...(testMode?[{id:'instruction-42215-1',kind:'instruction',title:'Volvo 42215 · '+tr('интерактивные подсказки','interactive hints'),priceKopecks:17900}]:[])]
+  const a=account,products=[...catalog.products.map(p=>({id:p.sku,kind:'theme',title:p.title,priceKopecks:p.amountKopecks})),...commerceProducts,...(catalog.instructions??[])]
   for(const [id,b] of tabs){b.classList.toggle('primary',selected===id);b.setAttribute('aria-pressed',String(selected===id))}
-  const adminTab=tabs.get('ledger');if(adminTab)adminTab.hidden=!ledger;
+  const adminTab=tabs.get('ledger');if(adminTab)adminTab.hidden=!ledger;tabs.get('analytics').hidden=!checkoutStatus?.admin;
   notice.textContent=testMode?tr('ТЕСТ · Оплата без списания. Тестовые права администратора действуют до переключения кассы в боевой режим.','TEST · No charge. Administrator test entitlements apply until switching to live.'):catalog.live?tr('Оплата через ЮKassa.','Payment via YooKassa.'):tr('Оплата пока закрыта. Темы — первый ассортимент; остальные товары готовятся к выпуску.','Checkout closed. Themes are the first assortment; other products are in preparation.')
   grid.replaceChildren();summary.replaceChildren();summary.hidden=!a
   if(a){
@@ -126,6 +125,21 @@ export function mountStore(root,{language='ru',signal}){
    }
    summary.append(head,limits)
    if(a.plus===true)summary.append(el('small','account-muted',tr('Plus активен до ','Plus active until ')+new Date(a.plusUntil).toLocaleDateString(language)))
+  }
+  if(selected==='analytics'){
+   const panel=el('section','store-orders');panel.style.gridColumn='1 / -1';
+   panel.append(el('h2',null,tr('Интерактивность · последние 90 дней','Interactive access · last 90 days')),el('p','account-muted',tr('Авторизованные пользователи, без администратора. События: один пользователь, набор, действие и день. Покупки — только реальные, не тестовые.','Signed-in users, excluding admins from activity. Events: one user, set, action and day. Real purchases only.')));
+   if(!analytics){panel.append(el('p','account-muted',tr('Данные недоступны','Data unavailable')));grid.append(panel);return}
+   const stats=el('div','store-grid')
+   for(const [label,value] of [[tr('Активные аккаунты','Active accounts'),analytics.activeUsers],[tr('Подарочные доступы','Welcome grants'),analytics.welcomeClaims],[tr('First Builder','First Builder'),analytics.firstBuilders],[tr('Покупатели','Buyers'),analytics.buyers],[tr('Оплаченные наборы без возврата','Non-refunded purchases'),analytics.paidOrders],[tr('Повторные покупатели','Repeat buyers'),analytics.repeatBuyers],[tr('Возвращённые покупки','Refunded purchases'),analytics.refundedOrders],[tr('Выручка до комиссий, без возвратов','Revenue before fees, excluding refunds'),money(analytics.netKopecks)],[tr('Выручка на активный аккаунт','Revenue per active account'),analytics.activeUsers?money(Number(analytics.netKopecks)/Number(analytics.activeUsers)):'—']]){
+    const c=el('article','commerce-preview-card');c.append(el('p','account-muted',label),el('strong','store-price',String(value)));stats.append(c)
+   }
+   panel.append(stats,el('h3',null,tr('Воронка взаимодействия','Engagement funnel')));
+   for(const [id,ruLabel,enLabel] of [['set_open','Открыли набор','Opened set'],['build_start','Начали сборку','Started build'],['hint_use','Использовали подсказку','Used hint'],['offer_view','Увидели оплату','Saw offer'],['checkout_click','Перешли к оплате','Clicked checkout']]){
+    const v=analytics.events.find(e=>e.event===id);panel.append(el('p',null,tr(ruLabel,enLabel)+': '+(v?.users??0)+' · '+tr('событий ','events ')+(v?.interactions??0)))
+   }
+   panel.append(el('h3',null,tr('Популярные наборы','Popular sets')));for(const row of analytics.popular)panel.append(el('p',null,row.set_id+' · '+row.users))
+   grid.append(panel);return
   }
   if(selected==='ledger'){
    if(!ledger)return
@@ -163,11 +177,11 @@ export function mountStore(root,{language='ru',signal}){
   }
   if(selected==='orders'){
    if(!a){grid.append(link(t.login,'#account'));return}
-   for(const o of a.orders??[]){const card=el('article','commerce-preview-card'),p=products.find(p=>p.id===o.sku);card.append(orderIdentity(p,p?productTitle(p):o.title),el('strong','store-price',money(o.amountKopecks)),el('p','account-muted',({pending:tr('Ожидает оплаты','Pending'),succeeded:tr('Оплачено','Paid'),canceled:tr('Отменено','Canceled'),refunded:tr('Возвращено','Refunded')})[o.status]??o.status),el('small','account-muted',orderNo(o.orderNumber)));if(!testMode&&o.receiptStatus==='pending')card.append(el('p','account-muted',tr('Чек формируется','Receipt pending')));if(!testMode&&o.receiptUrl&&/^https:\/\/lknpd\.nalog\.ru\/api\/v1\/receipt\/[0-9]{12}\/[A-Za-z0-9_-]{1,80}\/print$/.test(o.receiptUrl)){const receipt=link(tr('Чек НПД','NPD receipt'),o.receiptUrl);receipt.target='_blank';receipt.rel='noopener noreferrer';card.append(receipt)}if(o.status==='pending'&&p&&checkoutStatus?.enabled&&checkoutStatus.skus.includes(p.id))card.append(button(tr('Продолжить оплату','Resume checkout'),()=>showCheckout(p)));if(testMode&&o.status==='succeeded'){const refund=button(o.refundRequestedAt?tr('Проверить возврат','Check refund'):tr('Тестовый возврат','Test refund'),async()=>{if(!o.refundRequestedAt&&!window.confirm(tr('Вернуть всю тестовую сумму и отозвать приобретение?','Refund the full test amount and revoke the entitlement?')))return;refund.disabled=true;try{const result=await api('/api/commerce/refund',signal,{orderId:o.id,confirm:true,mode:checkoutStatus.mode});await refresh();notice.textContent=tr('Возврат: ','Refund: ')+result.status}catch(e){notice.textContent=errorText(e);refund.disabled=false}});card.append(refund)}grid.append(card)}
+   for(const o of a.orders??[]){const card=el('article','commerce-preview-card'),p=products.find(p=>p.id===o.sku);card.append(orderIdentity(p,p?productTitle(p):o.title),el('strong','store-price',money(o.amountKopecks)),el('p','account-muted',({pending:tr('Ожидает оплаты','Pending'),succeeded:tr('Оплачено','Paid'),canceled:tr('Отменено','Canceled'),refunded:tr('Возвращено','Refunded')})[o.status]??o.status),el('small','account-muted',orderNo(o.orderNumber)));if(!testMode&&o.receiptStatus==='pending')card.append(el('p','account-muted',tr('Чек формируется','Receipt pending')));if(!testMode&&o.receiptUrl&&/^https:\/\/lknpd\.nalog\.ru\/api\/v1\/receipt\/[0-9]{12}\/[A-Za-z0-9_-]{1,80}\/print$/.test(o.receiptUrl)){const receipt=link(tr('Чек НПД','NPD receipt'),o.receiptUrl);receipt.target='_blank';receipt.rel='noopener noreferrer';card.append(receipt)}if(p?.kind==='instruction'&&['pending','succeeded'].includes(o.status))card.append(button(tr('Открыть набор','Open set'),()=>{try{sessionStorage.setItem('bricklab-instruction-return',p.setId)}catch{}location.hash='#sets'}));else if(o.status==='pending'&&p&&checkoutStatus?.enabled&&checkoutStatus.skus.includes(p.id))card.append(button(tr('Продолжить оплату','Resume checkout'),()=>showCheckout(p)));if(testMode&&o.status==='succeeded'){const refund=button(o.refundRequestedAt?tr('Проверить возврат','Check refund'):tr('Тестовый возврат','Test refund'),async()=>{if(!o.refundRequestedAt&&!window.confirm(tr('Вернуть всю тестовую сумму и отозвать приобретение?','Refund the full test amount and revoke the entitlement?')))return;refund.disabled=true;try{const result=await api('/api/commerce/refund',signal,{orderId:o.id,confirm:true,mode:checkoutStatus.mode});await refresh();notice.textContent=tr('Возврат: ','Refund: ')+result.status}catch(e){notice.textContent=errorText(e);refund.disabled=false}});card.append(refund)}grid.append(card)}
    if(!(a.orders??[]).length)grid.append(el('p','account-muted',t.noOrders))
    grid.append(link(tr('Перейти в мастерскую','Open workshop'),'#account'));return
   }
-  const ordered=['subscription','theme','themeBundle','storage','badge',...(testMode?['instruction']:[])]
+  const ordered=['subscription','theme','themeBundle','storage','badge']
   for(const kind of ordered){if(selected!=='all'&&selected!==kind)continue
    const section=el('section','store-orders commerce-store-section'),items=el('div','store-grid'),head=el('div','commerce-section-heading'),heading=el('div')
    const assortment=products.filter(p=>p.kind===kind)
@@ -201,15 +215,10 @@ export function mountStore(root,{language='ru',signal}){
     copy.append(footer);card.append(copy);items.append(card)
    }
   }
-  if(selected==='all'||selected==='instruction'){
-   const section=el('section','store-orders');section.style.gridColumn='1 / -1';section.append(el('h2',null,tr('Интерактивные инструкции','Interactive instructions')),el('p','account-muted',tr('Во время ОБТ бесплатно. PDF и ручной поиск останутся бесплатными. Продажа отдельных наборов начнётся после проверки распознавания.','Free during open beta. PDF and manual search remain free. Individual sets launch after recognition audit.')))
-   const guide=productArtwork({kind:'instruction'},language);guide.classList.add('commerce-guide-banner');section.append(guide)
-   const prices=el('div','commerce-instruction-prices');let min=1;for(const [max,price] of instructionTiers){const row=el('div','commerce-preview-tier');row.append(el('span',null,min+'–'+(max===Number.MAX_SAFE_INTEGER?'∞':max)+tr(' деталей',' parts')),el('strong',null,money(price)));prices.append(row);min=max+1}section.append(prices);grid.append(section)
-  }
  }
  async function refresh(){
   const v=++serial;notice.textContent=t.loading
-  try{const [c,a,st,p]=await Promise.all([api('/api/store/catalog',signal),optional('/api/commerce/account'),optional('/api/commerce/status'),profiles.get().catch(()=>null)]);const adminLedger=st?.admin?await optional('/api/commerce/admin-ledger?environment='+st.mode):null;if(signal.aborted||v!==serial)return;catalog=c;account=a;checkoutStatus=st;profile=p;ledger=adminLedger;testMode=st?.mode==='test'&&st?.admin===true;if(selected==='ledger'&&!ledger)selected='all';render()}catch{if(!signal.aborted&&v===serial)notice.textContent=t.error}
+  try{const [c,a,st,p]=await Promise.all([api('/api/store/catalog',signal),optional('/api/commerce/account'),optional('/api/commerce/status'),profiles.get().catch(()=>null)]);const [adminLedger,adminAnalytics]=st?.admin?await Promise.all([optional('/api/commerce/admin-ledger?environment='+st.mode),optional('/api/commerce/instruction-analytics').catch(()=>null)]):[null,null];if(signal.aborted||v!==serial)return;catalog=c;account=a;checkoutStatus=st;profile=p;ledger=adminLedger;analytics=adminAnalytics;testMode=st?.mode==='test'&&st?.admin===true;if(selected==='ledger'&&!ledger)selected='all';render()}catch{if(!signal.aborted&&v===serial)notice.textContent=t.error}
  }
  const timer=setInterval(()=>{if(!busy&&account?.orders?.some(o=>o.status==='pending'&&o.paymentId||o.status==='succeeded'&&o.refundRequestedAt))void refresh()},15000)
  signal.addEventListener('abort',()=>clearInterval(timer),{once:true})

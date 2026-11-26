@@ -1,6 +1,6 @@
 import { loadPartIndex, enrichInventory, normalizeDocumentDesigns } from '../catalog/part-resolver.js?v=catalog-engine-1'
-import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=commerce-plus-2'
-import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=same-origin-pdf'
+import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=instruction-artwork-v5'
+import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=instruction-artwork-v5'
 import { mountSetPalette } from '../sets/palette.js?v=catalog-engine-1'
 import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'
@@ -18,7 +18,12 @@ import { nearestDetent } from '../mechanics/axial.js?v=torque-clutch'
 import { nearbyConnections, translationSnaps } from './snap.js?v=volvo-spur-gears'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=system-complete'
 import { mountLibrary } from './library.js?v=catalog-engine-1'
-import { createScene } from './scene.js?v=catalog-engine-1'
+import { createScene } from './scene.js?v=collision-1'
+import {mountTransmissionMap,transmissionMap,transmissionCodes} from './transmission-map.js'
+import {mountCollisionPanel} from './collision-panel.js?v=engineering-3'
+import {mountMotorBench} from './motor-bench-panel.js'
+import {mountDriveEstimate} from './drive-estimate-panel.js'
+import {engineeringReport,downloadEngineeringReport} from './engineering-report.js'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=volvo-spur-gears'
@@ -185,6 +190,12 @@ export async function mountEditor(root, { document, projectId, language, save, d
                 <button type="button" data-el="play">${t.play}</button>
                 <button type="button" data-el="applyHinge" hidden>${t.applyHinge}</button>
               </div>
+              <section class="editor-transmission-map" data-el="transmissionMap" hidden></section>
+              <section class="editor-drive-estimate" data-el="driveEstimate" hidden></section>
+              <section class="editor-drive-estimate" data-el="motorBench" hidden></section>
+              <button data-el="engineeringReport" type="button" hidden>${language==='ru'?'Скачать инженерный отчёт':'Download engineering report'}</button>
+              <section class="editor-collision-panel" data-el="collisionPanel" hidden></section>
+              <section class="editor-diagnostic-issues" data-el="diagnosticIssues" hidden></section>
               <button type="button" data-el="clutchTest" hidden></button>
               <p role="status" data-el="clutchStatus" hidden></p>
               <section class="editor-belt-panel" data-el="beltPanel"  aria-label="${t.beltAdd}" hidden></section>
@@ -290,6 +301,24 @@ export async function mountEditor(root, { document, projectId, language, save, d
   state.belts = assembly.belts.map(({ record }) => record)
   const discardedBelts = beltRecords.length - state.belts.length - hiddenBelts.length
   const discardedLinks = source.connections.length - assembly.connections.length - unknownLinks.length
+  const connectionKey=link=>JSON.stringify([link?.shaft?.part,link?.shaft?.port,link?.socket?.part,link?.socket?.port])
+  const acceptedKeys=new Map(),unavailableLinks=new Set(unknownLinks)
+  for(const link of assembly.connections){const k=connectionKey(link);acceptedKeys.set(k,(acceptedKeys.get(k)??0)+1)}
+  const initialIssues=[]
+  for(const link of source.connections){
+    if(unavailableLinks.has(link))continue
+    const k=connectionKey(link),count=acceptedKeys.get(k)??0
+    if(count)acceptedKeys.set(k,count-1)
+    else initialIssues.push({kind:'connection',a:link?.shaft?.part,b:link?.socket?.part,portA:link?.shaft?.port,portB:link?.socket?.port})
+  }
+  const acceptedBeltIds=new Map()
+  for(const record of state.belts)acceptedBeltIds.set(record.id,(acceptedBeltIds.get(record.id)??0)+1)
+  for(const record of beltRecords){
+    if(hasHiddenEndpoint(record))continue
+    const count=acceptedBeltIds.get(record?.id)??0
+    if(count)acceptedBeltIds.set(record.id,count-1)
+    else initialIssues.push({kind:'belt',a:record?.a?.part,b:record?.b?.part,portA:record?.a?.groove,portB:record?.b?.groove})
+  }
   const loadNotice = [
     failedModels.size ? t.modelsUnavailable(failedModels.size) : '',
     discardedLinks ? t.discarded(discardedLinks) : '',
@@ -343,6 +372,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   let clutchTest
   let runningMotor
   let transmission
+  let mappedParts=new Map(),lastMotionPoses=[],lastMapUpdate=0,collisionIds=[],locatingCollision=false,driveReport=null,collisionReport=null,motorBenchReport=null
   let hinge
   let pointerDown
   let boxSelection
@@ -353,6 +383,11 @@ export async function mountEditor(root, { document, projectId, language, save, d
   let messageTimer
   let snappingScene = false
   let pendingPart
+  const mapUI=mountTransmissionMap(el('transmissionMap'),{language,signal,onChange:()=>{refreshTransmissionMap();updateHighlights()},onFocus:ids=>scene.focus(ids)})
+  const collisionUI=mountCollisionPanel(el('collisionPanel'),{language,signal,onScan:scanCollisionPoses,onLocate:locateCollision,onReport:value=>{collisionReport=value},onClear:()=>{collisionIds=[];scene.markCollision(null);scene.select(mode==='paint'?undefined:selected);updateHighlights()}})
+  const estimateUI=mountDriveEstimate(el('driveEstimate'),{language,signal,onFocus:ids=>scene.focus(ids),onReport:value=>{driveReport=value}})
+  const benchUI=mountMotorBench(el('motorBench'),{language,signal,onReport:value=>{motorBenchReport=value},onRun:async(motorId,seconds,request,onProgress)=>{const {runMotorBench}=await import('./motor-bench.js');request.throwIfAborted();return runMotorBench({parts:state.parts.filter(p=>!hidden.has(p.id)),links:state.links,models,motorId,seconds,signal:request,onProgress})}})
+  on(el('engineeringReport'),'click',()=>downloadEngineeringReport(engineeringReport({name:currentDocument().name,driver:selected,parts:state.parts.length,connections:links.length,belts:state.belts.length,hidden:hidden.size,importIssues:initialIssues,motion:transmission,drive:driveReport,collisions:collisionReport,motorBench:motorBenchReport})))
   const audio = createEditorAudio(signal)
   function updateSoundControl() {
     const button = el('sound')
@@ -608,6 +643,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }, { once: true })
 
   function showMotion(audible = false, wrappedAngle = 0) {
+    if(!locatingCollision)collisionUI.reset()
     const previous = lastPreview
     if (hinge?.ok) {
       const target = nearestDetent(hinge.detents, angle * Math.PI / 180)
@@ -625,6 +661,8 @@ export async function mountEditor(root, { document, projectId, language, save, d
       } else {
         lastPreview = angle
         scene.previewParts(poses)
+        lastMotionPoses=poses
+        if(mapUI.enabled&&performance.now()-lastMapUpdate>100)refreshTransmissionMap()
         scene.belts.travel(new Map(transmission.belts?.map(belt =>
           [belt.record.id, beltTravel(belt, transmission.spins, value)])))
         scene.select(selected)
@@ -705,6 +743,8 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }
 
   function refreshLayerVisibility() {
+    benchUI.clear()
+    collisionUI.reset()
     if (isolation && !state.parts.some(part => isolation.has(part.id))) isolation = undefined
     hidden = hiddenSceneParts(state.layers, state.parts, isolation)
     scene.setHidden(hidden)
@@ -773,6 +813,8 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }
 
   function setSelection(id) {
+    benchUI.clear()
+    collisionUI.reset()
     stopAnimation()
     audio.resetRotation()
     scene.setParts(state.parts)
@@ -792,7 +834,9 @@ export async function mountEditor(root, { document, projectId, language, save, d
     angle = hinge?.ok ? hinge.roll * 180 / Math.PI : 0
     lastPreview = angle
     transmission = mode === 'kinematics' && !hinge ? rotationMotion(id, state.parts, assembly, selectorLinkage) : null
+    lastMotionPoses=[]
     showMotion()
+    refreshTransmissionMap()
     refreshPartsPanel()
     render()
     if (mode === 'kinematics' && id) tutorial?.handle('gearSelected', { rotatable: Boolean(hinge?.ok || transmission?.ok) })
@@ -915,6 +959,10 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }
 
   function render() {
+    collisionUI.render(mode==='kinematics',Boolean(hinge?.ok||transmission?.ok))
+    estimateUI.render(mode==='kinematics'?transmission:null,state.parts)
+    benchUI.render(selectedPart(),mode==='kinematics'&&!hidden.has(selected))
+    el('engineeringReport').hidden=mode!=='kinematics'
     const part = selectedPart()
     const selectedLinks = part ? links.filter(link => link.shaft.part === part.id || link.socket.part === part.id) : []
     el('selection').textContent = additional.size ? t.selectedCount(selectionIds().length)
@@ -1346,8 +1394,67 @@ export async function mountEditor(root, { document, projectId, language, save, d
     return links.filter(l => ['continuous', 'detented'].includes(l.fit.motion.rotation) && (l.shaft.part === id || l.socket.part === id))
   }
 
+  function refreshTransmissionMap(){
+    const available=mode==='kinematics'&&transmission?.ok===true
+    lastMapUpdate=performance.now()
+    const next=available&&mapUI.enabled?transmissionMap(transmission,selected,lastMotionPoses,state.parts.filter(p=>!hidden.has(p.id))):new Map()
+    for(const id of next.keys())if(hidden.has(id))next.delete(id)
+    const changed=next.size!==mappedParts.size||[...next].some(([id,key])=>mappedParts.get(id)!==key)
+    mappedParts=next
+    mapUI.render(mappedParts,available)
+    if(mapUI.enabled&&available&&changed)updateHighlights()
+  }
   function updateHighlights() {
-    scene.highlight(activeJoint?.moving ?? additional, 0xffb01b, false)
+    if(mode==='kinematics'&&collisionIds.length){
+      const codes=new Map(mapUI.enabled&&transmission?.ok?[...mappedParts].map(([id,key])=>[id,transmissionCodes[key]]):[])
+      for(const id of collisionIds)codes.set(id,transmissionCodes.issue)
+      scene.highlight(codes.keys(),0xff6666,true,codes)
+    }else if(mode==='kinematics'&&mapUI.enabled&&transmission?.ok){
+      scene.highlight(mappedParts.keys(),0xff6666,true,new Map([...mappedParts].map(([id,key])=>[id,transmissionCodes[key]])))
+    }else scene.highlight(activeJoint?.moving ?? additional, 0xffb01b, false)
+  }
+
+  async function scanCollisionPoses(count,includeMated,request,progress){
+    const sweep=count>1,deadline=performance.now()+15000
+    stopAnimation();releaseMotor()
+    locatingCollision=true
+    try{scene.setParts(state.parts);showMotion()}finally{locatingCollision=false}
+    render()
+    const {inspectCollisions}=await import('./collision-inspector.js')
+    request.throwIfAborted()
+    const linear=transmission?.unit==='linear'&&!hinge?.ok,base=state.parts.filter(p=>!hidden.has(p.id)),axis=Number(el('motionAxis').value)
+    let values=[angle]
+    if(sweep&&hinge?.ok){
+      const d=hinge.detents.map(x=>x*180/Math.PI)
+      values=[...new Set(Array.from({length:Math.min(count,d.length)},(_,i)=>d[Math.round(i*(d.length-1)/Math.max(1,Math.min(count,d.length)-1))]))]
+    }else if(sweep&&transmission?.ok){
+      const [min,max]=transmission.range??[-1080,1080]
+      const span=linear?40:360,lo=Math.max(min,Math.min(angle-span/2,max-span)),hi=Math.min(max,lo+span)
+      values=[...new Set(Array.from({length:count},(_,i)=>lo+(hi-lo)*i/(count-1)))]
+    }
+    const samples=[]
+    for(const [i,value] of values.entries()){
+      if(performance.now()>deadline)break
+      request.throwIfAborted();progress(i+1,values.length)
+      await new Promise(resolve=>setTimeout(resolve,0))
+      request.throwIfAborted()
+      const poses=hinge?.ok?hingePoses(state.parts,hinge,value*Math.PI/180):transmission?.ok?rotationPoses(state.parts,transmission,linear?value:value*Math.PI/180,axis):[]
+      if(!poses){samples.push({value,pairs:[],checked:0,excluded:0,unsolved:true});continue}
+      const byId=new Map(poses.map(p=>[p.id,p]))
+      const placed=base.map(p=>byId.get(p.id)??p)
+      // For sweep checks, keep every pair involving a solver-driven part, even at rest.
+      const movingIds=sweep?new Set(hinge?.ok?hinge.moving:poses.map(p=>p.id)):null
+      const result=await inspectCollisions({parts:placed,models,connections:links,movingIds,signal:request,deadline,includeMated})
+      samples.push({...result,value})
+    }
+    return {samples,linear,includeMated,requested:values.length,truncated:samples.length<values.length}
+  }
+  function locateCollision(hit){
+    if(mode!=='kinematics')return
+    stopAnimation();releaseMotor()
+    locatingCollision=true
+    try{angle=hit.value;scene.setParts(state.parts);showMotion()}finally{locatingCollision=false}
+    collisionIds=[hit.a,hit.b];scene.select(undefined);scene.markCollision(hit.point);updateHighlights();scene.focus(collisionIds);render()
   }
 
   function positionHandles() {
@@ -1490,6 +1597,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     if (next === 'paint' && message !== t.storage) setMessage()
     releaseMotor()
     mode = next
+    if(mode!=='kinematics')mapUI.clear()
     additional.clear()
     setSelection(selected)
     if (mode === 'testDrive') drivePanel.setActive(true)
@@ -1723,6 +1831,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   })
   on(el('clutchTest'), 'click', testClutch)
   on(el('play'), 'click', () => {
+    collisionUI.reset()
     if (transmission?.kind === 'motor' && transmission.playback && !runningMotor) {
       stopAnimation()
       runningMotor = { id: selected, motion: transmission, degrees: angle }
@@ -2084,6 +2193,28 @@ export async function mountEditor(root, { document, projectId, language, save, d
   scene.belts.set(state.belts)
   setSelection(undefined)
   scene.resetView()
+  // Keep the load-time report even when the editor has discarded invalid links.
+  // It is a snapshot of the import, not a claim that current geometry is still invalid.
+  if(initialIssues.length){
+    const ru=language==='ru',panel=el('diagnosticIssues'),make=(tag,txt)=>{const n=window.document.createElement(tag);n.textContent=txt;return n}
+    const details=make('details',''),heading=make('summary',(ru?'Проблемы при загрузке':'Import issues')+' · '+initialIssues.length)
+    const note=make('p',ru?'Эти записи не были приняты при открытии сборки. Нажми на запись, чтобы найти доступные детали.':'These records were rejected during import. Click an entry to locate available parts.')
+    details.append(heading,note)
+    for(const issue of initialIssues.slice(0,100)){
+      const ids=[issue.a,issue.b].filter(id=>typeof id==='string')
+      const label=(issue.kind==='belt'?(ru?'Ремень':'Belt'):(ru?'Соединение':'Connection'))+': '+(issue.a??'—')+' / '+(issue.portA??'—')+' → '+(issue.b??'—')+' / '+(issue.portB??'—')
+      const b=make('button',label);b.type='button'
+      on(b,'click',()=>{
+        const visible=state.parts.filter(p=>ids.includes(p.id)&&!hidden.has(p.id)).map(p=>p.id)
+        if(!visible.length){setMessage(ru?'Детали скрыты или отсутствуют в сцене.':'Parts are hidden or missing from the scene.');render();return}
+        if(mode!=='build')setMode('build')
+        selectParts(visible);scene.focus(visible)
+      })
+      details.append(b)
+    }
+    if(initialIssues.length>100)details.append(make('p',ru?'Показаны первые 100 записей.':'Showing the first 100 records.'))
+    panel.append(details);panel.hidden=false
+  }
   tutorial = mountTutorial(root, { projectId, language, signal })
   if (tutorial?.step === 'placed') workspaceUI.openPanel('library')
   // A resumed mechanics lesson needs kinematics mode and a selectable gear.

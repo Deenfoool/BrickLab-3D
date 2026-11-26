@@ -267,3 +267,76 @@ test('real PostgreSQL enforces extended quota, collection ownership and badge pr
 
  }finally{await store.close();await db.end()}
 })
+
+test('welcome activations are permanent, idempotent, capped at one plus one earned and isolated from payments',{skip:!enabled},async()=>{
+ assert.equal(process.env.PGDATABASE,'bricklab_commerce_check')
+ const db=postgres({host:process.env.PGHOST,port:Number(process.env.PGPORT||5432),database:process.env.PGDATABASE,username:'bricklab_admin',password:process.env.COMMERCE_ADMIN_PASSWORD,max:1})
+ const store=connectAuthStore(),uid='31000000-0000-4000-8000-000000000001',other='31000000-0000-4000-8000-000000000002'
+ try{
+  for(const [id,email] of [[uid,'welcome-a@example.invalid'],[other,'welcome-b@example.invalid']]){
+   await db`insert into bricklab.users(id,email,display_name,password_hash) values(${id},${email},'Welcome fixture',${'scrypt$'+'0'.repeat(32)+'$'+'0'.repeat(128)})`
+  }
+  assert.equal((await store.commerceAccount(uid)).welcomeRemaining,1)
+  await assert.rejects(store.claimInstructionWelcome(uid,'12341-1'),/verified_account_required/)
+  await db`update bricklab.users set email_verified_at=now() where id=${uid}`
+  const repeats=await Promise.all(Array.from({length:5},()=>store.claimInstructionWelcome(uid,'12341-1')))
+  assert.ok(repeats.every(a=>a.welcomeRemaining===0&&a.instructions.includes('12341-1')))
+  await assert.rejects(store.claimInstructionWelcome(uid,'12342-1'),/welcome_exhausted/)
+  const project=await store.createProject(uid,{format:'bricklab-3d',version:1,name:'Welcome project',parts:[],connections:[]})
+  await assert.rejects(store.earnFirstBuilder(other,project.id,()=> '12341-1'),/build_not_complete/)
+  await assert.rejects(store.earnFirstBuilder(uid,project.id,()=>null),/build_not_complete/)
+  const earned=await store.earnFirstBuilder(uid,project.id,()=> '12341-1')
+  assert.equal(earned.firstBuilder,true);assert.equal(earned.welcomeRemaining,1)
+  assert.equal((await store.earnFirstBuilder(uid,project.id,()=> '12341-1')).welcomeRemaining,1)
+  const attempts=await Promise.allSettled(['12342-1','12343-1','12344-1'].map(set=>store.claimInstructionWelcome(uid,set)))
+  assert.equal(attempts.filter(a=>a.status==='fulfilled').length,1)
+  assert.equal(attempts.filter(a=>a.status==='rejected'&&/welcome_exhausted/.test(a.reason.message)).length,2)
+  const account=await store.commerceAccount(uid)
+  assert.equal(account.welcomeRemaining,0);assert.equal(account.welcomeInstructions.length,2);assert.equal(account.orders.length,0)
+  assert.deepEqual((await store.commerceAccount(other)).instructions,[])
+  assert.equal((await store.commerceTestAccount(uid)).instructions.length,0)
+  await assert.rejects(store.quoteCommerce(uid,'instruction-12341-1','a'.repeat(64),false,'live',{setId:'12341-1',title:'Fixture',partCount:601}),/already_owned/)
+  await store.recordInstructionActivity(uid,'12341-1','set_open')
+  await store.recordInstructionActivity(uid,'12341-1','set_open')
+  await assert.rejects(store.instructionAnalytics(uid),/admin_required/)
+  await db`insert into bricklab.admin_accounts(user_id) values(${other}) on conflict do nothing`
+  const analytics=await store.instructionAnalytics(other)
+  assert.equal(analytics.events.find(e=>e.event==='set_open').interactions,1)
+  assert.equal(analytics.popular[0].set_id,'12341-1')
+  const [r]=await db`select has_table_privilege('bricklab_app','bricklab.instruction_welcome_grants','INSERT') as allowed`
+  assert.equal(r.allowed,false)
+ }finally{await store.close();await db.end()}
+})
+
+test('sandbox pack atomically grants and refunds exactly three sets',{skip:!enabled},async()=>{
+ assert.equal(process.env.PGDATABASE,'bricklab_commerce_check')
+ const db=postgres({host:process.env.PGHOST,port:Number(process.env.PGPORT||5432),database:process.env.PGDATABASE,username:'bricklab_admin',password:process.env.COMMERCE_ADMIN_PASSWORD,max:1})
+ const store=connectAuthStore(),uid='32000000-0000-4000-8000-000000000001',other='32000000-0000-4000-8000-000000000002'
+ const products=[{setId:'12351-1',title:'Fixture A',partCount:601},{setId:'12352-1',title:'Fixture B',partCount:1500},{setId:'12353-1',title:'Fixture C',partCount:4001}]
+ const ids=products.map(p=>p.setId),terms='a'.repeat(64),payment='sandbox-pack-fixture'
+ try{
+  for(const [id,email] of [[uid,'pack-a@example.invalid'],[other,'pack-b@example.invalid']])await db`insert into bricklab.users(id,email,display_name,password_hash,email_verified_at) values(${id},${email},'Pack fixture',${'scrypt$'+'0'.repeat(32)+'$'+'0'.repeat(128)},now())`
+  await db`insert into bricklab.admin_accounts(user_id) values(${uid})`
+  await assert.rejects(store.quoteSandboxPack(other,ids,products,terms),/admin_required/)
+  const q=await store.quoteSandboxPack(uid,ids,products,terms)
+  assert.equal(q.lines.length,3);assert.equal(q.lines.reduce((n,l)=>n+l.amount,0),q.amountKopecks)
+  await assert.rejects(store.createSandboxPack(uid,ids,products,q.amountKopecks-1,terms),/quote_changed/)
+  const orders=await Promise.all([store.createSandboxPack(uid,ids,products,q.amountKopecks,terms),store.createSandboxPack(uid,[...ids].reverse(),products,q.amountKopecks,terms)])
+  assert.equal(orders[0].id,orders[1].id)
+  const order=orders[0]
+  await assert.rejects(store.createCommerceOrder(uid,'instruction-'+ids[0],7900,terms,true,'test',products[0]),/checkout_pending/)
+  assert.equal(await store.attachCommercePayment(order.id,payment,'test'),true)
+  assert.equal(await store.fulfillCommercePayment(order.id,payment,'live',q.amountKopecks),false)
+  assert.equal(await store.fulfillCommercePayment(order.id,payment,'test',q.amountKopecks-1),false)
+  assert.equal(await store.fulfillCommercePayment(order.id,payment,'test',q.amountKopecks),true)
+  assert.equal(await store.fulfillCommercePayment(order.id,payment,'test',q.amountKopecks),true)
+  assert.deepEqual((await store.commerceTestAccount(uid)).instructions.sort(),ids)
+  assert.deepEqual((await store.commerceAccount(uid)).instructions,[])
+  assert.deepEqual((await store.commerceTestAccount(other)).instructions,[])
+  await assert.rejects(store.quoteSandboxPack(uid,ids,products,terms),/bundle_set_unavailable/)
+  assert.equal(await store.refundCommercePayment(payment,'test',q.amountKopecks),true)
+  assert.deepEqual((await store.commerceTestAccount(uid)).instructions,[])
+  const [r]=await db`select count(*)::integer as n from bricklab.commerce_grants where order_id=${order.id} and revoked_at is not null`
+  assert.equal(r.n,3)
+ }finally{await store.close();await db.end()}
+})

@@ -2,7 +2,7 @@
 # Run from production checkout; never connect to its database.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
-REF="${1:-origin/feature/commerce-finance-receipts}"
+REF="${1:-HEAD}"
 SHA=$(git rev-parse --verify "$REF^{commit}")
 TMP=$(mktemp -d /tmp/bricklab-commerce-XXXXXX)
 DB="bricklab-commerce-check-$$"
@@ -14,7 +14,7 @@ echo "=== TEST COMMIT: $SHA ==="
 python3 -m py_compile "$TMP/scripts/publish-legal.py" "$TMP/scripts/configure-commerce-telegram.py" "$TMP/scripts/configure-commerce-live.py" "$TMP/scripts/npd/configure.py" "$TMP/scripts/npd/worker.py" "$TMP/scripts/npd/operation.py" "$TMP/scripts/npd/test_operation.py"
 docker run --rm --user 1000:1000 -e npm_config_cache=/tmp/npm-cache -v "$TMP:/tests" -w /tests bricklab-test-runner:local sh -ec '
  npm ci --include=dev --ignore-scripts --no-audit --no-fund
- for f in server/index.js server/payments.js server/yookassa.js server/db/commerce-store.js server/db/auth-store.js server/payment-reconciliation.js server/commerce-telegram.js server/receipt-delivery.js src/menu/store.js; do node --check "$f"; done
+ for f in server/index.js server/payments.js server/yookassa.js server/db/commerce-store.js server/db/auth-store.js server/payment-reconciliation.js server/commerce-telegram.js server/receipt-delivery.js src/menu/store.js src/sets/catalog.js src/sets/instruction-offer.js src/sets/filter-panel.js src/sets/instructions.js src/sets/instruction-events.js src/menu/instruction-collection.js src/menu/cloud-workshop.js server/instruction-access.js server/http.js src/editor/editor.js src/editor/scene.js src/editor/part-outlines.js src/editor/transmission-map.js src/editor/collision-inspector.js src/editor/collision-panel.js src/editor/drive-estimate-panel.js src/editor/engineering-report.js src/mechanics/drive-estimate.js src/editor/motor-bench.js src/editor/motor-bench-panel.js src/mechanics/physical-assembly.js src/menu/mechanism-inspector.js src/menu/workshop-tools.js src/menu/instruction-bundle-pricing.js src/sets/sandbox-pack.js src/editor/project-preview.js src/sets/instruction-recognition.js src/sets/instruction-recognition-worker.js src/sets/instruction-pdf.js; do node --check "$f"; done
  npm test -- --test-concurrency=1
 '
 DBPASS=$(openssl rand -hex 24)

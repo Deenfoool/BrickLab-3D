@@ -176,6 +176,7 @@ function simulateAssembly(rapier, world, parts, joints, models, pinned, gravityE
       motor.speed = speed
       motor.stalled = supply.powered && Math.abs(supply.power) > 1 && Math.abs(speed) < .01
       const torque = motorTorque(supply, speed, motor.angle, motor.hold)
+      motor.appliedTorque=motor.housing===motor.output?0:torque
       // Approximate 2 Ah battery pack, including no-load current and stall current.
       const hub = electricParts.find(part => part.id === supply.hubId)
       if (hub && supply.powered) {
@@ -219,8 +220,9 @@ function simulateAssembly(rapier, world, parts, joints, models, pinned, gravityE
     bodies: bodies.size,
     constraints,
     unsupported,
-    get motors() { return motors.map(motor => ({ part: motor.part.id, rpm: motor.speed * 30 / Math.PI, stalled: motor.stalled,
+    get motors() { return motors.map(motor => ({ part: motor.part.id, rpm: motor.speed * 30 / Math.PI, stalled: motor.stalled, appliedTorque:motor.appliedTorque??0, angleRadians:motor.angle,
       ...motorSupply(electricParts.find(part => part.id === motor.part.id), electricParts) })) },
+    get diagnostics(){return {bodies:bodies.size,constraints,unsupported,clutches:clutches.length,colliderModel:'cuboid',contactScope:'between-disconnected-components',scaleMetersPerLdu:units,massKgPerPart:.025}},
     controlMotor(id, power, stop) {
       const motor = motors.find(motor => motor.part.id === id)
       if (!motor) return

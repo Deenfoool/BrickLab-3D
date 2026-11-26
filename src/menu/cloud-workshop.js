@@ -1,5 +1,7 @@
+import {renderWorkshopTools} from './workshop-tools.js?v=photo-studio-2'
+import {renderInstructionCollection} from './instruction-collection.js'
 import {commerceBadge,productArtwork,factsPanel,loyaltyBadge} from './commerce-visuals.js?v=merch-2'
-import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=merch-2'
+import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=welcome-2'
 import {renderWorkshopOverview} from './workshop-overview.js?v=account-projects-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
@@ -62,9 +64,10 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
   const actions=el('div','workshop-quickbar'),quick=el('div','workshop-shortcuts'),create=button(ru?'Новая сборка':'New build',createBuild,busy);create.classList.add('primary');create.prepend(icon('plus'));quick.append(create)
   for(const key of ['cloud','storage','favorites','cosmetics'])quick.append(button(t[key],()=>go(key),busy))
   actions.append(el('span','workshop-quick-label',ru?'Быстрые действия':'Quick actions'),quick)
-  content.append(hero,actions)
+  content.append(hero,actions,renderInstructionCollection({lang,signal,remote}))
   if(publicCard){const top=el('div','portfolio-owner-heading');top.append(el('h2',null,ru?'Моя витрина':'My showcase'),button(ru?'Настроить блоки':'Customize blocks',()=>go('settings'),busy));content.append(top,renderPortfolio({lang,profile:publicCard,builds:publicBuilds,owner:true}))}
   content.append(renderWorkshopOverview({lang,user,local,remote,busy,signal,previewsEnabled,createBuild,openLocal,openCloud:openFavorite,fetchCloud,go,activityData,publicLoaded,publicCard,publicBuilds,loadPublic,progress}))
+  content.append(renderWorkshopTools({lang,local,remote,fetchCloud,signal}))
   if(Array.isArray(activityData?.calendar)){const cal=card(ru?'Личный календарь активности':'Private activity calendar');cal.append(activityCalendar(lang,activityData.calendar));content.append(cal)}
  }else if(section==='achievements'){
   const c=card(t.achievements),grid=el('div','workshop-badges');c.append(el('p','account-muted',t.progressHint));const first=el('div','workshop-badge'+(progress?.awards.some(a=>a.award==='firstCloudSave')?' earned':''));first.append(el('strong',null,t.firstCloudSave),el('p','account-muted',t.firstCloudSaveDesc),el('small',null,progress?progress.awards.some(a=>a.award==='firstCloudSave')?t.awarded:t.locked:t.profileMissing));grid.append(first)

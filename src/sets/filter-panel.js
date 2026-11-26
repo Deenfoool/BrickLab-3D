@@ -58,7 +58,7 @@ export function mountSetFilters(form, themes, { language, signal, change }) {
   setOrderings.forEach((value, i) => order.add(new Option(titles[i], value)))
   const selects = make('div', undefined, 'set-filter-selects')
   selects.append(theme, order)
-  panel.append(selects)
+  form.append(selects)
   function range(name, caption, low, high, unlimited = false) {
     const field = make('fieldset', undefined, 'set-filter-range')
     field.append(make('legend', caption))
@@ -187,7 +187,9 @@ export function mountSetFilters(form, themes, { language, signal, change }) {
   theme.addEventListener('change', change, { signal })
   order.addEventListener('change', change, { signal })
   panel.append(reset)
-  form.append(panel)
+  const advanced = make('details', undefined, 'set-filter-disclosure')
+  advanced.append(make('summary', ru ? 'Расширенные фильтры' : 'Advanced filters'), panel)
+  form.append(advanced)
   function setDefaults() {
     theme.value = ''
     order.value = '-year'
