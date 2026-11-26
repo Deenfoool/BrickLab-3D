@@ -84,12 +84,12 @@ function intersectTrees(a,b,budget){
  return {}
 }
 const yieldUI=()=>new Promise(resolve=>setTimeout(resolve,0))
-export async function inspectCollisions({parts,models,connections=[],movingIds=null,signal}){
+export async function inspectCollisions({parts,models,connections=[],movingIds=null,signal,deadline=Infinity}){
  const result={pairs:[],checked:0,excluded:0,unavailable:0,limited:false}
  if(parts.length>MAX_PARTS){result.limited=true;return result}
  const exempt=new Set(connections.map(l=>pairKey(l.shaft?.part,l.socket?.part)))
  const gears=new Map(gearPoses(parts).map(g=>[g.part,g]))
- const entries=[],budget={nodes:0,built:0,buildLimited:false,deadline:performance.now()+3000}
+ const entries=[],budget={nodes:0,built:0,buildLimited:false,deadline:Math.min(deadline,performance.now()+3000)}
  for(const p of parts){
   signal?.throwIfAborted()
   if(!models.get(p.design)?.bounds||!Array.isArray(p.position)||!Array.isArray(p.rotation)){result.unavailable++;continue}
