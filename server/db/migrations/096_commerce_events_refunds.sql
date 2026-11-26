@@ -37,7 +37,7 @@ CREATE FUNCTION bricklab.commerce_refund_full(p_payment text,p_environment text,
  IF o.amount_kopecks<>p_amount OR o.provider<>'yookassa' THEN RETURN false; END IF;
  IF o.status='refunded' THEN RETURN true; END IF;
  IF o.status<>'succeeded' THEN RETURN false; END IF;
- UPDATE bricklab.commerce_grants SET revoked_at=now() WHERE order_id=o.id AND revoked_at IS NULL;
+ UPDATE bricklab.commerce_grants SET revoked_at=greatest(now(),granted_at) WHERE order_id=o.id AND revoked_at IS NULL;
  UPDATE bricklab.commerce_orders SET status='refunded',refunded_at=now() WHERE id=o.id;
  RETURN true;
  END $$;
