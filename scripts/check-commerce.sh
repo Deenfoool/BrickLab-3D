@@ -2,7 +2,7 @@
 # Run from production checkout; never connect to its database.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
-REF="${1:-origin/feature/commerce-finance-receipts}"
+REF="${1:-HEAD}"
 SHA=$(git rev-parse --verify "$REF^{commit}")
 TMP=$(mktemp -d /tmp/bricklab-commerce-XXXXXX)
 DB="bricklab-commerce-check-$$"
