@@ -4,7 +4,7 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js'
 import { partMesh, parts } from './parts.js?v=system-complete'
 import { createBeltScene } from './belt-scene.js?v=belt-drive'
 import { createMotorCables } from './motor-cables.js?v=system-complete'
-import { createPartOutlines } from './part-outlines.js?v=part-outlines'
+import { createPartOutlines } from './part-outlines.js?v=transmission-map-1'
 import { snapGrid } from './model.js?v=belt-drive'
 import { readPreference } from '../menu/preferences.js?v=full-settings'
 
@@ -368,8 +368,8 @@ export function createScene(host, models) {
     invalidate()
   }
 
-  function highlight(ids, color = 0xff6666, throughParts = true) {
-    highlights = { ids: new Set(ids), color, throughParts }
+  function highlight(ids, color = 0xff6666, throughParts = true, codes = null) {
+    highlights = { ids: new Set(ids), color, throughParts, codes }
     invalidate()
   }
 
