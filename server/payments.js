@@ -212,7 +212,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
    }
    throw new ProjectError(405,'method_not_allowed')
   }catch(e){
-   const expected={verified_account_required:403,admin_required:403,checkout_pending:409,unknown_product:404,invalid_quote:400,invalid_environment:400}
+   const expected={verified_account_required:403,admin_required:403,checkout_pending:409,fiscal_reconciliation_required:409,unknown_product:404,invalid_quote:400,invalid_environment:400}
    if(e instanceof ProjectError)reply(res,e.status,{error:e.message})
    else if(e.code==='P0001'&&Object.hasOwn(expected,e.message))reply(res,expected[e.message],{error:e.message})
    else if(e.code==='23505'&&e.constraint_name==='commerce_receipt_unique_url')reply(res,409,{error:'receipt_already_used'})
