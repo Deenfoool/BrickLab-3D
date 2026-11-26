@@ -10,7 +10,7 @@ const motors=new Set(['u9479c01','10089c01'])
 const endpoint=e=>({part:e?.part??null,port:e?.port??e?.groove??null})
 export function prepareMechanismInspection(doc){
  const parts=[],seen=new Set(),excluded=[]
- for(const p of doc.parts??[]){
+ for(const p of Array.isArray(doc.parts)?doc.parts:[]){
   if(!p||typeof p.id!=='string'||!p.id||seen.has(p.id)||!finite(p.position,3)||!finite(p.rotation,4)||!p.rotation.some(Boolean)){
    excluded.push(p?.id??null);continue
   }
@@ -19,7 +19,7 @@ export function prepareMechanismInspection(doc){
  }
  const byId=new Map(parts.map(p=>[p.id,p])),assembly=createAssembly(parts,[],{belts:doc.belts})
  const links=[],accepted=[]
- for(const link of doc.connections??[]){
+ for(const link of Array.isArray(doc.connections)?doc.connections:[]){
   const a=byId.get(link?.shaft?.part),b=byId.get(link?.socket?.part)
   let reason
   if(!a||!b||a===b)reason='invalid-endpoint'
@@ -28,7 +28,7 @@ export function prepareMechanismInspection(doc){
   if(reason)links.push({a:endpoint(link?.shaft),b:endpoint(link?.socket),reason})
  }
  const belts=[],used=new Set(),beltIds=new Set()
- for(const record of doc.belts??[]){
+ for(const record of Array.isArray(doc.belts)?doc.belts:[]){
   let reason
   const a=record?.a,b=record?.b
   if(typeof record?.id!=='string'||!record.id.trim()||beltIds.has(record.id)||!a||!b||a.part===b.part||typeof a.groove!=='string'||typeof b.groove!=='string')reason='invalid-belt'
