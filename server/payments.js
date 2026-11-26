@@ -54,7 +54,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
  let active=0
  async function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return /^[a-f0-9]{64}$/.test(token||'')?await store.getSession(digest(token)):null}
  return async(req,res,path)=>{
-  if(!['/api/commerce/test-checkout','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
+  if(!['/api/commerce/test-checkout','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
   if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
   active++
   try{
@@ -121,6 +121,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     throw new ProjectError(405,'method_not_allowed')
    }
    if(!user.admin)throw new ProjectError(403,'admin_required')
+   if(path==='/api/commerce/test-account'&&req.method==='GET'){reply(res,200,await store.commerceTestAccount(user.id));return true}
    if(path==='/api/commerce/test-status'&&req.method==='GET'){reply(res,200,{enabled:yookassa?.enabled===true,mode:'test'});return true}
    if(path==='/api/commerce/test-checkout'&&req.method==='POST'){
     if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
