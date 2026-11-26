@@ -89,7 +89,7 @@ async function intersectTrees(a,b,budget,signal){
  return {}
 }
 const yieldUI=()=>new Promise(resolve=>setTimeout(resolve,0))
-export async function inspectCollisions({parts,models,connections=[],movingIds=null,signal,deadline=Infinity}){
+export async function inspectCollisions({parts,models,connections=[],movingIds=null,signal,deadline=Infinity,includeMated=false}){
  const result={pairs:[],checked:0,excluded:0,unavailable:0,limited:false}
  if(parts.length>MAX_PARTS){result.limited=true;return result}
  const exempt=new Set(connections.map(l=>pairKey(l.shaft?.part,l.socket?.part)))
@@ -111,7 +111,10 @@ export async function inspectCollisions({parts,models,connections=[],movingIds=n
    if(++budget.nodes>MAX_NODES||performance.now()>budget.deadline){result.limited=true;return result}
    if(movingIds&&!movingIds.has(a.p.id)&&!movingIds.has(b.p.id))continue
    if(!strictOverlap(a.box,b.box))continue
-   if(exempt.has(pairKey(a.p.id,b.p.id))||(gears.has(a.p.id)&&gears.has(b.p.id)&&evaluateSpurMesh(gears.get(a.p.id),gears.get(b.p.id)).ok)){result.excluded++;continue}
+   const mated=exempt.has(pairKey(a.p.id,b.p.id))||(gears.has(a.p.id)&&gears.has(b.p.id)&&evaluateSpurMesh(gears.get(a.p.id),gears.get(b.p.id)).ok)
+   const coincident=a.p.design===b.p.design&&a.matrix.elements.every((v,k)=>Math.abs(v-b.matrix.elements[k])<1e-5)
+   if(coincident){result.checked++;result.pairs.push({a:a.p.id,b:b.p.id,point:a.box.getCenter(new Vector3()).toArray(),kind:'coincident',mated});if(result.pairs.length>=100){result.limited=true;return result}continue}
+   if(mated&&!includeMated){result.excluded++;continue}
    if(++candidates>MAX_PAIRS){result.limited=true;return result}
    signal?.throwIfAborted()
    if(performance.now()-lastYield>12){await yieldUI();signal?.throwIfAborted();lastYield=performance.now()}
@@ -121,7 +124,7 @@ export async function inspectCollisions({parts,models,connections=[],movingIds=n
    const hit=await intersectTrees({...a,tree:treeA},{...b,tree:treeB},budget,signal)
    if(hit.limited){result.limited=true;return result}
    result.checked++
-   if(hit.point){result.pairs.push({a:a.p.id,b:b.p.id,point:hit.point});if(result.pairs.length>=100){result.limited=true;return result}}
+   if(hit.point){result.pairs.push({a:a.p.id,b:b.p.id,point:hit.point,kind:'surface-crossing',mated});if(result.pairs.length>=100){result.limited=true;return result}}
   }
   if(performance.now()-lastYield>12){await yieldUI();signal?.throwIfAborted();lastYield=performance.now()}
  }
