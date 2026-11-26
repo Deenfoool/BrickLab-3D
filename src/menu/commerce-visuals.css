@@ -106,3 +106,10 @@
 .commerce-badge-preview .commerce-emblem{font-size:10px}
 .commerce-merch:hover{transform:none}
 @media(max-width:640px){.commerce-product-art{min-height:170px}.commerce-product-art .art-eyebrow,.commerce-product-art .art-serial{font-size:8px}.commerce-plus-panel .art-subscription,.commerce-guide-banner{min-height:150px}.commerce-product-art .commerce-insignia{height:74px}}
+
+.commerce-insignia .metal-dark{stop-color:var(--support-dark,#263344)}
+.commerce-insignia .metal-accent{stop-color:var(--support-accent,#b6c1d5)}
+.commerce-insignia .metal-highlight{stop-color:var(--support-light,#edf6ff)}
+.insignia-inner{fill:var(--support-dark,#263344);fill-opacity:.76}
+.insignia-glyph{fill-opacity:.28;stroke-width:1.8}
+.insignia-plus .insignia-glyph{fill-opacity:1;stroke-width:0}
