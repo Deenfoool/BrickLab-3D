@@ -3,7 +3,7 @@ import {commerceProducts,productById,indexedInstructionProducts} from '../src/me
 import {createHash,timingSafeEqual} from 'node:crypto'
 import {ProjectError} from './projects.js'
 import {validNpdReceiptUrl} from './receipt-delivery.js'
-import {instructionAccess} from './instruction-access.js'
+import {instructionAccess,completedInstructionSet} from './instruction-access.js'
 import {canonicalInstructionUrl} from '../src/sets/instruction-url.js'
 const checkout='https://auth.robokassa.ru/Merchant/Index.aspx'
 export function paymentConfig(env=process.env){
@@ -67,7 +67,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
  let active=0
  async function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return /^[a-f0-9]{64}$/.test(token||'')?await store.getSession(digest(token)):null}
  return async(req,res,path)=>{
-  if(!['/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions','/api/commerce/instruction-offer','/api/commerce/instruction-activate'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
+  if(!['/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions','/api/commerce/instruction-offer','/api/commerce/instruction-activate','/api/commerce/instruction-complete'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
   if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
   active++
   try{
@@ -122,10 +122,10 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
      reply(res,200,{state:'free',beta:!instructionRelease,mode:commerceMode,product:test?product:null,canBuy:test&&!account?.instructions?.includes(setId),testOwned:account?.instructions?.includes(setId)===true});return true
     }
     const viewer=await session(req)
-    if(!viewer){reply(res,200,{state:'signin',mode:commerceMode,product});return true}
+    if(!viewer){reply(res,200,{state:'signin',mode:commerceMode,product,trialSteps:instructionPolicy?.trialSteps?.(setId)??10});return true}
     const account=await store.commerceAccount(viewer.id),pending=account.orders?.some(o=>o.sku===sku&&o.status==='pending')===true
     const state=account.instructions.includes(setId)?'owned':account.plus?'plus':pending?'purchase':account.welcomeRemaining>0?'welcome':'purchase'
-    reply(res,200,{state,mode:commerceMode,product,remaining:account.welcomeRemaining??0,pending,canBuy:!!legal?.version&&adapter?.enabled===true});return true
+    reply(res,200,{state,mode:commerceMode,product,remaining:account.welcomeRemaining??0,firstBuilder:account.firstBuilder===true,trialSteps:instructionPolicy?.trialSteps?.(setId)??10,pending,canBuy:!!legal?.version&&adapter?.enabled===true,plusProduct:!pending&&liveSkus.includes('plus-1')?productById('plus-1'):null});return true
    }
    if(path==='/api/commerce/instruction-activate'){
     if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
@@ -135,6 +135,16 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(!data||typeof data.setId!=='string'||Object.keys(data).length!==1||!instructionLocked(data.setId))throw new ProjectError(404,'unknown_product')
     const account=await store.claimInstructionWelcome(viewer.id,data.setId)
     reply(res,200,{state:account.instructions.includes(data.setId)?'owned':account.plus?'plus':'unavailable',remaining:account.welcomeRemaining});return true
+   }
+   if(path==='/api/commerce/instruction-complete'){
+    if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
+    if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
+    const viewer=await session(req);if(!viewer)throw new ProjectError(401,'unauthenticated')
+    if(commerceMode!=='live'||!instructionRelease)throw new ProjectError(409,'welcome_not_released')
+    let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
+    if(!data||Object.keys(data).length!==1||!(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.projectId??'')))throw new ProjectError(400,'invalid_project')
+    const account=await store.earnFirstBuilder(viewer.id,data.projectId,doc=>{const id=completedInstructionSet(doc,instructionPolicy);return id&&instructionLocked(id)?id:null})
+    reply(res,200,{firstBuilder:account.firstBuilder,remaining:account.welcomeRemaining});return true
    }
    const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated')
    if(path==='/api/commerce/status'&&req.method==='GET'){
