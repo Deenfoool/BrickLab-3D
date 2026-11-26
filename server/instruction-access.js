@@ -1,5 +1,5 @@
 import {readFile,stat} from 'node:fs/promises'
-import {canUseInteractive,instructionProduct} from '../src/menu/commerce-catalog.js'
+import {canUseInteractive,instructionProduct,trialStepLimit} from '../src/menu/commerce-catalog.js'
 import {canonicalInstructionUrl} from '../src/sets/instruction-url.js'
 
 // The private audit file is never in a served directory or in Git.
@@ -11,7 +11,7 @@ function bookId(book){
  return canonical?new URL(canonical).pathname.match(/\/(\d+)\.pdf$/)?.[1]??null:null
 }
 export function createInstructionPolicy(audit={}){
- const books=new Map(),products=[]
+ const books=new Map(),products=[],limits=new Map(),completion=new Map()
  for(const [set,volumes] of Object.entries(audit)){
   if(!/^\d{3,7}-\d{1,2}$/.test(set)||!volumes||typeof volumes!=='object'||Array.isArray(volumes))throw Error('invalid_audited_set')
   const metadata=volumes.metadata;
@@ -31,15 +31,23 @@ export function createInstructionPolicy(audit={}){
    }
    books.set(set+'/'+id,pages)
   }
+  let maxStep=0;for(const [,pages] of entries)for(const p of pages)maxStep=Math.max(maxStep,p.step)
+  limits.set(set,trialStepLimit(maxStep))
+  // Multi-volume completion requires explicit operator-supplied final book ID.
+  const last=metadata?.finalBook??(entries.length===1?entries[0][0]:null)
+  const finalPages=entries.find(([id])=>id===last)?.[1]
+  if(products.some(p=>p.setId===set)&&finalPages){let finalPage=0;for(let i=0;i<finalPages.length;i++)if(finalPages[i].step>0)finalPage=i+1;if(finalPage)completion.set(set,{book:last,page:finalPage,partCount:metadata.partCount})}
  }
  return {
   count:books.size,
   products:Object.freeze(products),
+  trialSteps:set=>limits.get(set)??10,
+  completion:set=>completion.get(set)??null,
   access({setId,book,page,account=null,release=false}){
    const pages=books.get(setId+'/'+bookId(book)),supported=!!pages
    const entry=pages?.[page-1],step=entry?.step??null
    // A known audited book with an out-of-range page is not a free bypass.
-   const interactive=!release||!products.some(p=>p.setId===setId)||!supported||!!entry&&(step===0||canUseInteractive({account,setId,step,beta:false,supported:true}))
+   const interactive=!release||!products.some(p=>p.setId===setId)||!supported||!!entry&&(step===0||canUseInteractive({account,setId,step,beta:false,supported:true,trialSteps:limits.get(set)??10}))
    return {mode:release?'release':'beta',supported,step,interactive}
   },
   regions(setId,pdfId,page){return books.get(setId+'/'+pdfId)?.[page-1]?.regions??null}
