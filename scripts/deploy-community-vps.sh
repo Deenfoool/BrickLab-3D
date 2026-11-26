@@ -32,6 +32,20 @@ git archive "$TARGET" | tar -x -C "$TMP"
 chown -R 1000:1000 "$TMP"
 chmod 755 "$TMP"
 
+echo "=== RELEASE HISTORY CHECK ==="
+mkdir -p "$TMP/.release-check"
+if git cat-file -e "HEAD:src/menu/home-hub.js" 2>/dev/null; then
+ git show "HEAD:src/menu/home-hub.js" > "$TMP/.release-check/before.js"
+else
+ : > "$TMP/.release-check/before.js"
+fi
+git diff --no-renames --numstat -z "HEAD" "$TARGET" > "$TMP/.release-check/numstat"
+git diff --no-renames --name-status -z "HEAD" "$TARGET" > "$TMP/.release-check/status"
+chmod 755 "$TMP/.release-check"
+chmod 644 "$TMP/.release-check/"*
+docker run --rm --network none --user 1000:1000 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local node scripts/check-release-history.mjs --snapshot .release-check/before.js .release-check/numstat .release-check/status
+rm -rf -- "$TMP/.release-check"
+
 echo "=== UNIT AND HTTP TESTS ==="
 docker run --rm --network bridge --memory=1536m --cpus=1 \
     -e npm_config_cache=/tmp/npm-cache -v "$TMP:/tests" -w /tests \
