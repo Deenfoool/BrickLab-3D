@@ -127,5 +127,45 @@ test('real PostgreSQL enforces extended quota, collection ownership and badge pr
   assert.equal((await store.getActivity(uid)).limits.projects,60)
   const [receipt]=await db`select receipt_status,offer_version from bricklab.commerce_orders where id=${live.id}`
   assert.equal(receipt.receipt_status,'pending');assert.equal(receipt.offer_version,terms)
+  // Exercise the real checkout function for every SKU, not merely inserted grants.
+  await db`insert into bricklab.admin_accounts(user_id) values(${uid}) on conflict do nothing`
+  const skus=['carbon','neon','blueprint','titanium','ember','aurora','theme-collection','slots-20','slots-30','slots-100','supporter','bronze-builder','silver-builder','gold-builder','diamond-patron','founders-club','plus-1','plus-3','plus-12','instruction-42215-1']
+  const purchased=new Map()
+  for(const sku of skus){
+   const o=await store.createCommerceTestOrder(uid,sku)
+   const replay=await store.createCommerceTestOrder(uid,sku);assert.equal(o.id,replay.id)
+   const payment=crypto.randomUUID()
+   assert.equal(await store.attachCommercePayment(o.id,payment,'test'),true)
+   assert.equal(await store.fulfillCommercePayment(o.id,payment,'test',o.amountKopecks),true)
+   assert.equal(await store.fulfillCommercePayment(o.id,payment,'test',o.amountKopecks),true)
+   purchased.set(sku,{...o,payment})
+  }
+  const sandbox=await store.commerceTestAccount(uid)
+  assert.equal(sandbox.themes.length,6);assert.equal(sandbox.badges.length,6);assert.equal(sandbox.plus,true)
+  assert.ok(sandbox.instructions.includes('42215-1'))
+  assert.equal((await store.commerceAccount(uid)).plus,false)
+  assert.equal((await store.getActivity(uid)).limits.projects,60)
+  const future=purchased.get('plus-12'),refund=crypto.randomUUID()
+  const requested=await store.requestCommerceTestRefund(uid,future.id)
+  assert.equal(requested.paymentId,future.payment)
+  assert.equal(await store.attachCommerceTestRefund(future.id,refund),true)
+  assert.equal(await store.refundCommercePayment(future.payment,'live',future.amountKopecks),false)
+  assert.equal(await store.refundCommercePayment(future.payment,'test',future.amountKopecks-1),false)
+  assert.equal(await store.refundCommercePayment(future.payment,'test',future.amountKopecks),true)
+  assert.equal(await store.refundCommercePayment(future.payment,'test',future.amountKopecks),true)
+  const [revoked]=await db`select revoked_at from bricklab.commerce_grants where order_id=${future.id}`
+  assert.ok(revoked.revoked_at)
+  const events=await db`select event from bricklab.commerce_events where order_id=${future.id} order by id`
+  assert.deepEqual(events.map(e=>e.event),['succeeded','refunded'])
+  const claimed=await store.claimCommerceEvents()
+  assert.ok(claimed.length>0&&claimed.length<=5)
+  assert.equal(await store.ackCommerceEvent(claimed[0].id),true)
+  const [ack]=await db`select sent_at from bricklab.commerce_events where id=${claimed[0].id}`
+  assert.ok(ack.sent_at)
+  assert.ok((await store.commerceAdminLedger(uid,'test')).some(o=>o.id===future.id))
+  assert.equal(await store.confirmCommerceReceipt(uid,live.id,'fixture-receipt'),true)
+  assert.equal(await store.confirmCommerceReceipt(uid,live.id,'second'),false)
+  assert.equal(await store.confirmCommerceReceipt(uid,future.id,'invalid-test'),false)
+
  }finally{await store.close();await db.end()}
 })
