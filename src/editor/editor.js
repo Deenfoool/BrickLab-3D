@@ -293,6 +293,24 @@ export async function mountEditor(root, { document, projectId, language, save, d
   state.belts = assembly.belts.map(({ record }) => record)
   const discardedBelts = beltRecords.length - state.belts.length - hiddenBelts.length
   const discardedLinks = source.connections.length - assembly.connections.length - unknownLinks.length
+  const connectionKey=link=>JSON.stringify([link?.shaft?.part,link?.shaft?.port,link?.socket?.part,link?.socket?.port])
+  const acceptedKeys=new Map()
+  for(const link of assembly.connections){const k=connectionKey(link);acceptedKeys.set(k,(acceptedKeys.get(k)??0)+1)}
+  const initialIssues=[]
+  for(const link of source.connections){
+    if(unknownLinks.includes(link))continue
+    const k=connectionKey(link),count=acceptedKeys.get(k)??0
+    if(count)acceptedKeys.set(k,count-1)
+    else initialIssues.push({kind:'connection',a:link?.shaft?.part,b:link?.socket?.part,portA:link?.shaft?.port,portB:link?.socket?.port})
+  }
+  const acceptedBeltIds=new Map()
+  for(const record of state.belts)acceptedBeltIds.set(record.id,(acceptedBeltIds.get(record.id)??0)+1)
+  for(const record of beltRecords){
+    if(hasHiddenEndpoint(record))continue
+    const count=acceptedBeltIds.get(record?.id)??0
+    if(count)acceptedBeltIds.set(record.id,count-1)
+    else initialIssues.push({kind:'belt',a:record?.a?.part,b:record?.b?.part,portA:record?.a?.groove,portB:record?.b?.groove})
+  }
   const loadNotice = [
     failedModels.size ? t.modelsUnavailable(failedModels.size) : '',
     discardedLinks ? t.discarded(discardedLinks) : '',
@@ -346,7 +364,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   let clutchTest
   let runningMotor
   let transmission
-  let mappedParts=new Map(),lastMotionPoses=[]
+  let mappedParts=new Map(),lastMotionPoses=[],lastMapUpdate=0
   let hinge
   let pointerDown
   let boxSelection
@@ -631,7 +649,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
         lastPreview = angle
         scene.previewParts(poses)
         lastMotionPoses=poses
-        if(mapUI.enabled)refreshTransmissionMap()
+        if(mapUI.enabled&&performance.now()-lastMapUpdate>100)refreshTransmissionMap()
         scene.belts.travel(new Map(transmission.belts?.map(belt =>
           [belt.record.id, beltTravel(belt, transmission.spins, value)])))
         scene.select(selected)
@@ -1357,9 +1375,13 @@ export async function mountEditor(root, { document, projectId, language, save, d
 
   function refreshTransmissionMap(){
     const available=mode==='kinematics'&&transmission?.ok===true
-    mappedParts=available&&mapUI.enabled?transmissionMap(transmission,selected,lastMotionPoses,state.parts):new Map()
+    lastMapUpdate=performance.now()
+    const next=available&&mapUI.enabled?transmissionMap(transmission,selected,lastMotionPoses,state.parts.filter(p=>!hidden.has(p.id))):new Map()
+    for(const id of next.keys())if(hidden.has(id))next.delete(id)
+    const changed=next.size!==mappedParts.size||[...next].some(([id,key])=>mappedParts.get(id)!==key)
+    mappedParts=next
     mapUI.render(mappedParts,available)
-    if(mapUI.enabled&&available)updateHighlights()
+    if(mapUI.enabled&&available&&changed)updateHighlights()
   }
   function updateHighlights() {
     if(mode==='kinematics'&&mapUI.enabled&&transmission?.ok){
@@ -2102,6 +2124,28 @@ export async function mountEditor(root, { document, projectId, language, save, d
   scene.belts.set(state.belts)
   setSelection(undefined)
   scene.resetView()
+  // Keep the load-time report even when the editor has discarded invalid links.
+  // It is a snapshot of the import, not a claim that current geometry is still invalid.
+  if(initialIssues.length){
+    const ru=language==='ru',panel=el('diagnosticIssues'),make=(tag,txt)=>{const n=window.document.createElement(tag);n.textContent=txt;return n}
+    const details=make('details',''),heading=make('summary',(ru?'Проблемы при загрузке':'Import issues')+' · '+initialIssues.length)
+    const note=make('p',ru?'Эти записи не были приняты при открытии сборки. Нажми на запись, чтобы найти доступные детали.':'These records were rejected during import. Click an entry to locate available parts.')
+    details.append(heading,note)
+    for(const issue of initialIssues.slice(0,100)){
+      const ids=[issue.a,issue.b].filter(id=>typeof id==='string')
+      const label=(issue.kind==='belt'?(ru?'Ремень':'Belt'):(ru?'Соединение':'Connection'))+': '+(issue.a??'—')+' / '+(issue.portA??'—')+' → '+(issue.b??'—')+' / '+(issue.portB??'—')
+      const b=make('button',label);b.type='button'
+      on(b,'click',()=>{
+        const visible=state.parts.filter(p=>ids.includes(p.id)&&!hidden.has(p.id)).map(p=>p.id)
+        if(!visible.length){setMessage(ru?'Детали скрыты или отсутствуют в сцене.':'Parts are hidden or missing from the scene.');render();return}
+        if(mode!=='build')setMode('build')
+        selectParts(visible);scene.focus(visible)
+      })
+      details.append(b)
+    }
+    if(initialIssues.length>100)details.append(make('p',ru?'Показаны первые 100 записей.':'Showing the first 100 records.'))
+    panel.append(details);panel.hidden=false
+  }
   tutorial = mountTutorial(root, { projectId, language, signal })
   if (tutorial?.step === 'placed') workspaceUI.openPanel('library')
   // A resumed mechanics lesson needs kinematics mode and a selectable gear.
