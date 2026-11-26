@@ -2,7 +2,7 @@
 # Run from production checkout; never connect to its database.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
-REF="${1:-origin/feature/payment-reconciliation}"
+REF="${1:-origin/feature/commerce-finance-receipts}"
 SHA=$(git rev-parse --verify "$REF^{commit}")
 TMP=$(mktemp -d /tmp/bricklab-commerce-XXXXXX)
 DB="bricklab-commerce-check-$$"
@@ -14,7 +14,7 @@ echo "=== TEST COMMIT: $SHA ==="
 python3 -m py_compile "$TMP/scripts/publish-legal.py" "$TMP/scripts/configure-commerce-telegram.py" "$TMP/scripts/configure-commerce-live.py"
 docker run --rm --user 1000:1000 -e npm_config_cache=/tmp/npm-cache -v "$TMP:/tests" -w /tests bricklab-test-runner:local sh -ec '
  npm ci --include=dev --ignore-scripts --no-audit --no-fund
- for f in server/index.js server/payments.js server/yookassa.js server/db/commerce-store.js server/db/auth-store.js server/payment-reconciliation.js server/commerce-telegram.js src/menu/store.js; do node --check "$f"; done
+ for f in server/index.js server/payments.js server/yookassa.js server/db/commerce-store.js server/db/auth-store.js server/payment-reconciliation.js server/commerce-telegram.js server/receipt-delivery.js src/menu/store.js; do node --check "$f"; done
  npm test -- --test-concurrency=1
 '
 DBPASS=$(openssl rand -hex 24)
@@ -26,5 +26,5 @@ for i in $(seq 1 40); do
 done
 docker exec -e PGHOST=127.0.0.1 -e PGDATABASE=bricklab_commerce_check -e PGUSER=bricklab_admin -e PGPASSWORD="$DBPASS" -e BRICKLAB_APP_PASSWORD="$APPPASS" "$DB" sh /repo/server/db/setup.sh
 docker exec -e PGPASSWORD="$DBPASS" "$DB" psql -X -h 127.0.0.1 -U bricklab_admin -d bricklab_commerce_check -v ON_ERROR_STOP=1 -f /repo/tests/commerce-db.sql
-docker run --rm --network "container:$DB" --user 1000:1000 -e PGHOST=127.0.0.1 -e PGPORT=5432 -e PGDATABASE=bricklab_commerce_check -e PGUSER=bricklab_app -e PGPASSWORD="$APPPASS" -e COMMERCE_ADMIN_PASSWORD="$DBPASS" -e BRICKLAB_COMMERCE_INTEGRATION=1 -v "$TMP:/tests" -w /tests bricklab-test-runner:local node --test tests/commerce-upgrades.test.js tests/commerce-yookassa.test.js tests/commerce-unified.test.js tests/commerce-refund-telegram.test.js tests/commerce-live.test.js
+docker run --rm --network "container:$DB" --user 1000:1000 -e PGHOST=127.0.0.1 -e PGPORT=5432 -e PGDATABASE=bricklab_commerce_check -e PGUSER=bricklab_app -e PGPASSWORD="$APPPASS" -e COMMERCE_ADMIN_PASSWORD="$DBPASS" -e BRICKLAB_COMMERCE_INTEGRATION=1 -v "$TMP:/tests" -w /tests bricklab-test-runner:local node --test tests/commerce-upgrades.test.js tests/commerce-yookassa.test.js tests/commerce-unified.test.js tests/commerce-refund-telegram.test.js tests/commerce-live.test.js tests/commerce-receipt-delivery.test.js
 echo "=== ALL CHECKS PASSED: $SHA ==="
