@@ -9,11 +9,11 @@ export function quoteInstructionBundle({setIds,auditedProducts,account,release=f
   const audited=catalog.get(id),product=audited&&instructionProduct(id,audited.title,audited.partCount)
   if(!product||owned.has(id))throw Error('bundle_set_unavailable')
   return {setId:id,title:product.title,base:product.priceKopecks}
- }).sort((a,b)=>a.setId.localeCompare(b.setId))
+ }).sort((a,b)=>a.setId<b.setId?-1:a.setId>b.setId?1:0)
  const subtotal=lines.reduce((sum,l)=>sum+l.base,0),total=Math.round(subtotal*.85)
  // Largest remainder distribution makes exact line amounts sum to checkout amount.
  const allocations=lines.map(l=>({...l,amount:Math.floor(l.base*total/subtotal),remainder:(l.base*total)%subtotal}))
  let remaining=total-allocations.reduce((sum,l)=>sum+l.amount,0)
- for(const l of [...allocations].sort((a,b)=>b.remainder-a.remainder||a.setId.localeCompare(b.setId)))if(remaining>0){l.amount++;remaining--}
+ for(const l of [...allocations].sort((a,b)=>b.remainder-a.remainder||(a.setId<b.setId?-1:a.setId>b.setId?1:0)))if(remaining>0){l.amount++;remaining--}
  return {kind:'instruction-bundle-preview',discountPercent:15,subtotalKopecks:subtotal,amountKopecks:total,lines:allocations.map(({remainder,...l})=>l)}
 }
