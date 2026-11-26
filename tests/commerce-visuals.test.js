@@ -20,11 +20,13 @@ test('six supporter badges have distinctive art and accessible visible labels; P
  const badges=commerceProducts.filter(p=>p.kind==='badge')
  assert.equal(badges.length,6)
  assert.equal(new Set(badges.map(p=>insigniaSpec(p.id).shape)).size,6)
+ assert.deepEqual(badges.map(p=>insigniaSpec(p.id).icon),['heart-handshake','hammer','medal','trophy','gem','crown'])
  for(const p of badges){
   const badge=commerceBadge(p.id)
   assert.equal(badge.children[1].textContent,p.title)
   assert.equal(badge.children[0].attrs['aria-hidden'],'true')
-  assert.ok(productArtwork(p))
+  assert.equal(all(badge).find(n=>n.attrs['data-icon'])?.attrs['data-icon'],insigniaSpec(p.id).icon)
+  assert.equal(all(productArtwork(p)).find(n=>n.attrs['data-icon'])?.attrs['data-icon'],insigniaSpec(p.id).icon)
  }
  const plus=commerceBadge('plus')
  assert.equal(plus.children[1].textContent,'BrickLab Plus')
