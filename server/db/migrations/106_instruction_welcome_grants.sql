@@ -58,3 +58,14 @@ CREATE FUNCTION bricklab.claim_instruction_welcome(p_set text) RETURNS boolean
  END $$;
 REVOKE ALL ON FUNCTION bricklab.claim_instruction_welcome(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION bricklab.claim_instruction_welcome(text) TO bricklab_app;
+
+-- Public profile exposes only the badge boolean, never the private set or reward date.
+CREATE FUNCTION bricklab.public_first_builder(p_public uuid) RETURNS boolean
+ LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
+ SELECT EXISTS(SELECT 1 FROM bricklab.public_profiles p
+ JOIN bricklab.instruction_first_build f ON f.user_id=p.user_id
+ WHERE p.public_id=p_public AND p.unified
+ AND p.portfolio->'blocks' @> '[{"key":"awards","visible":true}]'::jsonb)
+ $$;
+REVOKE ALL ON FUNCTION bricklab.public_first_builder(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION bricklab.public_first_builder(uuid) TO bricklab_app;
