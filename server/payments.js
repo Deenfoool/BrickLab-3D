@@ -54,7 +54,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
  let active=0
  async function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return /^[a-f0-9]{64}$/.test(token||'')?await store.getSession(digest(token)):null}
  return async(req,res,path)=>{
-  if(!['/api/commerce/test-checkout','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
+  if(!['/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-receipt','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
   if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
   active++
   try{
@@ -121,6 +121,18 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     throw new ProjectError(405,'method_not_allowed')
    }
    if(!user.admin)throw new ProjectError(403,'admin_required')
+   if(path==='/api/commerce/admin-ledger'&&req.method==='GET'){
+    const q=new URL(req.url,'http://localhost').searchParams,environment=q.get('environment')
+    if(q.size!==1||!['test','live'].includes(environment))throw new ProjectError(400,'invalid_environment')
+    reply(res,200,{orders:await store.commerceAdminLedger(user.id,environment)});return true
+   }
+   if(path==='/api/commerce/admin-receipt'&&req.method==='POST'){
+    if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
+    let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
+    if(!data||typeof data.orderId!=='string'||!(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.orderId))||typeof data.reference!=='string'||!data.reference.trim()||data.reference.length>250||/[\x00-\x1f\x7f]/.test(data.reference)||data.confirm!==true||Object.keys(data).some(k=>!['orderId','reference','confirm'].includes(k)))throw new ProjectError(400,'invalid_receipt')
+    if(!await store.confirmCommerceReceipt(user.id,data.orderId,data.reference))throw new ProjectError(409,'receipt_not_pending')
+    reply(res,200,{ok:true});return true
+   }
    if(path==='/api/commerce/test-refund'&&req.method==='POST'){
     if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
     if(!yookassa?.enabled)throw new ProjectError(503,'yookassa_test_disabled')
