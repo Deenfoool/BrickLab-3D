@@ -15,7 +15,8 @@ export function mountCollaboration(root,{language,scene,signal,initial,onJoin,re
  let lastDraw=0
  function draw(now){if(closed||!room)return;if(now-lastDraw>80){lastDraw=now;renderCursors()}raf=requestAnimationFrame(draw)}
  function startDrawing(){cancelAnimationFrame(raf);raf=requestAnimationFrame(draw)}
- scene.canvas.addEventListener('pointermove',e=>{if(!room)return;try{const p=scene.pointer(e,false).ground;cursor=p?.toArray()??null}catch{cursor=null}},{signal})
+ let lastPointer=0
+ scene.canvas.addEventListener('pointermove',e=>{if(!room||performance.now()-lastPointer<80)return;lastPointer=performance.now();try{const p=scene.pointer(e,true);cursor=(p.point??p.ground)?.toArray()??null}catch{cursor=null}},{signal})
  scene.canvas.addEventListener('pointerleave',()=>cursor=null,{signal})
  async function api(action,data={}){const response=await fetch('/api/collaboration/'+action,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},signal:AbortSignal.any([signal,AbortSignal.timeout(7000)]),body:JSON.stringify({client,...data})});const result=await response.json();if(!response.ok)throw Object.assign(Error(result.error??'unavailable'),{status:response.status});return result}
  function attach(value){room=value;baseline=value.document;revision=value.revision;participants=value.participants??[];paused=false;pending=null;updateBadge();startDrawing();schedule()}

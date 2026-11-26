@@ -410,10 +410,12 @@ export function createScene(host, models) {
       2 * (event.clientX - rect.left) / rect.width - 1,
       1 - 2 * (event.clientY - rect.top) / rect.height,
     ), camera)
+    const intersection=pick?ray.intersectObjects([...objects.values()].filter(object=>object.visible),true)[0]:undefined
     return {
       ray: ray.ray,
       ground: ray.ray.intersectPlane(plane, new THREE.Vector3()),
-      hit: pick ? ray.intersectObjects([...objects.values()].filter(object => object.visible), true)[0]?.object.parent.userData.id : undefined,
+      hit: intersection?.object.parent.userData.id,
+      point: intersection?.point,
     }
   }
 

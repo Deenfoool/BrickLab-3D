@@ -406,7 +406,7 @@ export async function mountSetCatalog(
       (!hasRebrickable() || (remoteStarted && !nextPage))
     more.disabled = loading
     more.textContent = loading ? t.loading : retry ? t.retry : t.more
-    if (!more.hidden && !loading && !retry) observer.observe(more)
+    if (!more.hidden && !loading && !retry && displayed.size) observer.observe(more)
   }
   async function loadMore() {
     if (loading || signal.aborted || more.hidden) return

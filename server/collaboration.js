@@ -1,9 +1,30 @@
 import {createHash,randomBytes} from 'node:crypto'
 import {ProjectError,validateDocument,maxBody} from './projects.js'
-import {createAssembly} from '../src/editor/model.js?v=volvo-spur-gears'
+import {Assembly} from '../src/mechanics/assembly.js?v=torque-clutch'
+import {portsFor} from '../src/mechanics/catalog.js?v=volvo-spur-gears'
 import {mergeShared,validateShared} from '../src/editor/shared-document.js'
 const hex=n=>randomBytes(n).toString('hex'),tokenPattern=/^[a-f0-9]{32}$/
-function verifiedGeometry(doc){const assembly=createAssembly(doc.parts,doc.connections,{belts:doc.belts??[]});if(assembly.connections.length!==doc.connections.length||assembly.belts.length!==(doc.belts??[]).length)throw Error('edit_conflict');return doc}
+// The server has no browser import map. Use the existing pure connector engine.
+function worldPort(p,port){
+ const [x,y,z,w]=p.rotation.map(v=>v/Math.hypot(...p.rotation))
+ function rotate(v){
+  const [a,b,c]=[p.mirrored?-v[0]:v[0],v[1],v[2]],tx=2*(y*c-z*b),ty=2*(z*a-x*c),tz=2*(x*b-y*a)
+  return [a+w*tx+y*tz-z*ty,b+w*ty+z*tx-x*tz,c+w*tz+x*ty-y*tx]
+ }
+ return {start:rotate(port.start).map((v,i)=>v+p.position[i]),axis:rotate(port.axis)}
+}
+function verifiedGeometry(doc){
+ const catalog=Object.create(null),assembly=new Assembly(catalog),byId=new Map(doc.parts.map(p=>[p.id,p]))
+ for(const p of doc.parts){const ports=portsFor(p.design);if(ports.length){catalog[p.design]=ports;assembly.addPart(p.id,p.design)}}
+ for(const link of doc.connections){
+  const a=byId.get(link.shaft.part),b=byId.get(link.socket.part),male=assembly.port(a.id,link.shaft.port),female=assembly.port(b.id,link.socket.port)
+  if(!male||!female||!link.placement)throw Error('edit_conflict')
+  const world={shaft:worldPort(a,male),socket:worldPort(b,female)}
+  if(!assembly.connect(link.shaft,link.socket,link.placement,{world,seated:true}).ok)throw Error('edit_conflict')
+ }
+ // The browser additionally validates actual belt layouts and keyed roll.
+ return doc
+}
 const lifetime=8*3600000,idle=60*60000,presence=8000
 export function createCollaborationHandler({store,origin,clock=Date.now}){
  const rooms=new Map(),cookieName=new URL(origin).protocol==='https:'?'__Host-bricklab_session':'bricklab_session'
