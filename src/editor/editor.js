@@ -1,5 +1,5 @@
 import { loadPartIndex, enrichInventory, normalizeDocumentDesigns } from '../catalog/part-resolver.js?v=catalog-engine-1'
-import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=commerce-plus-2'
+import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=instruction-artwork-v5'
 import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=same-origin-pdf'
 import { mountSetPalette } from '../sets/palette.js?v=catalog-engine-1'
 import { inspectSetPart } from '../sets/inspect.js'
@@ -18,7 +18,8 @@ import { nearestDetent } from '../mechanics/axial.js?v=torque-clutch'
 import { nearbyConnections, translationSnaps } from './snap.js?v=volvo-spur-gears'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=system-complete'
 import { mountLibrary } from './library.js?v=catalog-engine-1'
-import { createScene } from './scene.js?v=catalog-engine-1'
+import { createScene } from './scene.js?v=transmission-map-1'
+import {mountTransmissionMap,transmissionMap,transmissionCodes} from './transmission-map.js'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=volvo-spur-gears'
@@ -185,6 +186,8 @@ export async function mountEditor(root, { document, projectId, language, save, d
                 <button type="button" data-el="play">${t.play}</button>
                 <button type="button" data-el="applyHinge" hidden>${t.applyHinge}</button>
               </div>
+              <section class="editor-transmission-map" data-el="transmissionMap" hidden></section>
+              <section class="editor-diagnostic-issues" data-el="diagnosticIssues" hidden></section>
               <button type="button" data-el="clutchTest" hidden></button>
               <p role="status" data-el="clutchStatus" hidden></p>
               <section class="editor-belt-panel" data-el="beltPanel"  aria-label="${t.beltAdd}" hidden></section>
@@ -343,6 +346,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   let clutchTest
   let runningMotor
   let transmission
+  let mappedParts=new Map(),lastMotionPoses=[]
   let hinge
   let pointerDown
   let boxSelection
@@ -353,6 +357,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   let messageTimer
   let snappingScene = false
   let pendingPart
+  const mapUI=mountTransmissionMap(el('transmissionMap'),{language,signal,onChange:()=>{refreshTransmissionMap();updateHighlights()},onFocus:ids=>scene.focus(ids)})
   const audio = createEditorAudio(signal)
   function updateSoundControl() {
     const button = el('sound')
@@ -625,6 +630,8 @@ export async function mountEditor(root, { document, projectId, language, save, d
       } else {
         lastPreview = angle
         scene.previewParts(poses)
+        lastMotionPoses=poses
+        if(mapUI.enabled)refreshTransmissionMap()
         scene.belts.travel(new Map(transmission.belts?.map(belt =>
           [belt.record.id, beltTravel(belt, transmission.spins, value)])))
         scene.select(selected)
@@ -792,7 +799,9 @@ export async function mountEditor(root, { document, projectId, language, save, d
     angle = hinge?.ok ? hinge.roll * 180 / Math.PI : 0
     lastPreview = angle
     transmission = mode === 'kinematics' && !hinge ? rotationMotion(id, state.parts, assembly, selectorLinkage) : null
+    lastMotionPoses=[]
     showMotion()
+    refreshTransmissionMap()
     refreshPartsPanel()
     render()
     if (mode === 'kinematics' && id) tutorial?.handle('gearSelected', { rotatable: Boolean(hinge?.ok || transmission?.ok) })
@@ -1346,8 +1355,16 @@ export async function mountEditor(root, { document, projectId, language, save, d
     return links.filter(l => ['continuous', 'detented'].includes(l.fit.motion.rotation) && (l.shaft.part === id || l.socket.part === id))
   }
 
+  function refreshTransmissionMap(){
+    const available=mode==='kinematics'&&transmission?.ok===true
+    mappedParts=available&&mapUI.enabled?transmissionMap(transmission,selected,lastMotionPoses,state.parts):new Map()
+    mapUI.render(mappedParts,available)
+    if(mapUI.enabled&&available)updateHighlights()
+  }
   function updateHighlights() {
-    scene.highlight(activeJoint?.moving ?? additional, 0xffb01b, false)
+    if(mode==='kinematics'&&mapUI.enabled&&transmission?.ok){
+      scene.highlight(mappedParts.keys(),0xff6666,true,new Map([...mappedParts].map(([id,key])=>[id,transmissionCodes[key]])))
+    }else scene.highlight(activeJoint?.moving ?? additional, 0xffb01b, false)
   }
 
   function positionHandles() {
@@ -1490,6 +1507,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     if (next === 'paint' && message !== t.storage) setMessage()
     releaseMotor()
     mode = next
+    if(mode!=='kinematics')mapUI.clear()
     additional.clear()
     setSelection(selected)
     if (mode === 'testDrive') drivePanel.setActive(true)
