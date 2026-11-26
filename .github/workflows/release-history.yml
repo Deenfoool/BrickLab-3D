@@ -1,0 +1,45 @@
+name: BrickLab release history
+
+on:
+  pull_request:
+    branches:
+      - feature/cloud-migration
+  push:
+    branches:
+      - feature/cloud-migration
+
+permissions:
+  contents: read
+
+jobs:
+  release-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate release history and regression tests
+        run: |
+          node scripts/check-release-history.mjs
+          node --test tests/release-history.test.js
+      - name: Require release notes for major changes
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -eu
+          if [ "$EVENT" = pull_request ]; then
+            BASE=$(git merge-base "$PR_BASE" HEAD)
+          else
+            BASE="$PUSH_BEFORE"
+            if [ "$BASE" = 0000000000000000000000000000000000000000 ]; then
+              echo "New branch: validated history structure above"
+              exit 0
+            fi
+          fi
+          node scripts/check-release-history.mjs "$BASE" HEAD
