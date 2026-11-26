@@ -5,7 +5,7 @@ export function commerceTelegramConfig(env=process.env){
  return {enabled:env.BRICKLAB_COMMERCE_TELEGRAM_ENABLED==='true'&&/^\d{5,15}:[A-Za-z0-9_-]{20,100}$/.test(token)&&/^-?\d{1,20}$/.test(chat),token,chat}
 }
 export function commerceEventText(e){
- const titles={succeeded:'✅ Оплата подтверждена',canceled:'⚪ Платёж отменён',refunded:'↩ Возврат выполнен'}
+ const titles={succeeded:'✅ Оплата подтверждена',canceled:'⚪ Платёж отменён',refunded:'↩ Возврат выполнен',receipt_issued:'🧾 Чек НПД сформирован',receipt_canceled:'🧾 Чек НПД аннулирован'}
  const clean=value=>String(value??'').replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g,' ').trim().slice(0,200)
  const name=clean(e.buyer_name)
  const amount=value=>(Number(value)/100).toFixed(2)+' ₽'
@@ -20,7 +20,7 @@ export function commerceEventText(e){
    'Итого: '+amount(Number(e.paid_kopecks)-Number(e.refunded_kopecks)))
  }
  if(e.environment==='live'){
-  if(e.receipt_correction_pending)lines.push('','⚠ Требуется корректировка чека НПД')
+  if(e.receipt_correction_pending&&e.event!=='receipt_canceled')lines.push('','⚠ Требуется корректировка чека НПД')
   else if(e.event==='succeeded'&&e.receipt_status==='pending')lines.push('','⚠ Сформируйте чек НПД в «Мой налог» и добавьте ссылку в Финансы.')
  }
  lines.push('','Событие: '+clean(e.id))
