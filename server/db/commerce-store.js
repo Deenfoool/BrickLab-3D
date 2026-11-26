@@ -20,7 +20,10 @@ export async function commerceEntitlements(tx,uid,environment='live'){
      ...(g.kind==='instruction'?{setId:g.target}:{}),
      ...(g.grantedAt?{grantedAt:new Date(g.grantedAt).getTime()}:{}),
      ...(g.expiresAt?{expiresAt:new Date(g.expiresAt).getTime()}:{})}));
-    return {...projectAccount(grants),loyalty:plusLoyalty(grants)};
+    const account=projectAccount(grants)
+    const welcome=environment==='live'?await tx`select set_id as "setId" from bricklab.instruction_welcome_grants where user_id=${uid} order by slot`:[]
+    if(environment==='live')account.instructions=[...new Set([...account.instructions,...welcome.map(g=>g.setId)])]
+    return {...account,loyalty:plusLoyalty(grants),welcomeInstructions:welcome.map(g=>g.setId),welcomeRemaining:environment==='live'?Math.max(0,3-welcome.length):0};
 }
 
 // Only trusted server adapters may invoke the security-definer write functions.
@@ -58,6 +61,14 @@ async function orderQuote(tx,uid,sku,offerVersion,beta,environment,product){
 }
 export function commerceStore(scope){
  return {
+  async claimInstructionWelcome(uid,setId){return scope(uid,async tx=>{
+   await tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text,312042))`
+   const before=await commerceEntitlements(tx,uid)
+   if(before.plus||before.instructions.includes(setId))return before
+   const [r]=await tx`select bricklab.claim_instruction_welcome(${setId}) as ok`
+   if(!r.ok)throw new ProjectError(409,'welcome_exhausted')
+   return commerceEntitlements(tx,uid)
+  })},
   async quoteCommerce(uid,sku,offerVersion,beta,environment,product){return scope(uid,tx=>orderQuote(tx,uid,sku,offerVersion,beta,environment,product))},
   async createCommerceOrder(uid,sku,amount,offerVersion,beta,environment,product){return scope(uid,async tx=>{
    await tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text,312042))`
