@@ -52,3 +52,25 @@ test('sandbox lists multiple SKUs; live checkout accepts completed large audit o
   if(mode==='test'||release)assert.equal(calls[0][2].instructionProduct.setId,'12345-1')
  }
 })
+
+test('contextual activation is authorized by the released set and does not accept client prices',async t=>{
+ const origin='https://bricklab.test',terms='a'.repeat(64),account={instructions:[],plus:false,welcomeRemaining:3,orders:[]}
+ let calls=0
+ const store={getSession:async()=>({id:'fixture',admin:true}),commerceAccount:async()=>account,commerceTestAccount:async()=>account,claimInstructionWelcome:async(uid,setId)=>{calls++;if(!account.instructions.includes(setId)){account.instructions.push(setId);account.welcomeRemaining--}return account}}
+ const handler=createPaymentsHandler({store,origin,config:{enabled:false},legal:{version:terms},fullCatalog:true,commerceMode:'live',instructionRelease:true,instructionPolicy:audit,liveYookassa:{enabled:true}})
+ const server=createServer((req,res)=>handler(req,res,new URL(req.url,origin).pathname))
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)))
+ const base='http://127.0.0.1:'+server.address().port,headers={cookie:'__Host-bricklab_session='+'a'.repeat(64),origin,'Content-Type':'application/json'}
+ const get=path=>fetch(base+path,{headers}),post=(data,extra={})=>fetch(base+'/api/commerce/instruction-activate',{method:'POST',headers:{...headers,...extra},body:JSON.stringify(data)})
+ const path='/api/commerce/instruction-offer?set=12345-1'
+ assert.equal((await(await fetch(base+path)).json()).state,'signin')
+ assert.equal((await(await get(path)).json()).state,'welcome')
+ assert.equal((await(await get('/api/commerce/instruction-offer?set=12346-1')).json()).state,'free')
+ assert.equal((await post({setId:'12346-1'})).status,404)
+ assert.equal((await post({setId:'12345-1',price:0})).status,404)
+ assert.equal((await post({setId:'12345-1'},{origin:'https://other.test'})).status,403)
+ assert.equal(calls,0)
+ assert.equal((await(await post({setId:'12345-1'})).json()).state,'owned')
+ assert.equal((await(await get(path)).json()).state,'owned')
+ assert.equal(account.welcomeRemaining,2)
+})
