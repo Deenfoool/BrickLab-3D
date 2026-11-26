@@ -34,7 +34,7 @@ CREATE FUNCTION bricklab.earn_instruction_first_build(p_set text) RETURNS boolea
  IF NOT EXISTS(SELECT 1 FROM bricklab.instruction_welcome_grants WHERE user_id=uid AND slot=1 AND set_id=p_set) THEN RETURN false; END IF;
  INSERT INTO bricklab.instruction_first_build(user_id,set_id) VALUES(uid,p_set) ON CONFLICT DO NOTHING;
  RETURN true;
- END $$;
+ END; $;
 REVOKE ALL ON FUNCTION bricklab.earn_instruction_first_build(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION bricklab.earn_instruction_first_build(text) TO bricklab_app;
 
@@ -55,7 +55,7 @@ CREATE FUNCTION bricklab.claim_instruction_welcome(p_set text) RETURNS boolean
  IF free_slot IS NULL THEN RETURN false; END IF;
  INSERT INTO bricklab.instruction_welcome_grants(user_id,set_id,slot) VALUES(uid,p_set,free_slot);
  RETURN true;
- END $$;
+ END; $;
 REVOKE ALL ON FUNCTION bricklab.claim_instruction_welcome(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION bricklab.claim_instruction_welcome(text) TO bricklab_app;
 
