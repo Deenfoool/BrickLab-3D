@@ -64,7 +64,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
   if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
   active++
   try{
-   if(path==='/api/store/catalog'&&req.method==='GET'){reply(res,200,{products:await store.storeCatalog(),mode:config.enabled?'test':'disabled',live:liveYookassa?.enabled===true,liveSkus:liveYookassa?.enabled===true?liveSkus:[]});return true}
+   if(path==='/api/store/catalog'&&req.method==='GET'){reply(res,200,{products:await store.storeCatalog(),mode:config.enabled?'test':'disabled',live:commerceMode==='live'&&liveYookassa?.enabled===true,liveSkus:commerceMode==='live'&&liveYookassa?.enabled===true?liveSkus:[]});return true}
    if(path==='/api/payments/robokassa/result'){
     if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
     if(!config.enabled)throw new ProjectError(503,'payments_disabled')
@@ -73,7 +73,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(!await store.confirmTestOrder(data.invoice,data.amount))throw new ProjectError(409,'payment_mismatch')
     reply(res,200,'OK'+data.invoice,true);return true
    }
-   if(path==='/api/commerce/live-status'&&req.method==='GET'){reply(res,200,{enabled:liveYookassa?.enabled===true,offerVersion:legal?.version??null});return true}
+   if(path==='/api/commerce/live-status'&&req.method==='GET'){reply(res,200,{enabled:commerceMode==='live'&&liveYookassa?.enabled===true,offerVersion:legal?.version??null});return true}
    if(path==='/api/payments/yookassa/live-result'){
     if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
     if(!liveYookassa?.enabled)throw new ProjectError(503,'payments_disabled')
