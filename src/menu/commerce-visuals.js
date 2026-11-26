@@ -54,7 +54,7 @@ function blueprintGraphic(kind,amount){
  const svg=svgNode('svg',{viewBox:'0 0 160 100',class:'commerce-blueprint-graphic','aria-hidden':'true',focusable:'false'})
  if(kind==='storage'){
   for(let i=0;i<(amount>=100?3:amount>=30?2:1);i++){
-   const g=svgNode('g',{transform:'translate('+(i*12)+' '+(-i*12)+')'})
+   const g=svgNode('g',{transform:'translate('+(i*9)+' '+(-i*5)+')'})
    g.append(path('M32 35 72 13l40 22v36L72 93 32 71Z','graphic-face'),path('M32 35 72 57l40-22 M72 57v36 M40 48l20 11 M40 57l20 11 M83 68l18-10 M83 77l18-10','graphic-line'))
    svg.append(g)
   }
@@ -74,7 +74,7 @@ export function productArtwork(p,language='ru'){
   art.append(node('small','art-eyebrow','BRICKLAB / '+(p.betaOnly?'FOUNDERS':'SUPPORT')),insignia(p.id),node('span','art-serial',spec.code+' / '+(p.betaOnly?'OBT':'SERIES')),node('strong','art-caption',p.title))
  }else if(p.kind==='subscription'){
   art.classList.add('support-plus')
-  art.append(node('small','art-eyebrow','BRICKLAB / MEMBERSHIP'),insignia('plus'),node('strong','art-caption','PLUS'),node('span','art-serial',p.months+' '+tr('мес.','mo.')))
+  art.append(node('small','art-eyebrow','BRICKLAB / MEMBERSHIP'),insignia('plus'),node('strong','art-caption','PLUS'),node('span','art-serial',p.months?p.months+' '+tr('мес.','mo.'):'MEMBER'))
  }else if(p.kind==='storage'){
   art.append(node('small','art-eyebrow','BRICKLAB / CLOUD'),blueprintGraphic('storage',p.slots),node('strong','art-caption','+'+p.slots),node('span','art-serial','PROJECTS'))
  }else{
