@@ -109,3 +109,22 @@
 .set-details-dialog .set-actions:empty{display:none}
 #sets-panel .set-filter-selects{gap:8px}
 #sets-panel .set-filter-selects select{padding:9px 11px;font-size:13px}
+
+.set-demo{display:grid;grid-template-columns:1.1fr 1fr .65fr;gap:14px;align-items:center;border:1px solid #485363;border-radius:12px;padding:14px;margin:0 0 14px;background:#252c37;color:#e8edf5}
+.set-demo[hidden],.set-recommendations[hidden]{display:none}
+.set-demo-copy{display:grid;gap:7px}.set-demo-copy h3,.set-recommendations h3{margin:0;font-size:16px}.set-demo-copy p{font-size:12px;line-height:1.5;margin:0;color:#bec8d6}
+.set-demo-copy button{justify-self:start;font-size:12px}
+.set-demo-art{position:relative;min-height:110px;aspect-ratio:2/1;background:#f0f2f5;border-radius:8px;overflow:hidden}
+.set-demo-shape{position:absolute;box-sizing:border-box;display:flex;align-items:center;justify-content:space-evenly}
+.set-demo-shape.beam{border-radius:100px;background:#b33037;border:2px solid #7c252d;box-shadow:0 4px 0 #6b2027}
+.set-demo-shape.beam span{width:13%;aspect-ratio:1;border-radius:50%;background:#e8edf3;box-shadow:inset 0 2px 3px #4448}
+.set-demo-shape.pin{border-radius:5px;background:repeating-linear-gradient(90deg,#39414a 0 12%,#1d2228 12% 20%);border:2px solid #14171c}
+.set-demo-caption{position:absolute;bottom:10px;left:8px;right:8px;text-align:center;color:#515d70;font-size:10px}
+.set-demo-result{display:grid;gap:4px;min-height:45px;align-content:center;font-size:13px;color:#e3ad47}.set-demo-result small,.set-demo-result span{font-size:11px;color:#bfc9d6}
+.set-recommendations{margin:0 0 18px;display:grid;gap:8px}
+.set-recommendation-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.set-recommendation-grid button{display:flex;align-items:center;gap:8px;text-align:left;padding:7px;min-width:0}
+.set-recommendation-grid img{width:64px;height:48px;object-fit:contain;background:#f3f4f6;border-radius:5px}
+.set-recommendation-grid button span{display:grid;gap:4px;min-width:0}
+.set-recommendation-grid strong{font-size:12px;overflow-wrap:anywhere}.set-recommendation-grid small{font-size:10px;opacity:.75}
+@media(max-width:720px){.set-demo{grid-template-columns:1fr 1fr}.set-demo-copy{grid-column:1/-1}.set-recommendation-grid{grid-template-columns:1fr}}
