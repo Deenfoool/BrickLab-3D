@@ -1,8 +1,8 @@
 // Server-authoritative quote for the isolated admin sandbox. No live SKU.
 // A bundle is three named permanent set unlocks, never transferable credit.
 import {instructionProduct} from './commerce-catalog.js'
-export function quoteInstructionBundle({setIds,auditedProducts,account,release=false}){
- if(!release||account?.plus===true)throw Error('bundle_unavailable')
+export function quoteInstructionBundle({setIds,auditedProducts,account,release=false,sandbox=false}){
+ if(!release||(!sandbox&&account?.plus===true))throw Error('bundle_unavailable')
  if(!Array.isArray(setIds)||setIds.length!==3||new Set(setIds).size!==3)throw Error('invalid_bundle')
  const owned=new Set(account?.instructions??[]),catalog=new Map((auditedProducts??[]).map(p=>[p.setId,p]))
  const lines=setIds.map(id=>{

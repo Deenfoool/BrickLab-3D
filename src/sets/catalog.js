@@ -13,7 +13,6 @@ import {
   instructionSources,
 } from './instruction-sources.js?v=browser-recognition'
 import {mountSandboxPack} from './sandbox-pack.js'
-import {renderInteractiveDemo} from './interactive-demo.js'
 import {instructionEvent} from './instruction-events.js'
 import { mountInstructionOffer } from './instruction-offer.js?v=welcome-1'
 const storageKey = 'bricklab.sets.v1'
@@ -153,11 +152,10 @@ export async function mountSetCatalog(
   const listHead=node('div',undefined,'set-catalog-list-head'),resultCount=node('span',undefined,'set-result-count')
   listHead.append(node('h3',tr('Каталог наборов','Set catalog')),resultCount)
   credit.classList.add('set-catalog-credit')
-  const demo=renderInteractiveDemo({language,signal,onPractice:practice})
   const recommended=node('section',undefined,'set-recommendations')
   recommended.hidden=true
   const sandboxPack=node('section',undefined,'set-sandbox-pack');sandboxPack.hidden=true
-  root.replaceChildren(header,demo,recommended,sandboxPack,form,listHead,status,grid,more,credit)
+  root.replaceChildren(header,recommended,sandboxPack,form,listHead,status,grid,more,credit)
   void mountSandboxPack(sandboxPack,{language,signal})
   const pageSize = 24
   let localItems = []
@@ -443,7 +441,6 @@ export async function mountSetCatalog(
     loading = false
     activeQuery = query.value.trim()
     recommended.hidden=Boolean(activeQuery)||!recommended.childElementCount
-    demo.hidden=Boolean(activeQuery)
     activeFilters = filters.read()
     // Let the server order the full catalog, without a locally cached prefix.
     localItems = hasRebrickable()

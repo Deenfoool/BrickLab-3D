@@ -74,7 +74,7 @@ async function sandboxPackQuote(tx,uid,setIds,products,offerVersion){
   return {...pending,lines,subtotalKopecks:lines.reduce((n,l)=>n+l.base,0),discountPercent:15}
  }
  let q
- try{q=quoteInstructionBundle({setIds,auditedProducts:products,account:await commerceEntitlements(tx,uid,'test'),release:true})}
+ try{q=quoteInstructionBundle({setIds,auditedProducts:products,account:await commerceEntitlements(tx,uid,'test'),release:true,sandbox:true})}
  catch(e){throw new ProjectError(409,e.message)}
  return {...q,sku,title:'BrickLab Build Pack (тест) · '+setIds.slice().sort().join(', '),offerVersion}
 }
