@@ -39,7 +39,7 @@ export function createInstructionPolicy(audit={}){
    const pages=books.get(setId+'/'+bookId(book)),supported=!!pages
    const entry=pages?.[page-1],step=entry?.step??null
    // A known audited book with an out-of-range page is not a free bypass.
-   const interactive=!release||!supported||!!entry&&(step===0||canUseInteractive({account,setId,step,beta:false,supported:true}))
+   const interactive=!release||!products.some(p=>p.setId===setId)||!supported||!!entry&&(step===0||canUseInteractive({account,setId,step,beta:false,supported:true}))
    return {mode:release?'release':'beta',supported,step,interactive}
   },
   regions(setId,pdfId,page){return books.get(setId+'/'+pdfId)?.[page-1]?.regions??null}
