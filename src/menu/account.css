@@ -216,3 +216,12 @@
 .commerce-support-badge{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;max-width:100%;padding:4px 10px;border:1px solid var(--support-accent,#8dbeaa);border-radius:6px;font-size:12px;font-weight:650;color:inherit;background:color-mix(in srgb,var(--support-accent,#8dbeaa) 16%,transparent)}
 .commerce-support-badge::before{content:"◆";color:var(--support-accent,#8dbeaa)}
 .support-bronze-builder{--support-accent:#c88d60}.support-silver-builder{--support-accent:#b7c8db}.support-gold-builder{--support-accent:#d6ad50}.support-diamond-patron{--support-accent:#79def2}.support-founders-club{--support-accent:#bc8cf5}
+
+.workshop-tools-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,155px),1fr));gap:10px;align-items:end}
+.workshop-tools-controls label{display:grid;gap:4px;font-size:12px}
+.workshop-tools-controls select{min-width:0;width:100%;box-sizing:border-box;padding:8px;border-radius:6px;font:inherit}
+.workshop-tools-controls>select{grid-column:1/-1}
+.workshop-tools-output{display:grid;gap:12px;margin-top:10px}
+.workshop-tools-output:empty{display:none}
+.workshop-photo-preview{width:100%;height:auto;display:block;border-radius:10px;background:repeating-conic-gradient(#29313a 0% 25%,#343d48 0% 50%) 0 0/24px 24px;max-height:560px;object-fit:contain}
+.workshop-tools-output>a{justify-self:start}
