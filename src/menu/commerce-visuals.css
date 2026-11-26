@@ -113,3 +113,10 @@
 .insignia-inner{fill:var(--support-dark,#263344);fill-opacity:.76}
 .insignia-glyph{fill-opacity:.28;stroke-width:1.8}
 .insignia-plus .insignia-glyph{fill-opacity:1;stroke-width:0}
+
+/* Official Lucide support glyphs: uncluttered medal face, consistent strokes. */
+.commerce-insignia .insignia-lucide{color:var(--support-light,#eef4ff);fill:none;stroke:currentColor;stroke-width:1.85;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 1px #0006)}
+.commerce-insignia:not(.insignia-plus) .insignia-inner{fill:var(--support-dark,#263344);fill-opacity:.95;stroke-opacity:.42;stroke-width:.65}
+.commerce-insignia:not(.insignia-plus) .insignia-outer{stroke-width:1.15}
+.commerce-insignia:not(.insignia-plus) .metal-highlight{stop-color:var(--support-accent,#b6c1d5)}
+.commerce-emblem .insignia-lucide{stroke-width:2.2}
