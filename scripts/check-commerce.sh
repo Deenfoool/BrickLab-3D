@@ -14,7 +14,7 @@ echo "=== TEST COMMIT: $SHA ==="
 python3 -m py_compile "$TMP/scripts/publish-legal.py" "$TMP/scripts/configure-commerce-telegram.py" "$TMP/scripts/configure-commerce-live.py" "$TMP/scripts/npd/configure.py" "$TMP/scripts/npd/worker.py" "$TMP/scripts/npd/operation.py" "$TMP/scripts/npd/test_operation.py"
 docker run --rm --user 1000:1000 -e npm_config_cache=/tmp/npm-cache -v "$TMP:/tests" -w /tests bricklab-test-runner:local sh -ec '
  npm ci --include=dev --ignore-scripts --no-audit --no-fund
- for f in server/index.js server/payments.js server/yookassa.js server/db/commerce-store.js server/db/auth-store.js server/payment-reconciliation.js server/commerce-telegram.js server/receipt-delivery.js src/menu/store.js; do node --check "$f"; done
+ for f in server/index.js server/payments.js server/yookassa.js server/db/commerce-store.js server/db/auth-store.js server/payment-reconciliation.js server/commerce-telegram.js server/receipt-delivery.js src/menu/store.js src/sets/catalog.js src/sets/instruction-offer.js src/sets/filter-panel.js server/instruction-access.js server/http.js; do node --check "$f"; done
  npm test -- --test-concurrency=1
 '
 DBPASS=$(openssl rand -hex 24)
