@@ -164,9 +164,9 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(path.endsWith('checkout')&&req.method==='POST'){
      if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
      let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
-     if(!data||!activeSkus.includes(data.sku)||!Number.isSafeInteger(data.amountKopecks)||data.amountKopecks<1||data.offerVersion!==legal.version||data.accepted!==true||data.mode!==commerceMode||Object.keys(data).some(k=>!['sku','amountKopecks','offerVersion','accepted','mode'].includes(k)))throw new ProjectError(400,'invalid_order')
+     if(!data||!activeSkus.includes(data.sku)||!Number.isSafeInteger(data.amountKopecks)||data.amountKopecks<1||data.offerVersion!==legal.version||data.accepted!==true||data.mode!==commerceMode||(data.returnToSets!==undefined&&(data.returnToSets!==true||data.sku!=='plus-1'))||Object.keys(data).some(k=>!['sku','amountKopecks','offerVersion','accepted','mode','returnToSets'].includes(k)))throw new ProjectError(400,'invalid_order')
      if(commerceMode==='live'&&!fullCatalog){const offered=(await store.storeCatalog()).find(p=>p.sku===data.sku);if(!offered||offered.amountKopecks!==data.amountKopecks)throw new ProjectError(409,'quote_changed')}
-     reply(res,200,await adapter.checkout(user.id,data.sku,{unified:true,amountKopecks:data.amountKopecks,offerVersion:legal.version,beta:!instructionRelease,...(instructionFor(data.sku)?{instructionProduct:instructionFor(data.sku)}:{})}));return true
+     reply(res,200,await adapter.checkout(user.id,data.sku,{unified:true,amountKopecks:data.amountKopecks,offerVersion:legal.version,beta:!instructionRelease,...(data.returnToSets===true?{returnToSets:true}:{}),...(instructionFor(data.sku)?{instructionProduct:instructionFor(data.sku)}:{})}));return true
     }
     throw new ProjectError(405,'method_not_allowed')
    }
