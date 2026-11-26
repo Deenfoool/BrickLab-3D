@@ -187,7 +187,9 @@ export function mountSetFilters(form, themes, { language, signal, change }) {
   theme.addEventListener('change', change, { signal })
   order.addEventListener('change', change, { signal })
   panel.append(reset)
-  form.append(panel)
+  const advanced = make('details', undefined, 'set-filter-disclosure')
+  advanced.append(make('summary', ru ? 'Расширенные фильтры' : 'Advanced filters'), panel)
+  form.append(advanced)
   function setDefaults() {
     theme.value = ''
     order.value = '-year'
