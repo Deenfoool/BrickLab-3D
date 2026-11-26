@@ -5,8 +5,10 @@ import { editorLabels } from '../editor/labels.js?v=torque-clutch'
 import { locales } from './locale.js?v=store-1'
 import {mountStore} from './store.js?v=welcome-1'
 import { mountHomeHub, mountHubSearch } from './home-hub.js?v=signature-art-1'
-import { mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=feedback-2'
+import { createAuthClient } from './auth-client.js?v=live-polish-1'
+import { createCommunityClient } from './community-client.js?v=community-options-1'
+import { createProjectsClient,cloudLink,mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
+import { createCloudAccount } from './account.js?v=live-polish-1'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -589,7 +591,7 @@ async function openCommunity(){
  closeCommunity()
  const controller=new AbortController();communitySession={key,controller}
  const root=byId('community-panel');root.textContent=strings().loadingLibrary
- try{const {mountCommunity}=await import('./community-gallery.js?v=welcome-2');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
+ try{const {mountCommunity}=await import('./community-gallery.js?v=live-polish-1');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
  catch(e){if(!controller.signal.aborted)root.textContent=language==='ru'?'Не удалось открыть сообщество.':'Could not open community.'}
 }
 function closeSets() {
@@ -692,7 +694,7 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=feedback-3')
+    const { mountEditor } = await import('../editor/editor.js?v=installation-1')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {
@@ -700,11 +702,12 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
       collaboration:collaborationJoins.get(project.id),
       onJoinCollaboration:(document,session)=>addProject(document,null,null,session),
       download: downloadProject,
+      projectActions:{newBuild:()=>addProject(newProject(strings().untitled)),copy:doc=>addProject({...structuredClone(doc),name:(doc.name+' '+(language==='ru'?'(копия)':'(copy)')).slice(0,120)}),home:()=>{location.hash=cloudAccount.projectState().signedIn?'#account/projects':'#projects'},async cloud(doc){const user=await createAuthClient().me();if(!user)throw Error('unauthenticated');const record=projects.find(x=>x.id===project.id),client=createProjectsClient(),link=cloudLink(record,user.id);const saved=link?await client.save(link.id,link.revision,doc):await client.create(doc);return linkCloudProject(project.id,{ownerId:user.id,id:saved.id,revision:saved.revision},record.cloud)},async history(){const user=await createAuthClient().me(),record=projects.find(x=>x.id===project.id),link=cloudLink(record,user?.id);if(!link)throw Error('not_linked');const client=createProjectsClient(),revs=await client.revisions(link.id);if(controller.signal.aborted)return;const d=document.createElement('dialog');d.className='bricklab-choice';const h=document.createElement('h2');h.textContent=language==='ru'?'История версий':'Version history';d.append(h);for(const rev of revs){const b=document.createElement('button');b.type='button';b.textContent=(language==='ru'?'Открыть копию версии ':'Open revision copy ')+rev.revision;b.onclick=async()=>{const item=await client.get(link.id,rev.revision);d.close();if(!controller.signal.aborted)addProject(item.document)};d.append(b)}const close=document.createElement('button');close.textContent=language==='ru'?'Закрыть':'Close';close.onclick=()=>d.close();d.append(close);d.addEventListener('close',()=>d.remove(),{once:true});controller.signal.addEventListener('abort',()=>d.remove(),{once:true});document.body.append(d);d.showModal()},async shareLink(){const user=await createAuthClient().me(),link=cloudLink(projects.find(x=>x.id===project.id),user?.id);if(!link)throw Error('not_linked');const builds=await createCommunityClient().builds(),b=builds.find(x=>x.projectId===link.id);if(!b)throw Error('not_published');await navigator.clipboard.writeText(location.origin+'/#community/build/'+b.id);return true}},
       async publish(document,capture) {
         if(controller.signal.aborted)return
         const record=projects.find(item=>item.id===project.id)
         if(!record)return
-        const {openPublishDialog}=await import('./publish-dialog.js?v=community-options-1')
+        const {openPublishDialog}=await import('./publish-dialog.js?v=live-polish-1')
         if(controller.signal.aborted)return
         await openPublishDialog({record:{...record,document},language,signal:controller.signal,linkLocal:linkCloudProject,capture,onPublished:()=>{void cloudAccount.refreshProjects()}})
       },

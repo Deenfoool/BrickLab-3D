@@ -1,0 +1,67 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {registerHooks} from 'node:module'
+const three=new URL('../vendor/three/build/three.module.min.js',import.meta.url).href
+registerHooks({resolve(specifier,context,next){return next(specifier==='three'?three:specifier,context)}})
+const {Box3,Vector3}=await import('three')
+const {installationBounds,sweptOverlap,planInstallation,sampleInstallation}=await import('../src/editor/instruction-trajectories.js')
+const {portsFor}=await import('../src/mechanics/catalog.js')
+const {joinedPose,worldPort}=await import('../src/editor/placement.js')
+const {createAssembly,connectAligned}=await import('../src/editor/model.js')
+const box=(min,max)=>new Box3(new Vector3(...min),new Vector3(...max))
+const model=(min=[-4,-4,-4],max=[4,4,4])=>({bounds:box(min,max)})
+const part=(id,design,position=[0,0,0])=>({id,design,position,rotation:[0,0,0,1]})
+const steps=(...ids)=>ids.map(ids=>({ids,note:'',angle:'iso'}))
+test('swept bounds reject obstacles along a continuous translation, not mere tangencies',()=>{
+ const moving=box([0,0,0],[2,2,2]),fixed=box([5,0,0],[7,2,2]),right=new Vector3(1,0,0)
+ assert.equal(sweptOverlap(moving,fixed,right,10),true)
+ assert.equal(sweptOverlap(moving,fixed,right,2),false)
+ assert.equal(sweptOverlap(moving,fixed,right.clone().negate(),10),false)
+ assert.equal(sweptOverlap(moving,box([5,2,0],[7,4,2]),right,10),false)
+ assert.equal(sweptOverlap(moving,box([5,-8,0],[7,-6,2]),right,10),false)
+})
+test('installation uses the actual axle-bush connector axis and preserves original final poses',()=>{
+ const bush=part('bush','3713'),axle=part('axle','3705')
+ const male=portsFor(axle.design).find(p=>p.gender==='M'),female=portsFor(bush.design).find(p=>p.gender==='F')
+ Object.assign(axle,joinedPose(axle,male,bush,female,{offset:-20,direction:1,roll:0,keyStep:Math.PI/2}))
+ const assembly=createAssembly([bush,axle],[]),links=connectAligned(assembly,[axle],[bush])
+ assert.ok(links.length>0)
+ const models=new Map([['3713',model()],['3705',model()]])
+ const build={parts:[bush,axle],connections:links}
+ const original=structuredClone(build)
+ const result=planInstallation(build,steps(['bush'],['axle']),models)
+ assert.equal(result[1][0].kind,'axial')
+ const track=result[1][0],direction=new Vector3(...track.from).sub(new Vector3(...track.to)).normalize()
+ assert.ok(Math.abs(direction.dot(worldPort(bush,female).axis))>.999)
+ assert.deepEqual(sampleInstallation(track,0).position,track.from)
+ assert.deepEqual(sampleInstallation(track,1).position,axle.position)
+ assert.deepEqual(build,original)
+ // A solid unrelated blocker at the final destination forces explicit fallback.
+ const obstacle=part('block','obstacle',axle.position)
+ models.set('obstacle',model([-100,-100,-100],[100,100,100]))
+ const blocked=planInstallation({parts:[bush,obstacle,axle],connections:links},steps(['bush','block'],['axle']),models)
+ assert.equal(blocked[1][0].kind,'manual');assert.equal(blocked[1][0].reason,'blocked')
+})
+test('free placement chooses another direction when an unrelated obstacle blocks the first path',()=>{
+ const obstacle=part('above','box',[0,20,0]),p=part('target','box')
+ const models=new Map([['box',model()]])
+ const tracks=planInstallation({parts:[obstacle,p],connections:[]},steps(['above'],['target']),models)
+ const t=tracks[1][0];assert.equal(t.kind,'free');assert.notDeepEqual(t.from,[0,t.distance,0])
+ assert.equal(sweptOverlap(installationBounds(p,models.get('box')),installationBounds(obstacle,models.get('box')),new Vector3(...t.from).normalize(),t.distance),false)
+})
+test('unresolved paths remain static, missing geometry and exhausted budgets do not fabricate movement',()=>{
+ const a=part('a','box'),b=part('b','box',[30,0,0]),models=new Map([['box',model()]])
+ const limited=planInstallation({parts:[a,b],connections:[]},steps(['a'],['b']),models,{maxChecks:0})[1][0]
+ assert.equal(limited.kind,'manual');assert.equal(limited.reason,'budget')
+ assert.deepEqual(sampleInstallation(limited,.99),{visible:false,position:b.position})
+ assert.deepEqual(sampleInstallation(limited,1),{visible:true,position:b.position})
+ const missing=planInstallation({parts:[a,b],connections:[]},steps(['a'],['b']),new Map())
+ assert.ok(missing.flat().every(t=>t.reason==='missing_geometry'))
+})
+test('planning respects manual step boundaries, deduplicates IDs and is deterministic',()=>{
+ const a=part('a','box',[0,0,0]),b=part('b','box',[100,0,0]),c=part('c','box',[200,0,0]),models=new Map([['box',model()]])
+ const build={parts:[a,b,c],connections:[]},order=steps(['c','c'],['a','b','c'])
+ const result=planInstallation(build,order,models)
+ assert.deepEqual(result.map(s=>s.map(t=>t.id)),[['c'],['a','b']])
+ assert.deepEqual(planInstallation(build,order,models),result)
+})

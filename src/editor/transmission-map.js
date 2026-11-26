@@ -26,7 +26,7 @@ export function transmissionMap(motion,driver,poses=[],baseParts=[]){
 export function mountTransmissionMap(root,{language,signal,onChange,onFocus}){
  const ru=language==='ru',tr=(a,b)=>ru?a:b
  const el=(tag,txt,cls)=>{const n=document.createElement(tag);if(txt!==undefined)n.textContent=txt;if(cls)n.className=cls;return n}
- const toggle=el('button',tr('Карта передачи','Transmission map')),legend=el('div',undefined,'editor-transmission-legend'),summary=el('p',undefined,'editor-transmission-note')
+ const toggle=el('button','Power Flow'),legend=el('div',undefined,'editor-transmission-legend'),summary=el('p',undefined,'editor-transmission-note')
  toggle.type='button';toggle.setAttribute('aria-pressed','false')
  const names={positive:tr('Положительное отношение','Positive ratio'),negative:tr('Отрицательное отношение','Negative ratio'),nonlinear:tr('Нелинейная передача','Nonlinear drive'),moving:tr('Подвижные звенья','Moving links')}
  let enabled=false,last=new Map()

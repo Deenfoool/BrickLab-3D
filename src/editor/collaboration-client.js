@@ -1,6 +1,6 @@
 import {Vector3} from 'three'
 import {sharedDelta,mergeShared} from './shared-document.js'
-export function mountCollaboration(root,{language,scene,signal,initial,onJoin,read,apply,idle}){
+export function mountCollaboration(root,{language,scene,signal,initial,onJoin,read,apply,idle,preview=()=>[],loadPreview=async()=>{}}){
  const ru=language==='ru',tr=(a,b)=>ru?a:b,doc=root.ownerDocument
  const el=(tag,cls,text)=>{const n=doc.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
  const client=initial?.client??crypto.randomUUID().replaceAll('-','')
@@ -10,18 +10,22 @@ export function mountCollaboration(root,{language,scene,signal,initial,onJoin,re
  root.querySelector('.editor-bar').append(badge)
  const updateBadge=()=>{badge.hidden=!room;badge.textContent=paused?tr('Сессия приостановлена','Session paused'):tr('Вместе','Live')+' · '+participants.length;badge.title=participants.map(p=>p.name).join(', ');badge.dataset.paused=String(paused)}
  const colors=['#7dcaff','#ffd476','#a8efb2','#e2a9ff','#ff9b9b','#86eee4','#f8d2a6','#b6b8ff']
- function renderCursors(){overlay.replaceChildren();if(!room||paused)return;const rect=scene.canvas.getBoundingClientRect();for(const p of participants){if(p.self||!p.cursor)continue;const point=scene.project(new Vector3(...p.cursor));if(!point.visible||point.clientX<rect.left||point.clientX>rect.right||point.clientY<rect.top||point.clientY>rect.bottom)continue;const marker=el('div','collaboration-cursor');marker.style.left=point.clientX+'px';marker.style.top=point.clientY+'px';marker.style.setProperty('--cursor-color',colors[parseInt(p.client.slice(0,2),16)%colors.length]);marker.append(el('span',null,p.name));overlay.append(marker)}}
- let raf
+ function renderCursors(){overlay.replaceChildren();if(!room||paused)return;const rect=scene.canvas.getBoundingClientRect();for(const p of participants){if(p.self||!p.cursor)continue;let pos=cursorPositions.get(p.client);if(!pos){pos=new Vector3(...p.cursor);cursorPositions.set(p.client,pos)}else pos.lerp(new Vector3(...p.cursor),.32);const point=scene.project(pos);if(!point.visible||point.clientX<rect.left||point.clientX>rect.right||point.clientY<rect.top||point.clientY>rect.bottom)continue;const marker=el('div','collaboration-cursor');marker.style.left=point.clientX+'px';marker.style.top=point.clientY+'px';marker.style.setProperty('--cursor-color',colors[parseInt(p.client.slice(0,2),16)%colors.length]);marker.append(el('span',null,p.name));overlay.append(marker)}}
+ let raf,presenceTimer,presenceBusy=false
+ const cursorPositions=new Map()
  let lastDraw=0
- function draw(now){if(closed||!room)return;if(now-lastDraw>80){lastDraw=now;renderCursors()}raf=requestAnimationFrame(draw)}
+ function draw(now){if(closed||!room)return;if(now-lastDraw>16){lastDraw=now;renderCursors()}raf=requestAnimationFrame(draw)}
  function startDrawing(){cancelAnimationFrame(raf);raf=requestAnimationFrame(draw)}
  let lastPointer=0
  scene.canvas.addEventListener('pointermove',e=>{if(!room||performance.now()-lastPointer<80)return;lastPointer=performance.now();try{const p=scene.pointer(e,true);cursor=(p.point??p.ground)?.toArray()??null}catch{cursor=null}},{signal})
  scene.canvas.addEventListener('pointerleave',()=>cursor=null,{signal})
  async function api(action,data={}){const response=await fetch('/api/collaboration/'+action,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},signal:AbortSignal.any([signal,AbortSignal.timeout(7000)]),body:JSON.stringify({client,...data})});const result=await response.json();if(!response.ok)throw Object.assign(Error(result.error??'unavailable'),{status:response.status});return result}
- function attach(value){room=value;baseline=value.document;revision=value.revision;participants=value.participants??[];paused=false;pending=null;updateBadge();startDrawing();schedule()}
- function pause(reason){paused=true;clearTimeout(timer);badge.title=reason;updateBadge();badge.title=reason;overlay.replaceChildren()}
- function schedule(delay=500){clearTimeout(timer);if(!closed&&room&&!paused)timer=setTimeout(tick,delay)}
+ function acceptPresence(value){participants=value.participants??[];updateBadge();const others=participants.filter(p=>!p.self);const designs=[...new Set(others.flatMap(p=>(p.preview??[]).map(x=>x.design)))].slice(0,16);scene.remotePreview(others,preview().map(p=>p.id));void loadPreview(designs).then(()=>{if(!closed&&room&&!paused)scene.remotePreview(participants.filter(p=>!p.self),preview().map(p=>p.id))}).catch(()=>{})}
+ function schedulePresence(delay=90){clearTimeout(presenceTimer);if(!closed&&room&&!paused)presenceTimer=setTimeout(presenceTick,delay)}
+ async function presenceTick(){if(closed||!room||paused||presenceBusy)return;presenceBusy=true;const id=room.roomId;try{const value=await api('presence',{roomId:id,cursor,preview:preview().slice(0,64).map(({id,design,position,rotation,mirrored,color})=>({id,design,position,rotation,mirrored,color}))});if(!closed&&!paused&&room?.roomId===id)acceptPresence(value)}catch{}finally{presenceBusy=false;schedulePresence()}}
+ function attach(value){room=value;baseline=value.document;revision=value.revision;participants=value.participants??[];paused=false;pending=null;updateBadge();startDrawing();schedule();schedulePresence()}
+ function pause(reason){paused=true;clearTimeout(timer);clearTimeout(presenceTimer);scene.remotePreview([]);badge.title=reason;updateBadge();badge.title=reason;overlay.replaceChildren()}
+ function schedule(delay=180){clearTimeout(timer);if(!closed&&room&&!paused)timer=setTimeout(tick,delay)}
  async function tick(){
   if(closed||!room||paused||busy)return
   busy=true
@@ -35,7 +39,7 @@ export function mountCollaboration(root,{language,scene,signal,initial,onJoin,re
    const canEdit=idle(),sent=read(),operations=canEdit?sharedDelta(baseline,sent):[]
    const value=await api('sync',{roomId:room.roomId,revision,operations,cursor})
    if(closed||!room||paused)return
-   participants=value.participants??[];updateBadge()
+   if(!presenceBusy)acceptPresence(value)
    if(value.document){pending={document:value.document,revision:value.revision,sent:canEdit?sent:baseline};if(idle()){
      const current=read(),merged=mergeShared(pending.document,sharedDelta(pending.sent,current))
      if(!sharedDelta(current,merged).length||await apply(merged,current)){baseline=pending.document;revision=pending.revision;pending=null}
@@ -45,7 +49,7 @@ export function mountCollaboration(root,{language,scene,signal,initial,onJoin,re
  }
  async function leave(closeRoom=false){
   if(!room)return
-  const id=room.roomId;paused=true;clearTimeout(timer)
+  const id=room.roomId;paused=true;clearTimeout(timer);clearTimeout(presenceTimer);scene.remotePreview([])
   try{await api(closeRoom?'close':'leave',{roomId:id})}catch(e){if(closeRoom){pause(tr('Не удалось закрыть сессию.','Could not close session.'));throw e}}
   room=null;baseline=null;pending=null;participants=[];paused=false;overlay.replaceChildren();updateBadge()
  }
@@ -74,7 +78,7 @@ export function mountCollaboration(root,{language,scene,signal,initial,onJoin,re
   signal.addEventListener('abort',()=>dialog.remove(),{once:true})
  }
  badge.onclick=open
- if(room){participants=room.participants??[];updateBadge();startDrawing();schedule(850)}
- signal.addEventListener('abort',()=>{closed=true;clearTimeout(timer);cancelAnimationFrame(raf);overlay.remove();badge.remove()},{once:true})
+ if(room){participants=room.participants??[];updateBadge();startDrawing();schedule(200);schedulePresence()}
+ signal.addEventListener('abort',()=>{closed=true;clearTimeout(timer);clearTimeout(presenceTimer);cancelAnimationFrame(raf);overlay.remove();badge.remove()},{once:true})
  return {open}
 }

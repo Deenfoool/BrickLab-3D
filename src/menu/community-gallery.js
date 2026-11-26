@@ -1,5 +1,5 @@
 import {commerceBadge} from './commerce-visuals.js?v=merch-2'
-import {renderUnifiedHero,renderPortfolio} from './unified-profile.js?v=welcome-2'
+import {renderUnifiedHero,renderPortfolio} from './unified-profile.js?v=live-polish-1'
 import {productById} from './commerce-catalog.js'
 import {applySignature,decorateAuthor,themeBadge,themePlate,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {backgroundIds} from './store-themes.js?v=themes-2'
@@ -23,7 +23,7 @@ Object.assign(copy.en,{bookmarks:'Favorites',bookmark:'Save',bookmarked:'Saved �
 Object.assign(copy.ru,{viewerLimit:'Модель превышает предел просмотра: 20 000 деталей или 2 000 артикулов.',largeViewer:'Облегчённый 3D-просмотр',largeHelp:'Перетаскивай модель, чтобы вращать её. Масштаб и редактирование доступны в редакторе.',largeHelpRestricted:'Перетаскивай модель, чтобы вращать её. Автор запретил открытие в редакторе.',simplified:'Упрощённая геометрия деталей:',largeLoading:'Загрузка геометрии',previewLimit:'Открыть облегчённый просмотр',viewerUnavailable:'3D-просмотр недоступен. Попробуй снимки, если они добавлены.'})
 Object.assign(copy.en,{viewerLimit:'Model exceeds the viewer limit of 20,000 parts or 2,000 designs.',largeViewer:'Lightweight 3D viewer',largeHelp:'Drag to rotate the model. Zoom and editing are available in the editor.',largeHelpRestricted:'Drag to rotate the model. The author disabled opening in the editor.',simplified:'Simplified part geometry:',largeLoading:'Loading geometry',previewLimit:'Open lightweight viewer',viewerUnavailable:'3D viewer unavailable. Try screenshots if provided.'})
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-export function communityRoute(route){const m=/^community\/(build|profile)\/([^/]+)$/.exec(route);return route==='community'?{type:'list'}:m&&uuid.test(m[2])?{type:m[1],id:m[2]}:{type:'missing'}}
+export function communityRoute(route){const m=/^community\/(build|profile)\/([^/]+)$/.exec(route);return route==='community'?{type:'list'}:m&&(uuid.test(m[2])||m[1]==='profile'&&(/^[a-z0-9][a-z0-9_.-]{2,31}$/i.test(m[2])||/^id_[a-f0-9]{32}$/i.test(m[2])))?{type:m[1],id:m[2]}:{type:'missing'}}
 export function previewDocument(doc){return sanitizePreview(doc,{strict:true})}
 function el(tag,cls,value){const n=document.createElement(tag);if(cls)n.className=cls;if(value!==undefined)n.textContent=value;return n}
 function button(label,fn,cls='workspace-action'){const b=el('button',cls,label);b.type='button';b.onclick=fn;return b}
@@ -156,7 +156,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
     for(let i=0;i<Math.min(4,b.imageCount);i++){const thumb=button('',()=>{main.src='/api/community/build/'+b.id+'/image/'+i;main.hidden=false;host.hidden=true;message.hidden=true;for(const c of [minus,plus,reset])c.hidden=true;for(const c of choices.children)c.setAttribute('aria-pressed',String(c===thumb))});thumb.setAttribute('aria-label',t.image+' '+(i+1));thumb.setAttribute('aria-pressed','false');const img=el('img');img.src='/api/community/build/'+b.id+'/image/'+i;img.alt='';thumb.append(img);choices.append(thumb)}
     pictures.append(choices);left.insertBefore(main,host);left.append(pictures)
   }
-  const author=link(b.author,'#community/profile/'+b.authorId,'community-author')
+  const author=link(b.author,'#community/profile/'+(b.authorUsername??b.authorId),'community-author')
   const avatar=publicImage(b.authorAvatarUrl,b.authorId,'avatar');if(avatar){avatar.className='community-author-avatar';author.prepend(avatar)}
   decorateAuthor(author,b.authorTheme,language);const authorBar=el('div','community-model-author');authorBar.append(author);applySignature(authorBar,b.authorTheme)
   const meta=el('div','community-meta')
@@ -182,12 +182,13 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   if(b.authorId!==social.ownId)actions.append(button(t.reportBuild,()=>{if(!social.signedIn){location.hash='#account';return}reportForm.hidden=!reportForm.hidden}))
   actions.append(reportForm)
   const credit=el('div','community-model-credit')
+  if(b.coauthors?.length){const row=el('div','community-coauthors');row.append(el('strong',null,language==='ru'?'Соавторы (указаны автором)':'Coauthors (credited by author)'));for(const p of b.coauthors)row.append(link('@'+p.username,'#community/profile/'+p.username));credit.append(row)}
   if(b.attribution){credit.append(el('p','account-muted',t.attribution+': '+b.attribution));if(b.originId&&uuid.test(b.originId))credit.append(link(t.attribution,'#community/build/'+b.originId))}
   credit.append(el('p','account-muted',b.allowRemix?t.remixAllowed:t.remixForbidden))
   info.append(authorBar,meta,el('h3',null,t.aboutModel),el('p','community-description',b.description||t.noDescription),credit,stats,actions,notice)
   layout.append(left,info)
   const related=el('section','community-related'),relatedHead=el('div','community-heading'),relatedGrid=el('div','community-related-grid')
-  relatedHead.append(el('h3',null,t.moreByAuthor),link(t.allAuthor,'#community/profile/'+b.authorId))
+  relatedHead.append(el('h3',null,t.moreByAuthor),link(t.allAuthor,'#community/profile/'+(b.authorUsername??b.authorId)))
   related.append(relatedHead,relatedGrid)
   dialog.append(bar,layout,related);root.append(dialog)
   try{
@@ -296,7 +297,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
   const card=el('article','community-card'+(detail?' community-detail':'')),art=artFor(b,detail),body=el('div','community-card-body')
   const title=detail?el('h2',null,b.title):link(b.title,'#community/build/'+b.id,'community-title')
   if(!detail)title.addEventListener('click',e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;e.preventDefault();void showViewer(b)})
-  const meta=el('div','community-meta'),author=link(b.author,'#community/profile/'+b.authorId,'community-author')
+  const meta=el('div','community-meta'),author=link(b.author,'#community/profile/'+(b.authorUsername??b.authorId),'community-author')
   const authorImage=publicImage(b.authorAvatarUrl,b.authorId,'avatar');if(authorImage){authorImage.className='community-author-avatar';author.prepend(authorImage)}
   decorateAuthor(author,b.authorTheme,language);applySignature(card,b.authorTheme);meta.append(author,el('span',null,b.partCount+' '+t.partCount),el('span',null,t[b.category]??t.other),el('span',null,t.revision+' '+b.revision))
   const statistics=el('div','community-meta'),views=el('span'),downloads=el('span');const update=(v,d)=>{views.textContent=t.views+': '+v;downloads.textContent=t.downloads+': '+d};update(b.views??0,b.downloads??0);if(!viewUpdates.has(b.id))viewUpdates.set(b.id,[]);viewUpdates.get(b.id).push(update);statistics.append(views,downloads)
@@ -324,7 +325,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
  function builderCard(p,detail=false){
   const a=el('article','community-card community-builder'+(detail?' community-builder-detail':'')),avatar=el('div','account-avatar community-profile-avatar',Array.from(p.displayName).slice(0,2).join('').toUpperCase()),body=el('div','community-card-body')
   applySignature(a,p.backgroundTheme);const img=publicImage(p.avatarUrl,p.id,'avatar');if(img)avatar.replaceChildren(img)
-  body.append(detail?el('h2',null,p.displayName):link(p.displayName,'#community/profile/'+p.id,'community-title'),el('p','community-description',p.bio))
+  body.append(detail?el('h2',null,p.displayName):link(p.displayName,'#community/profile/'+(p.username??p.id),'community-title'),el('p','community-description',p.bio))
   const badge=themeBadge(p.backgroundTheme,language);if(badge)body.append(badge);const support=productById(p.supportBadge);if(support?.kind==='badge')body.append(commerceBadge(support.id));if(p.plus===true)body.append(commerceBadge('plus'));const reputation=reputationBlock(p);if(reputation)body.append(reputation);body.append(reaction('follow',p.id,p.followers,p.id===social.ownId))
   if(detail){
    const theme=['blueprint','graphite','amber'].includes(p.coverTheme)?p.coverTheme:'blueprint'
@@ -345,7 +346,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
    if(view.type==='build'){const {build}=await request('/api/community/build/'+view.id,signal);if(!signal.aborted){status.textContent='';void showViewer(build)}}
    else{
     const {profile}=await request('/api/community/profile/'+view.id,signal);if(signal.aborted)return
-    const {builds}=await request('/api/community/builds?author='+view.id,signal);if(signal.aborted)return
+    const {builds}=await request('/api/community/builds?author='+profile.id,signal);if(signal.aborted)return
     status.textContent='';const theme=backgroundIds.includes(profile.backgroundTheme)?profile.backgroundTheme:'default'
     const workshop=el('section','unified-public-profile fullscreen-workshop cosmetic-'+theme);applySignature(workshop,profile.backgroundTheme)
     const actions=[link(t.back,'#community'),reaction('follow',profile.id,profile.followers,profile.id===social.ownId)]

@@ -50,7 +50,7 @@ function credentials(data, registering) {
   const email = typeof data.email === 'string' ? data.email.trim().toLowerCase() : ''
   const password = data.password
   const displayName = typeof data.displayName === 'string' ? data.displayName.trim() : ''
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 ||
+  if ((!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && (registering||!(/^[a-z0-9][a-z0-9_.-]{2,31}$/.test(email)||/^id_[a-f0-9]{32}$/.test(email)))) || email.length > 254 ||
       typeof password !== 'string' || password.includes('\0') || password.length > 256 ||
       password.length < (registering ? 12 : 1) ||
       (registering && (!displayName || displayName.length > 80 || /[\u0000-\u001f\u007f]/.test(displayName)))) {
@@ -167,7 +167,7 @@ export function createAuthHandler({ store, origin, registrationEnabled = false, 
             user = safeUser
             if(await store.createSession(user.id, s.tokenHash, s.expiresAt, previousHash,passwordHash)===false)throw new InputError(401,'invalid_login')
           }
-          reply(res, register ? 201 : 200, { user: { id: user.id, email: user.email, displayName: user.displayName,...(user.admin===true?{admin:true}:{}) } }, cookie(s.token))
+          reply(res, register ? 201 : 200, { user: { id: user.id, email: user.email, displayName: user.displayName,...(user.username?{username:user.username}:{}),...(user.admin===true?{admin:true}:{}) } }, cookie(s.token))
         } finally { active-- }
       }
     } catch (error) {

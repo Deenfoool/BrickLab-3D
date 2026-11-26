@@ -6,7 +6,7 @@ import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'
 import { mountCablePanel } from './cable-panel.js'
 import { mountFloatingPanels } from './floating-panels.js?v=workspace-21'
-import { mountWorkspace } from './workspace.js?v=feedback-2'
+import { mountWorkspace } from './workspace.js?v=menu-studio-2'
 import { createEditorAudio } from './audio.js?v=editor-sound'
 import { mountMotorPanel } from './motor-panel.js'
 import { Plane, Quaternion, Vector3 } from 'three'
@@ -18,15 +18,15 @@ import { nearestDetent } from '../mechanics/axial.js?v=torque-clutch'
 import { nearbyConnections, translationSnaps } from './snap.js?v=volvo-spur-gears'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=system-complete'
 import { mountLibrary } from './library.js?v=catalog-engine-1'
-import { createScene } from './scene.js?v=feedback-2'
-import {mountTransmissionMap,transmissionMap,transmissionCodes} from './transmission-map.js'
+import { createScene } from './scene.js?v=menu-studio-2'
+import {mountTransmissionMap,transmissionMap,transmissionCodes} from './transmission-map.js?v=menu-studio-1'
 import {mountMotorBench} from './motor-bench-panel.js'
-import {mountCollaboration} from './collaboration-client.js'
+import {mountCollaboration} from './collaboration-client.js?v=live-polish-1'
 import {sharedDelta} from './shared-document.js'
 import {mountDriveEstimate} from './drive-estimate-panel.js?v=feedback-2'
 import {engineeringReport,downloadEngineeringReport} from './engineering-report.js'
-import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
-import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
+import { mountScenePartsPanel } from './scene-parts-panel.js?v=menu-studio-2'
+import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=menu-studio-1'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=volvo-spur-gears'
 import { mountBeltPanel } from './belt-panel.js?v=belt-drive'
 import { mountTrackPanel, trackLabels } from './track-panel.js?v=level-treads'
@@ -56,7 +56,7 @@ const simulating = mode => mode === 'testDrive'
 const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
-export async function mountEditor(root, { document, projectId, language, save, download, publish, signal, reportLoad, collaboration, onJoinCollaboration }) {
+export async function mountEditor(root, { document, projectId, language, save, download, publish, signal, reportLoad, collaboration, onJoinCollaboration, projectActions }) {
   await loadPartIndex()
   if (signal.aborted) return
   const source = upgradeInlineEngineFan(promoteLegacyBelts(expandComponents(normalizeDocumentDesigns(document, parts), parts)))
@@ -282,8 +282,10 @@ export async function mountEditor(root, { document, projectId, language, save, d
   })
   mountFloatingPanels(el('panelLayer'), t, signal)
   let collaborationUI
+  let customInstructions=source.customInstructions
   const workspaceUI = mountWorkspace(root, { language, scene, signal,
     grid: readPreference('grid') !== 'off', axes: readPreference('axes') !== 'off', changePreference: writePreference,
+    commands:()=>commandList(), invokeCommand:id=>invokeCommand(id), openCommands:()=>openCommands(),
     hideSelection: () => setPartsHidden(selectionIds(), true),
     openCollaboration:()=>collaborationUI?.open(),
     openPhotoStudio:async()=>{if(dragActive()||moving||pendingPart)return;stopAnimation();releaseMotor();try{const {openPhotoStudio}=await import('./photo-studio.js');if(!signal.aborted)openPhotoStudio({document:currentDocument(),models,hidden,language,signal})}catch{setMessage(language==='ru'?'Не удалось открыть фотостудию: проверь загрузку деталей и WebGL.':'Could not open Photo Studio: check geometry and WebGL.');render()}},
@@ -438,6 +440,8 @@ export async function mountEditor(root, { document, projectId, language, save, d
     selectPart: (id, toggle) => selectClick(id, toggle),
     selectGroup: (id, toggle) => selectParts(state.layers.groups.find(group => group.id === id).partIds, toggle),
     createGroup,
+    lockLabel:id=>locked(id)?tr('Разблокировать','Unlock'):tr('Заблокировать','Lock'),
+    toggleLock:id=>{const ids=new Set(state.layers.lockedPartIds??[]);ids.has(id)?ids.delete(id):ids.add(id);commitLayers({lockedPartIds:[...ids]})},
     togglePart: id => setPartsHidden([id], isolation ? !hidden.has(id) : !state.layers.hiddenPartIds.includes(id)),
     deletePart: id => removeParts([id]),
     toggleGroup: id => {
@@ -520,6 +524,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   function currentDocument() {
     return {
       ...source,
+      customInstructions,
       ...(buildingSet && { buildingSet }),
       ...(driveConfig && { testDrive: driveConfig }),
       name: el('name').value.trim() || source.name,
@@ -538,6 +543,36 @@ export async function mountEditor(root, { document, projectId, language, save, d
     render()
     return successful
   }
+
+  const tr=(a,b)=>language==='ru'?a:b
+  const editing=()=>mode==='build'&&!dragActive()&&!pendingPart&&!snappingScene
+  const locked=id=>state.layers.lockedPartIds?.includes(id)===true
+  const unlockedSelection=()=>editing()&&selectionIds().length>0&&!selectionIds().some(locked)
+  function toggleLocked(){if(!editing()||!selectionIds().length)return;const ids=new Set(state.layers.lockedPartIds??[]),unlock=selectionIds().every(id=>ids.has(id));for(const id of selectionIds())unlock?ids.delete(id):ids.add(id);commitLayers({lockedPartIds:[...ids]})}
+  function selectMatching(byColor=false){if(!editing()||!selectedPart())return;const p=selectedPart(),color=x=>String(x.color??parts[x.design]?.color).toLowerCase();selectParts(state.parts.filter(x=>!hidden.has(x.id)&&(byColor?color(x)===color(p):x.design===p.design)).map(x=>x.id))}
+  function focusSelection(){scene.focus(selectionIds())}
+  function openInstruction(){if(!editing()||!state.parts.length)return;void import('./instruction-studio.js?v=installation-1').then(({openInstructionStudio})=>{if(!signal.aborted)openInstructionStudio({document:currentDocument(),selection:selectionIds(),language,signal,partsCatalog:parts,models,save:steps=>{customInstructions=structuredClone(steps);return persist(true)}})}).catch(()=>{setMessage(tr('Не удалось открыть студию инструкций. Проверь загрузку геометрии (до 2000 деталей).','Could not open Instruction Studio. Check geometry loading (up to 2000 parts).'));render()})}
+  function showPowerFlow(play=false){if(!selectedPart()||dragActive())return;if(mode!=='kinematics')setMode('kinematics');workspaceUI.openPanel('inspector');if(transmission?.ok){if(!mapUI.enabled)el('transmissionMap').querySelector('button').click();if(play&&!el('play').hidden&&!el('play').disabled)el('play').click()}else if(hinge?.ok){setMessage(tr('Для этого соединения доступен угол поворота.','This joint has an angle control.'));render()}else{setMessage(tr('Передача вращения не обнаружена.','No rotational transmission detected.'));render()}}
+  function choiceDialog(title,fill){if(window.document.querySelector('dialog[open]'))return;const d=window.document,dialog=d.createElement('dialog');dialog.className='bricklab-choice';const h=d.createElement('h2');h.textContent=title;const status=d.createElement('p');status.setAttribute('role','status');const body=d.createElement('div');body.className='bricklab-choice-body';const close=d.createElement('button');close.type='button';close.textContent=tr('Закрыть','Close');close.onclick=()=>dialog.close();dialog.append(h,status,body,close);dialog.addEventListener('close',()=>{scene.setGhost(null);dialog.remove()},{once:true});signal.addEventListener('abort',()=>dialog.remove(),{once:true});d.body.append(dialog);dialog.showModal();fill({dialog,body,status,button:(label,run)=>{const b=d.createElement('button');b.type='button';b.textContent=label;b.onclick=run;return b}})}
+  async function openSmartConnect(){if(!editing()||selectionIds().length!==2)return;if(state.parts.length>2000){setMessage(tr('Smart Connect доступен до 2000 деталей.','Smart Connect supports up to 2000 parts.'));render();return}const before=state,[a,b]=selectionIds().map(id=>state.parts.find(p=>p.id===id));const loose=p=>!locked(p.id)&&!state.links.some(l=>l.shaft.part===p.id||l.socket.part===p.id)&&!state.belts.some(l=>l.a.part===p.id||l.b.part===p.id);const moving=a&&b?(loose(a)?a:loose(b)?b:null):null,fixed=moving===a?b:a;if(!moving){setMessage(tr('Для Smart Connect одна деталь должна быть свободной и незаблокированной.','Smart Connect needs one loose, unlocked part.'));render();return}
+    const {smartConnections}=await import('./smart-connect.js');if(signal.aborted||state!==before)return
+    const options=smartConnections(moving,fixed,state.parts,state.links,state.belts)
+    choiceDialog('Smart Connect',({dialog,body,status,button})=>{status.textContent=options.length?tr('Выбери проверенное соединение. Перемещается только свободная деталь.','Choose a verified connection. Only the loose part moves.'):tr('Подходящих свободных креплений не найдено.','No compatible free ports found.');for(const opt of options){const row=window.document.createElement('div');row.className='choice-row';row.append(button(opt.label,()=>scene.setGhost(opt.pose)),button(tr('Соединить','Connect'),()=>{if(state!==before||signal.aborted)return;dialog.close();commit({parts:state.parts.map(p=>p.id===moving.id?opt.pose:p),links:[...state.links,opt.link]})}));body.append(row)}})
+  }
+  function openReplace(){if(!unlockedSelection()||selectionIds().length!==1)return;const p=selectedPart(),before=state,group=parts[p.design]?.group
+    choiceDialog(tr('Заменить деталь','Replace part'),({dialog,body,status,button})=>{const d=window.document,input=d.createElement('input'),results=d.createElement('div');input.type='search';input.placeholder=tr('Название или артикул','Name or design ID');body.append(input,results)
+      const draw=()=>{results.replaceChildren();const q=input.value.trim().toLowerCase();const candidates=Object.values(parts).filter(x=>x.design!==p.design&&(q?String(x.design+' '+x[language]+' '+x.en).toLowerCase().includes(q):x.group===group)).slice(0,40);for(const candidate of candidates)results.append(button(candidate.design+' · '+candidate[language],async()=>{if(state!==before||signal.aborted)return;try{status.textContent=tr('Проверяем соединения…','Checking connections…');await prepareModel(candidate);if(state!==before||signal.aborted||!dialog.open)return;const replacement={...p,design:candidate.design};delete replacement.electric;const placed=state.parts.map(x=>x.id===p.id?replacement:x),retained=transformLinks(placed,[p.id]);const check=createAssembly(placed,retained,{belts:state.belts});if(check.connections.length!==state.links.length||check.belts.length!==state.belts.length){status.textContent=tr('Замена нарушит соединения. Выбери другой вариант.','Replacement would break connections. Choose another.');return}dialog.close();commit({parts:placed,links:retained})}catch{status.textContent=tr('Не удалось загрузить деталь.','Part could not be loaded.')}}))}
+      input.oninput=draw;draw()})
+  }
+  function revealAll(){updateVisibility({hiddenPartIds:[],groups:state.layers.groups.map(g=>({...g,hidden:false}))})}
+  async function exportFormat(format){if(dragActive())return;try{const {inventoryCsv,ldrawText,downloadText}=await import('./project-exports.js');const doc=currentDocument();if(format==='csv')downloadText(doc.name+'.csv',inventoryCsv(doc,parts),'text/csv');else if(format==='ldr')downloadText(doc.name+'.ldr',ldrawText(doc,parts))}catch{setMessage(tr('Не удалось экспортировать файл.','Export failed.'));render()}}
+  let cloudBusy=false
+  function cloudAction(kind){if(cloudBusy||!editing()||!persist())return;cloudBusy=true;Promise.resolve(projectActions?.[kind]?.(currentDocument())).then(ok=>{if(!signal.aborted&&ok!==undefined){setMessage(ok?(kind==='shareLink'?tr('Ссылка скопирована','Link copied'):tr('Сохранено в облаке','Saved to cloud')):tr('Облачное сохранение не выполнено.','Cloud save not completed.'));render()}}).catch(e=>{if(!signal.aborted){setMessage(e.code==='revision_conflict'?tr('В облаке новая версия. Локальная копия сохранена.','Cloud revision conflict. Local copy retained.'):e.message==='not_published'?tr('Сначала опубликуй сборку.','Publish the build first.'):e.message==='not_linked'?tr('Сначала сохрани сборку в облако.','Save the build to cloud first.'):tr('Войди в аккаунт или проверь соединение.','Sign in or check your connection.'));render()}}).finally(()=>{cloudBusy=false})}
+  function commandList(){const c=(id,label,group,run,enabled=()=>true,shortcut='',keywords='')=>({id,label,group,run,enabled,shortcut,keywords});const project=tr('Проект','Project'),edit=tr('Редактор','Editor'),view=tr('Вид','View'),mech=tr('Механика','Mechanics')
+    return [c('rename',tr('Переименовать','Rename'),project,()=>workspaceUI.rename()),c('new',tr('Новая сборка','New build'),project,()=>projectActions?.newBuild?.(),editing),c('copyProject',tr('Создать копию','Duplicate project'),project,()=>projectActions?.copy?.(currentDocument()),editing),c('home',tr('Мои сборки','My builds'),project,()=>projectActions?.home?.(),editing),c('save',tr('Сохранить','Save'),project,()=>persist(true),editing,'Ctrl+S'),c('cloud',tr('Сохранить в облако','Save to cloud'),project,()=>cloudAction('cloud'),editing),c('history',tr('История версий','Version history'),project,()=>cloudAction('history'),editing),c('photo','Photo Studio',project,()=>workspaceUI.photo(),editing,'',tr('фотостудия фото','photo image')),c('instructions','Instruction Studio',project,openInstruction,()=>editing()&&state.parts.length>0,'',tr('инструкция PDF','instructions PDF')),c('live',tr('Совместная сессия','Live collaboration'),project,()=>collaborationUI?.open(),editing),c('publish',tr('Опубликовать','Publish'),project,()=>el('publish').click(),()=>editing()&&!el('publish').hidden),c('shareLink',tr('Скопировать публичную ссылку','Copy public link'),project,()=>cloudAction('shareLink'),editing),c('bricklab','BrickLab (.bricklab)',project,()=>download(currentDocument()),editing),c('ldr','LDraw (.ldr)',project,()=>exportFormat('ldr'),editing),c('csv',tr('Список деталей CSV','Parts CSV'),project,()=>exportFormat('csv'),editing),c('duplicate',tr('Дублировать деталь','Duplicate part'),edit,()=>insertCopy(clipboardSelection()),()=>editing()&&!!selected,'Ctrl+D'),c('paint',tr('Изменить цвет','Change color'),edit,()=>{workspaceUI.openPanel('inspector');el('color').click()},()=>editing()&&!!selected),c('replace',tr('Заменить деталь','Replace part'),edit,openReplace,()=>unlockedSelection()&&selectionIds().length===1),c('sameDesign',tr('Выделить одинаковые детали','Select same design'),edit,()=>selectMatching(),()=>editing()&&!!selected),c('sameColor',tr('Выделить одинаковый цвет','Select same color'),edit,()=>selectMatching(true),()=>editing()&&!!selected),c('lock',selectionIds().length&&selectionIds().every(locked)?tr('Разблокировать','Unlock'):tr('Заблокировать','Lock'),edit,toggleLocked,()=>editing()&&!!selected),c('group',tr('Создать группу','Create group'),edit,createGroup,()=>editing()&&!!selected,'Ctrl+G'),c('hide',tr('Скрыть детали','Hide parts'),edit,()=>setPartsHidden(selectionIds(),true),()=>editing()&&!!selected,'H'),c('isolate',tr('Изолировать выделение','Isolate selection'),edit,toggleIsolation,()=>editing()&&(!!selected||!!isolation),'Ctrl+H'),c('showAll',tr('Показать скрытые детали','Show hidden parts'),view,revealAll,editing),c('focus',tr('Приблизить к детали','Focus selection'),view,focusSelection,()=>!!selected),c('reset',tr('Сбросить вид','Reset view'),view,()=>scene.resetView()),c('connect','Smart Connect',mech,()=>void openSmartConnect().catch(()=>{setMessage(tr('Ошибка поиска соединений.','Connection search failed.'));render()}),()=>editing()&&selectionIds().length===2,'',tr('соединить детали','connect parts')),c('flow','Power Flow',mech,()=>showPowerFlow(),()=>!!selected&&!dragActive(),'',tr('передача вращения','transmission')),c('play',tr('Запустить механизм','Run mechanism'),mech,()=>showPowerFlow(true),()=>!!selected&&!dragActive()),c('length',tr('Изменить длину оси','Change axle length'),edit,()=>setTool('length'),()=>unlockedSelection()&&canResize(selectedPart())),c('remove',tr('Удалить','Delete'),edit,()=>removeParts(),()=>editing()&&!!selected,'Del'),...['select','move','rotate','box','belt','track'].map(k=>c('tool-'+k,({select:tr('Выделение','Select'),move:tr('Перемещение','Move'),rotate:tr('Вращение','Rotate'),box:tr('Рамка','Box selection'),belt:tr('Ремень','Belt'),track:tr('Гусеница','Track')})[k],edit,()=>setTool(k),editing)),...['library','inspector','scene-parts','instruction'].filter(k=>root.querySelector('[data-panel="'+k+'"]')).map(k=>c('panel-'+k,({library:tr('Библиотека','Library'),inspector:tr('Инспектор','Inspector'),'scene-parts':tr('Детали сцены','Scene parts'),instruction:tr('Инструкция','Instruction')})[k],view,()=>workspaceUI.openPanel(k))),c('grid',tr('Сетка','Grid'),view,()=>workspaceUI.toggleView('grid')),c('axes',tr('Оси координат','Axes'),view,()=>workspaceUI.toggleView('axes')),c('fullscreen',tr('Полноэкранный режим','Fullscreen'),view,()=>workspaceUI.toggleView('fullscreen')),c('ortho',tr('Ортографическая камера','Orthographic camera'),view,()=>{scene.setCameraMode('orthographic');render()},()=>!dragActive()&&mode!=='testDrive'),c('perspective',tr('Перспективная камера','Perspective camera'),view,()=>{scene.setCameraMode('perspective');render()},()=>!dragActive()&&mode!=='testDrive')]
+  }
+  function invokeCommand(id){const cmd=commandList().find(c=>c.id===id);if(cmd&&cmd.enabled()!==false)cmd.run()}
+  function openCommands(){void import('./command-palette.js').then(({openCommandPalette})=>{if(!signal.aborted)openCommandPalette({commands:commandList,language,signal,searchParts:q=>editing()?Object.values(parts).filter(p=>(p.design+' '+p[language]+' '+p.en).toLowerCase().includes(q.toLowerCase())).slice(0,12).map(p=>({label:p.design+' · '+p[language],group:tr('Библиотека','Library'),run:()=>void selectLibraryPart(p)})):[]})})}
 
   function selectedPart() {
     return state.parts.find(part => part.id === selected)
@@ -678,7 +713,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }
 
   const selectionIds = () => selected ? [selected, ...additional] : []
-  const canResize = part => !additional.size && axleOptions(part).length > 1
+  const canResize = part => Boolean(part)&&!locked(part.id)&&!additional.size && axleOptions(part).length > 1
   const dragActive = () => Boolean(moving || gizmoPart || resize || boxSelection)
   const snapAllowed = event => snapEnabled && !event?.ctrlKey && !event?.metaKey
 
@@ -804,10 +839,12 @@ export async function mountEditor(root, { document, projectId, language, save, d
 
   function removeParts(partIds = selectionIds(), groupId) {
     if (mode !== 'build' || dragActive() || (!partIds.length && !groupId)) return
+    if(partIds.some(locked)){setMessage(tr('Сначала разблокируй детали.','Unlock the parts first.'));render();return}
     const ids = new Set(partIds.filter(id => !hiddenIds.has(id)))
     const layers = {
       groups: moveToSceneGroup(state.layers.groups.filter(group => group.id !== groupId), ids),
       hiddenPartIds: state.layers.hiddenPartIds.filter(id => !ids.has(id)),
+      lockedPartIds:(state.layers.lockedPartIds??[]).filter(id=>!ids.has(id)),
     }
     commit({ layers, parts: state.parts.filter(part => !ids.has(part.id)),
       links: state.links.filter(link => !ids.has(link.shaft.part) && !ids.has(link.socket.part)),
@@ -877,12 +914,14 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }
 
   function commit(next) {
+    if(next.parts){const byId=new Map(next.parts.map(p=>[p.id,p]));if(state.parts.some(p=>{const n=byId.get(p.id);return locked(p.id)&&n&&(n.design!==p.design||Boolean(n.mirrored)!==Boolean(p.mirrored)||!samePose(p,n))})){setMessage(tr('Сначала разблокируй детали.','Unlock the parts first.'));render();return false}}
     const beforeLinks = state.links
     undo.push(state)
     if (undo.length > 80) undo.shift()
     redo.length = 0
     applyState({ belts: state.belts, layers: state.layers, ...next })
     if (hasNewConnection(beforeLinks, state.links)) tutorial?.handle('connected')
+    return true
   }
 
   function paintPart(id, color, allMatching = false) {
@@ -1007,7 +1046,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
       scene.gizmo.setRotationSnap(jointTool ? null : steppedRotation ? rotationStep : null)
       if (!resize) updateHighlights()
     }
-    scene.setTool(building && !moving && !resize && (!jointTool || activeJoint) && (tool === 'move' || tool === 'rotate')
+    scene.setTool(building && !selectionIds().some(locked) && !(activeJoint?.moving&&[...activeJoint.moving].some(locked)) && !moving && !resize && (!jointTool || activeJoint) && (tool === 'move' || tool === 'rotate')
       ? tool === 'move' ? 'translate' : 'rotate' : null, part, selectionIds(), activeJoint)
     positionHandles()
     if (part) el('color').value = /^#[0-9a-f]{6}$/i.test(part.color) ? part.color : parts[part.design].color
@@ -1070,7 +1109,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     el('snap').setAttribute('aria-pressed', String(snapEnabled))
     el('undo').disabled = simulating(mode) || !undo.length
     el('redo').disabled = simulating(mode) || !redo.length
-    workspaceUI.render(mode, tool, state.parts.length, links.length, building && Boolean(part) && !dragActive() && !moving && !addingConnection, !dragActive() && !moving && !pendingPart && !boxSelection)
+    workspaceUI.render(mode, tool, state.parts.length, links.length, building && Boolean(part) && !dragActive() && !moving && !addingConnection, !dragActive() && !moving && !pendingPart && !boxSelection, state.belts.length)
     renderHint()
   }
 
@@ -1130,6 +1169,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }
 
   function startPlacement(part, existing = false, origin, group) {
+    if(existing&&[part,...(group?.items??[])].some(p=>locked(p.id))){setMessage(tr('Детали заблокированы.','Parts are locked.'));render();return}
     cancelGizmo()
     cancelPlacement()
     cancelResize()
@@ -1310,6 +1350,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
         return
       }
       const fixed = new Set([
+        ...(state.layers.lockedPartIds??[]),
         ...unknownLinks.flatMap(link => [link.shaft?.part, link.socket?.part]),
         ...hiddenBelts.flatMap(record => [record.a?.part, record.b?.part]),
       ])
@@ -1673,6 +1714,10 @@ export async function mountEditor(root, { document, projectId, language, save, d
   on(el('paste'), 'click', () => insertCopy(clipboard))
   const context = el('partContext')
   const mirrorAxes = el('mirrorAxes')
+  function refreshContext(){
+    context.querySelectorAll('[data-smart-context]').forEach(n=>n.remove());const p=selectedPart();if(!p)return;const d=root.ownerDocument,header=d.createElement('div');header.dataset.smartContext='';header.className='part-context-header';header.textContent=selectionIds().length>1?tr('Выбрано: ','Selected: ')+selectionIds().length:(parts[p.design]?.[language]??p.design)+' · '+p.design;context.prepend(header);
+    const ids=['paint','replace','sameDesign','sameColor','lock','group','focus','hide','isolate'];if(selectionIds().length===2)ids.unshift('connect');if(rotationMotion(p.id,state.parts,assembly)?.ok)ids.unshift('flow','play');if(canResize(p))ids.unshift('length');const commands=commandList();for(const id of ids){const c=commands.find(c=>c.id===id);if(!c)continue;const b=d.createElement('button');b.type='button';b.dataset.smartContext='';b.dataset.command=id;const iconPaths={paint:'M12 3a9 9 0 1 0 0 18h2a2 2 0 0 0 0-4h-1',replace:'M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4',sameDesign:'M3 3h7v7H3zM14 14h7v7h-7z',sameColor:'M12 2C8 8 5 11 5 15a7 7 0 0 0 14 0c0-4-3-7-7-13z',lock:'M5 10h14v11H5zM8 10V7a4 4 0 1 1 8 0v3',group:'M3 5h7l2 2h9v12H3z',focus:'M3 9V3h6m6 0h6v6m0 6v6h-6m-6 0H3v-6',hide:'M3 3l18 18M2 12s4-7 10-7c6 0 10 7 10 7',isolate:'M3 3h18v18H3zM8 8h8v8H8z',connect:'M10 13l4-4m-7 1-3 3a4 4 0 0 0 6 6l3-3m-2-8 3-3a4 4 0 0 1 6 6l-3 3',flow:'M3 12h6l3-7 3 14 3-7h3',play:'M7 4l14 8-14 8z',length:'M3 12h18M7 8l-4 4 4 4m10-8 4 4-4 4'};b.innerHTML=menuIcon(iconPaths[id]??iconPaths.group);b.append(d.createTextNode(c.label));b.disabled=!c.enabled();context.insertBefore(b,context.querySelector('[data-action=delete]'))}
+  }
   function positionContext(x, y) {
     context.style.left = Math.max(0, Math.min(x, window.innerWidth - context.offsetWidth)) + 'px'
     context.style.top = Math.max(0, Math.min(y, window.innerHeight - context.offsetHeight)) + 'px'
@@ -1697,9 +1742,10 @@ export async function mountEditor(root, { document, projectId, language, save, d
       return
     }
     context.hidden = true
+    if(button.dataset.command){invokeCommand(button.dataset.command);return}
     if (button.dataset.action === 'copy') insertCopy(clipboardSelection())
     else if (button.dataset.action === 'delete') removeParts()
-    else if (button.hasAttribute('data-axis')) {
+    else if (button.hasAttribute('data-axis')&&unlockedSelection()) {
       const ids = selectionIds()
       const center = scene.selectionCenter(ids)
       const selectedIds = new Set(ids)
@@ -1866,7 +1912,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
         const part = state.parts.find(entry => entry.id === hit)
         if (part) {
           if (!selectionIds().includes(hit)) selectClick(hit)
-          directDrag = { part, start: event }
+          if(!selectionIds().some(locked))directDrag = { part, start: event }
         }
       }
       return
@@ -1914,12 +1960,14 @@ export async function mountEditor(root, { document, projectId, language, save, d
     if (event.button === 2) {
       if (rightDown && Math.hypot(event.clientX - rightDown[0], event.clientY - rightDown[1]) < 5) {
         const hit = scene.pointer(event).hit
-        if (mode === 'build' && !dragActive() && !pendingPart && selectionIds().includes(hit)) {
+        if (mode === 'build' && !dragActive() && !pendingPart && hit) {
+          if(!selectionIds().includes(hit))selectClick(hit)
+          refreshContext()
           context.hidden = false
           mirrorAxes.hidden = true
-          context.firstElementChild.setAttribute('aria-expanded', 'false')
+          context.querySelector('[data-action=mirror]').setAttribute('aria-expanded', 'false')
           positionContext(event.clientX, event.clientY)
-          context.firstElementChild.focus()
+          context.querySelector('button:not(:disabled)')?.focus()
           rightDown = null
           return
         }
@@ -1995,6 +2043,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   })
   on(window, 'keydown', event => {
     if (event.defaultPrevented || root.ownerDocument.querySelector('dialog[open]')) return
+    if((event.ctrlKey||event.metaKey)&&event.code==='KeyK'){event.preventDefault();if(!event.repeat)openCommands();return}
     if (root.hasAttribute('data-workspace-presentation')) {
       if(event.key==='Escape'){event.preventDefault();workspaceUI.exitPresentation()}
       return
@@ -2182,8 +2231,14 @@ export async function mountEditor(root, { document, projectId, language, save, d
       if (gear) setSelection(gear.id)
     }
   }
+  const collaborationPreview=()=>{
+    if(moving&&pose)return [pose,...(pastedGroup?groupTransforms(pastedGroup.items,pastedGroup.anchor,pose):[])]
+    if(resize?.pose)return [resize.pose]
+    if(gizmoPart&&gizmoRaw){const p=gizmoSnap?.pose?{...gizmoRaw,...gizmoSnap.pose}:gizmoRaw;const followers=activeJoint?.moving??additional;return [p,...groupTransforms(state.parts.filter(x=>x.id!==gizmoPart.id&&followers.has(x.id)),gizmoPart,p)]}
+    return []
+  }
   const collaborationIdle=()=>!signal.aborted&&!dragActive()&&!pendingPart&&!snappingScene&&!frame&&!runningMotor&&!clutchTest&&mode!=='testDrive'&&!window.document.querySelector('dialog[open]:not(.collaboration-dialog)')
-  collaborationUI=mountCollaboration(root,{language,scene,signal,initial:collaboration,onJoin:onJoinCollaboration,read:currentDocument,idle:collaborationIdle,apply:async(next,expected)=>{
+  collaborationUI=mountCollaboration(root,{language,scene,signal,initial:collaboration,onJoin:onJoinCollaboration,read:currentDocument,preview:collaborationPreview,loadPreview:async designs=>{await Promise.allSettled(designs.filter(id=>Object.hasOwn(parts,id)&&!models.has(id)).map(id=>prepareModel(parts[id])))},idle:collaborationIdle,apply:async(next,expected)=>{
     if(!collaborationIdle())return false
     if(hiddenParts.length||next.parts.some(p=>!parts[p.design]))throw Error('invalid_shared_geometry')
     const missing=[...new Set(next.parts.map(p=>p.design))].filter(id=>!models.has(id))
@@ -2191,7 +2246,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     if(!collaborationIdle()||sharedDelta(expected,currentDocument()).length)return false
     const placed=next.parts,rebuilt=createAssembly(placed,next.connections,{belts:next.belts??[]})
     if(placed.length!==next.parts.length||rebuilt.connections.length!==next.connections.length||rebuilt.belts.length!==(next.belts??[]).length)throw Error('invalid_shared_geometry')
-    undo.length=redo.length=0;el('name').value=next.name;driveConfig=next.testDrive
+    undo.length=redo.length=0;el('name').value=next.name;driveConfig=next.testDrive;customInstructions=next.customInstructions
     applyState({parts:placed,links:next.connections,belts:next.belts??[],layers:readSceneLayers(next.sceneLayers,new Set(placed.map(p=>p.id)))})
     return true
   }})

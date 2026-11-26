@@ -1,4 +1,6 @@
 const icons = {
+  lock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/>',
+  unlock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8-1"/>',
   folder: '<path d="M3 7V5h6l2 3h10v11H3z"/>',
   group: '<path d="M3 7V5h6l2 3h10v11H3zM9 13h6m-3-3v6"/>',
   show: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/>',
@@ -64,7 +66,9 @@ export function mountScenePartsPanel(body, t, actions, signal) {
     const design = document.createElement('small')
     design.textContent = part.design
     pick.append(swatch, title, design)
-    item.append(eye, pick, control('deletePart', `${t.delete} · ${name}`, 'remove'))
+    const isLocked=snapshot.layers.lockedPartIds?.includes(part.id)===true;item.toggleAttribute('data-layer-locked',isLocked)
+    const lock=control('toggleLock',actions.lockLabel?.(part.id)??(isLocked?'Unlock':'Lock'),isLocked?'lock':'unlock');lock.setAttribute('aria-pressed',String(isLocked))
+    item.append(eye,pick,...(actions.toggleLock?[lock]:[]),control('deletePart',`${t.delete} · ${name}`,'remove'))
     return item
   }
 

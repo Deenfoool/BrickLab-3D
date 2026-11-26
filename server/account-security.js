@@ -1,4 +1,4 @@
-import {randomBytes,createHash} from 'node:crypto'
+import {randomBytes,randomInt,createHash,createHmac} from 'node:crypto'
 import {hashPassword} from './auth.js'
 import {ProjectError} from './projects.js'
 const digest=s=>createHash('sha256').update(s).digest('hex')
@@ -15,9 +15,10 @@ async function body(req){
  for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>8192){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
  try{const d=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(!d||typeof d!=='object'||Array.isArray(d))throw Error();return d}catch{throw new ProjectError(400,'invalid_json')}
 }
-export function createAccountSecurityHandler({store,origin,registrationEnabled=false,mail=null,logger=console}){
+export function createAccountSecurityHandler({store,origin,registrationEnabled=false,mail=null,codeSecret=randomBytes(32),logger=console}){
  const secure=new URL(origin).protocol==='https:',cookie=secure?'__Host-bricklab_session':'bricklab_session'
  const attempts=new Map();let active=0
+ const hashCode=(email,purpose,code)=>createHmac('sha256',codeSecret).update('bricklab-account-code-v2\0'+purpose+'\0'+email+'\0'+code).digest('hex')
  function throttle(key,limit,ms){
   const now=Date.now(),old=attempts.get(key)
   if(old&&old.until>now){if(old.count>=limit)throw new ProjectError(429,'too_many_attempts');old.count++;return}
@@ -69,13 +70,15 @@ export function createAccountSecurityHandler({store,origin,registrationEnabled=f
     const d=await body(req),email=emailOf(d.email)
     throttle('mail:'+email+':'+purpose+':'+String(finish),finish?10:3,15*60000)
     if(!finish){
-     const code=randomBytes(24).toString('hex'),hash=digest(code)
+     const code=String(randomInt(0,1000000)).padStart(6,'0'),hash=hashCode(email,purpose,code)
      if(await store.issueAccountToken(email,purpose,hash)){try{await mail({email,purpose,code})}catch(e){await store.discardAccountToken(email,purpose,hash);throw new ProjectError(503,'mail_unavailable')}}
      reply(res,202,{pending:true});return true
     }
-    const password=d.password,displayName=typeof d.displayName==='string'?d.displayName.trim():''
-    if(typeof d.code!=='string'||!/^[0-9a-f]{48}$/.test(d.code)||typeof password!=='string'||password.length<12||password.length>256||password.includes('\0')||(purpose==='register'&&(!displayName||displayName.length>80||/[\u0000-\u001f\u007f]/.test(displayName)||/[\ud800-\udfff]/u.test(displayName))))throw new ProjectError(400,'invalid_credentials')
-    if(!await store.finishAccountToken(email,purpose,digest(d.code),await hashPassword(password),displayName))throw new ProjectError(400,'invalid_code')
+    const password=d.password,displayName=typeof d.displayName==='string'?d.displayName.trim():'',username=displayName.toLowerCase()
+    const code=typeof d.code==='string'?d.code.trim().replace(/[- ]/g,'').toLowerCase():''
+    if(purpose==='register'&&(!/^[a-z0-9][a-z0-9_.-]{2,31}$/.test(username)||username.startsWith('id_')))throw new ProjectError(400,'invalid_username')
+    if(!(/^[0-9]{6}$/.test(code)||/^[0-9a-f]{48}$/.test(code))||typeof password!=='string'||password.length<12||password.length>256||password.includes('\0')||(purpose==='register'&&(!displayName||displayName.length>80||/[\u0000-\u001f\u007f]/.test(displayName)||/[\ud800-\udfff]/u.test(displayName))))throw new ProjectError(400,'invalid_credentials')
+    if(!await store.finishAccountToken(email,purpose,code.length===6?hashCode(email,purpose,code):digest(code),await hashPassword(password),displayName,username))throw new ProjectError(400,'invalid_code')
     reply(res,200,{ok:true});return true
    }finally{active--}
   }catch(e){if(e instanceof ProjectError)reply(res,e.status,{error:e.message});else{logger.error('Account security operation failed:',e.code||e.name);reply(res,503,{error:'auth_unavailable'})}}

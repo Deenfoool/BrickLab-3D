@@ -13,6 +13,7 @@ export function validatePublicCard(value){
  if(value.unified!==undefined){if(value.unified!==true||value.consent!==true||!['blueprint','graphite','amber'].includes(value.cover)||!['showAvatar','showCover','showBackground'].every(k=>typeof value[k]==='boolean'))throw new ProjectError(400,'invalid_public_profile');let portfolio;try{portfolio=validatePortfolio(value.portfolio)}catch{throw new ProjectError(400,'invalid_public_profile')}return {displayName:value.displayName.trim(),bio:value.bio.trim(),...appearance,unified:true,cover:value.cover,portfolio}}
  return {displayName:value.displayName.trim(),bio:value.bio.trim(),...appearance}
 }
+const profileKey=value=>typeof value==='string'&&(uuid.test(value)||/^[a-z0-9][a-z0-9_.-]{2,31}$/i.test(value)||/^id_[a-f0-9]{32}$/i.test(value))
 export const buildCategories=['vehicles','mechanisms','architecture','robots','other']
 export function galleryQuery(url){
  const p=new URL(url,'http://localhost').searchParams
@@ -37,6 +38,7 @@ export function validatePublication(value){
  }
  if(value.workType!==undefined){if(!['original','remix','instruction'].includes(value.workType))invalid();extra.workType=value.workType}
  if(value.attribution!==undefined){if(typeof value.attribution!=='string'||value.attribution.length>250||/[\u0000-\u001f\u007f]/.test(value.attribution))invalid();extra.attribution=value.attribution.trim()}
+ if(value.coauthors!==undefined){if(!Array.isArray(value.coauthors)||value.coauthors.length>8||value.coauthors.some(v=>typeof v!=='string'||!profileKey(v.replace(/^@/,''))))invalid();extra.coauthors=[...new Set(value.coauthors.map(v=>v.replace(/^@/,'').toLowerCase()))]}
  if(value.images!==undefined){
   if(!Array.isArray(value.images)||value.images.length>4||value.images.some(i=>typeof i!=='string'||i.length>699120||!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(i)))invalid()
   extra.images=value.images
@@ -60,7 +62,7 @@ async function discussionBody(req){
  try{return JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new ProjectError(400,'invalid_json')}
 }
 export function publicBuild(row){
- return row?{authorTheme:backgroundIds.includes(row.authorTheme)?row.authorTheme:null,id:row.id,authorId:row.authorId,author:row.author,authorAvatarUrl:row.authorHasAvatar===true&&uuid.test(row.authorId)?'/api/community/profile/'+row.authorId+'/avatar':null,title:row.title,description:row.description,revision:row.revision,category:row.category??'other',partCount:row.partCount??0,likes:row.likes??0,views:row.views??0,downloads:row.downloads??0,publishedAt:row.publishedAt,allowDownload:row.allowDownload!==false,allowComments:row.allowComments!==false,allowRemix:row.allowRemix===true,difficulty:row.difficulty??'unspecified',tags:row.tags??[],workType:row.workType??'original',attribution:row.attribution??'',originId:row.originId??null,imageCount:row.imageCount??0}:null
+ return row?{authorTheme:backgroundIds.includes(row.authorTheme)?row.authorTheme:null,id:row.id,authorId:row.authorId,...(row.authorUsername?{authorUsername:row.authorUsername}:{}),...(Array.isArray(row.coauthors)?{coauthors:row.coauthors}:{}),author:row.author,authorAvatarUrl:row.authorHasAvatar===true&&uuid.test(row.authorId)?'/api/community/profile/'+row.authorId+'/avatar':null,title:row.title,description:row.description,revision:row.revision,category:row.category??'other',partCount:row.partCount??0,likes:row.likes??0,views:row.views??0,downloads:row.downloads??0,publishedAt:row.publishedAt,allowDownload:row.allowDownload!==false,allowComments:row.allowComments!==false,allowRemix:row.allowRemix===true,difficulty:row.difficulty??'unspecified',tags:row.tags??[],workType:row.workType??'original',attribution:row.attribution??'',originId:row.originId??null,imageCount:row.imageCount??0}:null
 }
 export function publicCard(row,options={}){
  if(!row)return null
@@ -68,7 +70,7 @@ export function publicCard(row,options={}){
  const portfolio=row.unified===true?filterPortfolio(row.portfolio,row.publicIds??[]):null
  const visible=key=>portfolio?.blocks.some(b=>b.key===key&&b.visible)===true
  const projected=portfolio?(owner?portfolio:{...portfolio,featured:visible('featured')?portfolio.featured:null,collections:visible('collections')?portfolio.collections:[]}):null
- return {id:row.id,displayName:row.displayName,bio:portfolio&&!owner&&!visible('about')?'':row.bio,updatedAt:row.updatedAt,followers:row.followers??0,
+ return {id:row.id,...(row.username?{username:row.username}:{}),displayName:row.displayName,bio:portfolio&&!owner&&!visible('about')?'':row.bio,updatedAt:row.updatedAt,followers:row.followers??0,
   avatarUrl:base&&row.hasAvatar===true?base+'/avatar':null,coverUrl:base&&row.hasCover===true?base+'/cover':null,
   coverTheme:['blueprint','graphite','amber'].includes(row.coverTheme)?row.coverTheme:null,
   backgroundTheme:backgroundIds.includes(row.backgroundTheme)?row.backgroundTheme:null,
@@ -211,11 +213,11 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
       res.end(bytes);return true
     }
     const m=/^\/(api\/)?community\/profile\/([^/]+)$/.exec(path)
-    if(m&&uuid.test(m[2])){
-     const card=publicCard(await store.getPublicCard(m[2]))
+    if(m&&profileKey(m[2])){
+     const card=publicCard(await store.getPublicCard(m[2].toLowerCase()))
      if(!card)throw new ProjectError(404,'not_found')
      if(m[1])reply(res,200,{profile:{...card,reputation:publicReputation(store.reputation?await store.reputation(card.id):null)}})
-     else {res.writeHead(302,{'Location':'/#community/profile/'+card.id,'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}
+     else {res.writeHead(302,{'Location':'/#community/profile/'+(card.username??card.id),'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}
     }else if(path==='/community'||path==='/api/community'){
      const q=(new URL(req.url,'http://localhost').searchParams.get('q')??'').trim();if(q.length>100||/[\u0000-\u001f\u007f]/.test(q))throw new ProjectError(400,'invalid_gallery_query');const cards=(await store.listPublicCards(q)).map(publicCard)
      if(path.startsWith('/api/'))reply(res,200,{profiles:cards})

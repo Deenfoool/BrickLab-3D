@@ -27,7 +27,7 @@ export function createAuthClient({ fetcher = globalThis.fetch, location = global
     if (route === 'logout' && data?.ok === true) return null
     if (route !== 'logout' && typeof data?.user?.id === 'string' && typeof data.user.email === 'string' && typeof data.user.displayName === 'string') {
       const {id,email,displayName} = data.user
-      return {id,email,displayName,...(data.user.admin===true?{admin:true}:{})}
+      return {id,email,displayName,...(typeof data.user.username==='string'?{username:data.user.username}:{}),...(data.user.admin===true?{admin:true}:{})}
     }
     throw new AuthError('auth_unavailable', response.status)
   }

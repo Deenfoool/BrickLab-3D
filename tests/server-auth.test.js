@@ -70,7 +70,7 @@ async function exercise(t, store, email) {
   const first = extractCookie(r)
   const registered = await r.json()
   assert.equal(registered.user.email, email.toLowerCase())
-  assert.deepEqual(Object.keys(registered.user).sort(), ['displayName','email','id'])
+  assert.deepEqual(Object.keys(registered.user).sort(), registered.user.username?['displayName','email','id','username']:['displayName','email','id'])
   assert.equal((await api('me', { method: 'GET' })).status, 401)
   r = await api('me', { method: 'GET', cookie: first })
   assert.equal(r.status, 200)
@@ -101,7 +101,7 @@ test('authentication lifecycle, cookie flags, session rotation and CSRF', async 
 test('registration disabled and malformed requests rejected', async t => {
   const api = await fixture(t, memoryStore(), false)
   assert.equal((await api('register', { body: { email: 'x@example.invalid', password, displayName: 'X' } })).status, 403)
-  assert.equal((await api('login', { body: { email: 'invalid', password } })).status, 400)
+  assert.equal((await api('login', { body: { email: 'invalid!', password } })).status, 400)
   assert.equal((await api('login', { body: { email: 'x@example.invalid', password: 'x'.repeat(9000) } })).status, 413)
   assert.equal((await api('login', { body: { email: 'x@example.invalid', password }, from: 'https://evil.example' })).status, 403)
   assert.equal((await api('login', { method: 'GET' })).status, 405)

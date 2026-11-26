@@ -22,9 +22,9 @@ test('registration creates no session, code is hashed and one-use; recovery uses
  const api=await fixture(t,{store,mail:async data=>codes.push(data)})
  const r=await api('auth/register',{body:{email,password,admin:true}})
  assert.equal(r.status,202);assert.equal(r.headers.get('set-cookie'),null);assert.deepEqual(await r.json(),{pending:true});assert.equal(finished.length,0)
- assert.equal(codes.length,1);assert.equal(tokens.get(email+':register'),digest(codes[0].code));assert.notEqual(tokens.get(email+':register'),codes[0].code)
+ assert.equal(codes.length,1);assert.match(codes[0].code,/^\d{6}$/);assert.match(tokens.get(email+':register'),/^[a-f0-9]{64}$/);assert.notEqual(tokens.get(email+':register'),digest(codes[0].code));assert.notEqual(tokens.get(email+':register'),codes[0].code)
  assert.equal((await api('auth/verify',{body:{email,code:'0'.repeat(48),password,displayName:'Builder'}})).status,400)
- const valid={email,code:codes[0].code,password,displayName:'Builder'}
+ const valid={email,code:codes[0].code.slice(0,3)+'-'+codes[0].code.slice(3),password,displayName:'Builder'}
  assert.equal((await api('auth/verify',{body:valid})).status,200)
  assert.equal((await api('auth/verify',{body:valid})).status,400)
  assert.equal(finished[0].name,'Builder');assert.equal(await verifyPassword(password,finished[0].hash),true)
@@ -62,10 +62,10 @@ test('client retains only explicit admin flag and supports pending responses',as
 test('Postbox adapter passes credentials only to transport and uses dedicated test message',async()=>{
  let call
  const mail=createMailer({BRICKLAB_MAIL_USER:'test-id',BRICKLAB_MAIL_KEY:'test-key',BRICKLAB_MAIL_FROM:'noreply@bricklab-3d.ru'},async(message)=>{call=message})
- await mail({email,purpose:'register',code:'a'.repeat(48)})
+ await mail({email,purpose:'register',code:'054751'})
  assert.equal(call.username,'test-id');assert.equal(call.password,'test-key')
  assert.equal(call.to,email);assert.equal(call.from,'noreply@bricklab-3d.ru');assert.ok(!call.text.includes('test-key'))
- assert.ok(call.text.includes('a'.repeat(48)))
+ assert.ok(call.text.includes('054-751'));assert.ok(call.html.includes('054-751'));assert.ok(call.html.includes('BrickLab 3D'))
  await mail({email,purpose:'test'})
  assert.ok(!call.text.includes('undefined'))
  assert.equal(createMailer({}),null)

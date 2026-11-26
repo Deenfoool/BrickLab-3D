@@ -76,7 +76,7 @@ export function createProjectPreviewRenderer(options={}) {
   }
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, .01, 100)
   const contactShadow = makeContactShadow()
-  const models = new Map()
+  const models = new Map(options.models??[]),ownedModels=new Set()
 
   return {
     async render(document, signal, shot={}) {
@@ -87,7 +87,7 @@ export function createProjectPreviewRenderer(options={}) {
         signal.throwIfAborted()
         await Promise.allSettled(designs.slice(start, start + 4).map(async design => {
           const model = await loadPartModel(parts[design])
-          if (model) models.set(design, model)
+          if (model){models.set(design, model);ownedModels.add(design)}
         }))
       }
       signal.throwIfAborted()
@@ -100,8 +100,10 @@ export function createProjectPreviewRenderer(options={}) {
 
       const solids = new THREE.Group()
       world.add(solids)
+      const emphasized=Array.isArray(shot.highlightIds)?new Set(shot.highlightIds):null
       for (const part of visible) {
         const object = partMesh(models.get(part.design), part.color ?? parts[part.design].color)
+        if(emphasized&&!emphasized.has(part.id))object.userData.finish.color.lerp(new THREE.Color('#a5adb7'),.75)
         object.position.fromArray(part.position)
         object.quaternion.fromArray(part.rotation)
         object.scale.x = part.mirrored ? -1 : 1
@@ -109,10 +111,12 @@ export function createProjectPreviewRenderer(options={}) {
       }
       const byId = new Map(visible.map(part => [part.id, part]))
       const belts = createBeltScene(world, id => byId.get(id), () => {})
+      const arrows=[]
       try {
         belts.set(assembleBelts(byId, source.belts).map(({ record }) => record))
         const bounds = new THREE.Box3().setFromObject(solids)
         if (bounds.isEmpty()) return null
+        for(const track of (shot.installationTracks??[]).filter(t=>t.kind!=='manual').slice(0,12)){const end=new THREE.Vector3(...track.to),start=new THREE.Vector3(...track.from),delta=end.clone().sub(start),length=Math.min(36,delta.length());if(length<2)continue;const dir=delta.normalize(),origin=end.clone().addScaledVector(dir,-length);const arrow=new THREE.ArrowHelper(dir,origin,length,0xe68a12,Math.min(8,length*.35),Math.min(5,length*.24));arrow.line.material.depthTest=false;arrow.cone.material.depthTest=false;arrow.line.renderOrder=10;arrow.cone.renderOrder=10;world.add(arrow);arrows.push(arrow);bounds.expandByPoint(origin)}
         fitCamera(camera, bounds, width, height, directionFor(shot.angle??options.angle),options.framing==='wide'?.63:options.framing==='close'?.51:.53)
         const size = bounds.getSize(new THREE.Vector3())
         const center = bounds.getCenter(new THREE.Vector3())
@@ -130,6 +134,7 @@ export function createProjectPreviewRenderer(options={}) {
           world.remove(shadow)
         }
       } finally {
+        for(const arrow of arrows){world.remove(arrow);arrow.line.material.dispose();arrow.cone.material.dispose()}
         belts.dispose()
         for (const object of solids.children) object.userData.finish.dispose()
         world.remove(solids)
@@ -137,7 +142,7 @@ export function createProjectPreviewRenderer(options={}) {
     },
     dispose() {
       for (const [design, model] of models) {
-        if (parts[design].pack) {
+        if (ownedModels.has(design)&&parts[design].pack) {
           for (const geometry of model.meshes) geometry.dispose()
         }
       }

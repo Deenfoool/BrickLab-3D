@@ -8,6 +8,18 @@ const defaults = {
   testDrive: { library: false, right: '' },
 }
 const icons = {
+  plus:'M12 5v14M5 12h14',
+  folder:'M3 5h7l2 2h9v12H3z',
+  save:'M4 3h13l4 4v14H3V3zm3 0v7h10V3M7 21v-7h10v7',
+  cloud:'M7 17H5a4 4 0 1 1 1-8 6 6 0 0 1 11-2 5 5 0 0 1 2 10h-2m-5 4V10m-4 4 4-4 4 4',
+  history:'M3 12a9 9 0 1 0 3-7L3 8m0-5v5h5m4-1v6l4 2',
+  users:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m11-14a4 4 0 1 1-8 0 4 4 0 0 1 8 0m5 7a4 4 0 0 1 4 4v3M17 3a4 4 0 0 1 0 8',
+  link:'M10 13a4 4 0 0 0 6 0l4-4a4 4 0 0 0-6-6l-2 2m2 6a4 4 0 0 0-6 0l-4 4a4 4 0 1 0 6 6l2-2',
+  exit:'M10 17l5-5-5-5m5 5H3m12-9h6v18h-6',
+  globe:'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
+  file:'M5 3h10l4 4v14H5zM14 3v5h5',
+  search:'M16 16l5 5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',
+  box:'M3 7l9-5 9 5v10l-9 5-9-5zm0 0 9 5 9-5m-9 5v10',
   library:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
   layers:'m12 3 10 5-10 5L2 8zM2 12l10 5 10-5M2 16l10 5 10-5',
   inspector:'M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6',
@@ -49,7 +61,7 @@ export function readWorkspace(raw, guided = false) {
   return out
 }
 export const defaultRightPanels=guided=>[...(guided?['instruction']:[]),'inspector','scene-parts']
-export function mountWorkspace(root, { language, scene, signal, grid, axes, changePreference, hideSelection, openPhotoStudio, openCollaboration }) {
+export function mountWorkspace(root, { language, scene, signal, grid, axes, changePreference, hideSelection, openPhotoStudio, openCollaboration, commands, invokeCommand, openCommands }) {
   const ru = language === 'ru'
   const tr = (r,e) => ru ? r : e
   const doc = root.ownerDocument
@@ -64,7 +76,7 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
   const allRight=defaultRightPanels(Boolean(panels.instruction)).filter(id=>panels[id])
   settings.floating=false
   for(const m of ['build','kinematics'])settings.modes[m].floatRight=[...allRight]
-  let mode='build', focus=false, presentation=false, gridOn=grid, axesOn=axes, saveState='initial', canPresent=true
+  let mode='build', focus=false, presentation=false, gridOn=grid, axesOn=axes, saveState='initial', canPresent=true, pointsOn=false, wireframeOn=false
   const remember=()=>{try{localStorage.setItem(KEY,JSON.stringify(settings))}catch{}}
   const bar=root.querySelector('.editor-bar'), actions=root.querySelector('.editor-actions')
   const back=root.querySelector('.editor-back'), name=el('name')
@@ -76,25 +88,62 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
   summary.append(title,doc.createRange().createContextualFragment(svg('chevron')))
   project.append(summary)
   const projectItems=create('div','workspace-menu-items')
-  const label=create('label','workspace-name-field')
-  label.textContent=tr('Название сборки','Build name')
-  label.append(name)
-  projectItems.append(label)
-  const home=back.cloneNode(true)
-  home.className='workspace-home-link'
-  home.replaceChildren(doc.createTextNode(tr('Мои сборки','My builds')))
-  projectItems.append(home)
-  const studio=create('button','workspace-home-link');studio.type='button';studio.textContent=tr('Фотостудия','Photo Studio');projectItems.append(studio);on(studio,'click',()=>{project.open=false;openPhotoStudio?.()})
-  if(openCollaboration){const collaboration=create('button','workspace-home-link');collaboration.type='button';collaboration.textContent=tr('Совместная сессия','Live collaboration');projectItems.append(collaboration);on(collaboration,'click',()=>{project.open=false;openCollaboration()})}
-  project.append(projectItems)
-  back.after(project,status)
+  const menuButtons=new Map(),menus=[project]
+  const section=(host,text)=>{const label=create('div','workspace-menu-heading');label.textContent=text;host.append(label)}
+  const cmdButton=(host,id,icon,text,shortcut='',closeMenu=true)=>{const b=create('button','workspace-menu-command');b.type='button';b.dataset.command=id;b.innerHTML=svg(icon);const span=create('span');span.textContent=text;b.append(span);if(shortcut){const k=create('kbd');k.textContent=shortcut;b.append(k)}host.append(b);if(!menuButtons.has(id))menuButtons.set(id,[]);menuButtons.get(id).push(b);on(b,'click',()=>{if(closeMenu)for(const m of menus)m.open=false;invokeCommand?.(id)});return b}
+  const stats=create('div','workspace-project-stats')
+  const statValues=[]
+  for(const [icon,label] of [['library',tr('Детали','Parts')],['link',tr('Соединения','Links')],['cable',tr('Ремни','Belts')]]){const box=create('div');box.innerHTML=svg(icon);const number=create('strong');number.textContent='0';statValues.push(number);const caption=create('small');caption.textContent=label;box.append(number,caption);stats.append(box)}
+  projectItems.append(stats)
+  section(projectItems,tr('Проект','Project'))
+  const label=create('label','workspace-name-field');label.textContent=tr('Название сборки','Build name');label.append(name);projectItems.append(label)
+  cmdButton(projectItems,'new','plus',tr('Новая сборка','New build'))
+  cmdButton(projectItems,'home','folder',tr('Мои сборки','My builds'))
+  cmdButton(projectItems,'copyProject','duplicate',tr('Создать копию','Duplicate project'))
+  section(projectItems,tr('Сохранение','Save'))
+  cmdButton(projectItems,'save','save',tr('Сохранить','Save'),'Ctrl+S')
+  cmdButton(projectItems,'cloud','cloud',tr('Сохранить в облако','Save to cloud'))
+  cmdButton(projectItems,'history','history',tr('История версий','Version history'))
+  section(projectItems,tr('Студия конструктора','Builder studio'))
+  cmdButton(projectItems,'photo','camera','Photo Studio')
+  cmdButton(projectItems,'instructions','instruction','Instruction Studio')
+  cmdButton(projectItems,'live','users',tr('Совместная сессия','Live collaboration'))
+  section(projectItems,tr('Навигация','Navigation'))
+  cmdButton(projectItems,'home','exit',tr('Закрыть проект','Close project'))
+  project.append(projectItems);back.after(project,status)
   const share=create('details','workspace-menu workspace-share')
-  const shareTitle=create('summary','workspace-share-title')
-  shareTitle.innerHTML=svg('share')+'<span>'+tr('Поделиться','Share')+'</span>'+svg('chevron')
+  const shareTitle=create('summary','workspace-share-title');shareTitle.innerHTML=svg('share')+'<span>'+tr('Поделиться','Share')+'</span>'+svg('chevron')
   const shareItems=create('div','workspace-menu-items')
-  shareItems.append(el('export'),el('publish'))
-  share.append(shareTitle,shareItems)
-  actions.append(share)
+  const originalActions=create('div');originalActions.hidden=true;originalActions.append(el('export'),el('publish'));shareItems.append(originalActions)
+  section(shareItems,tr('Сообщество','Community'))
+  cmdButton(shareItems,'publish','globe',tr('Опубликовать','Publish'))
+  cmdButton(shareItems,'shareLink','link',tr('Скопировать публичную ссылку','Copy public link'))
+  section(shareItems,tr('Экспорт','Export'))
+  cmdButton(shareItems,'bricklab','file','BrickLab','.bricklab')
+  cmdButton(shareItems,'ldr','file','LDraw','.ldr')
+  cmdButton(shareItems,'csv','file',tr('Список деталей','Parts list'),'.csv')
+  cmdButton(shareItems,'photo','camera',tr('Изображение','Image'),'.png')
+  cmdButton(shareItems,'instructions','instruction',tr('Инструкция','Instruction'),'.pdf')
+  share.append(shareTitle,shareItems);actions.append(share);menus.push(share)
+  const display=create('details','workspace-menu workspace-display'),displayTitle=create('summary','workspace-share-title')
+  displayTitle.innerHTML=svg('view')+'<span>'+tr('Вид','View')+'</span>'+svg('chevron')
+  const displayItems=create('div','workspace-menu-items')
+  const viewButtons=new Map()
+  function viewItem(id,icon,text,run){const b=create('button','workspace-menu-command');b.type='button';b.innerHTML=svg(icon);const span=create('span');span.textContent=text;b.append(span);const check=create('span','workspace-menu-check');check.textContent='✓';b.append(check);displayItems.append(b);viewButtons.set(id,b);on(b,'click',run);return b}
+  section(displayItems,tr('Панели','Panels'))
+  for(const [id,icon,label] of [['library','library',tr('Библиотека','Library')],['instruction','instruction',tr('Инструкция','Instructions')],['inspector','inspector',tr('Инспектор','Inspector')],['scene-parts','layers',tr('Детали сцены','Scene parts')]])if(panels[id])viewItem(id,icon,label,()=>togglePanel(id))
+  section(displayItems,tr('Отображение','Display'))
+  viewItem('grid','grid',tr('Сетка','Grid'),()=>gridBtn.click())
+  viewItem('axes','axes',tr('Оси координат','Axes'),()=>axesBtn.click())
+  viewItem('connections','link',tr('Точки соединений','Connection points'),()=>{pointsOn=!pointsOn;scene.setConnectorPoints(pointsOn);apply()})
+  viewItem('wireframe','box',tr('Каркасный режим','Wireframe'),()=>{wireframeOn=!wireframeOn;scene.setWireframe(wireframeOn);apply()})
+  section(displayItems,tr('Камера','Camera'))
+  viewItem('perspective','view',tr('Перспективная','Perspective'),()=>{scene.setCameraMode('perspective');apply()})
+  viewItem('orthographic','view',tr('Ортографическая','Orthographic'),()=>{scene.setCameraMode('orthographic');apply()})
+  viewItem('fullscreen','focus',tr('Полноэкранный режим','Fullscreen'),()=>toggleView('fullscreen'))
+  cmdButton(displayItems,'reset','history',tr('Сбросить вид','Reset view'))
+  display.append(displayTitle,displayItems);actions.append(display);menus.push(display)
+  const commandButton=create('button','workspace-command-trigger');commandButton.type='button';commandButton.innerHTML=svg('search')+'<span>Ctrl K</span>';commandButton.title='BrickLab Command (Ctrl+K)';commandButton.setAttribute('aria-label',commandButton.title);on(commandButton,'click',()=>{for(const menu of menus)menu.open=false;openCommands?.()});actions.append(commandButton)
   const context=create('div','workspace-context')
   const leftTools=create('div','workspace-context-group')
   const rightTools=create('div','workspace-context-group')
@@ -186,6 +235,8 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     dividerRight.hidden=floating||!right
     scene.setWorkspaceHelpers(gridOn&&!presentation,axesOn&&!presentation)
     scene.setWorkspacePresentation(presentation)
+    const active={library:left,inspector:rightIds.includes('inspector'),'scene-parts':rightIds.includes('scene-parts'),instruction:rightIds.includes('instruction'),grid:gridOn,axes:axesOn,connections:pointsOn,wireframe:wireframeOn,perspective:scene.cameraMode==='perspective',orthographic:scene.cameraMode==='orthographic',fullscreen:Boolean(doc.fullscreenElement)}
+    for(const [id,b] of viewButtons){pressed(b,active[id]);b.disabled=['library','inspector','scene-parts','instruction'].includes(id)&&!panelMode||['perspective','orthographic','connections','wireframe'].includes(id)&&(mode==='testDrive'||!canPresent)}
   }
   function openPanel(id){
     if(!panels[id])return
@@ -219,17 +270,20 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     if(e.altKey&&e.shiftKey&&e.code==='KeyF'&&!e.repeat){e.preventDefault();toggleFocus()}
   })
   on(window,'resize',apply)
+  on(doc,'fullscreenchange',apply)
+  function toggleView(id){if(id==='grid')gridBtn.click();else if(id==='axes')axesBtn.click();else if(id==='fullscreen'){const result=doc.fullscreenElement?doc.exitFullscreen?.():root.requestFullscreen?.();result?.catch?.(()=>{})}}
   // Menus close on outside click and Escape, without intercepting scene hotkeys.
-  on(doc,'pointerdown',e=>{for(const menu of [project,share])if(!menu.contains(e.target))menu.open=false})
+  on(doc,'pointerdown',e=>{for(const menu of menus)if(!menu.contains(e.target))menu.open=false})
   on(root,'keydown',e=>{
     if(e.key!=='Escape')return
-    const menu=[project,share].find(m=>m.open)
+    const menu=menus.find(m=>m.open)
     if(menu){e.preventDefault();e.stopPropagation();menu.open=false;menu.querySelector('summary').focus()}
   })
   on(name,'change',()=>{title.textContent=name.value})
   for(const b of shareItems.querySelectorAll('button'))on(b,'click',()=>{share.open=false})
-  for(const menu of [project,share])on(menu,'toggle',()=>{
-    if(menu.open){for(const other of [project,share])if(other!==menu)other.open=false}
+  function updateCommands(){const active=new Map((commands?.()??[]).map(c=>[c.id,c]));for(const [id,buttons] of menuButtons){const cmd=active.get(id);for(const b of buttons)b.disabled=!cmd||cmd.enabled?.()===false}}
+  for(const menu of menus)on(menu,'toggle',()=>{
+    if(menu.open){for(const other of menus)if(other!==menu)other.open=false;updateCommands()}
   })
   for(const [id,panel] of Object.entries(panels)){
     const toggle=panel.querySelector('[data-panel-toggle]')
@@ -265,12 +319,14 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     status.dataset.state=saveState
     status.title=ok?tr('Сохранено в браузере','Saved in browser'):tr('Не удалось сохранить локально','Local save failed')
     status.setAttribute('aria-label',status.title)
-    status.textContent=ok?'✓':'!'
+    status.textContent=ok?tr('✓ Сохранено','✓ Saved'):tr('! Не сохранено','! Not saved')
   }
-  function render(nextMode,tool,partCount,linkCount,canQuick,idle){
+  function render(nextMode,tool,partCount,linkCount,canQuick,idle,beltCount=0){
     canPresent=idle
     if(mode!==nextMode){mode=nextMode;focus=presentation=false}
     title.textContent=name.value||tr('Новая сборка','New build')
+    statValues.forEach((v,i)=>v.textContent=[partCount,linkCount,beltCount][i])
+    if(menus.some(m=>m.open))updateCommands()
     counts.textContent=tr('Деталей: ','Parts: ')+partCount+' · '+tr('Связей: ','Links: ')+linkCount
     modeLabel.textContent=nextMode==='build'?({select:tr('Выделение','Select'),box:tr('Рамка','Box select'),move:tr('Перемещение','Move'),rotate:tr('Вращение','Rotate'),length:tr('Длина оси','Axle length'),belt:tr('Ремень','Belt'),track:tr('Гусеница','Track')}[tool]||''):''
     options.hidden=nextMode!=='build'
@@ -285,5 +341,5 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     for(const name of ['data-workspace-layout','data-workspace-mode','data-workspace-focus','data-workspace-presentation','data-workspace-left','data-workspace-right'])root.removeAttribute(name)
     root.style.removeProperty('--workspace-left');root.style.removeProperty('--workspace-right')
   },{once:true})
-  return {render,setSaved,openPanel,exitPresentation(){if(presentation){focus=presentation=false;apply()}},placed(){if(!settings.pin&&mode==='build'){settings.modes.build.library=false;remember();apply()}}}
+  return {render,setSaved,openPanel,toggleView,rename(){project.open=true;name.focus();name.select()},photo(){openPhotoStudio?.()},exitPresentation(){if(presentation){focus=presentation=false;apply()}},placed(){if(!settings.pin&&mode==='build'){settings.modes.build.library=false;remember();apply()}}}
 }

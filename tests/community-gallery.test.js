@@ -7,9 +7,10 @@ test('gallery input is bounded and allowlisted',()=>{
  for(const q of ['sort=bad','offset=-1','category=bad','offset=10001','author=no'])assert.throws(()=>galleryQuery('/api/community/builds?'+q),{message:'invalid_gallery_query'})
  assert.equal(validatePublication({revision:1,description:'',consent:true,category:'robots'}).category,'robots')
 })
-test('community routes only accept public UUIDs and previews discard nongeometry fields',()=>{
+test('community routes accept profile usernames and public UUIDs and previews discard nongeometry fields',()=>{
  assert.deepEqual(communityRoute('community'),{type:'list'})
  assert.equal(communityRoute('community/build/no').type,'missing')
+ assert.deepEqual(communityRoute('community/profile/deenfoool'),{type:'profile',id:'deenfoool'})
  const doc={name:'Example',parts:[{design:'3001',id:'private',position:[1,2,3],rotation:[0,0,0,1],color:'#ff0000',extra:'secret'}],connections:[{}],buildingSet:{url:'https://example.invalid'}}
  const p=previewDocument(doc);assert.equal(p.parts[0].design,'3001');assert.equal(p.parts[0].id,'preview-0');assert.equal(p.parts[0].extra,undefined);assert.equal(p.buildingSet,undefined);assert.deepEqual(p.connections,[])
  assert.equal(previewDocument({parts:Array(601).fill({design:'3001'})}).parts.length,601)

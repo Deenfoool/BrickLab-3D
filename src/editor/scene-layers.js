@@ -16,7 +16,8 @@ export function readSceneLayers(value, ids) {
   }
   const hiddenPartIds = [...new Set(Array.isArray(value?.hiddenPartIds) ? value.hiddenPartIds : [])]
     .filter(id => ids.has(id))
-  return { groups, hiddenPartIds }
+  const lockedPartIds=[...new Set(Array.isArray(value?.lockedPartIds)?value.lockedPartIds:[])].filter(id=>ids.has(id))
+  return { groups, hiddenPartIds, ...(lockedPartIds.length?{lockedPartIds}:{}) }
 }
 
 export function hiddenSceneParts(layers, parts, isolation) {

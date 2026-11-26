@@ -36,6 +36,9 @@ test('authenticated invitation, disjoint changes, privacy, and owner-only close'
  const {roomId,code}=created.body
  assert.equal((await call(2,'sync',{roomId,revision:1,operations:[]})).status,404)
  const joined=await call(1,'join',{code});assert.equal(joined.status,200);assert.equal(joined.body.participants.length,2)
+ const moving=await call(0,'presence',{roomId,cursor:[1,2,3],preview:[part('a',15)]});assert.equal(moving.status,200);assert.equal(moving.body.revision,1);assert.equal(moving.body.document,undefined)
+ const seeing=await call(1,'presence',{roomId,cursor:null,preview:[]});assert.equal(seeing.status,200);assert.equal(seeing.body.participants.find(p=>!p.self).preview[0].position[0],15)
+ assert.equal((await call(2,'presence',{roomId,preview:[]})).status,404)
  await new Promise(r=>setTimeout(r,280))
  const first=await call(0,'sync',{roomId,revision:1,operations:sharedDelta(doc,{...doc,parts:[...doc.parts,part('b',20)]}),cursor:[1,2,3]})
  assert.equal(first.status,200)

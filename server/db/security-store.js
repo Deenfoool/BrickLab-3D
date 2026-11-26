@@ -10,22 +10,29 @@ export function securityStore(sql,scope,lock){
     const [u]=await tx`select u.id,u.blocked_at as blocked,exists(select 1 from bricklab.admin_accounts a where a.user_id=u.id) as admin from bricklab.users u where lower(u.email)=${email}`
     if(purpose==='register'?Boolean(u):!u||u.blocked||u.admin)return false
     const rows=await tx`insert into bricklab.account_tokens(email,purpose,token_hash,expires_at) values(${email},${purpose},${tokenHash},now()+interval '30 minutes')
-      on conflict(email,purpose) do update set token_hash=excluded.token_hash,created_at=now(),expires_at=excluded.expires_at
+      on conflict(email,purpose) do update set token_hash=excluded.token_hash,created_at=now(),expires_at=excluded.expires_at,failed_attempts=0
       where account_tokens.created_at<now()-interval '2 minutes' returning email`
     return rows.length===1
    })
   },
   async discardAccountToken(email,purpose,tokenHash){await sql`delete from bricklab.account_tokens where email=${email} and purpose=${purpose} and token_hash=${tokenHash}`},
-  async finishAccountToken(email,purpose,tokenHash,passwordHash,displayName){
+  async finishAccountToken(email,purpose,tokenHash,passwordHash,displayName,username){
    return sql.begin(async tx=>{
     await tx`select pg_advisory_xact_lock(hashtextextended(${email},123521))`
     const [u]=await tx`select u.id,u.blocked_at as blocked,exists(select 1 from bricklab.admin_accounts a where a.user_id=u.id) as admin from bricklab.users u where lower(u.email)=${email}`
     if(purpose==='register'?Boolean(u):!u||u.blocked||u.admin)return false
     if(u){await lock(tx,u.id);const [fresh]=await tx`select blocked_at as blocked from bricklab.users where id=${u.id}`;if(!fresh||fresh.blocked)return false}
-    const rows=await tx`delete from bricklab.account_tokens where email=${email} and purpose=${purpose} and token_hash=${tokenHash} and expires_at>now() returning email`
-    if(!rows.length)return false
+    const [token]=await tx`select token_hash as hash,failed_attempts as attempts from bricklab.account_tokens where email=${email} and purpose=${purpose} and expires_at>now() for update`
+    if(!token||token.attempts>=5)return false
+    if(token.hash!==tokenHash){await tx`update bricklab.account_tokens set failed_attempts=failed_attempts+1 where email=${email} and purpose=${purpose}`;return false}
+    if(purpose==='register'&&username){
+     await tx`select pg_advisory_xact_lock(820491109)`
+     const [taken]=await tx`select 1 from bricklab.users where username=${username}`
+     if(taken)throw new ProjectError(409,'username_taken')
+    }
+    await tx`delete from bricklab.account_tokens where email=${email} and purpose=${purpose}`
     if(purpose==='register'){
-     const inserted=await tx`insert into bricklab.users(email,display_name,password_hash) values(${email},${displayName},${passwordHash}) on conflict do nothing returning id`
+     const inserted=await tx`insert into bricklab.users(email,display_name,password_hash,username) values(${email},${displayName},${passwordHash},${username??null}) on conflict do nothing returning id`
      if(!inserted.length)return false
      await tx`update bricklab.users set email_verified_at=now() where id=${inserted[0].id}`
     }else{

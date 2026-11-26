@@ -21,7 +21,7 @@ export async function sendPostbox(message,fetcher=globalThis.fetch){
  const body=JSON.stringify({
   FromEmailAddress:message.from,
   Destination:{ToAddresses:[message.to]},
-  Content:{Simple:{Subject:{Data:message.subject,Charset:'UTF-8'},Body:{Text:{Data:message.text,Charset:'UTF-8'}}}}
+  Content:{Simple:{Subject:{Data:message.subject,Charset:'UTF-8'},Body:{Text:{Data:message.text,Charset:'UTF-8'},...(message.html?{Html:{Data:message.html,Charset:'UTF-8'}}:{})}}}
  })
  let response
  try{
@@ -49,6 +49,9 @@ export function createMailer(env=process.env,transport=sendPostbox){
   if(!['register','reset','test'].includes(purpose))throw Error('invalid_mail_purpose')
   const subject=purpose==='test'?'BrickLab — проверка почты':purpose==='register'?'BrickLab — подтверждение регистрации':'BrickLab — восстановление пароля'
   const text=purpose==='test'?'Почтовый сервис BrickLab 3D подключён. Это тестовое письмо, код не требуется.':subject+'\n\nКод / Code: '+code+'\n\nДействует 30 минут. Введите код на сайте BrickLab. Если вы не запрашивали код, проигнорируйте письмо. / Expires in 30 minutes. Enter the code on BrickLab. Ignore this email if you did not request it.'
-  await transport({username,password,from,to:email,subject,text})
+  const formatted=/^\d{6}$/.test(code??'')?code.slice(0,3)+'-'+code.slice(3):String(code??'').replace(/[^a-f0-9]/gi,'')
+  const heading=purpose==='test'?'Почтовый сервис подключён':purpose==='register'?'Подтверди регистрацию':'Восстановление пароля'
+  const html='<!doctype html><html lang="ru"><body style="margin:0;background:#eff2f6;font-family:Arial,sans-serif;color:#182332"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eff2f6"><tr><td align="center" style="padding:32px 12px"><table role="presentation" width="100%" style="max-width:520px;background:#fff;border-radius:18px;overflow:hidden" cellspacing="0" cellpadding="0"><tr><td style="background:#19212d;padding:24px 30px;color:#fff;font-size:22px;font-weight:bold"><span style="color:#ffb33e">▦</span> BrickLab 3D</td></tr><tr><td style="padding:30px"><h1 style="margin:0 0 14px;font-size:24px">'+heading+'</h1><p style="font-size:15px;line-height:1.6">'+(purpose==='test'?'Письма BrickLab отправляются успешно.':'Введи этот код на сайте BrickLab, чтобы продолжить.')+'</p>'+(purpose==='test'?'':'<div style="background:#f0f3f7;border:1px solid #dce3ed;border-radius:12px;padding:22px;text-align:center;font-size:32px;font-weight:bold;letter-spacing:4px;color:#19212d">'+formatted+'</div><p style="font-size:13px;line-height:1.6;color:#58677b">Код действителен 30 минут. Не передавай его другим. Если ты не запрашивал код, проигнорируй это письмо.</p>')+'</td></tr><tr><td style="padding:20px 30px;background:#f6f8fa;color:#667487;font-size:12px">BrickLab 3D · <a href="https://bricklab-3d.ru/" style="color:#344963">bricklab-3d.ru</a></td></tr></table></td></tr></table></body></html>'
+  await transport({username,password,from,to:email,subject,text:/^\d{6}$/.test(code??'')?text.replace(code,formatted):text,html})
  }
 }
