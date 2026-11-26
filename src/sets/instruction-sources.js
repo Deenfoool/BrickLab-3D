@@ -112,6 +112,15 @@ async function findDesignerBook(number, signal) {
   return normalizeBooks([{ title: '1', url, pages, source: 'BrickLink' }])
 }
 
+// Cheap catalog availability check: existing trusted index before individual network discovery.
+export async function indexedBooks(setNumber,signal){
+ signal.throwIfAborted()
+ if(Array.isArray(knownBooks[setNumber]))return knownBooks[setNumber]
+ if(Array.isArray(sequences[setNumber]))return normalizeBooks(sequences[setNumber].map(([title,id,pages])=>({title,pages,url:'https://www.lego.com/cdn/product-assets/product.bi.core.pdf/'+id+'.pdf'})))
+ const archive=await loadArchive()
+ signal.throwIfAborted()
+ return archiveBooks(archive.get(setNumber))
+}
 export async function discoverBooks(setNumber, signal) {
   signal.throwIfAborted()
   const known = knownBooks[setNumber]

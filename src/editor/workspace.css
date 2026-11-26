@@ -136,3 +136,8 @@
 
 .editor[data-workspace-presentation] :is(.editor-axle-handles,.editor-selection-frame,.editor-empty,.workspace-status,.part-context){display:none!important}
 .editor[data-workspace-presentation]{grid-template-rows:auto auto minmax(0,1fr)}
+
+/* Independent right docks, ordered instruction / inspector / scene parts. */
+.editor[data-workspace-layout=dock] .editor-panel-layer :is(.editor-inspector,.editor-scene-parts,.instruction-panel){top:var(--dock-top,0%)!important;bottom:var(--dock-bottom,0%)!important;height:auto!important;max-height:none!important;min-height:0!important;border-bottom:1px solid var(--workspace-line);overflow:hidden;display:flex;flex-direction:column}
+.editor[data-workspace-layout=dock] .editor-panel-layer :is(.editor-inspector,.editor-scene-parts,.instruction-panel) .editor-panel-body{min-height:0;overflow:auto}
+.editor-motion [data-el=speedControl]{display:grid;gap:3px;grid-column:1/-1}.editor-motion [data-el=speedControl][hidden]{display:none}

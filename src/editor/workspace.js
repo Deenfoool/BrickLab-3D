@@ -48,7 +48,7 @@ export function readWorkspace(raw, guided = false) {
   }
   return out
 }
-export function mountWorkspace(root, { language, scene, signal, grid, axes, changePreference, hideSelection }) {
+export function mountWorkspace(root, { language, scene, signal, grid, axes, changePreference, hideSelection, openPhotoStudio, openCollaboration }) {
   const ru = language === 'ru'
   const tr = (r,e) => ru ? r : e
   const doc = root.ownerDocument
@@ -60,6 +60,9 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
   let raw
   try { raw=localStorage.getItem(KEY) } catch {}
   const settings=readWorkspace(raw,Boolean(panels.instruction))
+  const allRight= ['instruction','inspector','scene-parts'].filter(id=>panels[id])
+  settings.floating=false
+  for(const m of ['build','kinematics'])settings.modes[m].floatRight=[...allRight]
   let mode='build', focus=false, presentation=false, gridOn=grid, axesOn=axes, saveState='initial', canPresent=true
   const remember=()=>{try{localStorage.setItem(KEY,JSON.stringify(settings))}catch{}}
   const bar=root.querySelector('.editor-bar'), actions=root.querySelector('.editor-actions')
@@ -80,6 +83,8 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
   home.className='workspace-home-link'
   home.replaceChildren(doc.createTextNode(tr('Мои сборки','My builds')))
   projectItems.append(home)
+  const studio=create('button','workspace-home-link');studio.type='button';studio.textContent=tr('Фотостудия','Photo Studio');projectItems.append(studio);on(studio,'click',()=>{project.open=false;openPhotoStudio?.()})
+  if(openCollaboration){const collaboration=create('button','workspace-home-link');collaboration.type='button';collaboration.textContent=tr('Совместная сессия','Live collaboration');projectItems.append(collaboration);on(collaboration,'click',()=>{project.open=false;openCollaboration()})}
   project.append(projectItems)
   back.after(project,status)
   const share=create('details','workspace-menu workspace-share')
@@ -147,12 +152,12 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
   function apply(){
     const pref=settings.modes[mode]
     const small=innerWidth<900
-    const floating=settings.floating||small
+    const floating=settings.floating
     const panelMode=mode==='build'||mode==='kinematics'
     const left=panelMode&&!focus&&pref.library&&mode==='build'
-    const right=panelMode&&!focus&&pref.right
-    const rightIds=panelMode&&!focus?(settings.floating&&!small?pref.floatRight:right?[right]:[]):[]
-    const rightWidth=right==='instruction'?Math.max(settings.rightWidth,Math.min(440,innerWidth*.34)):settings.rightWidth
+    const rightIds=panelMode&&!focus?allRight.filter(id=>pref.floatRight.includes(id)):[]
+    const right=rightIds.length>0
+    const rightWidth=rightIds.includes('instruction')?Math.max(settings.rightWidth,Math.min(440,innerWidth*.34)):settings.rightWidth
     root.dataset.workspaceLayout=floating?'floating':'dock'
     root.dataset.workspaceMode=mode
     root.toggleAttribute('data-workspace-focus',focus)
@@ -164,8 +169,9 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     for(const [id,panel] of Object.entries(panels)){
       const shown=id==='library'?left:rightIds.includes(id)
       panel.toggleAttribute('data-workspace-hidden',!shown)
+      if(id!=='library'&&shown){const i=rightIds.indexOf(id),weights=rightIds.map(x=>x==='instruction'?4:x==='inspector'?3:3),total=weights.reduce((a,b)=>a+b,0);panel.style.setProperty('--dock-top',100*weights.slice(0,i).reduce((a,b)=>a+b,0)/total+'%');panel.style.setProperty('--dock-bottom',100*weights.slice(i+1).reduce((a,b)=>a+b,0)/total+'%')}
     }
-    if(!floating){if(left)expand('library');if(right)expand(right)}
+    if(!floating){if(left)expand('library');for(const id of rightIds)expand(id)}
     lib.disabled=mode!=='build'
     pin.disabled=mode!=='build'
     view.disabled=small
@@ -192,10 +198,10 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
     focus=presentation=false
     const p=settings.modes[mode]
     if(id==='library'){p.library=!p.library;if(p.library)expand(id)}
-    else if(settings.floating&&innerWidth>=900){
+    else {
       if(p.floatRight.includes(id))p.floatRight=p.floatRight.filter(x=>x!==id)
       else {p.floatRight.push(id);expand(id)}
-    }else{p.right=p.right===id?'':id;if(p.right)expand(id)}
+    }
     remember();apply()
   }
   on(lib,'click',()=>togglePanel('library'))
@@ -231,7 +237,7 @@ export function mountWorkspace(root, { language, scene, signal, grid, axes, chan
       if(root.dataset.workspaceLayout==='dock'&&toggle.getAttribute('aria-expanded')==='false'){
         const p=settings.modes[mode]
         if(id==='library')p.library=false
-        else if(p.right===id)p.right=''
+        else {p.floatRight=p.floatRight.filter(x=>x!==id);if(p.right===id)p.right=''}
         remember();apply()
       }
     })
