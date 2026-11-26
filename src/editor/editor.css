@@ -280,3 +280,15 @@ body:has(.editor:not([hidden])){overflow:hidden}
 .editor .editor-publish{border-color:#b98025;background:#392d1d;color:#ffd28a;font-weight:650;white-space:nowrap}
 .editor .editor-publish:hover:not(:disabled){background:#55401f}
 .editor-actions{flex-wrap:wrap;justify-content:flex-end}
+
+/* Live solver overlay and import issue locator */
+.editor-transmission-map:not([hidden]),.editor-diagnostic-issues:not([hidden]){display:grid;gap:6px;padding:8px 0;border-top:1px solid color-mix(in srgb,currentColor 16%,transparent)}
+.editor-transmission-map [aria-pressed="true"]{border-color:#36d399}
+.editor-transmission-legend:not([hidden]){display:grid;gap:4px}
+.editor-transmission-row{display:flex;align-items:center;gap:7px;text-align:left;font-size:11px}
+.editor-transmission-row span:nth-child(2){flex:1}
+.editor-transmission-dot{flex:none;width:9px;height:9px;border-radius:50%}
+.editor-transmission-note,.editor-diagnostic-issues p{font-size:11px;line-height:1.4;opacity:.8;margin:0}
+.editor-diagnostic-issues summary{cursor:pointer;font-size:12px;font-weight:650}
+.editor-diagnostic-issues details[open]{display:grid;gap:5px}
+.editor-diagnostic-issues details button{display:block;width:100%;margin-top:5px;font-size:11px;text-align:left;overflow-wrap:anywhere}
