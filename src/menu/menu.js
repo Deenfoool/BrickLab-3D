@@ -6,7 +6,7 @@ import { locales } from './locale.js?v=store-1'
 import {mountStore} from './store.js?v=welcome-1'
 import { mountHomeHub, mountHubSearch } from './home-hub.js?v=signature-art-1'
 import { mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=welcome-1'
+import { createCloudAccount } from './account.js?v=welcome-2'
 import { createNotificationPopover } from './notifications.js?v=gallery-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -587,7 +587,7 @@ async function openCommunity(){
  closeCommunity()
  const controller=new AbortController();communitySession={key,controller}
  const root=byId('community-panel');root.textContent=strings().loadingLibrary
- try{const {mountCommunity}=await import('./community-gallery.js?v=merch-2');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
+ try{const {mountCommunity}=await import('./community-gallery.js?v=welcome-2');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
  catch(e){if(!controller.signal.aborted)root.textContent=language==='ru'?'Не удалось открыть сообщество.':'Could not open community.'}
 }
 function closeSets() {
@@ -602,12 +602,13 @@ async function openSets() {
   const root = byId('sets-panel')
   root.textContent = strings().loadingLibrary
   try {
-    const { mountSetCatalog } = await import('../sets/catalog.js?v=welcome-1')
+    const { mountSetCatalog } = await import('../sets/catalog.js?v=welcome-2')
     if (controller.signal.aborted) return
     let initialQuery=pendingSetQuery;pendingSetQuery=''
     try{const target=sessionStorage.getItem('bricklab-instruction-return');if(/^\d{3,7}-\d{1,2}$/.test(target??'')){initialQuery=target;sessionStorage.removeItem('bricklab-instruction-return')}}catch{}
     await mountSetCatalog(root, { language, signal: controller.signal, initialQuery, projects: () => projects,
       resume: openProject,
+      practice:()=>beginTutorial('quick'),
       begin(set) {
         const data = newProject(set.name)
         data.buildingSet = { set, book: 0, page: 1 }
