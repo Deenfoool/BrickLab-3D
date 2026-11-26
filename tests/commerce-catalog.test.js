@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {BASE_LIMITS,commerceProducts,projectAccount,instructionPrice,canUseInteractive,badgeUpgradePrice,bundlePrice,discountedPrice,themePrices} from '../src/menu/commerce-catalog.js';
+import {BASE_LIMITS,commerceProducts,projectAccount,instructionPrice,canUseInteractive,badgeUpgradePrice,bundlePrice,discountedPrice,themePrices,instructionProduct,indexedInstructionProducts} from '../src/menu/commerce-catalog.js';
 test('catalog uses distinct SKUs and positive integer kopecks',()=>{
  assert.equal(new Set(commerceProducts.map(p=>p.id)).size,commerceProducts.length);
  assert.ok(commerceProducts.every(p=>Number.isSafeInteger(p.priceKopecks)&&p.priceKopecks>0));
@@ -50,4 +50,13 @@ test('plus discount uses integer kopecks',()=>{
  assert.equal(discountedPrice(12900,true),11610);
  assert.equal(discountedPrice(12900,false),12900);
  assert.throws(()=>discountedPrice(-1,true),RangeError);
+});
+
+test('all initial instruction products have more than 600 pieces and individual IDs',()=>{
+ assert.equal(indexedInstructionProducts.length,13);
+ assert.equal(new Set(indexedInstructionProducts.map(p=>p.id)).size,13);
+ assert.ok(indexedInstructionProducts.every(p=>p.partCount>600&&p.priceKopecks===instructionPrice(p.partCount)));
+ assert.equal(instructionProduct('12345-1','Small',600),null);
+ assert.equal(instructionProduct('12345-1','Large',601).priceKopecks,7900);
+ assert.equal(instructionProduct('invalid','Large',601),null);
 });
