@@ -26,7 +26,7 @@ export function startCommerceTelegram({store,config=commerceTelegramConfig(),fet
  }
  function tick(){
   if(stopped||active||!config.enabled)return
-  active=run().catch(()=>logger.warn('Commerce Telegram queue unavailable')).finally(()=>{active=null})
+  active=run().catch(()=>logger.warn('Commerce Telegram queue unavailable')).finally(()=>{active=null});return active
  }
  const timer=config.enabled?setInterval(tick,intervalMs).unref():null
  return {tick,async stop(){stopped=true;clearInterval(timer);await active}}
