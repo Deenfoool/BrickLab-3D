@@ -67,7 +67,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
  let active=0
  async function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return /^[a-f0-9]{64}$/.test(token||'')?await store.getSession(digest(token)):null}
  return async(req,res,path)=>{
-  if(!['/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions','/api/commerce/instruction-offer','/api/commerce/instruction-activate','/api/commerce/instruction-complete'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
+  if(!['/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions','/api/commerce/instruction-offer','/api/commerce/instruction-activate','/api/commerce/instruction-complete','/api/commerce/instruction-event','/api/commerce/instruction-analytics'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
   if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
   active++
   try{
@@ -135,6 +135,20 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(!data||typeof data.setId!=='string'||Object.keys(data).length!==1||!instructionLocked(data.setId))throw new ProjectError(404,'unknown_product')
     const account=await store.claimInstructionWelcome(viewer.id,data.setId)
     reply(res,200,{state:account.instructions.includes(data.setId)?'owned':account.plus?'plus':'unavailable',remaining:account.welcomeRemaining});return true
+   }
+   if(path==='/api/commerce/instruction-event'){
+    if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
+    if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
+    let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
+    if(!data||Object.keys(data).length!==2||typeof data.setId!=='string'||!/^\d{3,7}-\d{1,2}$/.test(data.setId)||!['set_open','build_start','hint_use','offer_view','checkout_click'].includes(data.event))throw new ProjectError(400,'invalid_instruction_event')
+    const viewer=await session(req)
+    if(viewer&&!viewer.admin)await store.recordInstructionActivity(viewer.id,data.setId,data.event)
+    reply(res,200,{ok:true});return true
+   }
+   if(path==='/api/commerce/instruction-analytics'){
+    if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
+    const viewer=await session(req);if(!viewer?.admin)throw new ProjectError(403,'admin_required')
+    reply(res,200,await store.instructionAnalytics(viewer.id));return true
    }
    if(path==='/api/commerce/instruction-complete'){
     if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
