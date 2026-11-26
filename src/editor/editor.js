@@ -18,8 +18,9 @@ import { nearestDetent } from '../mechanics/axial.js?v=torque-clutch'
 import { nearbyConnections, translationSnaps } from './snap.js?v=volvo-spur-gears'
 import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=system-complete'
 import { mountLibrary } from './library.js?v=catalog-engine-1'
-import { createScene } from './scene.js?v=transmission-map-1'
+import { createScene } from './scene.js?v=collision-1'
 import {mountTransmissionMap,transmissionMap,transmissionCodes} from './transmission-map.js'
+import {mountCollisionPanel} from './collision-panel.js'
 import { mountScenePartsPanel } from './scene-parts-panel.js?v=scene-parts'
 import { hiddenSceneParts, moveToSceneGroup, readSceneLayers } from './scene-layers.js?v=scene-parts'
 import { driveTitle, mountDrivePanel } from './drive-panel.js?v=volvo-spur-gears'
@@ -187,6 +188,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
                 <button type="button" data-el="applyHinge" hidden>${t.applyHinge}</button>
               </div>
               <section class="editor-transmission-map" data-el="transmissionMap" hidden></section>
+              <section class="editor-collision-panel" data-el="collisionPanel" hidden></section>
               <section class="editor-diagnostic-issues" data-el="diagnosticIssues" hidden></section>
               <button type="button" data-el="clutchTest" hidden></button>
               <p role="status" data-el="clutchStatus" hidden></p>
@@ -364,7 +366,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   let clutchTest
   let runningMotor
   let transmission
-  let mappedParts=new Map(),lastMotionPoses=[],lastMapUpdate=0
+  let mappedParts=new Map(),lastMotionPoses=[],lastMapUpdate=0,collisionIds=[],locatingCollision=false
   let hinge
   let pointerDown
   let boxSelection
@@ -376,6 +378,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   let snappingScene = false
   let pendingPart
   const mapUI=mountTransmissionMap(el('transmissionMap'),{language,signal,onChange:()=>{refreshTransmissionMap();updateHighlights()},onFocus:ids=>scene.focus(ids)})
+  const collisionUI=mountCollisionPanel(el('collisionPanel'),{language,signal,onScan:scanCollisionPoses,onLocate:locateCollision,onClear:()=>{collisionIds=[];scene.markCollision(null);updateHighlights()}})
   const audio = createEditorAudio(signal)
   function updateSoundControl() {
     const button = el('sound')
@@ -631,6 +634,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }, { once: true })
 
   function showMotion(audible = false, wrappedAngle = 0) {
+    if(!locatingCollision)collisionUI.reset()
     const previous = lastPreview
     if (hinge?.ok) {
       const target = nearestDetent(hinge.detents, angle * Math.PI / 180)
@@ -730,6 +734,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }
 
   function refreshLayerVisibility() {
+    collisionUI.reset()
     if (isolation && !state.parts.some(part => isolation.has(part.id))) isolation = undefined
     hidden = hiddenSceneParts(state.layers, state.parts, isolation)
     scene.setHidden(hidden)
@@ -798,6 +803,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }
 
   function setSelection(id) {
+    collisionUI.reset()
     stopAnimation()
     audio.resetRotation()
     scene.setParts(state.parts)
@@ -942,6 +948,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }
 
   function render() {
+    collisionUI.render(mode==='kinematics',Boolean(hinge?.ok||transmission?.ok))
     const part = selectedPart()
     const selectedLinks = part ? links.filter(link => link.shaft.part === part.id || link.socket.part === part.id) : []
     el('selection').textContent = additional.size ? t.selectedCount(selectionIds().length)
@@ -1384,9 +1391,54 @@ export async function mountEditor(root, { document, projectId, language, save, d
     if(mapUI.enabled&&available&&changed)updateHighlights()
   }
   function updateHighlights() {
-    if(mode==='kinematics'&&mapUI.enabled&&transmission?.ok){
+    if(mode==='kinematics'&&collisionIds.length){
+      const codes=new Map(mapUI.enabled&&transmission?.ok?[...mappedParts].map(([id,key])=>[id,transmissionCodes[key]]):[])
+      for(const id of collisionIds)codes.set(id,transmissionCodes.issue)
+      scene.highlight(codes.keys(),0xff6666,true,codes)
+    }else if(mode==='kinematics'&&mapUI.enabled&&transmission?.ok){
       scene.highlight(mappedParts.keys(),0xff6666,true,new Map([...mappedParts].map(([id,key])=>[id,transmissionCodes[key]])))
     }else scene.highlight(activeJoint?.moving ?? additional, 0xffb01b, false)
+  }
+
+  async function scanCollisionPoses(sweep,request,progress){
+    stopAnimation();releaseMotor()
+    locatingCollision=true
+    try{scene.setParts(state.parts);showMotion()}finally{locatingCollision=false}
+    render()
+    const {inspectCollisions}=await import('./collision-inspector.js')
+    request.throwIfAborted()
+    const linear=transmission?.unit==='linear'&&!hinge?.ok,base=state.parts.filter(p=>!hidden.has(p.id)),axis=Number(el('motionAxis').value)
+    let values=[angle]
+    if(sweep&&hinge?.ok){
+      const d=hinge.detents.map(x=>x*180/Math.PI)
+      values=[...new Set(Array.from({length:Math.min(9,d.length)},(_,i)=>d[Math.round(i*(d.length-1)/Math.max(1,Math.min(9,d.length)-1))]))]
+    }else if(sweep&&transmission?.ok){
+      const [min,max]=transmission.range??[-1080,1080]
+      const span=linear?40:360,lo=Math.max(min,Math.min(angle-span/2,max-span)),hi=Math.min(max,lo+span)
+      values=[...new Set(Array.from({length:9},(_,i)=>lo+(hi-lo)*i/8))]
+    }
+    const samples=[]
+    for(const [i,value] of values.entries()){
+      request.throwIfAborted();progress(i+1,values.length)
+      await new Promise(resolve=>setTimeout(resolve,0))
+      request.throwIfAborted()
+      const poses=hinge?.ok?hingePoses(state.parts,hinge,value*Math.PI/180):transmission?.ok?rotationPoses(state.parts,transmission,linear?value:value*Math.PI/180,axis):[]
+      if(!poses){samples.push({value,pairs:[],checked:0,excluded:0,unsolved:true});continue}
+      const byId=new Map(poses.map(p=>[p.id,p]))
+      const placed=base.map(p=>byId.get(p.id)??p)
+      // For sweep checks, keep every pair involving a solver-driven part, even at rest.
+      const movingIds=sweep?new Set(hinge?.ok?hinge.moving:poses.map(p=>p.id)):null
+      const result=await inspectCollisions({parts:placed,models,connections:links,movingIds,signal:request})
+      samples.push({...result,value})
+    }
+    return {samples,linear}
+  }
+  function locateCollision(hit){
+    if(mode!=='kinematics')return
+    stopAnimation();releaseMotor()
+    locatingCollision=true
+    try{angle=hit.value;scene.setParts(state.parts);showMotion()}finally{locatingCollision=false}
+    collisionIds=[hit.a,hit.b];scene.markCollision(hit.point);updateHighlights();scene.focus(collisionIds);render()
   }
 
   function positionHandles() {
@@ -1763,6 +1815,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   })
   on(el('clutchTest'), 'click', testClutch)
   on(el('play'), 'click', () => {
+    collisionUI.reset()
     if (transmission?.kind === 'motor' && transmission.playback && !runningMotor) {
       stopAnimation()
       runningMotor = { id: selected, motion: transmission, degrees: angle }
