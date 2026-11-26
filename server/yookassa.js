@@ -76,6 +76,12 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
     if(Date.now()-new Date(order.requestedAt).getTime()>23*3600000)throw new ProjectError(409,'refund_reconciliation_required')
     const paid=await call('payments/'+order.paymentId)
     if(!validPayment(paid,order.paymentId,'test')||paid.metadata.order_id!==order.id||paid.status!=='succeeded'||paid.paid!==true||amountKopecks(paid.amount.value)!==order.amountKopecks)throw new ProjectError(409,'payment_mismatch')
+    const alreadyRefunded=paid.refunded_amount?.currency==='RUB'?amountKopecks(paid.refunded_amount.value):null
+    if(alreadyRefunded===order.amountKopecks){
+     if(!await store.refundCommercePayment(order.paymentId,'test',order.amountKopecks))throw new ProjectError(409,'refund_mismatch')
+     return {status:'succeeded',mode:'test'}
+    }
+    if(alreadyRefunded!==null&&alreadyRefunded>0)throw new ProjectError(409,'partial_refund_requires_review')
     // A previous refund may have succeeded before its response reached us.
     // Replay only the same idempotency key, never generate a new refund key.
     refund=await call('refunds',{payment_id:order.paymentId,amount:{currency:'RUB',value:(order.amountKopecks/100).toFixed(2)}},order.id)
