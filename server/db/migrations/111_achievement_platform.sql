@@ -113,6 +113,7 @@ CREATE FUNCTION bricklab.admin_create_achievement(p jsonb) RETURNS boolean
  IF key IS NULL OR key !~ '^custom-[a-z0-9-]{1,39}$' OR coalesce(p->>'cat','') NOT IN ('construction','mechanics','learning','community','activity','special')
  OR coalesce(p->>'rarity','') NOT IN ('common','uncommon','rare','epic','legendary','unique')
  OR coalesce(p->>'icon','') NOT IN ('layers','settings','icon-trophy','book','play','icon-heart','icon-account','icon-cloud','icon-bug','icon-flask','folder')
+ OR (p ? 'hidden' AND jsonb_typeof(p->'hidden')<>'boolean')
  OR (metric IS NOT NULL AND metric NOT IN ('cloud','parts','designs','models','days','publications','likes','followers','age','lesson','gears','drive','engine','gearbox','tracks','suspension','belts','bugs'))
  OR coalesce(p->>'xp','') !~ '^[0-9]{1,4}$' OR (p->>'xp')::int>5000
  OR coalesce(p->>'target','') !~ '^[1-9][0-9]{0,5}$' OR (p->>'target')::int>100000

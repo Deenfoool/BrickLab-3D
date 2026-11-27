@@ -1,3 +1,4 @@
+import {renderAchievementAdmin} from './admin-achievements.js'
 import {achievements} from './achievement-catalog.js'
 
 import {AuthError,authOriginAllowed} from './auth-client.js?v=security-1'
@@ -13,8 +14,8 @@ function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className
 export function renderAdminPanel({lang='ru',signal,initialMode='overview',initialQuery='',fetcher=globalThis.fetch,location=globalThis.location}){
  const t={...(labels[lang]??labels.ru),bugs:lang==='ru'?'Баг-репорты':'Bug reports',bugSearch:lang==='ru'?'ID отчёта':'Report ID',grant_achievement:lang==='ru'?'Выдать достижение':'Grant achievement',confirm_bug:lang==='ru'?'Подтвердить баг':'Confirm bug',confirmed:lang==='ru'?'Подтверждён':'Confirmed'},root=el('section','admin-panel'),notice=el('p','account-muted'),tabs=el('div','community-actions'),content=el('div','admin-content'),more=el('button','workspace-action',t.more)
  notice.setAttribute('role','status');more.type='button';more.hidden=true
- const modes=['overview','users','reports','build-reports','bugs','content','audit'];let mode=modes.includes(initialMode)?initialMode:'overview',offset=0,q=uuid.test(initialQuery)?initialQuery:'',busy=false,serial=0
- const controls=new Map()
+ const modes=['overview','users','achievements','reports','build-reports','bugs','content','audit'];let mode=modes.includes(initialMode)?initialMode:'overview',offset=0,q=uuid.test(initialQuery)?initialQuery:'',busy=false,serial=0
+ const controls=new Map();let definitions=[];t.achievements=lang==='ru'?'Достижения':'Achievements';t.create_achievement=lang==='ru'?'Создание достижения':'Achievement created'
  async function call(path='',method='GET',body){
   if(!authOriginAllowed(location))throw new AuthError('https_required')
   const r=await fetcher('/api/admin'+path,{method,signal,credentials:'same-origin',cache:'no-store',redirect:'error',headers:{Accept:'application/json',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})})
@@ -37,7 +38,7 @@ export function renderAdminPanel({lang='ru',signal,initialMode='overview',initia
   if(mode==='users'){
    row.append(el('strong',null,r.displayName),el('p','account-muted',r.email),el('p','account-muted',r.id),el('p',null,(r.admin?t.admin+' · ':'')+(r.verifiedAt?t.verified:t.unverified)+' · '+(r.blockedAt?t.blocked:t.active)))
    if(r.publicId&&uuid.test(r.publicId)){const a=el('a','workspace-action',lang==='ru'?'Публичный профиль':'Public profile');a.href='#community/profile/'+r.publicId;row.append(a)}
-   if(!r.blockedAt){const select=el('select');select.setAttribute('aria-label',t.grant_achievement);for(const a of achievements.filter(a=>a.metric===null)){const option=el('option',null,a[lang==='ru'?'ru':'en']);option.value=a.id;select.append(option)}row.append(select,button(t.grant_achievement,()=>action('grant_achievement',r.id,undefined,select.value)))}
+   if(!r.blockedAt){const select=el('select');select.setAttribute('aria-label',t.grant_achievement);for(const a of [...achievements,...definitions].filter(a=>a.metric===null)){const option=el('option',null,a[lang==='ru'?'ru':'en']);option.value=a.id;select.append(option)}row.append(select,button(t.grant_achievement,()=>action('grant_achievement',r.id,undefined,select.value)))}
    if(!r.admin)row.append(button(t[r.blockedAt?'unblock':'block'],()=>action(r.blockedAt?'unblock':'block',r.id)),button(t.revoke_sessions,()=>action('revoke_sessions',r.id)))
   }else if(mode==='bugs'){
    row.append(el('strong',null,r.area),el('p','account-muted',r.id+' · '+new Date(r.createdAt).toLocaleString(lang)),el('p','community-comment-text',r.summary),r.confirmedAt?el('span','account-muted',t.confirmed):button(t.confirm_bug,()=>action('confirm_bug',r.id)))
@@ -61,6 +62,8 @@ export function renderAdminPanel({lang='ru',signal,initialMode='overview',initia
    content.append(form);notice.textContent='';return
   }
   try{
+   if(mode==='achievements'){const {items}=await call('/achievements');if(signal.aborted||version!==serial)return;definitions=items;content.append(renderAchievementAdmin({lang,definitions,signal,create:async data=>{await call('/achievements','POST',data);if(!signal.aborted)await load(true)}}));notice.textContent='';return}
+   if(mode==='users'){const {items}=await call('/achievements');if(signal.aborted||version!==serial)return;definitions=items}
    if(mode==='overview'){
     const {overview}=await call();if(signal.aborted||version!==serial)return
     const grid=el('div','admin-metrics')
