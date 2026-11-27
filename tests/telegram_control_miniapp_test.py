@@ -61,5 +61,26 @@ class Mini(unittest.TestCase):
             handler.do_POST()
             self.assertEqual(reply.call_args.args[0],403)
             call.assert_not_called()
+    def test_media_requires_linked_signed_request(self):
+        from types import SimpleNamespace
+        handler=object.__new__(m.Handler)
+        handler.path="/control/hub/avatar"
+        handler.server=SimpleNamespace(token="123:abc",hub_key=b"key")
+        handler.headers={}
+        with patch.object(handler,"reply") as reply,patch.object(m,"hub_request") as call:
+            handler.do_GET()
+            self.assertEqual(reply.call_args.args[0],403)
+            call.assert_not_called()
+        handler.headers={"X-Telegram-Init-Data":signed("123:abc",user=99,stamp=10000)}
+        data=b"RIFF"+b"1234"+b"WEBP"
+        with patch.object(m.time,"time",return_value=10001),patch.object(handler,"reply") as reply,patch.object(m,"hub_request",return_value=(200,data)) as call:
+            handler.do_GET()
+            call.assert_called_once_with(b"key",99,"avatar",None)
+            reply.assert_called_once_with(200,data,"image/webp")
+        handler.path="/control/hub/avatar?uid=42"
+        with patch.object(handler,"reply") as reply,patch.object(m,"hub_request") as call:
+            handler.do_GET()
+            self.assertEqual(reply.call_args.args[0],400)
+            call.assert_not_called()
 if __name__=="__main__":
     unittest.main()
