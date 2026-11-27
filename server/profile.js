@@ -1,3 +1,4 @@
+import {createAchievementVerifier} from './achievement-verifier.js'
 import {rewardById} from '../src/menu/achievement-rewards.js'
 import {achievementProgress,achievementById} from '../src/menu/achievement-catalog.js'
 import { createHash } from 'node:crypto'
@@ -20,18 +21,20 @@ export function awardProgress(awards,metrics,showcase,rarity,definitions){return
 export function createProfileHandler({store,origin,logger=console}){
  const cookieName=new URL(origin).protocol==='https:'?'__Host-bricklab_session':'bricklab_session'
  let active=0,mediaActive=0
+ const verify=createAchievementVerifier({store})
  async function readBytes(req,limit){const chunks=[];let size=0;if(Number(req.headers['content-length'])>limit)throw new ProjectError(413,'body_too_large');for await(const c of req.iterator({destroyOnReturn:false})){size+=c.length;if(size>limit){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(c)}return Buffer.concat(chunks)}
  function reply(res,status,data){const b=JSON.stringify(data);res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Content-Length':Buffer.byteLength(b)});res.end(b)}
  return async(req,res,path)=>{
-  const ranking=path==='/api/profile/rankings'
+  const verification=path==='/api/profile/verify',ranking=path==='/api/profile/rankings'
   const kind=path==='/api/profile/avatar'?'avatar':path==='/api/profile/cover'?'cover':null
-  if(path!=='/api/profile'&&!kind&&!ranking)return false
+  if(path!=='/api/profile'&&!kind&&!ranking&&!verification)return false
   try{
-   if(!(ranking?['GET']:kind?['GET','PUT','DELETE']:['GET','PUT']).includes(req.method)){res.setHeader('Allow',kind?'GET, PUT, DELETE':'GET, PUT');throw new ProjectError(405,'method_not_allowed')}
+   if(!(verification?['POST']:ranking?['GET']:kind?['GET','PUT','DELETE']:['GET','PUT']).includes(req.method)){res.setHeader('Allow',kind?'GET, PUT, DELETE':'GET, PUT');throw new ProjectError(405,'method_not_allowed')}
    if(req.method!=='GET'&&req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
    const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1)
    const user=/^[a-f0-9]{64}$/.test(token||'')&&await store.getSession(createHash('sha256').update(token).digest('hex'))
    if(!user)throw new ProjectError(401,'unauthenticated')
+   if(verification){if(req.headers['content-type']?.split(';')[0].trim()!=='application/json')throw new ProjectError(415,'json_required');let input;try{input=JSON.parse((await readBytes(req,4096)).toString('utf8'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}reply(res,200,await verify(user.id,input));return true}
    if(ranking){const raw=new URL(req.url,'http://localhost').searchParams.get('offset')??'0';if(!/^\d{1,5}$/.test(raw)||Number(raw)>10000)throw new ProjectError(400,'invalid_offset');const items=await store.getAchievementRankings(Number(raw));reply(res,200,{items:items.slice(0,50),nextOffset:items.length>50&&Number(raw)+50<=10000?Number(raw)+50:null});return true}
    if(kind){
     if(req.method==='GET'){
