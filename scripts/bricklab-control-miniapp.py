@@ -122,7 +122,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         status,data=hub_request(self.server.hub_key,ident,route,body)
         return self.reply(status,data,"application/json")
     def do_POST(self):
-        route={"/control/hub/claim":"claim","/control/hub/preferences":"preferences"}.get(self.path)
+        route={"/control/hub/claim":"claim","/control/hub/preferences":"preferences","/control/hub/redeem":"redeem"}.get(self.path)
+        admin_route={"/control/promo-create":"promo-create","/control/promo-disable":"promo-disable"}.get(self.path)
+        if admin_route and not self.authorized():
+            return self.reply(403,b'{"error":"unauthorized"}',"application/json")
+        route=route or admin_route
         if route:
             if self.headers.get("Origin")!=ORIGIN:
                 return self.reply(403,b'{"error":"unauthorized"}',"application/json")
@@ -155,6 +159,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             path=path[len("/control/"):]
         else:
             path=path.lstrip("/")
+        if path=="promos":
+            if not self.authorized(): return self.reply(403,b'{"error":"unauthorized"}',"application/json")
+            return self.hub_reply("promos")
         if path=="hub/api":
             return self.hub_reply("hub")
         if path=="role":

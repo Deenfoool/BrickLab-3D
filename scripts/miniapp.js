@@ -199,3 +199,15 @@ async function enqueue(action){
 devTest.onclick=()=>enqueue('test');
 devDeploy.onclick=()=>enqueue('deploy');
 document.getElementById('dev-refresh').onclick=refreshJob;
+
+const promoStatus=document.getElementById('promo-status'),promoList=document.getElementById('promo-list');
+async function promoRequest(path,data){
+ const r=await fetch(path,{method:data?'POST':'GET',headers:{'X-Telegram-Init-Data':tg?.initData??'',...(data?{'Content-Type':'application/json'}:{})},credentials:'omit',cache:'no-store',...(data?{body:JSON.stringify(data)}:{})});
+ if(r.status===403)throw Error('Нужен привязанный аккаунт администратора и свежая авторизация Telegram.');
+ if(!r.ok)throw Error('Операция не выполнена: HTTP '+r.status);return r.json();
+}
+async function loadPromos(){
+ try{const d=await promoRequest('promos');promoList.replaceChildren();for(const p of d.items??[]){const row=document.createElement('article');row.className='admin-row';addText(row,p.code,'strong');addText(row,p.days+' дн. · '+p.used+'/'+p.maxUses+' · '+new Date(p.expiresAt).toLocaleDateString());if(!p.disabled){const b=document.createElement('button');b.type='button';b.textContent='Отключить';b.onclick=async()=>{if(!confirm('Отключить '+p.code+'?'))return;try{await promoRequest('promo-disable',{code:p.code});await loadPromos()}catch(e){promoStatus.textContent=e.message}};row.append(b)}else addText(row,'Отключён');promoList.append(row)}promoStatus.textContent='Промокоды загружены.'}catch(e){promoStatus.textContent=e.message}
+}
+document.getElementById('promo-load').onclick=loadPromos;
+document.getElementById('promo-create').onsubmit=async e=>{e.preventDefault();try{const code=document.getElementById('promo-admin-code').value.trim().toUpperCase(),days=Number(document.getElementById('promo-days').value),maxUses=Number(document.getElementById('promo-limit').value),expiresAt=new Date(document.getElementById('promo-expiry').value+'T23:59:59').toISOString();await promoRequest('promo-create',{code,days,maxUses,expiresAt});await loadPromos()}catch(err){promoStatus.textContent=err.message}};

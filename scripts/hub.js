@@ -36,3 +36,5 @@ $('pair-form').onsubmit=async e=>{e.preventDefault();const code=$('pair-code').v
 $('save-prefs').onclick=async()=>{if(!current?.linked)return;try{const d=await request('preferences',{marketing:$('marketing').checked});if(!d.ok)throw Error('Привязка недоступна.');await load()}catch(e){$('status').textContent=e.message}};
 for(const b of document.querySelectorAll('[data-tab]'))b.onclick=()=>{for(const t of document.querySelectorAll('[data-tab]'))t.setAttribute('aria-selected',String(t===b));for(const p of document.querySelectorAll('[data-page]'))p.hidden=p.dataset.page!==b.dataset.tab};
 tg?.ready();tg?.expand();load();request('../role').then(r=>{$('owner').hidden=r.admin!==true}).catch(()=>{});
+
+$('promo-form').onsubmit=async e=>{e.preventDefault();const code=$('promo-code').value.trim().toUpperCase();try{await request('redeem',{code});$('promo-code').value='';await load();$('status').textContent='Промокод активирован.'}catch(err){$('status').textContent=err.message}};

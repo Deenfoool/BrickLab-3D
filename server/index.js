@@ -48,7 +48,7 @@ if (process.env.PGPASSWORD) {
     auth = createAuthHandler({ store, origin: process.env.PUBLIC_ORIGIN || 'http://localhost:8080',
       registrationEnabled: registrationEnabled && new URL(origin).protocol==='http:',
       trustedProxyIp: process.env.BRICKLAB_TRUSTED_PROXY_IP || '' })
-    hub=createTelegramHubHandler({store,origin,keyFile:process.env.BRICKLAB_HUB_KEY_FILE||''})
+    hub=createTelegramHubHandler({store,origin,keyFile:process.env.BRICKLAB_HUB_KEY_FILE||'',ownerId:process.env.BRICKLAB_HUB_OWNER_ID||''})
     projects = createProjectsHandler({ store, origin: process.env.PUBLIC_ORIGIN || 'http://localhost:8080' })
     profile = createProfileHandler({store,origin:process.env.PUBLIC_ORIGIN || 'http://localhost:8080'})
     activity = createActivityHandler({store,origin:process.env.PUBLIC_ORIGIN || 'http://localhost:8080'})

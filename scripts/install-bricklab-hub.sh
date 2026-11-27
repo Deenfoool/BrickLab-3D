@@ -8,7 +8,7 @@ test ! -L .env
 python3 - <<'PY'
 import json
 with open('/etc/bricklab-backup/telegram.json') as f:
-    assert int(json.load(f)['chat_id'])==548086804, 'Owner Telegram ID mismatch'
+    assert int(json.load(f)['chat_id'])>0, 'Private owner required'
 PY
 # App container already mounts this private directory read-only.
 test -d /var/lib/bricklab-commerce-private
@@ -23,11 +23,14 @@ python3 - <<'PY'
 from pathlib import Path
 p=Path('.env')
 s=p.read_text()
-line='BRICKLAB_HUB_KEY_FILE=/app/private-commerce/hub.key'
-matches=[x for x in s.splitlines() if x.startswith('BRICKLAB_HUB_KEY_FILE=')]
-assert not matches or matches==[line], 'Unexpected Hub key configuration'
-if not matches:
-    with p.open('a') as f:f.write('\n'+line+'\n')
+import json
+with open('/etc/bricklab-backup/telegram.json') as f:
+    owner=int(json.load(f)['chat_id'])
+for line in ('BRICKLAB_HUB_KEY_FILE=/app/private-commerce/hub.key',f'BRICKLAB_HUB_OWNER_ID={owner}'):
+    matches=[x for x in s.splitlines() if x.startswith(line.split('=',1)[0]+'=')]
+    assert not matches or matches==[line], 'Unexpected Hub key configuration'
+    if not matches:
+        with p.open('a') as f:f.write('\n'+line+'\n')
 PY
 install -d -m 0755 /etc/systemd/system/bricklab-control-miniapp.service.d /etc/systemd/system/bricklab-control.service.d
 printf '[Service]\nLoadCredential=hub.key:/etc/bricklab-backup/hub.key\n' >/etc/systemd/system/bricklab-control-miniapp.service.d/30-hub.conf
