@@ -1,3 +1,4 @@
+import {profileHref} from '../src/menu/profile-route.js'
 import {achievementById} from '../src/menu/achievement-catalog.js'
 import {validatePortfolio,filterPortfolio} from '../src/menu/portfolio-model.js'
 import {backgroundIds} from '../src/menu/store-themes.js'
@@ -218,7 +219,7 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
      const card=publicCard(await store.getPublicCard(m[2].toLowerCase()))
      if(!card)throw new ProjectError(404,'not_found')
      if(m[1])reply(res,200,{profile:{...card,reputation:publicReputation(store.reputation?await store.reputation(card.id):null)}})
-     else {res.writeHead(302,{'Location':'/#community/profile/'+(card.username??card.id),'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}
+     else {res.writeHead(302,{'Location':'/'+profileHref(card.username,card.id),'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}
     }else if(path==='/community'||path==='/api/community'){
      const q=(new URL(req.url,'http://localhost').searchParams.get('q')??'').trim();if(q.length>100||/[\u0000-\u001f\u007f]/.test(q))throw new ProjectError(400,'invalid_gallery_query');const cards=(await store.listPublicCards(q)).map(publicCard)
      if(path.startsWith('/api/'))reply(res,200,{profiles:cards})

@@ -1,3 +1,4 @@
+import {validNewUsername} from '../src/menu/profile-route.js'
 import {validateAchievement} from './achievement-rules.js'
 import {achievementById} from '../src/menu/achievement-catalog.js'
 import {randomBytes,randomInt,createHash,createHmac} from 'node:crypto'
@@ -82,7 +83,7 @@ export function createAccountSecurityHandler({store,origin,registrationEnabled=f
     }
     const password=d.password,displayName=typeof d.displayName==='string'?d.displayName.trim():'',username=displayName.toLowerCase()
     const code=typeof d.code==='string'?d.code.trim().replace(/[- ]/g,'').toLowerCase():''
-    if(purpose==='register'&&(!/^[a-z0-9][a-z0-9_.-]{2,31}$/.test(username)||username.startsWith('id_')))throw new ProjectError(400,'invalid_username')
+    if(purpose==='register'&&!validNewUsername(username))throw new ProjectError(400,'invalid_username')
     if(!(/^[0-9]{6}$/.test(code)||/^[0-9a-f]{48}$/.test(code))||typeof password!=='string'||password.length<12||password.length>256||password.includes('\0')||(purpose==='register'&&(!displayName||displayName.length>80||/[\u0000-\u001f\u007f]/.test(displayName)||/[\ud800-\udfff]/u.test(displayName))))throw new ProjectError(400,'invalid_credentials')
     if(!await store.finishAccountToken(email,purpose,code.length===6?hashCode(email,purpose,code):digest(code),await hashPassword(password),displayName,username))throw new ProjectError(400,'invalid_code')
     reply(res,200,{ok:true});return true

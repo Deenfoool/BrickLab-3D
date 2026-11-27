@@ -1,3 +1,4 @@
+import {createDefaultWorkshop} from './default-workshop.js'
 
 import {ProjectError} from '../projects.js'
 export function securityStore(sql,scope,lock){
@@ -35,6 +36,7 @@ export function securityStore(sql,scope,lock){
      const inserted=await tx`insert into bricklab.users(email,display_name,password_hash,username) values(${email},${displayName},${passwordHash},${username??null}) on conflict do nothing returning id`
      if(!inserted.length)return false
      await tx`update bricklab.users set email_verified_at=now() where id=${inserted[0].id}`
+     await createDefaultWorkshop(tx,inserted[0].id)
     }else{
      await tx`update bricklab.users set password_hash=${passwordHash},email_verified_at=coalesce(email_verified_at,now()) where id=${u.id}`
      await tx`delete from bricklab.sessions where user_id=${u.id}`

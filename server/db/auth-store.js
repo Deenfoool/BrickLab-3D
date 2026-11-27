@@ -1,3 +1,4 @@
+import {createDefaultWorkshop} from './default-workshop.js'
 import {rewardInventory} from '../../src/menu/achievement-rewards.js'
 import {filterPortfolio} from '../../src/menu/portfolio-model.js'
 import postgres from 'postgres'
@@ -52,6 +53,7 @@ export function connectAuthStore(env = process.env) {
         const [user] = await tx`insert into bricklab.users (email, display_name, password_hash)
           values (${email}, ${displayName}, ${passwordHash})
           returning id, email, username, display_name as "displayName"`
+        await createDefaultWorkshop(tx,user.id)
         await tx`insert into bricklab.sessions (token_hash, user_id, expires_at)
           values (${tokenHash}, ${user.id}, ${expiresAt})`
         return user
@@ -128,7 +130,7 @@ export function connectAuthStore(env = process.env) {
         return tx`select revision,created_at as "savedAt" from bricklab.project_revisions where project_id=${id} order by revision desc`
       })
     },
-    async getAchievementRankings(offset){return sql`select * from bricklab.achievement_rankings(${offset}::integer)`},
+    async getAchievementRankings(offset){return sql`select r.*,u.username,(p.avatar_image is not null) as "hasAvatar" from bricklab.achievement_rankings(${offset}::integer) r join bricklab.public_profiles p on p.public_id=r.id join bricklab.users u on u.id=p.user_id order by r.xp desc,r.id`},
     async listAchievementDefinitions(){return (await sql`select definition from bricklab.achievement_definitions where id like 'custom-%' order by id`).map(r=>r.definition)},
     async recordAchievementEvidence(uid,id,revision,metrics){return scope(uid,async tx=>{await lock(tx,uid);for(const metric of metrics)await tx`insert into bricklab.achievement_evidence(user_id,project_id,revision,metric) values(${uid},${id},${revision},${metric}) on conflict do nothing`;return tx`select bricklab.refresh_achievements()`})},
     async getProfile(uid) {

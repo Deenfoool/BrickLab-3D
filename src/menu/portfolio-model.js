@@ -2,7 +2,7 @@
 export const portfolioKeys=['featured','publications','collections','awards','activity','statistics','about','followers']
 export const portfolioUuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export function defaultPortfolio(){
- return {blocks:portfolioKeys.map(key=>({key,visible:!['awards','activity'].includes(key)})),featured:null,collections:[]}
+ return {blocks:portfolioKeys.map(key=>({key,visible:key!=='activity'})),featured:null,collections:[]}
 }
 export function validatePortfolio(value){
  const fail=()=>{throw new TypeError('invalid_portfolio')}
