@@ -19,10 +19,13 @@ export function mountModulePanel({dialog,button,signal,api,status,busy}){
    card.append(image,el('strong',item.name),el('small',item.category+' · '+(item.preset?item.description:item.parts.length+' дет.')));
    const actions=el('div',null,'world-module-actions');
    actions.append(action('Разместить',()=>run(async()=>{await api.start(item);dialog.close();status('Модуль: ЛКМ разместить · Q/E поворот · Esc отмена')})));
-   if(!item.preset){
+   if(item.preset){actions.append(action('В мои модули',()=>run(async()=>{if(modules.length>=32)throw Error('Лимит 32 модуля.');const result=validateModule(await api.preset(item));if(signal.aborted)return;const next=[...modules,result];writeModules(next);modules=next;})))}
+   else{
     actions.append(action('Экспорт',()=>exportModule(item)),action('Изменить',()=>{
      const name=prompt('Название модуля',item.name);if(!name?.trim())return;
-     const next=modules.map(m=>m.id===item.id?{...m,name:name.trim().slice(0,80)}:m);
+     const choice=prompt('Категория: '+moduleCategories.join(', '),item.category);if(choice===null)return;
+     if(!moduleCategories.includes(choice.trim())){notice('Выбери категорию из списка.');return}
+     const next=modules.map(m=>m.id===item.id?{...m,name:name.trim().slice(0,80),category:choice.trim()}:m);
      try{writeModules(next);modules=next;render()}catch(e){notice(e.message)}
     }),action('Удалить',()=>{if(!confirm('Удалить модуль «'+item.name+'» из библиотеки?'))return;const next=modules.filter(m=>m.id!==item.id);try{writeModules(next);modules=next;render()}catch(e){notice(e.message)}}));
    }
@@ -37,11 +40,12 @@ export function mountModulePanel({dialog,button,signal,api,status,busy}){
   finally{working=false;if(!signal.aborted){busy(false);render()}}
  }
  function open(){
+  api.cancel();
   try{modules=readModules();error=''}catch(e){modules=[];error=e.message}
   notice(error||'Выдели детали в сцене, чтобы сохранить свой модуль.');
   render();if(!dialog.open)dialog.showModal();
  }
- on(button,'click',open);on($('module-close'),'click',()=>dialog.close());
+ on(button,'click',open);on($('module-close'),'click',()=>{if(!working)dialog.close()});on(dialog,'cancel',e=>{if(working)e.preventDefault()});
  on($('module-search'),'input',render);on($('module-filter'),'change',render);
  on($('module-save'),'click',()=>run(async()=>{
   const name=$('module-name').value.trim();if(!name)throw Error('Введи название.');
@@ -55,8 +59,8 @@ export function mountModulePanel({dialog,button,signal,api,status,busy}){
   const f=$('module-file').files[0];$('module-file').value='';if(!f)return;
   if(f.size>2*1024*1024)throw Error('Файл модуля до 2 МБ.');
   const item=validateModule(JSON.parse(await f.text()));item.id=crypto.randomUUID();
-  await api.validate(item);if(signal.aborted)return;
-  const next=[...modules,item];writeModules(next);modules=next;
+  const normalized=validateModule(await api.validate(item));if(signal.aborted)return;
+  const next=[...modules,normalized];writeModules(next);modules=next;
  }));
  signal.addEventListener('abort',()=>{if(dialog.open)dialog.close();$('module-file').value='';$('module-cards').replaceChildren()},{once:true});
  return {open}

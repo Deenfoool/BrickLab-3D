@@ -2388,6 +2388,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
         worldControls.status('Размещён модуль: '+m.data.name+' · можно поставить ещё один');
       }
     },true);
+    on(canvas,'pointerleave',()=>{if(modulePlacement){scene.setGroupGhost([]);modulePlacement.pose=null}});
     on(host,'pointerup',event=>{if(modulePlacement&&event.target===canvas&&event.button===0){event.preventDefault();event.stopImmediatePropagation()}},true);
     on(window,'keydown',event=>{
       if(!modulePlacement||event.target.closest?.('input,textarea,select,dialog'))return;
@@ -2400,15 +2401,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     on(worldControls.tool,'change',cancelModule);
     on(root,'pointerdown',event=>{if(modulePlacement&&!event.target.closest('.editor-viewport'))cancelModule()},true);
     signal.addEventListener('abort',()=>{modulePlacement=null;host.classList.remove('world-drawing')},{once:true});
-    onModules({
-      async capture(name,category){
-        cancelModule();
-        if(!editing()||moving)throw Error('Заверши текущую операцию.');
-        const group=clipboardSelection();
-        if(!group)throw Error('Выдели детали модуля в сцене.');
-        const items=[group.anchor,...group.items];
-        if(items.length>MODULE_LIMIT||items.some(p=>hidden.has(p.id)))throw Error('Выдели до 256 видимых деталей.');
-        const result=normalizeModule({format:'bricklab-world-module',version:1,id:crypto.randomUUID(),name,category,parts:items,connections:group.links,belts:group.belts});
+    async function moduleThumbnail(result){
         try{
           const {createProjectPreviewRenderer}=await import('./project-preview.js');
           signal.throwIfAborted();
@@ -2418,18 +2411,36 @@ export async function mountEditor(root, { document, projectId, language, save, d
             if(blob?.type==='image/webp'&&blob.size<110000)result.thumbnail=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob)});
           }finally{renderer.dispose()}
         }catch(e){if(signal.aborted)throw e;console.warn('Module thumbnail unavailable',e)}
+
+      return result;
+    }
+    async function modulePreset(raw){
+      const cells=presetCells(raw.id,catalogIds);
+      await loadModuleDesigns(cells);
+      return normalizeModule({format:'bricklab-world-module',version:1,name:raw.name,category:raw.category,parts:cells.map(cellPose),connections:[],belts:[]});
+    }
+    onModules({
+      cancel:cancelModule,
+      async preset(raw){return moduleThumbnail(await modulePreset(raw))},
+      async capture(name,category){
+        cancelModule();
+        if(!editing()||moving)throw Error('Заверши текущую операцию.');
+        const group=clipboardSelection();
+        if(!group)throw Error('Выдели детали модуля в сцене.');
+        const items=[group.anchor,...group.items];
+        if(items.length>MODULE_LIMIT||items.some(p=>hidden.has(p.id)))throw Error('Выдели до 256 видимых деталей.');
+        const result=normalizeModule({format:'bricklab-world-module',version:1,id:crypto.randomUUID(),name,category,parts:items,connections:group.links,belts:group.belts});
+        await moduleThumbnail(result);
         return result;
       },
-      async validate(raw){const data=validateModule(raw);await loadModuleDesigns(data.parts);return normalizeModule(data)},
+      async validate(raw){const data=validateModule(raw);await loadModuleDesigns(data.parts);const result=normalizeModule(data);return result.thumbnail?result:moduleThumbnail(result)},
       async start(raw){
         cancelModule();
         if(!editing()||moving||isolation)throw Error('Заверши текущую операцию и отключи изоляцию.');
         const before=state;
         let data;
         if(raw.preset){
-          const cells=presetCells(raw.id,catalogIds);
-          await loadModuleDesigns(cells);
-          data=normalizeModule({format:'bricklab-world-module',version:1,name:raw.name,category:raw.category,parts:cells.map(cellPose),connections:[],belts:[]});
+          data=await modulePreset(raw);
         }else{data=validateModule(raw);await loadModuleDesigns(data.parts);data=normalizeModule(data)}
         if(signal.aborted||state!==before||!editing())throw Error('Сцена изменилась.');
         worldControls.tool.value='select';worldControls.tool.dispatchEvent(new Event('change'));
