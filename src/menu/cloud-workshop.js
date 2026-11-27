@@ -128,7 +128,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,sett
   }else if(active==='security'){
   const c=card(t.security);c.append(el('p',null,t.email+': '+user.email),el('p','account-muted',t.securityText),el('p','account-muted',t.privateOnly));if(revokeOthers)c.append(button(t.revokeOthers,revokeOthers,busy));content.append(c);if(passwordPanel)content.append(passwordPanel())
   }else if(active==='integrations'){if(integrationsPanel)content.append(integrationsPanel())}
-  else if(active==='notifications'){if(notificationPanel)content.append(notificationPanel());const c=card(ru?'Уведомления аккаунта':'Account notifications');c.append(el('p','account-muted',ru?'Уведомления о достижениях сохраняются в личном кабинете. Push-уведомления Telegram настраиваются отдельно в BrickLab Hub.':'Achievement notifications remain in your account. Configure Telegram push in BrickLab Hub.'),button(t.notifications,()=>go('notifications'),busy));content.append(c)}
+  else if(active==='notifications'){if(notificationPanel)content.append(notificationPanel());const c=card(ru?'Уведомления аккаунта':'Account notifications');c.append(el('p','account-muted',ru?'Уведомления о достижениях сохраняются в личном кабинете. Доставку в Telegram можно включить здесь.':'Achievement notifications remain in your account. Enable Telegram delivery here.'),button(t.notifications,()=>go('notifications'),busy));content.append(c)}
  }else{const c=card(t[section]);c.append(el('p','account-muted',t.pending));content.append(c)}
  function appendPublicProfile(){
   if(publicLoaded){
@@ -142,7 +142,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,sett
         row.append(el('p','account-muted',t.privateRevision+': '+project.revision+(old?' · '+t.publishedRevision+': '+old.revision:'')))
         row.append(el('p','account-muted',old.description||''),el('p','account-muted',lang==='ru'?'Для изменения публикации открой сборку в редакторе.':'Open the build in the editor to update its publication.'))
         row.append(button(t.cloud,()=>go('cloud'),busy))
-        if(old){const link=el('a','workspace-action',t.viewPublication);link.href='#community/build/'+old.id;row.append(link,button(t.unpublishBuild,()=>unpublishBuild(project.id),busy))}
+        if(old){if(publicCard.visible!==false){const link=el('a','workspace-action',t.viewPublication);link.href='#community/build/'+old.id;row.append(link)}row.append(button(t.unpublishBuild,()=>unpublishBuild(project.id),busy))}
         builds.append(row)
       }
     }

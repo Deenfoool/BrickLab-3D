@@ -8,7 +8,7 @@ import { createAuthClient } from './auth-client.js?v=live-polish-1'
 
 import { createProjectsClient, cloudLink } from './projects-client.js?v=profile-gallery-1'
 
-import { renderCloudWorkshop } from './cloud-workshop.js?v=workshop-settings-3'
+import { renderCloudWorkshop } from './cloud-workshop.js?v=workshop-settings-4'
 
 import {createProfileClient} from './profile-client.js?v=workshop-settings-3'
 
