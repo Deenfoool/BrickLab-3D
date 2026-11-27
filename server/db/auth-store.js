@@ -427,6 +427,23 @@ export function connectAuthStore(env = process.env) {
       if(download){const [p]=await sql`select document,allow_download as "allowDownload" from bricklab.public_builds where public_id=${id}`;return p}
       const [p]=await sql`select b.public_id as id,b.author_id as "authorId",(select u.username from bricklab.users u where u.id=c.user_id) as "authorUsername",c.display_name as author,c.avatar_image is not null as "authorHasAvatar",bricklab.public_active_theme(c.public_id) as "authorTheme",b.title,b.description,b.revision,b.category,b.allow_download as "allowDownload",b.allow_comments as "allowComments",b.allow_remix as "allowRemix",b.difficulty,b.tags,b.work_type as "workType",b.attribution,b.origin_id as "originId",coalesce((select jsonb_agg(jsonb_build_object('id',p.public_id,'username',u.username,'displayName',p.display_name) order by u.username) from bricklab.public_profiles p join bricklab.users u on u.id=p.user_id where p.public_id=any(b.coauthor_ids) and u.blocked_at is null),'[]'::jsonb) as coauthors,cardinality(b.images) as "imageCount",b.part_count as "partCount",b.published_at as "publishedAt",coalesce(l.likes,0) as likes,coalesce(e.views,0) as views,coalesce(e.downloads,0) as downloads from bricklab.public_builds b join bricklab.public_profiles c on c.public_id=b.author_id left join bricklab.community_like_counts l on l.build_id=b.public_id left join bricklab.community_event_counts e on e.build_id=b.public_id where b.public_id=${id}`;return p
     },
+    async telegramStatus(uid){return scope(uid,async tx=>(await tx`select bricklab.telegram_link_status() as data`)[0].data)},
+    async telegramCode(uid,hash){return scope(uid,async tx=>(await tx`select bricklab.telegram_pair_code(${hash}) as ok`)[0].ok)},
+    async telegramUnlink(uid){return scope(uid,async tx=>(await tx`select bricklab.telegram_unlink() as ok`)[0].ok)},
+    async telegramClaim(hash,id){return (await sql`select bricklab.telegram_claim(${hash},${id}::bigint) as ok`)[0].ok},
+    async telegramIdentity(id){return (await sql`select bricklab.telegram_identity(${id}::bigint) as uid`)[0].uid},
+    async telegramMarketing(uid,enabled){return scope(uid,async tx=>(await tx`select bricklab.telegram_marketing(${enabled}) as ok`)[0].ok)},
+    async telegramDashboard(uid){return scope(uid,async tx=>{
+      const [u]=await tx`select display_name as "displayName",username from bricklab.users where id=${uid} and blocked_at is null`
+      if(!u)throw new ProjectError(403,'blocked')
+      const commerce=await commerceEntitlements(tx,uid)
+      const awards=await tx`select w.award as id,d.definition->>'ru' as title,d.definition->>'rarity' as rarity,(d.definition->>'xp')::int as xp,w.awarded_at as "at" from bricklab.workshop_awards w join bricklab.achievement_definitions d on d.id=w.award where w.user_id=${uid} order by w.awarded_at desc,w.award`
+      const [p]=await tx`select public_id as id,bricklab.public_workshop_summary(public_id) as summary from bricklab.public_profiles where user_id=${uid}`
+      const [counts]=await tx`select (select count(*)::int from bricklab.community_follows where user_id=${uid}) as following,coalesce((select followers from bricklab.community_follow_counts where author_id=${p?.id??null}::uuid),0)::int as followers,(select count(*)::int from bricklab.public_builds where author_id=${p?.id??null}::uuid) as builds,coalesce((select sum(l.likes) from bricklab.public_builds b join bricklab.community_like_counts l on l.build_id=b.public_id where b.author_id=${p?.id??null}::uuid),0)::int as likes`
+      const [popular]=await tx`select b.public_id as id,b.title,b.part_count as "partCount",coalesce(l.likes,0)::int as likes,coalesce(e.views,0)::int as views from bricklab.public_builds b left join bricklab.community_like_counts l on l.build_id=b.public_id left join bricklab.community_event_counts e on e.build_id=b.public_id where b.author_id=${p?.id??null}::uuid order by coalesce(l.likes,0) desc,coalesce(e.views,0) desc,b.public_id limit 1`
+      const [prefs]=await tx`select bricklab.telegram_link_status() as data`
+      return {displayName:u.displayName,username:u.username,plus:commerce.plus,plusUntil:commerce.plusUntil,awards,xp:awards.reduce((n,a)=>n+a.xp,0),rank:p?.summary?.rank??null,...counts,popular:popular??null,marketing:prefs.data.marketing}
+    })},
     async cleanup() { await sql`delete from bricklab.sessions where expires_at <= now()`;await sql`delete from bricklab.account_tokens where expires_at <= now()` },
     async close() { await sql.end({ timeout: 5 }) },
   }
