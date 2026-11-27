@@ -1,11 +1,15 @@
-import {sortableHandle,moveItem} from './sortable-handle.js'
-import {renderMetricGrid} from './workshop-metrics.js?v=workshop-settings-3'
+import {renderWorkshopLayoutEditor} from './workshop-layout-editor.js?v=layout-studio-2'
+import {planPortfolioGrid,placePortfolioBlock} from './portfolio-layout-model.js'
+import {metricItems} from './workshop-metrics-model.js'
+import {workshopMetricValues} from './workshop-metrics.js?v=layout-studio-2'
+import {sortableHandle,moveItem} from './sortable-handle.js?v=layout-studio-2'
+import {renderMetricGrid} from './workshop-metrics.js?v=layout-studio-2'
 import {profileHref} from './profile-route.js'
 import {applyAchievementAppearance} from './achievement-rewards.js'
 import {achievementById} from './achievement-catalog.js'
 import {commerceBadge} from './commerce-visuals.js?v=merch-2'
 import {applySignature,themeBadge,themePlate,mountThemeCover} from './profile-signature.js?v=signature-art-1'
-import {defaultPortfolio,filterPortfolio,calendarDays,portfolioUuid} from './portfolio-model.js'
+import {defaultPortfolio,filterPortfolio,calendarDays,portfolioUuid} from './portfolio-model.js?v=layout-studio-2'
 import {productById} from './commerce-catalog.js'
 const words={
  ru:{featured:'Закреплённая работа',publications:'Опубликованные сборки',collections:'Коллекции',awards:'Витрина достижений',activity:'Календарь активности',statistics:'Инженерная статистика',about:'О себе',followers:'Подписчики',empty:'Пока нет опубликованных сборок.',noPin:'Закрепи лучшую опубликованную работу в настройках профиля.',noCollections:'Коллекции пока не созданы.',noAwards:'Нет опубликованных наград.',firstAward:'Первая облачная сборка',parts:'Детали',builds:'Сборки',likes:'Лайки',downloads:'Скачивания',score:'Репутация',open:'Открыть сборку / 3D',publicDays:'26 недель · даты последних ревизий действующих публичных работ · UTC',privateDays:'26 недель · сохранённые облачные ревизии · UTC',days:'Активных дней',count:'Событий',none:'Не закреплено',order:'Порядок и видимость блоков',up:'Выше',down:'Ниже',remove:'Удалить',add:'Добавить коллекцию',name:'Название коллекции',choose:'Выбери опубликованные сборки',visibility:'Виден посетителям',notShared:'Публичная страница выключена',shared:'Публичная страница включена',save:'Сохранить профиль',publish:'Сохранить и опубликовать',edit:'Оформление и приватность',publicConsent:'Разрешаю публиковать выбранные данные и автоматически синхронизировать их при дальнейшем редактировании.',legacy:'У существующего публичного профиля могли быть отдельные имя и описание. При сохранении единого профиля выбранные поля станут общими.',privacy:'Почта, локальные и приватные облачные сборки, хранилище и избранное не публикуются. Календарь посетителя показывает только публичные работы.',unpublish:'Снять публикацию профиля',unpublishConfirm:'Снятие публикации также удалит публичные сборки и связанные обсуждения. Личные сборки сохранятся. Продолжить?',preview:'Глазами посетителя',copy:'Скопировать ссылку',copied:'Ссылка скопирована',copyFailed:'Скопируй адрес вручную:',privateHint:'Публикация необязательна. Включи её, чтобы открылась витрина конструктора.',avatar:'Показывать аватар',cover:'Показывать обложку',theme:'Показывать активную тему',display:'Имя конструктора',bio:'Описание',coverStyle:'Стиль обложки',publicationSettings:'Публичность и оформление',savePrivate:'Сохранить личный профиль',more:'Открыть все работы'},
@@ -56,9 +60,10 @@ function buildTile(b,t,onOpen,makeArt){
  card.append(art,info);return card
 }
 export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeBuildCard,makeFeaturedArt,privateCalendar}){
- const t=tr(lang),root=ui('div','portfolio-blocks'),valid=builds.filter(b=>safePublicId(b.id)),p=filterPortfolio(profile?.portfolio,valid.map(b=>b.id))
+ const t=tr(lang),root=ui('div','portfolio-blocks portfolio-layout-grid'),rendered=[],valid=builds.filter(b=>safePublicId(b.id)).map(b=>profile?.visible===false?{...b,imageCount:0}:b),p=filterPortfolio(profile?.portfolio,valid.map(b=>b.id))
  const byId=new Map(valid.map(b=>[b.id,b]))
- for(const {key,visible} of p.blocks){
+ for(const item of p.blocks){
+  const {key,visible}=item
   if(!visible&&!owner)continue
   // Owner sees the exact public block selection, not an invented public record.
   if(!visible)continue
@@ -87,8 +92,9 @@ export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeB
    for(const [label,value] of vals){const m=ui('div','workshop-metric');m.append(ui('span',null,label),ui('strong',null,value));grid.append(m)}c.append(grid)
   }else if(key==='about'){if(!profile?.bio)continue;c.append(ui('p','portfolio-about',profile.bio))}
   else if(key==='followers'){c.append(ui('strong','portfolio-follower-count',profile?.followers??0))}
-  root.append(c)
+  root.append(c);rendered.push({item,node:c})
  }
+ const positions=planPortfolioGrid(rendered.map(x=>x.item));rendered.forEach((entry,i)=>placePortfolioBlock(entry.node,positions[i]))
  if(owner&&Array.isArray(privateCalendar)){const c=block(t.activity+' · '+(lang==='ru'?'личный':'private'),'private-activity');c.append(activityCalendar(lang,privateCalendar));root.append(c)}
  return root
 }
@@ -98,9 +104,9 @@ export function profileLinkControls(lang,profile){
  const href='/'+profileHref(profile.username,profile.id),notice=ui('span','account-muted');notice.setAttribute('role','status')
  root.append(action(t.copy,async()=>{const value=new URL(href,location.origin).href;try{await navigator.clipboard.writeText(value);notice.textContent=t.copied}catch{notice.textContent=t.copyFailed+' '+value}}),notice);return root
 }
-export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic,visibilitySupported=false,mode='all'}){
- const t=tr(lang),root=ui('section','account-card workshop-card unified-profile-editor');root.append(ui('h2',null,mode==='layout'?(lang==='ru'?'Блоки витрины':'Showcase blocks'):mode==='privacy'?t.publicationSettings:t.edit))
- if(mode==='layout'&&!publicCard){root.append(ui('p','account-muted',lang==='ru'?'Сначала создай мастерскую во вкладке «Приватность».':'Create your workshop in Privacy first.'));return root}
+export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic,visibilitySupported=false,mode='all',portfolioDraft,onPortfolioDraft,savePortfolio,progress}){
+ const t=tr(lang),root=ui('section','account-card workshop-card unified-profile-editor');root.append(ui('h2',null,mode==='layout'?(lang==='ru'?'Компоновка мастерской':'Workshop layout'):mode==='privacy'?t.publicationSettings:t.edit))
+ if(mode==='layout'&&publicLoaded&&(!publicCard||!publicCard.unified)){root.append(ui('p','account-muted',lang==='ru'?'Сначала создай или обнови единый профиль во вкладке «Приватность».':'Create or update your unified workshop in Privacy first.'));return root}
  if(!profile){root.append(ui('p','account-muted',lang==='ru'?'Профиль недоступен':'Profile unavailable'));return root}
  const form=ui('form','workshop-form'),name=ui('input'),bio=ui('textarea'),cover=ui('select')
  name.required=true;name.maxLength=80;name.value=profile.displayName??publicCard?.displayName??user.displayName;name.disabled=busy
@@ -120,7 +126,8 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
  const enable=check(lang==='ru'?'Публичная мастерская':'Public workshop',!!publicCard&&publicCard.visible!==false,busy),shareAvatar=check(t.avatar,publicCard?.unified?publicCard.showAvatar:!!publicCard?.avatarUrl,busy),shareCover=check(t.cover,publicCard?.unified?publicCard.showCover:!!publicCard?.coverTheme,busy),shareTheme=check(t.theme,!!publicCard?.backgroundTheme,busy)
  const consent=check(t.publicConsent,false,busy),panel=ui('fieldset','portfolio-editor-controls')
  if(mode!=='layout')form.append(enable.label,ui('p','account-muted',lang==='ru'?'Публичная мастерская участвует в рейтинге при открытых достижениях. Скрытие сохраняет работы, комментарии и подписчиков.':'A visible workshop participates in ranking when achievements are shared. Hiding preserves works, comments and followers.'));form.append(panel)
- const p=filterPortfolio(publicCard?.portfolio??(publicCard?undefined:defaultPortfolio({publicByDefault:true})),publicBuilds.map(b=>b.id)),blocks=ui('div','portfolio-order'),collections=ui('div','portfolio-editor-collections')
+ const savedPortfolio=filterPortfolio(publicCard?.portfolio??(publicCard?undefined:defaultPortfolio({publicByDefault:true})),publicBuilds.map(b=>b.id)),p=structuredClone(mode==='layout'&&portfolioDraft?portfolioDraft:savedPortfolio),blocks=ui('div','portfolio-order'),collections=ui('div','portfolio-editor-collections')
+ const draftChanged=()=>{if(mode==='layout')onPortfolioDraft?.(structuredClone(p))}
  function renderBlocks(){
   blocks.replaceChildren()
   for(const [i,item] of p.blocks.entries()){
@@ -133,24 +140,57 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
  }
  const pin=ui('select'),none=ui('option',null,t.none);none.value='';pin.append(none);pin.disabled=busy
  for(const b of publicBuilds){const o=ui('option',null,b.title);o.value=b.id;pin.append(o)}pin.value=p.featured??''
- pin.onchange=()=>{p.featured=pin.value||null}
+ pin.onchange=()=>{p.featured=pin.value||null;draftChanged()}
  function renderCollections(){
   collections.replaceChildren()
   for(const [i,g] of p.collections.entries()){
-   const box=ui('div','portfolio-collection-editor'),label=ui('input');label.value=g.title;label.maxLength=60;label.required=true;label.disabled=busy;label.oninput=()=>{g.title=label.value}
+   const box=ui('div','portfolio-collection-editor'),label=ui('input');label.value=g.title;label.maxLength=60;label.required=true;label.disabled=busy;label.oninput=()=>{g.title=label.value;draftChanged()}
    box.append(field(t.name,label),ui('p','account-muted',t.choose))
-   for(const b of publicBuilds){const v=check(b.title,g.ids.includes(b.id),busy);v.input.onchange=()=>{g.ids=v.input.checked?[...g.ids,b.id]:g.ids.filter(id=>id!==b.id)};box.append(v.label)}
-   box.append(action(t.remove,()=>{p.collections.splice(i,1);renderCollections()},busy));collections.append(box)
+   for(const b of publicBuilds){const v=check(b.title,g.ids.includes(b.id),busy);v.input.onchange=()=>{g.ids=v.input.checked?[...g.ids,b.id]:g.ids.filter(id=>id!==b.id);draftChanged()};box.append(v.label)}
+   box.append(action(t.remove,()=>{p.collections.splice(i,1);draftChanged();renderCollections()},busy));collections.append(box)
   }
-  collections.append(action(t.add,()=>{p.collections.push({title:'',ids:[]});renderCollections()},busy||p.collections.length>=6))
+  collections.append(action(t.add,()=>{p.collections.push({title:'',ids:[]});draftChanged();renderCollections()},busy||p.collections.length>=6))
  }
- renderBlocks();renderCollections()
- if(mode!=='layout')panel.append(shareAvatar.label,shareCover.label,shareTheme.label);if(mode!=='privacy')panel.append(field(t.featured,pin),ui('h3',null,t.order),blocks,ui('h3',null,t.collections),collections);if(!publicCard&&mode!=='layout')panel.append(consent.label)
- const submit=ui('button','workspace-action primary',t.save);submit.type='submit';submit.disabled=busy
- function setVisibility(){panel.hidden=mode==='layout'?false:!enable.input.checked&&!publicCard;panel.disabled=busy||(!publicCard&&!enable.input.checked&&mode!=='layout');consent.input.required=enable.input.checked&&!publicCard;submit.textContent=t.save}
+ if(mode!=='layout')renderBlocks();renderCollections()
+ if(mode==='layout'){
+  const ru=lang==='ru',describe=key=>{
+   if(key==='featured')return publicBuilds.find(b=>b.id===p.featured)?.title??t.noPin
+   if(key==='publications')return publicBuilds.length+' · '+t.builds
+   if(key==='collections')return p.collections.length+' · '+t.collections
+   if(key==='awards')return (progress?.showcase?.length??publicCard.awards?.length??0)+' · '+t.awards
+   if(key==='about')return (publicCard.bio??'').slice(0,120)||t.about
+   if(key==='followers')return String(publicCard.followers??0)
+   return t[key]
+  }
+  const previewLayout=layout=>{
+   const portfolio={...p,blocks:layout,collections:p.collections.filter(c=>c.title.trim()).map(c=>({...c,ids:c.ids.slice(0,20)}))},draft={...publicCard,portfolio}
+   const awardsVisible=layout.some(b=>b.key==='awards'&&b.visible)
+   if(awardsVisible&&progress){
+    const earned=new Set(progress.awards?.map(a=>a.award)??[])
+    const showcase=progress.showcase??(earned.has('firstCloudSave')?['firstCloudSave']:[])
+    draft.awards=[...showcase.filter(id=>earned.has(id)).slice(0,6),...(publicCard.awards?.includes('firstBuilder')?['firstBuilder']:[])]
+    draft.achievementDefinitions=progress.definitions??[];draft.achievementXp=progress.xp;draft.achievementCount=progress.awards?.length
+    draft.achievementStyle=profile.achievementStyle
+   }
+   if(!awardsVisible){draft.awards=[];draft.achievementStyle=null;draft.achievementXp=undefined;draft.achievementCount=undefined}
+   const visual=ui('div','studio-profile-preview'),previewOwner=publicCard.visible===false
+   const identity={...draft,bio:'',subtitle:ru?'Конструктор BrickLab':'BrickLab builder'}
+   if(previewOwner){identity.avatarUrl=publicCard.showAvatar?profile.avatarUrl:null;identity.coverUrl=publicCard.showCover?profile.coverUrl:null}
+   const values=workshopMetricValues({lang,card:draft,loaded:true})
+   visual.append(renderUnifiedHero({lang,identity,owner:previewOwner,metricCards:metricItems({layout:profile.metricLayout,lang,portfolio,values})}),renderPortfolio({lang,profile:draft,builds:publicBuilds,owner:false}))
+   return visual
+  }
+  panel.append(renderWorkshopLayoutEditor({lang,blocks:p.blocks,originalBlocks:savedPortfolio.blocks,labels:t,busy,onChange:next=>{p.blocks=next;draftChanged()},renderPreview:previewLayout,describe}),field(t.featured,pin),ui('h3',null,t.collections),collections)
+ }else{
+  panel.append(shareAvatar.label,shareCover.label,shareTheme.label)
+  if(mode!=='privacy')panel.append(field(t.featured,pin),ui('h3',null,t.order),blocks,ui('h3',null,t.collections),collections)
+  if(!publicCard)panel.append(consent.label)
+ }
+ const layoutSave=lang==='ru'?'Сохранить компоновку':'Save layout',submit=ui('button','workspace-action primary',mode==='layout'?layoutSave:t.save);submit.type='submit';submit.disabled=busy||(mode==='layout'&&!savePortfolio);if(mode==='layout')submit.classList.add('studio-save')
+ function setVisibility(){panel.hidden=mode==='layout'?false:!enable.input.checked&&!publicCard;panel.disabled=busy||(!publicCard&&!enable.input.checked&&mode!=='layout');consent.input.required=enable.input.checked&&!publicCard;submit.textContent=mode==='layout'?layoutSave:t.save}
  enable.input.onchange=setVisibility;setVisibility()
  form.append(submit)
- form.onsubmit=e=>{e.preventDefault();if(busy)return;const data={displayName:name.value,bio:bio.value,cover:cover.value},payload={...data,unified:true,consent:true,showAvatar:shareAvatar.input.checked,showCover:shareCover.input.checked,showBackground:shareTheme.input.checked,portfolio:p};if(mode==='layout'){if(publicCard)publishPublic(payload);return}if(publicCard&&visibilitySupported){publishPublic({...payload,visible:enable.input.checked});return}if(enable.input.checked&&(publicCard||consent.input.checked))publishPublic({...payload,...(visibilitySupported?{visible:true}:{})});else if(!enable.input.checked){if(publicCard){if(confirm(t.unpublishConfirm))unpublishPublic()}else saveProfile(data)}}
+ form.onsubmit=e=>{e.preventDefault();if(busy)return;const data={displayName:name.value,bio:bio.value,cover:cover.value},payload={...data,unified:true,consent:true,showAvatar:shareAvatar.input.checked,showCover:shareCover.input.checked,showBackground:shareTheme.input.checked,portfolio:p};if(mode==='layout'){if(publicCard&&savePortfolio)savePortfolio(p);return}if(publicCard&&visibilitySupported){publishPublic({...payload,visible:enable.input.checked});return}if(enable.input.checked&&(publicCard||consent.input.checked))publishPublic({...payload,...(visibilitySupported?{visible:true}:{})});else if(!enable.input.checked){if(publicCard){if(confirm(t.unpublishConfirm))unpublishPublic()}else saveProfile(data)}}
  root.append(form)
  
  return root

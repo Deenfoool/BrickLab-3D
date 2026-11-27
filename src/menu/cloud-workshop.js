@@ -1,11 +1,11 @@
 import {metricItems} from './workshop-metrics-model.js'
-import {renderMetricEditor,workshopMetricValues} from './workshop-metrics.js?v=workshop-settings-3'
+import {renderMetricEditor,workshopMetricValues} from './workshop-metrics.js?v=layout-studio-2'
 import {renderVerificationLab,renderAchievementRewards,renderAchievementRankings} from './achievement-platform.js'
 import {renderAchievements} from './achievement-hall.js'
 import {achievementName} from './achievement-catalog.js'
 import {renderInstructionCollection} from './instruction-collection.js'
 import {commerceBadge,productArtwork,factsPanel,loyaltyBadge} from './commerce-visuals.js?v=merch-2'
-import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=workshop-settings-3'
+import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=layout-studio-2'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 import {commerceProducts} from './commerce-catalog.js'
@@ -40,7 +40,7 @@ function metrics(items){const g=el('div','workshop-metric-grid');for(const [k,v]
 export function workshopSummary(local,remote){
  return {local:local.length,cloud:remote.length,revisions:remote.reduce((n,p)=>n+(Number.isSafeInteger(p.revision)&&p.revision>0?p.revision:0),0)}
 }
-export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,settingsTab='profile',setSettingsTab=()=>{},integrationsPanel,notificationPanel,promoPanel,passwordPanel,visibilitySupported=false,bureauPanel,adminPanel,revokeOthers,profileData,saveProfile,uploadMedia,removeMedia,activityData,publicCard,publicLoaded,publicBuilds=[],loadPublic,publishPublic,unpublishPublic,publishBuild,unpublishBuild,refreshActivity,verifyAchievement,verificationResult,readActivity,toggleFavorite,openFavorite,logout,createBuild,openLocal,fetchCloud,signal,previewsEnabled,noticeNodes=[]}){
+export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,settingsTab='profile',setSettingsTab=()=>{},integrationsPanel,notificationPanel,promoPanel,passwordPanel,visibilitySupported=false,portfolioDraft,onPortfolioDraft,savePortfolio,bureauPanel,adminPanel,revokeOthers,profileData,saveProfile,uploadMedia,removeMedia,activityData,publicCard,publicLoaded,publicBuilds=[],loadPublic,publishPublic,unpublishPublic,publishBuild,unpublishBuild,refreshActivity,verifyAchievement,verificationResult,readActivity,toggleFavorite,openFavorite,logout,createBuild,openLocal,fetchCloud,signal,previewsEnabled,noticeNodes=[]}){
  const t={...workshopCopy[lang],...extra[lang],admin:lang==='ru'?'Администрирование':'Administration',revokeOthers:lang==='ru'?'Завершить остальные сессии':'End other sessions'},summary=workshopSummary(local,remote)
  const profile=profileData?.profile,progress=profileData?.progress
  const layout=el('div','workshop-layout cosmetic-'+(profile?.background??'default')),nav=el('nav','workshop-nav'),content=el('div','workshop-content')
@@ -92,7 +92,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,sett
   const active=section==='cosmetics'?'appearance':section==='security'?'security':settingsTab,tabBar=el('nav','workshop-settings-tabs')
   const tabs=[['profile','Профиль','Profile'],['appearance','Оформление','Appearance'],['layout','Компоновка','Layout'],['privacy','Приватность','Privacy'],['security','Безопасность','Security'],['notifications','Уведомления','Notifications'],['integrations','Интеграции','Integrations'],['subscription','Подписка','Subscription']]
   tabBar.setAttribute('aria-label',ru?'Настройки аккаунта':'Account settings');for(const [key,r,e] of tabs){const b=button(ru?r:e,()=>setSettingsTab(key),busy);b.setAttribute('aria-pressed',String(active===key));tabBar.append(b)}content.append(tabBar)
-  const editor=mode=>renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic,visibilitySupported,mode})
+  const editor=mode=>renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic,visibilitySupported,mode,portfolioDraft,onPortfolioDraft,savePortfolio,progress})
   if(active==='profile'){
    content.append(editor('profile'))
   const c=card(ru?'Изображения профиля':'Profile images');c.append(el('p','account-muted',ru?'При включённой синхронизации изменения аватара и обложки сразу видны посетителям.':'When sharing is enabled, avatar and cover changes are immediately public.'))
@@ -104,7 +104,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,sett
   }}else c.append(el('p','account-muted',t.profileMissing))
   content.append(c)
   }else if(active==='layout'){
-   const values=workshopMetricValues({lang,owner:true,remoteCount:summary.cloud,progress,card:publicCard,loaded:publicLoaded});content.append(renderMetricEditor({lang,layout:profile?.metricLayout,values,busy,enabled:!!profile,expanded:true,save:metricLayout=>saveProfile({bio:profile.bio,cover:profile.cover,metricLayout})}),editor('layout'),renderAchievements({lang,progress,profile,busy,saveProfile,go,refresh:refreshActivity,showcaseOnly:true}))
+   const values=workshopMetricValues({lang,owner:true,remoteCount:summary.cloud,progress,card:publicCard,loaded:publicLoaded});content.append(editor('layout'),renderMetricEditor({lang,layout:profile?.metricLayout,values,busy,enabled:!!profile,expanded:true,save:metricLayout=>saveProfile({bio:profile.bio,cover:profile.cover,metricLayout})}),renderAchievements({lang,progress,profile,busy,saveProfile,go,refresh:refreshActivity,showcaseOnly:true}))
   }else if(active==='privacy'){content.append(editor('privacy'))}
   else if(active==='appearance'){
    const c=card(ru?'Темы оформления':'Themes');c.append(el('p','account-muted',t.cosmeticHint),el('p','account-muted',lang==='ru'?'Если показ оформления разрешён в публичном профиле, новая тема сразу появится в сообществе.':'If public appearance is enabled, equipped themes immediately appear in the community.'))

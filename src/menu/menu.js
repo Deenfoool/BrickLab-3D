@@ -5,12 +5,12 @@ import { safeImage } from '../sets/data.js?v=catalog-engine-1'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
 import { locales } from './locale.js?v=store-1'
 import {mountStore} from './store.js?v=welcome-1'
-import { mountHomeHub, mountHubSearch } from './home-hub.js?v=workshop-settings-4'
+import { mountHomeHub, mountHubSearch } from './home-hub.js?v=layout-studio-2'
 import { createAuthClient } from './auth-client.js?v=live-polish-1'
 import { createCommunityClient } from './community-client.js?v=community-options-1'
 import { createProjectsClient,cloudLink,mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=workshop-settings-4'
-import { createNotificationPopover } from './notifications.js?v=workshop-settings-4'
+import { createCloudAccount } from './account.js?v=layout-studio-2'
+import { createNotificationPopover } from './notifications.js?v=layout-studio-2'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
 import { revealMenu, showEditorLoading, startStartup } from './startup.js?v=bold-brand'
@@ -595,7 +595,7 @@ async function openCommunity(){
  closeCommunity()
  const controller=new AbortController();communitySession={key,controller}
  const root=byId('community-panel');root.textContent=strings().loadingLibrary
- try{const {mountCommunity}=await import('./community-gallery.js?v=workshop-settings-4');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
+ try{const {mountCommunity}=await import('./community-gallery.js?v=layout-studio-2');if(!controller.signal.aborted)await mountCommunity(root,{language,route,signal:controller.signal,openCopy:doc=>addProject(doc)})}
  catch(e){if(!controller.signal.aborted)root.textContent=language==='ru'?'Не удалось открыть сообщество.':'Could not open community.'}
 }
 function closeSets() {

@@ -65,3 +65,56 @@
 @media(prefers-reduced-motion:no-preference){.signature-neon .portfolio-featured:hover{box-shadow:0 0 24px #78eaff25;transition:box-shadow .25s}.signature-aurora .portfolio-featured{animation:portfolio-glow 9s ease-in-out infinite alternate}@keyframes portfolio-glow{from{box-shadow:inset 0 0 30px #85f0d00b}to{box-shadow:inset 0 0 45px #7972e023}}}
 @media(max-width:760px){.portfolio-blocks{grid-template-columns:minmax(0,1fr);gap:12px}.portfolio-block{padding:14px}.portfolio-featured .portfolio-build-tile{grid-template-columns:1fr}.portfolio-featured .portfolio-build-art{min-height:140px}.portfolio-heatmap{grid-auto-columns:minmax(9px,1fr);gap:3px}}
 @media(max-width:420px){.portfolio-order-row{gap:6px;padding:8px}.portfolio-order-row>.workspace-action{padding:4px 7px}.portfolio-editor-controls{padding:10px}.portfolio-build-grid{grid-template-columns:1fr}}
+
+/* Workshop studio shares the same deterministic twelve-column planner as public profiles. */
+.portfolio-blocks.portfolio-layout-grid,.studio-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;align-items:start;min-width:0;container-type:inline-size}
+.portfolio-layout-grid>.portfolio-block[data-layout-span],.studio-grid>.studio-widget[data-layout-span]{grid-column:var(--portfolio-column,1)/span var(--portfolio-span,12);grid-row:var(--portfolio-row,auto);min-width:0}
+.portfolio-layout-grid>.portfolio-block[data-layout-span]{align-content:start}
+.portfolio-layout-grid>.portfolio-featured:is([data-layout-span="3"],[data-layout-span="4"],[data-layout-span="6"],[data-layout-span="8"]) .portfolio-build-tile{grid-template-columns:minmax(0,1fr)}
+.portfolio-layout-grid>.portfolio-featured:is([data-layout-span="3"],[data-layout-span="4"],[data-layout-span="6"]) .portfolio-build-art{min-height:110px}
+.portfolio-layout-grid>.portfolio-featured:is([data-layout-span="3"],[data-layout-span="4"],[data-layout-span="6"]) .portfolio-build-info h3{font-size:clamp(16px,2vw,24px)}
+.portfolio-layout-grid>.portfolio-block:is([data-layout-span="3"],[data-layout-span="4"]){padding:12px;gap:10px}
+.portfolio-layout-grid>.portfolio-block>h2{overflow-wrap:anywhere}
+.portfolio-layout-grid>.portfolio-private-activity{grid-row:auto}
+.workshop-layout-studio{display:grid;gap:12px;min-width:0}
+.studio-toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.studio-toolbar .workspace-action,.studio-widget .workspace-action{font-size:12px;min-height:32px;padding:5px 9px;white-space:normal}
+.studio-toolbar .workspace-action[aria-pressed=true],.studio-row-break[aria-pressed=true]{color:var(--portfolio-accent);border-color:var(--portfolio-accent);background:color-mix(in srgb,var(--portfolio-accent) 10%,#21262f)}
+.studio-select{max-width:100%;min-width:0;padding:7px 8px;border:1px solid var(--portfolio-line,#3d434c);border-radius:6px;background:#1a1e25;color:inherit;font:inherit;font-size:12px}
+.studio-status{min-height:1.3em;margin:0}
+.studio-canvas{display:grid;gap:10px;border:1px dashed var(--portfolio-line,#424a55);border-radius:10px;padding:12px;background:#171c23}
+.studio-fixed{display:grid;place-items:center;min-height:64px;border:1px dashed #82909b55;background:#82909b0b;color:#a6afba;border-radius:6px;text-align:center;padding:8px;font-size:12px;letter-spacing:.02em}
+.studio-grid{gap:8px;background:repeating-linear-gradient(90deg,#82909b0d 0 calc(100% / 12 - 1px),#82909b1c calc(100% / 12 - 1px) calc(100% / 12));border-radius:6px;min-height:82px}
+.studio-widget{position:relative;display:grid;gap:8px;align-content:start;padding:9px 22px 10px 9px;border:1px solid var(--portfolio-line,#465261);border-radius:8px;background:var(--portfolio-surface,#252c35);min-height:110px;box-shadow:0 3px 12px #0002;transition:opacity .15s,box-shadow .15s;min-width:0}
+.studio-widget-head{display:flex;gap:6px;align-items:center;min-width:0}
+.studio-widget-head strong{font-size:13px;overflow-wrap:anywhere;line-height:1.25}
+.studio-widget .workshop-sort-handle{min-width:27px;min-height:32px;font-size:20px}
+.studio-widget-body{display:grid;gap:5px;min-width:0}
+.studio-widget-summary{font-size:12px;color:#a9b5c3;overflow-wrap:anywhere;margin:0;line-height:1.35}
+.studio-widget-controls{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.workshop-resize-handle{position:absolute;right:0;top:8px;bottom:8px;width:18px;border:0;border-left:1px solid #82909b44;border-radius:0 7px 7px 0;background:#82909b12;color:var(--portfolio-accent,#ffb53c);font-size:16px;cursor:ew-resize;touch-action:none;user-select:none;display:grid;place-items:center}
+.workshop-resize-handle:hover,.workshop-resize-handle:focus-visible,.studio-resizing .workshop-resize-handle{background:#82909b35;outline:1px solid var(--portfolio-accent,#ffb53c)}
+.studio-resize-hint{position:absolute;right:23px;top:4px;padding:4px 7px;border-radius:5px;background:#10171e;color:#fff;font-size:12px;z-index:5}
+.studio-catalog{display:grid;gap:8px;border:1px solid var(--portfolio-line,#424a55);padding:10px;border-radius:8px}
+.studio-catalog h4{font-size:13px;color:#bec6d1;margin:0}
+.studio-catalog-items{display:flex;flex-wrap:wrap;gap:7px}
+.studio-empty{grid-column:1/-1;margin:0;padding:22px;text-align:center;color:#a6b0bd}
+.studio-preview{min-width:0;display:grid;gap:8px}
+.studio-preview-viewport{width:100%;min-width:0;max-width:100%;margin-inline:auto;border:1px solid var(--portfolio-line,#424a55);border-radius:12px;overflow:hidden;background:#171b22;padding:8px;box-sizing:border-box}
+.studio-preview.is-mobile .studio-preview-viewport{max-width:390px}
+.studio-profile-preview{display:grid;gap:12px;min-width:0}
+.studio-profile-preview .workshop-hero{pointer-events:none}
+.studio-profile-preview .workshop-cover{min-height:110px!important;padding:12px!important}
+.studio-profile-preview .workshop-identity h2{font-size:22px!important}
+.studio-profile-preview .workshop-avatar{width:58px!important;height:58px!important}
+.studio-profile-preview .workshop-metric-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important;margin:8px!important;gap:6px!important}
+.studio-profile-preview .workshop-metric{min-height:60px!important;padding:7px!important}
+.studio-profile-preview .workshop-metric strong{font-size:18px!important;overflow-wrap:anywhere}
+.studio-preview.is-mobile .studio-profile-preview .workshop-metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.studio-preview.is-mobile .portfolio-layout-grid>.portfolio-block[data-layout-span]{grid-column:1/-1;grid-row:auto}
+.studio-preview.is-mobile .portfolio-featured .portfolio-build-tile{grid-template-columns:1fr}
+.workshop-layout-studio [hidden]{display:none!important}
+@container(max-width:720px){.portfolio-layout-grid>.portfolio-block[data-layout-span],.studio-grid>.studio-widget[data-layout-span]{grid-column:1/-1;grid-row:auto}.portfolio-featured .portfolio-build-tile{grid-template-columns:1fr}.studio-widget{min-height:90px}}
+@media(max-width:760px){.portfolio-layout-grid>.portfolio-block[data-layout-span],.studio-grid>.studio-widget[data-layout-span]{grid-column:1/-1;grid-row:auto}.studio-canvas{padding:7px}.studio-toolbar .workspace-action{flex:1 1 auto}.studio-widget .workshop-sort-handle{min-width:36px;min-height:42px}.workshop-resize-handle{width:23px}.studio-widget{padding-right:29px}}
+
+.studio-save{position:sticky;bottom:12px;z-index:8;box-shadow:0 4px 18px #0005}.studio-widget[data-layout-span="3"] .studio-widget-controls,.studio-widget[data-layout-span="4"] .studio-widget-controls{flex-wrap:wrap}.studio-widget .workspace-action{max-width:100%}.studio-resizing{outline:2px solid var(--portfolio-accent,#ffb53c);outline-offset:1px}.studio-grid .sort-target{outline-offset:1px}.studio-profile-preview .portfolio-blocks{padding:0!important}.studio-preview-viewport{padding:12px}.studio-preview.is-mobile .studio-preview-viewport{padding:8px}.studio-preview.is-mobile .workshop-identity{flex-wrap:wrap}.studio-preview.is-mobile .workshop-identity>div:last-child{padding-top:0}.studio-preview.is-mobile .portfolio-block{padding:12px}@container(max-width:720px){.studio-grid .workshop-resize-handle{cursor:default;opacity:.5}.studio-grid .studio-widget-controls select{flex:1 1 80px}}@media(prefers-reduced-motion:reduce){.studio-widget{transition:none}}
