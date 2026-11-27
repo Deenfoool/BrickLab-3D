@@ -297,7 +297,7 @@ export function connectAuthStore(env = process.env) {
     async unpublishBuild(uid,id){return scope(uid,async tx=>{const [p]=await tx`select id from bricklab.projects where id=${id} and owner_id=${uid}`;if(!p)throw missing();await tx`delete from bricklab.public_builds where project_id=${id} and author_id in (select public_id from bricklab.public_profiles where user_id=${uid})`})},
     async listComments(id,offset=0){
       const [b]=await sql`select 1 from bricklab.public_builds where public_id=${id}`;if(!b)throw missing()
-      return sql`select c.id,c.parent_id as "parentId",c.author_id as "authorId",p.display_name as author,p.avatar_image is not null as "authorHasAvatar",bricklab.public_active_theme(p.public_id) as "authorTheme",c.body,c.created_at as "createdAt",parent_author.display_name as "parentAuthor"
+      return sql`select c.id,c.parent_id as "parentId",c.author_id as "authorId",(select u.username from bricklab.users u where u.id=p.user_id) as "authorUsername",p.display_name as author,p.avatar_image is not null as "authorHasAvatar",bricklab.public_active_theme(p.public_id) as "authorTheme",c.body,c.created_at as "createdAt",parent_author.display_name as "parentAuthor"
         from bricklab.community_comments c join bricklab.public_profiles p on p.public_id=c.author_id left join bricklab.community_comments parent on parent.id=c.parent_id left join bricklab.public_profiles parent_author on parent_author.public_id=parent.author_id
         where c.build_id=${id} order by c.created_at desc,c.id limit 31 offset ${offset}`
     },

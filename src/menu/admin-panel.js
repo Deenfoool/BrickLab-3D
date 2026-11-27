@@ -1,3 +1,4 @@
+import {profileHref,workshopRoute} from './profile-route.js'
 import {renderAchievementAdmin} from './admin-achievements.js'
 import {achievements} from './achievement-catalog.js'
 
@@ -37,7 +38,7 @@ export function renderAdminPanel({lang='ru',signal,initialMode='overview',initia
   const row=el('article','account-card')
   if(mode==='users'){
    row.append(el('strong',null,r.displayName),el('p','account-muted',r.email),el('p','account-muted',r.id),el('p',null,(r.admin?t.admin+' · ':'')+(r.verifiedAt?t.verified:t.unverified)+' · '+(r.blockedAt?t.blocked:t.active)))
-   if(r.publicId&&uuid.test(r.publicId)){const a=el('a','workspace-action',lang==='ru'?'Публичный профиль':'Public profile');a.href='#community/profile/'+r.publicId;row.append(a)}
+   if(r.publicId&&uuid.test(r.publicId)){const a=el('a','workspace-action',lang==='ru'?'Публичный профиль':'Public profile');a.href=profileHref(r.username,r.publicId);row.append(a)}
    if(!r.blockedAt){const select=el('select');select.setAttribute('aria-label',t.grant_achievement);for(const a of [...achievements,...definitions].filter(a=>a.metric===null)){const option=el('option',null,a[lang==='ru'?'ru':'en']);option.value=a.id;select.append(option)}row.append(select,button(t.grant_achievement,()=>action('grant_achievement',r.id,undefined,select.value)))}
    if(!r.admin)row.append(button(t[r.blockedAt?'unblock':'block'],()=>action(r.blockedAt?'unblock':'block',r.id)),button(t.revoke_sessions,()=>action('revoke_sessions',r.id)))
   }else if(mode==='bugs'){
@@ -58,7 +59,7 @@ export function renderAdminPanel({lang='ru',signal,initialMode='overview',initia
    id.required=true;id.maxLength=300;id.placeholder=t.target;id.setAttribute('aria-label',t.target);reason.required=true;reason.maxLength=500;reason.placeholder=t.reason;reason.setAttribute('aria-label',t.reason)
    for(const key of ['unpublish_build','unpublish_profile']){const option=el('option',null,t[key]);option.value=key;select.append(option)}
    send.type='submit';form.append(el('p','account-muted',t.warning),select,id,reason,send)
-   form.onsubmit=e=>{e.preventDefault();const target=adminTarget(id.value);if(!target){notice.textContent=t.invalid_admin_action;return}void action(select.value,target,reason.value)}
+   form.onsubmit=async e=>{e.preventDefault();let target=adminTarget(id.value);if(!target&&select.value==='unpublish_profile'){const raw=id.value.trim();let key=workshopRoute(raw.replace(/^#/,''));try{const url=new URL(raw);if(url.origin===location.origin)key=workshopRoute(url.hash.slice(1))}catch{}if(key){try{const r=await fetch('/api/community/profile/'+encodeURIComponent(key),{credentials:'same-origin',cache:'no-store',signal});if(r.ok)target=adminTarget((await r.json()).profile?.id)}catch{}}}if(!target){notice.textContent=t.invalid_admin_action;return}void action(select.value,target,reason.value)}
    content.append(form);notice.textContent='';return
   }
   try{

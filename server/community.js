@@ -55,7 +55,7 @@ export function validateComment(value){
 export function publicReputation(r){
  return {builds:Number(r?.builds??0),likes:Number(r?.likes??0),downloads:Number(r?.downloads??0),followers:Number(r?.followers??0),score:Number(r?.score??0)}
 }
-export function publicComment(r){return {authorTheme:backgroundIds.includes(r.authorTheme)?r.authorTheme:null,id:r.id,parentId:r.parentId,parentAuthor:r.parentAuthor??null,authorId:r.authorId,author:r.author,body:r.body,createdAt:r.createdAt,avatarUrl:r.authorHasAvatar===true&&uuid.test(r.authorId)?'/api/community/profile/'+r.authorId+'/avatar':null}}
+export function publicComment(r){return {authorTheme:backgroundIds.includes(r.authorTheme)?r.authorTheme:null,id:r.id,parentId:r.parentId,parentAuthor:r.parentAuthor??null,authorId:r.authorId,...(r.authorUsername?{authorUsername:r.authorUsername}:{}),author:r.author,body:r.body,createdAt:r.createdAt,avatarUrl:r.authorHasAvatar===true&&uuid.test(r.authorId)?'/api/community/profile/'+r.authorId+'/avatar':null}}
 function discussionOffset(url){const raw=new URL(url,'http://localhost').searchParams.get('offset')??'0';if(!/^\d{1,5}$/.test(raw)||Number(raw)>10000)throw new ProjectError(400,'invalid_gallery_query');return Number(raw)}
 async function discussionBody(req){
  if(req.headers['content-type']?.split(';')[0].trim()!=='application/json')throw new ProjectError(415,'json_required')

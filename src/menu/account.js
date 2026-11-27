@@ -1,11 +1,11 @@
-import {isWorkshopHandle,profileHref} from './profile-route.js'
+import {isWorkshopHandle,profileHref,workshopRoute} from './profile-route.js'
 import {renderAdminPanel} from './admin-panel.js?v=achievements-v4'
 import {renderBureauPanel} from './bureau-panel.js?v=profile-gallery-1'
 import { createAuthClient } from './auth-client.js?v=live-polish-1'
 
 import { createProjectsClient, cloudLink } from './projects-client.js?v=profile-gallery-1'
 
-import { renderCloudWorkshop } from './cloud-workshop.js?v=workshop-identity-1'
+import { renderCloudWorkshop } from './cloud-workshop.js?v=workshop-identity-2'
 
 import {createProfileClient} from './profile-client.js?v=achievements-v4'
 
@@ -47,7 +47,8 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
  let adminRoute='',notificationError=false,bellRefreshing=false,bellRendered=false
  const t=()=>copy[lang]
  function publishNotifications(){onNotifications({lang,signedIn:Boolean(user),checked,busy,items:activityData?.notifications??null,userId:user?.id??null,error:notificationError})}
- function label(){const e=link.querySelector('[data-account-label]');e.textContent=user?t().account:t().login;link.href=user&&isWorkshopHandle(user.username)?profileHref(user.username):'#account';link.title=e.textContent;link.setAttribute('aria-label',e.textContent)}
+ function label(){const e=link.querySelector('[data-account-label]');e.textContent=user?(lang==='ru'?'Моя мастерская':'My workshop'):t().login;link.href=user&&isWorkshopHandle(user.username)?profileHref(user.username):'#account';link.title=e.textContent;link.setAttribute('aria-label',e.textContent)}
+ link.addEventListener('click',e=>{if(!user||e.ctrlKey||e.metaKey||e.shiftKey||e.altKey||e.button!==0)return;section='workshop';if(visible&&location.hash===link.hash){e.preventDefault();render()}})
  function message(code){const p=node('p','account-notice',t()[code]??t().unknown);p.setAttribute('role','status');return p}
  function localLink(){const a=node('a','workspace-action',t().local);a.href='#home';return a}
  async function run(fn){
@@ -154,7 +155,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
      const signal=workshopController.signal,noticeNodes=[]
      if(feedback)noticeNodes.push(message(feedback));if(error)noticeNodes.push(message(error));if(busy)noticeNodes.push(message('busy'))
      root.append(renderCloudWorkshop({lang,user,local:projects,remote,signal,previewsEnabled:previewsEnabled(),createBuild,openLocal,logout:()=>run(()=>api.logout()),noticeNodes,fetchCloud:async(id,requestSignal)=>{if(user?.id!==ownerId||requestSignal.aborted)return null;const item=await cloud.get(id,undefined,requestSignal);return user?.id===ownerId&&!requestSignal.aborted?item:null},section:section==='bureau'?'workshop':section==='admin'&&!user.admin?'workshop':section==='publicProfile'?'settings':section,busy,revokeOthers(){operate(async()=>{await api.revokeOthers();feedback='sessionsRevoked'})},adminPanel:()=>{adminController=new AbortController();return renderAdminPanel({lang,signal:adminController.signal,...(deepAdmin()??{})})},bureauPanel:()=>{bureauController=new AbortController();return renderBureauPanel({lang,user,signal:bureauController.signal,getProjects,openCopy,linkLocal,download,selection:bureauSelection})},profileData,activityData,publicCard,publicLoaded,publicBuilds,verificationResult:verificationResult?.owner===ownerId?verificationResult.result:null,verifyAchievement(data){operate(async()=>{try{const result=await profiles.verify(data);verificationResult={owner:user.id,result};profileData=await profiles.get();activityData=await activityApi.get()}catch(e){if(e.status===401)throw e;verificationResult={owner:user.id,result:{reason:e.code??'verification_unavailable',metrics:[]}}}})},loadPublic(){operate(async()=>{publicCard=await communityApi.get();publicBuilds=await communityApi.builds();publicLoaded=true})},publishBuild(id,data){operate(async()=>{publicBuilds=await communityApi.publishBuild(id,data);profileData=await profiles.get();activityData=await activityApi.get();feedback='publicationSaved'})},unpublishBuild(id){operate(async()=>{publicBuilds=await communityApi.unpublishBuild(id);feedback='publicationRemoved'})},publishPublic(data){operate(async()=>{publicCard=await communityApi.publish(data);profileData=await profiles.get();publicLoaded=true;feedback='publicSaved'})},unpublishPublic(){operate(async()=>{publicCard=await communityApi.unpublish();publicBuilds=[];publicLoaded=true;feedback='publicRemoved'})},refreshActivity(){operate(async()=>{profileData=await profiles.get();activityData=await activityApi.get()})},readActivity(){operate(async()=>{activityData=await activityApi.read()})},toggleFavorite(id,add){operate(async()=>{activityData=await activityApi.favorite(id,add)})},openFavorite(id){operate(async()=>{const owner=user.id,item=await cloud.get(id);if(user?.id===owner&&visible)openCopy(item.document,{ownerId:owner,id:item.id,revision:item.revision})})},uploadMedia(kind,file){operate(async()=>{profileData=await profiles.upload(kind,file);if(publicCard?.unified)publicCard=await communityApi.get();feedback='mediaSaved'})},removeMedia(kind){operate(async()=>{profileData=await profiles.remove(kind);if(publicCard?.unified)publicCard=await communityApi.get();feedback='mediaSaved'})},saveProfile(data){operate(async()=>{profileData=await profiles.save(data);if(publicCard?.unified||publicCard&&data.supportBadge!==undefined)publicCard=await communityApi.get();else if(publicCard?.backgroundTheme&&data.background!==undefined)publicCard={...publicCard,backgroundTheme:profileData.profile.background};feedback='profileSaved'})},
-       go(key){if(key==='achievements'&&location.hash!=='#account/achievements'){location.hash='#account/achievements';return}if(key==='cloud'&&location.hash!=='#account/projects'){location.hash='#account/projects';return}if(!['cloud','achievements'].includes(key)&&(deepAdmin()||['#account/projects','#account/achievements'].includes(location.hash))){window.history.replaceState(null,'','#account');adminRoute=''}section=key;render();window.scrollTo({top:0,behavior:'instant'})}}));
+       go(key){if(key==='workshop'&&isWorkshopHandle(user.username)){section='workshop';if(location.hash!==profileHref(user.username)){location.hash=profileHref(user.username);return}}if(key==='achievements'&&location.hash!=='#account/achievements'){location.hash='#account/achievements';return}if(key==='cloud'&&location.hash!=='#account/projects'){location.hash='#account/projects';return}if(!['cloud','achievements'].includes(key)&&(deepAdmin()||['#account/projects','#account/achievements'].includes(location.hash))){window.history.replaceState(null,'','#account');adminRoute=''}section=key;render();window.scrollTo({top:0,behavior:'instant'})}}));
      if(section==='cloud')onProjectsPanel(root.querySelector('.workshop-projects-slot'));return
    }
    const panel=node('div','account-auth'),hero=node('div','account-auth-hero'),brand=node('div','account-brand','BRICKLAB CLOUD')
@@ -202,7 +203,8 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    refreshNotifications,
    readNotifications(){return refreshNotifications(true)},
    update(language,show){
-     const next=language==='en'?'en':'ru',route=show&&(deepAdmin()||['#account/projects','#account/achievements'].includes(location.hash))?location.hash:'',changed=next!==lang||visible!==show||adminRoute!==route
+     const next=language==='en'?'en':'ru',route=show&&(deepAdmin()||workshopRoute(location.hash.slice(1))||['#account/projects','#account/achievements'].includes(location.hash))?location.hash:'',changed=next!==lang||visible!==show||adminRoute!==route
+     if(show&&workshopRoute(route.slice(1))&&adminRoute!==route)section='workshop'
      if(show&&route==='#account/projects')section='cloud'
      else if(show&&route==='#account/achievements')section='achievements'
      else if(show&&changed&&['cloud','achievements'].includes(section))section='workshop'

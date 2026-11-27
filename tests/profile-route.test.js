@@ -16,7 +16,8 @@ test('canonical username routes and legacy UUID links',()=>{
  assert.equal(workshopRoute('foo/bar'),null)
 })
 test('new workshop shows awards but not activity by default',()=>{
- const p=defaultPortfolio()
+ assert.equal(defaultPortfolio().blocks.find(b=>b.key==='awards').visible,false)
+ const p=defaultPortfolio({publicByDefault:true})
  assert.equal(p.blocks.find(b=>b.key==='awards').visible,true)
  assert.equal(p.blocks.find(b=>b.key==='activity').visible,false)
 })
