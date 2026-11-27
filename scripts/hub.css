@@ -14,3 +14,34 @@ label{color:var(--muted);font-size:12px;font-weight:600;display:block}input:not(
 :root[data-theme=light]{--accent:#285bc1;--accent-text:white;--soft:#e1ebff;--blue:#285bc1;--bg:#f4f6fb;--surface:#fff;--raised:#edf1f8;--line:#dce3f0}
 @media(prefers-color-scheme:light){:root:not([data-theme=dark]){--accent:#285bc1;--accent-text:white;--soft:#e1ebff;--blue:#285bc1;--bg:#f4f6fb;--surface:#fff;--raised:#edf1f8;--line:#dce3f0}}
 .profile-card{border:1px solid var(--line);border-radius:24px;padding:18px;background:linear-gradient(135deg,var(--soft),var(--surface) 80%);box-shadow:var(--shadow)}.profile-top{display:flex;align-items:center;gap:14px}.avatar{display:grid;place-items:center;width:61px;height:61px;flex:none;border-radius:20px;border:1px solid var(--line);background:var(--surface);color:var(--accent);font-size:24px;font-weight:800;letter-spacing:-1px}.profile-copy{min-width:0}.profile-copy h2{font-size:23px;margin:4px 0 0;overflow-wrap:anywhere}.profile-copy p{font-size:12px;margin:2px 0}.membership{margin-top:20px;background:var(--surface);border:1px solid var(--line);padding:13px;border-radius:16px;display:grid;grid-template-columns:35px minmax(0,1fr) 38px;align-items:center;gap:10px}.membership-icon{width:35px;height:35px;background:var(--raised);color:var(--muted);display:grid;place-items:center;border-radius:12px}.membership[data-plan=plus] .membership-icon,.membership[data-plan=plus] strong{color:var(--gold)}.membership .eyebrow{font-size:9px}.membership strong{display:block;font-size:16px}.membership p{margin:2px 0 0;font-size:12px}.membership-action{width:38px;min-height:38px;padding:0}.page-hero{background:var(--soft);border:1px solid var(--line);border-radius:21px;padding:19px;display:flex;align-items:center;gap:16px;margin:4px 0 18px}.page-hero>.ico{width:42px;height:42px;color:var(--accent)}.page-hero h2{margin:4px 0 0;font-size:23px}.page-hero p{margin:5px 0 0}.pair-panel{text-align:center;border:1px solid var(--line);background:var(--surface);border-radius:24px;padding:23px;margin:10px 0}.pair-art{height:82px;width:82px;margin:0 auto 18px;display:grid;place-items:center;background:var(--soft);border:1px solid var(--line);border-radius:27px;color:var(--accent)}.pair-art .ico{height:42px;width:42px}.pair-panel h2{font-size:25px;line-height:1.15;margin:10px 0}.pair-panel form{padding:0;border:0;background:transparent;text-align:left}.pair-panel form button,#promo-form button{width:100%}#awards .tile strong{font-size:15px;line-height:1.35;letter-spacing:0}#awards .tile[data-rarity=legendary]{border-color:var(--gold)}#awards .tile[data-rarity=epic]{border-color:#b393ea}#awards .tile[data-rarity=rare]{border-color:var(--blue)}#awards .metric-icon{color:var(--gold)}#ranking .rank-row{display:flex;align-items:center;gap:12px}.rank-position{width:37px;height:37px;display:grid;place-items:center;flex:none;background:var(--raised);border-radius:12px;font-weight:750;color:var(--muted)}.rank-row[data-podium=true] .rank-position{color:var(--gold)}.rank-row p{margin:0 0 0 auto;white-space:nowrap}.rank-row strong{min-width:0;overflow-wrap:anywhere}.feed{white-space:pre-wrap}.event-row{display:flex;gap:10px;align-items:flex-start}.event-row>.ico{color:var(--accent);margin-top:5px}.event-body{flex:1;min-width:0}.event-body p{margin:0 0 4px}.build-emblem{display:grid;place-items:center;height:94px;background:var(--soft);color:var(--accent);border-radius:12px;margin-bottom:12px}.build-emblem .ico{height:42px;width:42px}#popular h3{font-size:17px;margin:0 0 5px}#popular p{margin:0;font-size:12px}#promo-form{margin-top:18px}.settings-panel button{margin-top:12px}.settings-panel p{font-size:12px;margin-bottom:0}
+
+/* Private workshop identity: same theme, earned frame and badges as the site. */
+.profile-card{position:relative;overflow:hidden;padding:0 16px 16px;--identity-accent:var(--accent);--identity-cover:var(--soft)}
+.profile-card[data-theme=carbon]{--identity-accent:#ffae38;--identity-cover:#34312e}
+.profile-card[data-theme=neon]{--identity-accent:#75eaff;--identity-cover:#242a61}
+.profile-card[data-theme=blueprint]{--identity-accent:#86c9ff;--identity-cover:#193d62}
+.profile-card[data-theme=titanium]{--identity-accent:#d1dbe8;--identity-cover:#364250}
+.profile-card[data-theme=ember]{--identity-accent:#ff986a;--identity-cover:#572b25}
+.profile-card[data-theme=aurora]{--identity-accent:#6de5be;--identity-cover:#16463e}
+.profile-cover{height:100px;margin:0 -16px;background:linear-gradient(130deg,var(--identity-cover),var(--surface));overflow:hidden;position:relative}
+.profile-cover::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,#10151e55,transparent);pointer-events:none}
+.profile-cover img{width:100%;height:100%;object-fit:cover;display:block}
+.profile-top{align-items:flex-start;position:relative;margin-top:-22px}
+.profile-copy{padding-top:27px}
+.avatar{width:76px;height:76px;border:2px solid var(--identity-accent);background:var(--surface);box-shadow:0 0 0 3px var(--surface);overflow:hidden}
+.avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.profile-card[data-frame=forge] .avatar{border-color:#ff986a;box-shadow:0 0 0 3px var(--surface),0 0 0 5px #c46d41}
+.profile-card[data-frame=masterwork] .avatar{border-color:#edc783;box-shadow:0 0 0 3px var(--surface),0 0 0 5px #c6a05c}
+.profile-card[data-frame=pioneer] .avatar{border-color:#b4a0fa;box-shadow:0 0 0 3px var(--surface),0 0 0 5px #9279dc}
+.profile-card[data-frame=starlight] .avatar{border-color:#6de5be;box-shadow:0 0 0 3px var(--surface),0 0 0 5px #4ccaa3}
+.profile-card[data-frame=marathon] .avatar{border-color:#86c9ff;box-shadow:0 0 0 3px var(--surface),0 0 0 5px #679ec8}
+.profile-card[data-frame=academy] .avatar{border-color:#99baff;box-shadow:0 0 0 3px var(--surface),0 0 0 5px #708bd3}
+.profile-badges{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 0}
+.profile-badge{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:8px;padding:3px 7px;background:var(--surface);font-size:10px;font-weight:650;line-height:1.35;color:var(--text)}
+.profile-badge .ico{width:13px;height:13px}
+.profile-badge[data-kind=theme]{color:var(--identity-accent)}
+.profile-badge[data-kind=plus]{color:var(--gold)}
+.profile-badge[data-kind=founders-club]{color:#bfa9f3}
+.sandbox-note{color:var(--gold)!important;font-size:10px!important}
+.membership{margin-top:16px}
+@media(max-width:350px){.avatar{width:60px;height:60px;border-radius:17px}.profile-copy h2{font-size:20px}.profile-cover{height:85px}}

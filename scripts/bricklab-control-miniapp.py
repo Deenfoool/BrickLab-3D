@@ -64,7 +64,13 @@ def hub_request(key, ident, route, body=None):
             def redirect_request(self,*args,**kwargs): return None
         opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect())
         with opener.open(request,timeout=8) as response:
-            return response.status,response.read(262144)
+            limit=524288 if route in ("avatar","cover") else 262144
+            data=response.read(limit+1)
+            if len(data)>limit: return 503,b'{"error":"response_too_large"}'
+            if route in ("avatar","cover") and response.status==200:
+                if response.headers.get_content_type()!="image/webp" or len(data)<12 or data[:4]!=b"RIFF" or data[8:12]!=b"WEBP":
+                    return 503,b'{"error":"invalid_media"}'
+            return response.status,data
     except urllib.error.HTTPError as e:
         with e:
             return e.code,e.read(4096)
@@ -105,7 +111,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Cache-Control","no-store")
         self.send_header("Referrer-Policy","no-referrer")
         self.send_header("X-Content-Type-Options","nosniff")
-        self.send_header("Content-Security-Policy","default-src 'none'; script-src 'self' https://telegram.org; style-src 'self'; connect-src 'self'; frame-ancestors https://web.telegram.org https://*.telegram.org; base-uri 'none'; form-action 'none'")
+        self.send_header("Content-Security-Policy","default-src 'none'; script-src 'self' https://telegram.org; style-src 'self'; img-src 'self' blob:; connect-src 'self'; frame-ancestors https://web.telegram.org https://*.telegram.org; base-uri 'none'; form-action 'none'")
         self.end_headers()
         self.wfile.write(body)
     def authorized(self):
@@ -120,7 +126,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not getattr(self.server,"hub_key",None):
             return self.reply(503,b'{"error":"hub_disabled"}',"application/json")
         status,data=hub_request(self.server.hub_key,ident,route,body)
-        return self.reply(status,data,"application/json")
+        return self.reply(status,data,"image/webp" if status==200 and route in ("avatar","cover") else "application/json")
     def do_POST(self):
         route={"/control/hub/claim":"claim","/control/hub/preferences":"preferences","/control/hub/redeem":"redeem","/control/hub/personal-preferences":"personal-preferences"}.get(self.path)
         admin_route={"/control/promo-create":"promo-create","/control/promo-disable":"promo-disable","/control/campaign-create":"campaign-create","/control/campaign-queue":"campaign-queue","/control/campaign-cancel":"campaign-cancel","/control/campaign-test":"campaign-preview"}.get(self.path)
@@ -184,6 +190,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.hub_reply("promos")
         if path=="hub/api":
             return self.hub_reply("hub")
+        if path in ("hub/avatar","hub/cover"):
+            if self.path!="/control/"+path: return self.reply(400,b'{"error":"invalid_path"}',"application/json")
+            return self.hub_reply(path.split("/")[1])
         if path=="role":
             ident=telegram_identity(self.headers.get("X-Telegram-Init-Data",""),self.server.token)
             if ident is None: return self.reply(403,b'{"error":"unauthorized"}',"application/json")

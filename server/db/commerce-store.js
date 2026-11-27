@@ -3,6 +3,14 @@ import {quoteInstructionBundle} from '../../src/menu/instruction-bundle-pricing.
 import {commerceQuote} from '../commerce-quote.js'
 import {ProjectError} from '../projects.js'
 
+// Private profile and Hub share the same admin-only sandbox projection.
+export async function commerceEnvironment(tx,env){
+    if(env.BRICKLAB_COMMERCE_MODE==='test'&&env.BRICKLAB_YOOKASSA_TEST_ENABLED==='true'){
+      const [row]=await tx`select bricklab.is_admin() as admin`
+      if(row?.admin===true)return 'test'
+    }
+    return 'live'
+}
 export async function commerceEntitlements(tx,uid,environment='live'){
     const rows=environment==='test'?await tx`select g.id,g.kind,g.sku,g.target,g.granted_at as "grantedAt",g.expires_at as "expiresAt"
      from bricklab.commerce_grants g join bricklab.commerce_orders o on o.id=g.order_id and o.user_id=g.user_id

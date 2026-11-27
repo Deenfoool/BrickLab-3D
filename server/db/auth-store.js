@@ -4,7 +4,7 @@ import {filterPortfolio} from '../../src/menu/portfolio-model.js'
 import postgres from 'postgres'
 import {securityStore} from './security-store.js'
 import {storeOrders} from './store-orders.js'
-import {commerceStore,commerceEntitlements} from './commerce-store.js'
+import {commerceStore,commerceEntitlements,commerceEnvironment} from './commerce-store.js'
 import {plusThemeState} from '../../src/menu/commerce-catalog.js'
 import {bureauStore} from './bureau-store.js'
 import { ProjectError } from '../projects.js'
@@ -28,11 +28,25 @@ export function connectAuthStore(env = process.env) {
   // Test purchases exercise the actual private profile and quota code only
   // for an administrator while the sandbox is the active provider.
   async function effectiveCommerce(tx,uid){
-    if(env.BRICKLAB_COMMERCE_MODE==='test'&&env.BRICKLAB_YOOKASSA_TEST_ENABLED==='true'){
-      const [row]=await tx`select bricklab.is_admin() as admin`
-      if(row?.admin===true)return commerceEntitlements(tx,uid,'test')
-    }
-    return commerceEntitlements(tx,uid)
+    const environment=await commerceEnvironment(tx,env)
+    return commerceEntitlements(tx,uid,environment)
+  }
+  // Shared with the site's private profile. Hub does not refresh or grant awards.
+  async function profileAppearance(tx,uid,profile,awards,commerce){
+    const [appearance]=await tx`select style from bricklab.achievement_appearance where user_id=${uid}`
+    const media=await tx`select kind,version from bricklab.profile_media where user_id=${uid}`
+    const legacyEntitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
+    const [plusChoice]=await tx`select theme,changed_at as "changedAt" from bricklab.commerce_plus_theme where user_id=${uid}`
+    const plusTheme=plusThemeState(commerce,plusChoice)
+    const entitlements=[...legacyEntitlements,...commerce.themes.map(item=>({item})),...(plusTheme.chosen?[{item:plusTheme.chosen}]:[])]
+    const [{admin}]=await tx`select bricklab.is_admin() as admin`
+    const inventory=backgroundInventory(awards,entitlements,{admin:admin===true})
+    const [selection]=await tx`select badge from bricklab.commerce_badge_selection where user_id=${uid}`
+    const supportBadge=commerce.badges.includes(selection?.badge)?selection.badge:null
+    const background=inventory.some(i=>i.id===profile.background&&i.owned)?profile.background:'default'
+    return {background,achievementStyle:appearance?.style??null,inventory,plusTheme,supportBadge,
+      avatarUrl:media.find(m=>m.kind==='avatar')?'/api/profile/avatar?v='+media.find(m=>m.kind==='avatar').version:null,
+      coverUrl:media.find(m=>m.kind==='cover')?'/api/profile/cover?v='+media.find(m=>m.kind==='cover').version:null}
   }
   const lock = (tx, uid) => tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text, 312042))`
   async function quota(tx, doc, creating, limits) {
@@ -140,21 +154,11 @@ export function connectAuthStore(env = process.env) {
         const [{rarity:achievementRarity}]=await tx`select bricklab.achievement_rarity() as rarity`
         const [showcaseRow]=await tx`select awards from bricklab.achievement_showcases where user_id=${uid}`
         const achievementDefinitions=(await tx`select definition from bricklab.achievement_definitions where id like 'custom-%' AND (coalesce((definition->>'hidden')::boolean,false)=false OR EXISTS(SELECT 1 FROM bricklab.workshop_awards w WHERE w.user_id=${uid} AND w.award=achievement_definitions.id)) order by id`).map(r=>r.definition)
-        const [appearance]=await tx`select style from bricklab.achievement_appearance where user_id=${uid}`
         const awards=await tx`select award,awarded_at as "awardedAt" from bricklab.workshop_awards where user_id=${uid} order by awarded_at`
-        const media=await tx`select kind,version from bricklab.profile_media where user_id=${uid}`
-        const legacyEntitlements=await tx`select item from bricklab.cosmetic_entitlements where user_id=${uid}`
         const commerce=await effectiveCommerce(tx,uid)
-        const [plusChoice]=await tx`select theme,changed_at as "changedAt" from bricklab.commerce_plus_theme where user_id=${uid}`
-        const plusTheme=plusThemeState(commerce,plusChoice)
-        const entitlements=[...legacyEntitlements,...commerce.themes.map(item=>({item})),...(plusTheme.chosen?[{item:plusTheme.chosen}]:[])]
-          const [{admin}]=await tx`select bricklab.is_admin() as admin`
-        const inventory=backgroundInventory(awards,entitlements,{admin:admin===true})
         const profile=p??{bio:'',cover:'blueprint',background:'default'}
-        const [selection]=await tx`select badge from bricklab.commerce_badge_selection where user_id=${uid}`
-        const supportBadge=commerce.badges.includes(selection?.badge)?selection.badge:null
-        if(!inventory.some(i=>i.id===profile.background&&i.owned))profile.background='default'
-        return {...profile,awards,achievementDefinitions,achievementStyle:appearance?.style??null,achievementRewards:rewardInventory(awards),achievementMetrics,achievementRarity,showcase:showcaseRow?.awards??null,inventory,plus:commerce.plus,plusUntil:commerce.plusUntil,plusTheme,loyalty:commerce.loyalty,supportBadges:commerce.badges,supportBadge,avatarUrl:media.find(m=>m.kind==='avatar')?'/api/profile/avatar?v='+media.find(m=>m.kind==='avatar').version:null,coverUrl:media.find(m=>m.kind==='cover')?'/api/profile/cover?v='+media.find(m=>m.kind==='cover').version:null}
+        const appearance=await profileAppearance(tx,uid,profile,awards,commerce)
+        return {...profile,...appearance,awards,achievementDefinitions,achievementRewards:rewardInventory(awards),achievementMetrics,achievementRarity,showcase:showcaseRow?.awards??null,plus:commerce.plus,plusUntil:commerce.plusUntil,loyalty:commerce.loyalty,supportBadges:commerce.badges}
       })
     },
     async saveProfile(uid,p) {
@@ -452,15 +456,18 @@ export function connectAuthStore(env = process.env) {
     async telegramDashboard(uid){return scope(uid,async tx=>{
       const [u]=await tx`select display_name as "displayName",username from bricklab.users where id=${uid} and blocked_at is null`
       if(!u)throw new ProjectError(403,'blocked')
-      const commerce=await commerceEntitlements(tx,uid)
+      const environment=await commerceEnvironment(tx,env)
+      const commerce=await commerceEntitlements(tx,uid,environment)
+      const [profile]=await tx`select display_name as "displayName",background,cover from bricklab.profiles where user_id=${uid}`
       const awards=await tx`select w.award as id,d.definition->>'ru' as title,d.definition->>'rarity' as rarity,(d.definition->>'xp')::int as xp,w.awarded_at as "at" from bricklab.workshop_awards w join bricklab.achievement_definitions d on d.id=w.award where w.user_id=${uid} order by w.awarded_at desc,w.award`
       const [p]=await tx`select public_id as id,bricklab.public_workshop_summary(public_id) as summary from bricklab.public_profiles where user_id=${uid}`
+      const appearance=await profileAppearance(tx,uid,profile??{background:'default'},awards.map(a=>({award:a.id})),commerce)
       const [counts]=await tx`select (select count(*)::int from bricklab.community_follows where user_id=${uid}) as following,coalesce((select followers from bricklab.community_follow_counts where author_id=${p?.id??null}::uuid),0)::int as followers,(select count(*)::int from bricklab.public_builds where author_id=${p?.id??null}::uuid) as builds,coalesce((select sum(l.likes) from bricklab.public_builds b join bricklab.community_like_counts l on l.build_id=b.public_id where b.author_id=${p?.id??null}::uuid),0)::int as likes`
       const [popular]=await tx`select b.public_id as id,b.title,b.part_count as "partCount",coalesce(l.likes,0)::int as likes,coalesce(e.views,0)::int as views from bricklab.public_builds b left join bricklab.community_like_counts l on l.build_id=b.public_id left join bricklab.community_event_counts e on e.build_id=b.public_id where b.author_id=${p?.id??null}::uuid order by coalesce(l.likes,0) desc,coalesce(e.views,0) desc,b.public_id limit 1`
       const [prefs]=await tx`select bricklab.telegram_link_status() as data`
       const [inbox]=await tx`select bricklab.hub_inbox() as data,bricklab.hub_personal_inbox() as personal`
       const top=await tx`select "displayName",xp,"position" from bricklab.achievement_rankings(0) order by "position",id limit 10`
-      return {displayName:u.displayName,username:u.username,plus:commerce.plus,plusUntil:commerce.plusUntil,awards,xp:awards.reduce((n,a)=>n+a.xp,0),rank:p?.summary?.rank??null,...counts,popular:popular??null,marketing:prefs.data.marketing,personalPush:prefs.data.personalPush,top,inbox:[...inbox.data,...inbox.personal].sort((a,b)=>Date.parse(b.sentAt)-Date.parse(a.sentAt)).slice(0,50)}
+      return {displayName:profile?.displayName??u.displayName,username:u.username,commerceMode:environment,plus:commerce.plus,plusUntil:commerce.plusUntil,appearance:{background:appearance.background,coverTheme:profile?.cover??'blueprint',achievementStyle:appearance.achievementStyle,supportBadge:appearance.supportBadge,hasAvatar:!!appearance.avatarUrl,hasCover:!!appearance.coverUrl},awards,xp:awards.reduce((n,a)=>n+a.xp,0),rank:p?.summary?.rank??null,...counts,popular:popular??null,marketing:prefs.data.marketing,personalPush:prefs.data.personalPush,top,inbox:[...inbox.data,...inbox.personal].sort((a,b)=>Date.parse(b.sentAt)-Date.parse(a.sentAt)).slice(0,50)}
     })},
     async cleanup() { await sql`delete from bricklab.sessions where expires_at <= now()`;await sql`delete from bricklab.account_tokens where expires_at <= now()` },
     async close() { await sql.end({ timeout: 5 }) },
