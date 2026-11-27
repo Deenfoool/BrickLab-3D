@@ -1,5 +1,6 @@
 import {mountWorldGestures} from './world-gestures.js'
 import {worldPartIds} from './world-plan.js'
+import {readWorldConfig,worldPartBounds,spawnFromBounds,worldSurfaces} from './world-track.js'
 import {validateModule,presetCells,MODULE_LIMIT} from './world-modules.js'
 import { loadPartIndex, enrichInventory, normalizeDocumentDesigns } from '../catalog/part-resolver.js?v=catalog-engine-1'
 import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=instruction-artwork-v5'
@@ -60,7 +61,7 @@ const simulating = mode => mode === 'testDrive'
 const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
-export async function mountEditor(root, { document, projectId, language, save, download, publish, signal, reportLoad, collaboration, onJoinCollaboration, projectActions, labMode, onWorldBuild, onEnvironment, worldControls, onModules }) {
+export async function mountEditor(root, { document, projectId, language, save, download, publish, signal, reportLoad, collaboration, onJoinCollaboration, projectActions, labMode, onWorldBuild, onEnvironment, worldControls, onModules, readWorld, onWorldPhysics }) {
   await loadPartIndex()
   if (signal.aborted) return
   const source = upgradeInlineEngineFan(promoteLegacyBelts(expandComponents(normalizeDocumentDesigns(document, parts), parts)))
@@ -305,7 +306,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   const hasHiddenEndpoint = record => hiddenIds.has(record?.a?.part) || hiddenIds.has(record?.b?.part)
   const hiddenBelts = beltRecords.filter(hasHiddenEndpoint)
   const layers = readSceneLayers(source.sceneLayers, new Set([...shown, ...hiddenIds]))
-  let state = { parts: visibleParts, layers, belts: beltRecords.filter(record => !hasHiddenEndpoint(record)),
+  let state = { ...(labMode==='world'?{worldConfig:readWorldConfig(source.world)}:{}), parts: visibleParts, layers, belts: beltRecords.filter(record => !hasHiddenEndpoint(record)),
     links: source.connections.filter(link => shown.has(link?.shaft?.part) && shown.has(link?.socket?.part)) }
   let assembly = createAssembly(state.parts, state.links, { belts: state.belts })
   state.belts = assembly.belts.map(({ record }) => record)
@@ -506,7 +507,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   })
   let driveConfig = source.testDrive
   const drivePanel = mountDrivePanel(el('drivePanel'), {
-    language, scene, models, catalog: parts, signal,
+    language, scene, models, catalog: parts, signal, readWorld:labMode==='model'?readWorld:undefined,
     read: () => ({ parts: state.parts, assembly, config: driveConfig }),
     write: config => { driveConfig = config; persist() },
     nameOf: id => parts[state.parts.find(part => part.id === id)?.design]?.[language] ?? id,
@@ -527,6 +528,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   function currentDocument() {
     return {
       ...source,
+      ...(labMode==='world'?{world:state.worldConfig}:{}),
       customInstructions,
       ...(buildingSet && { buildingSet }),
       ...(driveConfig && { testDrive: driveConfig }),
@@ -892,6 +894,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
       }))
     const mechanicalChange = geometryChanged || state.links !== next.links || state.belts !== next.belts
     state = next
+    if(labMode==='world')refreshWorldPhysics();
     setPalette?.update([...state.parts, ...hiddenParts])
     if (mechanicalChange) {
       assembly = createAssembly(state.parts, state.links, { belts: state.belts })
@@ -922,7 +925,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     undo.push(state)
     if (undo.length > 80) undo.shift()
     redo.length = 0
-    applyState({ belts: state.belts, layers: state.layers, ...next })
+    applyState({ belts: state.belts, layers: state.layers, ...(labMode==='world'?{worldConfig:state.worldConfig}:{}), ...next })
     if (hasNewConnection(beforeLinks, state.links)) tutorial?.handle('connected')
     return true
   }
@@ -2245,6 +2248,36 @@ export async function mountEditor(root, { document, projectId, language, save, d
     applyState({parts:placed,links:next.connections,belts:next.belts??[],layers:readSceneLayers(next.sceneLayers,new Set(placed.map(p=>p.id)))})
     return true
   }})
+  function refreshWorldPhysics(){
+    if(labMode!=='world')return;
+    try{
+      const config=readWorldConfig(state.worldConfig);
+      const boxes=state.parts.filter(p=>!hiddenSceneParts(state.layers,state.parts).has(p.id)).map(p=>{const b=worldPartBounds(p,models.get(p.design));return {min:b.min.toArray(),max:b.max.toArray()}});
+      scene.setWorldSpawn(spawnFromBounds(config,boxes));
+    }catch{scene.setWorldSpawn(null)}
+  }
+  if(labMode==='world'&&onWorldPhysics){
+    onWorldPhysics({
+      config:()=>readWorldConfig(state.worldConfig),
+      spawn(value){
+        if(!editing())throw Error('Заверши текущую операцию.');
+        const config=readWorldConfig({spawn:value});
+        if(config.spawn.x!==value.x||config.spawn.z!==value.z||config.spawn.heading!==value.heading||config.spawn.level!==value.level)throw Error('Проверь координаты старта.');
+        const hiddenIds=hiddenSceneParts(state.layers,state.parts);
+        const boxes=state.parts.filter(p=>!hiddenIds.has(p.id)).map(p=>{const b=worldPartBounds(p,models.get(p.design));return {min:b.min.toArray(),max:b.max.toArray()}});
+        spawnFromBounds(config,boxes);
+        commit({...state,worldConfig:config});return config;
+      },
+      surface(kind){
+        if(!Object.hasOwn(worldSurfaces,kind)||!editing())throw Error('Заверши текущую операцию.');
+        const ids=new Set(selectionIds());
+        if(!ids.size)throw Error('Выдели детали покрытия.');
+        const next=state.parts.map(p=>{if(!ids.has(p.id))return p;const value={...p};if(kind==='auto')delete value.worldSurface;else value.worldSurface=kind;return value});
+        commit({...state,parts:next});return ids.size;
+      }
+    });
+    refreshWorldPhysics();
+  }
   if(labMode==='world'&&onWorldBuild){
   const worldBounds=(part,model)=>model.bounds.clone().applyMatrix4(new Matrix4().compose(new Vector3(...part.position),new Quaternion().fromArray(part.rotation),new Vector3(part.mirrored?-1:1,1,1)));
   function cellPose(c){

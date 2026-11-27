@@ -126,7 +126,7 @@ function runVehicle(rapier, world, vehicle, models, assembly, terrain) {
     const traction = input.brake ? -speed * supportedMass * .55 :
       (power * 7 * gain - speed * .7) * supportedMass * physicsStep
     const friction = forward.multiplyScalar(traction).addScaledVector(side, -velocity.dot(side) * supportedMass * .55)
-      .clampLength(0, load * .95)
+      .clampLength(0, load * (terrain?.group?.userData.worldTrack?clamp(hit.collider.friction(),.05,1.5):.95))
     return { impulse: normal.multiplyScalar(load).add(friction), point }
   }
 
@@ -147,7 +147,7 @@ function runVehicle(rapier, world, vehicle, models, assembly, terrain) {
       turns[index] = advanceRotor(spin, turns[index], wheelsById.get(sample.wheel.id).travel * sign / sample.wheel.radius)
     })
     world.step()
-    outOfBounds = body.translation().y < bottom
+    outOfBounds = body.translation().y < bottom || Boolean(terrain?.group?.userData.worldTrack&&(Math.abs(body.translation().x)>9.5||Math.abs(body.translation().z)>9.5))
   }
 
   function snapshot() {

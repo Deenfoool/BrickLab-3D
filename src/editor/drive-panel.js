@@ -5,6 +5,7 @@ const labels = {
   ru: {
     title: 'Тест-драйв',
     flat: 'Ровная площадка',
+    world: 'Мой BrickLab World',
     venue: 'Полигон',
     sketchbook: 'Sketchbook',
     loadingTrack: 'Загружаем полигон и готовим заезд…',
@@ -54,6 +55,7 @@ const labels = {
   en: {
     title: 'Test drive',
     flat: 'Flat test pad',
+    world: 'My BrickLab World',
     venue: 'Test venue',
     sketchbook: 'Sketchbook',
     loadingTrack: 'Loading the playground and preparing the drive…',
@@ -107,7 +109,7 @@ const keys = { KeyW: 'forward', ArrowUp: 'forward', KeyS: 'reverse', ArrowDown: 
 
 export const driveTitle = language => labels[language].title
 
-export function mountDrivePanel(root, { language, scene, models, catalog, read, write, nameOf, signal }) {
+export function mountDrivePanel(root, { language, scene, models, catalog, read, write, nameOf, signal, readWorld }) {
   const t = labels[language]
   root.setAttribute('aria-label', t.title)
   const { min, max, step } = driveScaleLimits
@@ -119,7 +121,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
       <p data-drive="scaleNotice" role="status" hidden></p>
     </div>
     <div data-drive="setup">
-      <label>${t.venue}<select data-drive="venue"><option value="sketchbook">${t.sketchbook}</option><option value="flat">${t.flat}</option></select></label>
+      <label>${t.venue}<select data-drive="venue"><option value="sketchbook">${t.sketchbook}</option><option value="flat">${t.flat}</option>${readWorld?'<option value="world">'+t.world+'</option>':''}</select></label>
       <label>${t.simulation}<select data-drive="simulation"><option value="physical">${t.physical}</option><option value="kinematic">${t.kinematic}</option></select></label>
       <label for="drive-heading">${t.heading} <output data-drive="degrees"></output></label>
       <input id="drive-heading" data-drive="heading" type="range" min="-180" max="180" step="1">
@@ -166,6 +168,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
   let press
   let sketchbook
   let track
+  let worldTrack,worldDocument
   let loadingTrack
   let launchError
   let physics
@@ -195,6 +198,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     const { parts, assembly, config } = read()
     vehicle = prepareTestDrive(parts, assembly, models, config, catalog)
     const { settings } = vehicle
+    if(settings.venue==='world'&&!readWorld)settings.venue='flat'
     el('venue').value = settings.venue
     el('simulation').value = settings.simulation
     el('venueTitle').textContent = t[settings.venue]
@@ -280,14 +284,28 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
   async function start() {
     if (!vehicle?.ready || loadingTrack) return
     const { venue, simulation } = vehicle.settings
+    let worldSource;
+    if(venue==='world'){
+      try{worldSource=readWorld?.();if(!worldSource)throw Error('Сначала сохрани карту в BrickLab World.')}
+      catch(e){el('info').textContent=e.message;return}
+    }
+    const worldKey=worldSource?JSON.stringify(worldSource):null;
+    const needsWorld=venue==='world'&&(!worldTrack||worldDocument!==worldKey);
     const needsTrack = venue === 'sketchbook' && !sketchbook
     const needsPhysics = simulation === 'physical' && !physics
-    if (needsTrack || needsPhysics) {
-      const request = loadingTrack = { message: needsTrack ? 'loadingTrack' : 'loadingPhysics' }
+    if (needsTrack || needsWorld || needsPhysics) {
+      const request = loadingTrack = { message: needsTrack || needsWorld ? 'loadingTrack' : 'loadingPhysics' }
       launchError = undefined
       sync()
       let stage = 'trackError'
       try {
+        if(needsWorld){
+          const {loadWorldTrack}=await import('./world-track.js');
+          const loaded=await loadWorldTrack(worldSource,signal);
+          if(loadingTrack!==request){loaded.dispose();return}
+          if(worldTrack){scene.setDriveMap();worldTrack.dispose()}
+          worldTrack=loaded;worldDocument=worldKey;
+        }
         if (needsTrack) {
           const { loadSketchbookTrack } = await import('./sketchbook-track.js?v=ford-startup')
           const loaded = await loadSketchbookTrack()
@@ -318,7 +336,8 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
       }
       if (!active || !vehicle.ready) return
     }
-    track = venue === 'sketchbook' ? sketchbook : undefined
+    track = venue === 'world' ? worldTrack : venue === 'sketchbook' ? sketchbook : undefined
+    if(venue==='world'&&!track)return;
     if (simulation === 'physical') {
       try {
         const next = physics.createPhysicalDrive(physics.rapier, vehicle, models, read().assembly, track)
@@ -455,6 +474,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     if (frame !== undefined) cancelAnimationFrame(frame)
     physicsRun?.dispose()
     scene.setDriveMap()
+    worldTrack?.dispose();worldTrack=undefined;worldDocument=undefined;
   }, { once: true })
 
   return {

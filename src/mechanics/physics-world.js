@@ -36,7 +36,7 @@ export function physicsWorld(rapier, terrain) {
         const desc = rapier.ColliderDesc.cuboid(size.x, size.y, size.z)
           .setTranslation(center.x * metersPerLdu, center.y * metersPerLdu, center.z * metersPerLdu)
           .setRotation(mesh.getWorldQuaternion(new Quaternion()))
-        world.createCollider(desc.setFriction(.8))
+        world.createCollider(desc.setFriction(Number.isFinite(mesh.userData.friction)?mesh.userData.friction:.8))
         continue
       }
       const vertices = new Float32Array(positions.count * 3)
@@ -48,7 +48,7 @@ export function physicsWorld(rapier, terrain) {
       const index = mesh.geometry.index
       const indices = index ? Uint32Array.from(index.array) : Uint32Array.from({ length: positions.count }, (_, i) => i)
       const desc = rapier.ColliderDesc.trimesh(vertices, indices)
-      world.createCollider(desc.setFriction(.8))
+      world.createCollider(desc.setFriction(Number.isFinite(mesh.userData.friction)?mesh.userData.friction:.8))
     }
     return world
   } catch (error) {
