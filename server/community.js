@@ -1,3 +1,4 @@
+import {readMetricLayout} from '../src/menu/workshop-metrics-model.js'
 import {profileHref} from '../src/menu/profile-route.js'
 import {achievementById} from '../src/menu/achievement-catalog.js'
 import {validatePortfolio,filterPortfolio} from '../src/menu/portfolio-model.js'
@@ -66,6 +67,7 @@ async function discussionBody(req){
 export function publicBuild(row){
  return row?{authorTheme:backgroundIds.includes(row.authorTheme)?row.authorTheme:null,id:row.id,authorId:row.authorId,...(row.authorUsername?{authorUsername:row.authorUsername}:{}),...(Array.isArray(row.coauthors)?{coauthors:row.coauthors}:{}),author:row.author,authorAvatarUrl:row.authorHasAvatar===true&&uuid.test(row.authorId)?'/api/community/profile/'+row.authorId+'/avatar':null,title:row.title,description:row.description,revision:row.revision,category:row.category??'other',partCount:row.partCount??0,likes:row.likes??0,views:row.views??0,downloads:row.downloads??0,publishedAt:row.publishedAt,allowDownload:row.allowDownload!==false,allowComments:row.allowComments!==false,allowRemix:row.allowRemix===true,difficulty:row.difficulty??'unspecified',tags:row.tags??[],workType:row.workType??'original',attribution:row.attribution??'',originId:row.originId??null,imageCount:row.imageCount??0}:null
 }
+export function publicWorkshopSummary(summary){return {metricLayout:readMetricLayout(summary?.layout),globalRank:Number.isSafeInteger(summary?.rank)&&summary.rank>0?summary.rank:null,achievementCount:Number.isSafeInteger(summary?.awards)&&summary.awards>=0?summary.awards:null}}
 export function publicCard(row,options={}){
  if(!row)return null
  const base=uuid.test(row.id)?'/api/community/profile/'+row.id:null,owner=options?.owner===true
@@ -190,7 +192,7 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
       let data;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new ProjectError(400,'invalid_json')}
       await store.publishCard(user.id,validatePublicCard(data))
      }else if(req.method==='DELETE')await store.unpublishCard(user.id)
-     const card=publicCard(await store.getOwnCard(user.id),{owner:true});if(card&&store.reputation)card.reputation=publicReputation(await store.reputation(card.id));reply(res,200,{profile:card});return true
+     const card=publicCard(await store.getOwnCard(user.id),{owner:true});if(card&&store.reputation)card.reputation=publicReputation(await store.reputation(card.id));if(card&&store.workshopPublicSummary)Object.assign(card,publicWorkshopSummary(await store.workshopPublicSummary(card.id)));reply(res,200,{profile:card});return true
     }
     if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
     const image=/^\/api\/community\/build\/([^/]+)\/image\/([0-3])$/.exec(path)
@@ -218,7 +220,7 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
     if(m&&profileKey(m[2])){
      const card=publicCard(await store.getPublicCard(m[2].toLowerCase()))
      if(!card)throw new ProjectError(404,'not_found')
-     if(m[1])reply(res,200,{profile:{...card,reputation:publicReputation(store.reputation?await store.reputation(card.id):null)}})
+     if(m[1])reply(res,200,{profile:{...card,reputation:publicReputation(store.reputation?await store.reputation(card.id):null),...publicWorkshopSummary(store.workshopPublicSummary?await store.workshopPublicSummary(card.id):null)}})
      else {res.writeHead(302,{'Location':'/'+profileHref(card.username,card.id),'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});res.end()}
     }else if(path==='/community'||path==='/api/community'){
      const q=(new URL(req.url,'http://localhost').searchParams.get('q')??'').trim();if(q.length>100||/[\u0000-\u001f\u007f]/.test(q))throw new ProjectError(400,'invalid_gallery_query');const cards=(await store.listPublicCards(q)).map(publicCard)

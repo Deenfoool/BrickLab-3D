@@ -1,3 +1,4 @@
+import {validateMetricLayout,readMetricLayout} from '../src/menu/workshop-metrics-model.js'
 import {createAchievementVerifier} from './achievement-verifier.js'
 import {rewardById} from '../src/menu/achievement-rewards.js'
 import {achievementProgress,achievementById} from '../src/menu/achievement-catalog.js'
@@ -15,7 +16,8 @@ export function validateProfile(value){
  if(value.supportBadge!==undefined&&value.supportBadge!==null&&productById(value.supportBadge)?.kind!=='badge')throw new ProjectError(400,'invalid_profile')
  if(value.showcase!==undefined&&(!Array.isArray(value.showcase)||value.showcase.length>6||new Set(value.showcase).size!==value.showcase.length||value.showcase.some(id=>typeof id!=='string'||(!achievementById(id)&&!/^custom-[a-z0-9-]{1,39}$/.test(id)))))throw new ProjectError(400,'invalid_showcase')
  if(value.achievementStyle!==undefined&&value.achievementStyle!==null&&!rewardById(value.achievementStyle))throw new ProjectError(400,'invalid_profile')
- return {...(value.achievementStyle===undefined?{}:{achievementStyle:value.achievementStyle}),...(value.showcase===undefined?{}:{showcase:value.showcase}),bio:value.bio.trim(),cover:value.cover,...(value.plusTheme===undefined?{}:{plusTheme:value.plusTheme}),...(value.supportBadge===undefined?{}:{supportBadge:value.supportBadge}),...(value.displayName===undefined?{}:{displayName:value.displayName.trim()}),...(value.background===undefined?{}:{background:value.background})}
+ let metricLayout;if(value.metricLayout!==undefined){try{metricLayout=validateMetricLayout(value.metricLayout)}catch{throw new ProjectError(400,'invalid_metric_layout')}}
+ return {...(metricLayout===undefined?{}:{metricLayout}),...(value.achievementStyle===undefined?{}:{achievementStyle:value.achievementStyle}),...(value.showcase===undefined?{}:{showcase:value.showcase}),bio:value.bio.trim(),cover:value.cover,...(value.plusTheme===undefined?{}:{plusTheme:value.plusTheme}),...(value.supportBadge===undefined?{}:{supportBadge:value.supportBadge}),...(value.displayName===undefined?{}:{displayName:value.displayName.trim()}),...(value.background===undefined?{}:{background:value.background})}
 }
 export function awardProgress(awards,metrics,showcase,rarity,definitions){return achievementProgress(awards,metrics,showcase,rarity,definitions)}
 export function createProfileHandler({store,origin,logger=console}){
@@ -66,7 +68,7 @@ export function createProfileHandler({store,origin,logger=console}){
     }finally{active--}
    }
    const p=await store.getProfile(user.id)
-   reply(res,200,{profile:{bio:p.bio,cover:p.cover,background:p.background,achievementStyle:p.achievementStyle??null,displayName:p.displayName??null,avatarUrl:p.avatarUrl,coverUrl:p.coverUrl},inventory:p.inventory,plus:p.plus===true,plusUntil:p.plusUntil??0,plusTheme:p.plusTheme??{chosen:null,nextChangeAt:0},loyalty:p.loyalty??{days:0,milestones:[]},supportBadges:p.supportBadges??[],supportBadge:p.supportBadge??null,achievementRewards:p.achievementRewards??[],progress:awardProgress(p.awards,p.achievementMetrics,p.showcase,p.achievementRarity,p.achievementDefinitions)})
+   reply(res,200,{profile:{bio:p.bio,cover:p.cover,background:p.background,metricLayout:readMetricLayout(p.metricLayout),achievementStyle:p.achievementStyle??null,displayName:p.displayName??null,avatarUrl:p.avatarUrl,coverUrl:p.coverUrl},inventory:p.inventory,plus:p.plus===true,plusUntil:p.plusUntil??0,plusTheme:p.plusTheme??{chosen:null,nextChangeAt:0},loyalty:p.loyalty??{days:0,milestones:[]},supportBadges:p.supportBadges??[],supportBadge:p.supportBadge??null,achievementRewards:p.achievementRewards??[],progress:awardProgress(p.awards,p.achievementMetrics,p.showcase,p.achievementRarity,p.achievementDefinitions)})
   }catch(e){if(e instanceof ProjectError)reply(res,e.status,{error:e.message});else{logger.error('Profile operation failed:',e.code||e.name);reply(res,503,{error:'profile_unavailable'})}}
   return true
  }
