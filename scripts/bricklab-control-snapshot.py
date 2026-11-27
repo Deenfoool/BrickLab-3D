@@ -173,6 +173,13 @@ def collect():
         data["automation"]["maintenance"]="публичный сайт на техработах"
     elif ready:
         data["automation"]["maintenance"]="публичный сайт открыт"
+    try:
+        upkeep = json.loads(pathlib.Path("/var/lib/bricklab-control-upkeep/status.json").read_text())
+        if 0 <= time.time()-upkeep["at"] <= 900:
+            data["upkeep"] = upkeep
+            data["upkeep"]["cleanup_enabled"] = pathlib.Path("/etc/bricklab-backup/upkeep-cleanup.enabled").is_file()
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
     data["audit"] = audit()
     data["timestamp"] = time.time()
     return data

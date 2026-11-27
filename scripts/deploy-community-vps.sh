@@ -148,6 +148,9 @@ curl -fsS https://bricklab-3d.ru/api/health
 curl -fsS https://bricklab-3d.ru/ | grep -F 'unified-profile.css?v=unified-1' >/dev/null
 curl -fsS 'https://bricklab-3d.ru/api/community/builds?sort=popular&week=1' >/dev/null
 trap - ERR
+if [[ -f /usr/local/lib/bricklab-control/bricklab-control-upkeep.py ]]; then
+    python3 /usr/local/lib/bricklab-control/bricklab-control-upkeep.py record "bricklab-cloud-bricklab:rollback-${OLD:0:7}" "$IMAGE" || echo "WARNING: rollback timestamp not recorded" >&2
+fi
 echo
 echo "BRICKLAB HUB AND COMMUNITY 2.0 UPDATED"
 git log -1 --oneline

@@ -41,6 +41,9 @@ async function load(){
     tiles('stats',[['Аккаунты',s.users],['Новые 24 ч',s.new_users],['Сборки',s.builds],['Профили',s.profiles],['Реакции',a.likes],['Скачивания',a.downloads]]);
     chart(Array.isArray(a.days)?a.days:[]);
     tiles('ops',[['Контейнер',o.bricklab],['События в очереди',e.pending],['Повторные отправки',e.retrying],['Бэкап БД',b.db],['Бэкап конфигурации',b.config],['Версия',d.release?.commit]]);
+    const u=d.upkeep??{}, c=u.cleanup??{};
+    tiles('upkeep-tiles',[['Политика очистки',u.cleanup_enabled===true?'Автоматически':u.cleanup_enabled===false?'Предварительный анализ':null],['Диск (макс.)',u.disks?Math.max(...Object.values(u.disks).map(x=>x.used_percent))+'%':null],['Rollback-образы',c.rollback_count],['К удалению',(c.candidates??[]).join(', ')||'—'],['Последняя очистка',c.status],['Измерений за 7 дней',u.samples],['Последний отчёт',u.weekly_sent_at?new Date(u.weekly_sent_at*1000).toLocaleString():null]]);
+    document.getElementById('upkeep-note').textContent='Кэш: 7 дней · резерв: 3 версии · тестовые образы защищены · уведомления: 75/85/90%.';
     status.textContent='Обновлено '+new Date(d.timestamp*1000).toLocaleTimeString();dashboard.hidden=false;
   }catch(err){status.textContent=err.message||'Ошибка соединения';}
   finally{refresh.disabled=false;}
