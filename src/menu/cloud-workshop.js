@@ -1,17 +1,16 @@
 import {metricItems} from './workshop-metrics-model.js'
-import {renderMetricEditor,workshopMetricValues} from './workshop-metrics.js?v=workshop-metrics-1'
+import {renderMetricEditor,workshopMetricValues} from './workshop-metrics.js?v=workshop-metrics-2'
 import {profileHref} from './profile-route.js'
 import {renderVerificationLab,renderAchievementRewards,renderAchievementRankings} from './achievement-platform.js'
-import {renderAchievements,achievementRank} from './achievement-hall.js'
+import {renderAchievements} from './achievement-hall.js'
 import {achievementName} from './achievement-catalog.js'
 import {renderInstructionCollection} from './instruction-collection.js'
 import {commerceBadge,productArtwork,factsPanel,loyaltyBadge} from './commerce-visuals.js?v=merch-2'
-import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=workshop-metrics-1'
-import {renderWorkshopOverview} from './workshop-overview.js?v=workshop-metrics-1'
+import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=workshop-metrics-2'
+import {renderWorkshopOverview} from './workshop-overview.js?v=workshop-metrics-2'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 import {commerceProducts} from './commerce-catalog.js'
-import { rankFor } from './workshop-model.js?v=activity-1'
 import { workshopCopy } from './workshop-copy.js?v=profile-gallery-1'
 
 export const sections=[['workshop','icon-home'],['cloud','folder'],['achievements','icon-trophy'],['rankings','icon-trophy'],['favorites','icon-heart'],['notifications','icon-bell'],['storage','icon-cloud'],['settings','settings'],['security','icon-shield'],['cosmetics','icon-heart']]
@@ -45,7 +44,7 @@ export function workshopSummary(local,remote){
 }
 export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bureauPanel,adminPanel,revokeOthers,profileData,saveProfile,uploadMedia,removeMedia,activityData,publicCard,publicLoaded,publicBuilds=[],loadPublic,publishPublic,unpublishPublic,publishBuild,unpublishBuild,refreshActivity,verifyAchievement,verificationResult,readActivity,toggleFavorite,openFavorite,logout,createBuild,openLocal,fetchCloud,signal,previewsEnabled,noticeNodes=[]}){
  const t={...workshopCopy[lang],...extra[lang],admin:lang==='ru'?'Администрирование':'Administration',revokeOthers:lang==='ru'?'Завершить остальные сессии':'End other sessions'},summary=workshopSummary(local,remote)
- const profile=profileData?.profile,progress=profileData?.progress,rank=progress?rankFor(progress.xp):null
+ const profile=profileData?.profile,progress=profileData?.progress
  const layout=el('div','workshop-layout cosmetic-'+(profile?.background??'default')),nav=el('nav','workshop-nav'),content=el('div','workshop-content')
  applySignature(layout,profile?.background)
  const ru=lang==='ru',sidebar=el('aside','workshop-sidebar'),sideHead=el('div','workshop-sidebar-heading'),sideFoot=el('div','workshop-sidebar-footer');sideHead.append(el('span','workshop-sidebar-kicker','BRICKLAB CLOUD'),el('strong',null,ru?'Личный кабинет':'Workspace'));nav.setAttribute('aria-label',t.workshop)

@@ -27,4 +27,8 @@ DO $$ BEGIN
  IF (SELECT count(*) FROM bricklab.workshop_awards WHERE award='custom-test-award')<>1 THEN RAISE EXCEPTION 'missing award'; END IF;
  IF EXISTS(SELECT 1 FROM bricklab.achievement_rankings(0) WHERE "displayName"='Achievement user') THEN RAISE EXCEPTION 'private user in rankings'; END IF;
 END $$;
+DO $ BEGIN
+ IF bricklab.valid_workshop_metric_layout('["xp","xp"]'::jsonb) OR bricklab.valid_workshop_metric_layout('["email"]'::jsonb) OR bricklab.valid_workshop_metric_layout('{}'::jsonb) THEN RAISE EXCEPTION 'invalid metric layout accepted'; END IF;
+ IF NOT bricklab.valid_workshop_metric_layout('[]'::jsonb) OR NOT bricklab.valid_workshop_metric_layout('["rank","likes"]'::jsonb) THEN RAISE EXCEPTION 'valid metric layout rejected'; END IF;
+END $;
 ROLLBACK;

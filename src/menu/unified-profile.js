@@ -1,4 +1,4 @@
-import {renderMetricGrid} from './workshop-metrics.js?v=workshop-metrics-1'
+import {renderMetricGrid} from './workshop-metrics.js?v=workshop-metrics-2'
 import {profileHref} from './profile-route.js'
 import {applyAchievementAppearance} from './achievement-rewards.js'
 import {achievementById} from './achievement-catalog.js'
