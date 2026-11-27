@@ -14,7 +14,7 @@ async function open(kind,doc){
  if(busy)return;if(failed&&!confirm('Локальное сохранение не удалось. Перейти без сохранения?'))return;
  let next;try{next=doc??read(kind)}catch{$('lab-status').textContent='Не удалось прочитать локальный проект. Открой резервный файл.';return}
  controller?.abort();controller=new AbortController();const signal=controller.signal;
- mode=kind;active=next;failed=false;worldAction=null;
+ mode=kind;active=next;failed=false;worldAction=null;$('lab-editor').dataset.labMode=kind;
  $('lab-model').setAttribute('aria-pressed',String(kind==='model'));$('lab-world').setAttribute('aria-pressed',String(kind==='world'));$('world-panel').hidden=kind!=='world';$('world-status').textContent='';
  setBusy(true);$('lab-status').textContent='Загрузка редактора…';$('lab-editor').replaceChildren();
  try{
@@ -22,7 +22,7 @@ async function open(kind,doc){
  projectActions:{newBuild:()=>void reset(),copy:doc=>downloadProject({...doc,name:(doc.name+' (копия)').slice(0,120)}),home:()=>{}},
  onWorldBuild:fn=>{worldAction=fn}});
  if(!signal.aborted){$('lab-status').textContent='Локальный редактор · '+(kind==='world'?'World':'механика');if(doc)save(kind,active)}
- }catch(e){console.error(e);$('lab-status').textContent='Не удалось открыть редактор. Проверь WebGL и файлы деталей.'}
+ }catch(e){controller.abort();active=null;worldAction=null;setBusy(false);console.error(e);$('lab-status').textContent='Не удалось открыть редактор. Проверь WebGL и файлы деталей.'}
  finally{if(!signal.aborted)setBusy(false)}
 }
 async function reset(){if(!busy&&confirm('Заменить текущий локальный проект? Скачай его заранее, если он нужен.'))await open(mode,fresh(mode))}

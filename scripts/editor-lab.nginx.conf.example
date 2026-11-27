@@ -1,0 +1,9 @@
+# Include ONLY inside the existing preview.bricklab-3d.ru HTTPS server block.
+# Remove old conflicting locations from that server block. Keep TLS settings.
+root /var/www/bricklab-editor-lab/current;
+index index.html;
+location = / { try_files /index.html =404; add_header Cache-Control "no-store" always; }
+location = /index.html { try_files $uri =404; add_header Cache-Control "no-store" always; }
+location ~ ^/(src|assets|catalog|vendor|examples)/ { try_files $uri =404; add_header Cache-Control "no-cache" always; }
+location / { return 404; }
+# No proxy_pass to the production API or Telegram control service.
