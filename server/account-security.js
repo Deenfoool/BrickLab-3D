@@ -1,9 +1,10 @@
+import {achievementById} from '../src/menu/achievement-catalog.js'
 import {randomBytes,randomInt,createHash,createHmac} from 'node:crypto'
 import {hashPassword} from './auth.js'
 import {ProjectError} from './projects.js'
 const digest=s=>createHash('sha256').update(s).digest('hex')
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const adminActions=['block','unblock','revoke_sessions','hide_comment','dismiss_reports','dismiss_build_reports','unpublish_build','unpublish_profile']
+const adminActions=['block','unblock','revoke_sessions','hide_comment','dismiss_reports','dismiss_build_reports','unpublish_build','unpublish_profile','confirm_bug','grant_achievement']
 function emailOf(value){
  const email=typeof value==='string'?value.trim().toLowerCase():''
  if(!/^[^\s@\u0000-\u001f\u007f]+@[^\s@\u0000-\u001f\u007f]+\.[^\s@\u0000-\u001f\u007f]+$/.test(email)||email.length>254||/[\ud800-\udfff]/u.test(email))throw new ProjectError(400,'invalid_credentials')
@@ -60,7 +61,9 @@ export function createAccountSecurityHandler({store,origin,registrationEnabled=f
      if(req.method!=='POST'||path!=='/api/admin/action')throw new ProjectError(405,'method_not_allowed')
      const d=await body(req)
      if(!adminActions.includes(d.action)||!uuid.test(d.id)||typeof d.reason!=='string'||!d.reason.trim()||d.reason.length>500||/[\u0000-\u001f\u007f]/.test(d.reason)||/[\ud800-\udfff]/u.test(d.reason))throw new ProjectError(400,'invalid_admin_action')
-     await store.adminAction(user.id,d.action,d.id,d.reason.trim());reply(res,200,{ok:true});return true
+     if(d.action==='grant_achievement'){const a=achievementById(d.award);if(!a||a.metric!==null||d.reason.trim().length>450)throw new ProjectError(400,'invalid_admin_action');await store.adminGrantAchievement(user.id,d.id,d.award,d.reason.trim())}
+     else if(d.action==='confirm_bug')await store.adminConfirmBug(user.id,d.id,d.reason.trim())
+     else await store.adminAction(user.id,d.action,d.id,d.reason.trim());reply(res,200,{ok:true});return true
     }
     if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
     const purpose=path.includes('reset')?'reset':'register',finish=path.endsWith('/verify')||path.endsWith('/reset-confirm')

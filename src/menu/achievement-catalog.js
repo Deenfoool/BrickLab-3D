@@ -556,8 +556,8 @@ export const achievements=Object.freeze([
   "icon": "icon-trophy",
   "ru": "Основатель",
   "en": "Founder",
-  "descRu": "В числе 100 самых ранних существующих аккаунтов на момент запуска системы.",
-  "descEn": "Among the first 100 existing accounts when the system launches."
+  "descRu": "Войти в число первых 100 зарегистрированных пользователей (с учётом сохранившихся аккаунтов до запуска наград).",
+  "descEn": "Join the first 100 registered users (existing accounts count at launch)."
  },
  {
   "id": "academy",
@@ -705,8 +705,8 @@ export const achievements=Object.freeze([
  {
   "id": "bugs",
   "cat": "community",
-  "metric": null,
-  "target": 1,
+  "metric": "bugs",
+  "target": 10,
   "xp": 250,
   "rarity": "epic",
   "icon": "icon-bug",
@@ -784,11 +784,13 @@ export const achievements=Object.freeze([
 export const achievementById=id=>achievements.find(a=>a.id===id)
 export const achievementName=(id,lang)=>achievementById(id)?.[lang==='ru'?'ru':'en']??id
 export const activeAchievements=achievements.filter(a=>a.metric!==null)
+export const xpForLevel=level=>10*(level-1)+3*(level-1)**2
+export function levelForXp(xp){let level=1;while(level<50&&xp>=xpForLevel(level+1))level++;return level}
 export function achievementProgress(awards,metrics={},showcase=null,rarity={}){
  const unique=new Map()
  for(const a of awards??[])if(achievementById(a?.award)&&!unique.has(a.award))unique.set(a.award,a)
  const earned=[...unique.values()]
  const xp=earned.reduce((sum,a)=>sum+achievementById(a.award).xp,0)
- const level=Math.min(50,1+Math.floor(Math.sqrt(xp/5)))
- return {xp,awards:earned,metrics,showcase,rarity,level,nextXp:level===50?null:5*level**2,levelStart:5*(level-1)**2}
+ const level=levelForXp(xp)
+ return {xp,awards:earned,metrics,showcase,rarity,level,nextXp:level===50?null:xpForLevel(level+1),levelStart:xpForLevel(level)}
 }

@@ -12,7 +12,7 @@ test('catalog identifiers, thresholds and localization are consistent',()=>{
 })
 test('experience deduplicates awards and ignores fabricated IDs and client XP',()=>{
  const p=achievementProgress([{award:'firstCloudSave',xp:999999},{award:'firstCloudSave'},{award:'parts100'},{award:'fake',xp:99999}])
- assert.equal(p.xp,55);assert.equal(p.awards.length,2);assert.equal(p.level,4)
+ assert.equal(p.xp,55);assert.equal(p.awards.length,2);assert.equal(p.level,3)
 })
 test('showcase payload limits and whitelists IDs',()=>{
  assert.deepEqual(validateProfile({bio:'',cover:'amber',showcase:['firstCloudSave']}).showcase,['firstCloudSave'])

@@ -1,3 +1,4 @@
+import {achievements} from './achievement-catalog.js'
 
 import {AuthError,authOriginAllowed} from './auth-client.js?v=security-1'
 const labels={
@@ -10,7 +11,7 @@ export function adminTarget(value){
 }
 function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
 export function renderAdminPanel({lang='ru',signal,initialMode='overview',initialQuery='',fetcher=globalThis.fetch,location=globalThis.location}){
- const t={...(labels[lang]??labels.ru),bugs:lang==='ru'?'Баг-репорты':'Bug reports',bugSearch:lang==='ru'?'ID отчёта':'Report ID'},root=el('section','admin-panel'),notice=el('p','account-muted'),tabs=el('div','community-actions'),content=el('div','admin-content'),more=el('button','workspace-action',t.more)
+ const t={...(labels[lang]??labels.ru),bugs:lang==='ru'?'Баг-репорты':'Bug reports',bugSearch:lang==='ru'?'ID отчёта':'Report ID',grant_achievement:lang==='ru'?'Выдать достижение':'Grant achievement',confirm_bug:lang==='ru'?'Подтвердить баг':'Confirm bug',confirmed:lang==='ru'?'Подтверждён':'Confirmed'},root=el('section','admin-panel'),notice=el('p','account-muted'),tabs=el('div','community-actions'),content=el('div','admin-content'),more=el('button','workspace-action',t.more)
  notice.setAttribute('role','status');more.type='button';more.hidden=true
  const modes=['overview','users','reports','build-reports','bugs','content','audit'];let mode=modes.includes(initialMode)?initialMode:'overview',offset=0,q=uuid.test(initialQuery)?initialQuery:'',busy=false,serial=0
  const controls=new Map()
@@ -21,14 +22,14 @@ export function renderAdminPanel({lang='ru',signal,initialMode='overview',initia
  }
  function button(label,fn){const b=el('button','workspace-action',label);b.type='button';b.onclick=fn;return b}
  const error=e=>{if(!signal.aborted)notice.textContent=t[e.code]??t.failed}
- async function action(key,id,reasonValue){
+ async function action(key,id,reasonValue,award){
   if(busy||signal.aborted)return
   const reason=reasonValue??prompt(t.reason)
   if(!reason?.trim())return
   if(reason.trim().length>500){notice.textContent=t.invalid_admin_action;return}
   if(!confirm(t.confirm+' '+t[key]))return
   busy=true
-  try{await call('/action','POST',{action:key,id,reason:reason.trim()});await load(true);if(!signal.aborted)notice.textContent=t.success}
+  try{await call('/action','POST',{action:key,id,reason:reason.trim(),...(award?{award}:{})});await load(true);if(!signal.aborted)notice.textContent=t.success}
   catch(e){error(e)}finally{busy=false}
  }
  function item(r){
@@ -36,9 +37,10 @@ export function renderAdminPanel({lang='ru',signal,initialMode='overview',initia
   if(mode==='users'){
    row.append(el('strong',null,r.displayName),el('p','account-muted',r.email),el('p','account-muted',r.id),el('p',null,(r.admin?t.admin+' · ':'')+(r.verifiedAt?t.verified:t.unverified)+' · '+(r.blockedAt?t.blocked:t.active)))
    if(r.publicId&&uuid.test(r.publicId)){const a=el('a','workspace-action',lang==='ru'?'Публичный профиль':'Public profile');a.href='#community/profile/'+r.publicId;row.append(a)}
+   if(!r.blockedAt){const select=el('select');select.setAttribute('aria-label',t.grant_achievement);for(const a of achievements.filter(a=>a.metric===null)){const option=el('option',null,a[lang==='ru'?'ru':'en']);option.value=a.id;select.append(option)}row.append(select,button(t.grant_achievement,()=>action('grant_achievement',r.id,undefined,select.value)))}
    if(!r.admin)row.append(button(t[r.blockedAt?'unblock':'block'],()=>action(r.blockedAt?'unblock':'block',r.id)),button(t.revoke_sessions,()=>action('revoke_sessions',r.id)))
   }else if(mode==='bugs'){
-   row.append(el('strong',null,r.area),el('p','account-muted',r.id+' · '+new Date(r.createdAt).toLocaleString(lang)),el('p','community-comment-text',r.summary))
+   row.append(el('strong',null,r.area),el('p','account-muted',r.id+' · '+new Date(r.createdAt).toLocaleString(lang)),el('p','community-comment-text',r.summary),r.confirmedAt?el('span','account-muted',t.confirmed):button(t.confirm_bug,()=>action('confirm_bug',r.id)))
   }else if(mode==='reports'){
    const link=el('a','community-author',t.comment+' · '+r.author);link.href='#community/build/'+r.buildId
    row.append(link,el('p','community-comment-text',r.body??t.removed),el('p','account-muted',r.reports+' · '+r.reasons.map(x=>t[x]??x).join(', ')),button(t.hide_comment,()=>action('hide_comment',r.id)),button(t.dismiss_reports,()=>action('dismiss_reports',r.id)))

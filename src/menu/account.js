@@ -1,4 +1,4 @@
-import {renderAdminPanel} from './admin-panel.js?v=events-1'
+import {renderAdminPanel} from './admin-panel.js?v=achievements-v2'
 import {renderBureauPanel} from './bureau-panel.js?v=profile-gallery-1'
 import { createAuthClient } from './auth-client.js?v=live-polish-1'
 
@@ -44,7 +44,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
  let workshopController=null,bureauController=null,bureauSelection={id:null},adminController=null,emailDraft='',securityFeedback=''
  let adminRoute='',notificationError=false,bellRefreshing=false,bellRendered=false
  const t=()=>copy[lang]
- function publishNotifications(){onNotifications({lang,signedIn:Boolean(user),checked,busy,items:activityData?.notifications??null,error:notificationError})}
+ function publishNotifications(){onNotifications({lang,signedIn:Boolean(user),checked,busy,items:activityData?.notifications??null,userId:user?.id??null,error:notificationError})}
  function label(){const e=link.querySelector('[data-account-label]');e.textContent=user?t().account:t().login;link.title=e.textContent;link.setAttribute('aria-label',e.textContent)}
  function message(code){const p=node('p','account-notice',t()[code]??t().unknown);p.setAttribute('role','status');return p}
  function localLink(){const a=node('a','workspace-action',t().local);a.href='#home';return a}
@@ -67,7 +67,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
        user=next;identityChanged=true;remote=[];history=[];historyId=null;profileData=null;activityData=null;publicCard=null;publicLoaded=false;publicBuilds=[];bureauSelection={id:null};feedback='';error=''
        if(user){remote=await cloud.list();profileData=await profiles.get()}
      }
-     if(user)activityData=mark&&!identityChanged?await activityApi.read():await activityApi.get()
+     if(user){if(!identityChanged&&!mark)profileData=await profiles.get();activityData=mark&&!identityChanged?await activityApi.read():await activityApi.get()}
      else activityData=null
    }catch(e){
      notificationError=true

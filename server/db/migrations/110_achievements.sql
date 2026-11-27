@@ -18,6 +18,24 @@ CREATE POLICY achievement_showcase_owner ON bricklab.achievement_showcases FOR S
 INSERT INTO bricklab.workshop_awards(user_id,award)
  SELECT id,'founder' FROM (SELECT id FROM bricklab.users ORDER BY created_at,id LIMIT 100) early
  ON CONFLICT DO NOTHING;
+-- Keep allocating founder slots until the first 100 registrations.
+CREATE TABLE bricklab.achievement_founder_slots (
+ singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton), used integer NOT NULL CHECK(used BETWEEN 0 AND 100)
+);
+INSERT INTO bricklab.achievement_founder_slots(used) SELECT count(*)::int FROM bricklab.workshop_awards WHERE award='founder';
+REVOKE ALL ON bricklab.achievement_founder_slots FROM PUBLIC,bricklab_app;
+CREATE FUNCTION bricklab.award_founder_on_registration() RETURNS trigger
+ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $
+ BEGIN
+ UPDATE bricklab.achievement_founder_slots SET used=used+1 WHERE singleton AND used<100;
+ IF FOUND THEN INSERT INTO bricklab.workshop_awards(user_id,award) VALUES(NEW.id,'founder') ON CONFLICT DO NOTHING; END IF;
+ RETURN NEW;
+ END; $;
+REVOKE ALL ON FUNCTION bricklab.award_founder_on_registration() FROM PUBLIC,bricklab_app;
+CREATE TRIGGER achievement_founder_registration AFTER INSERT ON bricklab.users FOR EACH ROW EXECUTE FUNCTION bricklab.award_founder_on_registration();
+ALTER TABLE bricklab.operator_bug_reports ADD COLUMN confirmed_at timestamptz;
+ALTER TABLE bricklab.admin_audit DROP CONSTRAINT admin_audit_action_check;
+ALTER TABLE bricklab.admin_audit ADD CONSTRAINT admin_audit_action_check CHECK(action IN ('block','unblock','revoke_sessions','hide_comment','dismiss_reports','unpublish_build','unpublish_profile','dismiss_build_reports','confirm_bug','grant_achievement'));
 -- Model size is structural document evidence, NOT proof of physics or authorship.
 CREATE FUNCTION bricklab.refresh_achievements() RETURNS jsonb
  LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
@@ -40,6 +58,7 @@ CREATE FUNCTION bricklab.refresh_achievements() RETURNS jsonb
  'publications',(SELECT count(DISTINCT md5((b.document->'parts')::text||(b.document->'connections')::text)) FROM bricklab.public_builds b JOIN bricklab.public_profiles p ON p.public_id=b.author_id WHERE p.user_id=uid AND b.part_count>0),
  'likes',(SELECT count(DISTINCT l.user_id) FROM bricklab.community_likes l JOIN bricklab.public_builds b ON b.public_id=l.build_id JOIN bricklab.public_profiles p ON p.public_id=b.author_id JOIN bricklab.users u ON u.id=l.user_id WHERE p.user_id=uid AND l.user_id<>uid AND u.email_verified_at IS NOT NULL AND u.blocked_at IS NULL),
  'followers',(SELECT count(*) FROM bricklab.community_follows f JOIN bricklab.public_profiles p ON p.public_id=f.author_id JOIN bricklab.users u ON u.id=f.user_id WHERE p.user_id=uid AND f.user_id<>uid AND u.email_verified_at IS NOT NULL AND u.blocked_at IS NULL),
+ 'bugs',(SELECT count(*) FROM bricklab.operator_bug_reports WHERE user_id=uid AND confirmed_at IS NOT NULL),
  'age',(SELECT greatest(0,floor(extract(epoch FROM now()-created_at)/86400))::int FROM bricklab.users WHERE id=uid),
  'founder',CASE WHEN EXISTS(SELECT 1 FROM bricklab.workshop_awards WHERE user_id=uid AND award='founder') THEN 1 ELSE 0 END)
  INTO m FROM sizes;
@@ -86,6 +105,8 @@ CREATE FUNCTION bricklab.refresh_achievements() RETURNS jsonb
  ('age180','age',180),
  ('veteran','age',365),
  ('age730','age',730)
+,
+ ('bugs','bugs',10)
  ) v(award,metric,target) WHERE coalesce((m->>v.metric)::numeric,0)>=v.target
  ON CONFLICT DO NOTHING;
  RETURN m;
@@ -124,3 +145,41 @@ CREATE FUNCTION bricklab.achievement_rarity() RETURNS jsonb
  $$;
 REVOKE ALL ON FUNCTION bricklab.achievement_rarity() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION bricklab.achievement_rarity() TO bricklab_app;
+
+CREATE FUNCTION bricklab.admin_grant_achievement(p_target uuid,p_award text,p_reason text) RETURNS boolean
+ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
+ DECLARE uid uuid; inserted integer;
+ BEGIN
+ uid:=nullif(current_setting('bricklab.user_id',true),'')::uuid;
+ IF NOT bricklab.is_admin() THEN RAISE EXCEPTION 'forbidden' USING ERRCODE='42501'; END IF;
+ IF p_award IS NULL OR p_award NOT IN ('academy','instruction','instruction5','instruction10','gears','firstDrive','engine','gearbox','tracks','suspension','belts','bureau','beta','firstEngineer','worldPioneer','winter') OR p_reason IS NULL OR length(btrim(p_reason)) NOT BETWEEN 1 AND 450 THEN RETURN false; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_target::text,312042));
+ IF NOT EXISTS(SELECT 1 FROM bricklab.users WHERE id=p_target AND blocked_at IS NULL) THEN RETURN false; END IF;
+ INSERT INTO bricklab.workshop_awards(user_id,award) VALUES(p_target,p_award) ON CONFLICT DO NOTHING;
+ GET DIAGNOSTICS inserted=ROW_COUNT;
+ IF inserted=0 THEN RETURN false; END IF;
+ INSERT INTO bricklab.admin_audit(actor_id,action,target_id,reason) VALUES(uid,'grant_achievement',p_target,p_award||': '||btrim(p_reason));
+ RETURN true;
+ END; $$;
+REVOKE ALL ON FUNCTION bricklab.admin_grant_achievement(uuid,text,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION bricklab.admin_grant_achievement(uuid,text,text) TO bricklab_app;
+CREATE FUNCTION bricklab.admin_confirm_bug(p_report uuid,p_reason text) RETURNS boolean
+ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
+ DECLARE uid uuid; target uuid;
+ BEGIN
+ uid:=nullif(current_setting('bricklab.user_id',true),'')::uuid;
+ IF NOT bricklab.is_admin() THEN RAISE EXCEPTION 'forbidden' USING ERRCODE='42501'; END IF;
+ IF p_reason IS NULL OR length(btrim(p_reason)) NOT BETWEEN 1 AND 500 THEN RETURN false; END IF;
+ SELECT user_id INTO target FROM bricklab.operator_bug_reports WHERE id=p_report;
+ IF target IS NULL THEN RETURN false; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(target::text,312042));
+ UPDATE bricklab.operator_bug_reports SET confirmed_at=now() WHERE id=p_report AND confirmed_at IS NULL;
+ IF NOT FOUND THEN RETURN false; END IF;
+ IF (SELECT count(*) FROM bricklab.operator_bug_reports WHERE user_id=target AND confirmed_at IS NOT NULL)>=10 THEN
+ INSERT INTO bricklab.workshop_awards(user_id,award) VALUES(target,'bugs') ON CONFLICT DO NOTHING;
+ END IF;
+ INSERT INTO bricklab.admin_audit(actor_id,action,target_id,reason) VALUES(uid,'confirm_bug',p_report,btrim(p_reason));
+ RETURN true;
+ END; $$;
+REVOKE ALL ON FUNCTION bricklab.admin_confirm_bug(uuid,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION bricklab.admin_confirm_bug(uuid,text) TO bricklab_app;
