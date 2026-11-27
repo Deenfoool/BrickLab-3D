@@ -1,3 +1,5 @@
+import {levelForXp} from './achievement-catalog.js'
+import {achievementRank} from './achievement-hall.js'
 import {commerceBadge} from './commerce-visuals.js?v=merch-2'
 import {renderUnifiedHero,renderPortfolio} from './unified-profile.js?v=achievements-v3'
 import {productById} from './commerce-catalog.js'
@@ -351,7 +353,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
     const workshop=el('section','unified-public-profile fullscreen-workshop cosmetic-'+theme);applySignature(workshop,profile.backgroundTheme)
     const actions=[link(t.back,'#community'),reaction('follow',profile.id,profile.followers,profile.id===social.ownId)]
     if(profile.id===social.ownId)actions.push(link(language==='ru'?'Вернуться в мастерскую':'Back to workshop','#account','workspace-action'))
-    workshop.append(renderUnifiedHero({lang:language,identity:{...profile,bio:'',subtitle:language==='ru'?'Конструктор BrickLab':'BrickLab builder'},actions}))
+    workshop.append(renderUnifiedHero({lang:language,identity:{...profile,bio:'',subtitle:Number.isSafeInteger(profile.achievementXp)?(language==='ru'?'Уровень ':'Level ')+levelForXp(profile.achievementXp)+' · '+achievementRank(levelForXp(profile.achievementXp),language):language==='ru'?'Конструктор BrickLab':'BrickLab builder'},actions}))
     workshop.append(renderPortfolio({lang:language,profile,builds,onOpen:b=>void showViewer(b),makeBuildCard:b=>buildCard(b),makeFeaturedArt:b=>artFor(b,true)}));root.replaceChildren(status,workshop)
    }
   }catch(e){fail(e)}

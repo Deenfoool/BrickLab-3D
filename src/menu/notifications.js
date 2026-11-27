@@ -17,7 +17,7 @@ export function createNotificationPopover({root,trigger,count,panel,onRefresh,on
  function clearToast(){if(timer!==null)clearTimeout(timer);timer=null;toast?.remove();toast=null}
  function chime(){
   try{
-   if(localStorage.getItem('bricklab.sound')==='off')return
+   if(localStorage.getItem('bricklab.editor.sound')==='off')return
    const Audio=globalThis.AudioContext||globalThis.webkitAudioContext;if(!Audio)return
    const ctx=new Audio();if(ctx.state!=='running'){ctx.close().catch(()=>{});return}
    const gain=ctx.createGain();gain.connect(ctx.destination);const now=ctx.currentTime
@@ -30,15 +30,15 @@ export function createNotificationPopover({root,trigger,count,panel,onRefresh,on
   const owner=next.signedIn?next.userId:null
   if(owner!==seenOwner){seenOwner=owner;initialized=false;seen=new Set();clearToast()}
   if(!owner||!Array.isArray(next.items)||next.error)return
-  const valid=next.items.filter(n=>achievementById(n?.award))
+  const valid=next.items.filter(n=>achievementById(n?.award,n?.definition?[n.definition]:[]))
   const fresh=initialized?valid.filter(n=>!seen.has(n.award)&&!n.read):[]
   valid.forEach(n=>seen.add(n.award));initialized=true
   if(!fresh.length)return
   clearToast()
-  const a=achievementById(fresh[0].award),ru=next.lang==='ru'
+  const a=achievementById(fresh[0].award,fresh[0].definition?[fresh[0].definition]:[]),ru=next.lang==='ru'
   toast=el('aside','achievement-unlock');toast.dataset.rarity=a.rarity;toast.setAttribute('role','status')
   const medal=el('span','achievement-unlock-medal');medal.append(icon(a.icon))
-  const copy=el('div','achievement-unlock-copy');copy.append(el('small',null,ru?'ДОСТИЖЕНИЕ ПОЛУЧЕНО':'ACHIEVEMENT UNLOCKED'),el('strong',null,achievementName(a.id,next.lang)),el('span',null,'+'+fresh.reduce((sum,n)=>sum+achievementById(n.award).xp,0)+' XP'+(fresh.length>1?' · +'+(fresh.length-1)+(ru?' наград':' more'):'')))
+  const copy=el('div','achievement-unlock-copy');copy.append(el('small',null,ru?'ДОСТИЖЕНИЕ ПОЛУЧЕНО':'ACHIEVEMENT UNLOCKED'),el('strong',null,achievementName(a.id,next.lang,[a])),el('span',null,'+'+fresh.reduce((sum,n)=>sum+achievementById(n.award,n.definition?[n.definition]:[]).xp,0)+' XP'+(fresh.length>1?' · +'+(fresh.length-1)+(ru?' наград':' more'):'')))
   const dismiss=button('×',clearToast,'achievement-unlock-close');dismiss.setAttribute('aria-label',ru?'Закрыть':'Dismiss')
   toast.append(medal,copy,dismiss);document.body.append(toast);chime();timer=setTimeout(clearToast,6500)
  }
@@ -62,7 +62,7 @@ export function createNotificationPopover({root,trigger,count,panel,onRefresh,on
   else for(const n of recent){
    const row=el('article','notification-item'+(!n.read?' unread':'')),body=el('div','notification-body')
    const badge=el('span','notification-symbol');badge.append(icon('icon-trophy'))
-   body.append(el('strong',null,t.award+': '+achievementName(n.award,state.lang)))
+   body.append(el('strong',null,t.award+': '+achievementName(n.award,state.lang,n.definition?[n.definition]:[])))
    const date=new Date(n.at),time=el('time',null,Number.isFinite(date.getTime())?new Intl.DateTimeFormat(state.lang,{dateStyle:'medium',timeStyle:'short'}).format(date):'')
    if(Number.isFinite(date.getTime()))time.dateTime=date.toISOString()
    body.append(time,el('small',null,n.read?t.read:t.unread));row.append(badge,body)

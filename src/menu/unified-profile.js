@@ -1,3 +1,4 @@
+import {applyAchievementAppearance} from './achievement-rewards.js'
 import {achievementById} from './achievement-catalog.js'
 import {commerceBadge} from './commerce-visuals.js?v=merch-2'
 import {applySignature,themeBadge,themePlate,mountThemeCover} from './profile-signature.js?v=signature-art-1'
@@ -24,7 +25,7 @@ export function renderUnifiedHero({lang,identity,owner=false,actions=[],metrics=
  const plate=themePlate(theme);if(plate)cover.append(plate)
  const avatarUrl=owner?ownMedia('avatar',identity.avatarUrl):publicImage(identity.id,'avatar',identity.avatarUrl),coverUrl=owner?ownMedia('cover',identity.coverUrl):publicImage(identity.id,'cover',identity.coverUrl)
  if(coverUrl){const img=ui('img','profile-cover-image');img.src=coverUrl;img.alt='';cover.prepend(img)}
- mountThemeCover(cover,theme,{custom:!!coverUrl});applySignature(hero,theme)
+ mountThemeCover(cover,theme,{custom:!!coverUrl});applySignature(hero,theme);applyAchievementAppearance(hero,identity.achievementStyle)
  const body=ui('div','workshop-hero-inner'),person=ui('div','workshop-identity'),avatar=ui('div','workshop-avatar',Array.from(identity.displayName||'?').slice(0,2).join('').toUpperCase()),name=ui('div')
  if(avatarUrl){const img=ui('img','profile-avatar-image');img.src=avatarUrl;img.alt='';avatar.replaceChildren(img)}
  name.append(ui('h2',null,identity.displayName));if(identity.username)name.append(ui('p','account-muted','@'+identity.username));if(identity.subtitle)name.append(ui('p','account-muted',identity.subtitle));const badge=themeBadge(theme,lang);if(badge)name.append(badge);if(identity.plus===true)name.append(commerceBadge('plus'));const support=productById(identity.supportBadge);if(support?.kind==='badge')name.append(commerceBadge(support.id))
@@ -69,9 +70,9 @@ export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeB
    for(const group of p.collections){const box=ui('section','portfolio-collection'),grid=ui('div','portfolio-collection-links');box.append(ui('h3',null,group.title));for(const id of group.ids){const b=byId.get(id);if(b)grid.append(anchor(b.title,'#community/build/'+b.id))}box.append(grid);c.append(box)}
   }else if(key==='awards'){
    const awards=profile?.awards??[]
-   for(const id of awards){const a=achievementById(id);if(!a)continue;const badge=ui('div','portfolio-earned rarity-'+a.rarity);badge.append(icon(a.icon),ui('strong',null,a[lang==='ru'?'ru':'en']),ui('span','account-muted',a.xp+' XP'));c.append(badge)}
+   for(const id of awards){const a=achievementById(id,profile?.achievementDefinitions??[]);if(!a)continue;const badge=ui('div','portfolio-earned rarity-'+a.rarity);badge.append(icon(a.icon),ui('strong',null,a[lang==='ru'?'ru':'en']),ui('span','account-muted',a.xp+' XP'));c.append(badge)}
    if(awards.includes('firstBuilder')){const badge=ui('div','portfolio-earned');badge.append(icon('icon-trophy'),ui('strong',null,'First Builder'),ui('span','account-muted',lang==='ru'?'Первая подарочная сборка':'First gifted build'));c.append(badge)}
-   if(!awards.some(a=>achievementById(a)||a==='firstBuilder'))c.append(ui('p','account-muted',t.noAwards))
+   if(!awards.some(a=>achievementById(a,profile?.achievementDefinitions??[])||a==='firstBuilder'))c.append(ui('p','account-muted',t.noAwards))
   }else if(key==='activity'){
    const days=valid.filter(b=>typeof b.publishedAt==='string').map(b=>({day:b.publishedAt.slice(0,10),count:1}))
    c.append(activityCalendar(lang,days,{publicOnly:true}))

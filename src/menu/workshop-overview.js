@@ -62,8 +62,8 @@ export function renderWorkshopOverview({lang,user,local,remote,busy,signal,previ
  const events=activityData?.events??[]
  if(!events.length)activity.append(node('p','account-muted',activityData?t.noActivity:t.loading))
  for(const e of events.slice(0,4)){const row=node('div','workshop-overview-row'),label=node('div');label.append(node('strong',null,e.name),node('small','account-muted',t.saved+' '+e.revision+' · '+date(e.at)));row.append(icon('icon-cloud'),label);activity.append(row)}
- const recentAwards=(progress?.awards??[]).filter(a=>achievementById(a.award)).slice(0,4)
- if(recentAwards.length){for(const a of recentAwards){const meta=achievementById(a.award),row=node('div','workshop-overview-row'),label=node('div');label.append(node('strong',null,achievementName(a.award,lang)),node('small','account-muted',meta.xp+' XP'));row.append(icon(meta.icon),label);awards.append(row)}}else{const row=node('div','workshop-overview-row');row.append(icon('icon-trophy'),node('small','account-muted',progress?t.notEarned:t.loading));awards.append(row)}
+ const recentAwards=(progress?.awards??[]).filter(a=>achievementById(a.award,progress?.definitions??[])).slice(-4).reverse()
+ if(recentAwards.length){for(const a of recentAwards){const meta=achievementById(a.award,progress?.definitions??[]),row=node('div','workshop-overview-row'),label=node('div');label.append(node('strong',null,achievementName(a.award,lang,progress?.definitions??[])),node('small','account-muted',meta.xp+' XP'));row.append(icon(meta.icon),label);awards.append(row)}}else{const row=node('div','workshop-overview-row');row.append(icon('icon-trophy'),node('small','account-muted',progress?t.notEarned:t.loading));awards.append(row)}
  lower.append(activity,awards);root.append(lower)
  if(jobs.length){
   let started=false,observer
