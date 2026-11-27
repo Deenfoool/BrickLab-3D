@@ -30,4 +30,10 @@ class Jobs(unittest.TestCase):
             self.assertEqual(result,{"error":"test_required"})
             self.assertEqual(m.dispatch({"action":"deploy","branch":"feature/control-os","sha":"a"*40,"id":"b"*32}),{"error":"duplicate"})
 
+    def test_worker_expected_sha(self):
+        src=pathlib.Path(m.__file__).read_text()
+        self.assertIn('LIB+"/bricklab-control-release.sh",job["sha"]',src)
+        release=(pathlib.Path(m.__file__).parent/"bricklab-control-release.sh").read_text()
+        self.assertIn('test "$target" = "$1"',release)
+
 if __name__=="__main__": unittest.main()

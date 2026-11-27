@@ -75,7 +75,7 @@ def current():
 
 def branches():
     # Only the configured origin is queried. Do not fetch arbitrary URLs.
-    raw=run("git","ls-remote","--heads","origin",timeout=15)
+    raw=run("git","ls-remote","--heads","origin",timeout=7)
     result=[]
     for line in raw.splitlines():
         fields=line.split("\t")
@@ -169,7 +169,7 @@ def worker():
         args=["/bin/bash",LIB+"/deploy-community-vps.sh",job["sha"],"--test-only",job["branch"]]
     else:
         # The existing release script consumes approval and rechecks the exact remote SHA.
-        args=["/bin/bash",LIB+"/bricklab-control-release.sh"]
+        args=["/bin/bash",LIB+"/bricklab-control-release.sh",job["sha"]]
     try:
         with (STATE/"last.log").open("wb") as log:
             # Logs stay root-only: candidate code output must not enter Telegram or the web.
@@ -187,9 +187,9 @@ def worker():
                     stage=re.fullmatch(r"=== ([A-Z AND]+) ===",text)
                     count=re.fullmatch(r"# fail (\d{1,6})",text)
                     # Allow only fixed stage names and numeric TAP counters to leave the root log.
-                    if stage and stage[1] in STAGES or count:
+                    if (stage and stage[1] in STAGES) or count:
                         with lock():
-                            if stage: job["stage"]=STAGES[stage[1]]
+                            if stage and stage[1] in STAGES: job["stage"]=STAGES[stage[1]]
                             if count: job["failed_tests"]=int(count[1])
                             job["updated"]=int(time.time())
                             write(job)

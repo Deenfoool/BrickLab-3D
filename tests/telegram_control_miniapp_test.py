@@ -19,5 +19,32 @@ class Mini(unittest.TestCase):
     def test_snapshot_privacy(self):
         with patch.object(m.SNAPSHOT.__class__,"read_text",return_value=json.dumps({"timestamp":10000,"stats":{"users":4},"admin":{"users":["private"]},"audit":{"recent":["private"]}})),patch.object(m.time,"time",return_value=10001):
             self.assertEqual(m.data(),{"timestamp":10000,"stats":{"users":4}})
+    def test_job_post_requires_owner_and_origin(self):
+        handler=object.__new__(m.Handler)
+        handler.path="/control/jobs"
+        handler.headers={"Origin":"https://evil.invalid"}
+        handler.authorized=lambda:True
+        with patch.object(handler,"reply") as reply,patch.object(m,"job_request") as job:
+            handler.do_POST()
+            self.assertEqual(reply.call_args.args[0],403)
+            job.assert_not_called()
+        handler.headers={"Origin":m.ORIGIN}
+        handler.authorized=lambda:False
+        with patch.object(handler,"reply") as reply,patch.object(m,"job_request") as job:
+            handler.do_POST()
+            self.assertEqual(reply.call_args.args[0],403)
+            job.assert_not_called()
+    def test_job_post_rejects_non_job_actions(self):
+        import io
+        handler=object.__new__(m.Handler)
+        handler.path="/control/jobs"
+        handler.authorized=lambda:True
+        body=b'{"action":"shell"}'
+        handler.headers={"Origin":m.ORIGIN,"Content-Length":str(len(body)),"Content-Type":"application/json"}
+        handler.rfile=io.BytesIO(body)
+        with patch.object(handler,"reply") as reply,patch.object(m,"job_request") as job:
+            handler.do_POST()
+            self.assertEqual(reply.call_args.args[0],400)
+            job.assert_not_called()
 if __name__=="__main__":
     unittest.main()

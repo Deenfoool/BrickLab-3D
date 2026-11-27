@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Loopback-only read-only Mini App. Telegram initData verified on every request."""
+"""Loopback-only Mini App with restricted jobs broker; owner initData checked per request."""
 import hashlib
 import hmac
 import http.server
@@ -54,7 +54,7 @@ def data():
 def job_request(payload):
     try:
         with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as conn:
-            conn.settimeout(20)
+            conn.settimeout(10)
             conn.connect("/run/bricklab-control-jobs.sock")
             conn.sendall((json.dumps(payload)+"\n").encode())
             with conn.makefile("rb") as reader:
@@ -125,7 +125,7 @@ def main():
     owner=int(conf["chat_id"])
     if owner<=0 or not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]{20,}",token):
         raise ValueError("private owner required")
-    with http.server.ThreadingHTTPServer(("127.0.0.1",8091),Handler) as server:
+    with http.server.HTTPServer(("127.0.0.1",8091),Handler) as server:
         server.token,server.owner=token,owner
         server.serve_forever()
 

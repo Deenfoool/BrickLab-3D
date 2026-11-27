@@ -14,6 +14,11 @@ mv -T -- "$approval" "$used"
 read -r target expires extra < "$used"
 [[ "$target" =~ ^[0-9a-f]{40}$ && "$expires" =~ ^[0-9]{1,12}$ && -z "$extra" ]]
 (( expires >= $(date +%s) && expires <= $(date +%s)+86400 ))
+# A queued Mini App release is bound to the exact SHA it tested.
+if [[ $# -gt 0 ]]; then
+    test "$#" = 1
+    test "$target" = "$1"
+fi
 test "$(git branch --show-current)" = feature/cloud-migration
 git diff --quiet
 git diff --cached --quiet

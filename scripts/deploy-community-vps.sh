@@ -68,8 +68,7 @@ docker run --rm --network bridge --memory=1536m --cpus=1 \
     bricklab-test-runner:local npm ci --include=dev --ignore-scripts --no-audit --no-fund
 docker run --rm --network none --memory=1536m --cpus=1 \
     -e BRICKLAB_TEST_IMAGE=true -v "$TMP:/tests" -w /tests \
-    bricklab-test-runner:local npm test -- --test-concurrency=1 \
-    2>&1 | tee /tmp/bricklab-hub-tests.log
+    bricklab-test-runner:local npm test -- --test-concurrency=1
 
 echo "=== TELEGRAM WORKER TESTS ==="
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local node --check scripts/miniapp.js
@@ -122,6 +121,7 @@ docker rm -f "$DB" >/dev/null
 docker network rm "$NET" >/dev/null
 
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_upkeep_test.py
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_jobs_test.py
 
 if [[ "$MODE" == --test-only ]]; then
     echo "=== ALL ISOLATED CHECKS PASSED: $TARGET ==="
