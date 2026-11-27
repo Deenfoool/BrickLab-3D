@@ -17,6 +17,7 @@ export function renderMetricGrid(items){
 }
 export function renderMetricEditor({lang,layout,values,busy,save,enabled=true,expanded=false}){
  const l=lang==='ru'?'ru':'en',t=words[l],root=el('section','workshop-metric-editor'),toggle=button(t.edit,()=>{panel.hidden=!panel.hidden;toggle.setAttribute('aria-expanded',String(!panel.hidden));if(!panel.hidden){draft=readMetricLayout(layout);render()}},busy||!enabled),panel=el('div','workshop-metric-editor-panel'),list=el('div','workshop-metric-edit-list'),addRow=el('div','workshop-metric-add'),actions=el('div','workshop-metric-actions')
+ if(!enabled){root.append(el('p','account-muted',l==='ru'?'Профиль недоступен.':'Profile unavailable.'));return root}
  let draft=readMetricLayout(layout)
  panel.hidden=!expanded;toggle.setAttribute('aria-expanded',String(expanded))
  function update(next){draft=next;render()}
