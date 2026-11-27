@@ -4,7 +4,7 @@ import { createAuthClient } from './auth-client.js?v=live-polish-1'
 
 import { createProjectsClient, cloudLink } from './projects-client.js?v=profile-gallery-1'
 
-import { renderCloudWorkshop } from './cloud-workshop.js?v=achievements-v2'
+import { renderCloudWorkshop } from './cloud-workshop.js?v=achievements-v3'
 
 import {createProfileClient} from './profile-client.js?v=achievements-v2'
 

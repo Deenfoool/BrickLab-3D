@@ -1,5 +1,5 @@
 import {commerceBadge} from './commerce-visuals.js?v=merch-2'
-import {renderUnifiedHero,renderPortfolio} from './unified-profile.js?v=live-polish-1'
+import {renderUnifiedHero,renderPortfolio} from './unified-profile.js?v=achievements-v3'
 import {productById} from './commerce-catalog.js'
 import {applySignature,decorateAuthor,themeBadge,themePlate,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {backgroundIds} from './store-themes.js?v=themes-2'

@@ -1,4 +1,4 @@
-import {achievementName} from './achievement-catalog.js'
+import {achievementName,achievementById} from './achievement-catalog.js'
 const labels={
  ru:{title:'Уведомления',mark:'Отметить все прочитанными',all:'Перейти в уведомления',guest:'Войди в аккаунт, чтобы увидеть уведомления.',empty:'Уведомлений пока нет',unavailable:'Не удалось загрузить уведомления.',loading:'Загрузка…',award:'Получено достижение',firstCloudSave:'Первая облачная сборка',unread:'Непрочитано',read:'Прочитано',retry:'Обновить'},
  en:{title:'Notifications',mark:'Mark all as read',all:'Go to notifications',guest:'Sign in to see notifications.',empty:'No notifications yet',unavailable:'Could not load notifications.',loading:'Loading…',award:'Achievement earned',firstCloudSave:'First cloud build',unread:'Unread',read:'Read',retry:'Refresh'}
@@ -13,6 +13,35 @@ function button(text,fn,cls='notification-action'){const b=el('button',cls,text)
 export function createNotificationPopover({root,trigger,count,panel,onRefresh,onRead,onOpen}){
  let state={lang:'ru',signedIn:false,checked:false,busy:false,items:null,error:false}
  let opened=false
+ let seenOwner=null,initialized=false,seen=new Set(),toast=null,timer=null
+ function clearToast(){if(timer!==null)clearTimeout(timer);timer=null;toast?.remove();toast=null}
+ function chime(){
+  try{
+   if(localStorage.getItem('bricklab.sound')==='off')return
+   const Audio=globalThis.AudioContext||globalThis.webkitAudioContext;if(!Audio)return
+   const ctx=new Audio();if(ctx.state!=='running'){ctx.close().catch(()=>{});return}
+   const gain=ctx.createGain();gain.connect(ctx.destination);const now=ctx.currentTime
+   gain.gain.setValueAtTime(0.06,now);gain.gain.exponentialRampToValueAtTime(0.001,now+0.65)
+   for(const [i,f] of [523.25,659.25,783.99].entries()){const o=ctx.createOscillator();o.type='sine';o.frequency.value=f;o.connect(gain);o.start(now+i*0.12);o.stop(now+0.65)}
+   setTimeout(()=>ctx.close().catch(()=>{}),800)
+  }catch{}
+ }
+ function checkAwards(next){
+  const owner=next.signedIn?next.userId:null
+  if(owner!==seenOwner){seenOwner=owner;initialized=false;seen=new Set();clearToast()}
+  if(!owner||!Array.isArray(next.items)||next.error)return
+  const valid=next.items.filter(n=>achievementById(n?.award))
+  const fresh=initialized?valid.filter(n=>!seen.has(n.award)&&!n.read):[]
+  valid.forEach(n=>seen.add(n.award));initialized=true
+  if(!fresh.length)return
+  clearToast()
+  const a=achievementById(fresh[0].award),ru=next.lang==='ru'
+  toast=el('aside','achievement-unlock');toast.dataset.rarity=a.rarity;toast.setAttribute('role','status')
+  const medal=el('span','achievement-unlock-medal');medal.append(icon(a.icon))
+  const copy=el('div','achievement-unlock-copy');copy.append(el('small',null,ru?'ДОСТИЖЕНИЕ ПОЛУЧЕНО':'ACHIEVEMENT UNLOCKED'),el('strong',null,achievementName(a.id,next.lang)),el('span',null,'+'+fresh.reduce((sum,n)=>sum+achievementById(n.award).xp,0)+' XP'+(fresh.length>1?' · +'+(fresh.length-1)+(ru?' наград':' more'):'')))
+  const dismiss=button('×',clearToast,'achievement-unlock-close');dismiss.setAttribute('aria-label',ru?'Закрыть':'Dismiss')
+  toast.append(medal,copy,dismiss);document.body.append(toast);chime();timer=setTimeout(clearToast,6500)
+ }
  function close(focus=false){if(!opened)return;opened=false;panel.hidden=true;trigger.setAttribute('aria-expanded','false');if(focus)trigger.focus()}
  function render(){
   const t=labels[state.lang==='en'?'en':'ru'],{unread,recent}=notificationSummary(state.signedIn?state.items:null)
@@ -48,5 +77,5 @@ export function createNotificationPopover({root,trigger,count,panel,onRefresh,on
  trigger.addEventListener('click',()=>{if(opened){close();return}opened=true;panel.hidden=false;trigger.setAttribute('aria-expanded','true');render();onRefresh()})
  document.addEventListener('pointerdown',e=>{if(opened&&!root.contains(e.target))close()})
  document.addEventListener('keydown',e=>{if(opened&&e.key==='Escape'){e.preventDefault();close(true)}})
- return {update(next){state=next;render()},close}
+ return {update(next){checkAwards(next);state=next;render()},close}
 }
