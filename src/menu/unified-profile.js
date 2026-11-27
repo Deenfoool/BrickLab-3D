@@ -109,14 +109,14 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
  if(mode==='all'||mode==='profile')form.append(field(t.display,name),field(t.bio,bio),field(t.coverStyle,cover))
  if(mode==='profile'){const submit=ui('button','workspace-action primary',t.save);submit.type='submit';submit.disabled=busy;form.append(submit);form.onsubmit=e=>{e.preventDefault();if(!busy)saveProfile({displayName:name.value,bio:bio.value,cover:cover.value})};root.append(form);return root}
  if(publicCard&&!publicCard.unified)form.append(ui('p','account-muted',t.legacy))
- const status=ui('p','account-muted',!publicLoaded?(lang==='ru'?'Видимость пока не проверена.':'Visibility has not been checked.'):publicCard?t.shared:t.notShared)
+ const status=ui('p','account-muted',!publicLoaded?(lang==='ru'?'Видимость пока не проверена.':'Visibility has not been checked.'):publicCard&&publicCard.visible!==false?t.shared:t.notShared)
  if(mode!=='layout')form.append(status,ui('p','account-muted',t.privacy))
  if(!publicLoaded){
   form.append(action(lang==='ru'?'Загрузить настройки публичности':'Load visibility settings',loadPublic,busy))
   form.append(ui('p','account-muted',lang==='ru'?'Сначала проверь статус публикации, чтобы случайно не раскрыть изменения.':'Check publication status before editing to avoid unintentionally sharing changes.'))
   root.append(form);return root
  }
- // Disabling a public page is a separate destructive action, never an implicit checkbox save.
+ // Visibility is independent of stored public snapshots.
  const enable=check(lang==='ru'?'Публичная мастерская':'Public workshop',!!publicCard&&publicCard.visible!==false,busy),shareAvatar=check(t.avatar,publicCard?.unified?publicCard.showAvatar:!!publicCard?.avatarUrl,busy),shareCover=check(t.cover,publicCard?.unified?publicCard.showCover:!!publicCard?.coverTheme,busy),shareTheme=check(t.theme,!!publicCard?.backgroundTheme,busy)
  const consent=check(t.publicConsent,false,busy),panel=ui('fieldset','portfolio-editor-controls')
  if(mode!=='layout')form.append(enable.label,ui('p','account-muted',lang==='ru'?'Публичная мастерская участвует в рейтинге при открытых достижениях. Скрытие сохраняет работы, комментарии и подписчиков.':'A visible workshop participates in ranking when achievements are shared. Hiding preserves works, comments and followers.'));form.append(panel)

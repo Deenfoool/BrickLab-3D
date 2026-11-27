@@ -63,6 +63,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,sett
   const metricValues=workshopMetricValues({lang,owner:true,remoteCount:summary.cloud,progress,card:publicCard,loaded:publicLoaded})
   const hero=renderUnifiedHero({lang,owner:true,identity:{displayName,username:user.username,bio:profile?.bio,coverTheme:profile?.cover,backgroundTheme:profile?.background,achievementStyle:profile?.achievementStyle,supportBadge:profileData?.supportBadge,plus:profileData?.plus===true,avatarUrl:profile?.avatarUrl,coverUrl:profile?.coverUrl,subtitle:user.admin===true?(ru?'Администратор · BrickLab Cloud':'Administrator · BrickLab Cloud'):t.active},metricCards:metricItems({layout:profile?.metricLayout,lang,owner:true,values:metricValues})})
   content.append(hero)
+  if(publicCard?.visible===false)content.append(el('p','account-muted',ru?'Мастерская скрыта от посетителей. Публикации сохранены.':'Workshop hidden from visitors. Publications retained.'))
   if(publicCard)content.append(renderPortfolio({lang,profile:publicCard,builds:publicBuilds,owner:true}))
  }else if(section==='achievements'){
   content.append(renderVerificationLab({lang,remote,busy,verify:verifyAchievement,result:verificationResult,go}),renderAchievements({lang,progress,profile,busy,saveProfile,go,refresh:refreshActivity}))
