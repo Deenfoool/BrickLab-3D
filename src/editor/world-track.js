@@ -9,7 +9,7 @@ const friction={smooth:.55,studs:.9,grip:1.2,ice:.16};
 const rectParts=new Set(worldPartIds),up=new THREE.Vector3(0,1,0),down=up.clone().negate();
 export function readWorldConfig(value){
  const s=value?.spawn??{},valid=(n,min,max,def)=>Number.isInteger(n)&&n>=min&&n<=max?n:def;
- return {version:1,static:true,obstacles:readObstacles(value?.obstacles),spawn:{x:valid(s.x,-40,40,0),z:valid(s.z,-40,40,0),heading:valid(s.heading,-180,180,0),level:s.level===null||s.level===undefined?null:valid(s.level,0,120,null)}};
+ return {version:1,static:true,...(value?.provingGround===1?{provingGround:1}:{}),obstacles:readObstacles(value?.obstacles),spawn:{x:valid(s.x,-40,40,0),z:valid(s.z,-40,40,0),heading:valid(s.heading,-180,180,0),level:s.level===null||s.level===undefined?null:valid(s.level,0,120,null)}};
 }
 export function surfaceFor(p){
  if(Object.hasOwn(friction,p.worldSurface))return friction[p.worldSurface];
@@ -75,7 +75,7 @@ export async function loadWorldTrack(document,signal){
  const visible=document.parts.filter(p=>!hidden.has(p?.id));
  if(visible.some(p=>!validPart(p)))throw Error('В мире есть неизвестные детали или повреждённые координаты.');
  const models=new Map(),group=new THREE.Group(),collisionMeshes=[],ownedGeometry=new Set(),ownedMaterials=new Set(),visualGroups=new Map(),instanceObjects=[];
- group.name='BrickLab World';group.userData.worldTrack=true;
+ group.name='BrickLab World';group.userData.worldTrack=true;group.userData.provingGround=document.world.provingGround===1;
  const collMat=new THREE.MeshBasicMaterial({visible:false});ownedMaterials.add(collMat);
  function dispose(){
   group.removeFromParent();

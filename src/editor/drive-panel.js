@@ -1,4 +1,5 @@
 import { Quaternion, Vector3 } from 'three'
+import {createDriveTelemetry,downloadDriveResult} from './drive-telemetry.js'
 import { driveScale, driveScaleLimits, driveSettings, forwardVector, newDriveState, prepareTestDrive, resizeKinematicDrive, stepTestDrive } from './vehicle-drive.js?v=volvo-spur-gears'
 
 const labels = {
@@ -6,6 +7,7 @@ const labels = {
     title: 'Тест-драйв',
     flat: 'Ровная площадка',
     world: 'Мой BrickLab World',
+    proving: 'BrickLab Proving Ground',
     venue: 'Полигон',
     sketchbook: 'Sketchbook',
     loadingTrack: 'Загружаем полигон и готовим заезд…',
@@ -56,6 +58,7 @@ const labels = {
     title: 'Test drive',
     flat: 'Flat test pad',
     world: 'My BrickLab World',
+    proving: 'BrickLab Proving Ground',
     venue: 'Test venue',
     sketchbook: 'Sketchbook',
     loadingTrack: 'Loading the playground and preparing the drive…',
@@ -121,7 +124,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
       <p data-drive="scaleNotice" role="status" hidden></p>
     </div>
     <div data-drive="setup">
-      <label>${t.venue}<select data-drive="venue"><option value="sketchbook">${t.sketchbook}</option><option value="flat">${t.flat}</option>${readWorld?'<option value="world">'+t.world+'</option>':''}</select></label>
+      <label>${t.venue}<select data-drive="venue"><option value="sketchbook">${t.sketchbook}</option><option value="flat">${t.flat}</option>${readWorld?'<option value="world">'+t.world+'</option><option value="proving">'+t.proving+'</option>':''}</select></label>
       <label>${t.simulation}<select data-drive="simulation"><option value="physical">${t.physical}</option><option value="kinematic">${t.kinematic}</option></select></label>
       <label for="drive-heading">${t.heading} <output data-drive="degrees"></output></label>
       <input id="drive-heading" data-drive="heading" type="range" min="-180" max="180" step="1">
@@ -137,14 +140,14 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
         <button type="button" data-drive="clearSteering">${t.clear}</button>
       </div>
       <label><input data-drive="invert" type="checkbox"> ${t.invert}</label>
-      <p data-drive="info" role="status"></p>
+      <p data-drive="info" role="status"></p><p data-drive="lastRun" hidden></p><button type="button" data-drive="downloadLast" hidden>${language==='ru'?'Скачать последний заезд':'Download last run'}</button>
       <button type="button" class="editor-primary" data-drive="start">${t.startLabel}</button>
     </div>
     <div data-drive="run" hidden>
       <output data-drive="telemetry"></output>
       <p data-drive="trackStatus" role="status" hidden></p>
       <p data-drive="mechanics" hidden></p>
-      <p data-drive="mapStats" hidden></p>
+      <p data-drive="mapStats" hidden></p><p data-drive="runMetrics" hidden></p><button type="button" data-drive="downloadRun" hidden>${language==='ru'?'Скачать результаты':'Download results'}</button>
       <p>${t.shortcuts}</p>
       <div class="drive-controls">
         ${[['forward','W'],['left','A'],['reverse','S'],['right','D'],['brake','⏹']].map(([key, label]) =>
@@ -175,6 +178,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
   let launchDetail=''
   let physics
   let physicsRun
+  let runMetrics,lastMetrics;
 
   function arrow(degrees, scale = vehicle.settings.scale) {
     const direction = forwardVector(degrees)
@@ -200,7 +204,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     const { parts, assembly, config } = read()
     vehicle = prepareTestDrive(parts, assembly, models, config, catalog)
     const { settings } = vehicle
-    if(settings.venue==='world'&&!readWorld)settings.venue='flat'
+    if(['world','proving'].includes(settings.venue)&&!readWorld)settings.venue='flat'
     el('venue').value = settings.venue
     el('simulation').value = settings.simulation
     el('venueTitle').textContent = t[settings.venue]
@@ -244,6 +248,10 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     const input = { throttle: amount('forward', 'reverse'), steer: amount('right', 'left'), brake: values.has('brake') }
     const dt = previous === undefined ? 0 : (time - previous) / 1000
     const result = physicsRun ? physicsRun.advance(input, dt) : stepTestDrive(vehicle, state, input, dt, track)
+    if(runMetrics){
+      runMetrics.update({position:vehicle.origin.clone().add(result.position).toArray(),speed:result.speed*(physicsRun?1:.01),dt:Math.min(dt,.05),throttle:input.throttle,brake:input.brake});
+      lastMetrics=runMetrics.result();showMetrics('runMetrics',lastMetrics);
+    }
     previous = time
     scene.previewParts(result.poses)
     scene.driveTransform(vehicle.origin, result.position, result.yaw, result.tilt, result.scale)
@@ -260,6 +268,14 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     else previous = undefined
   }
 
+  function showMetrics(element,r){
+    const ru=language==='ru';
+    const chunks=[(ru?'Время ':'Time ')+r.elapsed.toFixed(1)+' s',(ru?'Путь ':'Distance ')+r.distance.toFixed(2)+' m',(ru?'Макс. ':'Max ')+r.maxSpeed.toFixed(2)+' km/h'];
+    if(r.acceleration!==null)chunks.push('0–5 km/h: '+r.acceleration.toFixed(2)+' s');
+    if(r.braking)chunks.push((ru?'Торможение ':'Braking ')+r.braking.distance.toFixed(2)+' m @ '+r.braking.from.toFixed(1)+' km/h');
+    if(r.bestLap!==null)chunks.push((ru?'Лучший круг ':'Best lap ')+r.bestLap.toFixed(2)+' s · '+r.laps.length);
+    el(element).textContent=chunks.join(' · ');el(element).hidden=false;
+  }
   function clearTrackRequest() {
     loadingTrack = undefined
     launchError = undefined
@@ -270,6 +286,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     clearTrackRequest()
     if (frame !== undefined) cancelAnimationFrame(frame)
     frame = previous = state = undefined
+    if(runMetrics){lastMetrics=runMetrics.result();runMetrics=undefined;showMetrics('lastRun',lastMetrics);el('downloadLast').hidden=false}
     held.clear()
     track = undefined
     physicsRun?.dispose()
@@ -289,12 +306,13 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     if(state)stop();
     const { venue, simulation } = vehicle.settings
     let worldSource;
-    if(venue==='world'){
-      try{worldSource=readWorld?.();if(!worldSource)throw Error('Сначала сохрани карту в BrickLab World.')}
+    const custom=['world','proving'].includes(venue);
+    if(custom){
+      try{worldSource=readWorld?.(venue);if(!worldSource)throw Error(venue==='proving'?'Открой готовый полигон кнопкой Proving Ground и сохрани его.':'Сначала сохрани карту в BrickLab World.')}
       catch(e){el('info').textContent=e.message;return}
     }
     const worldKey=worldSource?JSON.stringify(worldSource):null;
-    const needsWorld=venue==='world'&&(!worldTrack||worldDocument!==worldKey);
+    const needsWorld=custom&&(!worldTrack||worldDocument!==worldKey);
     const needsTrack = venue === 'sketchbook' && !sketchbook
     const needsPhysics = simulation === 'physical' && !physics
     if (needsTrack || needsWorld || needsPhysics) {
@@ -342,8 +360,8 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
       }
       if (!active || !vehicle.ready) return
     }
-    track = venue === 'world' ? worldTrack : venue === 'sketchbook' ? sketchbook : undefined
-    if(venue==='world'&&!track)return;
+    track = custom ? worldTrack : venue === 'sketchbook' ? sketchbook : undefined
+    if(custom&&!track)return;
     if(track?.obstacles?.length&&simulation!=='physical'){launchError='physicsError';launchDetail=language==='ru'?'Подвижные препятствия требуют режима «Физика».':'Moving obstacles require physical mode.';sync();return}
     if (simulation === 'physical') {
       try {
@@ -353,7 +371,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
       } catch (error) {
         stop()
         launchError = 'physicsError'
-        launchDetail=venue==='world'&&error.message?.startsWith('На старте')?error.message:'';
+        launchDetail=custom&&error.message?.startsWith('На старте')?error.message:'';
         sync()
         console.error(error)
         return
@@ -369,6 +387,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     scene.clearDriveTransform()
     scene.setDriveMap(track?.group)
     state = newDriveState(vehicle, track)
+    runMetrics=createDriveTelemetry(track?.group?.userData.provingGround===true);lastMetrics=runMetrics.result();showMetrics('runMetrics',lastMetrics);el('downloadRun').hidden=false;
     el('trackStatus').hidden = true
     el('scaleNotice').hidden = true
     el('mechanics').hidden = !physicsRun
@@ -424,6 +443,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
   on(el('clearSteering'), 'click', () => change({ steering: null }))
   on(el('start'), 'click', start)
   on(el('retry'), 'click', start)
+  for(const key of ['downloadRun','downloadLast'])on(el(key),'click',()=>{if(lastMetrics)downloadDriveResult(lastMetrics,vehicle?.parts?.length+' parts')});
   on(el('stop'), 'click', stop)
   on(scene.canvas, 'pointerdown', event => {
     if (active && !state && picking && event.button === 0) press = [event.clientX, event.clientY]

@@ -24,7 +24,7 @@ export function driveSettings(value) {
   return {
     simulation: value?.simulation === 'kinematic' ? 'kinematic' : 'physical',
     scale: driveScale(value?.scale),
-    venue: ['flat','world'].includes(value?.venue) ? value.venue : 'sketchbook',
+    venue: ['flat','world','proving'].includes(value?.venue) ? value.venue : 'sketchbook',
     heading: Number.isFinite(value?.heading) ? clamp(value.heading, -180, 180) : 0,
     mode: value?.mode === 'powered' ? 'powered' : 'push',
     driveParts: Array.isArray(value?.driveParts) ? [...new Set(value.driveParts.map(id).filter(Boolean))] : [],
