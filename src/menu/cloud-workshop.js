@@ -1,11 +1,13 @@
+import {metricItems} from './workshop-metrics-model.js'
+import {renderMetricEditor,workshopMetricValues} from './workshop-metrics.js?v=workshop-metrics-1'
 import {profileHref} from './profile-route.js'
 import {renderVerificationLab,renderAchievementRewards,renderAchievementRankings} from './achievement-platform.js'
 import {renderAchievements,achievementRank} from './achievement-hall.js'
 import {achievementName} from './achievement-catalog.js'
 import {renderInstructionCollection} from './instruction-collection.js'
 import {commerceBadge,productArtwork,factsPanel,loyaltyBadge} from './commerce-visuals.js?v=merch-2'
-import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=workshop-identity-2'
-import {renderWorkshopOverview} from './workshop-overview.js?v=workshop-identity-2'
+import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=workshop-metrics-1'
+import {renderWorkshopOverview} from './workshop-overview.js?v=workshop-metrics-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 import {commerceProducts} from './commerce-catalog.js'
@@ -63,7 +65,9 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
   const displayName=profile?.displayName??publicCard?.displayName??user.displayName,heroActions=[button(ru?'Сменить тему':'Change theme',()=>go('cosmetics'),busy),button(ru?'Редактировать профиль':'Edit profile',()=>go('settings'),busy)]
   if(publicCard)heroActions.push(button(ru?'Скопировать ссылку':'Copy profile link',async()=>{const url=new URL(profileHref(publicCard.username,publicCard.id),location.origin+'/').href;try{await navigator.clipboard.writeText(url)}catch{globalThis.prompt(ru?'Ссылка на мастерскую':'Workshop link',url)}},busy))
   else heroActions.push(button(ru?'Настройки видимости':'Visibility settings',()=>go('settings'),busy))
-  const hero=renderUnifiedHero({lang,owner:true,identity:{displayName,username:user.username,bio:profile?.bio,coverTheme:profile?.cover,backgroundTheme:profile?.background,achievementStyle:profile?.achievementStyle,supportBadge:profileData?.supportBadge,plus:profileData?.plus===true,avatarUrl:profile?.avatarUrl,coverUrl:profile?.coverUrl,subtitle:user.admin===true?(ru?'Администратор · BrickLab Cloud':'Administrator · BrickLab Cloud'):t.active},actions:heroActions,metrics:[[t.local,summary.local],[t.cloud,summary.cloud],[t.revisions,summary.revisions],[t.xp,progress?.xp??'—'],[t.title,progress?.level?progress.level+' · '+achievementRank(progress.level,lang):rank?t[rank.id]:'—']]})
+  const metricValues=workshopMetricValues({lang,owner:true,remoteCount:summary.cloud,progress,card:publicCard,loaded:publicLoaded})
+  const hero=renderUnifiedHero({lang,owner:true,identity:{displayName,username:user.username,bio:profile?.bio,coverTheme:profile?.cover,backgroundTheme:profile?.background,achievementStyle:profile?.achievementStyle,supportBadge:profileData?.supportBadge,plus:profileData?.plus===true,avatarUrl:profile?.avatarUrl,coverUrl:profile?.coverUrl,subtitle:user.admin===true?(ru?'Администратор · BrickLab Cloud':'Administrator · BrickLab Cloud'):t.active},actions:heroActions,metricCards:metricItems({layout:profile?.metricLayout,lang,owner:true,values:metricValues})})
+  hero.append(renderMetricEditor({lang,layout:profile?.metricLayout,values:metricValues,busy,enabled:!!profile,save:metricLayout=>saveProfile({bio:profile.bio,cover:profile.cover,metricLayout})}))
   const actions=el('div','workshop-quickbar'),quick=el('div','workshop-shortcuts'),create=button(ru?'Новая сборка':'New build',createBuild,busy);create.classList.add('primary');create.prepend(icon('plus'));quick.append(create)
   for(const key of ['cloud','storage','favorites','cosmetics'])quick.append(button(t[key],()=>go(key),busy))
   actions.append(el('span','workshop-quick-label',ru?'Быстрые действия':'Quick actions'),quick)

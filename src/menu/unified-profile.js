@@ -1,3 +1,4 @@
+import {renderMetricGrid} from './workshop-metrics.js?v=workshop-metrics-1'
 import {profileHref} from './profile-route.js'
 import {applyAchievementAppearance} from './achievement-rewards.js'
 import {achievementById} from './achievement-catalog.js'
@@ -20,7 +21,7 @@ function block(title,key){const n=ui('section','portfolio-block portfolio-'+key)
 const safePublicId=id=>typeof id==='string'&&portfolioUuid.test(id)
 function publicImage(id,kind,url){const path='/api/community/profile/'+id+'/'+kind;return safePublicId(id)&&url===path?path:null}
 function ownMedia(kind,url){return typeof url==='string'&&new RegExp('^/api/profile/'+kind+'\\?v=[0-9a-f-]{36}$','i').test(url)?url:null}
-export function renderUnifiedHero({lang,identity,owner=false,actions=[],metrics=[]}){
+export function renderUnifiedHero({lang,identity,owner=false,actions=[],metrics=[],metricCards=[]}){
  const hero=ui('section','workshop-hero cover-'+(['blueprint','graphite','amber'].includes(identity.coverTheme)?identity.coverTheme:'blueprint'))
  const theme=identity.backgroundTheme,cover=ui('div','workshop-cover'),emblem=ui('div','workshop-emblem','BRICKLAB / WORKSHOP');emblem.prepend(icon('layers'));cover.append(emblem)
  const plate=themePlate(theme);if(plate)cover.append(plate)
@@ -35,6 +36,7 @@ export function renderUnifiedHero({lang,identity,owner=false,actions=[],metrics=
  hero.append(cover,body)
  if(identity.bio)hero.append(ui('p','workshop-bio',identity.bio))
  if(metrics.length){const grid=ui('div','workshop-metric-grid');for(const [label,value] of metrics){const m=ui('div','workshop-metric');m.append(ui('span',null,label),ui('strong',null,value));grid.append(m)}hero.append(grid)}
+ if(metricCards.length)hero.append(renderMetricGrid(metricCards))
  return hero
 }
 export function activityCalendar(lang,entries,{publicOnly=false}={}){
