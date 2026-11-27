@@ -123,7 +123,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return self.reply(status,data,"application/json")
     def do_POST(self):
         route={"/control/hub/claim":"claim","/control/hub/preferences":"preferences","/control/hub/redeem":"redeem"}.get(self.path)
-        admin_route={"/control/promo-create":"promo-create","/control/promo-disable":"promo-disable"}.get(self.path)
+        admin_route={"/control/promo-create":"promo-create","/control/promo-disable":"promo-disable","/control/campaign-create":"campaign-create","/control/campaign-queue":"campaign-queue","/control/campaign-cancel":"campaign-cancel"}.get(self.path)
         if admin_route and not self.authorized():
             return self.reply(403,b'{"error":"unauthorized"}',"application/json")
         route=route or admin_route
@@ -132,7 +132,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.reply(403,b'{"error":"unauthorized"}',"application/json")
             try:
                 n=int(self.headers.get("Content-Length","0"))
-                if not 0<n<=2048 or self.headers.get("Content-Type","").split(";")[0]!="application/json":
+                if not 0<n<=16384 or self.headers.get("Content-Type","").split(";")[0]!="application/json":
                     raise ValueError()
                 raw=self.rfile.read(n)
                 if len(raw)!=n: raise ValueError()
@@ -159,6 +159,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             path=path[len("/control/"):]
         else:
             path=path.lstrip("/")
+        if path=="campaigns":
+            if not self.authorized(): return self.reply(403,b'{"error":"unauthorized"}',"application/json")
+            return self.hub_reply("campaigns")
         if path=="promos":
             if not self.authorized(): return self.reply(403,b'{"error":"unauthorized"}',"application/json")
             return self.hub_reply("promos")

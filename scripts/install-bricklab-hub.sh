@@ -35,5 +35,35 @@ PY
 install -d -m 0755 /etc/systemd/system/bricklab-control-miniapp.service.d /etc/systemd/system/bricklab-control.service.d
 printf '[Service]\nLoadCredential=hub.key:/etc/bricklab-backup/hub.key\n' >/etc/systemd/system/bricklab-control-miniapp.service.d/30-hub.conf
 printf '[Service]\nEnvironment=BRICKLAB_HUB_ENABLED=1\n' >/etc/systemd/system/bricklab-control.service.d/30-hub.conf
+install -m 0644 scripts/bricklab-hub-campaign-worker.py /usr/local/lib/bricklab-control/
+cat >/etc/systemd/system/bricklab-hub-campaign.service <<'UNIT'
+[Unit]
+Description=BrickLab opt-in Telegram campaign delivery
+After=network-online.target
+[Service]
+Type=oneshot
+User=bricklab-control
+Group=bricklab-control
+LoadCredential=telegram.json:/etc/bricklab-backup/telegram.json
+LoadCredential=hub.key:/etc/bricklab-backup/hub.key
+ExecStart=/usr/bin/python3 /usr/local/lib/bricklab-control/bricklab-hub-campaign-worker.py
+TimeoutStartSec=6min
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+CapabilityBoundingSet=
+InaccessiblePaths=-/run/docker.sock -/var/run/docker.sock -/opt/bricklab-cloud -/etc/bricklab-backup -/run/bricklab-control-actions.sock -/run/bricklab-control-jobs.sock
+UNIT
+cat >/etc/systemd/system/bricklab-hub-campaign.timer <<'UNIT'
+[Unit]
+Description=Deliver approved opt-in campaigns
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=60s
+[Install]
+WantedBy=timers.target
+UNIT
 systemctl daemon-reload
+echo 'Campaign timer is opt-in: enable only after testing.'
 echo 'Hub credentials provisioned. Deploy updated application with migration, then restart control and miniapp services.'

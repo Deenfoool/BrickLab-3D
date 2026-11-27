@@ -211,3 +211,13 @@ async function loadPromos(){
 }
 document.getElementById('promo-load').onclick=loadPromos;
 document.getElementById('promo-create').onsubmit=async e=>{e.preventDefault();try{const code=document.getElementById('promo-admin-code').value.trim().toUpperCase(),days=Number(document.getElementById('promo-days').value),maxUses=Number(document.getElementById('promo-limit').value),expiresAt=new Date(document.getElementById('promo-expiry').value+'T23:59:59').toISOString();await promoRequest('promo-create',{code,days,maxUses,expiresAt});await loadPromos()}catch(err){promoStatus.textContent=err.message}};
+
+const campaignStatus=document.getElementById('campaign-status'),campaignList=document.getElementById('campaign-list');
+async function loadCampaigns(){
+ try{const d=await promoRequest('campaigns');campaignList.replaceChildren();campaignStatus.textContent='Подписаны на рассылки: '+d.eligible;
+ for(const c of d.items??[]){const row=document.createElement('article');row.className='admin-row';addText(row,new Date(c.sendAt).toLocaleString(),'strong');addText(row,c.body);addText(row,c.status+' · доставлено '+c.sent+'/'+c.total+' · ожидают '+c.pending+' · не доставлено '+c.unsuccessful);
+ for(const [action,label] of (c.status==='draft'?[['campaign-queue','Подтвердить рассылку'],['campaign-cancel','Отменить']]:c.status==='queued'?[['campaign-cancel','Остановить остаток']]:[])){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=async()=>{if(!confirm(action==='campaign-queue'?'Подтвердить отправку согласившимся пользователям?':'Отменить оставшиеся сообщения?'))return;try{await promoRequest(action,{id:c.id});await loadCampaigns()}catch(e){campaignStatus.textContent=e.message}};row.append(b)}campaignList.append(row)}
+ }catch(e){campaignStatus.textContent=e.message}
+}
+document.getElementById('campaign-load').onclick=loadCampaigns;
+document.getElementById('campaign-create').onsubmit=async e=>{e.preventDefault();try{const body=document.getElementById('campaign-body').value.trim(),raw=document.getElementById('campaign-time').value,sendAt=raw?new Date(raw).toISOString():new Date().toISOString();await promoRequest('campaign-create',{body,sendAt});document.getElementById('campaign-body').value='';await loadCampaigns()}catch(err){campaignStatus.textContent=err.message}};

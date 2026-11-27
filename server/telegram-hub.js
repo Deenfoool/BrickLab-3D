@@ -11,9 +11,9 @@ export function createTelegramHubHandler({store,origin,keyFile='',ownerId='',log
  let key=null
  if(keyFile){const raw=readFileSync(keyFile,'utf8').trim();if(!/^[a-f0-9]{64}$/.test(raw))throw Error('Invalid Hub bridge key');key=Buffer.from(raw,'hex')}
  const cookieName=new URL(origin).protocol==='https:'?'__Host-bricklab_session':'bricklab_session'
- const routes=new Map([['/api/telegram/link','GET'],['/api/telegram/code','POST'],['/api/telegram/unlink','POST'],['/api/telegram/hub','GET'],['/api/telegram/claim','POST'],['/api/telegram/preferences','POST'],['/api/telegram/redeem','POST'],['/api/telegram/promos','GET'],['/api/telegram/promo-create','POST'],['/api/telegram/promo-disable','POST']])
+ const routes=new Map([['/api/telegram/link','GET'],['/api/telegram/code','POST'],['/api/telegram/unlink','POST'],['/api/telegram/hub','GET'],['/api/telegram/claim','POST'],['/api/telegram/preferences','POST'],['/api/telegram/redeem','POST'],['/api/telegram/promos','GET'],['/api/telegram/promo-create','POST'],['/api/telegram/promo-disable','POST'],['/api/telegram/campaigns','GET'],['/api/telegram/campaign-create','POST'],['/api/telegram/campaign-queue','POST'],['/api/telegram/campaign-cancel','POST'],['/api/telegram/campaign-claim','POST'],['/api/telegram/campaign-finish','POST']])
  function reply(res,status,data){const b=JSON.stringify(data);res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Content-Length':Buffer.byteLength(b)});res.end(b)}
- async function body(req){let size=0;const chunks=[];for await(const c of req.iterator({destroyOnReturn:false})){size+=c.length;if(size>2048){req.resume();throw Error('invalid_body')}chunks.push(c)}return Buffer.concat(chunks)}
+ async function body(req){let size=0;const chunks=[];for await(const c of req.iterator({destroyOnReturn:false})){size+=c.length;if(size>16384){req.resume();throw Error('invalid_body')}chunks.push(c)}return Buffer.concat(chunks)}
  return async(req,res,path)=>{
   if(!routes.has(path))return false
   try{
@@ -45,6 +45,24 @@ export function createTelegramHubHandler({store,origin,keyFile='',ownerId='',log
    }
    const uid=await store.telegramIdentity(id)
    if(!uid){reply(res,path.endsWith('/hub')?200:403,{linked:false,error:'link_required'});return true}
+   if(path==='/api/telegram/campaigns'||path.startsWith('/api/telegram/campaign-')){
+    if(id!==ownerId||!await store.telegramAdmin(uid)){reply(res,403,{error:'admin_required'});return true}
+    const uuid=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i
+    if(path.endsWith('/campaigns')){reply(res,200,await store.telegramCampaigns(uid));return true}
+    const input=JSON.parse(raw.toString('utf8'))
+    if(path.endsWith('/campaign-claim')){reply(res,200,{item:await store.telegramCampaignClaim(uid)});return true}
+    if(path.endsWith('/campaign-finish')){
+     if(typeof input?.attempt!=='string'||!uuid.test(input.attempt)||!['sent','failed','unknown','retry'].includes(input.result)||!Number.isInteger(input.retry)||input.retry<0||input.retry>3600){reply(res,400,{error:'invalid_result'});return true}
+     reply(res,200,{ok:await store.telegramCampaignFinish(uid,input)});return true
+    }
+    if(path.endsWith('/campaign-create')){
+     if(typeof input?.body!=='string'||!input.body.trim()||input.body.length>2500||typeof input.sendAt!=='string'||!Number.isFinite(Date.parse(input.sendAt))){reply(res,400,{error:'invalid_campaign'});return true}
+     const campaignId=await store.telegramCampaignCreate(uid,input);reply(res,campaignId?200:409,{id:campaignId});return true
+    }
+    if(typeof input?.id!=='string'||!uuid.test(input.id)){reply(res,400,{error:'invalid_id'});return true}
+    const ok=path.endsWith('/campaign-queue')?await store.telegramCampaignQueue(uid,input.id):await store.telegramCampaignCancel(uid,input.id)
+    reply(res,ok?200:409,{ok});return true
+   }
    if(['/api/telegram/promos','/api/telegram/promo-create','/api/telegram/promo-disable'].includes(path)){
     if(id!==ownerId||!await store.telegramAdmin(uid)){reply(res,403,{error:'admin_required'});return true}
     if(path.endsWith('/promos')){reply(res,200,{items:await store.telegramPromos(uid)});return true}
