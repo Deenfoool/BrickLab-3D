@@ -30,7 +30,7 @@ test('metric editor adds, moves, removes and saves cards without sending values'
   assert.equal(values.builds,4);assert.equal(values.rank,'#5');assert.equal(values.likes,6)
   const root=renderMetricEditor({lang:'ru',layout:['likes','rank'],values,busy:false,save:ids=>saved=ids})
   root.children[0].onclick()
-  flatten(root).find(n=>n.attrs['aria-label']==='Переместить выше Место в глобальном рейтинге').onclick()
+  flatten(root).find(n=>n.attrs['aria-label']==='Перетащить: Место в глобальном рейтинге').onkeydown({key:'ArrowUp',preventDefault(){}})
   flatten(root).find(n=>n.attrs['aria-label']==='Убрать Кол-во лайков').onclick()
   flatten(root).find(n=>n.tag==='select').value='downloads'
   flatten(root).find(n=>n.tag==='button'&&n.textContent==='+ Добавить блок').onclick()

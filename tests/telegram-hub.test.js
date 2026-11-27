@@ -45,3 +45,18 @@ test('private Hub media requires signed linked identity and rejects target overr
  assert.equal((await fetch(base+'/api/telegram/cover',{headers:headers('42','/api/telegram/cover')})).status,200);
  assert.deepEqual(calls,[['account-b','avatar'],['account-a','avatar'],['account-a','cover']]);
 });
+
+test('site notification preferences use the authenticated browser account and same origin',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'bricklab-hub-prefs-')),file=join(dir,'key');writeFileSync(file,'ab'.repeat(32))
+ const calls=[],origin='https://bricklab.test',store={getSession:async()=>({id:'owner'}),workshopNotificationSettings:async uid=>({linked:uid==='owner',personalPush:false}),telegramPersonalPreferences:async(uid,push)=>{calls.push([uid,push]);return true}}
+ const handler=createTelegramHubHandler({store,origin,keyFile:file}),server=createServer(async(req,res)=>{if(!await handler(req,res,new URL(req.url,'http://localhost').pathname)){res.statusCode=404;res.end()}})
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>{server.closeAllConnections();return new Promise(r=>server.close(()=>{rmSync(dir,{recursive:true,force:true});r()}))})
+ const base='http://127.0.0.1:'+server.address().port+'/api/telegram/',headers={Cookie:'__Host-bricklab_session='+'a'.repeat(64),Origin:origin,'Content-Type':'application/json'}
+ assert.equal((await fetch(base+'site-notifications')).status,401)
+ assert.deepEqual(await(await fetch(base+'site-notifications',{headers})).json(),{linked:true,personalPush:false})
+ const post=(body,h=headers)=>fetch(base+'site-notification-preference',{method:'POST',headers:h,body:JSON.stringify(body)})
+ assert.equal((await post({push:true},{...headers,Origin:'https://evil.example'})).status,403)
+ assert.equal((await post({push:'true'})).status,400)
+ assert.equal((await post({push:true,userId:'other'})).status,200)
+ assert.deepEqual(calls,[['owner',true]])
+})

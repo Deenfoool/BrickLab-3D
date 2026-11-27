@@ -1,5 +1,5 @@
 import {sortableHandle,moveItem} from './sortable-handle.js'
-import {renderMetricGrid} from './workshop-metrics.js?v=workshop-settings-1'
+import {renderMetricGrid} from './workshop-metrics.js?v=workshop-settings-2'
 import {profileHref} from './profile-route.js'
 import {applyAchievementAppearance} from './achievement-rewards.js'
 import {achievementById} from './achievement-catalog.js'
