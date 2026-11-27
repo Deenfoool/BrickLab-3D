@@ -129,6 +129,11 @@ if [[ "$MODE" == --test-only ]]; then
     echo "=== ALL ISOLATED CHECKS PASSED: $TARGET ==="
     exit 0
 fi
+# Derive the smoke-test asset version from the exact candidate before touching production.
+EXPECTED_CSS=$(grep -oE 'unified-profile[.]css[?]v=[A-Za-z0-9._-]+' "$TMP/index.html")
+test -n "$EXPECTED_CSS"
+test "$(printf '%s\n' "$EXPECTED_CSS" | wc -l)" = 1
+
 echo "=== PRODUCTION BACKUPS ==="
 systemctl start bricklab-backup.service
 systemctl start bricklab-config-backup.service
@@ -167,10 +172,17 @@ docker compose run -T --rm --no-deps migrate
 phase=deploy
 echo "=== START RELEASE ==="
 docker compose up -d --no-deps --no-build --wait --wait-timeout 120 bricklab
-curl -fsS http://127.0.0.1:8080/api/health
-curl -fsS https://bricklab-3d.ru/api/health
-curl -fsS https://bricklab-3d.ru/ | grep -F 'unified-profile.css?v=unified-1' >/dev/null
-curl -fsS 'https://bricklab-3d.ru/api/community/builds?sort=popular&week=1' >/dev/null
+echo "=== SMOKE: LOCAL HEALTH ==="
+curl -fsS --retry 5 --retry-connrefused --retry-delay 2 --max-time 15 http://127.0.0.1:8080/api/health
+echo
+echo "=== SMOKE: PUBLIC HEALTH ==="
+curl -fsS --retry 5 --retry-delay 2 --max-time 15 https://bricklab-3d.ru/api/health
+echo
+echo "=== SMOKE: RELEASE FRONTEND ($EXPECTED_CSS) ==="
+curl -fsS --retry 5 --retry-delay 2 --max-time 20 https://bricklab-3d.ru/ -o "$TMP/release-smoke.html"
+grep -F -- "$EXPECTED_CSS" "$TMP/release-smoke.html" >/dev/null
+echo "=== SMOKE: COMMUNITY API ==="
+curl -fsS --retry 5 --retry-delay 2 --max-time 20 'https://bricklab-3d.ru/api/community/builds?sort=popular&week=1' >/dev/null
 trap - ERR
 if [[ -f /usr/local/lib/bricklab-control/bricklab-control-upkeep.py ]]; then
     python3 /usr/local/lib/bricklab-control/bricklab-control-upkeep.py record "bricklab-cloud-bricklab:rollback-${OLD:0:7}" "$IMAGE" || echo "WARNING: rollback timestamp not recorded" >&2

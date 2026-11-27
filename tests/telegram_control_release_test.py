@@ -13,5 +13,13 @@ class Release(unittest.TestCase):
         with patch.object(a.os.path,"isfile",return_value=True),patch.object(a,"run",return_value=(0,"")) as run:
             self.assertEqual(a.execute("deploy"),"queued")
             self.assertEqual(run.call_args.args[0],["/usr/bin/systemctl","start","--no-block","bricklab-control-release.service"])
+    def test_frontend_smoke_uses_candidate_asset(self):
+        import re
+        runner=(scripts/"deploy-community-vps.sh").read_text()
+        html=(scripts.parent/"index.html").read_text()
+        self.assertEqual(len(re.findall(r"unified-profile[.]css[?]v=[A-Za-z0-9._-]+",html)),1)
+        self.assertIn('grep -F -- "$EXPECTED_CSS"',runner)
+        self.assertNotIn("unified-profile.css?v=unified-1",runner)
+        self.assertLess(runner.index("EXPECTED_CSS=$(grep"),runner.index('echo "=== PRODUCTION BACKUPS ==="'))
 if __name__=="__main__":
     unittest.main()
