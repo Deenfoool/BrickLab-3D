@@ -19,9 +19,9 @@ export function layoutResizeHandle({key,span,grid,row,label,disabled=false,resiz
  grip.onkeydown=e=>{if(disabled||!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();const next=portfolioSpans[portfolioSpans.indexOf(span)+(e.key==='ArrowRight'?1:-1)];if(next)resize(key,next)}
  return {grip,hint}
 }
-export function renderWorkshopLayoutEditor({lang='ru',blocks,labels,busy=false,onChange,renderPreview,describe=()=>''}){
+export function renderWorkshopLayoutEditor({lang='ru',blocks,originalBlocks=blocks,labels,busy=false,onChange,renderPreview,describe=()=>''}){
  const l=lang==='ru'?'ru':'en',t=words[l],root=el('section','workshop-layout-studio'),toolbar=el('div','studio-toolbar'),canvas=el('div','studio-canvas'),catalog=el('div','studio-catalog'),notice=el('p','account-muted studio-status'),preview=el('div','studio-preview'),grid=el('div','studio-grid')
- const original=snapshot(blocks);let draft=snapshot(blocks),mode='edit',mobile=false
+ const original=snapshot(originalBlocks);let draft=snapshot(blocks),mode='edit',mobile=false
  const set=next=>{draft=snapshot(next);onChange(snapshot(draft));render()}
  const change=(key,patch)=>set(draft.map(b=>b.key===key?{...b,...patch}:b))
  const resize=(key,span)=>change(key,{span})

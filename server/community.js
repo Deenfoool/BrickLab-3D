@@ -182,17 +182,20 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
      reply(res,200,{builds:await store.listOwnBuilds(user.id)});return true
     }
     if(path==='/api/community/me'){
-     if(!['GET','PUT','DELETE'].includes(req.method))throw new ProjectError(405,'method_not_allowed')
+     if(!['GET','PUT','PATCH','DELETE'].includes(req.method))throw new ProjectError(405,'method_not_allowed')
      if(req.method!=='GET'&&req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
      const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1)
      const user=/^[a-f0-9]{64}$/.test(token||'')&&await store.getSession(createHash('sha256').update(token).digest('hex'))
      if(!user)throw new ProjectError(401,'unauthenticated')
-     if(req.method==='PUT'){
+     if(req.method==='PUT'||req.method==='PATCH'){
       if(req.headers['content-type']?.split(';')[0].trim()!=='application/json')throw new ProjectError(415,'json_required')
       let size=0;const chunks=[]
       for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>16384){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
       let data;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new ProjectError(400,'invalid_json')}
-      await store.publishCard(user.id,validatePublicCard(data))
+      if(req.method==='PATCH'){
+       let portfolio;try{portfolio=validatePortfolio(data?.portfolio)}catch{throw new ProjectError(400,'invalid_portfolio')}
+       await store.savePortfolio(user.id,portfolio)
+      }else await store.publishCard(user.id,validatePublicCard(data))
      }else if(req.method==='DELETE'){if(store.hideCard)await store.hideCard(user.id);else await store.unpublishCard(user.id)}
      const card=publicCard(await store.getOwnCard(user.id),{owner:true});if(card&&store.reputation)card.reputation=publicReputation(await store.reputation(card.id));if(card&&store.workshopPublicSummary)Object.assign(card,publicWorkshopSummary(await store.workshopPublicSummary(card.id)));reply(res,200,{profile:card});return true
     }
