@@ -52,7 +52,7 @@ test('owner controls publish only after consent and block order is persisted; vi
   const root=renderUnifiedEditor(base),all=flatten(root),form=all.find(n=>n.tag==='form'),enable=all.find(n=>n.tag==='label'&&n.children.some(c=>c.textContent==='Публичная мастерская')).children[0],consent=all.find(n=>n.tag==='label'&&n.children.some(c=>c.textContent.startsWith('Разрешаю публиковать'))).children[0]
   form.onsubmit({preventDefault(){}});assert.equal(saved.length,1);assert.equal(published.length,0)
   enable.checked=true;enable.onchange();form.onsubmit({preventDefault(){}});assert.equal(published.length,0)
-  const move=all.find(n=>n.tag==='button'&&n.attrs['aria-label']==='Ниже Закреплённая работа');move.onclick()
+  const move=all.find(n=>n.tag==='button'&&n.attrs['aria-label']==='Перетащить: Закреплённая работа');move.onkeydown({key:'ArrowDown',preventDefault(){}})
   consent.checked=true;form.onsubmit({preventDefault(){}});assert.equal(published.length,1);assert.equal(published[0].portfolio.blocks[0].key,'publications')
   const pending=flatten(renderUnifiedEditor({...base,publicLoaded:false}));assert.ok(!pending.some(n=>n.tag==='button'&&n.type==='submit'))
   const p=defaultPortfolio();p.featured=a;p.blocks.find(b=>b.key==='about').visible=false

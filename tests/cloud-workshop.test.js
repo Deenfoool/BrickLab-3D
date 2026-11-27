@@ -17,7 +17,7 @@ test('passport structural checks do not certify physics',()=>{
 test('production workshop merges public editing into account settings and omits experimental sections and legacy shared-project navigation',()=>{
  assert.ok(!sections.some(([key])=>key==='passport'))
  assert.ok(!sections.some(([key])=>['challenges','diary','publicProfile','bureau'].includes(key)))
- assert.deepEqual(sections.map(([key])=>key),['workshop','cloud','achievements','rankings','favorites','notifications','storage','settings','security','cosmetics'])
- assert.equal(new Set(sections.map(([key])=>key)).size,10)
+ assert.deepEqual(sections.map(([key])=>key),['workshop','cloud','achievements','rankings','favorites','notifications','storage','settings'])
+ assert.equal(new Set(sections.map(([key])=>key)).size,8)
  assert.equal(typeof modelPassport,'function')
 })

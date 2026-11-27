@@ -12,6 +12,7 @@ export function validatePublicCard(value){
  const clean=(s,max)=>typeof s==='string'&&s.length<=max&&!/[\u0000-\u0008\u000b-\u001f\u007f]/.test(s)&&!/[\ud800-\udfff]/u.test(s)
  if(!value||!clean(value.displayName,80)||!value.displayName.trim()||!clean(value.bio,500))throw new ProjectError(400,'invalid_public_profile')
  const appearance={}
+ if(value.visible!==undefined){if(typeof value.visible!=='boolean'||value.unified!==true)throw new ProjectError(400,'invalid_public_profile');appearance.visible=value.visible}
  for(const k of ['showAvatar','showCover','showBackground']){if(value[k]!==undefined){if(typeof value[k]!=='boolean')throw new ProjectError(400,'invalid_public_profile');appearance[k]=value[k]}}
  if(value.unified!==undefined){if(value.unified!==true||value.consent!==true||!['blueprint','graphite','amber'].includes(value.cover)||!['showAvatar','showCover','showBackground'].every(k=>typeof value[k]==='boolean'))throw new ProjectError(400,'invalid_public_profile');let portfolio;try{portfolio=validatePortfolio(value.portfolio)}catch{throw new ProjectError(400,'invalid_public_profile')}return {displayName:value.displayName.trim(),bio:value.bio.trim(),...appearance,unified:true,cover:value.cover,portfolio}}
  return {displayName:value.displayName.trim(),bio:value.bio.trim(),...appearance}
@@ -70,11 +71,12 @@ export function publicBuild(row){
 export function publicWorkshopSummary(summary){return {metricLayout:readMetricLayout(summary?.layout),globalRank:Number.isSafeInteger(summary?.rank)&&summary.rank>0?summary.rank:null,achievementCount:Number.isSafeInteger(summary?.awards)&&summary.awards>=0?summary.awards:null}}
 export function publicCard(row,options={}){
  if(!row)return null
+ if(row.visible===false&&!options?.owner)return null
  const base=uuid.test(row.id)?'/api/community/profile/'+row.id:null,owner=options?.owner===true
  const portfolio=row.unified===true?filterPortfolio(row.portfolio,row.publicIds??[]):null
  const visible=key=>portfolio?.blocks.some(b=>b.key===key&&b.visible)===true
  const projected=portfolio?(owner?portfolio:{...portfolio,featured:visible('featured')?portfolio.featured:null,collections:visible('collections')?portfolio.collections:[]}):null
- return {id:row.id,...(row.username?{username:row.username}:{}),displayName:row.displayName,bio:portfolio&&!owner&&!visible('about')?'':row.bio,updatedAt:row.updatedAt,followers:row.followers??0,
+ return {id:row.id,...(options?.owner?{visible:row.visible!==false}:{}),...(row.username?{username:row.username}:{}),displayName:row.displayName,bio:portfolio&&!owner&&!visible('about')?'':row.bio,updatedAt:row.updatedAt,followers:row.followers??0,
   avatarUrl:base&&row.hasAvatar===true?base+'/avatar':null,coverUrl:base&&row.hasCover===true?base+'/cover':null,
   coverTheme:['blueprint','graphite','amber'].includes(row.coverTheme)?row.coverTheme:null,
   backgroundTheme:backgroundIds.includes(row.backgroundTheme)?row.backgroundTheme:null,
@@ -191,7 +193,7 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
       for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>16384){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
       let data;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new ProjectError(400,'invalid_json')}
       await store.publishCard(user.id,validatePublicCard(data))
-     }else if(req.method==='DELETE')await store.unpublishCard(user.id)
+     }else if(req.method==='DELETE'){if(store.hideCard)await store.hideCard(user.id);else await store.unpublishCard(user.id)}
      const card=publicCard(await store.getOwnCard(user.id),{owner:true});if(card&&store.reputation)card.reputation=publicReputation(await store.reputation(card.id));if(card&&store.workshopPublicSummary)Object.assign(card,publicWorkshopSummary(await store.workshopPublicSummary(card.id)));reply(res,200,{profile:card});return true
     }
     if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
