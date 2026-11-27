@@ -1,4 +1,5 @@
 import {mountWorldGestures} from './world-gestures.js'
+import {worldPartIds} from './world-plan.js'
 import { loadPartIndex, enrichInventory, normalizeDocumentDesigns } from '../catalog/part-resolver.js?v=catalog-engine-1'
 import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=instruction-artwork-v5'
 import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=instruction-artwork-v5'
@@ -2248,9 +2249,13 @@ export async function mountEditor(root, { document, projectId, language, save, d
     if(!editing()||moving||frame||runningMotor||hiddenParts.length)throw Error('Заверши текущую операцию или открой все детали.');
     if(!Array.isArray(cells)||!cells.length||cells.length>256||state.parts.length+cells.length>3000)throw Error('Лимит строительства.');
     const before=state;
-    for(const id of new Set(cells.map(c=>c.design))){
-      if(!Object.hasOwn(parts,id))throw Error('Деталь недоступна: '+id);
-      await prepareModel(parts[id]);
+    const designs=[...new Set(cells.map(c=>c.design))];
+    for(let i=0;i<designs.length;i+=4){
+      await Promise.all(designs.slice(i,i+4).map(async id=>{
+        if(!Object.hasOwn(parts,id))throw Error('Деталь недоступна: '+id);
+        await prepareModel(parts[id]);
+      }));
+      if(signal.aborted)throw Error('Сцена закрыта.');
     }
     if(signal.aborted||state!==before||!editing()||moving)throw Error('Сцена изменилась. Повтори операцию.');
     const q=new Quaternion().fromArray(baseRotation);
@@ -2259,9 +2264,18 @@ export async function mountEditor(root, { document, projectId, language, save, d
     const added=[];
     for(const c of cells){
       const model=models.get(c.design);
-      const rotated=model.bounds.clone().applyMatrix4(new Matrix4().makeRotationFromQuaternion(q));
+      const width=(c.w??1)*20,depth=(c.d??1)*20;
+      let orientation=q.clone(),rotated=model.bounds.clone().applyMatrix4(new Matrix4().makeRotationFromQuaternion(orientation));
+      const size=rotated.getSize(new Vector3());
+      const matches=(a,b)=>Math.abs(a-width)<=2&&Math.abs(b-depth)<=2;
+      if(!matches(size.x,size.z)&&matches(size.z,size.x)){
+        orientation.premultiply(new Quaternion().setFromAxisAngle(Y,Math.PI/2));
+        rotated=model.bounds.clone().applyMatrix4(new Matrix4().makeRotationFromQuaternion(orientation));
+      }
+      const finalSize=rotated.getSize(new Vector3());
+      if(!matches(finalSize.x,finalSize.z))throw Error('Размер геометрии не совпадает с сеткой: '+c.design);
       const center=rotated.getCenter(new Vector3());
-      const p={id:crypto.randomUUID(),design:c.design,color:c.color,rotation:[...baseRotation],position:[c.x-center.x,c.y-rotated.min.y,c.z-center.z]};
+      const p={id:crypto.randomUUID(),design:c.design,color:c.color,rotation:orientation.toArray(),position:[c.x-center.x,c.y-rotated.min.y,c.z-center.z]};
       const box=bounds(p,model);
       // Studs overlap the underside of correctly stacked parts by up to 4 LDU.
       if(existing.some(b=>Math.min(b.max.x,box.max.x)-Math.max(b.min.x,box.min.x)>.5&&Math.min(b.max.z,box.max.z)-Math.max(b.min.z,box.min.z)>.5&&Math.min(b.max.y,box.max.y)-Math.max(b.min.y,box.min.y)>4.1))throw Error('Область пересекает существующую конструкцию.');
@@ -2270,7 +2284,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     if(!commit({parts:[...state.parts,...added],links:state.links}))throw Error('Не удалось добавить детали.');
     if(focus)scene.focus(added.map(p=>p.id));
   };
-  onWorldBuild(buildWorld);
+  onWorldBuild(buildWorld,worldPartIds.filter(id=>Object.hasOwn(parts,id)));
   if(worldControls)mountWorldGestures(root,{scene,signal,controls:worldControls,count:()=>state.parts.length+hiddenParts.length,canBuild:()=>editing()&&!moving&&!runningMotor&&!hiddenParts.length,prepare:()=>{if(mode!=='build')setMode('build');cancelPlacement();cancelGizmo();cancelResize();setTool('select')},build:buildWorld});
   }
   if(labMode)onEnvironment?.(scene.setLabSky)
