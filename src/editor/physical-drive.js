@@ -183,7 +183,7 @@ function runVehicle(rapier, world, vehicle, models, assembly, terrain,obstacles)
         sample.set(part.id, carryPose(vehicle.byId.get(part.id), part, sample.get(part.id)))
       }
     })
-    return { poses: [...sample.values()], position, yaw: 0, tilt: rotation, scale, speed, outOfBounds,
+    return { poses: [...sample.values()], position, yaw: 0, tilt: rotation, scale, speed, outOfBounds, elapsed,
       radius: yawRate > 1e-4 && Math.abs(speed) > .05 ? Math.abs(speed) / yawRate : Infinity,
       grounded: wheels.filter(wheel => wheel.grounded).length,
       suspension: wheels.flatMap(({ suspension, offset, wheel }) => suspension ?

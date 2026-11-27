@@ -509,7 +509,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   let driveConfig = source.testDrive
   const drivePanel = mountDrivePanel(el('drivePanel'), {
     language, scene, models, catalog: parts, signal, readWorld:labMode==='model'?readWorld:undefined,
-    read: () => ({ parts: state.parts, assembly, config: driveConfig }),
+    read: () => ({ parts: state.parts, assembly, config: driveConfig, name:el('name').value.trim()||source.name }),
     write: config => { driveConfig = config; persist() },
     nameOf: id => parts[state.parts.find(part => part.id === id)?.design]?.[language] ?? id,
   })

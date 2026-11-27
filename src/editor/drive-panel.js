@@ -178,7 +178,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
   let launchDetail=''
   let physics
   let physicsRun
-  let runMetrics,lastMetrics;
+  let runMetrics,lastMetrics,metricsTime=0;
 
   function arrow(degrees, scale = vehicle.settings.scale) {
     const direction = forwardVector(degrees)
@@ -249,7 +249,9 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     const dt = previous === undefined ? 0 : (time - previous) / 1000
     const result = physicsRun ? physicsRun.advance(input, dt) : stepTestDrive(vehicle, state, input, dt, track)
     if(runMetrics){
-      runMetrics.update({position:vehicle.origin.clone().add(result.position).toArray(),speed:result.speed*(physicsRun?1:.01),dt:Math.min(dt,.05),throttle:input.throttle,brake:input.brake});
+      const step=physicsRun?Math.max(0,result.elapsed-metricsTime):Math.max(0,Math.min(dt,.05));
+      if(physicsRun)metricsTime=result.elapsed;
+      runMetrics.update({position:vehicle.origin.clone().add(result.position).toArray(),speed:result.speed*(physicsRun?1:.0004),dt:step,throttle:input.throttle,brake:input.brake});
       lastMetrics=runMetrics.result();showMetrics('runMetrics',lastMetrics);
     }
     previous = time
@@ -387,13 +389,15 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     scene.clearDriveTransform()
     scene.setDriveMap(track?.group)
     state = newDriveState(vehicle, track)
-    runMetrics=createDriveTelemetry(track?.group?.userData.provingGround===true);lastMetrics=runMetrics.result();showMetrics('runMetrics',lastMetrics);el('downloadRun').hidden=false;
+    metricsTime=0;
+    runMetrics=createDriveTelemetry(track?.group?.userData.provingGround===true,{metersPerLdu:physicsRun?.advance ? .01:.0004,vehicle:read().name,venue,simulation,scale:vehicle.settings.scale});lastMetrics=runMetrics.result();showMetrics('runMetrics',lastMetrics);el('downloadRun').hidden=false;
     el('trackStatus').hidden = true
     el('scaleNotice').hidden = true
     el('mechanics').hidden = !physicsRun
     el('mapStats').hidden=!track?.stats;
     el('mapStats').textContent=track?.stats?(language==='ru'?'Карта: ':'Map: ')+track.stats.parts+(language==='ru'?' дет. · ':' parts · ')+track.stats.colliders+(language==='ru'?' коллайдеров':' colliders')+(track.stats.obstacles?' · '+track.stats.obstacles+(language==='ru'?' препятствий':' obstacles'):''):'';
     const initial = physicsRun ? physicsRun.advance({ throttle: 0, steer: 0, brake: false }, 0) : state
+    runMetrics.update({position:vehicle.origin.clone().add(initial.position).toArray(),speed:0,dt:0,throttle:0,brake:false});
     scene.driveTransform(vehicle.origin, initial.position, initial.yaw, initial.tilt, initial.scale)
     scene.resetView()
     el('setup').hidden = true
@@ -443,7 +447,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
   on(el('clearSteering'), 'click', () => change({ steering: null }))
   on(el('start'), 'click', start)
   on(el('retry'), 'click', start)
-  for(const key of ['downloadRun','downloadLast'])on(el(key),'click',()=>{if(lastMetrics)downloadDriveResult(lastMetrics,vehicle?.parts?.length+' parts')});
+  for(const key of ['downloadRun','downloadLast'])on(el(key),'click',()=>{if(lastMetrics)downloadDriveResult(lastMetrics)});
   on(el('stop'), 'click', stop)
   on(scene.canvas, 'pointerdown', event => {
     if (active && !state && picking && event.button === 0) press = [event.clientX, event.clientY]
