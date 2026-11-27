@@ -27,8 +27,8 @@ function render(d){
  $('rank').textContent=d.rank==null?'Место не отображается для скрытой мастерской.':'Твоё место: #'+d.rank;
  $('ranking').replaceChildren();for(const r of d.top??[]){const row=document.createElement('article');row.className='feed';const h=document.createElement('strong');h.textContent='#'+r.position+' · '+r.displayName;const p=document.createElement('p');p.textContent=r.xp+' XP';row.append(h,p);$('ranking').append(row)}
  $('inbox').replaceChildren();for(const m of d.inbox??[]){const row=document.createElement('article');row.className='feed';const date=document.createElement('p');date.textContent=new Date(m.sentAt).toLocaleString();const text=document.createElement('div');text.textContent=m.body;row.append(date,text);$('inbox').append(row)}
- if(!$('inbox').children.length)$('inbox').textContent='Полученных рассылок пока нет.';
- $('marketing').checked=d.marketing===true;
+ if(!$('inbox').children.length)$('inbox').textContent='Новых событий пока нет.';
+ $('marketing').checked=d.marketing===true;$('personal-push').checked=d.personalPush===true;
 }
 async function load(){
  $('refresh').disabled=true;
@@ -42,3 +42,5 @@ for(const b of document.querySelectorAll('[data-tab]'))b.onclick=()=>{for(const 
 tg?.ready();tg?.expand();load();request('../role').then(r=>{$('owner').hidden=r.admin!==true}).catch(()=>{});
 
 $('promo-form').onsubmit=async e=>{e.preventDefault();const code=$('promo-code').value.trim().toUpperCase();try{await request('redeem',{code});$('promo-code').value='';await load();$('status').textContent='Промокод активирован.'}catch(err){$('status').textContent=err.message}};
+
+$('save-personal').onclick=async()=>{if(!current?.linked)return;try{const d=await request('personal-preferences',{push:$('personal-push').checked});if(!d.ok)throw Error('Настройки недоступны.');await load()}catch(e){$('status').textContent=e.message}};

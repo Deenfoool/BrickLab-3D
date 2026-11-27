@@ -11,7 +11,7 @@ export function createTelegramHubHandler({store,origin,keyFile='',ownerId='',log
  let key=null
  if(keyFile){const raw=readFileSync(keyFile,'utf8').trim();if(!/^[a-f0-9]{64}$/.test(raw))throw Error('Invalid Hub bridge key');key=Buffer.from(raw,'hex')}
  const cookieName=new URL(origin).protocol==='https:'?'__Host-bricklab_session':'bricklab_session'
- const routes=new Map([['/api/telegram/link','GET'],['/api/telegram/code','POST'],['/api/telegram/unlink','POST'],['/api/telegram/site-redeem','POST'],['/api/telegram/hub','GET'],['/api/telegram/claim','POST'],['/api/telegram/preferences','POST'],['/api/telegram/redeem','POST'],['/api/telegram/promos','GET'],['/api/telegram/promo-create','POST'],['/api/telegram/promo-disable','POST'],['/api/telegram/campaigns','GET'],['/api/telegram/campaign-create','POST'],['/api/telegram/campaign-queue','POST'],['/api/telegram/campaign-cancel','POST'],['/api/telegram/campaign-claim','POST'],['/api/telegram/campaign-finish','POST'],['/api/telegram/campaign-preview','POST']])
+ const routes=new Map([['/api/telegram/link','GET'],['/api/telegram/code','POST'],['/api/telegram/unlink','POST'],['/api/telegram/site-redeem','POST'],['/api/telegram/hub','GET'],['/api/telegram/claim','POST'],['/api/telegram/preferences','POST'],['/api/telegram/redeem','POST'],['/api/telegram/promos','GET'],['/api/telegram/promo-create','POST'],['/api/telegram/promo-disable','POST'],['/api/telegram/campaigns','GET'],['/api/telegram/campaign-create','POST'],['/api/telegram/campaign-queue','POST'],['/api/telegram/campaign-cancel','POST'],['/api/telegram/campaign-claim','POST'],['/api/telegram/campaign-finish','POST'],['/api/telegram/campaign-preview','POST'],['/api/telegram/personal-prepare','POST'],['/api/telegram/personal-claim','POST'],['/api/telegram/personal-finish','POST'],['/api/telegram/personal-preferences','POST']])
  function reply(res,status,data){const b=JSON.stringify(data);res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Content-Length':Buffer.byteLength(b)});res.end(b)}
  async function body(req){let size=0;const chunks=[];for await(const c of req.iterator({destroyOnReturn:false})){size+=c.length;if(size>16384){req.resume();throw Error('invalid_body')}chunks.push(c)}return Buffer.concat(chunks)}
  return async(req,res,path)=>{
@@ -50,6 +50,19 @@ export function createTelegramHubHandler({store,origin,keyFile='',ownerId='',log
    }
    const uid=await store.telegramIdentity(id)
    if(!uid){reply(res,path.endsWith('/hub')?200:403,{linked:false,error:'link_required'});return true}
+   if(['/api/telegram/personal-prepare','/api/telegram/personal-claim','/api/telegram/personal-finish'].includes(path)){
+    if(id!==ownerId||!await store.telegramAdmin(uid)){reply(res,403,{error:'admin_required'});return true}
+    if(path.endsWith('/personal-prepare')){reply(res,200,{ok:await store.telegramPreparePersonal(uid)});return true}
+    if(path.endsWith('/personal-claim')){reply(res,200,{item:await store.telegramPersonalClaim(uid)});return true}
+    const input=JSON.parse(raw.toString('utf8'))
+    if(typeof input?.attempt!=='string'||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(input.attempt)||!['sent','failed','unknown','retry'].includes(input.result)||!Number.isInteger(input.retry)||input.retry<0||input.retry>3600){reply(res,400,{error:'invalid_result'});return true}
+    reply(res,200,{ok:await store.telegramPersonalFinish(uid,input)});return true
+   }
+   if(path.endsWith('/personal-preferences')){
+    const input=JSON.parse(raw.toString('utf8'))
+    if(typeof input?.push!=='boolean'){reply(res,400,{error:'invalid_preference'});return true}
+    reply(res,200,{ok:await store.telegramPersonalPreferences(uid,input.push)});return true
+   }
    if(path==='/api/telegram/campaigns'||path.startsWith('/api/telegram/campaign-')){
     if(id!==ownerId||!await store.telegramAdmin(uid)){reply(res,403,{error:'admin_required'});return true}
     const uuid=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i

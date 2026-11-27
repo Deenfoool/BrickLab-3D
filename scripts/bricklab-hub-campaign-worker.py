@@ -18,7 +18,7 @@ def deliver(token,item):
     if not isinstance(chat,str) or not re.fullmatch(r"[1-9]\d{0,15}",chat): return "failed",0
     body=item.get("body")
     if not isinstance(body,str) or not 1<=len(body)<=2500: return "failed",0
-    message={"chat_id":int(chat),"text":body+"\n\nНастройки рассылок: BrickLab Hub → Бонусы.",
+    message={"chat_id":int(chat),"text":body+("\n\nНастройки событий: BrickLab Hub → События." if item.get("personal") else "\n\nНастройки рассылок: BrickLab Hub → Бонусы."),
              "reply_markup":{"inline_keyboard":[[{"text":"BrickLab Hub","web_app":{"url":"https://bricklab-3d.ru/control/hub/"}}]]}}
     req=urllib.request.Request("https://api.telegram.org/bot"+token+"/sendMessage",data=json.dumps(message).encode(),headers={"Content-Type":"application/json"})
     try:
@@ -39,15 +39,25 @@ def main():
     c=json.loads((directory/"telegram.json").read_text())
     owner=int(c["chat_id"]); token=c["token"]; key=bytes.fromhex((directory/"hub.key").read_text().strip())
     if owner<=0 or len(key)!=32 or not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]{20,}",token): raise ValueError("Invalid Hub credential")
-    for _ in range(20):
-        status,raw=mini.hub_request(key,owner,"campaign-claim",b"{}")
+    status,raw=mini.hub_request(key,owner,"personal-prepare",b"{}")
+    personal_ready=status==200 and json.loads(raw).get("ok") is True
+    empty=set()
+    for i in range(20):
+        kind="personal" if personal_ready and i%2==0 else "campaign"
+        if kind in empty:
+            kind="campaign" if kind=="personal" else "personal"
+            if kind in empty or (kind=="personal" and not personal_ready): return
+        status,raw=mini.hub_request(key,owner,kind+"-claim",b"{}")
         if status!=200:
             print("Campaign worker unavailable");return
         item=json.loads(raw).get("item")
-        if not item:return
+        if not item:
+            empty.add(kind)
+            if len(empty)==2 or not personal_ready: return
+            continue
         result,retry=deliver(token,item)
         payload=json.dumps({"attempt":item["attempt"],"result":result,"retry":retry}).encode()
-        status,raw=mini.hub_request(key,owner,"campaign-finish",payload)
+        status,raw=mini.hub_request(key,owner,kind+"-finish",payload)
         if status!=200 or not json.loads(raw).get("ok"): return
         if result=="retry":return
         time.sleep(1)
