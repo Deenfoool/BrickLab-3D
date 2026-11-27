@@ -2245,9 +2245,20 @@ export async function mountEditor(root, { document, projectId, language, save, d
     return true
   }})
   if(labMode==='world'&&onWorldBuild){
+  function roadRecords(){
+    const protectedIds=new Set([...(state.layers.lockedPartIds??[]),...hidden,...state.layers.groups.flatMap(g=>g.partIds),...state.links.flatMap(l=>[l.shaft.part,l.socket.part]),...state.belts.flatMap(b=>[b.a?.part,b.b?.part])]);
+    return state.parts.flatMap(p=>{
+      const r=p.worldRoad;
+      if(!r||r.id!==p.id||r.design!==p.design||r.color!==p.color||p.mirrored||!Array.isArray(r.position)||r.position.length!==3||!Array.isArray(r.rotation)||r.rotation.length!==4||!r.position.every(Number.isFinite)||!r.rotation.every(Number.isFinite)||!samePose(p,r))return [];
+      return [{...r,protected:protectedIds.has(p.id)}]
+    })
+  }
   const buildWorld=async(cells,{focus=true}={})=>{
     if(!editing()||moving||frame||runningMotor||hiddenParts.length)throw Error('Заверши текущую операцию или открой все детали.');
-    if(!Array.isArray(cells)||!cells.length||cells.length>256||state.parts.length+cells.length>3000)throw Error('Лимит строительства.');
+    const replacing=new Set(cells?.replaceIds??[]);
+    const currentRoads=roadRecords();
+    if([...replacing].some(id=>!currentRoads.some(r=>r.id===id&&!r.protected)))throw Error('Дорога изменилась. Повтори операцию.');
+    if(!Array.isArray(cells)||!cells.length||cells.length>256||state.parts.length-replacing.size+cells.length>3000)throw Error('Лимит строительства.');
     const before=state;
     const designs=[...new Set(cells.map(c=>c.design))];
     for(let i=0;i<designs.length;i+=4){
@@ -2260,7 +2271,8 @@ export async function mountEditor(root, { document, projectId, language, save, d
     if(signal.aborted||state!==before||!editing()||moving)throw Error('Сцена изменилась. Повтори операцию.');
     const q=new Quaternion().fromArray(baseRotation);
     const bounds=(part,model)=>model.bounds.clone().applyMatrix4(new Matrix4().compose(new Vector3(...part.position),new Quaternion().fromArray(part.rotation),new Vector3(part.mirrored?-1:1,1,1)));
-    const existing=state.parts.map(p=>bounds(p,models.get(p.design)));
+    const retained=state.parts.filter(p=>!replacing.has(p.id));
+    const existing=retained.map(p=>bounds(p,models.get(p.design)));
     const added=[];
     for(const c of cells){
       const model=models.get(c.design);
@@ -2276,16 +2288,17 @@ export async function mountEditor(root, { document, projectId, language, save, d
       if(!matches(finalSize.x,finalSize.z))throw Error('Размер геометрии не совпадает с сеткой: '+c.design);
       const center=rotated.getCenter(new Vector3());
       const p={id:crypto.randomUUID(),design:c.design,color:c.color,rotation:orientation.toArray(),position:[c.x-center.x,c.y-rotated.min.y,c.z-center.z]};
+      if(c.road)p.worldRoad={...c.road,id:p.id,design:p.design,color:p.color,position:[...p.position],rotation:[...p.rotation],x:Math.round(c.x/20-((c.w??1)-1)/2),z:Math.round(c.z/20-((c.d??1)-1)/2),w:c.w??1,d:c.d??1};
       const box=bounds(p,model);
       // Studs overlap the underside of correctly stacked parts by up to 4 LDU.
       if(existing.some(b=>Math.min(b.max.x,box.max.x)-Math.max(b.min.x,box.min.x)>.5&&Math.min(b.max.z,box.max.z)-Math.max(b.min.z,box.min.z)>.5&&Math.min(b.max.y,box.max.y)-Math.max(b.min.y,box.min.y)>4.1))throw Error('Область пересекает существующую конструкцию.');
       added.push(p);
     }
-    if(!commit({parts:[...state.parts,...added],links:state.links}))throw Error('Не удалось добавить детали.');
+    if(!commit({parts:[...retained,...added],links:state.links}))throw Error('Не удалось добавить детали.');
     if(focus)scene.focus(added.map(p=>p.id));
   };
   onWorldBuild(buildWorld,worldPartIds.filter(id=>Object.hasOwn(parts,id)));
-  if(worldControls)mountWorldGestures(root,{scene,signal,controls:worldControls,count:()=>state.parts.length+hiddenParts.length,canBuild:()=>editing()&&!moving&&!runningMotor&&!hiddenParts.length,prepare:()=>{if(mode!=='build')setMode('build');cancelPlacement();cancelGizmo();cancelResize();setTool('select')},build:buildWorld});
+  if(worldControls)mountWorldGestures(root,{scene,signal,controls:{...worldControls,read:()=>({...worldControls.read(),roadParts:roadRecords()})},count:()=>state.parts.length+hiddenParts.length,canBuild:()=>editing()&&!moving&&!runningMotor&&!hiddenParts.length,prepare:()=>{if(mode!=='build')setMode('build');cancelPlacement();cancelGizmo();cancelResize();setTool('select')},build:buildWorld});
   }
   if(labMode)onEnvironment?.(scene.setLabSky)
   reportLoad?.('scene', true)
