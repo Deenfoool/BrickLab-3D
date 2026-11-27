@@ -8,7 +8,7 @@ import { mountHomeHub, mountHubSearch } from './home-hub.js?v=achievements-platf
 import { createAuthClient } from './auth-client.js?v=live-polish-1'
 import { createCommunityClient } from './community-client.js?v=community-options-1'
 import { createProjectsClient,cloudLink,mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=achievements-platform-1'
+import { createCloudAccount } from './account.js?v=achievements-platform-2'
 import { createNotificationPopover } from './notifications.js?v=achievements-platform-1'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -481,7 +481,7 @@ function renderHome(visible) {
 
 function currentPage() {
   const hash = location.hash.slice(1)
-  if (hash === 'account/projects' || hash.startsWith('account/admin/')) return 'account'
+  if (hash === 'account/projects' || hash === 'account/achievements' || hash.startsWith('account/admin/')) return 'account'
   if (hash.startsWith('community/')) return 'community'
   if (hash.startsWith('project/')) return 'project'
   return pages.includes(hash) ? hash : 'home'
@@ -694,7 +694,7 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=context-pages-1')
+    const { mountEditor } = await import('../editor/editor.js?v=academy-1')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

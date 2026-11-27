@@ -71,7 +71,8 @@ function gearbox(parts,assembly,drivers){
 export function verifyMechanics(prepared,driver){
  const {parts,byId,assembly}=prepared,metrics=new Set()
  const candidates=parts.filter(p=>sprockets[p.design]||portsFor(p.design).some(q=>['gear','axle','key','piston','damper-cylinder','selector-guide','rim-seat'].includes(q.role)))
- const ordered=[...candidates.filter(p=>p.id===driver),...candidates.filter(p=>p.id!==driver)].slice(0,24)
+ const priority=p=>sprockets[p.design]||portsFor(p.design).some(q=>['gear','piston','damper-cylinder','selector-guide'].includes(q.role))?0:1
+ const ordered=[...parts.filter(p=>p.id===driver),...candidates.filter(p=>p.id!==driver).sort((a,b)=>priority(a)-priority(b))].slice(0,24)
  const tracks=trackDrives(parts,assembly.connections).filter(t=>t.closed&&t.drives.length>=2&&t.links.length>=6)
  for(const p of ordered){
   let plan,sample
@@ -81,10 +82,10 @@ export function verifyMechanics(prepared,driver){
   if(gearTransmission(plan,changed))metrics.add('gears')
   if((plan.belts??plan.rotation?.belts??[]).some(b=>b.record&&changed.has(b.a)&&changed.has(b.b)))metrics.add('belts')
   if(plan.kind==='engine'&&parts.some(p=>p.design==='3652'&&poses.flat().some(q=>q.id===p.id&&dist(p.position,q.position)>.1)))metrics.add('engine')
-  if(plan.kind==='suspension'&&assembly.connections.some(l=>l.fit.motion.rotation==='spring')&&assembly.connections.some(l=>l.fit.motion.rotation==='slider'&&changed.has(l.shaft.part)))metrics.add('suspension')
+  if(plan.kind==='suspension'&&assembly.connections.some(l=>l.fit.motion.rotation==='spring')&&assembly.connections.some(l=>l.fit.motion.rotation==='slider'&&(changed.has(l.shaft.part)||changed.has(l.socket.part))))metrics.add('suspension')
   if(tracks.some(t=>t.links.filter(l=>changed.has(l.id)).length>=2&&t.drives.every(d=>changed.has(d.wheel.id))))metrics.add('tracks')
  }
- if(metrics.has('gears')&&parts.length<=250){try{if(gearbox(parts,assembly,ordered))metrics.add('gearbox')}catch{}}
+ if(parts.length<=250&&parts.some(p=>p.design==='18947'||p.design==='6641')){try{if(gearbox(parts,assembly,ordered))metrics.add('gearbox')}catch{}}
  return [...metrics]
 }
 async function verifyDrive(prepared,settings){

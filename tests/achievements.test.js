@@ -6,8 +6,8 @@ import {readFileSync} from 'node:fs'
 test('catalog identifiers, thresholds and localization are consistent',()=>{
  assert.equal(new Set(achievements.map(a=>a.id)).size,achievements.length)
  assert.equal(achievements.length,60)
- const sql=readFileSync(new URL('../server/db/migrations/110_achievements.sql',import.meta.url),'utf8')
- for(const a of achievements){assert.ok(a.ru&&a.en&&a.descRu&&a.descEn);assert.ok(sql.includes("'"+a.id+"'"));if(a.metric&&!['cloud','founder'].includes(a.metric))assert.ok(sql.includes("('"+a.id+"','"+a.metric+"',"+a.target+")"))}
+ const sql=readFileSync(new URL('../server/db/migrations/111_achievement_platform.sql',import.meta.url),'utf8')
+ for(const a of achievements){assert.ok(a.ru&&a.en&&a.descRu&&a.descEn);assert.ok(sql.includes(JSON.stringify(a).replaceAll("'","''")),a.id)}
  assert.ok(activeAchievements.every(a=>a.metric!==null))
 })
 test('experience deduplicates awards and ignores fabricated IDs and client XP',()=>{
