@@ -10,11 +10,27 @@ exec 9>>/run/bricklab-deploy.lock
 flock -n 9 || { echo "Another BrickLab operation is running" >&2; exit 1; }
 TARGET="${1:?Supply an exact release commit SHA}"
 [[ "$TARGET" =~ ^[0-9a-f]{40}$ ]]
-test "$(git branch --show-current)" = feature/cloud-migration
-git diff --quiet
-git diff --cached --quiet
-test "$(git rev-parse origin/feature/cloud-migration)" = "$TARGET"
-git merge-base --is-ancestor HEAD "$TARGET"
+MODE="${2:-deploy}"
+case "$MODE" in
+  deploy)
+    test "$#" -le 2
+    test "$(git branch --show-current)" = feature/cloud-migration
+    git diff --quiet
+    git diff --cached --quiet
+    test "$(git rev-parse origin/feature/cloud-migration)" = "$TARGET"
+    git merge-base --is-ancestor HEAD "$TARGET"
+    ;;
+  --test-only)
+    test "$#" = 3
+    BRANCH="$3"
+    git check-ref-format "refs/heads/$BRANCH"
+    git fetch --no-tags origin "refs/heads/$BRANCH"
+    test "$(git rev-parse FETCH_HEAD)" = "$TARGET"
+    # Test archives must not contain links to host paths or submodules.
+    test "$(git ls-tree -r "$TARGET" | awk '$1=="120000" || $1=="160000"{n++} END{print n+0}')" = 0
+    ;;
+  *) echo "Invalid release mode" >&2; exit 2 ;;
+esac
 docker compose config --quiet
 docker image inspect bricklab-test-runner:local >/dev/null
 docker image inspect postgres:16 >/dev/null
@@ -33,7 +49,7 @@ chown -R 1000:1000 "$TMP"
 chmod 755 "$TMP"
 
 echo "=== RELEASE HISTORY CHECK ==="
-mkdir -p "$TMP/.release-check"
+mkdir "$TMP/.release-check"
 if git cat-file -e "HEAD:src/menu/home-hub.js" 2>/dev/null; then
  git show "HEAD:src/menu/home-hub.js" > "$TMP/.release-check/before.js"
 else
@@ -107,6 +123,10 @@ docker network rm "$NET" >/dev/null
 
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_upkeep_test.py
 
+if [[ "$MODE" == --test-only ]]; then
+    echo "=== ALL ISOLATED CHECKS PASSED: $TARGET ==="
+    exit 0
+fi
 echo "=== PRODUCTION BACKUPS ==="
 systemctl start bricklab-backup.service
 systemctl start bricklab-config-backup.service

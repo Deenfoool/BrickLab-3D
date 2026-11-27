@@ -25,6 +25,16 @@ class Upkeep(unittest.TestCase):
         disks={"app":{"used_percent":75}}
         self.assertEqual(m.metric_sample({"timestamp":100,"vps":{"cpu":"50%","ram_percent":40,"https":"OK"}},disks,400),(400,None,None,75,None))
         self.assertEqual(m.metric_sample({"timestamp":390,"vps":{"cpu":"50%","ram_percent":40,"https":"OK"}},disks,400),(400,50,40,75,1))
+    def test_no_destructive_global_prune(self):
+        src=pathlib.Path(m.__file__).read_text()
+        self.assertIn('command("docker", "builder", "prune", "--force", "--filter", "until=168h"',src)
+        self.assertIn('command("docker", "image", "rm", tag)',src)
+        self.assertNotIn('"system", "prune"',src)
+        self.assertNotIn('"volume", "prune"',src)
+    def test_release_test_only_before_production(self):
+        src=(pathlib.Path(m.__file__).parent/"deploy-community-vps.sh").read_text()
+        self.assertIn('git check-ref-format "refs/heads/$BRANCH"',src)
+        self.assertLess(src.index('ALL ISOLATED CHECKS PASSED'),src.index('=== PRODUCTION BACKUPS ==='))
     def test_period_monday(self):
         import datetime as dt
         x=dt.datetime(2026,11,30,9,tzinfo=m.MSK).timestamp()
