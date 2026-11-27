@@ -1,3 +1,4 @@
+import {validateAchievement} from './achievement-rules.js'
 import {achievementById} from '../src/menu/achievement-catalog.js'
 import {randomBytes,randomInt,createHash,createHmac} from 'node:crypto'
 import {hashPassword} from './auth.js'
@@ -48,6 +49,7 @@ export function createAccountSecurityHandler({store,origin,registrationEnabled=f
      if(q.length>100||/[\u0000-\u001f\u007f]/.test(q)||!/^\d{1,5}$/.test(raw)||Number(raw)>10000)throw new ProjectError(400,'invalid_admin_action')
      const offset=Number(raw)
      if(req.method==='GET'){
+      if(path==='/api/admin/achievements'){reply(res,200,{items:await store.listAchievementDefinitions()});return true}
       if(path==='/api/admin'){reply(res,200,{overview:await store.adminOverview(user.id)});return true}
       let rows
       if(path==='/api/admin/users')rows=await store.adminUsers(user.id,q,offset)
@@ -58,10 +60,11 @@ export function createAccountSecurityHandler({store,origin,registrationEnabled=f
       else throw new ProjectError(404,'not_found')
       reply(res,200,{items:rows.slice(0,30),nextOffset:rows.length>30&&offset+30<=10000?offset+30:null});return true
      }
+     if(req.method==='POST'&&path==='/api/admin/achievements'){await store.adminCreateAchievement(user.id,validateAchievement(await body(req)));reply(res,201,{ok:true});return true}
      if(req.method!=='POST'||path!=='/api/admin/action')throw new ProjectError(405,'method_not_allowed')
      const d=await body(req)
      if(!adminActions.includes(d.action)||!uuid.test(d.id)||typeof d.reason!=='string'||!d.reason.trim()||d.reason.length>500||/[\u0000-\u001f\u007f]/.test(d.reason)||/[\ud800-\udfff]/u.test(d.reason))throw new ProjectError(400,'invalid_admin_action')
-     if(d.action==='grant_achievement'){const a=achievementById(d.award);if(!a||a.metric!==null||d.reason.trim().length>450)throw new ProjectError(400,'invalid_admin_action');await store.adminGrantAchievement(user.id,d.id,d.award,d.reason.trim())}
+     if(d.action==='grant_achievement'){const a=achievementById(d.award);if((!a&&!/^custom-[a-z0-9-]{1,39}$/.test(d.award??''))||(a&&a.metric!==null)||d.reason.trim().length>450)throw new ProjectError(400,'invalid_admin_action');await store.adminGrantAchievement(user.id,d.id,d.award,d.reason.trim())}
      else if(d.action==='confirm_bug')await store.adminConfirmBug(user.id,d.id,d.reason.trim())
      else await store.adminAction(user.id,d.action,d.id,d.reason.trim());reply(res,200,{ok:true});return true
     }

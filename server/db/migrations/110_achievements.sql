@@ -25,12 +25,12 @@ CREATE TABLE bricklab.achievement_founder_slots (
 INSERT INTO bricklab.achievement_founder_slots(used) SELECT count(*)::int FROM bricklab.workshop_awards WHERE award='founder';
 REVOKE ALL ON bricklab.achievement_founder_slots FROM PUBLIC,bricklab_app;
 CREATE FUNCTION bricklab.award_founder_on_registration() RETURNS trigger
- LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $
+ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
  BEGIN
  UPDATE bricklab.achievement_founder_slots SET used=used+1 WHERE singleton AND used<100;
  IF FOUND THEN INSERT INTO bricklab.workshop_awards(user_id,award) VALUES(NEW.id,'founder') ON CONFLICT DO NOTHING; END IF;
  RETURN NEW;
- END; $;
+ END; $$;
 REVOKE ALL ON FUNCTION bricklab.award_founder_on_registration() FROM PUBLIC,bricklab_app;
 CREATE TRIGGER achievement_founder_registration AFTER INSERT ON bricklab.users FOR EACH ROW EXECUTE FUNCTION bricklab.award_founder_on_registration();
 ALTER TABLE bricklab.operator_bug_reports ADD COLUMN confirmed_at timestamptz;

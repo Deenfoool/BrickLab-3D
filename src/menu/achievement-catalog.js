@@ -562,15 +562,15 @@ export const achievements=Object.freeze([
  {
   "id": "academy",
   "cat": "learning",
-  "metric": null,
+  "metric": "lesson",
   "target": 1,
   "xp": 30,
   "rarity": "common",
   "icon": "book",
   "ru": "Первый урок",
   "en": "First lesson",
-  "descRu": "Завершить подтверждённый урок.",
-  "descEn": "Complete a verified lesson."
+  "descRu": "Выполнить практическое задание Академии на сохранённой модели и ответить на контрольный вопрос.",
+  "descEn": "Complete a saved-model Academy exercise and answer its checkpoint."
  },
  {
   "id": "instruction",
@@ -614,7 +614,7 @@ export const achievements=Object.freeze([
  {
   "id": "gears",
   "cat": "mechanics",
-  "metric": null,
+  "metric": "gears",
   "target": 1,
   "xp": 250,
   "rarity": "epic",
@@ -627,20 +627,20 @@ export const achievements=Object.freeze([
  {
   "id": "firstDrive",
   "cat": "mechanics",
-  "metric": null,
+  "metric": "drive",
   "target": 1,
   "xp": 100,
   "rarity": "rare",
   "icon": "play",
   "ru": "Первый заезд",
   "en": "First drive",
-  "descRu": "Завершить проверенный тест-драйв.",
-  "descEn": "Complete a verified test drive."
+  "descRu": "Пройти серверную проверку движения на ровной площадке в кинематической симуляции.",
+  "descEn": "Pass the server-side flat-ground kinematic driving test."
  },
  {
   "id": "engine",
   "cat": "mechanics",
-  "metric": null,
+  "metric": "engine",
   "target": 1,
   "xp": 250,
   "rarity": "epic",
@@ -653,20 +653,20 @@ export const achievements=Object.freeze([
  {
   "id": "gearbox",
   "cat": "mechanics",
-  "metric": null,
+  "metric": "gearbox",
   "target": 1,
   "xp": 500,
   "rarity": "legendary",
   "icon": "settings",
   "ru": "Король трансмиссий",
   "en": "Transmission king",
-  "descRu": "Подтвердить коробку передач.",
-  "descEn": "Verify a gearbox."
+  "descRu": "Подтвердить две разные передаточные ступени через переключение.",
+  "descEn": "Verify two distinct transmission ratios by shifting."
  },
  {
   "id": "tracks",
   "cat": "mechanics",
-  "metric": null,
+  "metric": "tracks",
   "target": 1,
   "xp": 150,
   "rarity": "rare",
@@ -679,7 +679,7 @@ export const achievements=Object.freeze([
  {
   "id": "suspension",
   "cat": "mechanics",
-  "metric": null,
+  "metric": "suspension",
   "target": 1,
   "xp": 150,
   "rarity": "rare",
@@ -692,7 +692,7 @@ export const achievements=Object.freeze([
  {
   "id": "belts",
   "cat": "mechanics",
-  "metric": null,
+  "metric": "belts",
   "target": 1,
   "xp": 150,
   "rarity": "rare",
@@ -781,16 +781,16 @@ export const achievements=Object.freeze([
   "descEn": "Join an official winter event."
  }
 ])
-export const achievementById=id=>achievements.find(a=>a.id===id)
-export const achievementName=(id,lang)=>achievementById(id)?.[lang==='ru'?'ru':'en']??id
+export const achievementById=(id,definitions=[])=>achievements.find(a=>a.id===id)??definitions.find(a=>a.id===id)
+export const achievementName=(id,lang,definitions=[])=>achievementById(id,definitions)?.[lang==='ru'?'ru':'en']??id
 export const activeAchievements=achievements.filter(a=>a.metric!==null)
 export const xpForLevel=level=>10*(level-1)+3*(level-1)**2
 export function levelForXp(xp){let level=1;while(level<50&&xp>=xpForLevel(level+1))level++;return level}
-export function achievementProgress(awards,metrics={},showcase=null,rarity={}){
+export function achievementProgress(awards,metrics={},showcase=null,rarity={},definitions=[]){
  const unique=new Map()
- for(const a of awards??[])if(achievementById(a?.award)&&!unique.has(a.award))unique.set(a.award,a)
+ for(const a of awards??[])if(achievementById(a?.award,definitions)&&!unique.has(a.award))unique.set(a.award,a)
  const earned=[...unique.values()]
- const xp=earned.reduce((sum,a)=>sum+achievementById(a.award).xp,0)
+ const xp=earned.reduce((sum,a)=>sum+achievementById(a.award,definitions).xp,0)
  const level=levelForXp(xp)
- return {xp,awards:earned,metrics,showcase,rarity,level,nextXp:level===50?null:xpForLevel(level+1),levelStart:xpForLevel(level)}
+ return {xp,awards:earned,metrics,showcase,rarity,definitions,level,nextXp:level===50?null:xpForLevel(level+1),levelStart:xpForLevel(level)}
 }

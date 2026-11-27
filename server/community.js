@@ -76,7 +76,7 @@ export function publicCard(row,options={}){
   coverTheme:['blueprint','graphite','amber'].includes(row.coverTheme)?row.coverTheme:null,
   backgroundTheme:backgroundIds.includes(row.backgroundTheme)?row.backgroundTheme:null,
   ...(row.supportBadge?{supportBadge:row.supportBadge}:{}),...(row.plus===true?{plus:true}:{}),
-  ...(portfolio?{unified:true,portfolio:projected,awards:visible('awards')?[...(Array.isArray(row.achievementShowcase)?row.achievementShowcase.filter(id=>achievementById(id)).slice(0,6):row.showAward===true?['firstCloudSave']:[]),...(row.firstBuilder===true?['firstBuilder']:[])]:[],...(owner?{showAvatar:row.shareAvatar===true,showCover:row.shareCover===true}:{})}:{})}
+  ...(portfolio?{unified:true,portfolio:projected,...(visible('awards')&&row.achievementDetails?{achievementXp:row.achievementDetails.xp,achievementStyle:row.achievementDetails.style,achievementDefinitions:row.achievementDetails.definitions}:{}),awards:visible('awards')?[...(Array.isArray(row.achievementShowcase)?row.achievementShowcase.filter(id=>achievementById(id,row.achievementDetails?.definitions??[])).slice(0,6):row.showAward===true?['firstCloudSave']:[]),...(row.firstBuilder===true?['firstBuilder']:[])]:[],...(owner?{showAvatar:row.shareAvatar===true,showCover:row.shareCover===true}:{})}:{})}
 }
 
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
