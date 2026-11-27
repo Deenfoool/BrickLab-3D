@@ -1,0 +1,4 @@
+Cozy Sky Day, Cozy Sky Sunset, Cozy Sky Night — Grab3D
+Source: https://grab3d.com/skyboxes/
+License: CC0 1.0 Universal — https://creativecommons.org/publicdomain/zero/1.0/
+Downloaded as 4096x2048 PNG panoramas at preview staging. Distant brick terrain is original BrickLab code.

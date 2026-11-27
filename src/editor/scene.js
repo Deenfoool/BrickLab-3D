@@ -9,10 +9,12 @@ import { portsFor } from '../mechanics/catalog.js?v=volvo-spur-gears'
 import { snapGrid } from './model.js?v=belt-drive'
 import { readPreference } from '../menu/preferences.js?v=full-settings'
 
+import {createLabHorizon,labSky} from './lab-environment.js'
+
 const unitScale = [1, 1, 1]
 const axesUp = new THREE.Vector3(0, 1, 0)
 
-export function createScene(host, models) {
+export function createScene(host, models, {labMode} = {}) {
   const world = new THREE.Scene()
   const editorSky = new THREE.Color('#16191f')
   const trackSky = new THREE.Color('#b8d2e7')
@@ -95,6 +97,9 @@ export function createScene(host, models) {
   const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0))
   const ray = new THREE.Raycaster()
   let driveMap
+  let labTexture=null,labPreset=null,labRequest=0
+  const horizon=labMode==='world'?createLabHorizon():null
+  if(horizon)world.add(horizon.group)
   let ghost
   let frame = null
   let active = true
@@ -482,6 +487,26 @@ export function createScene(host, models) {
     invalidate()
   }
 
+  function applyLabSky(){
+    world.background=labTexture??(driveMap?trackSky:editorSky);
+    world.fog=driveMap?trackFog:labPreset?new THREE.FogExp2(labPreset.fog,.000055):editorFog;
+    if(horizon){horizon.group.visible=!!labTexture&&!driveMap;if(labPreset)horizon.apply(labPreset);}
+    invalidate();
+  }
+  async function setLabSky(name){
+    if(!labMode)return false;
+    const seq=++labRequest,preset=labSky(name);
+    if(!preset){
+      labTexture?.dispose();labTexture=null;labPreset=null;applyLabSky();return true;
+    }
+    let tex;
+    try{
+      tex=await new THREE.TextureLoader().loadAsync(new URL('../../assets/lab-skies/'+preset.file,import.meta.url).href);
+      if(!active||seq!==labRequest){tex.dispose();return false;}
+      tex.mapping=THREE.EquirectangularReflectionMapping;tex.colorSpace=THREE.SRGBColorSpace;
+      const previous=labTexture;labTexture=tex;labPreset=preset;applyLabSky();previous?.dispose();return true;
+    }catch{tex?.dispose();return false;}
+  }
   function setDriveMap(group) {
     if(group)setCameraMode('perspective')
     if (driveMap) world.remove(driveMap)
@@ -491,6 +516,7 @@ export function createScene(host, models) {
     axes.visible = !group && showAxes
     world.background = group ? trackSky : editorSky
     world.fog = group ? trackFog : editorFog
+    if(labMode)applyLabSky()
     camera.near = group ? 5 : 1
     camera.far = group ? 125000 : 14000
     camera.updateProjectionMatrix()
@@ -521,6 +547,7 @@ export function createScene(host, models) {
   }
 
   function dispose() {
+    labRequest++;labTexture?.dispose();horizon?.dispose();
     remotePreview([])
     for(const mesh of connectorPoints.children)mesh.dispose?.();connectorPoints.clear();wireMaterial.dispose();pointGeometry.dispose();pointMale.dispose();pointFemale.dispose()
     active = false
@@ -558,7 +585,7 @@ export function createScene(host, models) {
     }finally{helpers.forEach((o,i)=>o.visible=visibility[i]);invalidate()}
   }
   resetView()
-  return { capturePublication, selectionCenter(ids) {
+  return { setLabSky, capturePublication, selectionCenter(ids) {
     const bounds = new THREE.Box3()
     for (const id of ids) if (objects.has(id)) bounds.expandByObject(objects.get(id), true)
     return bounds.getCenter(new THREE.Vector3()).toArray()

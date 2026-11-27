@@ -57,7 +57,7 @@ const simulating = mode => mode === 'testDrive'
 const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
-export async function mountEditor(root, { document, projectId, language, save, download, publish, signal, reportLoad, collaboration, onJoinCollaboration, projectActions, labMode, onWorldBuild }) {
+export async function mountEditor(root, { document, projectId, language, save, download, publish, signal, reportLoad, collaboration, onJoinCollaboration, projectActions, labMode, onWorldBuild, onEnvironment }) {
   await loadPartIndex()
   if (signal.aborted) return
   const source = upgradeInlineEngineFan(promoteLegacyBelts(expandComponents(normalizeDocumentDesigns(document, parts), parts)))
@@ -269,7 +269,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   let scene
   let tutorial = null
   try {
-    scene = createScene(el('viewport'), models)
+    scene = createScene(el('viewport'), models, {labMode})
   } catch (error) {
     root.replaceChildren()
     throw error
@@ -2267,6 +2267,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     if(!commit({parts:[...state.parts,...added],links:state.links}))throw Error('Не удалось добавить детали.');
     scene.focus(added.map(p=>p.id));
   });
+  if(labMode)onEnvironment?.(scene.setLabSky)
   reportLoad?.('scene', true)
   if (instructionReady) await instructionReady
 }

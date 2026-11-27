@@ -22,6 +22,25 @@ chmod 755 "$TMP"
 test -z "$(find "$TMP" -type l -print -quit)"
 test -f "$TMP/src/editor/lab.js"
 test -f "$TMP/vendor/three/build/three.module.min.js"
+echo "=== PREPARE CC0 PANORAMAS ==="
+install -d -m0755 "$TMP/assets/lab-skies"
+for SKY in day sunset night; do
+    curl -fLsS --retry 2 --connect-timeout 10 --max-time 90 --max-filesize 12000000 \
+      "https://grab3d.com/dl/2d/cozy-sky-$SKY/cozy-sky-${SKY}_4k.png" \
+      -o "$TMP/assets/lab-skies/$SKY.png"
+done
+python3 - "$TMP/assets/lab-skies" <<'PY'
+import pathlib,struct,sys
+for name in ("day","sunset","night"):
+    p=pathlib.Path(sys.argv[1])/(name+".png")
+    with p.open("rb") as f: header=f.read(24)
+    assert header[:8]==b"\x89PNG\r\n\x1a\n" and header[12:16]==b"IHDR", "Invalid PNG: "+name
+    assert struct.unpack(">II",header[16:24])==(4096,2048), "Invalid panorama dimensions: "+name
+    assert 1000<p.stat().st_size<=12000000, "Invalid panorama size: "+name
+    print(name+": 4096x2048 OK")
+PY
+cp "$TMP/src/editor/lab-skies-LICENSE.txt" "$TMP/assets/lab-skies/LICENSE.txt"
+
 mv "$TMP" "$DEST"
 trap - EXIT
 ln -s "releases/$TARGET" "$ROOT/.current-$TARGET"
