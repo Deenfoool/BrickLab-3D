@@ -129,7 +129,7 @@ export function connectAuthStore(env = process.env) {
       })
     },
     async getAchievementRankings(offset){return sql`select * from bricklab.achievement_rankings(${offset}::integer)`},
-    async listAchievementDefinitions(){return (await sql`select definition from bricklab.achievement_definitions where id like 'custom-%' AND (coalesce((definition->>'hidden')::boolean,false)=false OR EXISTS(SELECT 1 FROM bricklab.workshop_awards w WHERE w.user_id=${uid} AND w.award=achievement_definitions.id)) order by id`).map(r=>r.definition)},
+    async listAchievementDefinitions(){return (await sql`select definition from bricklab.achievement_definitions where id like 'custom-%' order by id`).map(r=>r.definition)},
     async recordAchievementEvidence(uid,id,revision,metrics){return scope(uid,async tx=>{await lock(tx,uid);for(const metric of metrics)await tx`insert into bricklab.achievement_evidence(user_id,project_id,revision,metric) values(${uid},${id},${revision},${metric}) on conflict do nothing`;return tx`select bricklab.refresh_achievements()`})},
     async getProfile(uid) {
       return scope(uid,async tx=>{
@@ -137,7 +137,7 @@ export function connectAuthStore(env = process.env) {
         const [{metrics:achievementMetrics}]=await tx`select bricklab.refresh_achievements() as metrics`
         const [{rarity:achievementRarity}]=await tx`select bricklab.achievement_rarity() as rarity`
         const [showcaseRow]=await tx`select awards from bricklab.achievement_showcases where user_id=${uid}`
-        const achievementDefinitions=(await tx`select definition from bricklab.achievement_definitions where id like 'custom-%' order by id`).map(r=>r.definition)
+        const achievementDefinitions=(await tx`select definition from bricklab.achievement_definitions where id like 'custom-%' AND (coalesce((definition->>'hidden')::boolean,false)=false OR EXISTS(SELECT 1 FROM bricklab.workshop_awards w WHERE w.user_id=${uid} AND w.award=achievement_definitions.id)) order by id`).map(r=>r.definition)
         const [appearance]=await tx`select style from bricklab.achievement_appearance where user_id=${uid}`
         const awards=await tx`select award,awarded_at as "awardedAt" from bricklab.workshop_awards where user_id=${uid} order by awarded_at`
         const media=await tx`select kind,version from bricklab.profile_media where user_id=${uid}`
