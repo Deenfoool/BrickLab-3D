@@ -8,10 +8,12 @@ test ! -L .env
 python3 - <<'PY'
 import json
 with open('/etc/bricklab-backup/telegram.json') as f:
-    assert int(json.load(f)['chat_id'])>0, 'Private owner required'
+    owner=int(json.load(f)['chat_id'])
+    assert owner>0, 'Private owner required'
 PY
 # App container already mounts this private directory read-only.
 test -d /var/lib/bricklab-commerce-private
+# Refuse to alter permissions of the existing private directory.
 KEY=/var/lib/bricklab-commerce-private/hub.key
 if [[ ! -e "$KEY" ]]; then openssl rand -hex 32 > "$KEY"; fi
 test ! -L "$KEY"

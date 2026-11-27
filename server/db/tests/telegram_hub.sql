@@ -45,6 +45,7 @@ DO $$ BEGIN
 END $$;
 SELECT set_config('bricklab.user_id','00000000-0000-4000-8000-000000000202',true);
 DO $$ BEGIN
- IF NOT bricklab.telegram_unlink() OR bricklab.telegram_identity(900002) IS NOT NULL THEN RAISE EXCEPTION 'unlink failed'; END IF;
+ IF NOT bricklab.telegram_unlink() THEN RAISE EXCEPTION 'unlink failed'; END IF;
+ IF bricklab.telegram_identity(900002) IS NOT NULL THEN RAISE EXCEPTION 'identity persisted after unlink'; END IF;
 END $$;
 ROLLBACK;

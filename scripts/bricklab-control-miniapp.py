@@ -47,7 +47,7 @@ def telegram_identity(raw, token, now=None):
         return None
 
 def validate(raw, token, owner, now=None):
-    return telegram_identity(raw,token,now)==owner
+    return type(owner) is int and owner>0 and telegram_identity(raw,token,now)==owner
 
 def hub_request(key, ident, route, body=None):
     path="/api/telegram/"+route
