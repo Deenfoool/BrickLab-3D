@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {createPaymentsHandler} from '../server/payments.js';
-import {commerceStore,commerceEntitlements} from '../server/db/commerce-store.js';
+import {commerceStore,commerceEntitlements,commerceEnvironment} from '../server/db/commerce-store.js';
 import {BASE_LIMITS} from '../src/menu/commerce-catalog.js';
 
 test('account projection receives live scoped grants and safe order history',async()=>{
@@ -91,4 +91,14 @@ test('active promo alone enables live Plus, never sandbox Plus',async()=>{
  assert.equal(sandbox.plusUntil,0);
  assert.equal(queries.length,1);
  assert.match(queries[0],/environment='test'/);
+});
+
+test('private profile and Hub sandbox selection is admin only',async()=>{
+ const env={BRICKLAB_COMMERCE_MODE:'test',BRICKLAB_YOOKASSA_TEST_ENABLED:'true'};
+ const tx=admin=>async parts=>{assert.match(parts.join('?'),/bricklab.is_admin/);return [{admin}]};
+ assert.equal(await commerceEnvironment(tx(true),env),'test');
+ assert.equal(await commerceEnvironment(tx(false),env),'live');
+ const noQuery=()=>assert.fail('live must not query sandbox');
+ assert.equal(await commerceEnvironment(noQuery,{...env,BRICKLAB_COMMERCE_MODE:'live'}),'live');
+ assert.equal(await commerceEnvironment(noQuery,{...env,BRICKLAB_YOOKASSA_TEST_ENABLED:'false'}),'live');
 });

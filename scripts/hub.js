@@ -6,7 +6,40 @@ const iconPaths={"home":"<path d=\"m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2
 function uiIcon(name){const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.setAttribute('class','ico');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.7');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');const doc=new DOMParser().parseFromString('<svg xmlns="'+ns+'">'+(Object.hasOwn(iconPaths,name)?iconPaths[name]:iconPaths.cube)+'</svg>','image/svg+xml');for(const child of doc.documentElement.children)svg.append(document.importNode(child,true));return svg;}
 
 const $=id=>document.getElementById(id);
-let current=null;
+let current=null,mediaGeneration=0,mediaUrls=[];
+const themeNames={carbon:'Carbon GT',neon:'Neon Circuit',blueprint:'Blueprint Studio',titanium:'Titanium Factory',ember:'Ember Forge',aurora:'Aurora Lab','first-build':'Первая сборка'};
+const supportNames={supporter:'Supporter','bronze-builder':'Bronze Builder','silver-builder':'Silver Builder','gold-builder':'Gold Builder','diamond-patron':'Diamond Patron','founders-club':'Founder’s Club'};
+const styles=['forge','masterwork','pioneer','starlight','marathon','academy'];
+function clearMedia(){mediaGeneration++;for(const url of mediaUrls)URL.revokeObjectURL(url);mediaUrls=[];$('profile-cover').replaceChildren();$('avatar').querySelector('img')?.remove()}
+async function profileMedia(d){
+ const generation=mediaGeneration;
+ for(const [kind,target,enabled] of [['avatar','avatar',d.hasAvatar],['cover','profile-cover',d.hasCover]]){
+  if(!enabled)continue;
+  try{
+   const r=await fetch(kind,{headers:{'X-Telegram-Init-Data':tg.initData},credentials:'omit',cache:'no-store',redirect:'error'});
+   if(!r.ok||r.headers.get('content-type')!=='image/webp')continue;
+   const blob=await r.blob();if(blob.size<12||blob.size>524288||generation!==mediaGeneration)continue;
+   const url=URL.createObjectURL(blob);mediaUrls.push(url);
+   const img=document.createElement('img');img.alt='';img.src=url;
+   if(generation===mediaGeneration)$(target).replaceChildren(img);
+  }catch{/* Keep the initials or theme cover if media is unavailable. */}
+ }
+}
+function profileBadge(label,ico,kind){const b=document.createElement('span');b.className='profile-badge';b.dataset.kind=kind;b.append(uiIcon(ico),document.createTextNode(label));$('profile-badges').append(b)}
+function appearance(d){
+ const a=d.appearance??{},card=$('profile-card');
+ card.dataset.theme=Object.hasOwn(themeNames,a.background)?a.background:'default';
+ card.dataset.frame=styles.includes(a.achievementStyle)?a.achievementStyle:'';
+ card.dataset.cover=['blueprint','carbon','neon','titanium','ember','aurora','default'].includes(a.coverTheme)?a.coverTheme:'default';
+ $('profile-badges').replaceChildren();
+ if(Object.hasOwn(themeNames,a.background))profileBadge(themeNames[a.background],'star','theme');
+ if(d.plus)profileBadge('BrickLab Plus','star','plus');
+ if(Object.hasOwn(supportNames,a.supportBadge))profileBadge(supportNames[a.supportBadge],'award',a.supportBadge);
+ $('commerce-mode').hidden=d.commerceMode!=='test';
+ void profileMedia(a);
+}
+window.addEventListener('pagehide',clearMedia);
+
 async function request(path,data){
  if(!tg?.initData)throw Error('Открой Mini App из личного чата с ботом.');
  const r=await fetch(path,{method:data?'POST':'GET',headers:{'X-Telegram-Init-Data':tg.initData,...(data?{'Content-Type':'application/json'}:{})},credentials:'omit',cache:'no-store',...(data?{body:JSON.stringify(data)}:{})});
@@ -20,12 +53,13 @@ function tile(parent,label,value,ico='award',rarity){
  box.className='tile';l.textContent=label;v.textContent=value??'—';if(rarity)box.dataset.rarity=rarity;if(String(value??'—').length>15)box.classList.add('long-value');const icon=document.createElement('div');icon.className='metric-icon';icon.append(uiIcon(ico));box.append(icon,l,v);parent.append(box)
 }
 function render(d){
- current=d;
+ clearMedia();current=d;
  $('pair').hidden=d.linked===true;$('dash').hidden=d.linked!==true;
  if(!d.linked)return;
  $('name').textContent=d.displayName??d.username??'Конструктор';
  $('avatar').textContent=Array.from($('name').textContent.trim()).slice(0,2).join('').toLocaleUpperCase('ru')||'BL';
  $('handle').textContent=d.username?'@'+d.username:'';
+ appearance(d);
  $('plan-name').textContent=d.plus?'BrickLab Plus':'BrickLab Free';$('plus').closest('.membership').dataset.plan=d.plus?'plus':'free';
  const hours=Math.max(0,Math.ceil((Number(d.plusUntil)-Date.now())/3600000));
  $('plus').textContent=d.plus?(Number.isFinite(hours)?'Осталось '+Math.floor(hours/24)+' дн. '+hours%24+' ч.':'Срок недоступен'):'Базовый доступ';
@@ -40,7 +74,7 @@ function render(d){
 }
 async function load(){
  $('refresh').disabled=true;
- try{render(await request('api'));$('status').textContent='Данные BrickLab обновлены.'}catch(e){current=null;$('dash').hidden=true;$('pair').hidden=true;$('status').textContent=e.message}
+ try{render(await request('api'));$('status').textContent='Данные BrickLab обновлены.'}catch(e){clearMedia();current=null;$('dash').hidden=true;$('pair').hidden=true;$('status').textContent=e.message}
  finally{$('refresh').disabled=false}
 }
 $('refresh').onclick=load;
