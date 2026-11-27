@@ -4,3 +4,6 @@ World v1: explicit stud-grid rectangle and row tool using existing LDraw 3024 an
 
 ## Environment
 World defaults to Day; mechanical mode to Studio. Select Day/Sunset/Night/Studio independently per mode. Stage downloads three CC0 Grab3D panoramas as local files and validates PNG headers, dimensions and size before switching the symlink. No hotlinks from browser. World decor uses instanced blocks and studs, not physical LEGO parts; never enters picking or assembly. Texture failures retain previous scene and loaded textures are disposed on switches and editor shutdown. Verify WebGL and background framing in browser.
+
+## World gesture tools
+World mode has 20 LDU grid and mouse-driven brush, rectangular area, axis-aligned wall. Left drag paints a preview using a bounded instanced mesh, release commits one undoable operation. Right/middle camera controls remain, Escape exits tool. The current level is an explicit construction plane, rows repeat in 8/24 LDU increments. The brush fills sampled gaps with integer line interpolation, deduplicates visited cells, and limits strokes to 256 parts and worlds to 3000 for bulk operations. Preview shapes are approximate, not exact part meshes. Normal library placement remains available in Ordinary assembly. No vehicle physics integration yet.

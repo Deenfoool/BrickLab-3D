@@ -1,3 +1,4 @@
+import {mountWorldGestures} from './world-gestures.js'
 import { loadPartIndex, enrichInventory, normalizeDocumentDesigns } from '../catalog/part-resolver.js?v=catalog-engine-1'
 import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=instruction-artwork-v5'
 import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=instruction-artwork-v5'
@@ -57,7 +58,7 @@ const simulating = mode => mode === 'testDrive'
 const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
-export async function mountEditor(root, { document, projectId, language, save, download, publish, signal, reportLoad, collaboration, onJoinCollaboration, projectActions, labMode, onWorldBuild, onEnvironment }) {
+export async function mountEditor(root, { document, projectId, language, save, download, publish, signal, reportLoad, collaboration, onJoinCollaboration, projectActions, labMode, onWorldBuild, onEnvironment, worldControls }) {
   await loadPartIndex()
   if (signal.aborted) return
   const source = upgradeInlineEngineFan(promoteLegacyBelts(expandComponents(normalizeDocumentDesigns(document, parts), parts)))
@@ -2242,8 +2243,10 @@ export async function mountEditor(root, { document, projectId, language, save, d
     applyState({parts:placed,links:next.connections,belts:next.belts??[],layers:readSceneLayers(next.sceneLayers,new Set(placed.map(p=>p.id)))})
     return true
   }})
-  if(labMode==='world'&&onWorldBuild)onWorldBuild(async cells=>{
+  if(labMode==='world'&&onWorldBuild){
+  const buildWorld=async(cells,{focus=true}={})=>{
     if(!editing()||moving||frame||runningMotor||hiddenParts.length)throw Error('Заверши текущую операцию или открой все детали.');
+    if(!Array.isArray(cells)||!cells.length||cells.length>256||state.parts.length+cells.length>3000)throw Error('Лимит строительства.');
     const before=state;
     for(const id of new Set(cells.map(c=>c.design))){
       if(!Object.hasOwn(parts,id))throw Error('Деталь недоступна: '+id);
@@ -2265,8 +2268,11 @@ export async function mountEditor(root, { document, projectId, language, save, d
       added.push(p);
     }
     if(!commit({parts:[...state.parts,...added],links:state.links}))throw Error('Не удалось добавить детали.');
-    scene.focus(added.map(p=>p.id));
-  });
+    if(focus)scene.focus(added.map(p=>p.id));
+  };
+  onWorldBuild(buildWorld);
+  if(worldControls)mountWorldGestures(root,{scene,signal,controls:worldControls,count:()=>state.parts.length+hiddenParts.length,canBuild:()=>editing()&&!moving&&!runningMotor&&!hiddenParts.length,prepare:()=>{if(mode!=='build')setMode('build');cancelPlacement();cancelGizmo();cancelResize();setTool('select')},build:buildWorld});
+  }
   if(labMode)onEnvironment?.(scene.setLabSky)
   reportLoad?.('scene', true)
   if (instructionReady) await instructionReady

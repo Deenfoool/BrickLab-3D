@@ -12,18 +12,18 @@ const fresh=kind=>({...newProject(kind==='world'?'Новый мир':'Новая
 function read(kind){const raw=localStorage.getItem(keys[kind]);return raw?parseProject(raw):fresh(kind)}
 function save(kind,doc){try{localStorage.setItem(keys[kind],JSON.stringify(doc));failed=false;$('lab-status').textContent='Локально сохранено';return true}catch{failed=true;$('lab-status').textContent='Ошибка сохранения · скачай файл';return false}}
 function inputs(){return {kind:$('world-kind').value,x:$('world-x').valueAsNumber,z:$('world-z').valueAsNumber,width:$('world-w').valueAsNumber,depth:$('world-d').valueAsNumber,level:$('world-y').valueAsNumber,rows:$('world-rows').valueAsNumber,color:$('world-color').value}}
-function setBusy(value){busy=value;for(const id of ['lab-model','lab-world','lab-new','lab-import','lab-export','lab-sky'])$(id).disabled=value;$('world-add').disabled=value||!worldAction}
+function setBusy(value){busy=value;for(const id of ['lab-model','lab-world','lab-new','lab-import','lab-export','lab-sky','world-tool','world-kind','world-x','world-z','world-w','world-d','world-y','world-rows','world-color'])$(id).disabled=value;$('world-add').disabled=value||!worldAction}
 async function open(kind,doc){
  if(busy)return;if(failed&&!confirm('Локальное сохранение не удалось. Перейти без сохранения?'))return;
  let next;try{next=doc??read(kind)}catch{$('lab-status').textContent='Не удалось прочитать локальный проект. Открой резервный файл.';return}
  controller?.abort();controller=new AbortController();const signal=controller.signal;
  mode=kind;active=next;failed=false;worldAction=null;skyAction=null;$('lab-sky').value=skyChoice(kind);$('lab-editor').dataset.labMode=kind;
- $('lab-model').setAttribute('aria-pressed',String(kind==='model'));$('lab-world').setAttribute('aria-pressed',String(kind==='world'));$('world-panel').hidden=kind!=='world';$('world-status').textContent='';
+ $('lab-model').setAttribute('aria-pressed',String(kind==='model'));$('lab-world').setAttribute('aria-pressed',String(kind==='world'));$('world-panel').hidden=kind!=='world';$('world-tool').value='select';$('world-status').textContent='';
  setBusy(true);$('lab-status').textContent='Загрузка редактора…';$('lab-editor').replaceChildren();
  try{
  await mountEditor($('lab-editor'),{document:next,projectId:'lab-'+kind,language:'ru',signal,labMode:kind,save(value){if(signal.aborted)return false;active=value;return save(kind,value)},download:downloadProject,
  projectActions:{newBuild:()=>void reset(),copy:doc=>downloadProject({...doc,name:(doc.name+' (копия)').slice(0,120)}),home:()=>{}},
- onWorldBuild:fn=>{worldAction=fn},onEnvironment:fn=>{skyAction=fn}});
+ onWorldBuild:fn=>{worldAction=fn},onEnvironment:fn=>{skyAction=fn},worldControls:{tool:$('world-tool'),read:()=>({...inputs(),tool:$('world-tool').value}),status:s=>{$('world-status').textContent=s},busy:setBusy}});
  if(!signal.aborted){$('lab-status').textContent='Локальный редактор · '+(kind==='world'?'World':'механика');if(doc)save(kind,active);await changeSky()}
  }catch(e){controller.abort();active=null;worldAction=null;setBusy(false);console.error(e);$('lab-status').textContent='Не удалось открыть редактор. Проверь WebGL и файлы деталей.'}
  finally{if(!signal.aborted)setBusy(false)}

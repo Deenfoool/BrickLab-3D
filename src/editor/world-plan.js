@@ -10,3 +10,28 @@ export function planWorldFill({kind,x,z,width,depth,level,rows,color},existing=0
  for(let h=0;h<rows;h++)for(let dz=0;dz<depth;dz++)for(let dx=0;dx<width;dx++)cells.push({design:part.design,x:(x+dx)*STUD,z:(z+dz)*STUD,y:(level+h*part.height)*PLATE,color});
  return cells;
 }
+
+export function worldLine(a,b){
+ let x=a.x,z=a.z;const dx=Math.abs(b.x-x),dz=Math.abs(b.z-z),sx=x<b.x?1:-1,sz=z<b.z?1:-1;let err=dx-dz;const out=[];
+ for(;;){out.push({x,z});if(x===b.x&&z===b.z)break;const e=2*err;if(e> -dz){err-=dz;x+=sx}if(e<dx){err+=dx;z+=sz}}
+ return out;
+}
+export function worldGestureCells(settings,start,end,trail=[],existing=0){
+ const valid=p=>p&&Number.isInteger(p.x)&&Number.isInteger(p.z)&&p.x>=-40&&p.x<=40&&p.z>=-40&&p.z<=40;
+ if(!valid(start)||!valid(end))throw Error('За пределами строительной площадки.');
+ const {tool}=settings;
+ if(tool==='area'||tool==='wall'){
+  const b={...end};
+  if(tool==='wall'){if(Math.abs(b.x-start.x)>=Math.abs(b.z-start.z))b.z=start.z;else b.x=start.x}
+  return planWorldFill({...settings,x:Math.min(start.x,b.x),z:Math.min(start.z,b.z),width:Math.abs(start.x-b.x)+1,depth:Math.abs(start.z-b.z)+1},existing)
+ }
+ if(tool!=='brush')throw Error('Выбери инструмент строительства.');
+ const seen=new Set(),cells=[];
+ for(const point of trail.length?trail:[start,end]){
+  if(!valid(point))throw Error('За пределами строительной площадки.');
+  const key=point.x+','+point.z;if(seen.has(key))continue;seen.add(key);
+  cells.push(...planWorldFill({...settings,x:point.x,z:point.z,width:1,depth:1},existing+cells.length));
+  if(cells.length>256)throw Error('До 256 деталей за один мазок.');
+ }
+ return cells;
+}

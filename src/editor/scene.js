@@ -57,7 +57,7 @@ export function createScene(host, models, {labMode} = {}) {
   controls.minDistance = 42
   controls.maxDistance = 1800
   const gridSize = 1600
-  const floor = new THREE.GridHelper(gridSize, gridSize / snapGrid, 0x475267, 0x2b3039)
+  const floor = new THREE.GridHelper(gridSize, gridSize / (labMode==='world'?20:snapGrid), 0x475267, 0x2b3039)
   let showGrid = readPreference('grid') !== 'off'
   let showAxes = readPreference('axes') !== 'off'
   floor.visible = showGrid
@@ -100,6 +100,9 @@ export function createScene(host, models, {labMode} = {}) {
   let labTexture=null,labPreset=null,labRequest=0
   const horizon=labMode==='world'?createLabHorizon():null
   if(horizon)world.add(horizon.group)
+  const worldPreview=labMode==='world'?new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshBasicMaterial({color:0x62c8eb,transparent:true,opacity:.32,depthWrite:false}),256):null;
+  if(worldPreview){worldPreview.count=0;worldPreview.frustumCulled=false;worldPreview.renderOrder=2;world.add(worldPreview)}
+  function setWorldPreview(cells){if(!worldPreview)return;worldPreview.count=Math.min(256,cells.length);const m=new THREE.Matrix4();for(let i=0;i<worldPreview.count;i++){const c=cells[i],h=c.design==='3005'?24:8;m.makeScale(19.5,h,19.5);m.setPosition(c.x,c.y+h/2,c.z);worldPreview.setMatrixAt(i,m)}worldPreview.instanceMatrix.needsUpdate=true;invalidate()}
   let ghost
   let frame = null
   let active = true
@@ -146,7 +149,7 @@ export function createScene(host, models, {labMode} = {}) {
       if (!active || renderer.getContext().isContextLost()) return
       const remoteMoving=animateRemote(Math.min(50,now-(remoteFrameTime||now-16)));remoteFrameTime=now
       if (presenting) {
-        const helpers=[marker,frontArrow,gizmo.getHelper(),ghost,connectorPoints,...[...remoteMeshes.values()].map(r=>r.mesh)].filter(Boolean)
+        const helpers=[worldPreview,marker,frontArrow,gizmo.getHelper(),ghost,connectorPoints,...[...remoteMeshes.values()].map(r=>r.mesh)].filter(Boolean)
         const visibility=helpers.map(object=>object.visible)
         try { for(const object of helpers)object.visible=false;renderer.render(world,camera) }
         finally { helpers.forEach((object,index)=>object.visible=visibility[index]) }
@@ -547,7 +550,7 @@ export function createScene(host, models, {labMode} = {}) {
   }
 
   function dispose() {
-    labRequest++;labTexture?.dispose();horizon?.dispose();
+    labRequest++;labTexture?.dispose();horizon?.dispose();if(worldPreview){worldPreview.geometry.dispose();worldPreview.material.dispose();worldPreview.dispose();worldPreview.removeFromParent()}
     remotePreview([])
     for(const mesh of connectorPoints.children)mesh.dispose?.();connectorPoints.clear();wireMaterial.dispose();pointGeometry.dispose();pointMale.dispose();pointFemale.dispose()
     active = false
@@ -573,7 +576,7 @@ export function createScene(host, models, {labMode} = {}) {
 
   function capturePublication(){
     if(!active||!canvas.width||!canvas.height)return null
-    const helpers=[floor,axes,frontArrow,marker,gizmo.getHelper(),ghost,connectorPoints,...[...remoteMeshes.values()].map(r=>r.mesh)].filter(o=>o&&typeof o.visible==='boolean')
+    const helpers=[worldPreview,floor,axes,frontArrow,marker,gizmo.getHelper(),ghost,connectorPoints,...[...remoteMeshes.values()].map(r=>r.mesh)].filter(o=>o&&typeof o.visible==='boolean')
     const visibility=helpers.map(o=>o.visible)
     try{
       for(const o of helpers)o.visible=false
@@ -585,7 +588,7 @@ export function createScene(host, models, {labMode} = {}) {
     }finally{helpers.forEach((o,i)=>o.visible=visibility[i]);invalidate()}
   }
   resetView()
-  return { setLabSky, capturePublication, selectionCenter(ids) {
+  return { setLabSky, setWorldPreview, capturePublication, selectionCenter(ids) {
     const bounds = new THREE.Box3()
     for (const id of ids) if (objects.has(id)) bounds.expandByObject(objects.get(id), true)
     return bounds.getCenter(new THREE.Vector3()).toArray()
