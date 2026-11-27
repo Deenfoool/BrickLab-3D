@@ -1,19 +1,17 @@
 import {metricItems} from './workshop-metrics-model.js'
-import {renderMetricEditor,workshopMetricValues} from './workshop-metrics.js?v=workshop-metrics-2'
-import {profileHref} from './profile-route.js'
+import {renderMetricEditor,workshopMetricValues} from './workshop-metrics.js?v=workshop-settings-1'
 import {renderVerificationLab,renderAchievementRewards,renderAchievementRankings} from './achievement-platform.js'
 import {renderAchievements} from './achievement-hall.js'
 import {achievementName} from './achievement-catalog.js'
 import {renderInstructionCollection} from './instruction-collection.js'
 import {commerceBadge,productArtwork,factsPanel,loyaltyBadge} from './commerce-visuals.js?v=merch-2'
-import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=workshop-metrics-2'
-import {renderWorkshopOverview} from './workshop-overview.js?v=workshop-metrics-2'
+import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=workshop-settings-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 import {commerceProducts} from './commerce-catalog.js'
 import { workshopCopy } from './workshop-copy.js?v=profile-gallery-1'
 
-export const sections=[['workshop','icon-home'],['cloud','folder'],['achievements','icon-trophy'],['rankings','icon-trophy'],['favorites','icon-heart'],['notifications','icon-bell'],['storage','icon-cloud'],['settings','settings'],['security','icon-shield'],['cosmetics','icon-heart']]
+export const sections=[['workshop','icon-home'],['cloud','folder'],['achievements','icon-trophy'],['rankings','icon-trophy'],['favorites','icon-heart'],['notifications','icon-bell'],['storage','icon-cloud'],['settings','settings']]
 const implemented=new Set(['workshop','cloud','achievements','rankings','storage','settings','security','cosmetics','favorites','notifications'])
 const extra={
  ru:{active:'Личный аккаунт · BrickLab Cloud',pending:'Этот раздел ещё не подключён к серверу.',noAwards:'Серверный учёт наград ещё не подключён. XP и награды не начисляются по локальным данным.',catalog:'Каталог будущих достижений',rankPlan:'Планируемая лестница званий',localDoc:'Локальный документ',cloudDoc:'Облачная ревизия',chooseSource:'Источник паспорта',load:'Загрузить паспорт',latest:'Актуальная версия',privateOnly:'Все облачные сборки пока приватные.',limits:'Текущие ограничения: 20 проектов, 20 версий на проект, запрос до 2 МиБ, бюджет около 64 МиБ на аккаунт.',noBytes:'Точное использование диска пока не отображается.',identity:'Данные текущей серверной сессии. Редактирование профиля будет подключено отдельно.',securityText:'Серверная сессия хранится в HttpOnly cookie. Доступно завершение остальных сессий. Подтверждение почты и восстановление пароля требуют настроенного почтового сервиса. 2FA пока не подключена.',errors:'Ошибки ссылок',malformed:'Некорректные детали',duplicates:'Повторяющиеся ID',unavailable:'Нет данных для паспорта',actual:'Подтверждённые облачные данные',notIssued:'Начисление не подключено',manual:'Сохранение и получение сборок выполняются вручную.',sourceLocal:'Локальная',sourceCloud:'Облачная'},
@@ -42,7 +40,7 @@ function metrics(items){const g=el('div','workshop-metric-grid');for(const [k,v]
 export function workshopSummary(local,remote){
  return {local:local.length,cloud:remote.length,revisions:remote.reduce((n,p)=>n+(Number.isSafeInteger(p.revision)&&p.revision>0?p.revision:0),0)}
 }
-export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bureauPanel,adminPanel,revokeOthers,profileData,saveProfile,uploadMedia,removeMedia,activityData,publicCard,publicLoaded,publicBuilds=[],loadPublic,publishPublic,unpublishPublic,publishBuild,unpublishBuild,refreshActivity,verifyAchievement,verificationResult,readActivity,toggleFavorite,openFavorite,logout,createBuild,openLocal,fetchCloud,signal,previewsEnabled,noticeNodes=[]}){
+export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,settingsTab='profile',setSettingsTab=()=>{},integrationsPanel,notificationPanel,visibilitySupported=false,bureauPanel,adminPanel,revokeOthers,profileData,saveProfile,uploadMedia,removeMedia,activityData,publicCard,publicLoaded,publicBuilds=[],loadPublic,publishPublic,unpublishPublic,publishBuild,unpublishBuild,refreshActivity,verifyAchievement,verificationResult,readActivity,toggleFavorite,openFavorite,logout,createBuild,openLocal,fetchCloud,signal,previewsEnabled,noticeNodes=[]}){
  const t={...workshopCopy[lang],...extra[lang],admin:lang==='ru'?'Администрирование':'Administration',revokeOthers:lang==='ru'?'Завершить остальные сессии':'End other sessions'},summary=workshopSummary(local,remote)
  const profile=profileData?.profile,progress=profileData?.progress
  const layout=el('div','workshop-layout cosmetic-'+(profile?.background??'default')),nav=el('nav','workshop-nav'),content=el('div','workshop-content')
@@ -59,23 +57,15 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
  if(section!=='workshop')content.append(el('h2','workshop-section-title',t[section]))
  if(section==='bureau'&&bureauPanel)content.append(bureauPanel())
  else if(section==='admin'&&user.admin===true&&adminPanel)content.append(adminPanel())
- else if(section==='cloud')content.append(el('div','workshop-projects-slot'))
+ else if(section==='cloud'){content.append(el('div','workshop-projects-slot'));appendPublicProfile()}
  else if(section==='workshop'){
-  const displayName=profile?.displayName??publicCard?.displayName??user.displayName,heroActions=[button(ru?'Сменить тему':'Change theme',()=>go('cosmetics'),busy),button(ru?'Редактировать профиль':'Edit profile',()=>go('settings'),busy)]
-  if(publicCard)heroActions.push(button(ru?'Скопировать ссылку':'Copy profile link',async()=>{const url=new URL(profileHref(publicCard.username,publicCard.id),location.origin+'/').href;try{await navigator.clipboard.writeText(url)}catch{globalThis.prompt(ru?'Ссылка на мастерскую':'Workshop link',url)}},busy))
-  else heroActions.push(button(ru?'Настройки видимости':'Visibility settings',()=>go('settings'),busy))
+  const displayName=profile?.displayName??publicCard?.displayName??user.displayName
   const metricValues=workshopMetricValues({lang,owner:true,remoteCount:summary.cloud,progress,card:publicCard,loaded:publicLoaded})
-  const hero=renderUnifiedHero({lang,owner:true,identity:{displayName,username:user.username,bio:profile?.bio,coverTheme:profile?.cover,backgroundTheme:profile?.background,achievementStyle:profile?.achievementStyle,supportBadge:profileData?.supportBadge,plus:profileData?.plus===true,avatarUrl:profile?.avatarUrl,coverUrl:profile?.coverUrl,subtitle:user.admin===true?(ru?'Администратор · BrickLab Cloud':'Administrator · BrickLab Cloud'):t.active},actions:heroActions,metricCards:metricItems({layout:profile?.metricLayout,lang,owner:true,values:metricValues})})
-  hero.append(renderMetricEditor({lang,layout:profile?.metricLayout,values:metricValues,busy,enabled:!!profile,save:metricLayout=>saveProfile({bio:profile.bio,cover:profile.cover,metricLayout})}))
-  const actions=el('div','workshop-quickbar'),quick=el('div','workshop-shortcuts'),create=button(ru?'Новая сборка':'New build',createBuild,busy);create.classList.add('primary');create.prepend(icon('plus'));quick.append(create)
-  for(const key of ['cloud','storage','favorites','cosmetics'])quick.append(button(t[key],()=>go(key),busy))
-  actions.append(el('span','workshop-quick-label',ru?'Быстрые действия':'Quick actions'),quick)
-  content.append(hero,actions,renderInstructionCollection({lang,signal,remote}))
-  if(publicCard){const top=el('div','portfolio-owner-heading');top.append(el('h2',null,ru?'Моя витрина':'My showcase'),button(ru?'Настроить блоки':'Customize blocks',()=>go('settings'),busy));content.append(top,renderPortfolio({lang,profile:publicCard,builds:publicBuilds,owner:true}))}
-  content.append(renderWorkshopOverview({lang,user,local,remote,busy,signal,previewsEnabled,createBuild,openLocal,openCloud:openFavorite,fetchCloud,go,activityData,publicLoaded,publicCard,publicBuilds,loadPublic,progress}))
-  if(Array.isArray(activityData?.calendar)){const cal=card(ru?'Личный календарь активности':'Private activity calendar');cal.append(activityCalendar(lang,activityData.calendar));content.append(cal)}
+  const hero=renderUnifiedHero({lang,owner:true,identity:{displayName,username:user.username,bio:profile?.bio,coverTheme:profile?.cover,backgroundTheme:profile?.background,achievementStyle:profile?.achievementStyle,supportBadge:profileData?.supportBadge,plus:profileData?.plus===true,avatarUrl:profile?.avatarUrl,coverUrl:profile?.coverUrl,subtitle:user.admin===true?(ru?'Администратор · BrickLab Cloud':'Administrator · BrickLab Cloud'):t.active},metricCards:metricItems({layout:profile?.metricLayout,lang,owner:true,values:metricValues})})
+  content.append(hero)
+  if(publicCard)content.append(renderPortfolio({lang,profile:publicCard,builds:publicBuilds,owner:true}))
  }else if(section==='achievements'){
-  content.append(renderVerificationLab({lang,remote,busy,verify:verifyAchievement,result:verificationResult,go}),renderAchievements({lang,progress,profile,busy,saveProfile,go,refresh:refreshActivity}),renderAchievementRewards({lang,profile,rewards:profileData?.achievementRewards,busy,saveProfile}))
+  content.append(renderVerificationLab({lang,remote,busy,verify:verifyAchievement,result:verificationResult,go}),renderAchievements({lang,progress,profile,busy,saveProfile,go,refresh:refreshActivity}))
  }else if(section==='rankings'){
   content.append(renderAchievementRankings({lang,signal,go}))
  }else if(['favorites','notifications'].includes(section)){
@@ -97,8 +87,13 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
     if(summary.cloud>=limits.projects||used>=limits.storageMiB)c.append(el('p','account-notice',ru?'Лимит достигнут. Существующие сборки и версии доступны для открытия и скачивания.':'Limit reached. Existing builds and versions remain available to open and download.'));
     const shop=el('a','workspace-action',ru?'Расширения облака':'Cloud upgrades');shop.href='#store';c.append(shop)
    }else c.append(el('p','account-muted',t.noBytes));content.append(c)
- }else if(section==='settings'){
-  content.append(renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic}))
+ }else if(section==='settings'||section==='cosmetics'||section==='security'){
+  const active=section==='cosmetics'?'appearance':section==='security'?'security':settingsTab,tabBar=el('nav','workshop-settings-tabs')
+  const tabs=[['profile','Профиль','Profile'],['appearance','Оформление','Appearance'],['layout','Компоновка','Layout'],['privacy','Приватность','Privacy'],['security','Безопасность','Security'],['notifications','Уведомления','Notifications'],['integrations','Интеграции','Integrations'],['subscription','Подписка','Subscription']]
+  tabBar.setAttribute('aria-label',ru?'Настройки аккаунта':'Account settings');for(const [key,r,e] of tabs){const b=button(ru?r:e,()=>setSettingsTab(key),busy);b.setAttribute('aria-pressed',String(active===key));tabBar.append(b)}content.append(tabBar)
+  const editor=mode=>renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic,visibilitySupported,mode})
+  if(active==='profile'){
+   content.append(editor('profile'))
   const c=card(ru?'Изображения профиля':'Profile images');c.append(el('p','account-muted',ru?'При включённой синхронизации изменения аватара и обложки сразу видны посетителям.':'When sharing is enabled, avatar and cover changes are immediately public.'))
   if(profile){for(const kind of ['avatar','cover']){
      const block=el('div','account-card'),picker=el('input'),label=el('label','account-field');picker.type='file';picker.accept='image/png,image/jpeg,image/webp';picker.disabled=busy||!publicLoaded;label.append(el('span',null,t[kind+'Upload']),picker);block.append(label)
@@ -107,8 +102,10 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
      if(url)block.append(button(t.removeImage,()=>removeMedia(kind),busy||!publicLoaded));c.append(block)
   }}else c.append(el('p','account-muted',t.profileMissing))
   content.append(c)
-  appendPublicProfile()
- }else if(section==='cosmetics'){
+  }else if(active==='layout'){
+   const values=workshopMetricValues({lang,owner:true,remoteCount:summary.cloud,progress,card:publicCard,loaded:publicLoaded});content.append(renderMetricEditor({lang,layout:profile?.metricLayout,values,busy,enabled:!!profile,expanded:true,save:metricLayout=>saveProfile({bio:profile.bio,cover:profile.cover,metricLayout})}),editor('layout'),renderAchievements({lang,progress,profile,busy,saveProfile,go,refresh:refreshActivity,showcaseOnly:true}))
+  }else if(active==='privacy'){content.append(editor('privacy'))}
+  else if(active==='appearance'){
    const c=card(t.cosmetics);c.append(el('p','account-muted',t.cosmeticHint),el('p','account-muted',lang==='ru'?'Если показ оформления разрешён в публичном профиле, новая тема сразу появится в сообществе.':'If public appearance is enabled, equipped themes immediately appear in the community.'))
    const grid=el('div','workshop-grid')
    for(const item of profileData?.inventory??[]){
@@ -121,13 +118,16 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
    const shop=el('a','workspace-action',lang==='ru'?'Открыть BrickLab Store':'Open BrickLab Store');shop.href='#store';c.append(grid,shop);content.append(c)
    const supporter=card(ru?'Значки поддержки':'Supporter badges'),badgeGrid=el('div','workshop-grid');supporter.append(el('p','account-muted',ru?'Выбранный значок будет показан в публичном профиле, если он опубликован. Значки не дают XP.':'The selected badge is visible on your published profile. Badges do not award XP.'));
    for(const badge of commerceProducts.filter(p=>p.kind==='badge')){const owned=profileData?.supportBadges?.includes(badge.id)===true,active=profileData?.supportBadge===badge.id,tile=card(badge.title);tile.classList.add('commerce-inventory-tile');tile.append(productArtwork(badge,lang),commerceBadge(badge.id),el('p','account-muted',active?(ru?'Выбран в профиле':'Selected in profile'):owned?t.owned:t.purchase),button(active?(ru?'Показывается':'Displayed'):ru?'Показывать':'Display',()=>saveProfile({bio:profile.bio,cover:profile.cover,supportBadge:badge.id}),busy||!profile||!owned||active));badgeGrid.append(tile)}
-   supporter.append(badgeGrid,button(ru?'Скрыть значок':'Hide badge',()=>saveProfile({bio:profile.bio,cover:profile.cover,supportBadge:null}),busy||!profile||!profileData?.supportBadge));content.append(supporter)
+   supporter.append(badgeGrid,button(ru?'Скрыть значок':'Hide badge',()=>saveProfile({bio:profile.bio,cover:profile.cover,supportBadge:null}),busy||!profile||!profileData?.supportBadge));content.append(supporter,renderAchievementRewards({lang,profile,rewards:profileData?.achievementRewards,busy,saveProfile}))
+  }else if(active==='subscription'){
    const plus=card('BrickLab Plus'),state=profileData?.plusTheme,owned=profileData?.plus===true;plus.classList.add('commerce-plus-panel');plus.append(productArtwork({kind:'subscription',months:''},lang));if(owned)plus.append(commerceBadge('plus'));plus.append(el('p','account-muted',owned?(ru?'Активна до ':'Active until ')+new Date(profileData.plusUntil).toLocaleDateString(lang):(ru?'Подписка не активна':'No active subscription')));
    plus.append(factsPanel({kind:'subscription'},lang));const plusLink=el('a','workspace-action',owned?(ru?'Продлить Plus':'Extend Plus'):(ru?'Посмотреть тарифы Plus':'View Plus plans'));plusLink.href='#store';plus.append(plusLink)
    if(owned&&profile){const picker=el('select','account-field');for(const item of profileData.inventory.filter(i=>i.source==='purchase')){const option=el('option',null,themeFor(item.id)?.[lang]??item.id);option.value=item.id;picker.append(option)}if(state?.chosen)picker.value=state.chosen;const locked=state?.nextChangeAt>Date.now();picker.disabled=busy||locked;plus.append(picker,button(ru?'Выбрать тему Plus':'Choose Plus theme',()=>saveProfile({bio:profile.bio,cover:profile.cover,plusTheme:picker.value}),busy||locked));if(locked)plus.append(el('p','account-muted',(ru?'Следующая смена: ':'Next change: ')+new Date(state.nextChangeAt).toLocaleDateString(lang)))}
-   const loyalty=profileData?.loyalty;plus.append(el('h3',null,ru?'Лояльность Plus':'Plus loyalty'));const marks=el('div','commerce-loyalty-grid');for(const m of [1,3,6,12])marks.append(loyaltyBadge(m,loyalty?.milestones?.includes(m)===true,lang));plus.append(marks);plus.append(el('p','account-muted',(ru?'Дней активного доступа: ':'Days of active access: ')+(loyalty?.days??0)));content.append(plus)
- }else if(section==='security'){
+   const loyalty=profileData?.loyalty;plus.append(el('h3',null,ru?'Лояльность Plus':'Plus loyalty'));const marks=el('div','commerce-loyalty-grid');for(const m of [1,3,6,12])marks.append(loyaltyBadge(m,loyalty?.milestones?.includes(m)===true,lang));plus.append(marks);plus.append(el('p','account-muted',(ru?'Дней активного доступа: ':'Days of active access: ')+(loyalty?.days??0)));content.append(plus,renderInstructionCollection({lang,signal,remote}));const usage=card(ru?'Облачные лимиты':'Cloud limits');if(activityData?.limits)usage.append(metrics([[t.cloud,summary.cloud+' / '+activityData.limits.projects],[t.storage,(activityData.bytes/1048576).toFixed(2)+' / '+activityData.limits.storageMiB+' MiB']]));content.append(usage);const orders=el('a','workspace-action',ru?'Магазин и история заказов':'Store and order history');orders.href='#store';content.append(orders)
+  }else if(active==='security'){
   const c=card(t.security);c.append(el('p',null,t.email+': '+user.email),el('p','account-muted',t.securityText),el('p','account-muted',t.privateOnly));if(revokeOthers)c.append(button(t.revokeOthers,revokeOthers,busy));content.append(c)
+  }else if(active==='integrations'){if(integrationsPanel)content.append(integrationsPanel())}
+  else if(active==='notifications'){if(notificationPanel)content.append(notificationPanel());const c=card(ru?'Уведомления аккаунта':'Account notifications');c.append(el('p','account-muted',ru?'Уведомления о достижениях сохраняются в личном кабинете. Push-уведомления Telegram настраиваются отдельно в BrickLab Hub.':'Achievement notifications remain in your account. Configure Telegram push in BrickLab Hub.'),button(t.notifications,()=>go('notifications'),busy));content.append(c)}
  }else{const c=card(t[section]);c.append(el('p','account-muted',t.pending));content.append(c)}
  function appendPublicProfile(){
   if(publicLoaded){
