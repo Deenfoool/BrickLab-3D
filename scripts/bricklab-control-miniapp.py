@@ -46,7 +46,7 @@ def data():
         if not 0<=time.time()-float(d["timestamp"])<=180:
             return {}
         # Only aggregate sections, never account IDs, bug reports or audit IDs.
-        return {k:d[k] for k in ("timestamp","vps","docker","stats","analytics","events","backup","release","logs","automation","upkeep") if k in d}
+        return {k:d[k] for k in ("timestamp","vps","docker","stats","analytics","events","backup","release","logs","automation","upkeep","finance") if k in d}
     except (ValueError,KeyError,OSError,TypeError):
         return {}
 

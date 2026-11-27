@@ -180,6 +180,16 @@ def collect():
             data["upkeep"]["cleanup_enabled"] = pathlib.Path("/etc/bricklab-backup/upkeep-cleanup.enabled").is_file()
     except (OSError, ValueError, KeyError, TypeError):
         pass
+    data["finance"] = query("""SELECT json_build_object(
+        'paid_24h',count(*) FILTER (WHERE paid_at>=now()-interval '24 hours'),
+        'gross_24h',coalesce(sum(amount_kopecks) FILTER (WHERE paid_at>=now()-interval '24 hours'),0),
+        'refunds_24h',count(*) FILTER (WHERE refunded_at>=now()-interval '24 hours'),
+        'refund_amount_24h',coalesce(sum(amount_kopecks) FILTER (WHERE refunded_at>=now()-interval '24 hours'),0),
+        'gross_7d',coalesce(sum(amount_kopecks) FILTER (WHERE paid_at>=now()-interval '7 days'),0),
+        'refund_amount_7d',coalesce(sum(amount_kopecks) FILTER (WHERE refunded_at>=now()-interval '7 days'),0),
+        'pending',count(*) FILTER (WHERE status='pending'),
+        'receipts_pending',count(*) FILTER (WHERE status='succeeded' AND receipt_status='pending'))
+        FROM bricklab.commerce_orders WHERE environment='live';""")
     data["audit"] = audit()
     data["timestamp"] = time.time()
     return data

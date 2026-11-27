@@ -289,6 +289,10 @@ def render(page, data):
                      + "\nУтверждённый SHA: " + value("release","approved") + "\nСлужба релиза: " + value("release","job") + "\nОткат только по проверенной процедуре VPS.",
     }
     text = bodies[page]
+    if page in ("automation", "vps") and data.get("upkeep"):
+        u=data["upkeep"]
+        c=u.get("cleanup",{})
+        text += "\nОбслуживание Docker: " + ("автоматически" if u.get("cleanup_enabled") else "предварительный анализ") + "\nRollback-образы: " + str(c.get("rollback_count","нет данных")) + "\nИзмерений за неделю: " + str(u.get("samples","нет данных"))
     if not data:
         text += "\n⚠ Снимок отсутствует или устарел. Статус неизвестен."
     buttons = [[{"text": label, "callback_data": "cc:" + key} for label, key in MENUS["home"][i:i+2]]

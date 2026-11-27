@@ -106,8 +106,9 @@ def cleanup(apply=False):
         if not apply:
             print(json.dumps(report, ensure_ascii=False))
             return
-        before = disk_metrics()
+        before = {}
         try:
+            before = disk_metrics()
             # Default builder prune: only dangling build cache. No -a, no volume/image prune.
             command("docker", "builder", "prune", "--force", "--filter", "until=168h", timeout=600)
             for tag in targets:
@@ -127,6 +128,9 @@ def cleanup(apply=False):
                 report["free_delta_bytes"] = sum(after[k]["free_bytes"]-v["free_bytes"]
                     for k,v in before.items() if k in after)
                 report["rollback_count"] = len(inventory()[0])
+            except (OSError, ValueError, subprocess.SubprocessError):
+                report["status"] = "failed"
+                raise
             finally:
                 write(STATE/"cleanup.json", report)
 
@@ -224,6 +228,9 @@ def sample():
                 send(report(db,due,d,disks,last))
                 state["weekly_sent_at"]=due
                 write(STATE/"notify.json",state)
+                status=read(STATE/"status.json",{})
+                status["weekly_sent_at"]=due
+                write(STATE/"status.json",status)
 
 def main():
     if os.getuid()!=0: raise SystemExit("root required")

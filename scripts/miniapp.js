@@ -44,10 +44,20 @@ async function load(){
     const u=d.upkeep??{}, c=u.cleanup??{};
     tiles('upkeep-tiles',[['Политика очистки',u.cleanup_enabled===true?'Автоматически':u.cleanup_enabled===false?'Предварительный анализ':null],['Диск (макс.)',u.disks?Math.max(...Object.values(u.disks).map(x=>x.used_percent))+'%':null],['Rollback-образы',c.rollback_count],['К удалению',(c.candidates??[]).join(', ')||'—'],['Последняя очистка',c.status],['Измерений за 7 дней',u.samples],['Последний отчёт',u.weekly_sent_at?new Date(u.weekly_sent_at*1000).toLocaleString():null]]);
     document.getElementById('upkeep-note').textContent='Кэш: 7 дней · резерв: 3 версии · тестовые образы защищены · уведомления: 75/85/90%.';
+    const f=d.finance??{}, rub=n=>Number.isSafeInteger(n)?(n/100).toLocaleString('ru-RU',{style:'currency',currency:'RUB'}):null;
+    const net=(x,y)=>Number.isSafeInteger(x)&&Number.isSafeInteger(y)?rub(x-y):null;
+    tiles('finance-tiles',[['Оплаты за 24 ч',f.paid_24h],['Выручка за 24 ч',rub(f.gross_24h)],['Возвраты за 24 ч',rub(f.refund_amount_24h)],['Итого за 24 ч',net(f.gross_24h,f.refund_amount_24h)],['Итого за 7 дней',net(f.gross_7d,f.refund_amount_7d)],['Ожидают оплаты',f.pending],['Чеки ожидают',f.receipts_pending]]);
+    tiles('dev-tiles',[['Checkout',d.release?.commit],['Локальный origin',d.release?.tracking],['Отставание',d.release?.behind],['Рабочее дерево',d.release?.worktree],['Утверждённый SHA',d.release?.approved],['Релиз',d.release?.job]]);
     status.textContent='Обновлено '+new Date(d.timestamp*1000).toLocaleTimeString();dashboard.hidden=false;
   }catch(err){status.textContent=err.message||'Ошибка соединения';}
   finally{refresh.disabled=false;}
 }
+function openTab(tab){
+  for(const section of document.querySelectorAll('[data-page]'))section.hidden=section.dataset.page!==tab;
+  for(const button of document.querySelectorAll('[data-tab]'))button.setAttribute('aria-selected',String(button.dataset.tab===tab));
+}
+for(const button of document.querySelectorAll('[data-tab]'))button.addEventListener('click',()=>openTab(button.dataset.tab));
+openTab('home');
 refresh.addEventListener('click',load);tg?.ready();tg?.expand();load();
 
 const adminStatus=document.getElementById('admin-status');

@@ -105,6 +105,8 @@ unset POSTGRES_PASSWORD BRICKLAB_APP_PASSWORD BRICKLAB_TEST_ADMIN_ID
 docker rm -f "$DB" >/dev/null
 docker network rm "$NET" >/dev/null
 
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_upkeep_test.py
+
 echo "=== PRODUCTION BACKUPS ==="
 systemctl start bricklab-backup.service
 systemctl start bricklab-config-backup.service
