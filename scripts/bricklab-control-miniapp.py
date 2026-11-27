@@ -7,6 +7,7 @@ import json
 import os
 import pathlib
 import re
+import socket
 import time
 import urllib.parse
 
@@ -50,6 +51,19 @@ def data():
     except (ValueError,KeyError,OSError,TypeError):
         return {}
 
+def job_request(payload):
+    try:
+        with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as conn:
+            conn.settimeout(20)
+            conn.connect("/run/bricklab-control-jobs.sock")
+            conn.sendall((json.dumps(payload)+"\n").encode())
+            with conn.makefile("rb") as reader:
+                raw=reader.readline(65537)
+        if len(raw)>65536 or not raw.endswith(b"\n"): return {"error":"unavailable"}
+        return json.loads(raw)
+    except (OSError,ValueError):
+        return {"error":"unavailable"}
+
 class Handler(http.server.BaseHTTPRequestHandler):
     timeout = 10
     def log_message(self,*args):
@@ -64,12 +78,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Security-Policy","default-src 'none'; script-src 'self' https://telegram.org; style-src 'self'; connect-src 'self'; frame-ancestors https://web.telegram.org https://*.telegram.org; base-uri 'none'; form-action 'none'")
         self.end_headers()
         self.wfile.write(body)
+    def authorized(self):
+        return validate(self.headers.get("X-Telegram-Init-Data",""),self.server.token,self.server.owner)
+    def job_reply(self,payload):
+        d=job_request(payload)
+        return self.reply(409 if d.get("error") else 200,json.dumps(d,ensure_ascii=False).encode(),"application/json")
+    def do_POST(self):
+        if urllib.parse.urlsplit(self.path).path!="/control/jobs":
+            return self.reply(404,b"Not found","text/plain")
+        if not self.authorized() or self.headers.get("Origin")!=ORIGIN:
+            return self.reply(403,b'{"error":"unauthorized"}',"application/json")
+        try:
+            n=int(self.headers.get("Content-Length","0"))
+            if not 0<n<=1024 or self.headers.get("Content-Type","").split(";")[0]!="application/json":
+                raise ValueError()
+            d=json.loads(self.rfile.read(n))
+            if not isinstance(d,dict) or d.get("action") not in ("test","deploy"):
+                raise ValueError()
+        except (ValueError,OSError):
+            return self.reply(400,b'{"error":"invalid"}',"application/json")
+        return self.job_reply(d)
     def do_GET(self):
         path=urllib.parse.urlsplit(self.path).path
         if path.startswith("/control/"):
             path=path[len("/control/"):]
         else:
             path=path.lstrip("/")
+        if path in ("jobs","branches"):
+            if not self.authorized():
+                return self.reply(403,b'{"error":"unauthorized"}',"application/json")
+            return self.job_reply({"action":"status" if path=="jobs" else "branches"})
         if path=="api":
             raw=self.headers.get("X-Telegram-Init-Data","")
             if not validate(raw,self.server.token,self.server.owner):
@@ -87,7 +125,7 @@ def main():
     owner=int(conf["chat_id"])
     if owner<=0 or not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]{20,}",token):
         raise ValueError("private owner required")
-    with http.server.HTTPServer(("127.0.0.1",8091),Handler) as server:
+    with http.server.ThreadingHTTPServer(("127.0.0.1",8091),Handler) as server:
         server.token,server.owner=token,owner
         server.serve_forever()
 

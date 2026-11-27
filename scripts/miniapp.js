@@ -143,3 +143,59 @@ adminConfirm.addEventListener('submit',async event=>{
     await loadAdmin();
   }catch(err){adminStatus.textContent=err.message;}
 });
+
+const devBranch=document.getElementById('dev-branch'),devStatus=document.getElementById('dev-status'),devTest=document.getElementById('dev-test'),devDeploy=document.getElementById('dev-deploy');
+let branchRows=[],currentJob={},devBusy=false,devPoll=null;
+const jobErrors={disabled:'Запуск заданий не активирован на VPS.',busy:'Другое задание уже выполняется.',test_required:'Сначала успешно протестируйте этот SHA.',approval_required:'Нужно независимое подтверждение SHA на VPS.',duplicate:'Этот запрос уже обработан.',unavailable:'Служба заданий недоступна.',start_failed:'Не удалось запустить службу.',invalid:'Некорректный запрос.'};
+async function jobApi(path,body){
+  const r=await fetch(path,{method:body?'POST':'GET',headers:{'X-Telegram-Init-Data':tg?.initData??'',...(body?{'Content-Type':'application/json'}:{})},credentials:'omit',cache:'no-store',...(body?{body:JSON.stringify(body)}:{})});
+  if(r.status===403)throw Error('Откройте Mini App заново.');
+  const d=await r.json();if(!r.ok||d.error)throw Error(jobErrors[d.error]??'Ошибка службы заданий.');
+  return d;
+}
+function selected(){return branchRows[Number(devBranch.value)]??null;}
+function devButtons(){
+  const s=selected(),active=['queued','running'].includes(currentJob.status);
+  devTest.disabled=devBusy||!s||active;
+  devDeploy.disabled=devBusy||!s||active||s.branch!=='feature/cloud-migration'||currentJob.status!=='ok'||currentJob.action!=='test'||currentJob.sha!==s.sha||currentJob.branch!==s.branch;
+  document.getElementById('dev-sha').textContent=s?.sha??'';
+}
+function renderJob(job){
+  currentJob=job??{};
+  const states={queued:'В очереди',running:'Выполняется',ok:'Успешно',failed:'Ошибка',interrupted:'Прервано'};
+  tiles('job-tiles',[['Статус',states[currentJob.status]??'Нет заданий'],['Этап',currentJob.stage],['Ветка',currentJob.branch],['SHA',currentJob.sha],['Ошибки тестов',currentJob.failed_tests],['Код завершения',currentJob.exit_code]]);
+  devButtons();
+}
+async function refreshJob(){
+  try{
+    const d=await jobApi('jobs');renderJob(d.job);
+    devStatus.textContent='Статус обновлён.';
+    if(['queued','running'].includes(currentJob.status)){
+      clearTimeout(devPoll);devPoll=setTimeout(refreshJob,4000);
+    }
+  }catch(e){devStatus.textContent=e.message;clearTimeout(devPoll);}
+}
+document.getElementById('dev-branches').onclick=async()=>{
+  if(devBusy)return;devBusy=true;devButtons();
+  try{
+    const d=await jobApi('branches');branchRows=Array.isArray(d.branches)?d.branches:[];
+    devBranch.replaceChildren();branchRows.forEach((b,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=b.branch+' · '+b.sha.slice(0,8);devBranch.append(o);});
+    devBranch.disabled=!branchRows.length;await refreshJob();
+  }catch(e){devStatus.textContent=e.message;}
+  finally{devBusy=false;devButtons();}
+};
+devBranch.onchange=devButtons;
+async function enqueue(action){
+  const s=selected();if(!s||devBusy)return;
+  if(!window.confirm((action==='test'?'Запустить тесты ':'Развернуть production ')+s.branch+' @ '+s.sha.slice(0,12)+'?'))return;
+  devBusy=true;devButtons();
+  try{
+    const bytes=crypto.getRandomValues(new Uint8Array(16));
+    const id=Array.from(bytes,x=>x.toString(16).padStart(2,'0')).join('');
+    const d=await jobApi('jobs',{action,branch:s.branch,sha:s.sha,id});renderJob(d.job);await refreshJob();
+  }catch(e){devStatus.textContent=e.message;}
+  finally{devBusy=false;devButtons();}
+}
+devTest.onclick=()=>enqueue('test');
+devDeploy.onclick=()=>enqueue('deploy');
+document.getElementById('dev-refresh').onclick=refreshJob;
