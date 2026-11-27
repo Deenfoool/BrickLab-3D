@@ -74,7 +74,7 @@ export function createTelegramHubHandler({store,origin,keyFile='',ownerId='',log
      reply(res,200,{ok:await store.telegramCampaignFinish(uid,input)});return true
     }
     if(path.endsWith('/campaign-create')){
-     if(typeof input?.body!=='string'||!input.body.trim()||input.body.length>2500||typeof input.sendAt!=='string'||!Number.isFinite(Date.parse(input.sendAt))){reply(res,400,{error:'invalid_campaign'});return true}
+     if(!['all','plus','free','new'].includes(input?.audience)||typeof input?.body!=='string'||!input.body.trim()||input.body.length>2500||typeof input.sendAt!=='string'||!Number.isFinite(Date.parse(input.sendAt))){reply(res,400,{error:'invalid_campaign'});return true}
      const campaignId=await store.telegramCampaignCreate(uid,input);reply(res,campaignId?200:409,{id:campaignId});return true
     }
     if(typeof input?.id!=='string'||!uuid.test(input.id)){reply(res,400,{error:'invalid_id'});return true}

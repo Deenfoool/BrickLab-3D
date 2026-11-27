@@ -121,7 +121,7 @@ BEGIN
  IF NOT coalesce(bricklab.is_admin(),false) THEN RETURN NULL; END IF;
  UPDATE bricklab.hub_personal_events SET state='unknown',updated_at=now() WHERE state='sending' AND updated_at<now()-interval '5 minutes';
  UPDATE bricklab.hub_personal_events e SET state='skipped',updated_at=now() WHERE state='pending' AND
- (created_at<now()-interval '2 days' OR NOT EXISTS(SELECT 1 FROM bricklab.telegram_links l JOIN bricklab.users u ON u.id=l.user_id WHERE l.user_id=e.user_id AND l.telegram_id=e.telegram_id AND l.personal_push AND l.linked_at<=e.created_at AND u.blocked_at IS NULL AND u.email_verified_at IS NOT NULL));
+ (created_at<now()-interval '2 days' OR (e.kind='plus' AND NOT EXISTS(SELECT 1 FROM (SELECT bricklab.hub_plus_end(e.user_id) AS ending) s WHERE s.ending>now() AND e.event_key IN ('plus:'||extract(epoch FROM s.ending)::bigint||':7','plus:'||extract(epoch FROM s.ending)::bigint||':1'))) OR NOT EXISTS(SELECT 1 FROM bricklab.telegram_links l JOIN bricklab.users u ON u.id=l.user_id WHERE l.user_id=e.user_id AND l.telegram_id=e.telegram_id AND l.personal_push AND l.linked_at<=e.created_at AND u.blocked_at IS NULL AND u.email_verified_at IS NOT NULL));
  SELECT * INTO item FROM bricklab.hub_personal_events WHERE state='pending' AND next_at<=now() ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED;
  IF NOT FOUND THEN RETURN NULL; END IF;
  UPDATE bricklab.hub_personal_events SET state='sending',attempt=gen_random_uuid(),updated_at=now() WHERE id=item.id RETURNING * INTO item;

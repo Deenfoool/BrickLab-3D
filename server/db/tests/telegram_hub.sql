@@ -17,12 +17,14 @@ DO $$ BEGIN
  IF (bricklab.telegram_link_status()->>'marketing')::boolean THEN RAISE EXCEPTION 'marketing enabled without consent'; END IF;
  IF bricklab.hub_admin_create_promo('HUBTEST',7,1,now()+interval '1 day') THEN RAISE EXCEPTION 'non-admin created promo'; END IF;
  IF bricklab.hub_campaign_create('Unauthorized',now()) IS NOT NULL THEN RAISE EXCEPTION 'non-admin campaign'; END IF;
+ IF (bricklab.telegram_link_status()->>'personalPush')::boolean THEN RAISE EXCEPTION 'push enabled without consent'; END IF;
+ IF NOT bricklab.hub_personal_preferences(true) THEN RAISE EXCEPTION 'personal consent failed'; END IF;
  IF NOT bricklab.telegram_marketing(true) THEN RAISE EXCEPTION 'consent failed'; END IF;
 END $$;
 SELECT set_config('bricklab.user_id','00000000-0000-4000-8000-000000000201',true);
 DO $$ DECLARE cid uuid; BEGIN
  IF NOT bricklab.hub_admin_create_promo('HUBTEST',7,1,now()+interval '1 day') THEN RAISE EXCEPTION 'promo creation failed'; END IF;
- cid:=bricklab.hub_campaign_create('Test announcement',now());
+ cid:=bricklab.hub_campaign_create('Test announcement',now(),'free');
  IF cid IS NULL OR NOT bricklab.hub_campaign_queue(cid) THEN RAISE EXCEPTION 'campaign enqueue failed'; END IF;
  IF bricklab.hub_campaign_queue(cid) THEN RAISE EXCEPTION 'campaign queued twice'; END IF;
  IF (bricklab.hub_campaign_list()->>'eligible')::int<>1 THEN RAISE EXCEPTION 'unexpected audience'; END IF;
@@ -32,6 +34,7 @@ DO $$ BEGIN
  IF NOT bricklab.hub_redeem_promo('HUBTEST') THEN RAISE EXCEPTION 'promo failed'; END IF;
  IF bricklab.hub_redeem_promo('HUBTEST') THEN RAISE EXCEPTION 'promo redeemed twice'; END IF;
  IF (SELECT count(*) FROM bricklab.hub_promo_grants)<>1 THEN RAISE EXCEPTION 'missing grant'; END IF;
+ IF NOT bricklab.hub_personal_preferences(false) THEN RAISE EXCEPTION 'personal opt-out failed'; END IF;
  IF NOT bricklab.telegram_marketing(false) THEN RAISE EXCEPTION 'opt-out failed'; END IF;
 END $$;
 SELECT set_config('bricklab.user_id','00000000-0000-4000-8000-000000000203',true);
@@ -40,7 +43,9 @@ DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM bricklab.hub_promo_grants) THEN RAISE EXCEPTION 'cross-account grants'; END IF;
 END $$;
 SELECT set_config('bricklab.user_id','00000000-0000-4000-8000-000000000201',true);
-DO $$ BEGIN
+DO $ BEGIN
+ IF NOT bricklab.hub_prepare_personal() THEN RAISE EXCEPTION 'personal preparation failed'; END IF;
+ IF bricklab.hub_personal_claim() IS NOT NULL THEN RAISE EXCEPTION 'personal opt-out ignored'; END IF;
  IF bricklab.hub_campaign_claim() IS NOT NULL THEN RAISE EXCEPTION 'unsubscribed recipient claimed'; END IF;
 END $$;
 SELECT set_config('bricklab.user_id','00000000-0000-4000-8000-000000000202',true);
