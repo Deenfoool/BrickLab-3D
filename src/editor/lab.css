@@ -17,3 +17,5 @@ body.editor-lab{margin:0;height:100dvh;display:flex;flex-direction:column;overfl
 .editor-lab .world-drawing canvas{cursor:crosshair!important}.lab-world-tools select#world-tool{border-color:#508ca8;color:#a9e3ff;font-weight:650}
 
 .lab-world-tools .world-toggle{border:1px solid #394758;border-radius:6px;padding:4px 7px;white-space:nowrap}.lab-world-tools .world-toggle input{accent-color:#79c8ec;margin:0}
+
+.world-road-settings{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.world-road-settings>span{font-size:11px;color:#aab8c7}.lab-world-tools.road-mode>label:has(#world-kind,#world-smart,#world-bond,#world-x,#world-z,#world-w,#world-d,#world-rows,#world-color),.lab-world-tools.road-mode>#world-add{display:none!important}.lab-world-tools.road-mode #world-tool{border-color:#e4b85e;color:#ffe1a0}

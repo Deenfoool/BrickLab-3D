@@ -67,6 +67,7 @@ export function worldGestureCells(settings,start,end,trail=[],existing=0){
  const valid=p=>p&&Number.isInteger(p.x)&&Number.isInteger(p.z)&&p.x>=-40&&p.x<=40&&p.z>=-40&&p.z<=40;
  if(!valid(start)||!valid(end))throw Error('За пределами строительной площадки.');
  const {tool}=settings;
+ if(['road','roadCorner','roadCross','roadT'].includes(tool))return planWorldRoad(settings,start,end,existing);
  if(tool==='area'||tool==='wall'){
   const b={...end};
   if(tool==='wall'){if(Math.abs(b.x-start.x)>=Math.abs(b.z-start.z))b.z=start.z;else b.x=start.x}
@@ -81,4 +82,71 @@ export function worldGestureCells(settings,start,end,trail=[],existing=0){
   if(cells.length>256)throw Error('До 256 деталей за один мазок.');
  }
  return cells;
+}
+
+// Roads are packed from disjoint, stud-aligned masks. No texture, fake mesh,
+// overlapping surface tiles, or mutation of the surrounding scene.
+export function planWorldRoad(settings,start,end,existing=0){
+ const {tool,level,roadWidth=13,sidewalk=2,marking='dash',foundation=true,roadColor='#353b42',sidewalkColor='#a0a5a9',turnFirst='x',available}=settings;
+ const valid=p=>p&&Number.isInteger(p.x)&&Number.isInteger(p.z)&&p.x>=-40&&p.x<=40&&p.z>=-40&&p.z<=40;
+ if(!valid(start)||!valid(end)||!Number.isInteger(level)||level<0||level+(foundation?2:1)>120||![9,13,17,21,25].includes(roadWidth)||![0,1,2,3].includes(sidewalk)||!['none','dash','solid'].includes(marking)||!['x','z'].includes(turnFirst)||!/^#[0-9a-f]{6}$/i.test(roadColor)||!/^#[0-9a-f]{6}$/i.test(sidewalkColor))throw Error('Проверь параметры дороги.');
+ const half=(roadWidth-1)/2,outer=half+sidewalk,segments=[];
+ const add=(a,b,padA=0,padB=0)=>{
+  const horizontal=a.z===b.z;
+  if(!horizontal&&a.x!==b.x)throw Error('Дорога должна идти по сетке.');
+  const from=horizontal?a.x:a.z,to=horizontal?b.x:b.z;
+  segments.push({horizontal,fixed:horizontal?a.z:a.x,lo:Math.min(from,to)-(from<=to?padA:padB),hi:Math.max(from,to)+(from<=to?padB:padA)});
+ };
+ let joint=null;
+ if(tool==='road'){
+  const b={...end};
+  if(Math.abs(b.x-start.x)>=Math.abs(b.z-start.z))b.z=start.z;else b.x=start.x;
+  add(start,b);
+ }else if(tool==='roadCorner'){
+  if(Math.abs(end.x-start.x)<=outer||Math.abs(end.z-start.z)<=outer)throw Error('Протяни обе стороны поворота дальше половины ширины дороги с тротуаром.');
+  joint=turnFirst==='x'?{x:end.x,z:start.z}:{x:start.x,z:end.z};
+  add(start,joint,0,outer);add(joint,end,outer,0);
+ }else if(tool==='roadCross'||tool==='roadT'){
+  joint=start;
+  const rx=Math.abs(end.x-start.x),rz=Math.abs(end.z-start.z);
+  if(rx<=outer||rz<=outer)throw Error('Протяни перекрёсток за пределы центральной зоны.');
+  add({x:start.x-rx,z:start.z},{x:start.x+rx,z:start.z});
+  if(tool==='roadCross')add({x:start.x,z:start.z-rz},{x:start.x,z:start.z+rz});
+  else add(start,{x:start.x,z:start.z+Math.sign(end.z-start.z)*rz},outer,0);
+ }else throw Error('Неизвестный тип дороги.');
+ const key=(x,z)=>x+','+z,mask=new Map();
+ for(const s of segments){
+  for(let along=s.lo;along<=s.hi;along++)for(let offset=-outer;offset<=outer;offset++){
+   const x=s.horizontal?along:s.fixed+offset,z=s.horizontal?s.fixed+offset:along;
+   if(!valid({x,z}))throw Error('Дорога выходит за границы площадки.');
+   const k=key(x,z),asphalt=Math.abs(offset)<=half;
+   const nearJoint=joint&&Math.max(Math.abs(x-joint.x),Math.abs(z-joint.z))<=outer;
+   const stripe=asphalt&&offset===0&&!nearJoint&&(marking==='solid'||marking==='dash'&&((along%6)+6)%6<3);
+   const value=asphalt?(stripe?'mark':'road'):'walk',priority={walk:1,mark:2,road:3};
+   // Road wins over sidewalk. At the join there are no center markings.
+   const old=mask.get(k);if(!old||priority[value]>priority[old])mask.set(k,value);
+  }
+ }
+ if(!mask.size||mask.size*(foundation?2:1)>8192)throw Error('Слишком большая дорога. Раздели её на участки.');
+ const output=[];
+ function pack(source,kind,y,colors){
+  const remaining=new Map(source);
+  const coords=[...remaining.keys()].map(k=>k.split(',').map(Number)).sort((a,b)=>a[1]-b[1]||a[0]-b[0]);
+  for(const [x,z] of coords){
+   const type=remaining.get(key(x,z));if(type===undefined)continue;
+   // Largest homogeneous rectangle anchored at the first uncovered cell.
+   let bestW=1,bestD=1,span=32;
+   for(let d=1;d<=32;d++){
+    let w=0;while(w<span&&remaining.get(key(x+w,z+d-1))===type)w++;
+    span=w;if(!span)break;
+    if(span*d>bestW*bestD){bestW=span;bestD=d}
+   }
+   for(let dz=0;dz<bestD;dz++)for(let dx=0;dx<bestW;dx++)remaining.delete(key(x+dx,z+dz));
+   output.push(...planWorldFill({kind,x,z,width:bestW,depth:bestD,level:y,rows:1,color:colors[type],smart:true,bond:false,available},existing+output.length));
+   if(output.length>256)throw Error('До 256 деталей за участок. Раздели дорогу.');
+  }
+ }
+ if(foundation)pack(new Map([...mask.keys()].map(k=>[k,'base'])),'plate',level,{base:'#737b85'});
+ pack(mask,'tile',level+(foundation?1:0),{road:roadColor,walk:sidewalkColor,mark:'#f4f4f4'});
+ return output;
 }

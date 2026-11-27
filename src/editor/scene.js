@@ -100,9 +100,9 @@ export function createScene(host, models, {labMode} = {}) {
   let labTexture=null,labPreset=null,labRequest=0
   const horizon=labMode==='world'?createLabHorizon():null
   if(horizon)world.add(horizon.group)
-  const worldPreview=labMode==='world'?new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshBasicMaterial({color:0x62c8eb,transparent:true,opacity:.32,depthWrite:false}),256):null;
+  const worldPreview=labMode==='world'?new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.48,depthWrite:false}),256):null;
   if(worldPreview){worldPreview.count=0;worldPreview.frustumCulled=false;worldPreview.renderOrder=2;world.add(worldPreview)}
-  function setWorldPreview(cells){if(!worldPreview)return;worldPreview.count=Math.min(256,cells.length);const m=new THREE.Matrix4();for(let i=0;i<worldPreview.count;i++){const c=cells[i],h=c.height??(c.design==='3005'?24:8);m.makeScale((c.w??1)*20-.5,h,(c.d??1)*20-.5);m.setPosition(c.x,c.y+h/2,c.z);worldPreview.setMatrixAt(i,m)}worldPreview.instanceMatrix.needsUpdate=true;invalidate()}
+  function setWorldPreview(cells){if(!worldPreview)return;worldPreview.count=Math.min(256,cells.length);const m=new THREE.Matrix4();for(let i=0;i<worldPreview.count;i++){const c=cells[i],h=c.height??(c.design==='3005'?24:8);m.makeScale((c.w??1)*20-.5,h,(c.d??1)*20-.5);m.setPosition(c.x,c.y+h/2,c.z);worldPreview.setMatrixAt(i,m);worldPreview.setColorAt(i,new THREE.Color(c.color??'#62c8eb'))}worldPreview.instanceMatrix.needsUpdate=true;if(worldPreview.instanceColor)worldPreview.instanceColor.needsUpdate=true;invalidate()}
   let ghost
   let frame = null
   let active = true

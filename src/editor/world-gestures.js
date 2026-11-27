@@ -59,7 +59,7 @@ export function mountWorldGestures(root,{scene,signal,controls,canBuild,prepare,
  on(host,'pointercancel',e=>{if(stroke?.id===e.pointerId){consume(e);clear()}},true);
  on(canvas,'lostpointercapture',e=>{if(stroke?.id===e.pointerId){consume(e);clear()}},true);
  on(canvas,'pointerleave',()=>{if(!stroke)scene.setWorldPreview([])});
- on(window,'keydown',e=>{if(e.key==='Escape'&&active()&&!placing){consume(e);controls.tool.value='select';selectTool()}},true);
+ on(window,'keydown',e=>{if(e.key==='Escape'&&active()&&!placing){consume(e);controls.tool.value='select';controls.tool.dispatchEvent(new Event('change'))}},true);
  signal.addEventListener('abort',()=>{stroke=null;host.classList.remove('world-drawing')},{once:true});
  selectTool();
  return {cancel(){clear();controls.tool.value='select';host.classList.remove('world-drawing')}}
