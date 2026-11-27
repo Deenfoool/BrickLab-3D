@@ -144,6 +144,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
       <output data-drive="telemetry"></output>
       <p data-drive="trackStatus" role="status" hidden></p>
       <p data-drive="mechanics" hidden></p>
+      <p data-drive="mapStats" hidden></p>
       <p>${t.shortcuts}</p>
       <div class="drive-controls">
         ${[['forward','W'],['left','A'],['reverse','S'],['right','D'],['brake','⏹']].map(([key, label]) =>
@@ -171,6 +172,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
   let worldTrack,worldDocument
   let loadingTrack
   let launchError
+  let launchDetail=''
   let physics
   let physicsRun
 
@@ -214,7 +216,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     el('pickDrive').setAttribute('aria-pressed', String(picking === 'drive'))
     el('pickSteering').setAttribute('aria-pressed', String(picking === 'steering'))
     el('start').disabled = !vehicle.ready || Boolean(loadingTrack)
-    el('info').textContent = loadingTrack ? t[loadingTrack.message] : launchError ? t[launchError] :
+    el('info').textContent = loadingTrack ? t[loadingTrack.message] : launchError ? (launchDetail||t[launchError]) :
       picking ? (picking === 'drive' ? t.selectDrive : t.selectSteering) : [
       t.wheels + ': ' + vehicle.initial.length,
       settings.mode === 'powered' ? t.driven + ': ' + vehicle.driven.length : '',
@@ -261,6 +263,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
   function clearTrackRequest() {
     loadingTrack = undefined
     launchError = undefined
+    launchDetail=''
   }
 
   function stop() {
@@ -283,6 +286,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
 
   async function start() {
     if (!vehicle?.ready || loadingTrack) return
+    if(state)stop();
     const { venue, simulation } = vehicle.settings
     let worldSource;
     if(venue==='world'){
@@ -296,6 +300,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     if (needsTrack || needsWorld || needsPhysics) {
       const request = loadingTrack = { message: needsTrack || needsWorld ? 'loadingTrack' : 'loadingPhysics' }
       launchError = undefined
+      launchDetail=''
       sync()
       let stage = 'trackError'
       try {
@@ -326,6 +331,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
       } catch (error) {
         if (loadingTrack !== request) return
         launchError = stage
+        launchDetail=needsWorld&&stage==='trackError'?String(error.message||'').slice(0,200):'';
         console.error(error)
         return
       } finally {
@@ -346,6 +352,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
       } catch (error) {
         stop()
         launchError = 'physicsError'
+        launchDetail=venue==='world'&&error.message?.startsWith('На старте')?error.message:'';
         sync()
         console.error(error)
         return
@@ -364,6 +371,8 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     el('trackStatus').hidden = true
     el('scaleNotice').hidden = true
     el('mechanics').hidden = !physicsRun
+    el('mapStats').hidden=!track?.stats;
+    el('mapStats').textContent=track?.stats?(language==='ru'?'Карта: ':'Map: ')+track.stats.parts+(language==='ru'?' дет. · ':' parts · ')+track.stats.colliders+(language==='ru'?' коллайдеров':' colliders'):'';
     const initial = physicsRun ? physicsRun.advance({ throttle: 0, steer: 0, brake: false }, 0) : state
     scene.driveTransform(vehicle.origin, initial.position, initial.yaw, initial.tilt, initial.scale)
     scene.resetView()

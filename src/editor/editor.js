@@ -2252,7 +2252,8 @@ export async function mountEditor(root, { document, projectId, language, save, d
     if(labMode!=='world')return;
     try{
       const config=readWorldConfig(state.worldConfig);
-      const boxes=state.parts.filter(p=>!hiddenSceneParts(state.layers,state.parts).has(p.id)).map(p=>{const b=worldPartBounds(p,models.get(p.design));return {min:b.min.toArray(),max:b.max.toArray()}});
+      const hiddenIds=hiddenSceneParts(state.layers,state.parts);
+      const boxes=state.parts.filter(p=>!hiddenIds.has(p.id)).map(p=>{const b=worldPartBounds(p,models.get(p.design));return {min:b.min.toArray(),max:b.max.toArray()}});
       scene.setWorldSpawn(spawnFromBounds(config,boxes));
     }catch{scene.setWorldSpawn(null)}
   }

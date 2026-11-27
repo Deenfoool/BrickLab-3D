@@ -37,6 +37,13 @@ function mountChassis(rapier, world, vehicle, models, wheels, terrain, scale) {
   const size = bounds.getSize(new Vector3()).multiplyScalar(units / 2).max(new Vector3(.08, .04, .08))
   const center = bounds.getCenter(new Vector3()).applyQuaternion(housing).multiplyScalar(units)
   const mass = clamp(vehicle.parts.length * .025, .4, 30)
+  if(terrain?.group?.userData.worldTrack){
+    const rotation=new Quaternion().setFromAxisAngle(up,heading-sourceHeading);
+    const shapeCenter=center.clone().multiplyScalar(scale).applyQuaternion(rotation).add(start);
+    const shapeRotation=rotation.clone().multiply(housing);
+    const shape=new rapier.Cuboid(size.x*scale,size.y*scale,size.z*scale);
+    if(world.intersectionWithShape(shapeCenter,shapeRotation,shape,rapier.QueryFilterFlags.EXCLUDE_DYNAMIC,undefined,undefined,body))throw Error('На старте кузов пересекает препятствие. Измени точку старта или масштаб.');
+  }
   const collider = world.createCollider(rapier.ColliderDesc.cuboid(size.x * scale, size.y * scale, size.z * scale)
     .setTranslation(center.x * scale, center.y * scale, center.z * scale).setRotation(housing)
     .setMass(mass * scale ** 3).setFriction(.45).setRestitution(.12), body)
@@ -55,6 +62,7 @@ function springImpulse(min, max, sag, depth, normalVelocity, supportedMass) {
 export function createPhysicalDrive(rapier, vehicle, models, assembly, terrain) {
   const world = physicsWorld(rapier, terrain)
   try {
+    if(terrain?.group?.userData.worldTrack)world.step();
     return runVehicle(rapier, world, vehicle, models, assembly, terrain)
   } catch (error) {
     world.free()
@@ -126,7 +134,7 @@ function runVehicle(rapier, world, vehicle, models, assembly, terrain) {
     const traction = input.brake ? -speed * supportedMass * .55 :
       (power * 7 * gain - speed * .7) * supportedMass * physicsStep
     const friction = forward.multiplyScalar(traction).addScaledVector(side, -velocity.dot(side) * supportedMass * .55)
-      .clampLength(0, load * (terrain?.group?.userData.worldTrack?clamp(hit.collider.friction(),.05,1.5):.95))
+      .clampLength(0, load * (terrain?.group?.userData.worldTrack?clamp(hit.collider?.friction?.()??.8,.05,1.5):.95))
     return { impulse: normal.multiplyScalar(load).add(friction), point }
   }
 
