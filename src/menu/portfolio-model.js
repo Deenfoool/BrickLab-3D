@@ -1,3 +1,4 @@
+import {validateBlockLayout} from './portfolio-layout-model.js'
 // Canonical public portfolio schema. All IDs refer to public publication UUIDs, never private projects.
 export const portfolioKeys=['featured','publications','collections','awards','activity','statistics','about','followers']
 export const portfolioUuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -9,7 +10,7 @@ export function validatePortfolio(value){
  if(!value||typeof value!=='object'||Array.isArray(value)||!Array.isArray(value.blocks)||value.blocks.length!==portfolioKeys.length||!Array.isArray(value.collections)||value.collections.length>6)fail()
  const seen=new Set(),blocks=value.blocks.map(b=>{
   if(!b||!portfolioKeys.includes(b.key)||seen.has(b.key)||typeof b.visible!=='boolean')fail()
-  seen.add(b.key);return {key:b.key,visible:b.visible}
+  seen.add(b.key);return {key:b.key,visible:b.visible,...validateBlockLayout(b)}
  })
  if(value.featured!==null&&(typeof value.featured!=='string'||!portfolioUuid.test(value.featured)))fail()
  const collections=value.collections.map(c=>{
