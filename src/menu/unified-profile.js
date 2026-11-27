@@ -1,3 +1,4 @@
+import {sortableHandle,moveItem} from './sortable-handle.js'
 import {renderMetricGrid} from './workshop-metrics.js?v=workshop-metrics-2'
 import {profileHref} from './profile-route.js'
 import {applyAchievementAppearance} from './achievement-rewards.js'
@@ -97,36 +98,37 @@ export function profileLinkControls(lang,profile){
  const href='/'+profileHref(profile.username,profile.id),notice=ui('span','account-muted');notice.setAttribute('role','status')
  root.append(action(t.copy,async()=>{const value=new URL(href,location.origin).href;try{await navigator.clipboard.writeText(value);notice.textContent=t.copied}catch{notice.textContent=t.copyFailed+' '+value}}),notice);return root
 }
-export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic}){
- const t=tr(lang),root=ui('section','account-card workshop-card unified-profile-editor');root.append(ui('h2',null,t.edit))
+export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic,visibilitySupported=false,mode='all'}){
+ const t=tr(lang),root=ui('section','account-card workshop-card unified-profile-editor');root.append(ui('h2',null,mode==='layout'?(lang==='ru'?'Блоки витрины':'Showcase blocks'):mode==='privacy'?t.publicationSettings:t.edit))
+ if(mode==='layout'&&!publicCard){root.append(ui('p','account-muted',lang==='ru'?'Сначала создай мастерскую во вкладке «Приватность».':'Create your workshop in Privacy first.'));return root}
  if(!profile){root.append(ui('p','account-muted',lang==='ru'?'Профиль недоступен':'Profile unavailable'));return root}
  const form=ui('form','workshop-form'),name=ui('input'),bio=ui('textarea'),cover=ui('select')
  name.required=true;name.maxLength=80;name.value=profile.displayName??publicCard?.displayName??user.displayName;name.disabled=busy
  bio.maxLength=500;bio.value=profile.displayName===null&&publicCard&&!publicCard.unified?publicCard.bio:profile.bio;bio.disabled=busy
  cover.disabled=busy;for(const [key,ru,en] of [['blueprint','Чертёж','Blueprint'],['graphite','Графит','Graphite'],['amber','Янтарь','Amber']]){const option=ui('option',null,lang==='ru'?ru:en);option.value=key;cover.append(option)}cover.value=profile.cover
- form.append(field(t.display,name),field(t.bio,bio),field(t.coverStyle,cover))
+ if(mode==='all'||mode==='profile')form.append(field(t.display,name),field(t.bio,bio),field(t.coverStyle,cover))
+ if(mode==='profile'){const submit=ui('button','workspace-action primary',t.save);submit.type='submit';submit.disabled=busy;form.append(submit);form.onsubmit=e=>{e.preventDefault();if(!busy)saveProfile({displayName:name.value,bio:bio.value,cover:cover.value})};root.append(form);return root}
  if(publicCard&&!publicCard.unified)form.append(ui('p','account-muted',t.legacy))
  const status=ui('p','account-muted',!publicLoaded?(lang==='ru'?'Видимость пока не проверена.':'Visibility has not been checked.'):publicCard?t.shared:t.notShared)
- form.append(ui('h3',null,t.publicationSettings),status,ui('p','account-muted',t.privacy))
+ if(mode!=='layout')form.append(status,ui('p','account-muted',t.privacy))
  if(!publicLoaded){
   form.append(action(lang==='ru'?'Загрузить настройки публичности':'Load visibility settings',loadPublic,busy))
   form.append(ui('p','account-muted',lang==='ru'?'Сначала проверь статус публикации, чтобы случайно не раскрыть изменения.':'Check publication status before editing to avoid unintentionally sharing changes.'))
   root.append(form);return root
  }
  // Disabling a public page is a separate destructive action, never an implicit checkbox save.
- const enable=check(lang==='ru'?'Публичная мастерская':'Public workshop',!!publicCard,busy),shareAvatar=check(t.avatar,publicCard?.unified?publicCard.showAvatar:!!publicCard?.avatarUrl,busy),shareCover=check(t.cover,publicCard?.unified?publicCard.showCover:!!publicCard?.coverTheme,busy),shareTheme=check(t.theme,!!publicCard?.backgroundTheme,busy)
+ const enable=check(lang==='ru'?'Публичная мастерская':'Public workshop',!!publicCard&&publicCard.visible!==false,busy),shareAvatar=check(t.avatar,publicCard?.unified?publicCard.showAvatar:!!publicCard?.avatarUrl,busy),shareCover=check(t.cover,publicCard?.unified?publicCard.showCover:!!publicCard?.coverTheme,busy),shareTheme=check(t.theme,!!publicCard?.backgroundTheme,busy)
  const consent=check(t.publicConsent,false,busy),panel=ui('fieldset','portfolio-editor-controls')
- form.append(enable.label,ui('p','account-muted',lang==='ru'?'Публичная мастерская участвует в рейтинге, если открыт блок достижений. Отключение скрывает профиль и удаляет его публичные публикации и обсуждения; личные модели сохраняются. Остальные изменения в этой форме при отключении не сохраняются.':'A public workshop joins the leaderboard if achievements are visible. Turning it off removes the public profile, publications and discussions; private builds remain. Other edits on this form are not saved when disabling.'),panel)
+ if(mode!=='layout')form.append(enable.label,ui('p','account-muted',lang==='ru'?'Публичная мастерская участвует в рейтинге при открытых достижениях. Скрытие сохраняет работы, комментарии и подписчиков.':'A visible workshop participates in ranking when achievements are shared. Hiding preserves works, comments and followers.'));form.append(panel)
  const p=filterPortfolio(publicCard?.portfolio??(publicCard?undefined:defaultPortfolio({publicByDefault:true})),publicBuilds.map(b=>b.id)),blocks=ui('div','portfolio-order'),collections=ui('div','portfolio-editor-collections')
  function renderBlocks(){
   blocks.replaceChildren()
   for(const [i,item] of p.blocks.entries()){
    const row=ui('div','portfolio-order-row'),v=check(t[item.key],item.visible,busy)
    v.input.onchange=()=>{item.visible=v.input.checked}
-   const up=action('↑',()=>{[p.blocks[i-1],p.blocks[i]]=[p.blocks[i],p.blocks[i-1]];renderBlocks()},busy||i===0),down=action('↓',()=>{[p.blocks[i+1],p.blocks[i]]=[p.blocks[i],p.blocks[i+1]];renderBlocks()},busy||i===p.blocks.length-1)
-   up.setAttribute('aria-label',t.up+' '+t[item.key]);down.setAttribute('aria-label',t.down+' '+t[item.key]);row.append(icon('layers'),v.label,up,down)
-   if(!busy){row.draggable=true;row.ondragstart=e=>{e.dataTransfer.setData('text/plain',String(i));e.dataTransfer.effectAllowed='move'};row.ondragover=e=>e.preventDefault();row.ondrop=e=>{e.preventDefault();const value=e.dataTransfer.getData('text/plain');if(!/^[0-7]$/.test(value))return;const from=Number(value);if(from===i)return;const [moved]=p.blocks.splice(from,1);p.blocks.splice(i,0,moved);renderBlocks()}}
-   blocks.append(row)
+   const grip=sortableHandle({row,list:blocks,index:i,label:(lang==='ru'?'Перетащить: ':'Move: ')+t[item.key],disabled:busy,move:(from,to)=>{p.blocks=moveItem(p.blocks,from,to);renderBlocks()}})
+    row.append(grip,v.label)
+    blocks.append(row)
   }
  }
  const pin=ui('select'),none=ui('option',null,t.none);none.value='';pin.append(none);pin.disabled=busy
@@ -143,13 +145,13 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
   collections.append(action(t.add,()=>{p.collections.push({title:'',ids:[]});renderCollections()},busy||p.collections.length>=6))
  }
  renderBlocks();renderCollections()
- panel.append(shareAvatar.label,shareCover.label,shareTheme.label,field(t.featured,pin),ui('h3',null,t.order),blocks,ui('h3',null,t.collections),collections);if(!publicCard)panel.append(consent.label)
+ if(mode!=='layout')panel.append(shareAvatar.label,shareCover.label,shareTheme.label);if(mode!=='privacy')panel.append(field(t.featured,pin),ui('h3',null,t.order),blocks,ui('h3',null,t.collections),collections);if(!publicCard&&mode!=='layout')panel.append(consent.label)
  const submit=ui('button','workspace-action primary',t.save);submit.type='submit';submit.disabled=busy
- function setVisibility(){panel.hidden=!enable.input.checked;panel.disabled=busy||!enable.input.checked;consent.input.required=enable.input.checked&&!publicCard;submit.textContent=t.save}
+ function setVisibility(){panel.hidden=mode==='layout'?false:!enable.input.checked&&!publicCard;panel.disabled=busy||(!publicCard&&!enable.input.checked&&mode!=='layout');consent.input.required=enable.input.checked&&!publicCard;submit.textContent=t.save}
  enable.input.onchange=setVisibility;setVisibility()
  form.append(submit)
- form.onsubmit=e=>{e.preventDefault();if(busy)return;const data={displayName:name.value,bio:bio.value,cover:cover.value};if(enable.input.checked&&(publicCard||consent.input.checked))publishPublic({...data,unified:true,consent:true,showAvatar:shareAvatar.input.checked,showCover:shareCover.input.checked,showBackground:shareTheme.input.checked,portfolio:p});else if(!enable.input.checked){if(publicCard){if(confirm(t.unpublishConfirm))unpublishPublic()}else saveProfile(data)}}
+ form.onsubmit=e=>{e.preventDefault();if(busy)return;const data={displayName:name.value,bio:bio.value,cover:cover.value},payload={...data,unified:true,consent:true,showAvatar:shareAvatar.input.checked,showCover:shareCover.input.checked,showBackground:shareTheme.input.checked,portfolio:p};if(mode==='layout'){if(publicCard)publishPublic(payload);return}if(publicCard&&visibilitySupported){publishPublic({...payload,visible:enable.input.checked});return}if(enable.input.checked&&(publicCard||consent.input.checked))publishPublic({...payload,...(visibilitySupported?{visible:true}:{})});else if(!enable.input.checked){if(publicCard){if(confirm(t.unpublishConfirm))unpublishPublic()}else saveProfile(data)}}
  root.append(form)
- if(publicCard)root.append(profileLinkControls(lang,publicCard))
+ 
  return root
 }
