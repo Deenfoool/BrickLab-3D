@@ -7,6 +7,7 @@ import {startReceiptDelivery,createReceiptMailer} from './receipt-delivery.js'
 import {createInstructionRegions} from './instruction-regions.js'
 import {loadInstructionPolicy} from './instruction-access.js'
 import {loadApprovedLegal,liveCommerceConfig} from './legal-release.js'
+import {createTelegramHubHandler} from './telegram-hub.js'
 import { createBrickLabServer } from './http.js'
 import { createInstructionsHandler } from './instructions.js'
 import { createInstructionFetch } from './instruction-fetch.js'
@@ -24,7 +25,7 @@ import { createCommunityHandler } from './community.js'
 const host = process.env.HOST || '0.0.0.0'
 const port = Number(process.env.PORT || 8080)
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer from 1 to 65535')
-let store, auth, projects, profile, activity, community, bureau, security, payments, cleanup, legal, reconciliation, liveReconciliation, telegram, receiptDelivery
+let hub, store, auth, projects, profile, activity, community, bureau, security, payments, cleanup, legal, reconciliation, liveReconciliation, telegram, receiptDelivery
 if (process.env.PGPASSWORD) {
   const { connectAuthStore } = await import('./db/auth-store.js')
   store = connectAuthStore()
@@ -47,6 +48,7 @@ if (process.env.PGPASSWORD) {
     auth = createAuthHandler({ store, origin: process.env.PUBLIC_ORIGIN || 'http://localhost:8080',
       registrationEnabled: registrationEnabled && new URL(origin).protocol==='http:',
       trustedProxyIp: process.env.BRICKLAB_TRUSTED_PROXY_IP || '' })
+    hub=createTelegramHubHandler({store,origin,keyFile:process.env.BRICKLAB_HUB_KEY_FILE||'',ownerId:process.env.BRICKLAB_HUB_OWNER_ID||''})
     projects = createProjectsHandler({ store, origin: process.env.PUBLIC_ORIGIN || 'http://localhost:8080' })
     profile = createProfileHandler({store,origin:process.env.PUBLIC_ORIGIN || 'http://localhost:8080'})
     activity = createActivityHandler({store,origin:process.env.PUBLIC_ORIGIN || 'http://localhost:8080'})
@@ -63,7 +65,7 @@ if (process.env.PGPASSWORD) {
   }
 }
 const instructionFetch = createInstructionFetch({ proxy: process.env.BRICKLAB_INSTRUCTIONS_PROXY || '' })
-const server = createBrickLabServer({ root: fileURLToPath(new URL('../', import.meta.url)), auth, projects, profile, activity, community, bureau, security, payments, approvedLegal:legal,
+const server = createBrickLabServer({ root: fileURLToPath(new URL('../', import.meta.url)), auth, projects, profile, activity, community, bureau, security, payments, hub, approvedLegal:legal,
   instructions: createInstructionsHandler({ fetcher: instructionFetch }),
   rebrickable:createRebrickableHandler({apiKey:process.env.BRICKLAB_REBRICKABLE_API_KEY || ''}), cspReport:createCspReportHandler() })
 server.on('error', async error => {

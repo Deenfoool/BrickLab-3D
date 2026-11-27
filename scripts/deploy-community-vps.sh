@@ -10,11 +10,27 @@ exec 9>>/run/bricklab-deploy.lock
 flock -n 9 || { echo "Another BrickLab operation is running" >&2; exit 1; }
 TARGET="${1:?Supply an exact release commit SHA}"
 [[ "$TARGET" =~ ^[0-9a-f]{40}$ ]]
-test "$(git branch --show-current)" = feature/cloud-migration
-git diff --quiet
-git diff --cached --quiet
-test "$(git rev-parse origin/feature/cloud-migration)" = "$TARGET"
-git merge-base --is-ancestor HEAD "$TARGET"
+MODE="${2:-deploy}"
+case "$MODE" in
+  deploy)
+    test "$#" -le 2
+    test "$(git branch --show-current)" = feature/cloud-migration
+    git diff --quiet
+    git diff --cached --quiet
+    test "$(git rev-parse origin/feature/cloud-migration)" = "$TARGET"
+    git merge-base --is-ancestor HEAD "$TARGET"
+    ;;
+  --test-only)
+    test "$#" = 3
+    BRANCH="$3"
+    git check-ref-format "refs/heads/$BRANCH"
+    git fetch --no-tags origin "refs/heads/$BRANCH"
+    test "$(git rev-parse FETCH_HEAD)" = "$TARGET"
+    # Test archives must not contain links to host paths or submodules.
+    test "$(git ls-tree -r "$TARGET" | awk '$1=="120000" || $1=="160000"{n++} END{print n+0}')" = 0
+    ;;
+  *) echo "Invalid release mode" >&2; exit 2 ;;
+esac
 docker compose config --quiet
 docker image inspect bricklab-test-runner:local >/dev/null
 docker image inspect postgres:16 >/dev/null
@@ -33,7 +49,7 @@ chown -R 1000:1000 "$TMP"
 chmod 755 "$TMP"
 
 echo "=== RELEASE HISTORY CHECK ==="
-mkdir -p "$TMP/.release-check"
+mkdir "$TMP/.release-check"
 if git cat-file -e "HEAD:src/menu/home-hub.js" 2>/dev/null; then
  git show "HEAD:src/menu/home-hub.js" > "$TMP/.release-check/before.js"
 else
@@ -52,11 +68,11 @@ docker run --rm --network bridge --memory=1536m --cpus=1 \
     bricklab-test-runner:local npm ci --include=dev --ignore-scripts --no-audit --no-fund
 docker run --rm --network none --memory=1536m --cpus=1 \
     -e BRICKLAB_TEST_IMAGE=true -v "$TMP:/tests" -w /tests \
-    bricklab-test-runner:local npm test -- --test-concurrency=1 \
-    2>&1 | tee /tmp/bricklab-hub-tests.log
+    bricklab-test-runner:local npm test -- --test-concurrency=1
 
 echo "=== TELEGRAM WORKER TESTS ==="
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local node --check scripts/miniapp.js
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local node --check scripts/hub.js
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_events_test.py
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_test.py
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_actions_test.py
@@ -67,6 +83,7 @@ docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /te
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_external_test.py
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_maintenance_test.py
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_issue_test.py
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_hub_worker_test.py
 
 echo "=== ISOLATED DATABASE TESTS ==="
 export POSTGRES_PASSWORD="$(openssl rand -hex 32)"
@@ -87,7 +104,7 @@ PGPASSWORD="$POSTGRES_PASSWORD" docker run --rm --network "$NET" \
     -e PGHOST="$DB" -e PGDATABASE=bricklab_browser_test -e PGUSER=bricklab_admin \
     -e PGPASSWORD -e BRICKLAB_APP_PASSWORD -v "$TMP/server/db:/migrations:ro" \
     postgres:16 sh /migrations/setup.sh
-for check in account_security.sql community_options.sql store_orders.sql notification_events.sql unified_profile.sql; do
+for check in account_security.sql community_options.sql store_orders.sql notification_events.sql unified_profile.sql telegram_hub.sql; do
     docker exec -i -e PGPASSWORD="$POSTGRES_PASSWORD" "$DB" \
       psql -X -v ON_ERROR_STOP=1 -U bricklab_admin -d bricklab_browser_test \
       < "$TMP/server/db/tests/$check"
@@ -105,6 +122,13 @@ unset POSTGRES_PASSWORD BRICKLAB_APP_PASSWORD BRICKLAB_TEST_ADMIN_ID
 docker rm -f "$DB" >/dev/null
 docker network rm "$NET" >/dev/null
 
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_upkeep_test.py
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_jobs_test.py
+
+if [[ "$MODE" == --test-only ]]; then
+    echo "=== ALL ISOLATED CHECKS PASSED: $TARGET ==="
+    exit 0
+fi
 echo "=== PRODUCTION BACKUPS ==="
 systemctl start bricklab-backup.service
 systemctl start bricklab-config-backup.service
@@ -148,6 +172,9 @@ curl -fsS https://bricklab-3d.ru/api/health
 curl -fsS https://bricklab-3d.ru/ | grep -F 'unified-profile.css?v=unified-1' >/dev/null
 curl -fsS 'https://bricklab-3d.ru/api/community/builds?sort=popular&week=1' >/dev/null
 trap - ERR
+if [[ -f /usr/local/lib/bricklab-control/bricklab-control-upkeep.py ]]; then
+    python3 /usr/local/lib/bricklab-control/bricklab-control-upkeep.py record "bricklab-cloud-bricklab:rollback-${OLD:0:7}" "$IMAGE" || echo "WARNING: rollback timestamp not recorded" >&2
+fi
 echo
 echo "BRICKLAB HUB AND COMMUNITY 2.0 UPDATED"
 git log -1 --oneline

@@ -289,6 +289,10 @@ def render(page, data):
                      + "\nУтверждённый SHA: " + value("release","approved") + "\nСлужба релиза: " + value("release","job") + "\nОткат только по проверенной процедуре VPS.",
     }
     text = bodies[page]
+    if page in ("automation", "vps") and data.get("upkeep"):
+        u=data["upkeep"]
+        c=u.get("cleanup",{})
+        text += "\nОбслуживание Docker: " + ("автоматически" if u.get("cleanup_enabled") else "предварительный анализ") + "\nRollback-образы: " + str(c.get("rollback_count","нет данных")) + "\nИзмерений за неделю: " + str(u.get("samples","нет данных"))
     if not data:
         text += "\n⚠ Снимок отсутствует или устарел. Статус неизвестен."
     buttons = [[{"text": label, "callback_data": "cc:" + key} for label, key in MENUS["home"][i:i+2]]
@@ -315,6 +319,8 @@ def render(page, data):
                         [("Выключить уведомления" if preferences().get("enabled") else "Включить уведомления", "off" if preferences().get("enabled") else "on"), ("Тишина на 1 час", "quiet"), ("Снять тишину", "resume")]])
     if page == "home" and os.environ.get("BRICKLAB_MINIAPP_ENABLED") == "1":
         buttons.append([{"text":"📱 Панель управления", "web_app":{"url":ORIGIN+"/control/"}}])
+    if page=="home" and os.environ.get("BRICKLAB_HUB_ENABLED")=="1":
+        buttons.append([{"text":"🧱 Личный кабинет Hub","web_app":{"url":ORIGIN+"/control/hub/"}}])
     if page == "release":
         buttons.append([{"text": "GitHub", "url": "https://github.com/Deenfoool/BrickLab-3D"}])
     if actions_enabled() and page in ("docker", "backup", "release"):
@@ -423,8 +429,19 @@ def handle(update, owner, call):
         return
     msg = update.get("message", {})
     if not authorized(msg, msg.get("from", {}), owner):
+        chat=msg.get("chat",{})
+        sender=msg.get("from",{})
+        ident=sender.get("id")
+        if os.environ.get("BRICKLAB_HUB_ENABLED")=="1" and chat.get("type")=="private" and type(ident) is int and ident>0 and chat.get("id")==ident and msg.get("text") in ("/start","/menu","/hub"):
+            try:
+                call("sendMessage",{"chat_id":ident,"text":"BrickLab Hub · Твоя мастерская в Telegram","reply_markup":{"inline_keyboard":[[{"text":"Открыть BrickLab Hub","web_app":{"url":ORIGIN+"/control/hub/"}}]]}})
+            except ApiError as exc:
+                if exc.code not in ("400","403"): raise
         return
     text = msg.get("text", "")
+    if text=="/hub" and os.environ.get("BRICKLAB_HUB_ENABLED")=="1":
+        call("sendMessage",{"chat_id":owner,"text":"BrickLab Hub","reply_markup":{"inline_keyboard":[[{"text":"Личный кабинет","web_app":{"url":ORIGIN+"/control/hub/"}}]]}})
+        return
     if text in ("/start", "/menu", "/status"):
         call("sendMessage", {"chat_id": owner, "protect_content": True,
                              **render("home" if text != "/status" else "vps", snapshot())})

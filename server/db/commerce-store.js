@@ -21,7 +21,9 @@ export async function commerceEntitlements(tx,uid,environment='live'){
      ...(g.kind==='instruction'?{setId:g.target}:{}),
      ...(g.grantedAt?{grantedAt:new Date(g.grantedAt).getTime()}:{}),
      ...(g.expiresAt?{expiresAt:new Date(g.expiresAt).getTime()}:{})}));
-    const account=projectAccount(grants)
+    const promo=environment==='live'?await tx`select id,granted_at as "grantedAt",expires_at as "expiresAt" from bricklab.hub_promo_grants where user_id=${uid}`:[]
+    const promoGrants=promo.map(g=>({id:'promo:'+g.id,kind:'subscription',sku:'plus-1',grantedAt:new Date(g.grantedAt).getTime(),expiresAt:new Date(g.expiresAt).getTime()}))
+    const account=projectAccount([...grants,...promoGrants])
     const welcome=environment==='live'?await tx`select set_id as "setId" from bricklab.instruction_welcome_grants where user_id=${uid} order by slot`:[]
     if(environment==='live')account.instructions=[...new Set([...account.instructions,...welcome.map(g=>g.setId)])]
     const first=environment==='live'?(await tx`select set_id as "setId" from bricklab.instruction_first_build where user_id=${uid}`)[0]:null

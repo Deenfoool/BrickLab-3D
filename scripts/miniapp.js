@@ -41,10 +41,23 @@ async function load(){
     tiles('stats',[['Аккаунты',s.users],['Новые 24 ч',s.new_users],['Сборки',s.builds],['Профили',s.profiles],['Реакции',a.likes],['Скачивания',a.downloads]]);
     chart(Array.isArray(a.days)?a.days:[]);
     tiles('ops',[['Контейнер',o.bricklab],['События в очереди',e.pending],['Повторные отправки',e.retrying],['Бэкап БД',b.db],['Бэкап конфигурации',b.config],['Версия',d.release?.commit]]);
+    const u=d.upkeep??{}, c=u.cleanup??{};
+    tiles('upkeep-tiles',[['Политика очистки',u.cleanup_enabled===true?'Автоматически':u.cleanup_enabled===false?'Предварительный анализ':null],['Диск (макс.)',u.disks?Math.max(...Object.values(u.disks).map(x=>x.used_percent))+'%':null],['Rollback-образы',c.rollback_count],['К удалению',(c.candidates??[]).join(', ')||'—'],['Последняя очистка',c.status],['Измерений за 7 дней',u.samples],['Последний отчёт',u.weekly_sent_at?new Date(u.weekly_sent_at*1000).toLocaleString():null]]);
+    document.getElementById('upkeep-note').textContent='Кэш: 7 дней · резерв: 3 версии · тестовые образы защищены · уведомления: 75/85/90%.';
+    const f=d.finance??{}, rub=n=>Number.isSafeInteger(n)?(n/100).toLocaleString('ru-RU',{style:'currency',currency:'RUB'}):null;
+    const net=(x,y)=>Number.isSafeInteger(x)&&Number.isSafeInteger(y)?rub(x-y):null;
+    tiles('finance-tiles',[['Оплаты за 24 ч',f.paid_24h],['Выручка за 24 ч',rub(f.gross_24h)],['Возвраты за 24 ч',rub(f.refund_amount_24h)],['Итого за 24 ч',net(f.gross_24h,f.refund_amount_24h)],['Итого за 7 дней',net(f.gross_7d,f.refund_amount_7d)],['Ожидают оплаты',f.pending],['Чеки ожидают',f.receipts_pending]]);
+    tiles('dev-tiles',[['Checkout',d.release?.commit],['Локальный origin',d.release?.tracking],['Отставание',d.release?.behind],['Рабочее дерево',d.release?.worktree],['Утверждённый SHA',d.release?.approved],['Релиз',d.release?.job]]);
     status.textContent='Обновлено '+new Date(d.timestamp*1000).toLocaleTimeString();dashboard.hidden=false;
   }catch(err){status.textContent=err.message||'Ошибка соединения';}
   finally{refresh.disabled=false;}
 }
+function openTab(tab){
+  for(const section of document.querySelectorAll('[data-page]'))section.hidden=section.dataset.page!==tab;
+  for(const button of document.querySelectorAll('[data-tab]'))button.setAttribute('aria-selected',String(button.dataset.tab===tab));
+}
+for(const button of document.querySelectorAll('[data-tab]'))button.addEventListener('click',()=>openTab(button.dataset.tab));
+openTab('home');
 refresh.addEventListener('click',load);tg?.ready();tg?.expand();load();
 
 const adminStatus=document.getElementById('admin-status');
@@ -130,3 +143,84 @@ adminConfirm.addEventListener('submit',async event=>{
     await loadAdmin();
   }catch(err){adminStatus.textContent=err.message;}
 });
+
+const devBranch=document.getElementById('dev-branch'),devStatus=document.getElementById('dev-status'),devTest=document.getElementById('dev-test'),devDeploy=document.getElementById('dev-deploy');
+let branchRows=[],currentJob={},devBusy=false,devPoll=null;
+const jobErrors={disabled:'Запуск заданий не активирован на VPS.',busy:'Другое задание уже выполняется.',test_required:'Сначала успешно протестируйте этот SHA.',approval_required:'Нужно независимое подтверждение SHA на VPS.',duplicate:'Этот запрос уже обработан.',unavailable:'Служба заданий недоступна.',start_failed:'Не удалось запустить службу.',invalid:'Некорректный запрос.'};
+async function jobApi(path,body){
+  const r=await fetch(path,{method:body?'POST':'GET',headers:{'X-Telegram-Init-Data':tg?.initData??'',...(body?{'Content-Type':'application/json'}:{})},credentials:'omit',cache:'no-store',...(body?{body:JSON.stringify(body)}:{})});
+  if(r.status===403)throw Error('Откройте Mini App заново.');
+  const d=await r.json();if(!r.ok||d.error)throw Error(jobErrors[d.error]??'Ошибка службы заданий.');
+  return d;
+}
+function selected(){return branchRows[Number(devBranch.value)]??null;}
+function devButtons(){
+  const s=selected(),active=['queued','running'].includes(currentJob.status);
+  devTest.disabled=devBusy||!s||active;
+  devDeploy.disabled=devBusy||!s||active||s.branch!=='feature/cloud-migration'||currentJob.status!=='ok'||currentJob.action!=='test'||currentJob.sha!==s.sha||currentJob.branch!==s.branch;
+  document.getElementById('dev-sha').textContent=s?.sha??'';
+}
+function renderJob(job){
+  currentJob=job??{};
+  const states={queued:'В очереди',running:'Выполняется',ok:'Успешно',failed:'Ошибка',interrupted:'Прервано'};
+  tiles('job-tiles',[['Статус',states[currentJob.status]??'Нет заданий'],['Этап',currentJob.stage],['Ветка',currentJob.branch],['SHA',currentJob.sha],['Ошибки тестов',currentJob.failed_tests],['Код завершения',currentJob.exit_code]]);
+  devButtons();
+}
+async function refreshJob(){
+  try{
+    const d=await jobApi('jobs');renderJob(d.job);
+    devStatus.textContent='Статус обновлён.';
+    if(['queued','running'].includes(currentJob.status)){
+      clearTimeout(devPoll);devPoll=setTimeout(refreshJob,4000);
+    }
+  }catch(e){devStatus.textContent=e.message;clearTimeout(devPoll);}
+}
+document.getElementById('dev-branches').onclick=async()=>{
+  if(devBusy)return;devBusy=true;devButtons();
+  try{
+    const d=await jobApi('branches');branchRows=Array.isArray(d.branches)?d.branches:[];
+    devBranch.replaceChildren();branchRows.forEach((b,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=b.branch+' · '+b.sha.slice(0,8);devBranch.append(o);});
+    devBranch.disabled=!branchRows.length;await refreshJob();
+  }catch(e){devStatus.textContent=e.message;}
+  finally{devBusy=false;devButtons();}
+};
+devBranch.onchange=devButtons;
+async function enqueue(action){
+  const s=selected();if(!s||devBusy)return;
+  if(!window.confirm((action==='test'?'Запустить тесты ':'Развернуть production ')+s.branch+' @ '+s.sha.slice(0,12)+'?'))return;
+  devBusy=true;devButtons();
+  try{
+    const bytes=crypto.getRandomValues(new Uint8Array(16));
+    const id=Array.from(bytes,x=>x.toString(16).padStart(2,'0')).join('');
+    const d=await jobApi('jobs',{action,branch:s.branch,sha:s.sha,id});renderJob(d.job);await refreshJob();
+  }catch(e){devStatus.textContent=e.message;}
+  finally{devBusy=false;devButtons();}
+}
+devTest.onclick=()=>enqueue('test');
+devDeploy.onclick=()=>enqueue('deploy');
+document.getElementById('dev-refresh').onclick=refreshJob;
+
+const promoStatus=document.getElementById('promo-status'),promoList=document.getElementById('promo-list');
+async function promoRequest(path,data){
+ const r=await fetch(path,{method:data?'POST':'GET',headers:{'X-Telegram-Init-Data':tg?.initData??'',...(data?{'Content-Type':'application/json'}:{})},credentials:'omit',cache:'no-store',...(data?{body:JSON.stringify(data)}:{})});
+ if(r.status===403)throw Error('Нужен привязанный аккаунт администратора и свежая авторизация Telegram.');
+ if(!r.ok)throw Error('Операция не выполнена: HTTP '+r.status);return r.json();
+}
+async function loadPromos(){
+ try{const d=await promoRequest('promos');promoList.replaceChildren();for(const p of d.items??[]){const row=document.createElement('article');row.className='admin-row';addText(row,p.code,'strong');addText(row,p.days+' дн. · '+p.used+'/'+p.maxUses+' · '+new Date(p.expiresAt).toLocaleDateString());if(!p.disabled){const b=document.createElement('button');b.type='button';b.textContent='Отключить';b.onclick=async()=>{if(!confirm('Отключить '+p.code+'?'))return;try{await promoRequest('promo-disable',{code:p.code});await loadPromos()}catch(e){promoStatus.textContent=e.message}};row.append(b)}else addText(row,'Отключён');promoList.append(row)}promoStatus.textContent='Промокоды загружены.'}catch(e){promoStatus.textContent=e.message}
+}
+document.getElementById('promo-load').onclick=loadPromos;
+document.getElementById('promo-create').onsubmit=async e=>{e.preventDefault();try{const code=document.getElementById('promo-admin-code').value.trim().toUpperCase(),days=Number(document.getElementById('promo-days').value),maxUses=Number(document.getElementById('promo-limit').value),expiresAt=new Date(document.getElementById('promo-expiry').value+'T23:59:59').toISOString();await promoRequest('promo-create',{code,days,maxUses,expiresAt});await loadPromos()}catch(err){promoStatus.textContent=err.message}};
+
+const campaignStatus=document.getElementById('campaign-status'),campaignList=document.getElementById('campaign-list');
+const audienceNames={all:'Все',plus:'Plus',free:'Free',new:'Новые'};let audienceCounts={};
+function audienceCount(){const n=audienceCounts[document.getElementById('campaign-audience').value];document.getElementById('campaign-audience-count').textContent=Number.isInteger(n)?'Сейчас подходит: '+n:'Загрузи рассылки для оценки аудитории.'}
+document.getElementById('campaign-audience').onchange=audienceCount;
+async function loadCampaigns(){
+ try{const d=await promoRequest('campaigns');campaignList.replaceChildren();campaignStatus.textContent='Подписаны на рассылки: '+d.eligible;audienceCounts=d.audiences??{};audienceCount();
+ for(const c of d.items??[]){const row=document.createElement('article');row.className='admin-row';addText(row,new Date(c.sendAt).toLocaleString(),'strong');addText(row,c.body);addText(row,(audienceNames[c.audience]??'Все')+' · '+c.status+' · доставлено '+c.sent+'/'+c.total+' · ожидают '+c.pending+' · не доставлено '+c.unsuccessful);
+ for(const [action,label] of (c.status==='draft'?[['campaign-test','Тест мне'],['campaign-queue','Подтвердить рассылку'],['campaign-cancel','Отменить']]:c.status==='queued'?[['campaign-cancel','Остановить остаток']]:[])){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=async()=>{if(!confirm(action==='campaign-test'?'Отправить тест только себе?':action==='campaign-queue'?'Подтвердить отправку согласившимся пользователям?':'Отменить оставшиеся сообщения?'))return;try{await promoRequest(action,{id:c.id});await loadCampaigns();if(action==='campaign-test')campaignStatus.textContent='Тест отправлен владельцу.'}catch(e){campaignStatus.textContent=e.message}};row.append(b)}campaignList.append(row)}
+ }catch(e){campaignStatus.textContent=e.message}
+}
+document.getElementById('campaign-load').onclick=loadCampaigns;
+document.getElementById('campaign-create').onsubmit=async e=>{e.preventDefault();try{const body=document.getElementById('campaign-body').value.trim(),raw=document.getElementById('campaign-time').value,sendAt=raw?new Date(raw).toISOString():new Date().toISOString();await promoRequest('campaign-create',{body,sendAt,audience:document.getElementById('campaign-audience').value});document.getElementById('campaign-body').value='';await loadCampaigns()}catch(err){campaignStatus.textContent=err.message}};
