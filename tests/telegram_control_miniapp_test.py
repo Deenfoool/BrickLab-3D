@@ -46,5 +46,20 @@ class Mini(unittest.TestCase):
             handler.do_POST()
             self.assertEqual(reply.call_args.args[0],400)
             job.assert_not_called()
+    def test_user_hub_does_not_grant_admin(self):
+        token="123:abc"
+        raw=signed(token,user=99,stamp=10000)
+        self.assertEqual(m.telegram_identity(raw,token,10001),99)
+        self.assertFalse(m.validate(raw,token,42,10001))
+        self.assertIsNone(m.telegram_identity(raw,token,10400))
+    def test_public_user_cannot_create_campaign(self):
+        handler=object.__new__(m.Handler)
+        handler.path="/control/campaign-create"
+        handler.headers={"Origin":m.ORIGIN}
+        handler.authorized=lambda:False
+        with patch.object(handler,"reply") as reply,patch.object(m,"hub_request") as call:
+            handler.do_POST()
+            self.assertEqual(reply.call_args.args[0],403)
+            call.assert_not_called()
 if __name__=="__main__":
     unittest.main()

@@ -72,6 +72,7 @@ docker run --rm --network none --memory=1536m --cpus=1 \
 
 echo "=== TELEGRAM WORKER TESTS ==="
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local node --check scripts/miniapp.js
+docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local node --check scripts/hub.js
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_events_test.py
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_test.py
 docker run --rm --network none --memory=256m --cpus=1 -v "$TMP:/tests:ro" -w /tests bricklab-test-runner:local python3 -B tests/telegram_control_actions_test.py
@@ -102,7 +103,7 @@ PGPASSWORD="$POSTGRES_PASSWORD" docker run --rm --network "$NET" \
     -e PGHOST="$DB" -e PGDATABASE=bricklab_browser_test -e PGUSER=bricklab_admin \
     -e PGPASSWORD -e BRICKLAB_APP_PASSWORD -v "$TMP/server/db:/migrations:ro" \
     postgres:16 sh /migrations/setup.sh
-for check in account_security.sql community_options.sql store_orders.sql notification_events.sql unified_profile.sql; do
+for check in account_security.sql community_options.sql store_orders.sql notification_events.sql unified_profile.sql telegram_hub.sql; do
     docker exec -i -e PGPASSWORD="$POSTGRES_PASSWORD" "$DB" \
       psql -X -v ON_ERROR_STOP=1 -U bricklab_admin -d bricklab_browser_test \
       < "$TMP/server/db/tests/$check"
