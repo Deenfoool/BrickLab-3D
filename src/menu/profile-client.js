@@ -8,5 +8,5 @@ export function createProfileClient({fetcher=globalThis.fetch,location=globalThi
   if(typeof d?.profile?.bio!=='string'||!['blueprint','graphite','amber'].includes(d.profile.cover)||!Number.isSafeInteger(d?.progress?.xp)||!Array.isArray(d.progress.awards))throw new AuthError('profile_unavailable')
   return d
  }
- return {get:()=>call(),save:({bio,cover,background,displayName,supportBadge,plusTheme})=>call({bio,cover,...(plusTheme===undefined?{}:{plusTheme}),...(supportBadge===undefined?{}:{supportBadge}),...(displayName===undefined?{}:{displayName}),...(background===undefined?{}:{background})}),upload:(kind,file)=>call(file,kind),remove:kind=>call(undefined,kind,true)}
+ return {get:()=>call(),save:({bio,cover,background,displayName,supportBadge,plusTheme,showcase})=>call({bio,cover,...(showcase===undefined?{}:{showcase}),...(plusTheme===undefined?{}:{plusTheme}),...(supportBadge===undefined?{}:{supportBadge}),...(displayName===undefined?{}:{displayName}),...(background===undefined?{}:{background})}),upload:(kind,file)=>call(file,kind),remove:kind=>call(undefined,kind,true)}
 }
