@@ -1,3 +1,4 @@
+import {profileHref} from './profile-route.js'
 import {applyAchievementAppearance} from './achievement-rewards.js'
 import {achievementById} from './achievement-catalog.js'
 import {commerceBadge} from './commerce-visuals.js?v=merch-2'
@@ -91,8 +92,8 @@ export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeB
 export function profileLinkControls(lang,profile){
  const t=tr(lang),root=ui('div','portfolio-link-controls')
  if(!safePublicId(profile?.id))return root
- const href='/#community/profile/'+(profile.username??profile.id),notice=ui('span','account-muted');notice.setAttribute('role','status')
- root.append(anchor(t.preview,href),action(t.copy,async()=>{const value=new URL(href,location.origin).href;try{await navigator.clipboard.writeText(value);notice.textContent=t.copied}catch{notice.textContent=t.copyFailed+' '+value}}),notice);return root
+ const href='/'+profileHref(profile.username,profile.id),notice=ui('span','account-muted');notice.setAttribute('role','status')
+ root.append(action(t.copy,async()=>{const value=new URL(href,location.origin).href;try{await navigator.clipboard.writeText(value);notice.textContent=t.copied}catch{notice.textContent=t.copyFailed+' '+value}}),notice);return root
 }
 export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic}){
  const t=tr(lang),root=ui('section','account-card workshop-card unified-profile-editor');root.append(ui('h2',null,t.edit))
@@ -111,9 +112,9 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
   root.append(form);return root
  }
  // Disabling a public page is a separate destructive action, never an implicit checkbox save.
- const enable=check(t.visibility,!!publicCard,busy||!!publicCard),shareAvatar=check(t.avatar,publicCard?.unified?publicCard.showAvatar:!!publicCard?.avatarUrl,busy),shareCover=check(t.cover,publicCard?.unified?publicCard.showCover:!!publicCard?.coverTheme,busy),shareTheme=check(t.theme,!!publicCard?.backgroundTheme,busy)
+ const enable=check(lang==='ru'?'Публичная мастерская':'Public workshop',!!publicCard,busy),shareAvatar=check(t.avatar,publicCard?.unified?publicCard.showAvatar:!!publicCard?.avatarUrl,busy),shareCover=check(t.cover,publicCard?.unified?publicCard.showCover:!!publicCard?.coverTheme,busy),shareTheme=check(t.theme,!!publicCard?.backgroundTheme,busy)
  const consent=check(t.publicConsent,false,busy),panel=ui('fieldset','portfolio-editor-controls')
- form.append(enable.label,panel)
+ form.append(enable.label,ui('p','account-muted',lang==='ru'?'Публичная мастерская участвует в рейтинге, если открыт блок достижений. Отключение скрывает профиль и удаляет его публичные публикации и обсуждения; личные модели сохраняются.':'A public workshop joins the leaderboard if achievements are visible. Turning it off removes the public profile, publications and discussions; private builds remain.'),panel)
  const p=filterPortfolio(publicCard?.portfolio,publicBuilds.map(b=>b.id)),blocks=ui('div','portfolio-order'),collections=ui('div','portfolio-editor-collections')
  function renderBlocks(){
   blocks.replaceChildren()
@@ -140,13 +141,13 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
   collections.append(action(t.add,()=>{p.collections.push({title:'',ids:[]});renderCollections()},busy||p.collections.length>=6))
  }
  renderBlocks();renderCollections()
- panel.append(shareAvatar.label,shareCover.label,shareTheme.label,field(t.featured,pin),ui('h3',null,t.order),blocks,ui('h3',null,t.collections),collections,consent.label)
+ panel.append(shareAvatar.label,shareCover.label,shareTheme.label,field(t.featured,pin),ui('h3',null,t.order),blocks,ui('h3',null,t.collections),collections);if(!publicCard)panel.append(consent.label)
  const submit=ui('button','workspace-action primary',t.save);submit.type='submit';submit.disabled=busy
- function setVisibility(){panel.hidden=!enable.input.checked;panel.disabled=busy||!enable.input.checked;consent.input.required=enable.input.checked;submit.textContent=enable.input.checked?t.publish:t.savePrivate}
+ function setVisibility(){panel.hidden=!enable.input.checked;panel.disabled=busy||!enable.input.checked;consent.input.required=enable.input.checked&&!publicCard;submit.textContent=t.save}
  enable.input.onchange=setVisibility;setVisibility()
  form.append(submit)
- form.onsubmit=e=>{e.preventDefault();if(busy)return;const data={displayName:name.value,bio:bio.value,cover:cover.value};if(enable.input.checked&&consent.input.checked)publishPublic({...data,unified:true,consent:true,showAvatar:shareAvatar.input.checked,showCover:shareCover.input.checked,showBackground:shareTheme.input.checked,portfolio:p});else if(!enable.input.checked)saveProfile(data)}
+ form.onsubmit=e=>{e.preventDefault();if(busy)return;const data={displayName:name.value,bio:bio.value,cover:cover.value};if(enable.input.checked&&(publicCard||consent.input.checked))publishPublic({...data,unified:true,consent:true,showAvatar:shareAvatar.input.checked,showCover:shareCover.input.checked,showBackground:shareTheme.input.checked,portfolio:p});else if(!enable.input.checked){if(publicCard){if(confirm(t.unpublishConfirm))unpublishPublic()}else saveProfile(data)}}
  root.append(form)
- if(publicCard){root.append(profileLinkControls(lang,publicCard),action(t.unpublish,()=>{if(confirm(t.unpublishConfirm))unpublishPublic()},busy))}
+ if(publicCard)root.append(profileLinkControls(lang,publicCard))
  return root
 }

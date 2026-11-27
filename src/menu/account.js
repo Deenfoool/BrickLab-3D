@@ -1,10 +1,11 @@
+import {isWorkshopHandle,profileHref} from './profile-route.js'
 import {renderAdminPanel} from './admin-panel.js?v=achievements-v4'
 import {renderBureauPanel} from './bureau-panel.js?v=profile-gallery-1'
 import { createAuthClient } from './auth-client.js?v=live-polish-1'
 
 import { createProjectsClient, cloudLink } from './projects-client.js?v=profile-gallery-1'
 
-import { renderCloudWorkshop } from './cloud-workshop.js?v=achievements-platform-1'
+import { renderCloudWorkshop } from './cloud-workshop.js?v=workshop-identity-1'
 
 import {createProfileClient} from './profile-client.js?v=achievements-v4'
 
@@ -24,12 +25,12 @@ Object.assign(copy.ru,{invalid_image:'Не удалось обработать �
 Object.assign(copy.en,{invalid_image:'Image could not be processed. Use PNG, JPEG or WebP.',background_locked:'This background is not owned.',mediaSaved:'Appearance saved.'})
 Object.assign(copy.ru,{activity_unavailable:'Избранное и уведомления недоступны.',favoriteAdd:'В избранное',favoriteRemove:'Убрать из избранного'})
 Object.assign(copy.en,{activity_unavailable:'Activity unavailable.',favoriteAdd:'Add to favorites',favoriteRemove:'Remove from favorites'})
-Object.assign(copy.ru,{community_disabled:'Сообщество пока отключено на этом сервере.',community_unavailable:'Сообщество недоступно.',invalid_public_profile:'Проверь публичное имя и описание.',publicSaved:'Публичный профиль опубликован.',publicRemoved:'Публикация снята.'})
-Object.assign(copy.en,{community_disabled:'Community is disabled on this server.',community_unavailable:'Community unavailable.',invalid_public_profile:'Check public name and biography.',publicSaved:'Public profile published.',publicRemoved:'Profile unpublished.'})
+Object.assign(copy.ru,{community_disabled:'Сообщество пока отключено на этом сервере.',community_unavailable:'Сообщество недоступно.',invalid_public_profile:'Проверь публичное имя и описание.',publicSaved:'Настройки мастерской сохранены.',publicRemoved:'Мастерская скрыта.'})
+Object.assign(copy.en,{community_disabled:'Community is disabled on this server.',community_unavailable:'Community unavailable.',invalid_public_profile:'Check public name and biography.',publicSaved:'Workshop settings saved.',publicRemoved:'Workshop hidden.'})
 Object.assign(copy.ru,{public_profile_required:'Сначала опубликуй профиль конструктора.',invalid_publication:'Проверь описание и согласие на публикацию.',publicationSaved:'Сборка опубликована.',publicationRemoved:'Публикация сборки снята.',managePublic:'Управление публикациями'})
 Object.assign(copy.en,{public_profile_required:'Publish your builder profile first.',invalid_publication:'Check description and publication consent.',publicationSaved:'Build published.',publicationRemoved:'Build unpublished.',managePublic:'Manage publications'})
-Object.assign(copy.ru,{invalid_username:'Логин: 3–32 латинских символа, цифры, точка, дефис или подчёркивание.',username_taken:'Этот логин уже занят. Выбери другой.',closed:'Регистрация новых аккаунтов управляется сервером.',forgot:'Забыли пароль?',reset:'Восстановление пароля',verify:'Подтверждение почты',resetConfirm:'Новый пароль',sendCode:'Отправить код на почту',code:'Код из письма',codeSent:'Если адрес подходит, код отправлен. Проверь почту и спам. Код действителен 30 минут.',accountCreated:'Аккаунт создан. Теперь войди.',passwordChanged:'Пароль изменён. Войди с новым паролем.',invalid_code:'Код неверный или просрочен.',mail_unavailable:'Отправка почты пока недоступна.',revokeOthers:'Завершить остальные сессии',sessionsRevoked:'Другие сессии завершены.',admin:'Панель администратора',admin_required:'Недостаточно прав.',registration_disabled:'Регистрация пока закрыта.'})
-Object.assign(copy.en,{invalid_username:'Use 3–32 Latin letters, digits, dots, hyphens or underscores.',username_taken:'Username already taken. Choose another.',closed:'New account registration is controlled by the server.',forgot:'Forgot password?',reset:'Password recovery',verify:'Verify email',resetConfirm:'New password',sendCode:'Send email code',code:'Code from email',codeSent:'If the address is eligible, a code was sent. Check inbox and spam. It expires in 30 minutes.',accountCreated:'Account created. Sign in now.',passwordChanged:'Password changed. Sign in with your new password.',invalid_code:'Invalid or expired code.',mail_unavailable:'Email delivery is not available.',revokeOthers:'End other sessions',sessionsRevoked:'Other sessions ended.',admin:'Administration',admin_required:'Insufficient privileges.',registration_disabled:'Registration is currently closed.'})
+Object.assign(copy.ru,{invalid_username:'Логин: 3–32 латинских символа, цифры, точка, дефис или подчёркивание. Системные имена недоступны.',username_taken:'Этот логин уже занят. Выбери другой.',closed:'Регистрация новых аккаунтов управляется сервером.',forgot:'Забыли пароль?',reset:'Восстановление пароля',verify:'Подтверждение почты',resetConfirm:'Новый пароль',sendCode:'Отправить код на почту',code:'Код из письма',codeSent:'Если адрес подходит, код отправлен. Проверь почту и спам. Код действителен 30 минут.',accountCreated:'Аккаунт создан. Теперь войди.',passwordChanged:'Пароль изменён. Войди с новым паролем.',invalid_code:'Код неверный или просрочен.',mail_unavailable:'Отправка почты пока недоступна.',revokeOthers:'Завершить остальные сессии',sessionsRevoked:'Другие сессии завершены.',admin:'Панель администратора',admin_required:'Недостаточно прав.',registration_disabled:'Регистрация пока закрыта.'})
+Object.assign(copy.en,{invalid_username:'Use 3–32 Latin letters, digits, dots, hyphens or underscores. System names are reserved.',username_taken:'Username already taken. Choose another.',closed:'New account registration is controlled by the server.',forgot:'Forgot password?',reset:'Password recovery',verify:'Verify email',resetConfirm:'New password',sendCode:'Send email code',code:'Code from email',codeSent:'If the address is eligible, a code was sent. Check inbox and spam. It expires in 30 minutes.',accountCreated:'Account created. Sign in now.',passwordChanged:'Password changed. Sign in with your new password.',invalid_code:'Invalid or expired code.',mail_unavailable:'Email delivery is not available.',revokeOthers:'End other sessions',sessionsRevoked:'Other sessions ended.',admin:'Administration',admin_required:'Insufficient privileges.',registration_disabled:'Registration is currently closed.'})
 function node(tag, cls, value) {
  const e=document.createElement(tag); if(cls)e.className=cls; if(value!==undefined)e.textContent=value; return e
 }
@@ -46,7 +47,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
  let adminRoute='',notificationError=false,bellRefreshing=false,bellRendered=false
  const t=()=>copy[lang]
  function publishNotifications(){onNotifications({lang,signedIn:Boolean(user),checked,busy,items:activityData?.notifications??null,userId:user?.id??null,error:notificationError})}
- function label(){const e=link.querySelector('[data-account-label]');e.textContent=user?t().account:t().login;link.title=e.textContent;link.setAttribute('aria-label',e.textContent)}
+ function label(){const e=link.querySelector('[data-account-label]');e.textContent=user?t().account:t().login;link.href=user&&isWorkshopHandle(user.username)?profileHref(user.username):'#account';link.title=e.textContent;link.setAttribute('aria-label',e.textContent)}
  function message(code){const p=node('p','account-notice',t()[code]??t().unknown);p.setAttribute('role','status');return p}
  function localLink(){const a=node('a','workspace-action',t().local);a.href='#home';return a}
  async function run(fn){
@@ -166,6 +167,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    const name=(verify||reg&&!secure)?field(verify?(lang==='ru'?'Логин (латиница, 3–32 символа)':'Username (3–32 Latin characters)'):s.name,'text','nickname',verify?32:80):null,email=field(mode==='login'?(lang==='ru'?'Логин или почта':'Username or email'):s.email,mode==='login'?'text':'email','username',254),password=sendOnly?null:field(s.password,'password',reg||finish?'new-password':'current-password',256),code=finish?field(s.code,'text','one-time-code',48):null
    email.input.value=emailDraft;if(name){if(verify){name.input.pattern='[A-Za-z0-9][A-Za-z0-9_.\\-]{2,31}';name.input.autocapitalize='none'}form.append(name.wrap)}
    if(reg)form.append(node('p','account-muted',s.closed))
+   if(reg||verify)form.append(node('p','account-muted',lang==='ru'?'При регистрации создаётся публичная мастерская: логин, уровень, XP и достижения доступны посетителям. Почта и неопубликованные модели остаются приватными. Видимость можно изменить в настройках.':'Registration creates a public workshop: username, level, XP and achievements are visible. Email and unpublished models stay private. Change visibility in settings.'))
    form.append(email.wrap)
    if(reg||verify||reset||resetConfirm){const privacy=node('p','account-muted',lang==='ru'?'Как обрабатываются данные: ':'How data is processed: '),a=node('a',null,lang==='ru'?'Политика конфиденциальности':'Privacy policy');a.href='/privacy';a.target='_blank';a.rel='noopener';privacy.append(a);form.append(privacy)}
    if(code){code.input.minLength=6;code.input.placeholder='054-751';code.input.inputMode='numeric';code.input.autocapitalize='none';code.input.spellcheck=false;form.append(code.wrap)}
@@ -191,7 +193,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    panel.append(hero,form);root.append(panel)
  }
  return {
-   projectState(){return {signedIn:Boolean(user),checked,busy,ownerId:user?.id,remote:user?remote:[],message:error?t()[error]??t().unknown:feedback?t()[feedback]??'':'',warning:user?t().localWarning:''}},
+   projectState(){return {signedIn:Boolean(user),checked,busy,ownerId:user?.id,username:user?.username,publicId:publicCard?.id,remote:user?remote:[],message:error?t()[error]??t().unknown:feedback?t()[feedback]??'':'',warning:user?t().localWarning:''}},
    localProjectControls,
    remoteProjectControls,
    refreshProjects(){return operate(async()=>{remote=await cloud.list();activityData=await activityApi.get();if(historyId)history=await cloud.revisions(historyId)})},

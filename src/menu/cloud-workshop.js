@@ -1,10 +1,11 @@
+import {profileHref} from './profile-route.js'
 import {renderVerificationLab,renderAchievementRewards,renderAchievementRankings} from './achievement-platform.js'
 import {renderAchievements,achievementRank} from './achievement-hall.js'
 import {achievementName} from './achievement-catalog.js'
 import {renderInstructionCollection} from './instruction-collection.js'
 import {commerceBadge,productArtwork,factsPanel,loyaltyBadge} from './commerce-visuals.js?v=merch-2'
-import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=achievements-platform-1'
-import {renderWorkshopOverview} from './workshop-overview.js?v=achievements-platform-1'
+import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=workshop-identity-1'
+import {renderWorkshopOverview} from './workshop-overview.js?v=workshop-identity-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 import {commerceProducts} from './commerce-catalog.js'
@@ -60,8 +61,8 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
  else if(section==='cloud')content.append(el('div','workshop-projects-slot'))
  else if(section==='workshop'){
   const displayName=profile?.displayName??publicCard?.displayName??user.displayName,heroActions=[button(ru?'Сменить тему':'Change theme',()=>go('cosmetics'),busy),button(ru?'Редактировать профиль':'Edit profile',()=>go('settings'),busy)]
-  if(publicCard){const a=el('a','workspace-action',ru?'Глазами посетителя':'View as visitor');a.href='#community/profile/'+(publicCard.username??publicCard.id);heroActions.push(a)}
-  else heroActions.push(button(ru?'Опубликовать профиль':'Publish profile',()=>go('settings'),busy))
+  if(publicCard)heroActions.push(button(ru?'Скопировать ссылку':'Copy profile link',async()=>{const url=new URL(profileHref(publicCard.username,publicCard.id),location.origin+'/').href;try{await navigator.clipboard.writeText(url)}catch{globalThis.prompt(ru?'Ссылка на мастерскую':'Workshop link',url)}},busy))
+  else heroActions.push(button(ru?'Настройки видимости':'Visibility settings',()=>go('settings'),busy))
   const hero=renderUnifiedHero({lang,owner:true,identity:{displayName,username:user.username,bio:profile?.bio,coverTheme:profile?.cover,backgroundTheme:profile?.background,achievementStyle:profile?.achievementStyle,supportBadge:profileData?.supportBadge,plus:profileData?.plus===true,avatarUrl:profile?.avatarUrl,coverUrl:profile?.coverUrl,subtitle:user.admin===true?(ru?'Администратор · BrickLab Cloud':'Administrator · BrickLab Cloud'):t.active},actions:heroActions,metrics:[[t.local,summary.local],[t.cloud,summary.cloud],[t.revisions,summary.revisions],[t.xp,progress?.xp??'—'],[t.title,progress?.level?progress.level+' · '+achievementRank(progress.level,lang):rank?t[rank.id]:'—']]})
   const actions=el('div','workshop-quickbar'),quick=el('div','workshop-shortcuts'),create=button(ru?'Новая сборка':'New build',createBuild,busy);create.classList.add('primary');create.prepend(icon('plus'));quick.append(create)
   for(const key of ['cloud','storage','favorites','cosmetics'])quick.append(button(t[key],()=>go(key),busy))

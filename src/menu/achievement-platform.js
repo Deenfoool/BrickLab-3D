@@ -1,3 +1,4 @@
+import {profileHref} from './profile-route.js'
 import {achievementById,levelForXp} from './achievement-catalog.js'
 import {achievementRank} from './achievement-hall.js'
 import {achievementRewards,applyAchievementAppearance} from './achievement-rewards.js'
@@ -48,7 +49,7 @@ export function renderAchievementRankings({lang,signal,go,fetcher=globalThis.fet
  root.append(el('h2',null,t.rank),el('p','account-muted',t.rankDesc),button(t.privacy,()=>go('settings')),status,table,controls);controls.append(previous,next,button(t.refresh,()=>load(offset)))
  async function load(start){if(!Number.isSafeInteger(start)||start<0)return;const id=++seq;status.textContent=t.loading;previous.disabled=true;next.disabled=true
   try{const r=await fetcher('/api/profile/rankings?offset='+start,{credentials:'same-origin',cache:'no-store',signal});if(!r.ok)throw Error();const d=await r.json();if(signal?.aborted||seq!==id)return;offset=start;nextOffset=d.nextOffset;table.replaceChildren();const heading=el('div','achievement-ranking-row heading');for(const title of [t.place,t.builder,t.level,'XP'])heading.append(el('span',null,title));table.append(heading)
-   for(const a of d.items??[]){if(!/^[a-f0-9-]{36}$/i.test(a.id)||!Number.isSafeInteger(a.xp)||!Number.isSafeInteger(a.position))continue;const row=el('div','achievement-ranking-row'+(a.position<=3?' podium podium-'+a.position:'')),link=el('a',null,a.displayName);link.href='#community/profile/'+a.id;const level=levelForXp(a.xp);row.append(el('strong',null,'#'+a.position),link,el('span',null,level+' · '+achievementRank(level,l)),el('strong',null,new Intl.NumberFormat(l).format(a.xp)));table.append(row)}
+   for(const a of d.items??[]){if(!/^[a-f0-9-]{36}$/i.test(a.id)||!Number.isSafeInteger(a.xp)||!Number.isSafeInteger(a.position))continue;const row=el('div','achievement-ranking-row'+(a.position<=3?' podium podium-'+a.position:'')),link=el('a',null,a.displayName);link.href=profileHref(a.username,a.id);if(a.username)link.title='@'+a.username;if(a.hasAvatar===true){const avatar=el('img','achievement-ranking-avatar');avatar.src='/api/community/profile/'+a.id+'/avatar';avatar.alt='';avatar.loading='lazy';link.prepend(avatar)}const level=levelForXp(a.xp);row.append(el('strong',null,'#'+a.position),link,el('span',null,level+' · '+achievementRank(level,l)),el('strong',null,new Intl.NumberFormat(l).format(a.xp)));table.append(row)}
    status.textContent=d.items?.length?'':t.empty;previous.disabled=offset===0;next.disabled=nextOffset===null
   }catch{if(!signal?.aborted&&seq===id)status.textContent=t.unavailable}
  }

@@ -1,3 +1,4 @@
+import {profileHref} from './profile-route.js'
 import {achievementById,achievementName} from './achievement-catalog.js'
 import {cloudLink} from './projects-client.js?v=profile-gallery-1'
 import {loadHomePreviews} from './home-previews.js?v=profile-gallery-1'
@@ -48,7 +49,7 @@ export function renderWorkshopOverview({lang,user,local,remote,busy,signal,previ
  const fav=activityData?.favorites??[]
  if(!fav.length)favorites.append(node('p','account-muted',activityData?t.noFavorites:t.loading))
  for(const f of fav.slice(0,4)){const row=node('div','workshop-overview-row'),label=node('div');label.append(node('strong',null,f.name),node('small','account-muted',t.revision+' '+f.revision));row.append(icon('icon-heart'),label,button(t.openCopy,()=>openCloud(f.id),busy));favorites.append(row)}
- if(publicCard)published.append(link(t.publicView,'#community/profile/'+(publicCard.username??publicCard.id)))
+ if(publicCard)published.append(link(t.publicView,profileHref(publicCard.username,publicCard.id)))
  if(!publicLoaded)published.append(node('p','account-muted',t.loading),button(t.load,loadPublic,busy))
  else if(!publicBuilds.length)published.append(node('p','account-muted',t.noPublished))
  else for(const b of publicBuilds.slice(0,4)){

@@ -17,6 +17,7 @@ test('portfolio validates order, limits, collection membership and private field
 })
 test('unified profile requires explicit consent and projects only allowed public fields',()=>{
  const p=defaultPortfolio();p.featured=a;p.collections=[{title:'Hidden collection',ids:[a,b]}]
+ p.blocks.find(x=>x.key==='awards').visible=false
  p.blocks.find(x=>x.key==='collections').visible=false
  p.blocks.find(x=>x.key==='about').visible=false
  p.blocks.find(x=>x.key==='featured').visible=false
@@ -48,7 +49,7 @@ test('owner controls publish only after consent and block order is persisted; vi
  const prior=globalThis.document;globalThis.document={createElement:element,createElementNS:(_ns,tag)=>element(tag)}
  try{
   const saved=[],published=[],base={lang:'ru',user:{displayName:'Builder'},profile:{bio:'private',cover:'amber'},publicCard:null,publicLoaded:true,publicBuilds:[{id:a,title:'Model'}],busy:false,saveProfile:v=>saved.push(v),publishPublic:v=>published.push(v)}
-  const root=renderUnifiedEditor(base),all=flatten(root),form=all.find(n=>n.tag==='form'),enable=all.find(n=>n.tag==='label'&&n.children.some(c=>c.textContent==='Виден посетителям')).children[0],consent=all.find(n=>n.tag==='label'&&n.children.some(c=>c.textContent.startsWith('Разрешаю публиковать'))).children[0]
+  const root=renderUnifiedEditor(base),all=flatten(root),form=all.find(n=>n.tag==='form'),enable=all.find(n=>n.tag==='label'&&n.children.some(c=>c.textContent==='Публичная мастерская')).children[0],consent=all.find(n=>n.tag==='label'&&n.children.some(c=>c.textContent.startsWith('Разрешаю публиковать'))).children[0]
   form.onsubmit({preventDefault(){}});assert.equal(saved.length,1);assert.equal(published.length,0)
   enable.checked=true;enable.onchange();form.onsubmit({preventDefault(){}});assert.equal(published.length,0)
   const move=all.find(n=>n.tag==='button'&&n.attrs['aria-label']==='Ниже Закреплённая работа');move.onclick()
