@@ -11,7 +11,7 @@ export function createTelegramHubHandler({store,origin,keyFile='',ownerId='',log
  let key=null
  if(keyFile){const raw=readFileSync(keyFile,'utf8').trim();if(!/^[a-f0-9]{64}$/.test(raw))throw Error('Invalid Hub bridge key');key=Buffer.from(raw,'hex')}
  const cookieName=new URL(origin).protocol==='https:'?'__Host-bricklab_session':'bricklab_session'
- const routes=new Map([['/api/telegram/link','GET'],['/api/telegram/code','POST'],['/api/telegram/unlink','POST'],['/api/telegram/hub','GET'],['/api/telegram/claim','POST'],['/api/telegram/preferences','POST'],['/api/telegram/redeem','POST'],['/api/telegram/promos','GET'],['/api/telegram/promo-create','POST'],['/api/telegram/promo-disable','POST'],['/api/telegram/campaigns','GET'],['/api/telegram/campaign-create','POST'],['/api/telegram/campaign-queue','POST'],['/api/telegram/campaign-cancel','POST'],['/api/telegram/campaign-claim','POST'],['/api/telegram/campaign-finish','POST']])
+ const routes=new Map([['/api/telegram/link','GET'],['/api/telegram/code','POST'],['/api/telegram/unlink','POST'],['/api/telegram/hub','GET'],['/api/telegram/claim','POST'],['/api/telegram/preferences','POST'],['/api/telegram/redeem','POST'],['/api/telegram/promos','GET'],['/api/telegram/promo-create','POST'],['/api/telegram/promo-disable','POST'],['/api/telegram/campaigns','GET'],['/api/telegram/campaign-create','POST'],['/api/telegram/campaign-queue','POST'],['/api/telegram/campaign-cancel','POST'],['/api/telegram/campaign-claim','POST'],['/api/telegram/campaign-finish','POST'],['/api/telegram/campaign-preview','POST']])
  function reply(res,status,data){const b=JSON.stringify(data);res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Content-Length':Buffer.byteLength(b)});res.end(b)}
  async function body(req){let size=0;const chunks=[];for await(const c of req.iterator({destroyOnReturn:false})){size+=c.length;if(size>16384){req.resume();throw Error('invalid_body')}chunks.push(c)}return Buffer.concat(chunks)}
  return async(req,res,path)=>{
@@ -60,6 +60,7 @@ export function createTelegramHubHandler({store,origin,keyFile='',ownerId='',log
      const campaignId=await store.telegramCampaignCreate(uid,input);reply(res,campaignId?200:409,{id:campaignId});return true
     }
     if(typeof input?.id!=='string'||!uuid.test(input.id)){reply(res,400,{error:'invalid_id'});return true}
+    if(path.endsWith('/campaign-preview')){const body=await store.telegramCampaignPreview(uid,input.id);reply(res,body?200:409,body?{body}:{error:'draft_required'});return true}
     const ok=path.endsWith('/campaign-queue')?await store.telegramCampaignQueue(uid,input.id):await store.telegramCampaignCancel(uid,input.id)
     reply(res,ok?200:409,{ok});return true
    }

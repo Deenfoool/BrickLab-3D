@@ -433,7 +433,10 @@ def handle(update, owner, call):
         sender=msg.get("from",{})
         ident=sender.get("id")
         if os.environ.get("BRICKLAB_HUB_ENABLED")=="1" and chat.get("type")=="private" and type(ident) is int and ident>0 and chat.get("id")==ident and msg.get("text") in ("/start","/menu","/hub"):
-            call("sendMessage",{"chat_id":ident,"text":"BrickLab Hub · Твоя мастерская в Telegram","reply_markup":{"inline_keyboard":[[{"text":"Открыть BrickLab Hub","web_app":{"url":ORIGIN+"/control/hub/"}}]]}})
+            try:
+                call("sendMessage",{"chat_id":ident,"text":"BrickLab Hub · Твоя мастерская в Telegram","reply_markup":{"inline_keyboard":[[{"text":"Открыть BrickLab Hub","web_app":{"url":ORIGIN+"/control/hub/"}}]]}})
+            except ApiError as exc:
+                if exc.code not in ("400","403"): raise
         return
     text = msg.get("text", "")
     if text=="/hub" and os.environ.get("BRICKLAB_HUB_ENABLED")=="1":

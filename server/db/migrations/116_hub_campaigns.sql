@@ -87,3 +87,21 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION bricklab.hub_campaign_create(text,timestamptz),bricklab.hub_campaign_list(),bricklab.hub_campaign_queue(uuid),bricklab.hub_campaign_cancel(uuid),bricklab.hub_campaign_claim(),bricklab.hub_campaign_finish(uuid,text,integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION bricklab.hub_campaign_create(text,timestamptz),bricklab.hub_campaign_list(),bricklab.hub_campaign_queue(uuid),bricklab.hub_campaign_cancel(uuid),bricklab.hub_campaign_claim(),bricklab.hub_campaign_finish(uuid,text,integer) TO bricklab_app;
+
+CREATE FUNCTION bricklab.hub_campaign_preview(p_id uuid) RETURNS text
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
+BEGIN
+ IF NOT coalesce(bricklab.is_admin(),false) THEN RETURN NULL; END IF;
+ RETURN (SELECT body FROM bricklab.hub_campaigns WHERE id=p_id AND status='draft');
+END $$;
+CREATE FUNCTION bricklab.hub_inbox() RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
+ SELECT coalesce(jsonb_agg(to_jsonb(x)),'[]'::jsonb) FROM (
+ SELECT c.id,c.body,d.updated_at AS "sentAt" FROM bricklab.hub_campaign_delivery d
+ JOIN bricklab.hub_campaigns c ON c.id=d.campaign_id
+ JOIN bricklab.telegram_links l ON l.user_id=d.user_id AND l.telegram_id=d.telegram_id
+ WHERE d.user_id=nullif(current_setting('bricklab.user_id',true),'')::uuid AND d.state='sent'
+ ORDER BY d.updated_at DESC LIMIT 50) x
+$$;
+REVOKE ALL ON FUNCTION bricklab.hub_campaign_preview(uuid),bricklab.hub_inbox() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION bricklab.hub_campaign_preview(uuid),bricklab.hub_inbox() TO bricklab_app;

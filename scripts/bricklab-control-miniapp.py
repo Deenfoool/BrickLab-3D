@@ -123,7 +123,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return self.reply(status,data,"application/json")
     def do_POST(self):
         route={"/control/hub/claim":"claim","/control/hub/preferences":"preferences","/control/hub/redeem":"redeem"}.get(self.path)
-        admin_route={"/control/promo-create":"promo-create","/control/promo-disable":"promo-disable","/control/campaign-create":"campaign-create","/control/campaign-queue":"campaign-queue","/control/campaign-cancel":"campaign-cancel"}.get(self.path)
+        admin_route={"/control/promo-create":"promo-create","/control/promo-disable":"promo-disable","/control/campaign-create":"campaign-create","/control/campaign-queue":"campaign-queue","/control/campaign-cancel":"campaign-cancel","/control/campaign-test":"campaign-preview"}.get(self.path)
         if admin_route and not self.authorized():
             return self.reply(403,b'{"error":"unauthorized"}',"application/json")
         route=route or admin_route
@@ -138,6 +138,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if len(raw)!=n: raise ValueError()
             except (OSError,ValueError):
                 return self.reply(400,b'{"error":"invalid"}',"application/json")
+            if self.path=="/control/campaign-test":
+                if not getattr(self.server,"hub_key",None):
+                    return self.reply(503,b'{"error":"hub_disabled"}',"application/json")
+                status,body=hub_request(self.server.hub_key,self.server.owner,route,raw)
+                if status!=200:
+                    return self.reply(status,body,"application/json")
+                try:
+                    text=json.loads(body)["body"]
+                    if not isinstance(text,str) or not 1<=len(text)<=2500: raise ValueError()
+                    message={"chat_id":self.server.owner,"text":"ТЕСТ · BrickLab\n\n"+text+"\n\nНастройки рассылок: BrickLab Hub → Бонусы.",
+                             "reply_markup":{"inline_keyboard":[[{"text":"BrickLab Hub","web_app":{"url":ORIGIN+"/control/hub/"}}]]}}
+                    req=urllib.request.Request("https://api.telegram.org/bot"+self.server.token+"/sendMessage",data=json.dumps(message).encode(),headers={"Content-Type":"application/json"})
+                    with urllib.request.urlopen(req,timeout=8) as r:
+                        if not json.load(r).get("ok"): raise ValueError()
+                except (OSError,ValueError,KeyError,TypeError):
+                    return self.reply(503,b'{"error":"test_delivery_unknown"}',"application/json")
+                return self.reply(200,b'{"ok":true}',"application/json")
             return self.hub_reply(route,raw)
         if urllib.parse.urlsplit(self.path).path!="/control/jobs":
             return self.reply(404,b"Not found","text/plain")
