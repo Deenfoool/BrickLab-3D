@@ -1,32 +1,45 @@
 'use strict';
 const tg=window.Telegram?.WebApp;
+function syncTheme(){const theme=tg?.colorScheme;if(theme==='light'||theme==='dark')document.documentElement.dataset.theme=theme;}
+syncTheme();tg?.onEvent?.('themeChanged',syncTheme);
+const iconPaths={"home":"<path d=\"m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/><path d=\"M9 21v-8h6v8\"/>","users":"<path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/>","wallet":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"15\" rx=\"3\"/><path d=\"M3 9h18M16 14h2\"/>","code":"<path d=\"m8 6-6 6 6 6m8-12 6 6-6 6m-2-15-4 18\"/>","server":"<rect x=\"3\" y=\"3\" width=\"18\" height=\"8\" rx=\"2\"/><rect x=\"3\" y=\"13\" width=\"18\" height=\"8\" rx=\"2\"/><path d=\"M7 7h.01M7 17h.01M11 7h6M11 17h6\"/>","award":"<circle cx=\"12\" cy=\"8\" r=\"6\"/><path d=\"m8 13-2 9 6-3 6 3-2-9m-4-8 1 2 2 .3-1.5 1.5.4 2.2-1.9-1-1.9 1 .4-2.2L9 7.3l2-.3z\"/>","rank":"<path d=\"M3 21h18M5 21v-8h4v8m2 0V3h4v18m2 0V9h4v12\"/>","gift":"<rect x=\"3\" y=\"8\" width=\"18\" height=\"4\" rx=\"1\"/><path d=\"M5 12v9h14v-9M12 8v13M12 8H8a3 3 0 1 1 3-3zm0 0h4a3 3 0 1 0-3-3z\"/>","bell":"<path d=\"M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0\"/>","refresh":"<path d=\"M20 7v5h-5M4 17v-5h5\"/><path d=\"M5 8a8 8 0 0 1 13-3l2 7M4 12l2 7a8 8 0 0 0 13-3\"/>","cube":"<path d=\"m12 2 9 5v10l-9 5-9-5V7zM3 7l9 5 9-5M12 12v10m-5-17 10 5\"/>","link":"<path d=\"m10 13 4-4m-6 7-2 2a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m4 0 2-2a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0\" transform=\"translate(1 0) scale(.9)\"/>","heart":"<path d=\"M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z\"/>","star":"<path d=\"m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z\"/>","cpu":"<rect x=\"6\" y=\"6\" width=\"12\" height=\"12\" rx=\"2\"/><rect x=\"9\" y=\"9\" width=\"6\" height=\"6\" rx=\"1\"/><path d=\"M9 3v3m6-3v3M9 18v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3\"/>","activity":"<path d=\"M2 12h5l3-7 4 14 3-7h5\"/>"};
+function uiIcon(name){const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.setAttribute('class','ico');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.7');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');const doc=new DOMParser().parseFromString('<svg xmlns="'+ns+'">'+(Object.hasOwn(iconPaths,name)?iconPaths[name]:iconPaths.cube)+'</svg>','image/svg+xml');for(const child of doc.documentElement.children)svg.append(document.importNode(child,true));return svg;}
+
 const status=document.getElementById('status');
 const dashboard=document.getElementById('dashboard');
 const refresh=document.getElementById('refresh');
 function tiles(id, rows){
   const root=document.getElementById(id);root.replaceChildren();
+  const maps={'Аккаунты':'users','Новые 24 ч':'users','Сборки':'cube','Профили':'users','Реакции':'heart','Скачивания':'activity','API':'activity','HTTPS':'activity','CPU':'cpu','RAM':'cpu','Диск':'server','PostgreSQL':'server'};
   for(const [name,value] of rows){
     const box=document.createElement('div');box.className='tile';
+    if(maps[name]){const icon=document.createElement('div');icon.className='metric-icon';icon.append(uiIcon(maps[name]));box.append(icon)}
     const label=document.createElement('span');label.textContent=name;
     const val=document.createElement('strong');val.textContent=value??'Нет данных';
-    box.append(label,val);root.append(box);
+    if(String(value??'Нет данных').length>15)box.classList.add('long-value');
+    if(value==='OK')box.dataset.tone='good';else if(value==='ошибка')box.dataset.tone='bad';
+    box.append(label,val);
+    if(['CPU','RAM','Диск (макс.)'].includes(name)&&/^\d+(?:\.\d+)?%$/.test(String(value))){const n=Number.parseFloat(value);if(n>=0&&n<=100){const p=document.createElement('progress');p.max=100;p.value=n;p.setAttribute('aria-label',name);box.dataset.tone=n>=90?'bad':n>=75?'warn':'good';box.append(p)}}
+    root.append(box);
   }
 }
 function chart(days){
   const root=document.getElementById('chart');root.replaceChildren();
+  if(!days.length){const p=document.createElement('p');p.className='empty';p.textContent='История активности пока недоступна.';root.append(p);return}
+  days=days.slice(-7);
+  const legend=document.createElement('div');legend.className='chart-legend';
+  for(const [label,cls] of [['Аккаунты','series-a'],['Сборки','series-b']]){const t=document.createElement('span');t.className=cls;t.append(document.createElement('i'),document.createTextNode(label));legend.append(t)}root.append(legend);
+  const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
+  svg.setAttribute('viewBox','0 0 340 164');svg.setAttribute('class','chart-svg');svg.setAttribute('role','img');
+  svg.setAttribute('aria-label',days.map(d=>String(d.day)+': аккаунты '+(d.users??'нет данных')+', сборки '+(d.builds??'нет данных')).join('; '));
+  function el(tag,attrs,txt){const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,String(v));if(txt!==undefined)n.textContent=txt;svg.append(n);return n}
   const max=Math.max(1,...days.flatMap(d=>[Number(d.users)||0,Number(d.builds)||0]));
-  for(const d of days){
-    const row=document.createElement('div');row.className='day';
-    const date=document.createElement('span');date.textContent=String(d.day).slice(5,10);
-    const group=document.createElement('div');
-    for(const [label,value] of [['Аккаунты',d.users],['Сборки',d.builds]]){
-      const line=document.createElement('div');line.className='bar';
-      const bar=document.createElement('progress');bar.max=max;bar.value=Number(value)||0;
-      const caption=document.createElement('span');caption.textContent=label+' '+value;
-      line.append(bar,caption);group.append(line);
-    }
-    row.append(date,group);root.append(row);
-  }
+  for(const y of [20,58,96,134])el('line',{x1:5,x2:335,y1:y,y2:y,class:'chart-line'});
+  const step=330/days.length,w=Math.min(13,step/3);
+  days.forEach((d,i)=>{const x=5+(i+.5)*step;
+   for(const [v,offset,cls] of [[d.users,-w-2,'series-a'],[d.builds,2,'series-b']]){if(v==null||!Number.isFinite(Number(v)))continue;const n=Math.max(0,Number(v)),height=n/max*110;el('rect',{x:x+offset,y:134-height,width:w,height,rx:3,class:cls});el('text',{x:x+offset+w/2,y:Math.max(12,130-height),'text-anchor':'middle',class:'chart-number'},String(n))}
+   el('text',{x,y:153,'text-anchor':'middle'},String(d.day).slice(5,10));
+  });root.append(svg);
 }
 async function load(){
   dashboard.hidden=true;
@@ -37,6 +50,11 @@ async function load(){
     if(r.status===403)throw Error('Откройте панель заново из Telegram.');
     if(!r.ok)throw Error('Снимок сервера недоступен.');
     const d=await r.json(),v=d.vps??{},s=d.stats??{},a=d.analytics??{},o=d.docker??{},e=d.events??{},b=d.backup??{};
+    const healthy=v.api==='OK'&&v.https==='OK';
+    const known=v.api!=null&&v.https!=null;
+    document.getElementById('system-state').textContent=healthy?'Всё работает':known?'Нужна проверка':'Нет данных';
+    document.getElementById('system-dot').dataset.tone=healthy?'good':known?'bad':'';
+    document.getElementById('system-detail').textContent='Локальный API: '+(v.api??'—')+' · HTTPS: '+(v.https??'—')+(v.uptime?' · VPS '+v.uptime:'');
     tiles('server',[['API',v.api],['HTTPS',v.https],['CPU',v.cpu],['RAM',v.ram],['Диск',v.disk],['PostgreSQL',o.sql]]);
     tiles('stats',[['Аккаунты',s.users],['Новые 24 ч',s.new_users],['Сборки',s.builds],['Профили',s.profiles],['Реакции',a.likes],['Скачивания',a.downloads]]);
     chart(Array.isArray(a.days)?a.days:[]);
@@ -56,7 +74,8 @@ function openTab(tab){
   for(const section of document.querySelectorAll('[data-page]'))section.hidden=section.dataset.page!==tab;
   for(const button of document.querySelectorAll('[data-tab]'))button.setAttribute('aria-selected',String(button.dataset.tab===tab));
 }
-for(const button of document.querySelectorAll('[data-tab]'))button.addEventListener('click',()=>openTab(button.dataset.tab));
+for(const button of document.querySelectorAll('[data-tab]'))button.addEventListener('click',()=>{openTab(button.dataset.tab);window.scrollTo(0,0)});
+for(const button of document.querySelectorAll('[data-go]'))button.addEventListener('click',()=>{openTab(button.dataset.go);window.scrollTo(0,0)});
 openTab('home');
 refresh.addEventListener('click',load);tg?.ready();tg?.expand();load();
 
