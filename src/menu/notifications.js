@@ -1,3 +1,4 @@
+import {achievementName} from './achievement-catalog.js'
 const labels={
  ru:{title:'Уведомления',mark:'Отметить все прочитанными',all:'Перейти в уведомления',guest:'Войди в аккаунт, чтобы увидеть уведомления.',empty:'Уведомлений пока нет',unavailable:'Не удалось загрузить уведомления.',loading:'Загрузка…',award:'Получено достижение',firstCloudSave:'Первая облачная сборка',unread:'Непрочитано',read:'Прочитано',retry:'Обновить'},
  en:{title:'Notifications',mark:'Mark all as read',all:'Go to notifications',guest:'Sign in to see notifications.',empty:'No notifications yet',unavailable:'Could not load notifications.',loading:'Loading…',award:'Achievement earned',firstCloudSave:'First cloud build',unread:'Unread',read:'Read',retry:'Refresh'}
@@ -32,7 +33,7 @@ export function createNotificationPopover({root,trigger,count,panel,onRefresh,on
   else for(const n of recent){
    const row=el('article','notification-item'+(!n.read?' unread':'')),body=el('div','notification-body')
    const badge=el('span','notification-symbol');badge.append(icon('icon-trophy'))
-   body.append(el('strong',null,t.award+': '+(t[n.award]??n.award??'')))
+   body.append(el('strong',null,t.award+': '+achievementName(n.award,state.lang)))
    const date=new Date(n.at),time=el('time',null,Number.isFinite(date.getTime())?new Intl.DateTimeFormat(state.lang,{dateStyle:'medium',timeStyle:'short'}).format(date):'')
    if(Number.isFinite(date.getTime()))time.dateTime=date.toISOString()
    body.append(time,el('small',null,n.read?t.read:t.unread));row.append(badge,body)

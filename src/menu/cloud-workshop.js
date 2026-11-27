@@ -1,11 +1,13 @@
+import {renderAchievements,achievementRank} from './achievement-hall.js'
+import {achievementName} from './achievement-catalog.js'
 import {renderInstructionCollection} from './instruction-collection.js'
 import {commerceBadge,productArtwork,factsPanel,loyaltyBadge} from './commerce-visuals.js?v=merch-2'
-import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=live-polish-1'
+import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=achievements-v2'
 import {renderWorkshopOverview} from './workshop-overview.js?v=live-polish-1'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 import {commerceProducts} from './commerce-catalog.js'
-import { badges, ranks, rankFor } from './workshop-model.js?v=activity-1'
+import { rankFor } from './workshop-model.js?v=activity-1'
 import { workshopCopy } from './workshop-copy.js?v=profile-gallery-1'
 
 export const sections=[['workshop','icon-home'],['cloud','folder'],['achievements','icon-trophy'],['rankings','icon-trophy'],['favorites','icon-heart'],['notifications','icon-bell'],['storage','icon-cloud'],['settings','settings'],['security','icon-shield'],['cosmetics','icon-heart']]
@@ -59,7 +61,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
   const displayName=profile?.displayName??publicCard?.displayName??user.displayName,heroActions=[button(ru?'Сменить тему':'Change theme',()=>go('cosmetics'),busy),button(ru?'Редактировать профиль':'Edit profile',()=>go('settings'),busy)]
   if(publicCard){const a=el('a','workspace-action',ru?'Глазами посетителя':'View as visitor');a.href='#community/profile/'+(publicCard.username??publicCard.id);heroActions.push(a)}
   else heroActions.push(button(ru?'Опубликовать профиль':'Publish profile',()=>go('settings'),busy))
-  const hero=renderUnifiedHero({lang,owner:true,identity:{displayName,username:user.username,bio:profile?.bio,coverTheme:profile?.cover,backgroundTheme:profile?.background,supportBadge:profileData?.supportBadge,plus:profileData?.plus===true,avatarUrl:profile?.avatarUrl,coverUrl:profile?.coverUrl,subtitle:user.admin===true?(ru?'Администратор · BrickLab Cloud':'Administrator · BrickLab Cloud'):t.active},actions:heroActions,metrics:[[t.local,summary.local],[t.cloud,summary.cloud],[t.revisions,summary.revisions],[t.xp,progress?.xp??'—'],[t.title,rank?t[rank.id]:'—']]})
+  const hero=renderUnifiedHero({lang,owner:true,identity:{displayName,username:user.username,bio:profile?.bio,coverTheme:profile?.cover,backgroundTheme:profile?.background,supportBadge:profileData?.supportBadge,plus:profileData?.plus===true,avatarUrl:profile?.avatarUrl,coverUrl:profile?.coverUrl,subtitle:user.admin===true?(ru?'Администратор · BrickLab Cloud':'Administrator · BrickLab Cloud'):t.active},actions:heroActions,metrics:[[t.local,summary.local],[t.cloud,summary.cloud],[t.revisions,summary.revisions],[t.xp,progress?.xp??'—'],[t.title,progress?.level?progress.level+' · '+achievementRank(progress.level,lang):rank?t[rank.id]:'—']]})
   const actions=el('div','workshop-quickbar'),quick=el('div','workshop-shortcuts'),create=button(ru?'Новая сборка':'New build',createBuild,busy);create.classList.add('primary');create.prepend(icon('plus'));quick.append(create)
   for(const key of ['cloud','storage','favorites','cosmetics'])quick.append(button(t[key],()=>go(key),busy))
   actions.append(el('span','workshop-quick-label',ru?'Быстрые действия':'Quick actions'),quick)
@@ -68,11 +70,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
   content.append(renderWorkshopOverview({lang,user,local,remote,busy,signal,previewsEnabled,createBuild,openLocal,openCloud:openFavorite,fetchCloud,go,activityData,publicLoaded,publicCard,publicBuilds,loadPublic,progress}))
   if(Array.isArray(activityData?.calendar)){const cal=card(ru?'Личный календарь активности':'Private activity calendar');cal.append(activityCalendar(lang,activityData.calendar));content.append(cal)}
  }else if(section==='achievements'){
-  const c=card(t.achievements),grid=el('div','workshop-badges');c.append(el('p','account-muted',t.progressHint));const first=el('div','workshop-badge'+(progress?.awards.some(a=>a.award==='firstCloudSave')?' earned':''));first.append(el('strong',null,t.firstCloudSave),el('p','account-muted',t.firstCloudSaveDesc),el('small',null,progress?progress.awards.some(a=>a.award==='firstCloudSave')?t.awarded:t.locked:t.profileMissing));grid.append(first)
-  for(const b of badges){const item=el('div','workshop-badge rarity-'+b.rarity),medal=el('div','workshop-medal');medal.append(icon(b.icon));item.append(medal,el('strong',null,t[b.id==='bureau'?'bureauBadge':b.id]),el('p','account-muted',t[b.id+'Desc']),el('small',null,t.notIssued));grid.append(item)}
-  c.append(grid);const ladder=card(t.rankPlan)
-  for(const [key,xp] of ranks){const row=el('div','workshop-between workshop-rank-row');row.append(el('span',null,t[key]),el('strong',null,xp+' XP'));ladder.append(row)}
-  content.append(c,ladder)
+  content.append(renderAchievements({lang,progress,profile,busy,saveProfile,go,refresh:refreshActivity}))
  }else if(['favorites','notifications'].includes(section)){
   const c=card(t[section]);c.append(button(t.activityRefresh,refreshActivity,busy))
   const date=value=>new Intl.DateTimeFormat(lang,{dateStyle:'medium',timeStyle:'short'}).format(new Date(value))
@@ -83,7 +81,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,bure
   }else{
     c.append(button(t.markRead,readActivity,busy||!activityData.notifications.some(n=>!n.read)))
     if(!activityData.notifications.length)c.append(el('p','account-muted',t.noNotifications))
-    for(const n of activityData.notifications){const row=el('div','workshop-event'),info=el('div');info.append(el('strong',null,t.awardNotice+': '+(t[n.award]??n.award)),el('p','account-muted',date(n.at)+' · '+(n.read?t.readNotice:t.newNotice)));row.append(icon('icon-trophy'),info);c.append(row)}
+    for(const n of activityData.notifications){const row=el('div','workshop-event'),info=el('div');info.append(el('strong',null,t.awardNotice+': '+achievementName(n.award,lang)),el('p','account-muted',date(n.at)+' · '+(n.read?t.readNotice:t.newNotice)));row.append(icon('icon-trophy'),info);c.append(row)}
   }
   content.append(c)
  }else if(section==='storage'){
