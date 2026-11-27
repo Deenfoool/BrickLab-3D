@@ -33,7 +33,7 @@ export function mountWorldGestures(root,{scene,signal,controls,canBuild,prepare,
    const cells=worldGestureCells(cfg,stroke?.start??point,point,stroke?.trail??[],count());
    scene.setWorldPreview(cells);
    if(stroke)stroke.cells=cells;
-   controls.status('Предпросмотр · '+cells.length+' дет. / '+worldCoverage(cells)+' stud-слоёв');
+   controls.status('Предпросмотр · '+cells.length+' дет. / '+worldCoverage(cells)+' stud-слоёв'+(cells.replaceIds?.length?' · перераскладка '+cells.replaceIds.length+' дет.':''));
   }catch(e){if(stroke)stroke.cells=null;scene.setWorldPreview([]);controls.status(e.message)}
  }
  on(controls.tool,'change',selectTool);
@@ -54,7 +54,7 @@ export function mountWorldGestures(root,{scene,signal,controls,canBuild,prepare,
   consume(e);preview(e);const cells=stroke.cells;clear();
   if(!cells?.length)return;
   placing=true;controls.busy(true);
-  Promise.resolve().then(()=>build(cells,{focus:false})).then(()=>{if(!signal.aborted)controls.status('Добавлено: '+cells.length+' дет. · '+worldCoverage(cells)+' stud-слоёв')}).catch(e=>{if(!signal.aborted)controls.status(e.message)}).finally(()=>{placing=false;if(!signal.aborted)controls.busy(false)});
+  Promise.resolve().then(()=>build(cells,{focus:false})).then(()=>{if(!signal.aborted)controls.status((cells.replaceIds?.length?'Дорога объединена: ':'Добавлено: ')+cells.length+' дет. · '+worldCoverage(cells)+' stud-слоёв')}).catch(e=>{if(!signal.aborted)controls.status(e.message)}).finally(()=>{placing=false;if(!signal.aborted)controls.busy(false)});
  },true);
  on(host,'pointercancel',e=>{if(stroke?.id===e.pointerId){consume(e);clear()}},true);
  on(canvas,'lostpointercapture',e=>{if(stroke?.id===e.pointerId){consume(e);clear()}},true);

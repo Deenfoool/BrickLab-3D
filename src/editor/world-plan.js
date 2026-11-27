@@ -118,10 +118,43 @@ function mergeSurface(a,b){
  if(x.role==='road'&&y.role==='mark'&&x.axis==='joint')return a;
  return b;
 }
+// Snap near a real asphalt centerline or an adjacent open end. The
+// search uses complete cross-sections, including roads without markings.
+export function snapRoadPoint(point,records,level,maxDistance=2){
+ if(!gridPoint(point))return point;
+ const cross=new Map();
+ for(const r of records){
+  if(r.protected||r.level!==level||!['road','mark'].includes(r.role)||!['x','z'].includes(r.axis)||!Number.isInteger(r.w)||!Number.isInteger(r.d)||r.w<1||r.d<1||r.w>32||r.d>32||!gridPoint({x:r.x,z:r.z})||!gridPoint({x:r.x+r.w-1,z:r.z+r.d-1}))continue;
+  const xAxis=r.axis==='x',along=xAxis?point.x:point.z;
+  for(let n=(xAxis?r.x:r.z);n<(xAxis?r.x+r.w:r.z+r.d);n++){
+   if(Math.abs(n-along)>maxDistance)continue;
+   const k=r.axis+':'+n,values=cross.get(k)??new Set();
+   for(let v=(xAxis?r.z:r.x);v<(xAxis?r.z+r.d:r.x+r.w);v++)values.add(v);
+   cross.set(k,values);
+  }
+ }
+ let best=point,distance=maxDistance+.000001;
+ for(const [key,values] of cross){
+  const [axis,nText]=key.split(':'),n=Number(nText),v=[...values].sort((a,b)=>a-b);
+  for(let i=0;i<v.length;){
+   const lo=v[i];let hi=lo;i++;
+   while(i<v.length&&v[i]===hi+1){hi=v[i];i++}
+   if(![9,13,17,21,25].includes(hi-lo+1))continue;
+   const center=(lo+hi)/2,candidate=axis==='x'?{x:n,z:center}:{x:center,z:n};
+   const dist=Math.hypot(candidate.x-point.x,candidate.z-point.z);
+   if(dist<distance){best=candidate;distance=dist}
+  }
+ }
+ return best;
+}
 export function planWorldRoad(settings,start,end,existing=0){
- const {tool,level,roadWidth=13,sidewalk=2,marking='dash',foundation=true,roadColor='#353b42',sidewalkColor='#a0a5a9',turnFirst='x',radius=0,available,roadParts=[]}=settings;
+ const {tool,level,roadWidth=13,sidewalk=2,marking='dash',foundation=true,roadColor='#353b42',sidewalkColor='#a0a5a9',turnFirst='x',radius=0,autoJoin=true,available,roadParts=[]}=settings;
  if(!gridPoint(start)||!gridPoint(end)||!Number.isInteger(level)||level<0||level+(foundation?2:1)>120||![9,13,17,21,25].includes(roadWidth)||![0,1,2,3].includes(sidewalk)||!['none','dash','solid'].includes(marking)||!['x','z'].includes(turnFirst)||!Number.isInteger(radius)||radius<0||radius>32||!/^#[0-9a-f]{6}$/i.test(roadColor)||!/^#[0-9a-f]{6}$/i.test(sidewalkColor))throw Error('Проверь параметры дороги.');
  const half=(roadWidth-1)/2,outer=half+sidewalk,surfaceLevel=level+(foundation?1:0),mask=new Map();
+ if(autoJoin){
+  start=snapRoadPoint(start,roadParts,surfaceLevel);
+  if(!['roadCross','roadT'].includes(tool))end=snapRoadPoint(end,roadParts,surfaceLevel);
+ }
  let joint=null;
  const put=(x,z,offset,along,axis)=>{
   if(Math.abs(offset)>outer+.00001)return;
@@ -179,7 +212,7 @@ export function planWorldRoad(settings,start,end,existing=0){
  // operation. Preserve their entire footprints, including cells outside it.
  // Use the original incoming mask for the selection (no cascading deletion).
  const incoming=new Map(mask),incomingBase=new Map(base),oldSurface=new Map(),oldBase=new Map();
- for(const part of roadParts){
+ for(const part of (autoJoin?roadParts:[])){
   if(!part||!['base','road','mark','walk'].includes(part.role)||!Number.isInteger(part.w)||!Number.isInteger(part.d)||part.w<1||part.d<1||part.w>32||part.d>32||!gridPoint({x:part.x,z:part.z})||!gridPoint({x:part.x+part.w-1,z:part.z+part.d-1}))continue;
   const isBase=part.role==='base';
   if(part.level!==(isBase?level:surfaceLevel)||isBase&&!foundation)continue;
