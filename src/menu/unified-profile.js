@@ -106,7 +106,7 @@ export function profileLinkControls(lang,profile){
 }
 export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic,visibilitySupported=false,mode='all',portfolioDraft,onPortfolioDraft,savePortfolio,progress}){
  const t=tr(lang),root=ui('section','account-card workshop-card unified-profile-editor');root.append(ui('h2',null,mode==='layout'?(lang==='ru'?'Компоновка мастерской':'Workshop layout'):mode==='privacy'?t.publicationSettings:t.edit))
- if(mode==='layout'&&(!publicCard||!publicCard.unified)){root.append(ui('p','account-muted',lang==='ru'?'Сначала создай или обнови единый профиль во вкладке «Приватность».':'Create or update your unified workshop in Privacy first.'));return root}
+ if(mode==='layout'&&publicLoaded&&(!publicCard||!publicCard.unified)){root.append(ui('p','account-muted',lang==='ru'?'Сначала создай или обнови единый профиль во вкладке «Приватность».':'Create or update your unified workshop in Privacy first.'));return root}
  if(!profile){root.append(ui('p','account-muted',lang==='ru'?'Профиль недоступен':'Profile unavailable'));return root}
  const form=ui('form','workshop-form'),name=ui('input'),bio=ui('textarea'),cover=ui('select')
  name.required=true;name.maxLength=80;name.value=profile.displayName??publicCard?.displayName??user.displayName;name.disabled=busy
@@ -126,7 +126,7 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
  const enable=check(lang==='ru'?'Публичная мастерская':'Public workshop',!!publicCard&&publicCard.visible!==false,busy),shareAvatar=check(t.avatar,publicCard?.unified?publicCard.showAvatar:!!publicCard?.avatarUrl,busy),shareCover=check(t.cover,publicCard?.unified?publicCard.showCover:!!publicCard?.coverTheme,busy),shareTheme=check(t.theme,!!publicCard?.backgroundTheme,busy)
  const consent=check(t.publicConsent,false,busy),panel=ui('fieldset','portfolio-editor-controls')
  if(mode!=='layout')form.append(enable.label,ui('p','account-muted',lang==='ru'?'Публичная мастерская участвует в рейтинге при открытых достижениях. Скрытие сохраняет работы, комментарии и подписчиков.':'A visible workshop participates in ranking when achievements are shared. Hiding preserves works, comments and followers.'));form.append(panel)
- const savedPortfolio=filterPortfolio(publicCard?.portfolio??(publicCard?undefined:defaultPortfolio({publicByDefault:true})),publicBuilds.map(b=>b.id)),p=mode==='layout'&&portfolioDraft?structuredClone(portfolioDraft):savedPortfolio,blocks=ui('div','portfolio-order'),collections=ui('div','portfolio-editor-collections')
+ const savedPortfolio=filterPortfolio(publicCard?.portfolio??(publicCard?undefined:defaultPortfolio({publicByDefault:true})),publicBuilds.map(b=>b.id)),p=structuredClone(mode==='layout'&&portfolioDraft?portfolioDraft:savedPortfolio),blocks=ui('div','portfolio-order'),collections=ui('div','portfolio-editor-collections')
  const draftChanged=()=>{if(mode==='layout')onPortfolioDraft?.(structuredClone(p))}
  function renderBlocks(){
   blocks.replaceChildren()
@@ -151,7 +151,7 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
   }
   collections.append(action(t.add,()=>{p.collections.push({title:'',ids:[]});draftChanged();renderCollections()},busy||p.collections.length>=6))
  }
- renderBlocks();renderCollections()
+ if(mode!=='layout')renderBlocks();renderCollections()
  if(mode==='layout'){
   const ru=lang==='ru',describe=key=>{
    if(key==='featured')return publicBuilds.find(b=>b.id===p.featured)?.title??t.noPin
@@ -163,7 +163,7 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
    return t[key]
   }
   const previewLayout=layout=>{
-   const portfolio={...p,blocks:layout},draft={...publicCard,portfolio}
+   const portfolio={...p,blocks:layout,collections:p.collections.filter(c=>c.title.trim()).map(c=>({...c,ids:c.ids.slice(0,20)}))},draft={...publicCard,portfolio}
    const awardsVisible=layout.some(b=>b.key==='awards'&&b.visible)
    if(awardsVisible&&progress){
     const earned=new Set(progress.awards?.map(a=>a.award)??[])
@@ -186,7 +186,7 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
   if(mode!=='privacy')panel.append(field(t.featured,pin),ui('h3',null,t.order),blocks,ui('h3',null,t.collections),collections)
   if(!publicCard)panel.append(consent.label)
  }
- const layoutSave=lang==='ru'?'Сохранить компоновку':'Save layout',submit=ui('button','workspace-action primary',mode==='layout'?layoutSave:t.save);submit.type='submit';submit.disabled=busy
+ const layoutSave=lang==='ru'?'Сохранить компоновку':'Save layout',submit=ui('button','workspace-action primary',mode==='layout'?layoutSave:t.save);submit.type='submit';submit.disabled=busy||(mode==='layout'&&!savePortfolio);if(mode==='layout')submit.classList.add('studio-save')
  function setVisibility(){panel.hidden=mode==='layout'?false:!enable.input.checked&&!publicCard;panel.disabled=busy||(!publicCard&&!enable.input.checked&&mode!=='layout');consent.input.required=enable.input.checked&&!publicCard;submit.textContent=mode==='layout'?layoutSave:t.save}
  enable.input.onchange=setVisibility;setVisibility()
  form.append(submit)
