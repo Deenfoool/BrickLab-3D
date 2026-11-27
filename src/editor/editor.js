@@ -1,5 +1,6 @@
 import {mountWorldGestures} from './world-gestures.js'
 import {worldPartIds} from './world-plan.js'
+import {validateModule,presetCells,MODULE_LIMIT} from './world-modules.js'
 import { loadPartIndex, enrichInventory, normalizeDocumentDesigns } from '../catalog/part-resolver.js?v=catalog-engine-1'
 import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=instruction-artwork-v5'
 import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=instruction-artwork-v5'
@@ -59,7 +60,7 @@ const simulating = mode => mode === 'testDrive'
 const onGrid = value => Math.round(value / snapGrid) * snapGrid
 let clipboard
 
-export async function mountEditor(root, { document, projectId, language, save, download, publish, signal, reportLoad, collaboration, onJoinCollaboration, projectActions, labMode, onWorldBuild, onEnvironment, worldControls }) {
+export async function mountEditor(root, { document, projectId, language, save, download, publish, signal, reportLoad, collaboration, onJoinCollaboration, projectActions, labMode, onWorldBuild, onEnvironment, worldControls, onModules }) {
   await loadPartIndex()
   if (signal.aborted) return
   const source = upgradeInlineEngineFan(promoteLegacyBelts(expandComponents(normalizeDocumentDesigns(document, parts), parts)))
@@ -2245,6 +2246,50 @@ export async function mountEditor(root, { document, projectId, language, save, d
     return true
   }})
   if(labMode==='world'&&onWorldBuild){
+  const worldBounds=(part,model)=>model.bounds.clone().applyMatrix4(new Matrix4().compose(new Vector3(...part.position),new Quaternion().fromArray(part.rotation),new Vector3(part.mirrored?-1:1,1,1)));
+  function cellPose(c){
+    const q=new Quaternion().fromArray(baseRotation);
+      const model=models.get(c.design);
+      const width=(c.w??1)*20,depth=(c.d??1)*20;
+      let orientation=q.clone(),rotated=model.bounds.clone().applyMatrix4(new Matrix4().makeRotationFromQuaternion(orientation));
+      const size=rotated.getSize(new Vector3());
+      const matches=(a,b)=>Math.abs(a-width)<=2&&Math.abs(b-depth)<=2;
+      if(!matches(size.x,size.z)&&matches(size.z,size.x)){
+        orientation.premultiply(new Quaternion().setFromAxisAngle(Y,Math.PI/2));
+        rotated=model.bounds.clone().applyMatrix4(new Matrix4().makeRotationFromQuaternion(orientation));
+      }
+      const finalSize=rotated.getSize(new Vector3());
+      if(!matches(finalSize.x,finalSize.z))throw Error('Размер геометрии не совпадает с сеткой: '+c.design);
+      const center=rotated.getCenter(new Vector3());
+      const p={id:crypto.randomUUID(),design:c.design,color:c.color,rotation:orientation.toArray(),position:[c.x-center.x,c.y-rotated.min.y,c.z-center.z]};
+
+    return p;
+  }
+  async function loadModuleDesigns(items){
+    const designs=[...new Set(items.map(p=>p.design))];
+    for(let i=0;i<designs.length;i+=4){
+      await Promise.all(designs.slice(i,i+4).map(async id=>{
+        if(!Object.hasOwn(parts,id))throw Error('Деталь отсутствует: '+id);
+        await prepareModel(parts[id]);
+        if(!models.get(id))throw Error('Нет геометрии: '+id);
+      }));
+      signal.throwIfAborted();
+    }
+  }
+  function moduleBounds(items){
+    const b=worldBounds(items[0],models.get(items[0].design));
+    for(const p of items.slice(1))b.union(worldBounds(p,models.get(p.design)));
+    return b;
+  }
+  function normalizeModule(raw){
+    const data=validateModule(raw),bounds=moduleBounds(data.parts);
+    if(bounds.isEmpty())throw Error('Пустой модуль.');
+    const origin=new Vector3(Math.round((bounds.min.x+10)/20)*20,bounds.min.y,Math.round((bounds.min.z+10)/20)*20);
+    data.parts=data.parts.map(p=>({...p,position:new Vector3(...p.position).sub(origin).toArray()}));
+    const assembly=createAssembly(data.parts,data.connections,{belts:data.belts});
+    if(assembly.connections.length!==data.connections.length||assembly.belts.length!==data.belts.length)throw Error('В модуле есть неподдерживаемые соединения.');
+    return data;
+  }
   function roadRecords(){
     const protectedIds=new Set([...(state.layers.lockedPartIds??[]),...hidden,...state.layers.groups.flatMap(g=>g.partIds),...state.links.flatMap(l=>[l.shaft.part,l.socket.part]),...state.belts.flatMap(b=>[b.a?.part,b.b?.part])]);
     return state.parts.flatMap(p=>{
@@ -2269,25 +2314,12 @@ export async function mountEditor(root, { document, projectId, language, save, d
       if(signal.aborted)throw Error('Сцена закрыта.');
     }
     if(signal.aborted||state!==before||!editing()||moving)throw Error('Сцена изменилась. Повтори операцию.');
-    const q=new Quaternion().fromArray(baseRotation);
-    const bounds=(part,model)=>model.bounds.clone().applyMatrix4(new Matrix4().compose(new Vector3(...part.position),new Quaternion().fromArray(part.rotation),new Vector3(part.mirrored?-1:1,1,1)));
+    const bounds=worldBounds;
     const retained=state.parts.filter(p=>!replacing.has(p.id));
     const existing=retained.map(p=>bounds(p,models.get(p.design)));
     const added=[];
     for(const c of cells){
-      const model=models.get(c.design);
-      const width=(c.w??1)*20,depth=(c.d??1)*20;
-      let orientation=q.clone(),rotated=model.bounds.clone().applyMatrix4(new Matrix4().makeRotationFromQuaternion(orientation));
-      const size=rotated.getSize(new Vector3());
-      const matches=(a,b)=>Math.abs(a-width)<=2&&Math.abs(b-depth)<=2;
-      if(!matches(size.x,size.z)&&matches(size.z,size.x)){
-        orientation.premultiply(new Quaternion().setFromAxisAngle(Y,Math.PI/2));
-        rotated=model.bounds.clone().applyMatrix4(new Matrix4().makeRotationFromQuaternion(orientation));
-      }
-      const finalSize=rotated.getSize(new Vector3());
-      if(!matches(finalSize.x,finalSize.z))throw Error('Размер геометрии не совпадает с сеткой: '+c.design);
-      const center=rotated.getCenter(new Vector3());
-      const p={id:crypto.randomUUID(),design:c.design,color:c.color,rotation:orientation.toArray(),position:[c.x-center.x,c.y-rotated.min.y,c.z-center.z]};
+      const p=cellPose(c),model=models.get(p.design);
       if(c.road)p.worldRoad={...c.road,id:p.id,design:p.design,color:p.color,position:[...p.position],rotation:[...p.rotation],x:Math.round(c.x/20-((c.w??1)-1)/2),z:Math.round(c.z/20-((c.d??1)-1)/2),w:c.w??1,d:c.d??1};
       const box=bounds(p,model);
       // Studs overlap the underside of correctly stacked parts by up to 4 LDU.
@@ -2297,7 +2329,115 @@ export async function mountEditor(root, { document, projectId, language, save, d
     if(!commit({parts:[...retained,...added],links:state.links}))throw Error('Не удалось добавить детали.');
     if(focus)scene.focus(added.map(p=>p.id));
   };
-  onWorldBuild(buildWorld,worldPartIds.filter(id=>Object.hasOwn(parts,id)));
+  const catalogIds=worldPartIds.filter(id=>Object.hasOwn(parts,id));
+  onWorldBuild(buildWorld,catalogIds);
+  if(onModules){
+    const canvas=scene.canvas,host=canvas.parentElement;
+    let modulePlacement=null;
+    const identity={position:[0,0,0],rotation:[0,0,0,1]};
+    function cancelModule(){
+      if(!modulePlacement)return;
+      modulePlacement=null;scene.setGroupGhost([]);host.classList.remove('world-drawing');
+    }
+    function transformedModule(data,pose){
+      return groupTransforms(data.parts,identity,pose);
+    }
+    function modulePose(event){
+      const level=worldControls.read().level;
+      if(!Number.isInteger(level)||level<0||level>120)return null;
+      const point=scene.pointer(event,false).ray.intersectPlane(new Plane(Y,-level*8),new Vector3());
+      if(!point)return null;
+      return {position:[Math.round(point.x/20)*20,level*8,Math.round(point.z/20)*20],rotation:new Quaternion().setFromAxisAngle(Y,modulePlacement.turn*Math.PI/2).toArray()};
+    }
+    function blockedModule(items){
+      if(state.parts.length+items.length>3000)return 'Лимит 3000 деталей.';
+      if(hiddenParts.length)return 'В сцене есть недоступные детали.';
+      const box=moduleBounds(items);
+      if(box.min.x< -810.01||box.max.x>810.01||box.min.z< -810.01||box.max.z>810.01||box.min.y<-.01||box.max.y>964.01)return 'Модуль выходит за пределы мира.';
+      const occupied=state.parts.map(p=>worldBounds(p,models.get(p.design))).filter(b=>b.intersectsBox(box));
+      for(const p of items){const a=worldBounds(p,models.get(p.design));if(occupied.some(b=>Math.min(a.max.x,b.max.x)-Math.max(a.min.x,b.min.x)>.5&&Math.min(a.max.z,b.max.z)-Math.max(a.min.z,b.min.z)>.5&&Math.min(a.max.y,b.max.y)-Math.max(a.min.y,b.min.y)>4.1))return 'Модуль пересекает существующую конструкцию.'}
+      return '';
+    }
+    function previewModule(event){
+      if(!modulePlacement)return;
+      const pose=modulePose(event);modulePlacement.event=event;
+      if(!pose){scene.setGroupGhost([]);modulePlacement.pose=null;return}
+      modulePlacement.pose=pose;
+      scene.setGroupGhost(modulePlacement.data.parts,identity,pose);
+      const error=blockedModule(transformedModule(modulePlacement.data,pose));
+      worldControls.status(error||'ЛКМ разместить · Q/E поворот '+modulePlacement.turn*90+'° · Esc отмена');
+      return error;
+    }
+    on(host,'pointermove',event=>{
+      if(!modulePlacement||event.target!==canvas||event.buttons)return;
+      event.stopImmediatePropagation();previewModule(event);
+    },true);
+    on(host,'pointerdown',event=>{
+      if(!modulePlacement||event.target!==canvas||event.button!==0)return;
+      event.preventDefault();event.stopImmediatePropagation();
+      if(!editing()||moving||isolation){worldControls.status('Заверши текущую операцию или отключи изоляцию.');return}
+      const error=previewModule(event),m=modulePlacement;
+      if(error||!m.pose)return;
+      const placed=transformedModule(m.data,m.pose),ids=new Map(placed.map(p=>[p.id,crypto.randomUUID()]));
+      const added=placed.map(p=>({...p,id:ids.get(p.id)}));
+      const links=m.data.connections.map(l=>({...l,shaft:{...l.shaft,part:ids.get(l.shaft.part)},socket:{...l.socket,part:ids.get(l.socket.part)}}));
+      const belts=m.data.belts.map(b=>({...b,id:crypto.randomUUID(),a:{...b.a,part:ids.get(b.a.part)},b:{...b.b,part:ids.get(b.b.part)}}));
+      const group={id:crypto.randomUUID(),name:m.data.name.slice(0,80),partIds:added.map(p=>p.id),hidden:false};
+      const nextLayers={...state.layers,groups:[...state.layers.groups,group]};
+      if(commit({parts:[...state.parts,...added],links:[...state.links,...links],belts:[...state.belts,...belts],layers:nextLayers})){
+        worldControls.status('Размещён модуль: '+m.data.name+' · можно поставить ещё один');
+      }
+    },true);
+    on(host,'pointerup',event=>{if(modulePlacement&&event.target===canvas&&event.button===0){event.preventDefault();event.stopImmediatePropagation()}},true);
+    on(window,'keydown',event=>{
+      if(!modulePlacement||event.target.closest?.('input,textarea,select,dialog'))return;
+      if(event.key==='Escape'||['KeyQ','KeyE'].includes(event.code)){
+        event.preventDefault();event.stopImmediatePropagation();
+        if(event.key==='Escape'){cancelModule();worldControls.status('Размещение завершено.')}
+        else{modulePlacement.turn=(modulePlacement.turn+(event.code==='KeyQ'?3:1))%4;if(modulePlacement.event)previewModule(modulePlacement.event)}
+      }
+    },true);
+    on(worldControls.tool,'change',cancelModule);
+    on(root,'pointerdown',event=>{if(modulePlacement&&!event.target.closest('.editor-viewport'))cancelModule()},true);
+    signal.addEventListener('abort',()=>{modulePlacement=null;host.classList.remove('world-drawing')},{once:true});
+    onModules({
+      async capture(name,category){
+        cancelModule();
+        if(!editing()||moving)throw Error('Заверши текущую операцию.');
+        const group=clipboardSelection();
+        if(!group)throw Error('Выдели детали модуля в сцене.');
+        const items=[group.anchor,...group.items];
+        if(items.length>MODULE_LIMIT||items.some(p=>hidden.has(p.id)))throw Error('Выдели до 256 видимых деталей.');
+        const result=normalizeModule({format:'bricklab-world-module',version:1,id:crypto.randomUUID(),name,category,parts:items,connections:group.links,belts:group.belts});
+        try{
+          const {createProjectPreviewRenderer}=await import('./project-preview.js');
+          signal.throwIfAborted();
+          const renderer=createProjectPreviewRenderer({width:320,height:256,models,requireAll:true});
+          try{
+            const blob=await renderer.render({...result,format:'bricklab-3d',gears:[]},signal);
+            if(blob?.type==='image/webp'&&blob.size<110000)result.thumbnail=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob)});
+          }finally{renderer.dispose()}
+        }catch(e){if(signal.aborted)throw e;console.warn('Module thumbnail unavailable',e)}
+        return result;
+      },
+      async validate(raw){const data=validateModule(raw);await loadModuleDesigns(data.parts);return normalizeModule(data)},
+      async start(raw){
+        cancelModule();
+        if(!editing()||moving||isolation)throw Error('Заверши текущую операцию и отключи изоляцию.');
+        const before=state;
+        let data;
+        if(raw.preset){
+          const cells=presetCells(raw.id,catalogIds);
+          await loadModuleDesigns(cells);
+          data=normalizeModule({format:'bricklab-world-module',version:1,name:raw.name,category:raw.category,parts:cells.map(cellPose),connections:[],belts:[]});
+        }else{data=validateModule(raw);await loadModuleDesigns(data.parts);data=normalizeModule(data)}
+        if(signal.aborted||state!==before||!editing())throw Error('Сцена изменилась.');
+        worldControls.tool.value='select';worldControls.tool.dispatchEvent(new Event('change'));
+        cancelPlacement();cancelGizmo();cancelResize();setTool('select');
+        modulePlacement={data,turn:0,pose:null,event:null};host.classList.add('world-drawing');
+      }
+    })
+  }
   if(worldControls)mountWorldGestures(root,{scene,signal,controls:{...worldControls,read:()=>({...worldControls.read(),roadParts:roadRecords()})},count:()=>state.parts.length+hiddenParts.length,canBuild:()=>editing()&&!moving&&!runningMotor&&!hiddenParts.length,prepare:()=>{if(mode!=='build')setMode('build');cancelPlacement();cancelGizmo();cancelResize();setTool('select')},build:buildWorld});
   }
   if(labMode)onEnvironment?.(scene.setLabSky)

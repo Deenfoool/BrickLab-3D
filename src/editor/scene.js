@@ -149,7 +149,7 @@ export function createScene(host, models, {labMode} = {}) {
       if (!active || renderer.getContext().isContextLost()) return
       const remoteMoving=animateRemote(Math.min(50,now-(remoteFrameTime||now-16)));remoteFrameTime=now
       if (presenting) {
-        const helpers=[worldPreview,marker,frontArrow,gizmo.getHelper(),ghost,connectorPoints,...[...remoteMeshes.values()].map(r=>r.mesh)].filter(Boolean)
+        const helpers=[ghostRoot,worldPreview,marker,frontArrow,gizmo.getHelper(),ghost,connectorPoints,...[...remoteMeshes.values()].map(r=>r.mesh)].filter(Boolean)
         const visibility=helpers.map(object=>object.visible)
         try { for(const object of helpers)object.visible=false;renderer.render(world,camera) }
         finally { helpers.forEach((object,index)=>object.visible=visibility[index]) }
@@ -576,7 +576,7 @@ export function createScene(host, models, {labMode} = {}) {
 
   function capturePublication(){
     if(!active||!canvas.width||!canvas.height)return null
-    const helpers=[worldPreview,floor,axes,frontArrow,marker,gizmo.getHelper(),ghost,connectorPoints,...[...remoteMeshes.values()].map(r=>r.mesh)].filter(o=>o&&typeof o.visible==='boolean')
+    const helpers=[ghostRoot,worldPreview,floor,axes,frontArrow,marker,gizmo.getHelper(),ghost,connectorPoints,...[...remoteMeshes.values()].map(r=>r.mesh)].filter(o=>o&&typeof o.visible==='boolean')
     const visibility=helpers.map(o=>o.visible)
     try{
       for(const o of helpers)o.visible=false
