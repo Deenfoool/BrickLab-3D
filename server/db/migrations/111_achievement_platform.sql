@@ -173,7 +173,7 @@ CREATE FUNCTION bricklab.public_achievement_details(p_public uuid) RETURNS jsonb
  $$;
 REVOKE ALL ON FUNCTION bricklab.public_achievement_details(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION bricklab.public_achievement_details(uuid) TO bricklab_app;
-CREATE FUNCTION bricklab.achievement_rankings(p_offset integer) RETURNS TABLE(id uuid,"displayName" text,xp integer,position integer)
+CREATE FUNCTION bricklab.achievement_rankings(p_offset integer) RETURNS TABLE(id uuid,"displayName" text,xp integer,"position" integer)
  LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
  WITH scores AS (SELECT w.user_id,sum((d.definition->>'xp')::integer)::int xp FROM bricklab.workshop_awards w JOIN bricklab.achievement_definitions d ON d.id=w.award GROUP BY w.user_id),
  ranked AS (SELECT p.public_id,p.display_name,coalesce(s.xp,0) score,rank() OVER(ORDER BY coalesce(s.xp,0) DESC)::int place FROM bricklab.public_profiles p JOIN bricklab.users u ON u.id=p.user_id LEFT JOIN scores s ON s.user_id=p.user_id WHERE p.unified AND p.portfolio->'blocks' @> '[{"key":"awards","visible":true}]'::jsonb AND u.blocked_at IS NULL)

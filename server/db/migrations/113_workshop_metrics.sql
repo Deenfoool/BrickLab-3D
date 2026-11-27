@@ -16,7 +16,7 @@ CREATE VIEW bricklab.achievement_ranked_profiles AS
  FROM bricklab.public_profiles p JOIN bricklab.users u ON u.id=p.user_id LEFT JOIN scores s ON s.user_id=p.user_id
  WHERE p.unified AND p.portfolio->'blocks' @> '[{"key":"awards","visible":true}]'::jsonb AND u.blocked_at IS NULL;
 REVOKE ALL ON bricklab.achievement_ranked_profiles FROM PUBLIC,bricklab_app;
-CREATE OR REPLACE FUNCTION bricklab.achievement_rankings(p_offset integer) RETURNS TABLE(id uuid,"displayName" text,xp integer,position integer)
+CREATE OR REPLACE FUNCTION bricklab.achievement_rankings(p_offset integer) RETURNS TABLE(id uuid,"displayName" text,xp integer,"position" integer)
  LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
  SELECT public_id,display_name,score,place FROM bricklab.achievement_ranked_profiles ORDER BY score DESC,public_id LIMIT 51 OFFSET greatest(0,least(p_offset,10000))
  $$;
