@@ -344,6 +344,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     }
     track = venue === 'world' ? worldTrack : venue === 'sketchbook' ? sketchbook : undefined
     if(venue==='world'&&!track)return;
+    if(track?.obstacles?.length&&simulation!=='physical'){launchError='physicsError';launchDetail=language==='ru'?'Подвижные препятствия требуют режима «Физика».':'Moving obstacles require physical mode.';sync();return}
     if (simulation === 'physical') {
       try {
         const next = physics.createPhysicalDrive(physics.rapier, vehicle, models, read().assembly, track)
@@ -372,7 +373,7 @@ export function mountDrivePanel(root, { language, scene, models, catalog, read, 
     el('scaleNotice').hidden = true
     el('mechanics').hidden = !physicsRun
     el('mapStats').hidden=!track?.stats;
-    el('mapStats').textContent=track?.stats?(language==='ru'?'Карта: ':'Map: ')+track.stats.parts+(language==='ru'?' дет. · ':' parts · ')+track.stats.colliders+(language==='ru'?' коллайдеров':' colliders'):'';
+    el('mapStats').textContent=track?.stats?(language==='ru'?'Карта: ':'Map: ')+track.stats.parts+(language==='ru'?' дет. · ':' parts · ')+track.stats.colliders+(language==='ru'?' коллайдеров':' colliders')+(track.stats.obstacles?' · '+track.stats.obstacles+(language==='ru'?' препятствий':' obstacles'):''):'';
     const initial = physicsRun ? physicsRun.advance({ throttle: 0, steer: 0, brake: false }, 0) : state
     scene.driveTransform(vehicle.origin, initial.position, initial.yaw, initial.tilt, initial.scale)
     scene.resetView()

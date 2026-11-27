@@ -1,5 +1,6 @@
 import {mountWorldGestures} from './world-gestures.js'
 import {worldPartIds} from './world-plan.js'
+import {readObstacles,obstacleKinds} from './world-obstacles.js'
 import {readWorldConfig,worldPartBounds,spawnFromBounds,worldSurfaces} from './world-track.js'
 import {validateModule,presetCells,MODULE_LIMIT} from './world-modules.js'
 import { loadPartIndex, enrichInventory, normalizeDocumentDesigns } from '../catalog/part-resolver.js?v=catalog-engine-1'
@@ -894,7 +895,11 @@ export async function mountEditor(root, { document, projectId, language, save, d
       }))
     const mechanicalChange = geometryChanged || state.links !== next.links || state.belts !== next.belts
     state = next
-    if(labMode==='world')refreshWorldPhysics();
+    if(labMode==='world'){
+      const ids=new Set(state.parts.map(p=>p.id));
+      state.worldConfig={...readWorldConfig(state.worldConfig),obstacles:readObstacles(state.worldConfig?.obstacles).filter(o=>o.partIds.every(id=>ids.has(id)))};
+      refreshWorldPhysics();
+    }
     setPalette?.update([...state.parts, ...hiddenParts])
     if (mechanicalChange) {
       assembly = createAssembly(state.parts, state.links, { belts: state.belts })
@@ -2262,12 +2267,25 @@ export async function mountEditor(root, { document, projectId, language, save, d
       config:()=>readWorldConfig(state.worldConfig),
       spawn(value){
         if(!editing())throw Error('Заверши текущую операцию.');
-        const config=readWorldConfig({spawn:value});
+        const config=readWorldConfig({...state.worldConfig,spawn:value});
         if(config.spawn.x!==value.x||config.spawn.z!==value.z||config.spawn.heading!==value.heading||config.spawn.level!==value.level)throw Error('Проверь координаты старта.');
         const hiddenIds=hiddenSceneParts(state.layers,state.parts);
         const boxes=state.parts.filter(p=>!hiddenIds.has(p.id)).map(p=>{const b=worldPartBounds(p,models.get(p.design));return {min:b.min.toArray(),max:b.max.toArray()}});
         spawnFromBounds(config,boxes);
         commit({...state,worldConfig:config});return config;
+      },
+      obstacles(){return readObstacles(state.worldConfig?.obstacles)},
+      removeObstacle(id){if(!editing())throw Error('Заверши текущую операцию.');commit({...state,worldConfig:{...state.worldConfig,obstacles:readObstacles(state.worldConfig?.obstacles).filter(o=>o.id!==id)}})},
+      obstacle(value){
+        if(!editing())throw Error('Заверши текущую операцию.');
+        const list=readObstacles(state.worldConfig?.obstacles),old=list.find(o=>o.id===value.id),ids=old?.partIds??selectionIds();
+        if(!ids.length||ids.length>256)throw Error('Выдели от 1 до 256 движущихся деталей.');
+        if(!Object.hasOwn(obstacleKinds,value.kind)||ids.some(id=>hidden.has(id)||!state.parts.some(p=>p.id===id)))throw Error('Нужны видимые детали.');
+        if(list.some(o=>o.id!==old?.id&&o.partIds.some(id=>ids.includes(id))))throw Error('Деталь уже принадлежит препятствию.');
+        if(!old&&list.length>=32)throw Error('До 32 препятствий на карте.');
+        const result=readObstacles([{...value,id:old?.id??crypto.randomUUID(),partIds:ids}])[0];
+        if(!result||['angle','speed','travel','mass'].some(k=>result[k]!==value[k]))throw Error('Проверь параметры движения.');
+        commit({...state,worldConfig:{...state.worldConfig,obstacles:[...list.filter(o=>o.id!==result.id),result]}});return result;
       },
       surface(kind){
         if(!Object.hasOwn(worldSurfaces,kind)||!editing())throw Error('Заверши текущую операцию.');
@@ -2325,7 +2343,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     return data;
   }
   function roadRecords(){
-    const protectedIds=new Set([...(state.layers.lockedPartIds??[]),...hidden,...state.layers.groups.flatMap(g=>g.partIds),...state.links.flatMap(l=>[l.shaft.part,l.socket.part]),...state.belts.flatMap(b=>[b.a?.part,b.b?.part])]);
+    const protectedIds=new Set([...readObstacles(state.worldConfig?.obstacles).flatMap(o=>o.partIds),...(state.layers.lockedPartIds??[]),...hidden,...state.layers.groups.flatMap(g=>g.partIds),...state.links.flatMap(l=>[l.shaft.part,l.socket.part]),...state.belts.flatMap(b=>[b.a?.part,b.b?.part])]);
     return state.parts.flatMap(p=>{
       const r=p.worldRoad;
       if(!r||r.id!==p.id||r.design!==p.design||r.color!==p.color||p.mirrored||!Array.isArray(r.position)||r.position.length!==3||!Array.isArray(r.rotation)||r.rotation.length!==4||!r.position.every(Number.isFinite)||!r.rotation.every(Number.isFinite)||!samePose(p,r))return [];

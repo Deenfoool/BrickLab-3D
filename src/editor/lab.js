@@ -1,4 +1,5 @@
 
+import {obstacleKinds} from './world-obstacles.js';
 import {mountModulePanel} from './world-module-panel.js';
 import {mountEditor} from './editor.js';
 import {newProject,parseProject,downloadProject} from '../projects/documents.js';
@@ -41,8 +42,34 @@ $('world-physics').onclick=()=>{
  if(!physicsApi)return;
  const s=physicsApi.config().spawn;
  $('spawn-x').value=s.x;$('spawn-z').value=s.z;$('spawn-heading').value=s.heading;$('spawn-auto').checked=s.level===null;$('spawn-level').value=s.level??0;$('spawn-level').disabled=s.level===null;
- $('physics-notice').textContent='';$('physics-dialog').showModal()
+ renderObstacles();$('physics-notice').textContent='';$('physics-dialog').showModal()
 };
+function renderObstacles(id=''){
+ const list=$('obstacle-list');list.replaceChildren(new Option('Новое из выделения',''));
+ for(const o of physicsApi.obstacles())list.add(new Option(o.name+' · '+o.partIds.length+' дет.',o.id));
+ list.value=id;obstacleFields();
+}
+function obstacleFields(){
+ const item=physicsApi.obstacles().find(o=>o.id===$('obstacle-list').value);
+ const defaults={kind:'bridge',name:'',axis:'x',pivot:'center',angle:20,speed:.5,travel:4,mass:3};
+ for(const [k,v] of Object.entries(item??defaults)){const e=$('obstacle-'+k);if(e)e.value=v}
+ $('obstacle-remove').disabled=!item;obstacleHint();
+}
+function obstacleHint(){
+ const k=$('obstacle-kind').value;
+ const hints={bridge:'Свободный шарнир с ограничением угла; нагрузка колёс раскачивает мост.',balance:'Поворот вокруг центральной оси с возвратной пружиной.',roller:'Приводной ролик, скорость в оборотах/с. Выдели цилиндрическую конструкцию.',platform:'Вертикальное перемещение, ход в пластинах, скорость в циклах/с.',ramp:'Установка наклона вокруг выбранного шарнира до начала заезда.'};
+ $('obstacle-hint').textContent=hints[k];
+ const relevant={axis:k!=='platform',pivot:['bridge','ramp'].includes(k),angle:['bridge','balance','ramp'].includes(k),speed:k!=='ramp',travel:k==='platform',mass:['bridge','balance'].includes(k)};
+ for(const [key,show] of Object.entries(relevant))$('obstacle-'+key).closest('label').hidden=!show;
+}
+$('obstacle-list').onchange=obstacleFields;
+$('obstacle-kind').onchange=obstacleHint;
+$('obstacle-save').onclick=()=>{try{
+ const kind=$('obstacle-kind').value;
+ const value=physicsApi.obstacle({id:$('obstacle-list').value,kind,name:$('obstacle-name').value.trim()||obstacleKinds[kind],axis:$('obstacle-axis').value,pivot:$('obstacle-pivot').value,angle:$('obstacle-angle').valueAsNumber,speed:$('obstacle-speed').valueAsNumber,travel:$('obstacle-travel').valueAsNumber,mass:$('obstacle-mass').valueAsNumber});
+ renderObstacles(value.id);$('physics-notice').textContent='Препятствие сохранено.'
+ }catch(e){$('physics-notice').textContent=e.message}};
+$('obstacle-remove').onclick=()=>{try{physicsApi.removeObstacle($('obstacle-list').value);renderObstacles();$('physics-notice').textContent='Детали снова статические.'}catch(e){$('physics-notice').textContent=e.message}};
 $('physics-close').onclick=()=>$('physics-dialog').close();
 $('spawn-auto').onchange=()=>{$('spawn-level').disabled=$('spawn-auto').checked};
 $('spawn-save').onclick=()=>{try{physicsApi.spawn({x:$('spawn-x').valueAsNumber,z:$('spawn-z').valueAsNumber,heading:$('spawn-heading').valueAsNumber,level:$('spawn-auto').checked?null:$('spawn-level').valueAsNumber});$('physics-notice').textContent='Точка старта сохранена.'}catch(e){$('physics-notice').textContent=e.message}};

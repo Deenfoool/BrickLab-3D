@@ -1,4 +1,5 @@
 import { Quaternion, Vector3 } from 'three'
+import {mountObstacles} from './world-obstacles.js'
 import { assemblyBounds, gravity, metersPerLdu, physicsStep, physicsWorld, vectorFrom } from '../mechanics/physics-world.js'
 import { rotationPoses } from './model.js?v=volvo-spur-gears'
 import { findSuspension, suspensionValue } from './suspension.js?v=volvo-spur-gears'
@@ -42,7 +43,7 @@ function mountChassis(rapier, world, vehicle, models, wheels, terrain, scale) {
     const shapeCenter=center.clone().multiplyScalar(scale).applyQuaternion(rotation).add(start);
     const shapeRotation=rotation.clone().multiply(housing);
     const shape=new rapier.Cuboid(size.x*scale,size.y*scale,size.z*scale);
-    if(world.intersectionWithShape(shapeCenter,shapeRotation,shape,rapier.QueryFilterFlags.EXCLUDE_DYNAMIC,undefined,undefined,body))throw Error('На старте кузов пересекает препятствие. Измени точку старта или масштаб.');
+    if(world.intersectionWithShape(shapeCenter,shapeRotation,shape,terrain.obstacles?.length?undefined:rapier.QueryFilterFlags.EXCLUDE_DYNAMIC,undefined,undefined,body))throw Error('На старте кузов пересекает препятствие. Измени точку старта или масштаб.');
   }
   const collider = world.createCollider(rapier.ColliderDesc.cuboid(size.x * scale, size.y * scale, size.z * scale)
     .setTranslation(center.x * scale, center.y * scale, center.z * scale).setRotation(housing)
@@ -62,15 +63,16 @@ function springImpulse(min, max, sag, depth, normalVelocity, supportedMass) {
 export function createPhysicalDrive(rapier, vehicle, models, assembly, terrain) {
   const world = physicsWorld(rapier, terrain)
   try {
+    const obstacles=mountObstacles(rapier,world,terrain?.obstacles);
     if(terrain?.group?.userData.worldTrack)world.step();
-    return runVehicle(rapier, world, vehicle, models, assembly, terrain)
+    return runVehicle(rapier, world, vehicle, models, assembly, terrain,obstacles)
   } catch (error) {
     world.free()
     throw error
   }
 }
 
-function runVehicle(rapier, world, vehicle, models, assembly, terrain) {
+function runVehicle(rapier, world, vehicle, models, assembly, terrain,obstacles) {
   const suspensionByWheel = findSuspension(vehicle, assembly)
   const wheels = vehicle.initial.map(contact => {
     const { wheel } = contact
@@ -89,6 +91,7 @@ function runVehicle(rapier, world, vehicle, models, assembly, terrain) {
   let outOfBounds = false
   let steering = 0
   let remaining = 0
+  let elapsed=0
   let posed = vehicle.steeringParts(0)
   world.step()
 
@@ -109,7 +112,7 @@ function runVehicle(rapier, world, vehicle, models, assembly, terrain) {
     const start = hub.clone().addScaledVector(chassisUp, upper - radius)
     const probe = new rapier.Ray(start, chassisUp.clone().negate())
     const hit = world.castRayAndGetNormal(probe, upper - min, true,
-      rapier.QueryFilterFlags.EXCLUDE_DYNAMIC, undefined, undefined, body)
+      terrain?.obstacles?.length?undefined:rapier.QueryFilterFlags.EXCLUDE_DYNAMIC, undefined, undefined, body)
     const normal = hit && vectorFrom(hit.normal)
     spec.grounded = Boolean(normal && normal.dot(chassisUp) > .28 && normal.y > .25)
     spec.travel = 0
@@ -120,7 +123,9 @@ function runVehicle(rapier, world, vehicle, models, assembly, terrain) {
     const point = vectorFrom(probe.pointAt(hit.timeOfImpact))
     const depth = upper - hit.timeOfImpact
     spec.offset = clamp(depth, min, max) / wheelUnits
-    const velocity = vectorFrom(body.velocityAtPoint(point))
+    const support=hit.collider?.parent?.();
+    const velocity = vectorFrom(body.velocityAtPoint(point));
+    if(support?.velocityAtPoint)velocity.sub(vectorFrom(support.velocityAtPoint(point)))
     const sag = spec.suspension ? Math.max((max - min) * .19, .015 * scale) : .035 * scale
     const load = springImpulse(min, max, sag, depth, velocity.dot(normal), supportedMass)
     if (!load) return
@@ -135,10 +140,11 @@ function runVehicle(rapier, world, vehicle, models, assembly, terrain) {
       (power * 7 * gain - speed * .7) * supportedMass * physicsStep
     const friction = forward.multiplyScalar(traction).addScaledVector(side, -velocity.dot(side) * supportedMass * .55)
       .clampLength(0, load * (terrain?.group?.userData.worldTrack?clamp(hit.collider?.friction?.()??.8,.05,1.5):.95))
-    return { impulse: normal.multiplyScalar(load).add(friction), point }
+    return { impulse: normal.multiplyScalar(load).add(friction), point,support }
   }
 
   function solveStep(input) {
+    elapsed+=physicsStep;obstacles.beforeStep(elapsed);
     const requested = vehicle.steered.length ? input.steer : 0
     steering += clamp(requested - steering, -2.7 * physicsStep, 2.7 * physicsStep)
     posed = vehicle.steeringParts(steering)
@@ -147,7 +153,7 @@ function runVehicle(rapier, world, vehicle, models, assembly, terrain) {
     const chassisUp = up.clone().applyQuaternion(rotation)
     const forces = wheels.map(spec => wheelForces(spec, rotation, origin, chassisUp, input))
     for (const force of forces) {
-      if (force) body.applyImpulseAtPoint(force.impulse, force.point, true)
+      if (force){body.applyImpulseAtPoint(force.impulse, force.point, true);if(force.support?.isDynamic())force.support.applyImpulseAtPoint(force.impulse.clone().negate(),force.point,true)}
     }
     vehicle.groups.forEach(({ plan, sample }, index) => {
       const spin = plan.spins.get(sample.wheel.id)
@@ -218,8 +224,8 @@ function runVehicle(rapier, world, vehicle, models, assembly, terrain) {
     advance(input, dt) {
       remaining += clamp(dt, 0, .05)
       for (; !outOfBounds && remaining >= physicsStep; remaining -= physicsStep) solveStep(input)
-      return snapshot()
+      obstacles.sync();return snapshot()
     },
-    dispose() { world.free() },
+    dispose() { obstacles.reset();world.free() },
   }
 }

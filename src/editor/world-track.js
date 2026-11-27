@@ -3,12 +3,13 @@ import * as THREE from 'three'
 import {parts,partMesh,loadPartModel} from './parts.js?v=system-complete'
 import {hiddenSceneParts,readSceneLayers} from './scene-layers.js'
 import {worldPartIds} from './world-plan.js'
+import {readObstacles,obstaclePivot} from './world-obstacles.js'
 export const worldSurfaces=Object.freeze({auto:'Авто',smooth:'Гладкая плитка',studs:'Шипованная поверхность',grip:'Высокое сцепление',ice:'Скользкая поверхность'});
 const friction={smooth:.55,studs:.9,grip:1.2,ice:.16};
 const rectParts=new Set(worldPartIds),up=new THREE.Vector3(0,1,0),down=up.clone().negate();
 export function readWorldConfig(value){
  const s=value?.spawn??{},valid=(n,min,max,def)=>Number.isInteger(n)&&n>=min&&n<=max?n:def;
- return {version:1,static:true,spawn:{x:valid(s.x,-40,40,0),z:valid(s.z,-40,40,0),heading:valid(s.heading,-180,180,0),level:s.level===null||s.level===undefined?null:valid(s.level,0,120,null)}};
+ return {version:1,static:true,obstacles:readObstacles(value?.obstacles),spawn:{x:valid(s.x,-40,40,0),z:valid(s.z,-40,40,0),heading:valid(s.heading,-180,180,0),level:s.level===null||s.level===undefined?null:valid(s.level,0,120,null)}};
 }
 export function surfaceFor(p){
  if(Object.hasOwn(friction,p.worldSurface))return friction[p.worldSurface];
@@ -104,8 +105,33 @@ export async function loadWorldTrack(document,signal){
    if(batch.some(r=>r.status==='rejected'))throw batch.find(r=>r.status==='rejected').reason;
   }
   signal.throwIfAborted();
-  const boxes=[];
+  const boxes=[],obstacles=[],dynamicIds=new Set(),byId=new Map(visible.map(p=>[p.id,p]));
+  for(const spec of readWorldConfig(document.world).obstacles){
+   const items=spec.partIds.map(id=>byId.get(id));
+   // An entirely hidden group is excluded; a partly hidden or deleted
+   // moving group is rejected instead of simulating a broken mechanism.
+   if(items.every(p=>!p)&&spec.partIds.every(id=>hidden.has(id)))continue;
+   if(items.some(p=>!p))throw Error('Неполное препятствие: '+spec.name);
+   const bounds=new THREE.Box3(),records=[];
+   for(const p of items){
+    const b=worldPartBounds(p,models.get(p.design)),size=b.getSize(new THREE.Vector3());
+    if(Math.min(size.x,size.y,size.z)<.01)throw Error('Неверные габариты препятствия.');
+    bounds.union(b);records.push({center:b.getCenter(new THREE.Vector3()),size,friction:surfaceFor(p)});
+   }
+   const size=bounds.getSize(new THREE.Vector3());
+   if(size.length()>1800)throw Error('Препятствие слишком большое.');
+   if(spec.kind==='roller'&&Math.abs(size.y-size[spec.axis==='x'?'z':'x'])>Math.max(size.y,size[spec.axis==='x'?'z':'x'])*.2)throw Error('Ролик должен иметь примерно круглое сечение.');
+   const pivot=obstaclePivot(spec,bounds),visual=new THREE.Group();
+   visual.position.copy(pivot);group.add(visual);
+   for(const p of items){
+    dynamicIds.add(p.id);
+    const mesh=partMesh(models.get(p.design),p.color??parts[p.design].color);ownedMaterials.add(mesh.userData.finish);
+    mesh.position.fromArray(p.position).sub(pivot);mesh.quaternion.fromArray(p.rotation);mesh.scale.x=p.mirrored?-1:1;visual.add(mesh);
+   }
+   obstacles.push({spec,pivot,visual,boxes:records,bounds});
+  }
   for(const p of visible){
+   if(dynamicIds.has(p.id))continue;
    const model=models.get(p.design),f=surfaceFor(p),matrix=matrixFor(p);
    const hex=typeof p.color==='string'&&/^#[a-f0-9]{6}$/i.test(p.color)?p.color:parts[p.design].color;
    if(p.mirrored){
@@ -172,6 +198,6 @@ export async function loadWorldTrack(document,signal){
   const y=spawn.level===null?heightAt(x,z,high,-.1):heightAt(x,z,spawn.level*8+1,spawn.level*8-1);
   if(!Number.isFinite(y))throw Error('На точке старта нет поверхности. Измени уровень в World.');
   const heading=spawn.heading*Math.PI/180,start=new THREE.Vector3(x,y,z);
-  return {group,start,heading,heightAt,collisionMeshes,stats:{parts:visible.length,colliders:collisionMeshes.length},dispose};
+  return {group,start,heading,heightAt,collisionMeshes,obstacles,stats:{parts:visible.length,colliders:collisionMeshes.length,obstacles:obstacles.length},dispose};
  }catch(e){dispose();throw e}
 }
