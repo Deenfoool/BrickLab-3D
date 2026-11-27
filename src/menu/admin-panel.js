@@ -1,3 +1,6 @@
+import {profileHref,workshopRoute} from './profile-route.js'
+import {renderAchievementAdmin} from './admin-achievements.js'
+import {achievements} from './achievement-catalog.js'
 
 import {AuthError,authOriginAllowed} from './auth-client.js?v=security-1'
 const labels={
@@ -10,10 +13,10 @@ export function adminTarget(value){
 }
 function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
 export function renderAdminPanel({lang='ru',signal,initialMode='overview',initialQuery='',fetcher=globalThis.fetch,location=globalThis.location}){
- const t={...(labels[lang]??labels.ru),bugs:lang==='ru'?'Баг-репорты':'Bug reports',bugSearch:lang==='ru'?'ID отчёта':'Report ID'},root=el('section','admin-panel'),notice=el('p','account-muted'),tabs=el('div','community-actions'),content=el('div','admin-content'),more=el('button','workspace-action',t.more)
+ const t={...(labels[lang]??labels.ru),bugs:lang==='ru'?'Баг-репорты':'Bug reports',bugSearch:lang==='ru'?'ID отчёта':'Report ID',grant_achievement:lang==='ru'?'Выдать достижение':'Grant achievement',confirm_bug:lang==='ru'?'Подтвердить баг':'Confirm bug',confirmed:lang==='ru'?'Подтверждён':'Confirmed'},root=el('section','admin-panel'),notice=el('p','account-muted'),tabs=el('div','community-actions'),content=el('div','admin-content'),more=el('button','workspace-action',t.more)
  notice.setAttribute('role','status');more.type='button';more.hidden=true
- const modes=['overview','users','reports','build-reports','bugs','content','audit'];let mode=modes.includes(initialMode)?initialMode:'overview',offset=0,q=uuid.test(initialQuery)?initialQuery:'',busy=false,serial=0
- const controls=new Map()
+ const modes=['overview','users','achievements','reports','build-reports','bugs','content','audit'];let mode=modes.includes(initialMode)?initialMode:'overview',offset=0,q=uuid.test(initialQuery)?initialQuery:'',busy=false,serial=0
+ const controls=new Map();let definitions=[];t.achievements=lang==='ru'?'Достижения':'Achievements';t.create_achievement=lang==='ru'?'Создание достижения':'Achievement created'
  async function call(path='',method='GET',body){
   if(!authOriginAllowed(location))throw new AuthError('https_required')
   const r=await fetcher('/api/admin'+path,{method,signal,credentials:'same-origin',cache:'no-store',redirect:'error',headers:{Accept:'application/json',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})})
@@ -21,24 +24,25 @@ export function renderAdminPanel({lang='ru',signal,initialMode='overview',initia
  }
  function button(label,fn){const b=el('button','workspace-action',label);b.type='button';b.onclick=fn;return b}
  const error=e=>{if(!signal.aborted)notice.textContent=t[e.code]??t.failed}
- async function action(key,id,reasonValue){
+ async function action(key,id,reasonValue,award){
   if(busy||signal.aborted)return
   const reason=reasonValue??prompt(t.reason)
   if(!reason?.trim())return
   if(reason.trim().length>500){notice.textContent=t.invalid_admin_action;return}
   if(!confirm(t.confirm+' '+t[key]))return
   busy=true
-  try{await call('/action','POST',{action:key,id,reason:reason.trim()});await load(true);if(!signal.aborted)notice.textContent=t.success}
+  try{await call('/action','POST',{action:key,id,reason:reason.trim(),...(award?{award}:{})});await load(true);if(!signal.aborted)notice.textContent=t.success}
   catch(e){error(e)}finally{busy=false}
  }
  function item(r){
   const row=el('article','account-card')
   if(mode==='users'){
    row.append(el('strong',null,r.displayName),el('p','account-muted',r.email),el('p','account-muted',r.id),el('p',null,(r.admin?t.admin+' · ':'')+(r.verifiedAt?t.verified:t.unverified)+' · '+(r.blockedAt?t.blocked:t.active)))
-   if(r.publicId&&uuid.test(r.publicId)){const a=el('a','workspace-action',lang==='ru'?'Публичный профиль':'Public profile');a.href='#community/profile/'+r.publicId;row.append(a)}
+   if(r.publicId&&uuid.test(r.publicId)){const a=el('a','workspace-action',lang==='ru'?'Публичный профиль':'Public profile');a.href=profileHref(r.username,r.publicId);row.append(a)}
+   if(!r.blockedAt){const select=el('select');select.setAttribute('aria-label',t.grant_achievement);for(const a of [...achievements,...definitions].filter(a=>a.metric===null)){const option=el('option',null,a[lang==='ru'?'ru':'en']);option.value=a.id;select.append(option)}row.append(select,button(t.grant_achievement,()=>action('grant_achievement',r.id,undefined,select.value)))}
    if(!r.admin)row.append(button(t[r.blockedAt?'unblock':'block'],()=>action(r.blockedAt?'unblock':'block',r.id)),button(t.revoke_sessions,()=>action('revoke_sessions',r.id)))
   }else if(mode==='bugs'){
-   row.append(el('strong',null,r.area),el('p','account-muted',r.id+' · '+new Date(r.createdAt).toLocaleString(lang)),el('p','community-comment-text',r.summary))
+   row.append(el('strong',null,r.area),el('p','account-muted',r.id+' · '+new Date(r.createdAt).toLocaleString(lang)),el('p','community-comment-text',r.summary),r.confirmedAt?el('span','account-muted',t.confirmed):button(t.confirm_bug,()=>action('confirm_bug',r.id)))
   }else if(mode==='reports'){
    const link=el('a','community-author',t.comment+' · '+r.author);link.href='#community/build/'+r.buildId
    row.append(link,el('p','community-comment-text',r.body??t.removed),el('p','account-muted',r.reports+' · '+r.reasons.map(x=>t[x]??x).join(', ')),button(t.hide_comment,()=>action('hide_comment',r.id)),button(t.dismiss_reports,()=>action('dismiss_reports',r.id)))
@@ -55,10 +59,12 @@ export function renderAdminPanel({lang='ru',signal,initialMode='overview',initia
    id.required=true;id.maxLength=300;id.placeholder=t.target;id.setAttribute('aria-label',t.target);reason.required=true;reason.maxLength=500;reason.placeholder=t.reason;reason.setAttribute('aria-label',t.reason)
    for(const key of ['unpublish_build','unpublish_profile']){const option=el('option',null,t[key]);option.value=key;select.append(option)}
    send.type='submit';form.append(el('p','account-muted',t.warning),select,id,reason,send)
-   form.onsubmit=e=>{e.preventDefault();const target=adminTarget(id.value);if(!target){notice.textContent=t.invalid_admin_action;return}void action(select.value,target,reason.value)}
+   form.onsubmit=async e=>{e.preventDefault();let target=adminTarget(id.value);if(!target&&select.value==='unpublish_profile'){const raw=id.value.trim();let key=workshopRoute(raw.replace(/^#/,''));try{const url=new URL(raw);if(url.origin===location.origin)key=workshopRoute(url.hash.slice(1))}catch{}if(key){try{const r=await fetch('/api/community/profile/'+encodeURIComponent(key),{credentials:'same-origin',cache:'no-store',signal});if(r.ok)target=adminTarget((await r.json()).profile?.id)}catch{}}}if(!target){notice.textContent=t.invalid_admin_action;return}void action(select.value,target,reason.value)}
    content.append(form);notice.textContent='';return
   }
   try{
+   if(mode==='achievements'){const {items}=await call('/achievements');if(signal.aborted||version!==serial)return;definitions=items;content.append(renderAchievementAdmin({lang,definitions,signal,create:async data=>{await call('/achievements','POST',data);if(!signal.aborted)await load(true)}}));notice.textContent='';return}
+   if(mode==='users'){const {items}=await call('/achievements');if(signal.aborted||version!==serial)return;definitions=items}
    if(mode==='overview'){
     const {overview}=await call();if(signal.aborted||version!==serial)return
     const grid=el('div','admin-metrics')

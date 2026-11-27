@@ -139,6 +139,7 @@ export function mountTutorial(root, { projectId, language, signal }) {
     close.textContent = t.continue
     close.addEventListener('click', () => card.remove(), { signal })
     footer.append(close)
+    const assessment=document.createElement('a');assessment.href='#account/achievements';assessment.className='tutorial-action';assessment.textContent=language==='ru'?'Сдать зачёт Академии':'Take the Academy assessment';assessment.title=language==='ru'?'Сначала сохрани практическую модель в облаке':'Save your practice build to the cloud first';footer.append(assessment)
     if (active.mode !== 'mechanics') {
       const next = document.createElement('button')
       next.type = 'button'

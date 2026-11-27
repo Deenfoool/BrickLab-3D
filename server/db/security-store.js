@@ -1,3 +1,4 @@
+import {createDefaultWorkshop} from './default-workshop.js'
 
 import {ProjectError} from '../projects.js'
 export function securityStore(sql,scope,lock){
@@ -35,6 +36,7 @@ export function securityStore(sql,scope,lock){
      const inserted=await tx`insert into bricklab.users(email,display_name,password_hash,username) values(${email},${displayName},${passwordHash},${username??null}) on conflict do nothing returning id`
      if(!inserted.length)return false
      await tx`update bricklab.users set email_verified_at=now() where id=${inserted[0].id}`
+     await createDefaultWorkshop(tx,inserted[0].id)
     }else{
      await tx`update bricklab.users set password_hash=${passwordHash},email_verified_at=coalesce(email_verified_at,now()) where id=${u.id}`
      await tx`delete from bricklab.sessions where user_id=${u.id}`
@@ -44,12 +46,15 @@ export function securityStore(sql,scope,lock){
   },
   async revokeOtherSessions(uid,current){return sql.begin(async tx=>{await lock(tx,uid);await tx`delete from bricklab.sessions where user_id=${uid} and token_hash<>${current}`})},
   async submitBug(uid,id,area,summary){return scope(uid,async tx=>{const [r]=await tx`select bricklab.submit_operator_bug(${id}::uuid,${area},${summary}) as ok`;return r.ok===true})},
-  async adminBugs(uid,q,offset){return scope(uid,async tx=>{await ensure(tx);return tx`select id,area,summary,created_at as "createdAt" from bricklab.operator_bug_reports where (${q}='' or id::text=${q}) order by created_at desc,id limit 31 offset ${offset}`})},
+  async adminBugs(uid,q,offset){return scope(uid,async tx=>{await ensure(tx);return tx`select id,area,summary,confirmed_at as "confirmedAt",created_at as "createdAt" from bricklab.operator_bug_reports where (${q}='' or id::text=${q}) order by created_at desc,id limit 31 offset ${offset}`})},
   async adminOverview(uid){return scope(uid,async tx=>{await ensure(tx);const [r]=await tx`select (select count(id)::int from bricklab.users) as users,(select count(id)::int from bricklab.users where email_verified_at is not null) as verified,(select count(id)::int from bricklab.users where blocked_at is not null) as blocked,(select count(*)::int from bricklab.public_builds) as builds,(select count(*)::int from bricklab.public_profiles) as profiles,((select count(*)::int from bricklab.community_comment_reports where resolved_at is null)+(select count(*)::int from bricklab.community_build_reports where resolved_at is null)) as reports`;return r})},
-  async adminUsers(uid,q,offset){return scope(uid,async tx=>{await ensure(tx);return tx`select u.id,u.email,u.display_name as "displayName",u.created_at as "createdAt",u.email_verified_at as "verifiedAt",u.blocked_at as "blockedAt",(select public_id from bricklab.public_profiles where user_id=u.id) as "publicId",exists(select 1 from bricklab.admin_accounts a where a.user_id=u.id) as admin from bricklab.users u where (${q}='' or u.id::text=lower(${q}) or strpos(lower(u.email||' '||u.display_name),lower(${q}))>0) order by u.created_at desc,u.id limit 31 offset ${offset}`})},
+  async adminUsers(uid,q,offset){return scope(uid,async tx=>{await ensure(tx);return tx`select u.id,u.email,u.username,u.display_name as "displayName",u.created_at as "createdAt",u.email_verified_at as "verifiedAt",u.blocked_at as "blockedAt",(select public_id from bricklab.public_profiles where user_id=u.id) as "publicId",exists(select 1 from bricklab.admin_accounts a where a.user_id=u.id) as admin from bricklab.users u where (${q}='' or u.id::text=lower(${q}) or strpos(lower(u.email||' '||u.display_name),lower(${q}))>0) order by u.created_at desc,u.id limit 31 offset ${offset}`})},
   async adminReports(uid,offset){return scope(uid,async tx=>{await ensure(tx);return tx`select c.id,c.body,c.build_id as "buildId",p.display_name as author,count(*)::int as reports,array_agg(distinct r.reason) as reasons,max(r.created_at) as "reportedAt" from bricklab.community_comment_reports r join bricklab.community_comments c on c.id=r.comment_id join bricklab.public_profiles p on p.public_id=c.author_id where r.resolved_at is null group by c.id,p.display_name order by max(r.created_at) desc,c.id limit 31 offset ${offset}`})},
   async adminBuildReports(uid,offset){return scope(uid,async tx=>{await ensure(tx);return tx`select b.public_id as id,b.title,b.description,p.display_name as author,count(*)::int as reports,array_agg(distinct r.reason) as reasons,max(r.created_at) as "reportedAt" from bricklab.community_build_reports r join bricklab.public_builds b on b.public_id=r.build_id join bricklab.public_profiles p on p.public_id=b.author_id where r.resolved_at is null group by b.public_id,p.display_name order by max(r.created_at) desc,b.public_id limit 31 offset ${offset}`})},
   async adminAudit(uid,offset){return scope(uid,async tx=>{await ensure(tx);return tx`select id::text,actor_id as "actorId",action,target_id as "targetId",reason,created_at as "createdAt" from bricklab.admin_audit order by id desc limit 31 offset ${offset}`})},
+  async adminCreateAchievement(uid,definition){return scope(uid,async tx=>{await ensure(tx);const [r]=await tx`select bricklab.admin_create_achievement(${tx.json(definition)}::jsonb) as ok`;if(!r.ok)throw new ProjectError(409,'invalid_achievement')})},
+  async adminGrantAchievement(uid,id,award,reason){return scope(uid,async tx=>{await ensure(tx);const [r]=await tx`select bricklab.admin_grant_achievement(${id}::uuid,${award},${reason}) as ok`;if(!r.ok)throw new ProjectError(409,'invalid_admin_action')})},
+  async adminConfirmBug(uid,id,reason){return scope(uid,async tx=>{await ensure(tx);const [r]=await tx`select bricklab.admin_confirm_bug(${id}::uuid,${reason}) as ok`;if(!r.ok)throw new ProjectError(409,'invalid_admin_action')})},
   async adminAction(uid,action,id,reason){
    return scope(uid,async tx=>{
     await ensure(tx)

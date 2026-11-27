@@ -1,6 +1,10 @@
+import {renderMetricGrid} from './workshop-metrics.js?v=workshop-metrics-2'
+import {profileHref} from './profile-route.js'
+import {applyAchievementAppearance} from './achievement-rewards.js'
+import {achievementById} from './achievement-catalog.js'
 import {commerceBadge} from './commerce-visuals.js?v=merch-2'
 import {applySignature,themeBadge,themePlate,mountThemeCover} from './profile-signature.js?v=signature-art-1'
-import {filterPortfolio,calendarDays,portfolioUuid} from './portfolio-model.js'
+import {defaultPortfolio,filterPortfolio,calendarDays,portfolioUuid} from './portfolio-model.js'
 import {productById} from './commerce-catalog.js'
 const words={
  ru:{featured:'Закреплённая работа',publications:'Опубликованные сборки',collections:'Коллекции',awards:'Витрина достижений',activity:'Календарь активности',statistics:'Инженерная статистика',about:'О себе',followers:'Подписчики',empty:'Пока нет опубликованных сборок.',noPin:'Закрепи лучшую опубликованную работу в настройках профиля.',noCollections:'Коллекции пока не созданы.',noAwards:'Нет опубликованных наград.',firstAward:'Первая облачная сборка',parts:'Детали',builds:'Сборки',likes:'Лайки',downloads:'Скачивания',score:'Репутация',open:'Открыть сборку / 3D',publicDays:'26 недель · даты последних ревизий действующих публичных работ · UTC',privateDays:'26 недель · сохранённые облачные ревизии · UTC',days:'Активных дней',count:'Событий',none:'Не закреплено',order:'Порядок и видимость блоков',up:'Выше',down:'Ниже',remove:'Удалить',add:'Добавить коллекцию',name:'Название коллекции',choose:'Выбери опубликованные сборки',visibility:'Виден посетителям',notShared:'Публичная страница выключена',shared:'Публичная страница включена',save:'Сохранить профиль',publish:'Сохранить и опубликовать',edit:'Оформление и приватность',publicConsent:'Разрешаю публиковать выбранные данные и автоматически синхронизировать их при дальнейшем редактировании.',legacy:'У существующего публичного профиля могли быть отдельные имя и описание. При сохранении единого профиля выбранные поля станут общими.',privacy:'Почта, локальные и приватные облачные сборки, хранилище и избранное не публикуются. Календарь посетителя показывает только публичные работы.',unpublish:'Снять публикацию профиля',unpublishConfirm:'Снятие публикации также удалит публичные сборки и связанные обсуждения. Личные сборки сохранятся. Продолжить?',preview:'Глазами посетителя',copy:'Скопировать ссылку',copied:'Ссылка скопирована',copyFailed:'Скопируй адрес вручную:',privateHint:'Публикация необязательна. Включи её, чтобы открылась витрина конструктора.',avatar:'Показывать аватар',cover:'Показывать обложку',theme:'Показывать активную тему',display:'Имя конструктора',bio:'Описание',coverStyle:'Стиль обложки',publicationSettings:'Публичность и оформление',savePrivate:'Сохранить личный профиль',more:'Открыть все работы'},
@@ -17,13 +21,13 @@ function block(title,key){const n=ui('section','portfolio-block portfolio-'+key)
 const safePublicId=id=>typeof id==='string'&&portfolioUuid.test(id)
 function publicImage(id,kind,url){const path='/api/community/profile/'+id+'/'+kind;return safePublicId(id)&&url===path?path:null}
 function ownMedia(kind,url){return typeof url==='string'&&new RegExp('^/api/profile/'+kind+'\\?v=[0-9a-f-]{36}$','i').test(url)?url:null}
-export function renderUnifiedHero({lang,identity,owner=false,actions=[],metrics=[]}){
+export function renderUnifiedHero({lang,identity,owner=false,actions=[],metrics=[],metricCards=[]}){
  const hero=ui('section','workshop-hero cover-'+(['blueprint','graphite','amber'].includes(identity.coverTheme)?identity.coverTheme:'blueprint'))
  const theme=identity.backgroundTheme,cover=ui('div','workshop-cover'),emblem=ui('div','workshop-emblem','BRICKLAB / WORKSHOP');emblem.prepend(icon('layers'));cover.append(emblem)
  const plate=themePlate(theme);if(plate)cover.append(plate)
  const avatarUrl=owner?ownMedia('avatar',identity.avatarUrl):publicImage(identity.id,'avatar',identity.avatarUrl),coverUrl=owner?ownMedia('cover',identity.coverUrl):publicImage(identity.id,'cover',identity.coverUrl)
  if(coverUrl){const img=ui('img','profile-cover-image');img.src=coverUrl;img.alt='';cover.prepend(img)}
- mountThemeCover(cover,theme,{custom:!!coverUrl});applySignature(hero,theme)
+ mountThemeCover(cover,theme,{custom:!!coverUrl});applySignature(hero,theme);applyAchievementAppearance(hero,identity.achievementStyle)
  const body=ui('div','workshop-hero-inner'),person=ui('div','workshop-identity'),avatar=ui('div','workshop-avatar',Array.from(identity.displayName||'?').slice(0,2).join('').toUpperCase()),name=ui('div')
  if(avatarUrl){const img=ui('img','profile-avatar-image');img.src=avatarUrl;img.alt='';avatar.replaceChildren(img)}
  name.append(ui('h2',null,identity.displayName));if(identity.username)name.append(ui('p','account-muted','@'+identity.username));if(identity.subtitle)name.append(ui('p','account-muted',identity.subtitle));const badge=themeBadge(theme,lang);if(badge)name.append(badge);if(identity.plus===true)name.append(commerceBadge('plus'));const support=productById(identity.supportBadge);if(support?.kind==='badge')name.append(commerceBadge(support.id))
@@ -32,6 +36,7 @@ export function renderUnifiedHero({lang,identity,owner=false,actions=[],metrics=
  hero.append(cover,body)
  if(identity.bio)hero.append(ui('p','workshop-bio',identity.bio))
  if(metrics.length){const grid=ui('div','workshop-metric-grid');for(const [label,value] of metrics){const m=ui('div','workshop-metric');m.append(ui('span',null,label),ui('strong',null,value));grid.append(m)}hero.append(grid)}
+ if(metricCards.length)hero.append(renderMetricGrid(metricCards))
  return hero
 }
 export function activityCalendar(lang,entries,{publicOnly=false}={}){
@@ -68,9 +73,9 @@ export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeB
    for(const group of p.collections){const box=ui('section','portfolio-collection'),grid=ui('div','portfolio-collection-links');box.append(ui('h3',null,group.title));for(const id of group.ids){const b=byId.get(id);if(b)grid.append(anchor(b.title,'#community/build/'+b.id))}box.append(grid);c.append(box)}
   }else if(key==='awards'){
    const awards=profile?.awards??[]
-   if(awards.includes('firstCloudSave')){const badge=ui('div','portfolio-earned');badge.append(icon('icon-trophy'),ui('strong',null,t.firstAward),ui('span','account-muted','30 XP'));c.append(badge)}
+   for(const id of awards){const a=achievementById(id,profile?.achievementDefinitions??[]);if(!a)continue;const badge=ui('div','portfolio-earned rarity-'+a.rarity);badge.append(icon(a.icon),ui('strong',null,a[lang==='ru'?'ru':'en']),ui('span','account-muted',a.xp+' XP'));c.append(badge)}
    if(awards.includes('firstBuilder')){const badge=ui('div','portfolio-earned');badge.append(icon('icon-trophy'),ui('strong',null,'First Builder'),ui('span','account-muted',lang==='ru'?'Первая подарочная сборка':'First gifted build'));c.append(badge)}
-   if(!awards.some(a=>['firstCloudSave','firstBuilder'].includes(a)))c.append(ui('p','account-muted',t.noAwards))
+   if(!awards.some(a=>achievementById(a,profile?.achievementDefinitions??[])||a==='firstBuilder'))c.append(ui('p','account-muted',t.noAwards))
   }else if(key==='activity'){
    const days=valid.filter(b=>typeof b.publishedAt==='string').map(b=>({day:b.publishedAt.slice(0,10),count:1}))
    c.append(activityCalendar(lang,days,{publicOnly:true}))
@@ -89,8 +94,8 @@ export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeB
 export function profileLinkControls(lang,profile){
  const t=tr(lang),root=ui('div','portfolio-link-controls')
  if(!safePublicId(profile?.id))return root
- const href='/#community/profile/'+(profile.username??profile.id),notice=ui('span','account-muted');notice.setAttribute('role','status')
- root.append(anchor(t.preview,href),action(t.copy,async()=>{const value=new URL(href,location.origin).href;try{await navigator.clipboard.writeText(value);notice.textContent=t.copied}catch{notice.textContent=t.copyFailed+' '+value}}),notice);return root
+ const href='/'+profileHref(profile.username,profile.id),notice=ui('span','account-muted');notice.setAttribute('role','status')
+ root.append(action(t.copy,async()=>{const value=new URL(href,location.origin).href;try{await navigator.clipboard.writeText(value);notice.textContent=t.copied}catch{notice.textContent=t.copyFailed+' '+value}}),notice);return root
 }
 export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic}){
  const t=tr(lang),root=ui('section','account-card workshop-card unified-profile-editor');root.append(ui('h2',null,t.edit))
@@ -109,10 +114,10 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
   root.append(form);return root
  }
  // Disabling a public page is a separate destructive action, never an implicit checkbox save.
- const enable=check(t.visibility,!!publicCard,busy||!!publicCard),shareAvatar=check(t.avatar,publicCard?.unified?publicCard.showAvatar:!!publicCard?.avatarUrl,busy),shareCover=check(t.cover,publicCard?.unified?publicCard.showCover:!!publicCard?.coverTheme,busy),shareTheme=check(t.theme,!!publicCard?.backgroundTheme,busy)
+ const enable=check(lang==='ru'?'Публичная мастерская':'Public workshop',!!publicCard,busy),shareAvatar=check(t.avatar,publicCard?.unified?publicCard.showAvatar:!!publicCard?.avatarUrl,busy),shareCover=check(t.cover,publicCard?.unified?publicCard.showCover:!!publicCard?.coverTheme,busy),shareTheme=check(t.theme,!!publicCard?.backgroundTheme,busy)
  const consent=check(t.publicConsent,false,busy),panel=ui('fieldset','portfolio-editor-controls')
- form.append(enable.label,panel)
- const p=filterPortfolio(publicCard?.portfolio,publicBuilds.map(b=>b.id)),blocks=ui('div','portfolio-order'),collections=ui('div','portfolio-editor-collections')
+ form.append(enable.label,ui('p','account-muted',lang==='ru'?'Публичная мастерская участвует в рейтинге, если открыт блок достижений. Отключение скрывает профиль и удаляет его публичные публикации и обсуждения; личные модели сохраняются. Остальные изменения в этой форме при отключении не сохраняются.':'A public workshop joins the leaderboard if achievements are visible. Turning it off removes the public profile, publications and discussions; private builds remain. Other edits on this form are not saved when disabling.'),panel)
+ const p=filterPortfolio(publicCard?.portfolio??(publicCard?undefined:defaultPortfolio({publicByDefault:true})),publicBuilds.map(b=>b.id)),blocks=ui('div','portfolio-order'),collections=ui('div','portfolio-editor-collections')
  function renderBlocks(){
   blocks.replaceChildren()
   for(const [i,item] of p.blocks.entries()){
@@ -138,13 +143,13 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
   collections.append(action(t.add,()=>{p.collections.push({title:'',ids:[]});renderCollections()},busy||p.collections.length>=6))
  }
  renderBlocks();renderCollections()
- panel.append(shareAvatar.label,shareCover.label,shareTheme.label,field(t.featured,pin),ui('h3',null,t.order),blocks,ui('h3',null,t.collections),collections,consent.label)
+ panel.append(shareAvatar.label,shareCover.label,shareTheme.label,field(t.featured,pin),ui('h3',null,t.order),blocks,ui('h3',null,t.collections),collections);if(!publicCard)panel.append(consent.label)
  const submit=ui('button','workspace-action primary',t.save);submit.type='submit';submit.disabled=busy
- function setVisibility(){panel.hidden=!enable.input.checked;panel.disabled=busy||!enable.input.checked;consent.input.required=enable.input.checked;submit.textContent=enable.input.checked?t.publish:t.savePrivate}
+ function setVisibility(){panel.hidden=!enable.input.checked;panel.disabled=busy||!enable.input.checked;consent.input.required=enable.input.checked&&!publicCard;submit.textContent=t.save}
  enable.input.onchange=setVisibility;setVisibility()
  form.append(submit)
- form.onsubmit=e=>{e.preventDefault();if(busy)return;const data={displayName:name.value,bio:bio.value,cover:cover.value};if(enable.input.checked&&consent.input.checked)publishPublic({...data,unified:true,consent:true,showAvatar:shareAvatar.input.checked,showCover:shareCover.input.checked,showBackground:shareTheme.input.checked,portfolio:p});else if(!enable.input.checked)saveProfile(data)}
+ form.onsubmit=e=>{e.preventDefault();if(busy)return;const data={displayName:name.value,bio:bio.value,cover:cover.value};if(enable.input.checked&&(publicCard||consent.input.checked))publishPublic({...data,unified:true,consent:true,showAvatar:shareAvatar.input.checked,showCover:shareCover.input.checked,showBackground:shareTheme.input.checked,portfolio:p});else if(!enable.input.checked){if(publicCard){if(confirm(t.unpublishConfirm))unpublishPublic()}else saveProfile(data)}}
  root.append(form)
- if(publicCard){root.append(profileLinkControls(lang,publicCard),action(t.unpublish,()=>{if(confirm(t.unpublishConfirm))unpublishPublic()},busy))}
+ if(publicCard)root.append(profileLinkControls(lang,publicCard))
  return root
 }
