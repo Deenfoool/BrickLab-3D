@@ -1,0 +1,9 @@
+export function renderWorkshopNotificationSettings({lang='ru',signal,fetcher=globalThis.fetch}={}){
+ const ru=lang==='ru',el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n},root=el('section','account-card'),status=el('p','account-muted'),label=el('label','workshop-check'),input=el('input');input.type='checkbox';input.disabled=true;status.setAttribute('role','status')
+ label.append(input,el('span',null,ru?'Личные уведомления в Telegram':'Personal Telegram notifications'));root.append(el('h2',null,ru?'Доставка уведомлений':'Notification delivery'),label,status)
+ const call=async(path,push)=>{const r=await fetcher('/api/telegram/'+path,{signal,credentials:'same-origin',cache:'no-store',...(push===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({push})})});if(!r.ok)throw Error('unavailable');return r.json()}
+ let linked=false,saved=false
+ async function load(){try{const d=await call('site-notifications');if(signal?.aborted)return;linked=d.linked===true;saved=d.personalPush===true;input.checked=saved;input.disabled=!linked;status.textContent=linked?(ru?'Достижения, подписчики, комментарии, лайки, рейтинг и Plus.':'Achievements, followers, comments, likes, rank and Plus.'):(ru?'Сначала привяжи Telegram во вкладке «Интеграции».':'Connect Telegram in Integrations first.')}catch{if(!signal?.aborted)status.textContent=ru?'Настройки недоступны.':'Settings unavailable.'}}
+ input.onchange=async()=>{if(!linked)return;const next=input.checked;input.disabled=true;try{await call('site-notification-preference',next);saved=next;status.textContent=ru?'Настройки сохранены.':'Settings saved.'}catch{input.checked=saved;status.textContent=ru?'Не удалось сохранить.':'Could not save.'}finally{input.disabled=!linked}}
+ void load();return root
+}

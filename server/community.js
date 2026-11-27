@@ -193,7 +193,7 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
       for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>16384){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
       let data;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new ProjectError(400,'invalid_json')}
       await store.publishCard(user.id,validatePublicCard(data))
-     }else if(req.method==='DELETE')await store.unpublishCard(user.id)
+     }else if(req.method==='DELETE'){if(store.hideCard)await store.hideCard(user.id);else await store.unpublishCard(user.id)}
      const card=publicCard(await store.getOwnCard(user.id),{owner:true});if(card&&store.reputation)card.reputation=publicReputation(await store.reputation(card.id));if(card&&store.workshopPublicSummary)Object.assign(card,publicWorkshopSummary(await store.workshopPublicSummary(card.id)));reply(res,200,{profile:card});return true
     }
     if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')

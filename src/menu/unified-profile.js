@@ -1,5 +1,5 @@
 import {sortableHandle,moveItem} from './sortable-handle.js'
-import {renderMetricGrid} from './workshop-metrics.js?v=workshop-metrics-2'
+import {renderMetricGrid} from './workshop-metrics.js?v=workshop-settings-1'
 import {profileHref} from './profile-route.js'
 import {applyAchievementAppearance} from './achievement-rewards.js'
 import {achievementById} from './achievement-catalog.js'
@@ -106,7 +106,7 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
  name.required=true;name.maxLength=80;name.value=profile.displayName??publicCard?.displayName??user.displayName;name.disabled=busy
  bio.maxLength=500;bio.value=profile.displayName===null&&publicCard&&!publicCard.unified?publicCard.bio:profile.bio;bio.disabled=busy
  cover.disabled=busy;for(const [key,ru,en] of [['blueprint','Чертёж','Blueprint'],['graphite','Графит','Graphite'],['amber','Янтарь','Amber']]){const option=ui('option',null,lang==='ru'?ru:en);option.value=key;cover.append(option)}cover.value=profile.cover
- if(mode==='all'||mode==='profile')form.append(field(t.display,name),field(t.bio,bio),field(t.coverStyle,cover))
+ if(mode==='all'||mode==='profile'){form.append(field(t.display,name),field(t.bio,bio),field(t.coverStyle,cover));if(user.username)form.prepend(ui('p','account-muted','@'+user.username))}
  if(mode==='profile'){const submit=ui('button','workspace-action primary',t.save);submit.type='submit';submit.disabled=busy;form.append(submit);form.onsubmit=e=>{e.preventDefault();if(!busy)saveProfile({displayName:name.value,bio:bio.value,cover:cover.value})};root.append(form);return root}
  if(publicCard&&!publicCard.unified)form.append(ui('p','account-muted',t.legacy))
  const status=ui('p','account-muted',!publicLoaded?(lang==='ru'?'Видимость пока не проверена.':'Visibility has not been checked.'):publicCard&&publicCard.visible!==false?t.shared:t.notShared)
