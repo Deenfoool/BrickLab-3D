@@ -43,10 +43,29 @@ DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM bricklab.hub_promo_grants) THEN RAISE EXCEPTION 'cross-account grants'; END IF;
 END $$;
 SELECT set_config('bricklab.user_id','00000000-0000-4000-8000-000000000201',true);
-DO $ BEGIN
+DO $$ BEGIN
  IF NOT bricklab.hub_prepare_personal() THEN RAISE EXCEPTION 'personal preparation failed'; END IF;
  IF bricklab.hub_personal_claim() IS NOT NULL THEN RAISE EXCEPTION 'personal opt-out ignored'; END IF;
  IF bricklab.hub_campaign_claim() IS NOT NULL THEN RAISE EXCEPTION 'unsubscribed recipient claimed'; END IF;
+END $$;
+RESET ROLE;
+SELECT bricklab.hub_add_event('00000000-0000-4000-8000-000000000202','test:inbox','follow','Test event');
+SET LOCAL ROLE bricklab_app;
+SELECT set_config('bricklab.user_id','00000000-0000-4000-8000-000000000202',true);
+DO $$ BEGIN
+ IF jsonb_array_length(bricklab.hub_personal_inbox())<1 THEN RAISE EXCEPTION 'personal inbox missing events'; END IF;
+ IF NOT bricklab.hub_personal_preferences(true) THEN RAISE EXCEPTION 'personal opt-in failed'; END IF;
+END $$;
+RESET ROLE;
+SELECT bricklab.hub_add_event('00000000-0000-4000-8000-000000000202','test:delivery','follow','Test event');
+SELECT bricklab.hub_add_event('00000000-0000-4000-8000-000000000202','test:delivery','follow','Duplicate');
+SET LOCAL ROLE bricklab_app;
+SELECT set_config('bricklab.user_id','00000000-0000-4000-8000-000000000201',true);
+DO $$ DECLARE item jsonb; BEGIN
+ item:=bricklab.hub_personal_claim();
+ IF item IS NULL OR item->>'chatId'<>'900002' THEN RAISE EXCEPTION 'personal delivery missing'; END IF;
+ IF NOT bricklab.hub_personal_finish((item->>'attempt')::uuid,'sent',0) THEN RAISE EXCEPTION 'personal finish failed'; END IF;
+ IF bricklab.hub_personal_claim() IS NOT NULL THEN RAISE EXCEPTION 'duplicate personal event'; END IF;
 END $$;
 SELECT set_config('bricklab.user_id','00000000-0000-4000-8000-000000000202',true);
 DO $$ BEGIN

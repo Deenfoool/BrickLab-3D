@@ -70,3 +70,40 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION bricklab.hub_campaign_create(text,timestamptz,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION bricklab.hub_campaign_create(text,timestamptz,text) TO bricklab_app;
+
+-- Opt-out takes effect even if the user opts in again before the worker next runs.
+CREATE OR REPLACE FUNCTION bricklab.telegram_marketing(p_enabled boolean) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
+DECLARE uid uuid:=nullif(current_setting('bricklab.user_id',true),'')::uuid;
+BEGIN
+ IF p_enabled IS NULL THEN RETURN false; END IF;
+ UPDATE bricklab.telegram_links SET marketing=p_enabled WHERE user_id=uid;
+ IF NOT FOUND THEN RETURN false; END IF;
+ IF NOT p_enabled THEN
+  UPDATE bricklab.hub_campaign_delivery SET state='skipped',updated_at=now() WHERE user_id=uid AND state='pending';
+ END IF;
+ RETURN true;
+END $$;
+CREATE OR REPLACE FUNCTION bricklab.hub_personal_preferences(p_push boolean) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
+DECLARE uid uuid:=nullif(current_setting('bricklab.user_id',true),'')::uuid;
+BEGIN
+ IF p_push IS NULL THEN RETURN false; END IF;
+ UPDATE bricklab.telegram_links SET personal_push=p_push WHERE user_id=uid;
+ IF NOT FOUND THEN RETURN false; END IF;
+ IF NOT p_push THEN
+  UPDATE bricklab.hub_personal_events SET state='skipped',updated_at=now() WHERE user_id=uid AND state='pending';
+ END IF;
+ RETURN true;
+END $$;
+CREATE OR REPLACE FUNCTION bricklab.telegram_unlink() RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,bricklab AS $$
+DECLARE uid uuid:=nullif(current_setting('bricklab.user_id',true),'')::uuid;
+BEGIN
+ IF uid IS NULL THEN RETURN false; END IF;
+ DELETE FROM bricklab.telegram_pairing WHERE user_id=uid;
+ DELETE FROM bricklab.telegram_links WHERE user_id=uid;
+ UPDATE bricklab.hub_campaign_delivery SET state='skipped',updated_at=now() WHERE user_id=uid AND state='pending';
+ UPDATE bricklab.hub_personal_events SET state='skipped',updated_at=now() WHERE user_id=uid AND state='pending';
+ RETURN true;
+END $$;
