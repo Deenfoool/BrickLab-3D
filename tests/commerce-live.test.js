@@ -1,7 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {commerceQuote} from '../server/commerce-quote.js'
-import {liveCommerceConfig} from '../server/legal-release.js'
+import {liveCommerceConfig,liveProviderConfig} from '../server/legal-release.js'
 import {createYookassaAdapter} from '../server/yookassa.js'
 const account={themes:[],badges:[],plus:false}
 test('actual quote discounts only eligible purchases and credits paid badge amounts',()=>{
@@ -96,4 +96,10 @@ test('operator recovery cannot attach unrelated provider payments and uses GET o
  value={...pending,status:'succeeded',paid:true};assert.equal(await adapter.recoverPayment(row,payment),'succeeded');assert.deepEqual(calls.pop(),['settle',order,payment,'live',9900,false]);
  value={...pending,status:'canceled'};assert.equal(await adapter.recoverPayment(row,payment),'canceled');assert.deepEqual(calls.pop(),['cancel',order,payment,'live',9900]);
  await assert.rejects(adapter.recoverPayment({...row,paymentId:order},payment));
+});
+
+test('provider reconciliation credentials remain active independently of checkout approval',()=>{
+ const env={BRICKLAB_YOOKASSA_LIVE_ENABLED:'true',BRICKLAB_YOOKASSA_LIVE_SHOP_ID:'1',BRICKLAB_YOOKASSA_LIVE_SECRET:'live_example_secret',BRICKLAB_NPD_RECEIPTS_READY:'false'}
+ assert.equal(liveProviderConfig(env).enabled,true);assert.equal(liveCommerceConfig(env,null).enabled,false)
+ assert.equal(liveProviderConfig({...env,BRICKLAB_YOOKASSA_TEST_SHOP_ID:'1'}).enabled,false)
 });

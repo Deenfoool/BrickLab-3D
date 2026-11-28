@@ -89,3 +89,21 @@ test('operator recovery is admin-only and available in closed live scope',async 
  assert.deepEqual(await (await post(payload)).json(),{status:'succeeded',mode:'live'});
  assert.equal(lookups,1);assert.equal(checks,1);
 });
+
+test('closed or unready checkout does not prevent verified callbacks or an owner reading an existing order',async t=>{
+ let admin=false;const calls=[]
+ const store={getSession:async()=>({id:uid,admin}),commerceOwnOrder:async(...a)=>{calls.push(a);return a[1]===pid?{id:pid,status:'pending',amountKopecks:24900}:null}}
+ const adapter={enabled:true,notification:async()=>({ok:true})}
+ const handler=createPaymentsHandler({store,origin,config:{enabled:false},legal:{version:terms},fullCatalog:true,commerceMode:'live',liveCheckoutScope:'public',liveCheckoutReady:false,liveYookassa:adapter})
+ const server=createServer((req,res)=>handler(req,res,new URL(req.url,origin).pathname))
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)))
+ const base='http://127.0.0.1:'+server.address().port,headers={cookie:'__Host-bricklab_session='+'a'.repeat(64),origin,'Content-Type':'application/json'}
+ const get=path=>fetch(base+path,{headers})
+ assert.equal((await (await get('/api/commerce/status')).json()).enabled,false)
+ assert.equal((await get('/api/commerce/quote?sku=plus-1')).status,503)
+ assert.equal((await get('/api/commerce/order-status?id='+pid+'&mode=test')).status,403)
+ assert.equal((await get('/api/commerce/order-status?id='+uid+'&mode=live')).status,404)
+ assert.deepEqual(await (await get('/api/commerce/order-status?id='+pid+'&mode=live')).json(),{id:pid,status:'pending',amountKopecks:24900,mode:'live'})
+ assert.deepEqual(calls,[[uid,uid,'live'],[uid,pid,'live']])
+ assert.equal((await fetch(base+'/api/payments/yookassa/live-result',{method:'POST',headers,body:'{}'})).status,200)
+})

@@ -51,10 +51,10 @@ async function body(req,type){
  for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>8192){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
  return Buffer.concat(chunks).toString('utf8')
 }
-export function createPaymentsHandler({store,origin,config=paymentConfig(),logger=console,instructionRelease=false,instructionPolicy=null,yookassa=null,liveYookassa=null,legal=null,regions=null,fullCatalog=false,commerceMode='test',liveCheckoutScope='closed'}){
- const publicLive=commerceMode==='live'&&liveCheckoutScope==='public'&&liveYookassa?.enabled===true&&!!legal?.version
+export function createPaymentsHandler({store,origin,config=paymentConfig(),logger=console,instructionRelease=false,instructionPolicy=null,yookassa=null,liveYookassa=null,legal=null,regions=null,fullCatalog=false,commerceMode='test',liveCheckoutScope='closed',liveCheckoutReady=true}){
+ const publicLive=liveCheckoutReady&&commerceMode==='live'&&liveCheckoutScope==='public'&&liveYookassa?.enabled===true&&!!legal?.version
  const validCheckoutKey=key=>typeof key==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(key)
- const canCheckout=user=>commerceMode==='test'?user?.admin===true:commerceMode==='live'&&(liveCheckoutScope==='public'||liveCheckoutScope==='pilot'&&user?.admin===true)
+ const canCheckout=user=>commerceMode==='test'?user?.admin===true:liveCheckoutReady&&commerceMode==='live'&&(liveCheckoutScope==='public'||liveCheckoutScope==='pilot'&&user?.admin===true)
  const releasedProducts=fullCatalog?commerceProducts.filter(p=>!p.betaOnly||!instructionRelease):[]
  const instructionCatalog=new Map(indexedInstructionProducts.map(p=>[p.id,p]))
  const auditedProducts=new Map((instructionPolicy?.products??[]).map(p=>[p.id,p]))
@@ -71,7 +71,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
  let active=0
  async function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return /^[a-f0-9]{64}$/.test(token||'')?await store.getSession(digest(token)):null}
  return async(req,res,path)=>{
-  if(!['/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-health','/api/commerce/admin-provider-totals','/api/commerce/admin-reconcile','/api/commerce/admin-partial-review','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions','/api/commerce/instruction-offer','/api/commerce/instruction-activate','/api/commerce/instruction-complete','/api/commerce/instruction-event','/api/commerce/instruction-analytics','/api/commerce/instruction-pack-quote','/api/commerce/instruction-pack-checkout'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
+  if(!['/api/commerce/order-status','/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-health','/api/commerce/admin-provider-totals','/api/commerce/admin-reconcile','/api/commerce/admin-partial-review','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions','/api/commerce/instruction-offer','/api/commerce/instruction-activate','/api/commerce/instruction-complete','/api/commerce/instruction-event','/api/commerce/instruction-analytics','/api/commerce/instruction-pack-quote','/api/commerce/instruction-pack-checkout'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
   if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
   active++
   try{
@@ -165,6 +165,14 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     reply(res,200,{firstBuilder:account.firstBuilder,remaining:account.welcomeRemaining});return true
    }
    const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated')
+   if(path==='/api/commerce/order-status'&&req.method==='GET'){
+    const q=new URL(req.url,'http://localhost').searchParams,id=q.get('id'),mode=q.get('mode')
+    if(q.size!==2||!validCheckoutKey(id)||!['test','live'].includes(mode))throw new ProjectError(400,'invalid_order')
+    if(mode==='test'&&!user.admin)throw new ProjectError(403,'admin_required')
+    const order=await store.commerceOwnOrder(user.id,id,mode)
+    if(!order)throw new ProjectError(404,'unknown_order')
+    reply(res,200,{...order,mode});return true
+   }
    if(path==='/api/commerce/instruction-pack-quote'||path==='/api/commerce/instruction-pack-checkout'){
     if(commerceMode!=='test'||!user.admin)throw new ProjectError(403,'bundle_unavailable')
     if(!adapter?.enabled||!legal?.version)throw new ProjectError(503,'payments_disabled')

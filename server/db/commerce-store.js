@@ -182,11 +182,12 @@ export function commerceStore(scope){
   async settleVerifiedCommercePayment(id,paymentId,environment,amount,refunded=false){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_settle_verified(${id}::uuid,${paymentId},${environment},${amount}::integer,${refunded}::boolean) as ok`;return r.ok})},
   async cancelVerifiedCommercePayment(id,paymentId,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_cancel_verified(${id}::uuid,${paymentId},${environment},${amount}::integer) as ok`;return r.ok})},
   async fulfillCommercePayment(id,paymentId,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_fulfill(${id}::uuid,${paymentId},${environment},${amount}::integer) as ok`;return r.ok})},
+  async commerceOwnOrder(uid,id,environment){return scope(uid,async tx=>{const [r]=await tx`select id,order_number as "orderNumber",sku,title,amount_kopecks as "amountKopecks",status,refunded_kopecks as "refundedKopecks",receipt_status as "receiptStatus",partial_review_pending as "partialReviewPending",case when status='succeeded' and not partial_refund_seen then receipt_delivery_url else null end as "receiptUrl" from bricklab.commerce_orders where user_id=${uid} and id=${id}::uuid and environment=${environment}`;return r})},
   async commerceAccount(uid){
    return scope(uid,async tx=>{
     const account=await commerceEntitlements(tx,uid);
     const orders=await tx`select id,order_number as "orderNumber",sku,title,amount_kopecks as "amountKopecks",status,
-     created_at as "createdAt",paid_at as "paidAt",refunded_at as "refundedAt",refunded_kopecks as "refundedKopecks",partial_review_pending as "partialReviewPending",receipt_status as "receiptStatus",case when status='succeeded' then receipt_delivery_url else null end as "receiptUrl",receipt_delivery_sent_at as "receiptSentAt",payment_id as "paymentId",refund_requested_at as "refundRequestedAt"
+     created_at as "createdAt",paid_at as "paidAt",refunded_at as "refundedAt",refunded_kopecks as "refundedKopecks",partial_review_pending as "partialReviewPending",receipt_status as "receiptStatus",case when status='succeeded' and not partial_refund_seen then receipt_delivery_url else null end as "receiptUrl",receipt_delivery_sent_at as "receiptSentAt",payment_id as "paymentId",refund_requested_at as "refundRequestedAt"
      from bricklab.commerce_orders where user_id=${uid} and environment='live'
      order by created_at desc,id limit 50`;
     return {...account,orders};
