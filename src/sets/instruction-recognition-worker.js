@@ -1,3 +1,4 @@
+import {rankModels} from './instruction-model-match.js?v=recognition-v8'
 // Page text locates the callouts. Compare the composited part artwork with
 // labeled drawings from the illustrated inventory of the same set.
 import {isQuantity} from './instruction-text.js?v=smart-highlight-1'
@@ -403,14 +404,16 @@ export function rank({ samples, templates }) {
       // A color match alone cannot identify a different shape. Keep shifted and isolated views as valid evidence.
       if(references.length&&!references.some(t=>silhouetteDifference(sample.pixels,t.pixels)<=.48||silhouetteDifference((sample.drawing??sample).pixels,(t.drawing??t).pixels)<=.48))return []
     }
-    return item ? [[...sample.region, ...item]] : []
+    if(!item)return []
+    const ids=new Set(templates.filter(t=>t.item?.[0]===item[0]&&t.item?.[1]===item[1]).map(t=>t.item[2]).filter(Boolean))
+    return [[...sample.region,...(ids.size>1?item.slice(0,2):item)]]
   })
 }
 
 if(typeof self!=='undefined'&&typeof self.postMessage==='function')self.onmessage = ({ data }) => {
   const { id, action, input } = data
   try {
-    self.postMessage({ id, value: action === 'extract' ? extract(input) : rank(input) })
+    self.postMessage({ id, value: action === 'extract' ? extract(input) : action==='rank-models'?rankModels(input):rank(input) })
   } catch (error) {
     self.postMessage({ id, error: error.message })
   }

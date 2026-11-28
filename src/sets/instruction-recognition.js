@@ -1,3 +1,5 @@
+import {lookupElement} from '../editor/element-index.js?v=catalog-engine-1'
+import {createElementRecovery} from './instruction-element-recovery.js?v=recognition-v8'
 import { createOcrWorker } from './ocr.js'
 import {createInstructionPdfReader} from './instruction-pdf.js?v=smart-highlight-1'
 import {canonicalInstructionUrl} from './instruction-url.js'
@@ -47,20 +49,23 @@ function inventoryLabels(inventory) {
       }
     }
   }
-  return labels
+  return {labels,ambiguous}
 }
 
-async function inventoryVersion(labels) {
+async function inventoryVersion(labels,inventory) {
   if (!globalThis.crypto?.subtle) return
   const entries = Object.entries(labels).sort(([a], [b]) => a.localeCompare(b))
-  const bytes = new TextEncoder().encode(JSON.stringify(entries))
+  const items=inventory.map(i=>[i.partNum,String(i.colorId),i.color,i.quantity,Boolean(i.spare),i.ldraw??[]]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))
+  const bytes = new TextEncoder().encode(JSON.stringify([entries,items]))
   const digest = await crypto.subtle.digest('SHA-256', bytes)
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
 export function createInstructionRecognition(reader, set, signal) {
-  const labels = inventoryLabels(set.inventory)
-  const version = inventoryVersion(labels)
+  const {labels,ambiguous}=inventoryLabels(set.inventory)
+  const version = inventoryVersion(labels,set.inventory)
+  const recoverElements=createElementRecovery(set.inventory,lookupElement)
+  let modelReferences
   const jobs = new Map()
   const books = new Map()
   let active, worker, ocr, ocrQueue = Promise.resolve(), jobId = 0
@@ -80,7 +85,7 @@ export function createInstructionRecognition(reader, set, signal) {
   function analyze(action, input, transfer = []) {
     signal.throwIfAborted()
     if (!worker) {
-      worker = new Worker(new URL('./instruction-recognition-worker.js?v=smart-highlight-1', import.meta.url), { type: 'module' })
+      worker = new Worker(new URL('./instruction-recognition-worker.js?v=recognition-v8', import.meta.url), { type: 'module' })
       worker.onmessage = ({ data }) => {
         const job = jobs.get(data.id)
         jobs.delete(data.id)
@@ -103,7 +108,7 @@ export function createInstructionRecognition(reader, set, signal) {
     const bookSignal = AbortSignal.any([controller.signal, signal])
     const key = Promise.all([reader.fingerprint(source), version]).then(([fingerprint, hash]) => {
       if (!fingerprint || !hash) return
-      return JSON.stringify(['regions-v7', set.number, hash, fingerprint])
+      return JSON.stringify(['regions-v8', set.number, hash, fingerprint])
     })
     active = { source, controller, signal: bookSignal, key, pages }
     return active
@@ -138,10 +143,11 @@ export function createInstructionRecognition(reader, set, signal) {
     let surface = canvas
     const raw=geometry.words
     geometry.words=normalizedCaptions(raw)
+    await recoverElements(geometry.words,labels,ambiguous,request)
     const hasWords=()=>geometry.words.some(({text})=>mode?isElement(text)&&Object.hasOwn(labels,text):isQuantity(text)||isElement(text)&&Object.hasOwn(labels,text))
     if(!surface){surface=document.createElement('canvas');await pdfReader.render(source,page,surface,request)}
     async function recognize(){
-      try{const words=await readText(surface,geometry,request);geometry.words=mergeCaptions(raw,words)}
+      try{const words=await readText(surface,geometry,request);geometry.words=mergeCaptions(raw,words);await recoverElements(geometry.words,labels,ambiguous,request)}
       catch(error){request.throwIfAborted()} // A failed OCR pass must not discard vector evidence.
     }
     const knownElements=()=>geometry.words.filter(({text})=>isElement(text)&&Object.hasOwn(labels,text)).length
@@ -168,7 +174,7 @@ export function createInstructionRecognition(reader, set, signal) {
   async function scanInventory(source,pages,request,pdfReader){
     const [fingerprint,hash]=await Promise.all([pdfReader.fingerprint(source),version])
     request.throwIfAborted()
-    const key=fingerprint&&hash&&JSON.stringify(['regions-v7',set.number,hash,fingerprint])+'/inventory'
+    const key=fingerprint&&hash&&JSON.stringify(['regions-v8',set.number,hash,fingerprint])+'/inventory'
     const stored=await cache(key)
     request.throwIfAborted()
     if(stored?.length){books.set(source,stored);return stored}
@@ -206,7 +212,7 @@ export function createInstructionRecognition(reader, set, signal) {
     return scanInventory(book.source,book.pages,book.signal,reader)
   }
 
-  async function pageRegions(source, page, pages, canvas, request) {
+  async function pageRegions(source, page, pages, canvas, request, onProgress=()=>{}) {
     request.throwIfAborted()
     const book = currentBook(source, pages)
     const key = await book.key
@@ -217,6 +223,8 @@ export function createInstructionRecognition(reader, set, signal) {
     const samples = await extract(source, page, canvas, false, request)
     request.throwIfAborted()
     if (!samples.length) return []
+    const direct=samples.filter(s=>s.item?.[0]).map(s=>[...s.region,...s.item])
+    onProgress({stage:'inventory',regions:direct,total:samples.length})
     if (samples.every(sample => sample.item?.[0])) {
       const regions = samples.map(({ region, item }) => [...region, ...item])
       void cache(pageKey, regions)
@@ -232,11 +240,26 @@ export function createInstructionRecognition(reader, set, signal) {
     const templates = typeof source === 'string'
       ? [...books].filter(([volume]) => typeof volume === 'string').flatMap(([, items]) => items)
       : books.get(source)??[]
-    if (!templates.length) return samples.filter(s=>s.item?.[0]).map(s=>[...s.region,...s.item])
-    const regions = await analyze('rank', { samples, templates })
-    if (regions.length && regions.length===samples.length) void cache(pageKey, regions)
+    const regions=templates.length?await analyze('rank',{samples,templates}):direct
     request.throwIfAborted()
-    return regions
+    if(regions.length===samples.length){if(regions.length)void cache(pageKey,regions);return regions}
+    // Only canonical books may use the selected set as a complete candidate universe.
+    // A user-supplied PDF may describe a different model.
+    if(typeof source!=='string'||!canonicalInstructionUrl(source))return regions
+    const identified=new Set(regions.map(r=>r.slice(0,4).join('/')))
+    const unresolved=samples.filter(s=>!identified.has(s.region.join('/'))&&!s.item?.[0])
+    if(!unresolved.length)return regions
+    onProgress({stage:'models',regions,total:samples.length})
+    modelReferences??=import('./instruction-model-references.js?v=recognition-v8').then(module=>
+      module.buildModelReferences(set.inventory,AbortSignal.any([signal,AbortSignal.timeout(35000)]))
+    ).catch(()=>[])
+    const references=await modelReferences
+    request.throwIfAborted()
+    if(!references.length)return regions
+    const recovered=await analyze('rank-models',{samples:unresolved,references})
+    request.throwIfAborted()
+    // Synthetic views are supplementary and are never persisted as reviewed PDF matches.
+    return [...regions,...recovered]
   }
 
   function closeBook(source) {

@@ -365,15 +365,21 @@ export function mountInstructions(
     recognitionStatus.textContent = ru ? 'Распознаём детали…' : 'Recognizing parts…'
     recognitionStatus.hidden = false
     try {
-      recognition ??= import('./instruction-recognition.js?v=smart-highlight-1').then(module => {
+      recognition ??= import('./instruction-recognition.js?v=recognition-v8').then(module => {
         recognitionEngine = module.createInstructionRecognition(pdf, progress.set, signal)
         return recognitionEngine
       })
       const engine = await recognition
-      const detected = await engine.pageRegions(source, page, pages, canvas, request)
-      const extra=detected.filter(([x, y, w, h]) => !ready.some(([a, b, aw, ah]) =>
+      const additional=detected=>detected.filter(([x, y, w, h]) => !ready.some(([a, b, aw, ah]) =>
         Math.min(x + w, a + aw) - Math.max(x, a) > .5 * Math.min(w, aw) &&
         Math.min(y + h, b + ah) - Math.max(y, b) > .5 * Math.min(h, ah)))
+      const detected=await engine.pageRegions(source,page,pages,canvas,request,({stage,regions,total})=>{
+        if(request.aborted)return
+        const found=additional(regions)
+        if(found.length)addInstructionParts(preview,found,{language,describe:describePart,find:(...args)=>{instructionEvent(progress.set.number,'hint_use');return findPart(...args)}})
+        recognitionStatus.textContent=(stage==='models'?(ru?'Сравниваем с 3D-библиотекой':'Comparing with 3D library'):(ru?'Сверяем с описью':'Checking inventory'))+' · '+regions.length+'/'+total
+      })
+      const extra=additional(detected)
       if(!request.aborted&&!ready.length&&!extra.length){recognitionStatus.textContent=ru?'На этой странице нет уверенно распознанных деталей.':'No confidently recognized parts on this page.';recognitionStatus.hidden=false;return extra}
       if(!request.aborted)recognitionStatus.hidden=true
       return extra

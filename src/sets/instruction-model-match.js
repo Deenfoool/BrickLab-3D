@@ -68,13 +68,14 @@ export function rankModels({samples,references}){
  if(!references?.length)return []
  const identities=new Set(references.map(r=>JSON.stringify(r.item)))
  if(identities.size<2)return []
+ const views=references.map(reference=>{const variants=[reference];for(let i=1;i<4;i++)variants.push(rotate(variants[i-1]));return {item:reference.item,variants}})
  return samples.flatMap(sample=>{
   if(sample.item?.[0]||!sample.pixels)return []
   const byKey=new Map()
-  for(const reference of references){
+  for(const reference of views){
    const key=JSON.stringify(reference.item)
-   let view=reference,best=Infinity
-   for(let i=0;i<4;i++){best=Math.min(best,modelDistance(sample,view)+i*.001);view=rotate(view)}
+   let best=Infinity
+   for(let i=0;i<4;i++)best=Math.min(best,modelDistance(sample,reference.variants[i])+i*.001)
    if(best<(byKey.get(key)?.score??Infinity))byKey.set(key,{item:reference.item,score:best})
   }
   const [first,second]=[...byKey.values()].sort((a,b)=>a.score-b.score)
