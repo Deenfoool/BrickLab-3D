@@ -12,7 +12,7 @@ import {
 } from './instruction-sources.js?v=ducati-instructions-1'
 import { addInstructionParts, instructionPartRegions, resetInstructionParts } from './instruction-parts.js?v=recognition-v9-polish'
 import { canonicalInstructionUrl } from './instruction-url.js'
-import { createInstructionPdfReader } from './instruction-pdf.js?v=recognition-v9'
+import { createInstructionPdfReader } from './instruction-pdf.js?v=recognition-recovery-1'
 
 const maxUnknownPages = 5000
 const pageWait = 6000
@@ -376,7 +376,7 @@ export function mountInstructions(
     recognitionStatus.textContent = ru ? 'Распознаём детали…' : 'Recognizing parts…'
     recognitionStatus.hidden = false
     try {
-      recognition ??= import('./instruction-recognition.js?v=recognition-v9-polish').then(module => {
+      recognition ??= import('./instruction-recognition.js?v=recognition-v9.3').then(module => {
         recognitionEngine = module.createInstructionRecognition(pdf, progress.set, signal)
         return recognitionEngine
       })
@@ -384,16 +384,16 @@ export function mountInstructions(
       const additional=detected=>detected.filter(([x, y, w, h]) => !ready.some(([a, b, aw, ah]) =>
         Math.min(x + w, a + aw) - Math.max(x, a) > .5 * Math.min(w, aw) &&
         Math.min(y + h, b + ah) - Math.max(y, b) > .5 * Math.min(h, ah)))
-      let detectedCount=0
-      const detected=await engine.pageRegions(source,page,pages,canvas,request,({stage,regions,total,callouts,scope})=>{
-        detectedCount=total
+      let detectedCount=0,templateCount=null,lastStage=''
+      const detected=await engine.pageRegions(source,page,pages,canvas,request,({stage,regions,total,callouts,scope,templates})=>{
+        detectedCount=total;lastStage=stage;if(Number.isInteger(templates))templateCount=templates
         if(request.aborted)return
         const found=additional(regions)
         study.update(found,{callouts:reconcileCallouts(callouts??[],ready),scope})
         recognitionStatus.textContent=(stage==='models'?(ru?'Сравниваем с 3D-библиотекой':'Comparing with 3D library'):(ru?'Сверяем с описью':'Checking inventory'))+' · '+regions.length+'/'+total
       })
       const extra=additional(detected)
-      if(!request.aborted&&!ready.length&&!extra.length){recognitionStatus.textContent=ru?'На этой странице нет уверенно распознанных деталей.':'No confidently recognized parts on this page.';recognitionStatus.hidden=false;return extra}
+      if(!request.aborted&&!ready.length&&!extra.length){recognitionStatus.textContent=detectedCount===0?(ru?'Не найдены выноски деталей на странице.':'No part callouts located on this page.'):(ru?'Найдено областей: '+detectedCount+' · Эталонов описи: '+(templateCount??'—')+(lastStage==='models-unavailable'?' · 3D-эталоны недоступны':''):'Callouts: '+detectedCount+' · Inventory references: '+(templateCount??'—')+(lastStage==='models-unavailable'?' · 3D references unavailable':''));recognitionStatus.hidden=false;return extra}
       if(!request.aborted){
         recognitionStatus.hidden=!(detectedCount>detected.length)
         if(!recognitionStatus.hidden)recognitionStatus.textContent=ru?'Часть деталей не распознана уверенно.':'Some parts could not be confidently recognized.'

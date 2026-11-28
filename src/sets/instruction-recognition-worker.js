@@ -1,3 +1,5 @@
+import {CLEAN_SIZE,cleanComponent,prepareCleanReferences,cleanMatch} from './instruction-clean-match.js?v=recognition-v9.3'
+import {candidateWindow} from './instruction-inventory-search.js?v=recognition-recovery-1'
 import {stepForCallout,repeatedArtwork} from './instruction-study.js?v=recognition-v9'
 import {rankModels,prepareModelReferences} from './instruction-model-match.js?v=recognition-v8'
 // Page text locates the callouts. Compare the composited part artwork with
@@ -14,14 +16,15 @@ const overlaps = (a, b) => Math.min(a[2], b[2]) - Math.max(a[0], b[0]) > .5 &&
 function anchors(captions, images, inventory) {
   const matches = []
   for (const [i, caption] of captions.entries()) {
+    const window=candidateWindow(caption,inventory)
     for (const [j, box] of images.entries()) {
       const dx = Math.abs(caption.box[0] - box[0]), dy = caption.box[1] - box[3]
       // Some PDFs paint a caption as an image and place searchable text over it.
       if (dy < 0 && heightOf(box) <= heightOf(caption.box) + 2 &&
           widthOf(box) <= widthOf(caption.box) + 3) continue
-      if (dx <= 5 && dy >= -4 && dy <= (inventory ? 20 : 5)) {
+      if (dx <= window.left && dy >= -window.overlap && dy <= window.above) {
         matches.push({ i, j, score: dx * 2 + Math.abs(dy) })
-      } else if (Math.abs((caption.box[0]+caption.box[2]-box[0]-box[2])/2)<=4 && dy>=-2 && dy<=(inventory?15:7)) {
+      } else if (Math.abs((caption.box[0]+caption.box[2]-box[0]-box[2])/2)<=window.center && dy>=-window.overlap && dy<=window.above) {
         matches.push({i,j,score:8+Math.abs(dy)+Math.abs((caption.box[0]+caption.box[2]-box[0]-box[2])/2)})
       }
     }
@@ -141,8 +144,8 @@ function scanArt(captions, words, raster, inventory) {
   const boxes = new Map()
   for (const { box } of captions) {
     const [x, y] = box
-    const margin = inventory ? 18 : 8
-    const area = pixelBox([x - 6, y - 70, x + 100, y + 2], raster)
+    const window=candidateWindow({box},inventory),margin=window.above
+    const area = pixelBox([x - Math.max(12,window.left*2), y - 85, x + 120, y + 3], raster)
     const [left, top, right, bottom] = area
     const width = widthOf(area), height = heightOf(area)
     if (width < 2 || height < 2) continue
@@ -188,7 +191,7 @@ function scanArt(captions, words, raster, inventory) {
         (left + x1 + 1) / raster.x, (top + y1 + 1) / raster.y]
       const dy = y - drawing[3]
       if (x0 && y0 && x1 < width - 1 && tail >= 14 && widthOf(drawing) >= 5 &&
-          heightOf(drawing) >= 3 && Math.abs(x - drawing[0]) <= 5 && dy >= -2 && dy <= margin) {
+          heightOf(drawing) >= 3 && (Math.abs(x-drawing[0])<=window.left||Math.abs((box[0]+box[2]-drawing[0]-drawing[2])/2)<=window.center) && dy >= -window.overlap && dy <= margin) {
         boxes.set(drawing.map(Math.round).join('/'), drawing)
       }
     }
@@ -222,7 +225,7 @@ function largestDrawing(pixels, width, height) {
   return largest
 }
 
-function feature(raster, box, neighbors) {
+function feature(raster, box, neighbors, annotations=[]) {
   const area = pixelBox([box[0] - .75, box[1] - .75, box[2] + .75, box[3] + .2], raster)
   const [left, top, right, bottom] = area
   if (right - left < 2 || bottom - top < 2) return
@@ -257,6 +260,27 @@ function feature(raster, box, neighbors) {
   const w = x1 - x0 + 1, h = y1 - y0 + 1
   thumb.drawImage(image, x0, y0, w, h, 0, 0, size, size)
   const sample = { pixels: thumb.getImageData(0, 0, size, size).data, aspect: Math.log(w / h) }
+  // Preserve the original crop as independent evidence. Clean a separate view.
+  const cleaned=ctx.createImageData(width,height)
+  cleaned.data.set(pixels.data)
+  for(const annotation of annotations){
+    const [a,b,c,d]=pixelBox(annotation,raster)
+    const l=Math.max(left,a-1),t=Math.max(top,b-1),r=Math.min(right,c+1),bt=Math.min(bottom,d+1)
+    if(r<=l||bt<=t||(r-l)*(bt-t)>.32*width*height)continue
+    for(let y=t;y<bt;y++)cleaned.data.fill(0,((y-top)*width+l-left)*4,((y-top)*width+r-left)*4)
+  }
+  const clean=cleanComponent(cleaned.data,width,height)
+  if(clean){
+    cleaned.data.set(clean.pixels);ctx.putImageData(cleaned,0,0)
+    const view=new OffscreenCanvas(CLEAN_SIZE,CLEAN_SIZE).getContext('2d')
+    const [a,b,c,d]=clean.box
+    view.fillStyle='white';view.fillRect(0,0,CLEAN_SIZE,CLEAN_SIZE)
+    view.imageSmoothingQuality='high'
+    // Slight common blur reduces differences in printed inventory resolution.
+    view.filter='blur(0.65px)';view.drawImage(image,a,b,c-a,d-b,0,0,CLEAN_SIZE,CLEAN_SIZE)
+    view.filter='none'
+    sample.clean={pixels:view.getImageData(0,0,CLEAN_SIZE,CLEAN_SIZE).data,aspect:Math.log((c-a)/(d-b))}
+  }
   const component = largestDrawing(pixels.data, width, height)
   if (component.length < count * .5 || component.length >= count * .995) return sample
   const isolated = ctx.createImageData(width, height)
@@ -303,7 +327,7 @@ function extract({ bitmap, geometry, labels, inventory }) {
   const output=candidates.flatMap(({ box, caption, embedded, badge }) => {
     const neighbors = candidates.map(part => part.box).filter(other => other !== box &&
       widthOf(other) * heightOf(other) < .65 * widthOf(box) * heightOf(box) && overlaps(other, box))
-    const sample = feature(raster, box, neighbors)
+    const sample = feature(raster, box, neighbors,[...words.map(w=>w.box),...(geometry.badges??[]).map(b=>b.box)])
     if(!sample&&inventory)return []
     const item = Object.hasOwn(labels,caption.text) ? [...labels[caption.text],caption.text] : undefined
     if (inventory) return [{ ...sample, item, embedded, badge }]
@@ -382,6 +406,7 @@ function badgeMatch(scores, sample) {
 }
 
 export function rank({ samples, templates }) {
+  const cleanReferences=prepareCleanReferences(templates)
   return samples.flatMap(sample => {
     if (sample.item?.[0]) return [[...sample.region, ...sample.item]]
     if(!sample.pixels)return []
@@ -392,6 +417,7 @@ export function rank({ samples, templates }) {
       if (aspect > .17) continue
       scores.push({ reference, aspect, score: aspect + pixelDistance(sample.pixels, reference.pixels) })
     }
+    const rawScores=scores.map(s=>({...s}))
     let item = badgeMatch(scores, sample) ?? confident(scores, sample)
     if (!item && sample.embedded && scores.some(({ score }) => score <= .13)) {
       const views = shiftedViews(sample.pixels)
@@ -412,11 +438,13 @@ export function rank({ samples, templates }) {
       const [first, second] = bestByItem(scores)
       if (first?.score <= .065 && (second?.score ?? Infinity) - first.score >= .035) item = first.reference.item
     }
+    // A legacy match must pass the original shape veto. Only then try the
+    // independent cleaned-view consensus if the ordinary ranking abstains.
     if(item){
-      const references=templates.filter(t=>t.item?.[0]===item[0]&&t.item?.[1]===item[1]&&t.pixels)
-      // A color match alone cannot identify a different shape. Keep shifted and isolated views as valid evidence.
-      if(references.length&&!references.some(t=>silhouetteDifference(sample.pixels,t.pixels)<=.48||silhouetteDifference((sample.drawing??sample).pixels,(t.drawing??t).pixels)<=.48))return []
+      const references=templates.filter(t=>t.item?.[0]===item[0]&&String(t.item?.[1])===String(item[1])&&t.pixels)
+      if(references.length&&!references.some(t=>silhouetteDifference(sample.pixels,t.pixels)<=.48||silhouetteDifference((sample.drawing??sample).pixels,(t.drawing??t).pixels)<=.48))item=undefined
     }
+    if(!item)item=cleanMatch(sample,cleanReferences,rawScores)
     if(!item)return []
     const ids=new Set(templates.filter(t=>t.item?.[0]===item[0]&&t.item?.[1]===item[1]).map(t=>t.item[2]).filter(Boolean))
     return [[...sample.region,...(ids.size>1?item.slice(0,2):item)]]
