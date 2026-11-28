@@ -1,3 +1,4 @@
+import { validActuatorExtension, validActuatorPhase } from '../mechanics/actuators.js'
 // Shared public preview contract; no editor or physics dependencies.
 export const previewLimits=Object.freeze({parts:20000,designs:2000,thumbnailParts:600,thumbnailDesigns:120})
 export function isLargePreview(doc){
@@ -11,7 +12,7 @@ export function sanitizePreview(doc,{strict=false}={}){
   if(!p||!['string','number'].includes(typeof p.design)||!/^[a-zA-Z0-9_-]{1,40}$/.test(String(p.design))){if(strict)return null;continue}
   const design=String(p.design)
   designs.add(design);if(designs.size>previewLimits.designs)return null
-  parts.push({id:'preview-'+parts.length,design,...(valid(p.position,3,1000000)?{position:p.position}:{}),...(valid(p.rotation,4,2)?{rotation:p.rotation}:{}),...(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color)?{color:p.color}:{}),mirrored:p.mirrored===true})
+  parts.push({id:'preview-'+parts.length,design,...(valid(p.position,3,1000000)?{position:p.position}:{}),...(valid(p.rotation,4,2)?{rotation:p.rotation}:{}),...(typeof p.color==='string'&&/^#[0-9a-f]{6}$/i.test(p.color)?{color:p.color}:{}),mirrored:p.mirrored===true,...(validActuatorExtension(design,p.actuatorExtension)&&{actuatorExtension:p.actuatorExtension}),...(validActuatorPhase(design,p.actuatorInputPhase)&&{actuatorInputPhase:p.actuatorInputPhase})})
  }
  if(!parts.length)return null
  return {format:'bricklab-3d',version:1,name:String(doc.name??'Model').slice(0,120),parts,connections:[],gears:[]}

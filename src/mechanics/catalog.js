@@ -9,6 +9,8 @@ import tiles from '../../catalog/system-tile-connectors.json' with { type: 'json
 import buggyParts from '../../catalog/dune-buggy-parts.json?v=rotation' with { type: 'json' }
 import engineParts from '../../catalog/inline-engine-parts.json' with { type: 'json' }
 
+import { linearActuators, actuatorMounts } from './actuators.js'
+
 export { technic }
 
 const support = { ...engineParts, ...buggyParts }
@@ -89,6 +91,14 @@ export function portsFor(design) {
       ...(suspensionPorts[design] && /:(?:fake-)?spring-[01]$/.test(catalog.definitions[type].group ?? '') && { legacy: true }),
     })) ?? support[design]?.ports ?? noPorts
     const supported = suspensionPorts[design] ? [...base, ...suspensionPorts[design]] : base
+    if (linearActuators[design]) {
+      const input=supported.find(port=>port.id===linearActuators[design].inputPort)
+      if(input)input.actuatorInput=true
+      supported.push(shockPort('actuator-housing-seat','actuator-housing','M',[0,0,0],[0,0,1],
+        {group:'large-actuator-mount',reference:[0,1,0]}))
+    }
+    if (actuatorMounts.has(design)) supported.push(shockPort('actuator-bracket-seat','actuator-mount','F',[0,0,0],[0,0,1],
+      {group:'large-actuator-mount',reference:[0,1,0]}))
     if (design === '88738' && profileDesign === '18938') {
       const gear = supported.find(port => port.role === 'gear')
       gear.sections = gear.sections.map(section => ({ ...section, length: 15 }))

@@ -307,3 +307,6 @@ body:has(.editor:not([hidden])){overflow:hidden}
 .editor-drive-output-list button{font-size:10px;text-align:left;overflow-wrap:anywhere}
 
 .editor-bench-results{max-height:220px;overflow:auto;font-size:11px}.editor-bench-results table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}.editor-bench-results th,.editor-bench-results td{padding:5px 3px;text-align:left;border-bottom:1px solid color-mix(in srgb,currentColor 15%,transparent)}
+
+.editor-actuator-state{display:block;color:var(--gold,#e5b75b);font-size:12px;font-variant-numeric:tabular-nums;line-height:1.45}
+.editor-actuator-state[hidden]{display:none}

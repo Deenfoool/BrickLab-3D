@@ -1,3 +1,4 @@
+import {validActuatorExtension,validActuatorPhase} from '../src/mechanics/actuators.js'
 import { createHash } from 'node:crypto'
 import {createCollaborationHandler} from './collaboration.js'
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -11,6 +12,7 @@ export function validateDocument(doc) {
       !Array.isArray(doc.parts) || !Array.isArray(doc.connections) ||
       doc.parts.length > 50000 || doc.connections.length > 150000)
     throw new ProjectError(400, 'invalid_document')
+  for(const p of doc.parts)if(p&&((p.actuatorExtension!==undefined&&!validActuatorExtension(p.design,p.actuatorExtension))||(p.actuatorInputPhase!==undefined&&!validActuatorPhase(p.design,p.actuatorInputPhase))))throw new ProjectError(400,'invalid_document')
   const encoded=JSON.stringify(doc)
   if (Buffer.byteLength(encoded)>maxBody-1024) throw new ProjectError(413,'body_too_large')
   // PostgreSQL jsonb rejects NUL and unpaired surrogates, even in nested strings/keys.

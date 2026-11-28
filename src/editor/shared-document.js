@@ -1,3 +1,4 @@
+import { validActuatorExtension, validActuatorPhase } from '../mechanics/actuators.js'
 // Shared fields only. Per-record compare-and-swap; disjoint edits commute.
 const keys={parts:p=>p.id,connections:p=>JSON.stringify([p.shaft?.part,p.shaft?.port,p.socket?.part,p.socket?.port]),belts:p=>p.id,gears:p=>p.part}
 const fields=['name','sceneLayers','testDrive','customInstructions']
@@ -38,7 +39,7 @@ export function validateShared(doc){
  if(doc.parts.length>2000||doc.connections.length>6000||(doc.belts??[]).length>100)throw Error('room_model_limit')
  const parts=mapOf('parts',doc.parts),links=mapOf('connections',doc.connections),belts=mapOf('belts',doc.belts??[]),gears=mapOf('gears',doc.gears??[])
  const vector=(v,n)=>Array.isArray(v)&&v.length===n&&v.every(x=>typeof x==='number'&&Number.isFinite(x)&&Math.abs(x)<1e7)
- for(const p of parts.values())if(typeof p.design!=='string'||p.design.length>80||!vector(p.position,3)||!vector(p.rotation,4)||p.rotation.every(x=>x===0))throw Error('invalid_part')
+ for(const p of parts.values())if(typeof p.design!=='string'||p.design.length>80||!vector(p.position,3)||!vector(p.rotation,4)||p.rotation.every(x=>x===0)||(p.actuatorExtension!==undefined&&!validActuatorExtension(p.design,p.actuatorExtension))||(p.actuatorInputPhase!==undefined&&!validActuatorPhase(p.design,p.actuatorInputPhase)))throw Error('invalid_part')
  for(const l of links.values())if(!parts.has(l.shaft?.part)||!parts.has(l.socket?.part)||typeof l.shaft?.port!=='string'||typeof l.socket?.port!=='string')throw Error('edit_conflict')
  for(const b of belts.values())if(!parts.has(b.a?.part)||!parts.has(b.b?.part))throw Error('edit_conflict')
  for(const g of gears.values())if(!parts.has(g.part))throw Error('edit_conflict')

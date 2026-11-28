@@ -1,6 +1,6 @@
-import { connectionMode, evaluateInsertion, overlap, portLength } from './axial.js?v=torque-clutch'
+import { connectionMode, evaluateInsertion, overlap, portLength } from './axial.js?v=linear-actuator-1'
 import { evaluateSpurMesh } from './gears.js'
-import { rotationPort } from './catalog.js?v=gear-selector'
+import { rotationPort } from './catalog.js?v=linear-actuator-1'
 import { cross, dot, isVector, length, subtract, unit } from './vector.js?v=connector-coverage'
 
 const LINEAR_TOLERANCE = .01

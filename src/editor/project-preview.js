@@ -1,10 +1,10 @@
 import * as THREE from 'three'
-import { partMesh, parts, loadPartModel } from './parts.js?v=system-complete'
-import { loadParts } from './model.js?v=track-builder'
+import { partMesh, parts, loadPartModel, previewActuatorMesh } from './parts.js?v=linear-actuator-2'
+import { loadParts } from './model.js?v=linear-actuator-2'
 import { expandComponents } from './components.js?v=belt-drive'
 import { upgradeInlineEngineFan } from './inline-engine.js'
 import { hiddenSceneParts, readSceneLayers } from './scene-layers.js?v=scene-parts'
-import { createBeltScene } from './belt-scene.js?v=belt-drive'
+import { createBeltScene } from './belt-scene.js?v=linear-actuator-2'
 import { assembleBelts, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 
 const width = 768
@@ -104,6 +104,7 @@ export function createProjectPreviewRenderer(options={}) {
       for (const part of visible) {
         const object = partMesh(models.get(part.design), part.color ?? parts[part.design].color)
         if(emphasized&&!emphasized.has(part.id))object.userData.finish.color.lerp(new THREE.Color('#a5adb7'),.75)
+        previewActuatorMesh(object,part)
         object.position.fromArray(part.position)
         object.quaternion.fromArray(part.rotation)
         object.scale.x = part.mirrored ? -1 : 1

@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.js'
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js'
+import { linearActuators, actuatorOffset, actuatorPhase } from '../mechanics/actuators.js'
 import { curated, partOrder, parts, sections } from './parts-data.js?v=system-complete'
 
 export { parts, sections }
@@ -134,12 +135,28 @@ export async function loadPartModel(part, { smoothNormals = part.group !== 'base
   // Repeated baseplate studs make edge smoothing expensive; flat faces keep their normals.
   loader.smoothNormals = smoothNormals
   loader.addDefaultMaterials()
-  const preserveColors = ['99499', '99499c01', '10089c01', '10095', '58124c01', '23816a',
+  const preserveColors = !!linearActuators[part.design] || ['99499', '99499c01', '10089c01', '10095', '58124c01', '23816a',
     '58119', '64228c01', '84599', '22127', '85824'].includes(part.design)
   const system = part.assetPath === 'system'
   const palette = system ? common['ldconfig.ldr'].split('\n').filter(line => line.startsWith('0 !COLOUR ')).join('\n')
     : preserveColors ? Object.entries(electricColors).map(([code, color]) =>
     `0 !COLOUR Electric_${code} CODE ${code} VALUE ${color} EDGE #333333`).join('\n') : ''
+  if (linearActuators[part.design]) {
+    const refs=(pack[modelFile]??common[modelFile]).split('\n').filter(line=>/^\s*1\s/.test(line))
+    const rotor=refs.find(line=>/\s47157\.dat\s*$/i.test(line)),rod=refs.find(line=>/\s62274c01\.dat\s*$/i.test(line))
+    if (refs.length!==3||!rotor||!rod) throw Error(`Unexpected LDraw actuator structure: ${part.design}`)
+    const model={meshes:[],bounds:new THREE.Box3()}
+    for (const [section,line] of [['housing',refs.find(line=>line!==rotor&&line!==rod)],['input',rotor],['rod',rod]]) {
+      const content=`0 FILE bricklab-actuator-${section}.ldr\n${palette}\n${line}\n${embedded.join('')}`
+      const sectionLoader=(await newLoader()).setFileMap(fileMap);sectionLoader.smoothNormals=smoothNormals;sectionLoader.addDefaultMaterials()
+      const group=await new Promise((resolve,reject)=>sectionLoader.parse(content,resolve,reject))
+      const segment=extractModel(group,preserveColors,system)
+      if(!segment)throw Error(`Missing actuator ${section}: ${part.design}`)
+      for(const mesh of segment.meshes)mesh.userData.actuatorSection=section
+      model.meshes.push(...segment.meshes);model.bounds.union(segment.bounds)
+    }
+    return model
+  }
   const content = `0 FILE bricklab-part.ldr\n${palette}\n1 16 0 0 0 1 0 0 0 1 0 0 0 1 ${modelFile}\n${embedded.join('')}`
   const group = await new Promise((resolve, reject) => loader.parse(content, resolve, reject))
   const model = extractModel(group, preserveColors, system)
@@ -169,4 +186,15 @@ export function partMesh(model, color, ghost = false) {
   }
   group.userData.finish = finish
   return group
+}
+
+// Actuator parts retain their original mesh positions; only the screw input and rod move in preview.
+export function previewActuatorMesh(group,part){
+  const rod=actuatorOffset(part)+(part.previewActuatorRod??0),phase=actuatorPhase(part)+(part.previewActuatorInput??0)
+  group.userData.actuatorRodOffset=rod
+  for(const mesh of group.children){
+    const section=mesh.geometry?.userData?.actuatorSection
+    if(section==='rod')mesh.position.z=rod
+    if(section==='input')mesh.rotation.z=phase
+  }
 }

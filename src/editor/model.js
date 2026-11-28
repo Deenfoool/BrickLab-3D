@@ -1,16 +1,18 @@
 import { sprockets, trackDrives, trackLine, trackPoses } from '../mechanics/treads.js?v=track-builder'
 import { Quaternion, Vector3 } from 'three'
-import { connectionMode } from '../mechanics/axial.js?v=torque-clutch'
-import { Assembly, measureInsertion } from '../mechanics/assembly.js?v=torque-clutch'
+import { connectionMode } from '../mechanics/axial.js?v=linear-actuator-2'
+import { Assembly, measureInsertion } from '../mechanics/assembly.js?v=linear-actuator-2'
 import { rotationalDrive } from '../mechanics/rotation.js?v=belt-drive'
 import { assembleBelts } from '../mechanics/belts.js?v=belt-drive'
 import { engineDrive } from '../mechanics/engine.js?v=belt-drive'
 import { cardanCoupling } from '../mechanics/cardan.js'
 import { movePose, turnPose, articulationDrive, jointBodies, linkageDrive, mechanismPoses, motionRange, suspensionDrive } from '../mechanics/linkage.js'
-import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=volvo-spur-gears'
-import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=torque-clutch'
+import { gearAt, gearRacks, portsFor, rotationPort, technic } from '../mechanics/catalog.js?v=linear-actuator-2'
+import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placement.js?v=linear-actuator-2'
 import { clutchTravel, selectorLinkages } from './selector-linkage.js?v=selector-drag'
 import { motorSupply } from '../mechanics/motors.js'
+import { linearActuatorMotion, actuatorPreview } from './actuator-motion.js'
+import { linearActuators, validActuatorExtension, validActuatorPhase } from '../mechanics/actuators.js'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
 export const snapGrid = 10
@@ -31,7 +33,9 @@ export function loadParts(document, models) {
     const old = !valid(entry.position, 3)
     const q = valid(entry.rotation, 4) && entry.rotation.some(Boolean) ? new Quaternion().fromArray(entry.rotation).normalize().toArray() : baseRotation
     const defaultY = models.get(design).bounds.max.y
-    records.push({ ...entry, id, design, position: old ? [index * 45, defaultY, 0] : entry.position, rotation: q })
+    const {previewActuatorRod,previewActuatorInput,actuatorExtension,actuatorInputPhase,...record}=entry
+    records.push({ ...record, id, design, position: old ? [index * 45, defaultY, 0] : entry.position, rotation: q,
+      ...(validActuatorExtension(design,actuatorExtension)&&{actuatorExtension}),...(validActuatorPhase(design,actuatorInputPhase)&&{actuatorInputPhase}) })
   }
   const exampleIds = ['drive', 'driven', 'bearing', 'bush', 'gear8', 'gear24']
   if (exampleIds.every(id => seen.has(id) && !valid(document.parts.find(entry => entry?.id === id)?.position, 3))) {
@@ -216,7 +220,7 @@ export function assemblyJoints(parts, assembly) {
     const female = assembly.port(socket.part, socket.port)
     return {
       a: shaft.part, b: socket.part, motion: fit.motion.rotation, group: male.group, restLength: male.restLength,
-      socketPort: socket.port,
+      socketPort: socket.port, shaftPort: shaft.port,
       ...(fit.motion.torqueLimit && { torqueLimit: fit.motion.torqueLimit }),
       detents: fit.motion.detents, roll: fit.placement.roll,
       shaftLine: portLine(byId.get(shaft.part), male),
@@ -235,7 +239,7 @@ export function rotationMotion(selected, parts, assembly, linkage = linkedSelect
     const motion = rotationMotion(output.socket.part, parts, assembly)
     const supply = motorSupply(motor, parts)
     return motion && { ...motion, kind: 'motor', motor: selected, supply,
-      playback: supply.speed * 180 / Math.PI, periodic: true, range: [0, 360] }
+      playback: supply.speed * 180 / Math.PI, periodic: !motion.actuators, range: motion.actuators ? motion.range : [0, 360] }
   }
   const selector = linkage?.motion(selected)
   if (selector) return { ...selector, ok: true, range: motionRange(selector), meshes: [] }
@@ -244,6 +248,7 @@ export function rotationMotion(selected, parts, assembly, linkage = linkedSelect
   const joints = assemblyJoints(parts, assembly)
   const graph = jointBodies(byId.keys(), joints)
   const gears = gearPoses(parts)
+  if (linearActuators[driver?.design]) return linearActuatorMotion(selected, parts, joints)
   const engine = engineDrive(selected, byId, graph, gears, joints, assembly.belts)
   if (engine || !driver) return engine
   const ports = portsFor(driver.design)
@@ -284,6 +289,8 @@ export function rotationMotion(selected, parts, assembly, linkage = linkedSelect
     })
     rotation.belts = rotation.belts.filter(belt => belt.record)
   }
+  const actuator = linearActuatorMotion(selected, parts, joints, rotation)
+  if (actuator) return actuator
   const rotateGear = id => {
     const gear = gears.find(item => item.part === id)
     return rotationalDrive(id, byId.keys(), spinJoints, gears, { start: gear.center, axis: gear.axis }, couplings, assembly.belts)
@@ -311,7 +318,7 @@ export function rotationPoses(parts, motion, angle, axis) {
   }
   const treads = (motion.tracks ?? []).flatMap(track =>
     trackPoses(track, motion.spins.get(track.drives[0].wheel.id), angle))
-  return treads.concat(parts.flatMap(part => {
+  const poses = treads.concat(parts.flatMap(part => {
     const spin = motion.spins.get(part.id)
     const cross = motion.cardans?.get(part.id)
     if (!spin && !cross) return []
@@ -326,6 +333,7 @@ export function rotationPoses(parts, motion, angle, axis) {
       rotation: new Quaternion().fromArray(part.rotation).premultiply(turn).toArray(),
     }]
   }))
+  return motion.actuators ? actuatorPreview(parts, motion, poses, angle) : poses
 }
 
 export function hingeMotion(selected, parts, links, chosen) {
