@@ -1,3 +1,4 @@
+import {stepForCallout,repeatedArtwork} from './instruction-study.js?v=recognition-v9'
 import {rankModels,prepareModelReferences} from './instruction-model-match.js?v=recognition-v8'
 // Page text locates the callouts. Compare the composited part artwork with
 // labeled drawings from the illustrated inventory of the same set.
@@ -70,7 +71,7 @@ function inventoryCaptions(elements, quantities) {
         distance = score
       }
     }
-    return closest ? { ...element, box: closest.box } : element
+    return closest ? { ...element, box: closest.box, quantity:Number.parseInt(closest.text,10) } : element
   })
 }
 
@@ -292,7 +293,7 @@ function extract({ bitmap, geometry, labels, inventory }) {
     candidates.push(...anchors(missing, fallback, readInventory).map(part => ({ ...part, embedded: false })))
   }
   assignBadges(candidates, geometry.badges ?? [])
-  return candidates.flatMap(({ box, caption, embedded, badge }) => {
+  const output=candidates.flatMap(({ box, caption, embedded, badge }) => {
     const neighbors = candidates.map(part => part.box).filter(other => other !== box &&
       widthOf(other) * heightOf(other) < .65 * widthOf(box) * heightOf(box) && overlaps(other, box))
     const sample = feature(raster, box, neighbors)
@@ -302,8 +303,12 @@ function extract({ bitmap, geometry, labels, inventory }) {
     const coordinates = [box[0] - 1.5, box[1] - 1.5, box[2] + 1.5, box[3] + 1.5]
     const [x, y, right, bottom] = coordinates.map((value, index) =>
       Math.max(0, Math.min(10000, Math.round(value * 10000 / (index % 2 ? height : width)))))
-    return [{ ...sample, item, embedded, badge, region: [x, y, right - x, bottom - y] }]
+    const region=[x,y,right-x,bottom-y]
+    const count=quantity.test(caption.text)?Number.parseInt(caption.text,10):caption.quantity??null
+    return [{ ...sample, item, embedded, badge, region,quantity:count,kind:readInventory?'inventory':'callout',step:readInventory?null:stepForCallout(region,geometry.stepLabels??[]) }]
   })
+  if(!inventory){const boxes=output.map(s=>s.region);for(const sample of output)if(sample.kind==='callout')sample.repeat=repeatedArtwork(sample.region,geometry.imageObjects??[],boxes)}
+  return output
 }
 
 function pixelDistance(a, b) {
