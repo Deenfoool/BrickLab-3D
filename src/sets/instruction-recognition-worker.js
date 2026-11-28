@@ -58,21 +58,26 @@ function anchors(captions, images, inventory) {
   })
 }
 
-function inventoryCaptions(elements, quantities) {
-  return elements.map(element => {
-    const [x, y] = element.box
-    let closest, distance = Infinity
-    for (const quantity of quantities) {
-      const dx = Math.abs(quantity.box[0] - x), dy = y - quantity.box[1]
-      if (dx > 3 || dy < 3 || dy > 15 || quantity.box[3] > y + 2) continue
-      const score = dx * 2 + dy
-      if (score < distance) {
-        closest = quantity
-        distance = score
-      }
-    }
-    return closest ? { ...element, box: closest.box, quantity:Number.parseInt(closest.text,10) } : element
-  })
+export function inventoryCaptions(elements,quantities){
+ const pairs=[]
+ for(const [i,element] of elements.entries())for(const [j,quantity] of quantities.entries()){
+  const [x,y]=element.box,dx=Math.abs(quantity.box[0]-x),dy=y-quantity.box[1]
+  if(dx>3||dy<3||dy>15||quantity.box[3]>y+2)continue
+  pairs.push({i,j,score:dx*2+dy})
+ }
+ const used=new Set(),assigned=new Map()
+ for(const {i,j,score} of pairs.sort((a,b)=>a.score-b.score)){
+  if(used.has(j)||assigned.has(i))continue
+  // A near tie is not evidence that the printed quantity belongs to this ID.
+  if(pairs.some(p=>p.i!==i&&p.j===j&&p.score-score<1.5&&p.score>=score))continue
+  used.add(j);assigned.set(i,j)
+ }
+ return elements.map((element,i)=>{
+  const j=assigned.get(i)
+  if(j===undefined)return element
+  const closest=quantities[j]
+  return {...element,box:closest.box,quantity:Number.parseInt(closest.text,10),quantityToken:closest}
+ })
 }
 
 function assignBadges(candidates, badges) {
@@ -270,21 +275,21 @@ function feature(raster, box, neighbors) {
 function extract({ bitmap, geometry, labels, inventory }) {
   const surface = new OffscreenCanvas(bitmap.width, bitmap.height)
   const ctx = surface.getContext('2d', { willReadFrequently: true })
-  ctx.drawImage(bitmap, 0, 0)
-  bitmap.close()
+  try{ctx.drawImage(bitmap,0,0)}finally{bitmap.close()}
   const pixels = ctx.getImageData(0, 0, surface.width, surface.height)
   const { width, height, words } = geometry
   const raster = { data: pixels.data, width: surface.width, height: surface.height,
     x: surface.width / width, y: surface.height / height }
-  const elements = words.filter(({ text }) => element.test(text) && Object.hasOwn(labels,text))
-  const quantities = words.filter(({ text }) => quantity.test(text))
+  const elements = words.filter(({ text }) => element.test(text) && Object.hasOwn(labels,text)).slice(0,300)
+  const quantities = words.filter(({ text }) => quantity.test(text)).slice(0,300)
   const labeled = inventoryCaptions(elements, quantities)
   const inventoryPage = labeled.filter((entry, i) => entry !== elements[i]).length >= 2
   const readInventory = inventory || inventoryPage
-  const captions = readInventory ? labeled : quantities.length ? quantities : elements
+  const paired=new Set(labeled.map(c=>c.quantityToken).filter(Boolean))
+  const captions=readInventory?labeled:[...labeled,...quantities.filter(q=>!paired.has(q))]
   if (inventory && !labeled.length) return []
   const images = geometry.images.filter(box => widthOf(box) >= 5 && heightOf(box) >= 3 &&
-    widthOf(box) < .45 * width && heightOf(box) < .35 * height)
+    widthOf(box) < .45 * width && heightOf(box) < .35 * height).slice(0,4000)
   const candidates = anchors(captions, images, readInventory)
   const assigned = new Set(candidates.map(candidate => candidate.caption))
   if (assigned.size < captions.length) {
@@ -297,12 +302,13 @@ function extract({ bitmap, geometry, labels, inventory }) {
     const neighbors = candidates.map(part => part.box).filter(other => other !== box &&
       widthOf(other) * heightOf(other) < .65 * widthOf(box) * heightOf(box) && overlaps(other, box))
     const sample = feature(raster, box, neighbors)
-    if (!sample && (inventory || !readInventory)) return []
+    if(!sample&&inventory)return []
     const item = Object.hasOwn(labels,caption.text) ? [...labels[caption.text],caption.text] : undefined
     if (inventory) return [{ ...sample, item, embedded, badge }]
     const coordinates = [box[0] - 1.5, box[1] - 1.5, box[2] + 1.5, box[3] + 1.5]
     const [x, y, right, bottom] = coordinates.map((value, index) =>
       Math.max(0, Math.min(10000, Math.round(value * 10000 / (index % 2 ? height : width)))))
+    if(right<=x||bottom<=y)return []
     const region=[x,y,right-x,bottom-y]
     const count=quantity.test(caption.text)?Number.parseInt(caption.text,10):caption.quantity??null
     return [{ ...sample, item, embedded, badge, region,quantity:count,kind:readInventory?'inventory':'callout',step:readInventory?null:stepForCallout(region,geometry.stepLabels??[]) }]

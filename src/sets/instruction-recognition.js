@@ -2,7 +2,7 @@ import {boundedTask} from './instruction-task.js?v=recognition-v9-polish'
 import {pageCallouts,visualKeyForSample} from './instruction-study.js?v=recognition-v9'
 import {lookupElement} from '../editor/element-index.js?v=catalog-engine-1'
 import {createElementRecovery} from './instruction-element-recovery.js?v=recognition-v8'
-import { createOcrWorker } from './ocr.js'
+import { createOcrWorker } from './ocr.js?v=recognition-v9-polish'
 import {createInstructionPdfReader} from './instruction-pdf.js?v=recognition-v9'
 import {canonicalInstructionUrl} from './instruction-url.js'
 import {normalizeCaption,isQuantity,isElement,normalizedCaptions,mergeCaptions} from './instruction-text.js?v=smart-highlight-1'
@@ -92,7 +92,7 @@ export function createInstructionRecognition(reader, set, signal) {
   function analyze(action, input, transfer = [], request=signal) {
     try{signal.throwIfAborted();request.throwIfAborted()}catch(error){for(const item of transfer)item.close?.();throw error}
     if (!worker) {
-      worker = new Worker(new URL('./instruction-recognition-worker.js?v=recognition-v9', import.meta.url), { type: 'module' })
+      worker = new Worker(new URL('./instruction-recognition-worker.js?v=recognition-v9-polish', import.meta.url), { type: 'module' })
       worker.onmessage = ({ data }) => {
         const job = jobs.get(data.id)
         jobs.delete(data.id)
@@ -174,7 +174,7 @@ export function createInstructionRecognition(reader, set, signal) {
     }
     let samples=await extractSamples()
     // Partial text layers: rerun on raster evidence if the first pass missed captions.
-    const expected=geometry.words.filter(({text})=>mode?isElement(text)&&Object.hasOwn(labels,text):isQuantity(text)).length
+    const expected=geometry.words.filter(({text})=>mode?isElement(text)&&Object.hasOwn(labels,text):isQuantity(text)||isElement(text)&&Object.hasOwn(labels,text)).length
     if(!usedOcr&&samples.length<expected&&samples.length<Math.max(2,expected*.8)){
       await recognize()
       const recovered=await extractSamples()
@@ -272,14 +272,14 @@ export function createInstructionRecognition(reader, set, signal) {
       book.inventoryPromise = undefined
       throw error
     })
-    let inventoryTemplates=[]
-    try{inventoryTemplates=await boundedTask(book.inventoryPromise,request,45000)}catch{request.throwIfAborted()}
+    let inventoryTemplates=[],inventoryComplete=true
+    try{inventoryTemplates=await boundedTask(book.inventoryPromise,request,45000)}catch{request.throwIfAborted();inventoryComplete=false}
     request.throwIfAborted()
     // A personal PDF can belong to a different edition or set.
     const templates=inventoryTemplates??[]
     const regions=templates.length?await analyze('rank',{samples,templates},[],request):direct
     request.throwIfAborted()
-    if(regions.length===samples.length){if(regions.length)void cache(pageKey,{regions,callouts});return regions}
+    if(regions.length===samples.length){if(regions.length&&inventoryComplete)void cache(pageKey,{regions,callouts});return regions}
     // Only canonical books may use the selected set as a complete candidate universe.
     // A user-supplied PDF may describe a different model.
     if(typeof source!=='string'||!canonicalInstructionUrl(source))return regions

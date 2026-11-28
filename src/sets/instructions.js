@@ -1,5 +1,5 @@
 import {reconcileCallouts} from './instruction-study.js?v=recognition-v9'
-import {createPageStudy} from './instruction-study-ui.js?v=recognition-v9'
+import {createPageStudy} from './instruction-study-ui.js?v=recognition-v9-polish'
 import {instructionEvent} from './instruction-events.js'
 import {mountInstructionOffer} from './instruction-offer.js?v=welcome-1'
 import { node, control, setStrings } from './catalog.js?v=ducati-instructions-1'
@@ -9,7 +9,7 @@ import {
   instructionPagePreview,
   instructionSources,
 } from './instruction-sources.js?v=ducati-instructions-1'
-import { addInstructionParts, instructionPartRegions, resetInstructionParts } from './instruction-parts.js?v=recognition-v9'
+import { addInstructionParts, instructionPartRegions, resetInstructionParts } from './instruction-parts.js?v=recognition-v9-polish'
 import { canonicalInstructionUrl } from './instruction-url.js'
 import { createInstructionPdfReader } from './instruction-pdf.js?v=recognition-v9'
 
@@ -131,7 +131,7 @@ export function mountInstructions(
   actions.id = 'editor-instruction-actions'
   const preview = node('div', undefined, 'instruction-preview')
   const find=(...args)=>{instructionEvent(progress.set.number,'hint_use');return findPart?.(...args)}
-  const study=createPageStudy({preview,inventory:progress.set.inventory,language,find,describe:describePart,readUsage:readInventoryUsage,onRegions:regions=>{resetInstructionParts(preview);addInstructionParts(preview,regions,{language,describe:describePart,find})}})
+  const study=createPageStudy({preview,inventory:progress.set.inventory,language,find,describe:describePart,readUsage:readInventoryUsage,onRegions:regions=>addInstructionParts(preview,regions,{language,describe:describePart,find,replace:true})})
   const previewStatus = node('p')
   previewStatus.setAttribute('role', 'status')
   const recognitionStatus = node('p', undefined, 'instruction-recognition-status')
@@ -260,6 +260,7 @@ export function mountInstructions(
     previewRequest?.abort()
     previewRequest = new AbortController()
     const signal = previewRequest.signal
+    resetInstructionParts(preview)
     preview.replaceChildren()
     study.reset(signal)
     preview.hidden = true

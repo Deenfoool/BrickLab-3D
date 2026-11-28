@@ -17,7 +17,7 @@ function pageState(preview){
  const tooltip=document.createElement('span')
  tooltip.className='instruction-part-label';tooltip.hidden=true;tooltip.setAttribute('aria-hidden','true')
  preview.append(tooltip)
- const state={surface,tooltip,keys:new Set(),active:null,readable:null}
+ const state={surface,tooltip,keys:new Map(),active:null,readable:null}
  states.set(preview,state);return state
 }
 function highlight(button,shape){
@@ -30,22 +30,29 @@ function highlight(button,shape){
  svg.classList.add('instruction-part-silhouette')
  path.setAttribute('d',shape.path);svg.append(path);button.append(svg)
 }
-export function addInstructionParts(preview, regions, { language, describe, find }) {
- if(!regions.length)return
+export function addInstructionParts(preview, regions, { language, describe, find, replace=false }) {
+ if(!regions.length&&!replace)return
  const state=pageState(preview),tooltip=state.tooltip
+ if(replace){
+  const desired=new Set(regions.filter(Array.isArray).map(r=>JSON.stringify(r.slice(0,7))))
+  for(const [key,button] of state.keys)if(!desired.has(key)){
+   if(state.active===button){state.active=null;tooltip.hidden=true}
+   button.remove();state.keys.delete(key)
+  }
+ }
  preview.style.isolation='isolate'
  for(const region of regions){
   if(!Array.isArray(region))continue
   const [x,y,width,height,partNum,colorId,elementId]=region
   if(![x,y,width,height].every(Number.isFinite)||x<0||y<0||width<=0||height<=0||x+width>10000||y+height>10000||typeof partNum!=='string'||!partNum)continue
-  const key=JSON.stringify(region.slice(0,7));if(state.keys.has(key))continue;state.keys.add(key)
-  const button=document.createElement('button')
+  const key=JSON.stringify(region.slice(0,7));if(state.keys.has(key))continue
+  const button=document.createElement('button');state.keys.set(key,button)
   const name=describe?.(partNum,colorId),label=[partNum,elementId&&'LEGO '+elementId,name].filter(Boolean).join(' · ')
   button.className='instruction-part-region';button.type='button'
   button.setAttribute('aria-label',(language==='ru'?'Найти деталь ':'Find part ')+label)
   button.dataset.partNum=partNum;button.dataset.regionKey=region.slice(0,4).join('/');if(elementId)button.dataset.elementId=elementId
   Object.assign(button.style,{left:x/100+'%',top:y/100+'%',width:width/100+'%',height:height/100+'%',zIndex:String(Math.max(1,1000-Math.floor(width*height/100000)))})
-  let prepared=false
+  let prepared=false,pulseTimer
   function showLabel(){
    if(!prepared){
     prepared=true
@@ -74,7 +81,7 @@ export function addInstructionParts(preview, regions, { language, describe, find
   button.addEventListener('pointerleave',()=>{if(!button.matches(':focus-visible'))hideLabel()})
   button.addEventListener('focus',showLabel);button.addEventListener('blur',hideLabel)
   button.addEventListener('keydown',e=>{if(e.key==='Escape'){hideLabel();button.blur()}})
-  button.addEventListener('click',()=>{showLabel();button.classList.remove('is-selected');void button.offsetWidth;button.classList.add('is-selected');find(partNum,colorId,elementId)})
+  button.addEventListener('click',()=>{showLabel();button.classList.remove('is-selected');void button.offsetWidth;button.classList.add('is-selected');clearTimeout(pulseTimer);pulseTimer=setTimeout(()=>button.classList.remove('is-selected'),550);find(partNum,colorId,elementId)})
   button.addEventListener('animationend',()=>button.classList.remove('is-selected'))
   preview.append(button)
  }

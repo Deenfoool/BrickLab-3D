@@ -10,9 +10,10 @@ export function createPageStudy({preview,inventory,language,find,describe,readUs
  const known=new Map(inventory.filter(i=>!i.spare).map(i=>[identityKey(i.partNum,i.colorId),i]))
  function clearPin(){pin?.remove();pin=null}
  function focusRegion(region){
+  clearPin()
   const key=regionKey(region)
   const target=[...preview.querySelectorAll('.instruction-part-region')].find(el=>el.dataset.regionKey===key)
-  if(target)target.focus({preventScroll:true})
+  if(target){target.focus({preventScroll:true});target.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'})}
   else mark(region,tr('Область детали','Part area'))
  }
  function mark(box,label){
@@ -60,6 +61,7 @@ export function createPageStudy({preview,inventory,language,find,describe,readUs
   const identified=rows.filter(r=>r.partNum).reduce((s,r)=>s+r.regions.length,0),all=rows.reduce((s,r)=>s+r.regions.length,0)
   summary.textContent=tr('Детали страницы','Page parts')+' · '+identified+'/'+all
   if(!root.open)return
+  const scroll=content.scrollTop
   content.replaceChildren()
   content.append(node('small',tr('Количество — из распознанных подписей PDF. На сцене — по всему набору, не по текущему шагу.','Quantities are from PDF captions. Scene counts cover the full set, not just this step.')))
   const groups=new Map()
@@ -86,6 +88,7 @@ export function createPageStudy({preview,inventory,language,find,describe,readUs
    }
   }
   if(editable&&Object.keys(changes).length)content.append(btn(tr('Сбросить исправления страницы','Reset page corrections'),()=>{changes=Object.create(null);persist()}))
+  content.scrollTop=scroll
  }
  root.addEventListener('toggle',()=>{if(root.open)render()})
  return {root,reset(nextRequest){
