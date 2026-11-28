@@ -58,6 +58,7 @@ export function createDiscovery({root,store=null,publicBuilds=false,catalog=load
  const {parts,sets}=catalog
  // Index useful named pages first, not thousands of near-empty variants.
  const partIndex=[...parts.values()].filter(p=>p.group&&p.ru&&p.en).slice(0,500)
+ const indexedPartIds=new Set(partIndex.map(p=>p.id))
  const notes=()=>readReleaseNotes(root)
  const safeBuild=b=>b&&uuid.test(b.id)&&clean(b.title,160)?{id:b.id,title:clean(b.title,160),description:clean(b.description,1000),author:clean(b.author,80),authorId:b.authorId,partCount:Number.isSafeInteger(b.partCount)&&b.partCount>=0?b.partCount:0}:null
  async function publicList(){
@@ -69,7 +70,7 @@ export function createDiscovery({root,store=null,publicBuilds=false,catalog=load
   if(path==='/sitemap.xml'){
    let builds=[]
    try{builds=await publicList()}catch(error){logger.error('SEO public list unavailable:',error.code||error.name);return {status:503,type:'text/plain; charset=utf-8',body:'Sitemap temporarily unavailable'}}
-   return {type:'application/xml; charset=utf-8',body:'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+['/','/editor','/instructions','/parts','/mechanics',...fixed,...sets.keys()].filter(p=>p.startsWith('/')).concat([...sets.keys()].map(id=>'/sets/'+id),partIndex.map(p=>'/parts/'+p.id),builds.map(b=>'/builds/'+b.id)).map(p=>'<url><loc>'+esc(siteOrigin+p)+'</loc></url>').join('')+'</urlset>'}
+   return {type:'application/xml; charset=utf-8',body:'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+['/','/editor','/instructions','/parts','/mechanics',...fixed.filter(p=>p!=='/builds'||builds.length)].concat([...sets.keys()].map(id=>'/sets/'+id),partIndex.map(p=>'/parts/'+p.id),builds.map(b=>'/builds/'+b.id)).map(p=>'<url><loc>'+esc(siteOrigin+p)+'</loc></url>').join('')+'</urlset>'}
   }
   if(path==='/sets')return html(path,'Каталог инструкций LEGO','Наборы с известными источниками инструкций в BrickLab.',grid([...sets.values()].map(s=>card('/sets/'+s.id,s.name+' · '+s.id,s.volumes+' том(а) инструкции')))+cta('/#sets','Открыть каталог редактора'))
   if(path==='/parts')return html(path,'Библиотека деталей LEGO Technic и System','Найдите цифровые детали по артикулу и названию.',grid(partIndex.map(p=>card('/parts/'+p.id,p.ru+' · '+p.id,p.family+' / '+p.group)))+cta('/#library','Вся библиотека'))
@@ -77,19 +78,20 @@ export function createDiscovery({root,store=null,publicBuilds=false,catalog=load
   if(path==='/learn')return html(path,'Инженерные эксперименты и руководства','Практические материалы о цифровой сборке и работе механизмов.',grid(Object.entries(articles).map(([id,a])=>card('/learn/'+id,a.title,a.intro))))
   if(path==='/en')return html(path,'Online 3D brick builder and mechanical playground','BrickLab 3D is an independent browser-based editor for building models, exploring supported mechanisms and following instructions.',grid([card('/editor','Build models','Use Technic and System parts, placement tools and groups.'),card('/instructions','Follow instructions','Browse available sets and use part hints where supported.'),card('/mechanics','Explore mechanics','Experiment with gears, shafts, piston engines and test drives; simulation is approximate.')])+cta('/#projects','Open BrickLab'),{lang:'en'})
   if(path==='/builds'){
-   const builds=await publicList()
+   let builds=[]
+   try{builds=await publicList()}catch(error){logger.error('SEO public list unavailable:',error.code||error.name);return {status:503,type:'text/plain; charset=utf-8',body:'Community temporarily unavailable'}}
    return html(path,'Публичные сборки BrickLab','Работы участников, опубликованные в сообществе.',grid(builds.map(b=>card('/builds/'+b.id,b.title,b.description)))+cta('/#community','Открыть сообщество'),{noindex:!publicBuilds||!builds.length})
   }
   const m=/^\/(sets|parts|builds|learn)\/([^/]+)$/.exec(path)
   if(!m)return null
   const [,kind,id]=m
   if(kind==='sets'&&sets.has(id)){
-   const s=sets.get(id),title='Инструкция LEGO '+id.split('-')[0]+' — '+s.name
+   const s=sets.get(id),number=id.split('-')[0],title='Инструкция LEGO '+number+(s.name==='LEGO '+number?'':' — '+s.name)
    return html(path,title,'Сборка набора '+s.name+' ('+id+') в виртуальном редакторе BrickLab.',grid([card('/instructions','Инструкция','Томов: '+s.volumes+(s.pages?' · страниц: '+s.pages:'')),card('/sets','Данные набора',(s.year?'Год: '+s.year+'. ':'')+(s.count?'Деталей по локальной описи: '+s.count+'. ':'')+'Номер: '+id),card('/parts','Библиотека','Ищите детали по артикулу. Точность распознавания зависит от инструкции.')])+cta('/?set='+encodeURIComponent(id)+'#sets','Найти набор в редакторе'))
   }
   if(kind==='parts'&&parts.has(id)){
    const p=parts.get(id)
-   return html(path,p.ru+' — деталь '+id,p.en+' · '+p.family+'. Артикул '+id+'.',grid([card('/parts','Категория',p.group||p.family),card('/editor','Использование в редакторе','Выберите деталь по артикулу. Наличие геометрии не гарантирует поддержку всех соединений.')])+cta('/?part='+encodeURIComponent(id)+'#library','Найти деталь'),{noindex:!partIndex.some(x=>x.id===id)})
+   return html(path,p.ru+' — деталь '+id,p.en+' · '+p.family+'. Артикул '+id+'.',grid([card('/parts','Категория',p.group||p.family),card('/editor','Использование в редакторе','Выберите деталь по артикулу. Наличие геометрии не гарантирует поддержку всех соединений.')])+cta('/?part='+encodeURIComponent(id)+'#library','Найти деталь'),{noindex:!indexedPartIds.has(id)})
   }
   if(kind==='learn'&&Object.hasOwn(articles,id)){const a=articles[id];return html(path,a.title,a.intro,grid(a.sections.map(([h,t])=>card('/mechanics',h,t)))+cta('/#examples','Открыть примеры'))}
   if(kind==='builds'&&publicBuilds&&store&&uuid.test(id)){
