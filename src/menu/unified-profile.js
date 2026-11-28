@@ -1,3 +1,5 @@
+import {toLiveBlocks,compactLiveBlocks} from './workshop-live-model.js'
+import {renderWorkshopAwards} from './workshop-award-widgets.js?v=workshop-live-1'
 import {renderWorkshopLayoutEditor} from './workshop-layout-editor.js?v=layout-studio-2'
 import {planPortfolioGrid,placePortfolioBlock} from './portfolio-layout-model.js'
 import {metricItems} from './workshop-metrics-model.js'
@@ -26,13 +28,13 @@ function block(title,key){const n=ui('section','portfolio-block portfolio-'+key)
 const safePublicId=id=>typeof id==='string'&&portfolioUuid.test(id)
 function publicImage(id,kind,url){const path='/api/community/profile/'+id+'/'+kind;return safePublicId(id)&&url===path?path:null}
 function ownMedia(kind,url){return typeof url==='string'&&new RegExp('^/api/profile/'+kind+'\\?v=[0-9a-f-]{36}$','i').test(url)?url:null}
-export function renderUnifiedHero({lang,identity,owner=false,actions=[],metrics=[],metricCards=[]}){
+export function renderUnifiedHero({lang,identity,owner=false,actions=[],metrics=[],metricCards=[],coverControls}){
  const hero=ui('section','workshop-hero cover-'+(['blueprint','graphite','amber'].includes(identity.coverTheme)?identity.coverTheme:'blueprint'))
  const theme=identity.backgroundTheme,cover=ui('div','workshop-cover'),emblem=ui('div','workshop-emblem','BRICKLAB / WORKSHOP');emblem.prepend(icon('layers'));cover.append(emblem)
  const plate=themePlate(theme);if(plate)cover.append(plate)
  const avatarUrl=owner?ownMedia('avatar',identity.avatarUrl):publicImage(identity.id,'avatar',identity.avatarUrl),coverUrl=owner?ownMedia('cover',identity.coverUrl):publicImage(identity.id,'cover',identity.coverUrl)
  if(coverUrl){const img=ui('img','profile-cover-image');img.src=coverUrl;img.alt='';cover.prepend(img)}
- mountThemeCover(cover,theme,{custom:!!coverUrl});applySignature(hero,theme);applyAchievementAppearance(hero,identity.achievementStyle)
+ mountThemeCover(cover,theme,{custom:!!coverUrl});if(owner&&coverControls)cover.append(coverControls);applySignature(hero,theme);applyAchievementAppearance(hero,identity.achievementStyle)
  const body=ui('div','workshop-hero-inner'),person=ui('div','workshop-identity'),avatar=ui('div','workshop-avatar',Array.from(identity.displayName||'?').slice(0,2).join('').toUpperCase()),name=ui('div')
  if(avatarUrl){const img=ui('img','profile-avatar-image');img.src=avatarUrl;img.alt='';avatar.replaceChildren(img)}
  name.append(ui('h2',null,identity.displayName));if(identity.username)name.append(ui('p','account-muted','@'+identity.username));if(identity.subtitle)name.append(ui('p','account-muted',identity.subtitle));const badge=themeBadge(theme,lang);if(badge)name.append(badge);if(identity.plus===true)name.append(commerceBadge('plus'));const support=productById(identity.supportBadge);if(support?.kind==='badge')name.append(commerceBadge(support.id))
@@ -59,29 +61,30 @@ function buildTile(b,t,onOpen,makeArt){
  if(onOpen)info.append(action(t.open,()=>onOpen(b)));else info.append(anchor(t.open,'#community/build/'+b.id))
  card.append(art,info);return card
 }
-export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeBuildCard,makeFeaturedArt,privateCalendar}){
+export function setLiveWidgetRect(node,rect){placePortfolioBlock(node,{row:rect.y+1,column:rect.x+1,span:rect.w});node.setAttribute('data-layout-height',String(rect.h));node.style?.setProperty?.('--widget-height',String(rect.h))}
+export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeBuildCard,makeFeaturedArt,privateCalendar,live=false,editing=false,metricCards=[]}){
  const t=tr(lang),root=ui('div','portfolio-blocks portfolio-layout-grid'),rendered=[],valid=builds.filter(b=>safePublicId(b.id)).map(b=>profile?.visible===false?{...b,imageCount:0}:b),p=filterPortfolio(profile?.portfolio,valid.map(b=>b.id))
- const byId=new Map(valid.map(b=>[b.id,b]))
- for(const item of p.blocks){
+ const byId=new Map(valid.map(b=>[b.id,b])),layout=live?toLiveBlocks(p.blocks):p.blocks
+ if(live)root.classList.add('workshop-live-grid')
+ for(const item of layout){
   const {key,visible}=item
-  if(!visible&&!owner)continue
-  // Owner sees the exact public block selection, not an invented public record.
-  if(!visible)continue
-  const c=block(t[key],key)
+  if(!visible&&!editing)continue
+  const title=key==='metrics'?(lang==='ru'?'Показатели мастерской':'Workshop metrics'):t[key],c=block(title,key)
+  if(live){c.setAttribute('data-widget',key);c.setAttribute('data-widget-visible',String(visible));c.setAttribute('data-widget-locked',String(!!item.locked))}
+  if(!visible&&editing)c.append(ui('p','account-muted',lang==='ru'?'Скрыт от посетителей':'Hidden from visitors'))
+  else{
   if(key==='featured'){
-   const b=byId.get(p.featured);if(b)c.append(buildTile(b,t,onOpen,makeFeaturedArt));else if(owner)c.append(ui('p','account-muted',t.noPin));else continue
+   const b=byId.get(p.featured);if(b)c.append(buildTile(b,t,onOpen,makeFeaturedArt));else if(owner||live)c.append(ui('p','account-muted',owner?t.noPin:t.empty));else continue
   }else if(key==='publications'){
    const grid=ui('div','portfolio-build-grid')
    for(const b of valid)grid.append(makeBuildCard?makeBuildCard(b):buildTile(b,t,onOpen))
    if(!valid.length)c.append(ui('p','account-muted',t.empty));else c.append(grid)
   }else if(key==='collections'){
-   if(!p.collections.length){if(!owner)continue;c.append(ui('p','account-muted',t.noCollections))}
+   if(!p.collections.length){if(!owner&&!live)continue;c.append(ui('p','account-muted',t.noCollections))}
    for(const group of p.collections){const box=ui('section','portfolio-collection'),grid=ui('div','portfolio-collection-links');box.append(ui('h3',null,group.title));for(const id of group.ids){const b=byId.get(id);if(b)grid.append(anchor(b.title,'#community/build/'+b.id))}box.append(grid);c.append(box)}
   }else if(key==='awards'){
-   const awards=profile?.awards??[]
-   for(const id of awards){const a=achievementById(id,profile?.achievementDefinitions??[]);if(!a)continue;const badge=ui('div','portfolio-earned rarity-'+a.rarity);badge.append(icon(a.icon),ui('strong',null,a[lang==='ru'?'ru':'en']),ui('span','account-muted',a.xp+' XP'));c.append(badge)}
-   if(awards.includes('firstBuilder')){const badge=ui('div','portfolio-earned');badge.append(icon('icon-trophy'),ui('strong',null,'First Builder'),ui('span','account-muted',lang==='ru'?'Первая подарочная сборка':'First gifted build'));c.append(badge)}
-   if(!awards.some(a=>achievementById(a,profile?.achievementDefinitions??[])||a==='firstBuilder'))c.append(ui('p','account-muted',t.noAwards))
+   const awards=profile?.awards??[],showcase=renderWorkshopAwards({lang,ids:awards,definitions:profile?.achievementDefinitions??[],dates:profile?.achievementDates??{},editing})
+   if(showcase.children[0].children.length)c.append(showcase);else c.append(ui('p','account-muted',t.noAwards))
   }else if(key==='activity'){
    const days=valid.filter(b=>typeof b.publishedAt==='string').map(b=>({day:b.publishedAt.slice(0,10),count:1}))
    c.append(activityCalendar(lang,days,{publicOnly:true}))
@@ -90,11 +93,14 @@ export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeB
    const vals=[[t.builds,stats?.builds??valid.length],[t.parts,valid.reduce((n,b)=>n+(Number.isSafeInteger(b.partCount)?b.partCount:0),0)]]
    if(stats)vals.push([t.likes,stats.likes],[t.downloads,stats.downloads],[t.score,stats.score])
    for(const [label,value] of vals){const m=ui('div','workshop-metric');m.append(ui('span',null,label),ui('strong',null,value));grid.append(m)}c.append(grid)
-  }else if(key==='about'){if(!profile?.bio)continue;c.append(ui('p','portfolio-about',profile.bio))}
+  }else if(key==='about'){if(!profile?.bio&&!live)continue;c.append(ui('p','portfolio-about',profile?.bio|| (lang==='ru'?'Описание пока не добавлено.':'No biography yet.')))}
   else if(key==='followers'){c.append(ui('strong','portfolio-follower-count',profile?.followers??0))}
+  else if(key==='metrics'){c.append(renderMetricGrid(metricCards))}
+  }
+  if(live){const body=ui('div','workshop-widget-body');body.append(...Array.from(c.children).slice(1));const heading=c.children[0];c.replaceChildren(heading,body)}
   root.append(c);rendered.push({item,node:c})
  }
- const positions=planPortfolioGrid(rendered.map(x=>x.item));rendered.forEach((entry,i)=>placePortfolioBlock(entry.node,positions[i]))
+ if(live){const positions=editing?layout:compactLiveBlocks(layout.map(b=>({...b,locked:b.locked&&b.visible})));const byKey=new Map(positions.map(b=>[b.key,b.rect]));for(const {item,node} of rendered){const rect=byKey.get(item.key);setLiveWidgetRect(node,rect)}}else{const positions=planPortfolioGrid(rendered.map(x=>x.item));rendered.forEach((entry,i)=>placePortfolioBlock(entry.node,positions[i]))}
  if(owner&&Array.isArray(privateCalendar)){const c=block(t.activity+' · '+(lang==='ru'?'личный':'private'),'private-activity');c.append(activityCalendar(lang,privateCalendar));root.append(c)}
  return root
 }
