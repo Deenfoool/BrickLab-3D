@@ -1,6 +1,7 @@
 // Page text locates the callouts. Compare the composited part artwork with
 // labeled drawings from the illustrated inventory of the same set.
-const quantity = /^[1-9]\d{0,2}[x×]$/i
+import {isQuantity,overlapFraction} from './instruction-text.js?v=smart-highlight-1'
+const quantity = {test:isQuantity}
 const element = /^\d{6,8}$/
 const size = 24
 const widthOf = box => box[2] - box[0]
@@ -18,6 +19,8 @@ function anchors(captions, images, inventory) {
           widthOf(box) <= widthOf(caption.box) + 3) continue
       if (dx <= 5 && dy >= -4 && dy <= (inventory ? 20 : 5)) {
         matches.push({ i, j, score: dx * 2 + Math.abs(dy) })
+      } else if (Math.abs((caption.box[0]+caption.box[2]-box[0]-box[2])/2)<=4 && dy>=-2 && dy<=(inventory?15:7)) {
+        matches.push({i,j,score:8+Math.abs(dy)+Math.abs((caption.box[0]+caption.box[2]-box[0]-box[2])/2)})
       }
     }
   }
@@ -46,6 +49,7 @@ function anchors(captions, images, inventory) {
         box[0] = Math.min(box[0], fragment[0])
         box[1] = Math.min(box[1], fragment[1])
         box[2] = Math.max(box[2], fragment[2])
+        box[3] = Math.max(box[3], fragment[3])
       }
     }
     return { caption: captions[i], box, embedded: true }
@@ -275,7 +279,7 @@ function extract({ bitmap, geometry, labels, inventory }) {
   const labeled = inventoryCaptions(elements, quantities)
   const inventoryPage = labeled.filter((entry, i) => entry !== elements[i]).length >= 2
   const readInventory = inventory || inventoryPage
-  const captions = readInventory ? labeled : quantities
+  const captions = readInventory ? labeled : quantities.length ? quantities : elements
   if (inventory && !labeled.length) return []
   const images = geometry.images.filter(box => widthOf(box) >= 5 && heightOf(box) >= 3 &&
     widthOf(box) < .45 * width && heightOf(box) < .35 * height)
@@ -292,7 +296,7 @@ function extract({ bitmap, geometry, labels, inventory }) {
       widthOf(other) * heightOf(other) < .65 * widthOf(box) * heightOf(box) && overlaps(other, box))
     const sample = feature(raster, box, neighbors)
     if (!sample && (inventory || !readInventory)) return []
-    const item = readInventory ? [...(labels[caption.text] ?? [null, null]), caption.text] : undefined
+    const item = Object.hasOwn(labels,caption.text) ? [...labels[caption.text],caption.text] : undefined
     if (inventory) return [{ ...sample, item, embedded, badge }]
     const coordinates = [box[0] - 1.5, box[1] - 1.5, box[2] + 1.5, box[3] + 1.5]
     const [x, y, right, bottom] = coordinates.map((value, index) =>
@@ -329,7 +333,7 @@ function shiftedViews(pixels) {
 function bestByItem(scores) {
   const items = new Map()
   for (const result of scores.sort((a, b) => a.score - b.score)) {
-    const key = result.reference.item.join('/')
+    const key = result.reference.item.slice(0,2).join('/')
     if (!items.has(key)) items.set(key, result)
   }
   return [...items.values()]
@@ -354,7 +358,7 @@ function badgeMatch(scores, sample) {
       (!second || second.score - first.score >= .022)) return first.reference.item
 }
 
-function rank({ samples, templates }) {
+export function rank({ samples, templates }) {
   return samples.flatMap(sample => {
     if (sample.item?.[0]) return [[...sample.region, ...sample.item]]
     if(!sample.pixels)return []
@@ -389,7 +393,7 @@ function rank({ samples, templates }) {
   })
 }
 
-self.onmessage = ({ data }) => {
+if(typeof self!=='undefined'&&typeof self.postMessage==='function')self.onmessage = ({ data }) => {
   const { id, action, input } = data
   try {
     self.postMessage({ id, value: action === 'extract' ? extract(input) : rank(input) })

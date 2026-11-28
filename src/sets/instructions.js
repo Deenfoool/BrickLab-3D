@@ -7,7 +7,7 @@ import {
   instructionPagePreview,
   instructionSources,
 } from './instruction-sources.js?v=ducati-instructions-1'
-import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=commerce-regions-1'
+import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=smart-highlight-1'
 import { canonicalInstructionUrl } from './instruction-url.js'
 import { createInstructionPdfReader } from './instruction-pdf.js?v=instruction-artwork-v5'
 
@@ -365,7 +365,7 @@ export function mountInstructions(
     recognitionStatus.textContent = ru ? 'Распознаём детали…' : 'Recognizing parts…'
     recognitionStatus.hidden = false
     try {
-      recognition ??= import('./instruction-recognition.js?v=ducati-instructions-1').then(module => {
+      recognition ??= import('./instruction-recognition.js?v=smart-highlight-1').then(module => {
         recognitionEngine = module.createInstructionRecognition(pdf, progress.set, signal)
         return recognitionEngine
       })

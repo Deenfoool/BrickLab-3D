@@ -116,7 +116,7 @@ function pdfWords(items, styles, viewport) {
   const words = new Map()
   const dimensions = new Map(), fragments=[]
   for (const item of items) {
-    const text = item.str?.trim()
+    const text = item.str?.trim().replace(/\s+/g,'')
     const isDimension = dimension.test(text) && item.height >= 5 && item.height <= 12
     if (!isDimension && !quantity.test(text) && !element.test(text) && !/^(?:\d{1,8}|[x×])$/i.test(text??'')) continue
     const [a, b, c, d, x, y] = item.transform

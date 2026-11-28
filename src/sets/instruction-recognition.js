@@ -1,6 +1,5 @@
 import { createOcrWorker } from './ocr.js'
-const quantity = /^[1-9]\d{0,2}[x×]$/i
-const element = /^\d{6,8}$/
+import {normalizeCaption,isQuantity,isElement,normalizedCaptions,mergeCaptions} from './instruction-text.js?v=smart-highlight-1'
 let database
 
 function openCache() {
@@ -79,7 +78,7 @@ export function createInstructionRecognition(reader, set, signal) {
   function analyze(action, input, transfer = []) {
     signal.throwIfAborted()
     if (!worker) {
-      worker = new Worker(new URL('./instruction-recognition-worker.js?v=instruction-artwork-v5', import.meta.url), { type: 'module' })
+      worker = new Worker(new URL('./instruction-recognition-worker.js?v=smart-highlight-1', import.meta.url), { type: 'module' })
       worker.onmessage = ({ data }) => {
         const job = jobs.get(data.id)
         jobs.delete(data.id)
@@ -96,13 +95,13 @@ export function createInstructionRecognition(reader, set, signal) {
   }
 
   function currentBook(source, pages) {
-    if (active?.source === source) return active
+    if (active?.source === source) {if(Number.isInteger(pages)&&pages>0)active.pages=pages;return active}
     active?.controller.abort()
     const controller = new AbortController()
     const bookSignal = AbortSignal.any([controller.signal, signal])
     const key = Promise.all([reader.fingerprint(source), version]).then(([fingerprint, hash]) => {
       if (!fingerprint || !hash) return
-      return JSON.stringify(['regions-v6', set.number, hash, fingerprint])
+      return JSON.stringify(['regions-v7', set.number, hash, fingerprint])
     })
     active = { source, controller, signal: bookSignal, key, pages }
     return active
@@ -121,10 +120,10 @@ export function createInstructionRecognition(reader, set, signal) {
       request.throwIfAborted()
       const x = geometry.width / canvas.width, y = geometry.height / canvas.height
       return (data.blocks ?? []).flatMap(block =>
-        block.paragraphs.flatMap(paragraph => paragraph.lines.flatMap(line => line.words)))
+        (block.paragraphs??[]).flatMap(paragraph => (paragraph.lines??[]).flatMap(line => line.words??[])))
         .flatMap(({ text, bbox, confidence }) => {
-          const word = text.trim()
-          if (element.test(word) ? confidence < 75 : !quantity.test(word) || confidence < 55) return []
+          const word = normalizeCaption(text)
+          if (isElement(word) ? confidence < 75 : !/^(?:[1-9]\d{0,2}x?|x)$/.test(word) || confidence < 55) return []
           return [{ text: word, box: [bbox.x0 * x, bbox.y0 * y, bbox.x1 * x, bbox.y1 * y] }]
         })
     })
@@ -135,28 +134,33 @@ export function createInstructionRecognition(reader, set, signal) {
   async function extract(source, page, canvas, mode, request) {
     const geometry = await reader.inspect(source, page, request)
     let surface = canvas
-    const hasWords = () => geometry.words.some(({ text }) => mode ? element.test(text) : quantity.test(text))
-    // Inventory labels may be raster artwork even when the PDF also has vector text.
-    // Mixed pages can have vector pictures and rasterized quantity labels.
-    // Do not reject them simply because the page is not one full-page scan.
-    if (!hasWords() && !geometry.wideScan && !mode && !geometry.images.length) return []
-    if (!surface) {
-      surface = document.createElement('canvas')
-      await reader.render(source, page, surface, request)
+    const raw=geometry.words
+    geometry.words=normalizedCaptions(raw)
+    const hasWords=()=>geometry.words.some(({text})=>mode?isElement(text)&&Object.hasOwn(labels,text):isQuantity(text)||isElement(text)&&Object.hasOwn(labels,text))
+    if(!surface){surface=document.createElement('canvas');await reader.render(source,page,surface,request)}
+    async function recognize(){
+      try{const words=await readText(surface,geometry,request);geometry.words=mergeCaptions(raw,words)}
+      catch(error){request.throwIfAborted()} // A failed OCR pass must not discard vector evidence.
     }
-    const knownElements=()=>geometry.words.filter(({text})=>element.test(text)&&Object.hasOwn(labels,text)).length
-    if (!hasWords() || (mode&&knownElements()<2)) {
-      const recognized=await readText(surface,geometry,request)
-      geometry.words=[...geometry.words,...recognized.filter(word=>!geometry.words.some(old=>old.text===word.text&&Math.abs(old.box[0]-word.box[0])<3&&Math.abs(old.box[1]-word.box[1])<3))]
-    }
-    if (!hasWords()) return []
-    request.throwIfAborted()
-    const bitmap = await createImageBitmap(surface)
-    if (request.aborted) {
-      bitmap.close()
+    const knownElements=()=>geometry.words.filter(({text})=>isElement(text)&&Object.hasOwn(labels,text)).length
+    let usedOcr=false
+    if(!hasWords()||(mode&&knownElements()<2)){usedOcr=true;await recognize()}
+    async function extractSamples(){
+      if(!hasWords())return []
       request.throwIfAborted()
+      const bitmap=await createImageBitmap(surface)
+      if(request.aborted){bitmap.close();request.throwIfAborted()}
+      return analyze('extract',{bitmap,geometry,inventory:mode,labels},[bitmap])
     }
-    return analyze('extract', { bitmap, geometry, inventory: mode, labels }, [bitmap])
+    let samples=await extractSamples()
+    // Partial text layers: rerun on raster evidence if the first pass missed captions.
+    const expected=geometry.words.filter(({text})=>mode?isElement(text)&&Object.hasOwn(labels,text):isQuantity(text)).length
+    if(!usedOcr&&samples.length<expected&&samples.length<Math.max(2,expected*.8)){
+      await recognize()
+      const recovered=await extractSamples()
+      if(recovered.length>=samples.length)samples=recovered
+    }
+    return samples
   }
 
   async function illustratedInventory(book) {
@@ -172,7 +176,8 @@ export function createInstructionRecognition(reader, set, signal) {
     let emptyAfterInventory = 0
     for (let page = book.pages; page > Math.max(0, book.pages - 36); page--) {
       book.signal.throwIfAborted()
-      const items = await extract(book.source, page, null, true, book.signal)
+      let items=[]
+      try{items=await extract(book.source,page,null,true,book.signal)}catch{book.signal.throwIfAborted()}
       templates.push(...items)
       emptyAfterInventory = items.length ? 0 : emptyAfterInventory + Number(templates.length > 0)
       if (emptyAfterInventory >= 3) break
@@ -202,12 +207,12 @@ export function createInstructionRecognition(reader, set, signal) {
       book.inventoryPromise = undefined
       throw error
     })
-    await book.inventoryPromise
+    try{await book.inventoryPromise}catch{request.throwIfAborted()}
     request.throwIfAborted()
     // A personal PDF can belong to a different edition or set.
     const templates = typeof source === 'string'
       ? [...books].filter(([volume]) => typeof volume === 'string').flatMap(([, items]) => items)
-      : books.get(source)
+      : books.get(source)??[]
     if (!templates.length) return samples.filter(s=>s.item?.[0]).map(s=>[...s.region,...s.item])
     const regions = await analyze('rank', { samples, templates })
     if (regions.length) void cache(pageKey, regions)
