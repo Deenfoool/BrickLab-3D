@@ -1,4 +1,4 @@
-import {regionKey,identityKey,validRegion,correctedRegions,pageRequirements,loadCorrections,saveCorrections} from './instruction-study.js?v=recognition-v9'
+import {regionKey,identityKey,validRegion,correctedRegions,pageRequirements,loadCorrections,saveCorrections,otherPageCorrections,reuseCorrections} from './instruction-study.js?v=recognition-v9'
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!=null)el.textContent=text;if(cls)el.className=cls;return el}
 const btn=(text,action)=>{const el=node('button',text);el.type='button';el.onclick=action;return el}
 function storage(){try{return globalThis.localStorage}catch{return null}}
@@ -6,7 +6,7 @@ export function createPageStudy({preview,inventory,language,find,describe,readUs
  const ru=language==='ru',tr=(a,b)=>ru?a:b
  const root=node('details',null,'instruction-study'),summary=node('summary'),content=node('div',null,'instruction-study-content')
  root.hidden=true;root.append(summary,content)
- let raw=new Map(),callouts=[],scope=null,changes=Object.create(null),editable=false,signature='',request,dialog,pin
+ let raw=new Map(),callouts=[],scope=null,changes=Object.create(null),editable=false,finished=false,signature='',request,dialog,pin
  const known=new Map(inventory.filter(i=>!i.spare).map(i=>[identityKey(i.partNum,i.colorId),i]))
  function clearPin(){pin?.remove();pin=null}
  function focusRegion(region){
@@ -23,9 +23,10 @@ export function createPageStudy({preview,inventory,language,find,describe,readUs
  }
  function updateOverlays(){
   const effective=correctedRegions([...raw.values()],callouts,changes,inventory)
-  const next=JSON.stringify(effective)
-  if(next!==signature){signature=next;onRegions(effective)}
-  return effective
+  const reused=finished&&scope?reuseCorrections(effective,callouts,changes,otherPageCorrections(storage(),scope),inventory):[]
+  const next=JSON.stringify([...effective,...reused])
+  if(next!==signature){signature=next;onRegions([...effective,...reused])}
+  return [...effective,...reused]
  }
  function persist(){saveCorrections(storage(),scope,changes);render()}
  function edit(region){
@@ -33,7 +34,7 @@ export function createPageStudy({preview,inventory,language,find,describe,readUs
   dialog?.close()
   const ownRequest=request,ownScope=scope,key=regionKey(region),d=node('dialog',null,'set-dialog instruction-correction'),search=node('input'),list=node('div',null,'instruction-correction-list')
   dialog=d;search.type='search';search.placeholder=tr('Название или артикул','Name or part number');search.setAttribute('aria-label',search.placeholder)
-  function pick(value){if(ownRequest?.aborted||scope!==ownScope)return;changes[key]=value;persist();d.close()}
+  function pick(value){if(ownRequest?.aborted||scope!==ownScope)return;changes[key]={...value,visualKey:callouts.find(c=>regionKey(c.region)===key)?.visualKey??null};persist();d.close()}
   function results(){
    const q=search.value.toLowerCase().trim()
    list.replaceChildren()
@@ -45,7 +46,7 @@ export function createPageStudy({preview,inventory,language,find,describe,readUs
   search.oninput=results
   const actions=node('div',null,'instruction-study-actions')
   actions.append(btn(tr('Не деталь','Not a part'),()=>pick({ignore:true})),btn(tr('Сбросить','Reset'),()=>{if(ownRequest?.aborted||scope!==ownScope)return;delete changes[key];persist();d.close()}),btn(tr('Закрыть','Close'),()=>d.close()))
-  d.append(node('h2',tr('Исправить распознавание','Correct recognition')),node('p',tr('Исправление хранится только в этом браузере для данной страницы PDF.','Correction stays in this browser for this PDF page.')),search,list,actions)
+  d.append(node('h2',tr('Исправить распознавание','Correct recognition')),node('p',tr('Исправление хранится только в этом браузере. Точное совпадение рисунка в той же версии PDF может восстановить пропущенную подсказку.','Correction stays in this browser. Identical artwork in the same PDF revision may recover a missing hint.')),search,list,actions)
   const abort=()=>{if(d.open)d.close();d.remove()}
   ownRequest?.addEventListener('abort',abort,{once:true})
   d.addEventListener('close',()=>{ownRequest?.removeEventListener('abort',abort);d.remove();if(dialog===d)dialog=null},{once:true})
@@ -74,6 +75,7 @@ export function createPageStudy({preview,inventory,language,find,describe,readUs
     line.append(main)
     const actions=node('div',null,'instruction-study-actions')
     if(row.partNum)actions.append(btn(tr('Найти','Find'),()=>find(row.partNum,row.colorId,row.elementId)))
+    if(row.regions.some(entry=>!raw.has(regionKey(entry.region))&&!changes[regionKey(entry.region)]?.partNum)&&row.partNum)main.append(node('small',tr('Из локального исправления','From local correction')))
     for(const [index,entry] of row.regions.entries()){
      const suffix=row.regions.length>1?' '+(index+1):''
      actions.append(btn(tr('Показать','Show')+suffix,()=>focusRegion(entry.region)))
@@ -87,10 +89,10 @@ export function createPageStudy({preview,inventory,language,find,describe,readUs
  }
  root.addEventListener('toggle',()=>{if(root.open)render()})
  return {root,reset(nextRequest){
-  dialog?.close();clearPin();request=nextRequest;raw=new Map();callouts=[];scope=null;changes=Object.create(null);editable=false;signature='';root.hidden=true;summary.textContent='';content.replaceChildren()
+  dialog?.close();clearPin();request=nextRequest;raw=new Map();callouts=[];scope=null;changes=Object.create(null);editable=false;finished=false;signature='';root.hidden=true;summary.textContent='';content.replaceChildren()
  },update(regions,meta){
   if(request?.aborted)return
-  if(meta){callouts=meta.callouts??callouts;if(meta.scope&&meta.scope!==scope){scope=meta.scope;changes=loadCorrections(storage(),scope)}editable=!!scope}
+  if(meta){if(meta.final)finished=true;callouts=meta.callouts??callouts;if(meta.scope&&meta.scope!==scope){scope=meta.scope;changes=loadCorrections(storage(),scope)}editable=!!scope}
   for(const region of regions){if(!validRegion(region))continue;const key=regionKey(region);if(!raw.has(key))raw.set(key,region)}
   render()
  },refresh(){if(!request?.aborted&&root.open)render()}}

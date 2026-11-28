@@ -403,7 +403,7 @@ export function mountInstructions(
     preview.hidden = false
     previewStatus.hidden = true
     if (findPart && regions) regions.then(parts => {
-      if(!signal.aborted)study.update(parts)
+      if(!signal.aborted)study.update(parts,{final:true})
     }).catch(()=>{})
   }
   async function lookupBooks() {

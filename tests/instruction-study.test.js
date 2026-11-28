@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {stepForCallout,repeatedArtwork,pageCallouts,pageRequirements,correctedRegions,regionKey,reconcileCallouts,loadCorrections,saveCorrections} from '../src/sets/instruction-study.js'
+import {stepForCallout,repeatedArtwork,pageCallouts,pageRequirements,correctedRegions,regionKey,reconcileCallouts,loadCorrections,saveCorrections,otherPageCorrections,reuseCorrections,visualKeyForSample} from '../src/sets/instruction-study.js'
 const a=[1000,1300,500,500],b=[2000,1300,500,500],c=[1000,4000,500,500]
 const item={partNum:'32316',colorId:'72',quantity:10,used:4,spare:false}
 test('step labels are assigned only with nearby unambiguous layout evidence',()=>{
@@ -41,4 +41,20 @@ test('corrections are confined to the exact PDF page scope',()=>{
  assert.deepEqual({...loadCorrections(storage,'set/fingerprint/1')},change)
  assert.deepEqual({...loadCorrections(storage,'set/fingerprint/2')},{})
  assert.deepEqual({...loadCorrections(storage,'set/other-fingerprint/1')},{})
+})
+
+test('local visual memory reuses only identical artwork with no competing correction or automatic region',async()=>{
+ const pixels=new Uint8ClampedArray(24*24*4).fill(127)
+ const visualKey=await visualKeyForSample({pixels,aspect:0,kind:'callout'})
+ assert.match(visualKey,/^[a-f0-9]{64}$/)
+ assert.notEqual(await visualKeyForSample({pixels,aspect:.2,kind:'callout'}),visualKey)
+ const correction={partNum:'32316',colorId:'72',visualKey}
+ const calls=[{region:a,visualKey},{region:b,visualKey},{region:c,visualKey,readonly:true}]
+ assert.deepEqual(reuseCorrections([[...a,'32316','72']],calls,{},[correction],[item]),[[...b,'32316','72']])
+ assert.deepEqual(reuseCorrections([],calls,{[regionKey(b)]:{ignore:true,visualKey}},[correction],[item]),[])
+ const db=new Map(),storage={getItem:k=>db.get(k),setItem:(k,v)=>db.set(k,v)}
+ saveCorrections(storage,'set/fingerprint/1',{[regionKey(a)]:correction})
+ saveCorrections(storage,'set/other/1',{[regionKey(b)]:correction})
+ assert.deepEqual(otherPageCorrections(storage,'set/fingerprint/2'),[correction])
+ assert.deepEqual(otherPageCorrections(storage,'set/fingerprint/1'),[])
 })

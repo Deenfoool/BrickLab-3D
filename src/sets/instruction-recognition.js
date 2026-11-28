@@ -1,4 +1,4 @@
-import {pageCallouts} from './instruction-study.js?v=recognition-v9'
+import {pageCallouts,visualKeyForSample} from './instruction-study.js?v=recognition-v9'
 import {lookupElement} from '../editor/element-index.js?v=catalog-engine-1'
 import {createElementRecovery} from './instruction-element-recovery.js?v=recognition-v8'
 import { createOcrWorker } from './ocr.js'
@@ -242,8 +242,11 @@ export function createInstructionRecognition(reader, set, signal) {
     if(stored&&Array.isArray(stored.regions)&&Array.isArray(stored.callouts)){onProgress({stage:'cached',regions:stored.regions,total:stored.callouts.length,callouts:stored.callouts,scope:pageKey});return stored.regions}
     const samples = await extract(source, page, canvas, false, request)
     request.throwIfAborted()
+    if(!samples.length)return []
+    // Exact normalized artwork hashes support local corrections without storing the image itself.
+    await Promise.all(samples.slice(0,300).map(async sample=>{try{sample.visualKey=await visualKeyForSample(sample)}catch{}}))
+    request.throwIfAborted()
     const callouts=pageCallouts(samples)
-    if (!samples.length) return []
     const notify=(stage,regions)=>onProgress({stage,regions,total:samples.length,callouts,scope:pageKey})
     const direct=samples.filter(s=>s.item?.[0]).map(s=>[...s.region,...s.item])
     notify('inventory',direct)

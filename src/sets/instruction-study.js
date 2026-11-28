@@ -8,7 +8,10 @@ export function reconcileCallouts(callouts,authoritative){
  const result=new Map()
  for(const c of callouts){
   if(!validBox(c.region))continue
-  const matches=authoritative.filter(validRegion).filter(r=>intersection(c.region,r.slice(0,4))>.5*Math.min(area(c.region),area(r.slice(0,4))))
+  const matches=authoritative.filter(validRegion).filter(([a,b,w,h])=>{
+   const [x,y,cw,ch]=c.region
+   return Math.min(x+cw,a+w)-Math.max(x,a)>.5*Math.min(cw,w)&&Math.min(y+ch,b+h)-Math.max(y,b)>.5*Math.min(ch,h)
+  })
   if(matches.length>1)continue
   const value=matches.length?{...c,region:matches[0].slice(0,4),repeat:null,readonly:true}:c
   const key=regionKey(value.region)
@@ -42,7 +45,7 @@ export function repeatedArtwork(box,objects,callouts){
  return targets.length===1?targets[0].box:null
 }
 export function pageCallouts(samples){
- return samples.filter(s=>validBox(s.region)).map(s=>({region:s.region.slice(0,4),quantity:Number.isInteger(s.quantity)&&s.quantity>0&&s.quantity<=999?s.quantity:null,kind:s.kind==='inventory'?'inventory':'callout',step:Number.isInteger(s.step)?s.step:null,repeat:validBox(s.repeat)?s.repeat:null}))
+ return samples.filter(s=>validBox(s.region)).map(s=>({region:s.region.slice(0,4),quantity:Number.isInteger(s.quantity)&&s.quantity>0&&s.quantity<=999?s.quantity:null,kind:s.kind==='inventory'?'inventory':'callout',step:Number.isInteger(s.step)?s.step:null,repeat:validBox(s.repeat)?s.repeat:null,visualKey:validVisualKey(s.visualKey)?s.visualKey:null}))
 }
 export function correctedRegions(regions,callouts,corrections,inventory){
  const allowed=new Set(inventory.filter(i=>!i.spare).map(i=>identityKey(i.partNum,i.colorId)))
@@ -93,4 +96,43 @@ export function saveCorrections(storage,scope,values){
   delete data[scope];data[scope]=Object.fromEntries(Object.entries(values).slice(-100))
   storage.setItem('bricklab.instruction.corrections.v1',JSON.stringify(Object.fromEntries(Object.entries(data).slice(-80))))
  }catch{/* Local settings may be unavailable. */}
+}
+
+const validVisualKey=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value)
+export async function visualKeyForSample(sample){
+ if(!globalThis.crypto?.subtle||!sample?.pixels||sample.pixels.length!==24*24*4||!Number.isFinite(sample.aspect))return null
+ const prefix=new TextEncoder().encode(JSON.stringify([sample.aspect,sample.badge??null,sample.kind??null]))
+ const bytes=new Uint8Array(prefix.length+sample.pixels.length)
+ bytes.set(prefix);bytes.set(sample.pixels,prefix.length)
+ const hash=await crypto.subtle.digest('SHA-256',bytes)
+ return Array.from(new Uint8Array(hash),v=>v.toString(16).padStart(2,'0')).join('')
+}
+export function otherPageCorrections(storage,scope){
+ if(!scope)return []
+ const prefix=scope.slice(0,scope.lastIndexOf('/')+1)
+ if(!prefix)return []
+ try{
+  const data=JSON.parse(storage.getItem('bricklab.instruction.corrections.v1')??'{}')
+  return Object.entries(data).filter(([key])=>key!==scope&&key.startsWith(prefix)&&/^\d+$/.test(key.slice(prefix.length))).flatMap(([,values])=>Object.values(values??{}))
+ }catch{return []}
+}
+export function reuseCorrections(regions,callouts,changes,otherPages,inventory){
+ const present=new Set(regions.filter(validRegion).map(regionKey))
+ const allowed=new Set(inventory.filter(i=>!i.spare).map(i=>identityKey(i.partNum,i.colorId)))
+ const learned=new Map()
+ for(const value of [...otherPages,...Object.values(changes)]){
+  if(!validVisualKey(value?.visualKey))continue
+  const key=value.visualKey,identity=value.ignore?'ignore':identityKey(value.partNum,value.colorId)
+  if(identity!=='ignore'&&!allowed.has(identity))continue
+  const old=learned.get(key)
+  if(old&&old.identity!==identity)learned.set(key,{identity:'conflict'})
+  else if(!old)learned.set(key,{identity,value})
+ }
+ const output=[]
+ for(const c of callouts){
+  const key=regionKey(c.region),match=learned.get(c.visualKey)
+  if(c.readonly||!validBox(c.region)||present.has(key)||Object.hasOwn(changes,key)||!match?.value||match.value.ignore)continue
+  output.push([...c.region,String(match.value.partNum),String(match.value.colorId)])
+ }
+ return output
 }
