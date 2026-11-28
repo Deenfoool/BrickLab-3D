@@ -83,6 +83,15 @@ export function createInstructionPdfReader(load = loadPdfJs) {
     return ids?.[0] && ids.filter(Boolean).join('/')
   }
 
+  async function textOnly(source,number,signal){
+    signal.throwIfAborted()
+    const pdf=await documentFor(source)
+    const page=await pdf.getPage(number)
+    signal.throwIfAborted()
+    const viewport=page.getViewport({scale:1}),{items,styles}=await page.getTextContent()
+    signal.throwIfAborted()
+    return pdfWords(items,styles,viewport).words
+  }
   async function inspect(source, number, signal,{study=false}={}) {
     signal.throwIfAborted()
     const pending = documentFor(source)
@@ -107,7 +116,7 @@ export function createInstructionPdfReader(load = loadPdfJs) {
   }
 
   async function pageCount(source,signal){signal.throwIfAborted();const doc=await documentFor(source);signal.throwIfAborted();return doc.numPages}
-  return { render, fingerprint, inspect, pageCount, close }
+  return { render, fingerprint, inspect, textOnly, pageCount, close }
 }
 
 const quantity = /^[1-9]\d{0,2}[x×]$/i

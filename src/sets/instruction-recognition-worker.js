@@ -1,3 +1,4 @@
+import {candidateWindow} from './instruction-inventory-search.js?v=recognition-recovery-1'
 import {stepForCallout,repeatedArtwork} from './instruction-study.js?v=recognition-v9'
 import {rankModels,prepareModelReferences} from './instruction-model-match.js?v=recognition-v8'
 // Page text locates the callouts. Compare the composited part artwork with
@@ -14,14 +15,15 @@ const overlaps = (a, b) => Math.min(a[2], b[2]) - Math.max(a[0], b[0]) > .5 &&
 function anchors(captions, images, inventory) {
   const matches = []
   for (const [i, caption] of captions.entries()) {
+    const window=candidateWindow(caption,inventory)
     for (const [j, box] of images.entries()) {
       const dx = Math.abs(caption.box[0] - box[0]), dy = caption.box[1] - box[3]
       // Some PDFs paint a caption as an image and place searchable text over it.
       if (dy < 0 && heightOf(box) <= heightOf(caption.box) + 2 &&
           widthOf(box) <= widthOf(caption.box) + 3) continue
-      if (dx <= 5 && dy >= -4 && dy <= (inventory ? 20 : 5)) {
+      if (dx <= window.left && dy >= -window.overlap && dy <= window.above) {
         matches.push({ i, j, score: dx * 2 + Math.abs(dy) })
-      } else if (Math.abs((caption.box[0]+caption.box[2]-box[0]-box[2])/2)<=4 && dy>=-2 && dy<=(inventory?15:7)) {
+      } else if (Math.abs((caption.box[0]+caption.box[2]-box[0]-box[2])/2)<=window.center && dy>=-window.overlap && dy<=window.above) {
         matches.push({i,j,score:8+Math.abs(dy)+Math.abs((caption.box[0]+caption.box[2]-box[0]-box[2])/2)})
       }
     }
@@ -141,8 +143,8 @@ function scanArt(captions, words, raster, inventory) {
   const boxes = new Map()
   for (const { box } of captions) {
     const [x, y] = box
-    const margin = inventory ? 18 : 8
-    const area = pixelBox([x - 6, y - 70, x + 100, y + 2], raster)
+    const window=candidateWindow({box},inventory),margin=window.above
+    const area = pixelBox([x - Math.max(12,window.left*2), y - 85, x + 120, y + 3], raster)
     const [left, top, right, bottom] = area
     const width = widthOf(area), height = heightOf(area)
     if (width < 2 || height < 2) continue
@@ -188,7 +190,7 @@ function scanArt(captions, words, raster, inventory) {
         (left + x1 + 1) / raster.x, (top + y1 + 1) / raster.y]
       const dy = y - drawing[3]
       if (x0 && y0 && x1 < width - 1 && tail >= 14 && widthOf(drawing) >= 5 &&
-          heightOf(drawing) >= 3 && Math.abs(x - drawing[0]) <= 5 && dy >= -2 && dy <= margin) {
+          heightOf(drawing) >= 3 && (Math.abs(x-drawing[0])<=window.left||Math.abs((box[0]+box[2]-drawing[0]-drawing[2])/2)<=window.center) && dy >= -window.overlap && dy <= margin) {
         boxes.set(drawing.map(Math.round).join('/'), drawing)
       }
     }

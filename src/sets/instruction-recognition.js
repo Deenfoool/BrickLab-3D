@@ -1,9 +1,10 @@
+import {inventoryEvidence,inventoryPageOrder} from './instruction-inventory-search.js?v=recognition-recovery-1'
 import {boundedTask} from './instruction-task.js?v=recognition-v9-polish'
 import {pageCallouts,visualKeyForSample} from './instruction-study.js?v=recognition-v9'
 import {lookupElement} from '../editor/element-index.js?v=catalog-engine-1'
 import {createElementRecovery} from './instruction-element-recovery.js?v=recognition-v8'
 import { createOcrWorker } from './ocr.js?v=recognition-v9-polish'
-import {createInstructionPdfReader} from './instruction-pdf.js?v=recognition-v9'
+import {createInstructionPdfReader} from './instruction-pdf.js?v=recognition-recovery-1'
 import {canonicalInstructionUrl} from './instruction-url.js'
 import {normalizeCaption,isQuantity,isElement,normalizedCaptions,mergeCaptions} from './instruction-text.js?v=smart-highlight-1'
 let database
@@ -92,7 +93,7 @@ export function createInstructionRecognition(reader, set, signal) {
   function analyze(action, input, transfer = [], request=signal) {
     try{signal.throwIfAborted();request.throwIfAborted()}catch(error){for(const item of transfer)item.close?.();throw error}
     if (!worker) {
-      worker = new Worker(new URL('./instruction-recognition-worker.js?v=recognition-v9-polish', import.meta.url), { type: 'module' })
+      worker = new Worker(new URL('./instruction-recognition-worker.js?v=recognition-recovery-1', import.meta.url), { type: 'module' })
       worker.onmessage = ({ data }) => {
         const job = jobs.get(data.id)
         jobs.delete(data.id)
@@ -119,7 +120,7 @@ export function createInstructionRecognition(reader, set, signal) {
     const bookSignal = AbortSignal.any([controller.signal, signal])
     const key = Promise.all([reader.fingerprint(source), version]).then(([fingerprint, hash]) => {
       if (!fingerprint || !hash) return
-      return JSON.stringify(['regions-v9.1', set.number, hash, fingerprint])
+      return JSON.stringify(['regions-v9.2', set.number, hash, fingerprint])
     }).catch(()=>undefined)
     active = { source, controller, signal: bookSignal, key, pages }
     return active
@@ -150,13 +151,14 @@ export function createInstructionRecognition(reader, set, signal) {
     return run
   }
 
-  async function extract(source, page, canvas, mode, request, pdfReader=reader) {
+  async function extract(source, page, canvas, mode, request, pdfReader=reader, allowOcr=true) {
     const geometry = await pdfReader.inspect(source, page, request,{study:!mode})
     let surface = canvas
     const raw=geometry.words
     geometry.words=normalizedCaptions(raw)
     await recoverElements(geometry.words,labels,ambiguous,request)
     const hasWords=()=>geometry.words.some(({text})=>mode?isElement(text)&&Object.hasOwn(labels,text):isQuantity(text)||isElement(text)&&Object.hasOwn(labels,text))
+    if(!hasWords()&&!allowOcr)return []
     if(!surface){surface=document.createElement('canvas');await pdfReader.render(source,page,surface,request)}
     async function recognize(){
       try{const words=await readText(surface,geometry,request);geometry.words=mergeCaptions(raw,words);await recoverElements(geometry.words,labels,ambiguous,request)}
@@ -164,7 +166,7 @@ export function createInstructionRecognition(reader, set, signal) {
     }
     const knownElements=()=>geometry.words.filter(({text})=>isElement(text)&&Object.hasOwn(labels,text)).length
     let usedOcr=false
-    if(!hasWords()||(mode&&knownElements()<2)){usedOcr=true;await recognize()}
+    if(allowOcr&&(!hasWords()||(mode&&knownElements()<2))){usedOcr=true;await recognize()}
     async function extractSamples(){
       if(!hasWords())return []
       request.throwIfAborted()
@@ -175,7 +177,7 @@ export function createInstructionRecognition(reader, set, signal) {
     let samples=await extractSamples()
     // Partial text layers: rerun on raster evidence if the first pass missed captions.
     const expected=geometry.words.filter(({text})=>mode?isElement(text)&&Object.hasOwn(labels,text):isQuantity(text)||isElement(text)&&Object.hasOwn(labels,text)).length
-    if(!usedOcr&&samples.length<expected&&samples.length<Math.max(2,expected*.8)){
+    if(allowOcr&&!usedOcr&&samples.length<expected&&samples.length<Math.max(2,expected*.8)){
       await recognize()
       const recovered=await extractSamples()
       if(recovered.length>=samples.length)samples=recovered
@@ -186,26 +188,35 @@ export function createInstructionRecognition(reader, set, signal) {
   async function scanInventory(source,request,pdfReader,bookSignal){
     const [fingerprint,hash]=await boundedTask(Promise.all([pdfReader.fingerprint(source),version]),request,12000)
     request.throwIfAborted()
-    const key=fingerprint&&hash&&JSON.stringify(['regions-v9.1',set.number,hash,fingerprint])+'/inventory'
+    const key=fingerprint&&hash&&JSON.stringify(['regions-v9.2',set.number,hash,fingerprint])+'/inventory'
     const stored=await cache(key)
     request.throwIfAborted()
     if(Array.isArray(stored)&&stored.length){books.set(source,stored);return stored}
     const templates=[]
-    let emptyAfterInventory=0,complete=true
+    let complete=true
     const total=await boundedTask(pdfReader.pageCount(source,request),request,10000)
-    async function visit(page){
-      if(request.aborted){complete=false;return false}
-      let items=[]
-      const pageSignal=AbortSignal.any([request,AbortSignal.timeout(21000)])
-      try{items=await boundedTask(extract(source,page,null,true,pageSignal,pdfReader),pageSignal,22000)}
-      catch{if(request.aborted){complete=false;return false}complete=false}
-      templates.push(...items)
-      emptyAfterInventory=items.length?0:emptyAfterInventory+Number(templates.length>0)
-      return emptyAfterInventory<3
+    const pageNumbers=[...new Set([...Array.from({length:Math.min(36,total)},(_,i)=>total-i),...Array.from({length:Math.min(12,total)},(_,i)=>i+1)])]
+    const preflight=[]
+    for(const page of pageNumbers){
+      if(request.aborted){complete=false;break}
+      try{
+        const words=normalizedCaptions(await boundedTask(pdfReader.textOnly(source,page,request),request,2500))
+        preflight.push({page,...inventoryEvidence(words,labels)})
+      }catch{complete=false;if(request.aborted)break}
     }
-    for(let page=total;page>Math.max(0,total-36);page--)if(!await visit(page))break
+    const ordered=inventoryPageOrder(preflight)
+    async function visit(page,allowOcr){
+      if(request.aborted){complete=false;return false}
+      const pageSignal=AbortSignal.any([request,AbortSignal.timeout(21000)])
+      try{templates.push(...await boundedTask(extract(source,page,null,true,pageSignal,pdfReader,allowOcr),pageSignal,22000))}
+      catch{complete=false}
+      return !request.aborted
+    }
+    // Never spend the scan budget OCR-ing a back cover before known printed IDs.
+    for(const candidate of ordered.filter(e=>e.known>0))if(!await visit(candidate.page,false))break
+    // Mixed/scanned books still get OCR, but only after the cheap vector pass.
     if(!templates.length&&!request.aborted){
-      for(let page=1;page<=Math.min(12,Math.max(0,total-36));page++)if(!await visit(page))break
+      for(const candidate of ordered.slice(0,8))if(!await visit(candidate.page,true))break
     }
     bookSignal.throwIfAborted()
     if(request.aborted)complete=false
@@ -214,7 +225,7 @@ export function createInstructionRecognition(reader, set, signal) {
     return templates
   }
   async function illustratedInventory(book){
-    const budget=AbortSignal.any([book.signal,AbortSignal.timeout(40000)])
+    const budget=AbortSignal.any([book.signal,AbortSignal.timeout(90000)])
     const identity=typeof book.source==='string'&&canonicalInstructionUrl(book.source)
     const ordered=identity?[...(set.books??[])].reverse().filter(v=>canonicalInstructionUrl(v.url)).slice(0,3).concat([{url:book.source}]):[{url:book.source}]
     const visited=new Set(),combined=[]
@@ -248,7 +259,7 @@ export function createInstructionRecognition(reader, set, signal) {
     if(stored&&Array.isArray(stored.regions)&&Array.isArray(stored.callouts)){onProgress({stage:'cached',regions:stored.regions,total:stored.callouts.length,callouts:stored.callouts,scope:pageKey});return stored.regions}
     const samples = await extract(source, page, canvas, false, request)
     request.throwIfAborted()
-    if(!samples.length)return []
+    if(!samples.length){onProgress({stage:'no-callouts',regions:[],total:0,callouts:[],scope:pageKey});return []}
     // Exact normalized artwork hashes support local corrections without storing the image itself.
     await Promise.all(samples.slice(0,300).map(async sample=>{try{sample.visualKey=await visualKeyForSample(sample)}catch{}}))
     request.throwIfAborted()
@@ -266,10 +277,11 @@ export function createInstructionRecognition(reader, set, signal) {
       throw error
     })
     let inventoryTemplates=[],inventoryComplete=true
-    try{inventoryTemplates=await boundedTask(book.inventoryPromise,request,45000)}catch{request.throwIfAborted();inventoryComplete=false}
+    try{inventoryTemplates=await boundedTask(book.inventoryPromise,request,95000)}catch{request.throwIfAborted();inventoryComplete=false}
     request.throwIfAborted()
     // A personal PDF can belong to a different edition or set.
     const templates=inventoryTemplates??[]
+    onProgress({stage:'matching',regions:direct,total:samples.length,callouts,scope:pageKey,templates:templates.length})
     const regions=templates.length?await analyze('rank',{samples,templates},[],request):direct
     request.throwIfAborted()
     if(regions.length===samples.length){
@@ -291,7 +303,7 @@ export function createInstructionRecognition(reader, set, signal) {
     let references=[]
     try{references=await boundedTask(modelReferences,request,36000)}catch{request.throwIfAborted()}
     request.throwIfAborted()
-    if(!references.length)return regions
+    if(!references.length){onProgress({stage:'models-unavailable',regions,total:samples.length,callouts,scope:pageKey,templates:templates.length});return regions}
     if(modelWorker!==worker||!worker){await analyze('model-references',{references},[],request);modelWorker=worker}
     request.throwIfAborted()
     const recovered=await analyze('rank-models',{samples:unresolved},[],request)
