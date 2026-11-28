@@ -26,9 +26,9 @@ test('receipt worker acknowledges only accepted messages and retries after failu
 })
 
 test('receipt registration requires admin, same origin and explicit confirmation',async t=>{
- let admin=true;const calls=[]
+ let admin=true,auditUnavailable=false;const calls=[],audit=[]
  const origin='https://bricklab.test',uid='30000000-0000-4000-8000-000000000001'
- const store={getSession:async()=>({id:uid,admin}),registerCommerceReceipt:async(...args)=>{calls.push(args);return true},commerceAdminLedger:async()=>[],commerceAdminDayTotals:async()=>({paid_kopecks:'0'})}
+ const store={getSession:async()=>({id:uid,admin}),commerceAdminAudit:async(...args)=>{if(auditUnavailable)throw Error('audit unavailable');audit.push(args)},registerCommerceReceipt:async(...args)=>{calls.push(args);return true},commerceAdminLedger:async()=>[],commerceAdminDayTotals:async()=>({paid_kopecks:'0'})}
  const handler=createPaymentsHandler({store,origin,config:{enabled:false}})
  const server=createServer((req,res)=>handler(req,res,new URL(req.url,origin).pathname))
  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)))
@@ -40,7 +40,11 @@ test('receipt registration requires admin, same origin and explicit confirmation
  assert.equal((await post({...d,url:'https://evil.example'})).status,400)
  assert.equal((await post(d,{origin:'https://evil.example'})).status,403)
  admin=false;assert.equal((await post(d)).status,403);admin=true
- assert.equal((await post(d)).status,200);assert.deepEqual(calls,[[uid,uid,receipt]])
+ assert.deepEqual(audit,[]);assert.deepEqual(calls,[])
+ auditUnavailable=true;assert.equal((await post(d)).status,503);assert.deepEqual(calls,[]);assert.deepEqual(audit,[])
+ auditUnavailable=false;assert.equal((await post(d)).status,200);assert.deepEqual(calls,[[uid,uid,receipt]])
+ assert.equal(audit.length,2);assert.match(audit[0][1],/^[0-9a-f-]{36}$/)
+ assert.deepEqual(audit,[[uid,audit[0][1],'register_receipt','live',uid,'started'],[uid,audit[0][1],'register_receipt','live',uid,'succeeded']])
  const finance=await (await fetch(base+'/api/commerce/admin-ledger?environment=live',{headers})).json()
  assert.deepEqual(finance,{orders:[],totals:{paid_kopecks:'0'}})
 })

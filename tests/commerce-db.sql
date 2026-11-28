@@ -25,7 +25,25 @@ BEGIN
  EXCEPTION WHEN unique_violation THEN NULL;
  END;
 END $$;
+INSERT INTO bricklab.admin_accounts(user_id) VALUES ('10000000-0000-4000-8000-000000000002');
 SET LOCAL ROLE bricklab_app;
+DO $audit$
+DECLARE day date:=(now() AT TIME ZONE 'Europe/Moscow')::date;
+BEGIN
+ PERFORM set_config('bricklab.user_id','10000000-0000-4000-8000-000000000001',true);
+ BEGIN
+  PERFORM bricklab.commerce_admin_export('live',day,day);
+  RAISE EXCEPTION 'nonadmin export accepted';
+ EXCEPTION WHEN raise_exception THEN IF SQLERRM<>'admin_required' THEN RAISE; END IF;
+ END;
+ PERFORM set_config('bricklab.user_id','10000000-0000-4000-8000-000000000002',true);
+ IF (SELECT count(*) FROM bricklab.commerce_admin_export('live',day,day))<>2 THEN RAISE EXCEPTION 'export incomplete'; END IF;
+ IF has_table_privilege(current_user,'bricklab.commerce_admin_audit','SELECT,INSERT,UPDATE,DELETE') THEN RAISE EXCEPTION 'audit table exposed'; END IF;
+ PERFORM bricklab.commerce_admin_audit_write('30000000-0000-4000-8000-000000000001','finance_export','live',NULL,'started');
+ PERFORM bricklab.commerce_admin_audit_write('30000000-0000-4000-8000-000000000001','finance_export','live',NULL,'succeeded');
+ IF (SELECT count(*) FROM bricklab.commerce_admin_audit_list('live'))<>2 THEN RAISE EXCEPTION 'audit incomplete'; END IF;
+ PERFORM set_config('bricklab.user_id','',true);
+END $audit$;
 DO $$
 BEGIN
  IF (SELECT count(*) FROM bricklab.commerce_orders)<>0 THEN RAISE EXCEPTION 'unscoped orders exposed'; END IF;

@@ -6,7 +6,7 @@ import {startCommerceTelegram} from './commerce-telegram.js'
 import {startReceiptDelivery,createReceiptMailer} from './receipt-delivery.js'
 import {createInstructionRegions} from './instruction-regions.js'
 import {loadInstructionPolicy} from './instruction-access.js'
-import {loadApprovedLegal,liveCommerceConfig} from './legal-release.js'
+import {loadApprovedLegal,liveCommerceConfig,liveProviderConfig} from './legal-release.js'
 import {createTelegramHubHandler} from './telegram-hub.js'
 import { createBrickLabServer } from './http.js'
 import { createInstructionsHandler } from './instructions.js'
@@ -32,18 +32,22 @@ if (process.env.PGPASSWORD) {
   try {
     await store.ready()
     const origin=process.env.PUBLIC_ORIGIN||'http://localhost:8080',registrationEnabled=process.env.BRICKLAB_REGISTRATION_ENABLED==='true'
-    const instructionPolicy=await loadInstructionPolicy(process.env.BRICKLAB_PRIVATE_INSTRUCTION_AUDIT||'')
     const instructionRelease=process.env.BRICKLAB_INSTRUCTIONS_RELEASE==='true'
-    if(instructionRelease&&!instructionPolicy.count)throw Error('Paid instructions require a nonempty private audit')
-    legal=await loadApprovedLegal({directory:fileURLToPath(new URL('../assets/legal/',import.meta.url)),approvalFile:process.env.BRICKLAB_COMMERCE_APPROVAL_FILE||''})
+    const instructionPolicy=await loadInstructionPolicy(instructionRelease?process.env.BRICKLAB_PRIVATE_INSTRUCTION_AUDIT||'':'',{requireEvidence:instructionRelease})
+    if(instructionRelease&&!instructionPolicy.products.length)throw Error('Paid instructions require a reviewed private catalog')
+    try{legal=await loadApprovedLegal({directory:fileURLToPath(new URL('../assets/legal/',import.meta.url)),approvalFile:process.env.BRICKLAB_COMMERCE_APPROVAL_FILE||''})}catch{legal=null;console.error('Legal approval unavailable; new live checkout remains closed')}
     const commerceMode=process.env.BRICKLAB_COMMERCE_MODE||'test'
+    const liveCheckoutScope=process.env.BRICKLAB_LIVE_CHECKOUT_SCOPE||'closed'
+    if(!['closed','pilot','public'].includes(liveCheckoutScope))throw Error('Invalid live checkout scope')
     if(!['test','live'].includes(commerceMode))throw Error('Invalid commerce mode')
     const receiptMailer=createReceiptMailer()
     const liveConfig=liveCommerceConfig(process.env,legal)
-    const liveYookassa=createYookassaAdapter({store,origin,config:{...liveConfig,enabled:liveConfig.enabled&&!!receiptMailer}})
+    const liveProvider=liveProviderConfig(process.env)
+    const liveYookassa=createYookassaAdapter({store,origin,config:liveProvider})
+    const liveCheckoutReady=liveConfig.enabled&&!!receiptMailer
     const testYookassa=createYookassaAdapter({store,origin})
     const fullCatalog=!!legal&&process.env.BRICKLAB_COMMERCE_FULL_CATALOG_OFFER_VERSION===legal.version
-    payments=createPaymentsHandler({store,origin,config:paymentConfig(),legal,fullCatalog,commerceMode,liveYookassa,instructionPolicy,instructionRelease,yookassa:testYookassa,regions:createInstructionRegions(fileURLToPath(new URL('../catalog/sets/',import.meta.url)))})
+    payments=createPaymentsHandler({store,origin,config:paymentConfig(),legal,fullCatalog,commerceMode,liveCheckoutScope,liveCheckoutReady,liveYookassa,instructionPolicy,instructionRelease,yookassa:testYookassa,regions:createInstructionRegions(fileURLToPath(new URL('../catalog/sets/',import.meta.url)))})
     security=createAccountSecurityHandler({store,origin,registrationEnabled,mail:createMailer(),codeSecret:process.env.BRICKLAB_MAIL_KEY||undefined})
     auth = createAuthHandler({ store, origin: process.env.PUBLIC_ORIGIN || 'http://localhost:8080',
       registrationEnabled: registrationEnabled && new URL(origin).protocol==='http:',

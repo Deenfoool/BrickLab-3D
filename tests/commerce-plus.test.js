@@ -37,7 +37,7 @@ test('private audited pages enforce trial steps, matching purchase and Plus on b
  const policy=createInstructionPolicy({'42215-1':{metadata:{title:'Volvo EC500',partCount:2359,complete:true},'6592888':[{step:10,regions:[region]},{step:11,regions:[region]}]}})
  const store={getSession:async token=>({id:'fixture'}),commerceAccount:async()=>({plus:false,instructions:['42215-1']})}
  const root=fileURLToPath(new URL('../',import.meta.url))
- const server=createBrickLabServer({root,payments:createPaymentsHandler({store,origin:'https://bricklab.test',instructionRelease:true,fullCatalog:true,commerceMode:'live',legal:{version:'a'.repeat(64)},liveYookassa:{enabled:true},instructionPolicy:policy,regions:async()=>{throw Error('must not read public fallback')}})})
+ const server=createBrickLabServer({root,payments:createPaymentsHandler({store,origin:'https://bricklab.test',instructionRelease:true,fullCatalog:true,commerceMode:'live',liveCheckoutScope:'public',legal:{version:'a'.repeat(64)},liveYookassa:{enabled:true},instructionPolicy:policy,regions:async()=>{throw Error('must not read public fallback')}})})
  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)))
  const base='http://127.0.0.1:'+server.address().port,route='/api/commerce/instruction-regions?set=42215-1&pdf=6592888&page='
  assert.equal((await fetch(base+route+'1')).status,200)

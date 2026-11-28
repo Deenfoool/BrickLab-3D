@@ -1,0 +1,103 @@
+{
+  "10300-1": {
+    "title": "Back to the Future Time Machine",
+    "partCount": 1872,
+    "volumes": [
+      "6413319"
+    ]
+  },
+  "10307-1": {
+    "title": "Eiffel Tower",
+    "partCount": 10001,
+    "volumes": [
+      "6437106",
+      "6501712",
+      "6437120"
+    ]
+  },
+  "10316-1": {
+    "title": "Rivendell",
+    "partCount": 6167,
+    "volumes": [
+      "6455635",
+      "6698730",
+      "6455639"
+    ]
+  },
+  "42143-1": {
+    "title": "Ferrari Daytona SP3",
+    "partCount": 3778,
+    "volumes": [
+      "6590123",
+      "6590116"
+    ]
+  },
+  "42154-1": {
+    "title": "Ford GT",
+    "partCount": 1468,
+    "volumes": [
+      "6456541"
+    ]
+  },
+  "42171-1": {
+    "title": "Mercedes-AMG F1 W14",
+    "partCount": 1643,
+    "volumes": [
+      "6562099"
+    ]
+  },
+  "42206-1": {
+    "title": "Oracle Red Bull Racing RB20 F1",
+    "partCount": 1639,
+    "volumes": [
+      "6569475"
+    ]
+  },
+  "42210-1": {
+    "title": "Nissan Skyline GT-R (R34)",
+    "partCount": 1410,
+    "volumes": [
+      "6582538"
+    ]
+  },
+  "42215-1": {
+    "title": "Volvo EC500 Hybrid Excavator",
+    "partCount": 2359,
+    "volumes": [
+      "6592888",
+      "6595793"
+    ]
+  },
+  "42222-1": {
+    "title": "Bugatti Chiron Pur Sport",
+    "partCount": 771,
+    "volumes": [
+      "6659180"
+    ]
+  },
+  "42223-1": {
+    "title": "1966 Ford GT40 MKII",
+    "partCount": 793,
+    "volumes": [
+      "6651409"
+    ]
+  },
+  "75313-1": {
+    "title": "AT-AT",
+    "partCount": 6785,
+    "volumes": [
+      "6393612",
+      "6394571",
+      "6393614",
+      "6393616"
+    ]
+  },
+  "76419-1": {
+    "title": "Hogwarts Castle and Grounds",
+    "partCount": 2660,
+    "volumes": [
+      "6503071",
+      "6502947"
+    ]
+  }
+}

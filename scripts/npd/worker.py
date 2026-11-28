@@ -81,8 +81,10 @@ def verified_payment(job, shop, secret):
         raise ValueError("refund_verification_failed")
     if job["action"] == "issue" and refunded_amount != 0:
         raise ValueError("refund_requires_review")
-    if job["action"] == "reconcile_issue" and refunded_amount not in (Decimal(0), amount):
-        raise ValueError("partial_refund_requires_review")
+    # An ambiguous original issue may be looked up even after a partial return.
+    # This is read-only; no new fiscal write is authorized.
+    if not refunded_amount.is_finite() or not 0 <= refunded_amount <= amount:
+        raise ValueError("refund_amount_invalid")
     captured = p.get("captured_at")
     if not isinstance(captured, str) or datetime.fromisoformat(captured.replace("Z", "+00:00")).tzinfo is None:
         raise ValueError("missing_capture_time")

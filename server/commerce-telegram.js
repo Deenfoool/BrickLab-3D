@@ -20,7 +20,7 @@ export function commerceEventText(e){
    'Итого: '+amount(Number(e.paid_kopecks)-Number(e.refunded_kopecks)))
  }
  if(e.environment==='live'){
-  if(e.receipt_correction_pending&&e.event!=='receipt_canceled')lines.push('','⚠ Требуется корректировка чека НПД')
+  if(e.receipt_correction_pending&&e.event!=='receipt_canceled')lines.push('','⚠ Требуется корректировка чека НПД',...(e.receipt_status==='pending'?['Возврат до выдачи чека: проверь фактические операции ФНС, не создавай дубликаты.']:[]))
   else if(e.event==='succeeded'&&e.receipt_status==='pending')lines.push('','⚠ Сформируйте чек НПД в «Мой налог» и добавьте ссылку в Финансы.')
  }
  lines.push('','Событие: '+clean(e.id))

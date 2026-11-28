@@ -11,12 +11,12 @@ test('sandbox rejects live credentials and verifies payment status independently
  assert.equal(yookassaConfig({BRICKLAB_YOOKASSA_TEST_ENABLED:'true',BRICKLAB_YOOKASSA_TEST_SHOP_ID:'12345',BRICKLAB_YOOKASSA_TEST_SECRET:'live_secret_example'}).enabled,false)
  const calls=[]
  let current=verified
- const adapter=createYookassaAdapter({config,origin:'https://bricklab.test',store:{fulfillCommercePayment:async(...args)=>{calls.push(args);return true}},fetcher:async(url,opts)=>{
+ const adapter=createYookassaAdapter({config,origin:'https://bricklab.test',store:{settleVerifiedCommercePayment:async(...args)=>{calls.push(args);return true}},fetcher:async(url,opts)=>{
   assert.equal(url,'https://api.yookassa.ru/v3/payments/'+payment);assert.equal(opts.method,'GET')
   return Response.json(current)
  }})
  await adapter.notification({event:'payment.succeeded',object:{id:payment,amount:{value:'0.01'}}})
- assert.deepEqual(calls,[[id,payment,'test',24900]])
+ assert.deepEqual(calls,[[id,payment,'test',24900,false]])
  for(const invalid of [{...verified,test:false},{...verified,paid:false},{...verified,status:'pending'},{...verified,amount:{value:'249.00',currency:'USD'}}]){
   current=invalid;await assert.rejects(adapter.notification({event:'payment.succeeded',object:{id:payment}}))
  }
@@ -48,8 +48,8 @@ test('hosted region files are no longer directly public',async t=>{
 test('reconciliation uses GET only and verifies all order fields before fulfillment',async()=>{
  const calls=[];let current=verified
  const adapter=createYookassaAdapter({config,origin:'https://bricklab.test',store:{
- fulfillCommercePayment:async(...args)=>{calls.push(['paid',...args]);return true},
- cancelCommercePayment:async(...args)=>{calls.push(['cancel',...args]);return true}
+ settleVerifiedCommercePayment:async(...args)=>{calls.push(['paid',...args]);return true},
+ cancelVerifiedCommercePayment:async(...args)=>{calls.push(['cancel',...args]);return true}
  },fetcher:async(url,opts)=>{assert.equal(opts.method,'GET');assert.equal(url,'https://api.yookassa.ru/v3/payments/'+payment);return Response.json(current)}})
  const order={id,paymentId:payment,amountKopecks:24900}
  current={...verified,status:'pending',paid:false};assert.equal(await adapter.reconcileTestPayment(order),'pending')
@@ -59,5 +59,5 @@ test('reconciliation uses GET only and verifies all order fields before fulfillm
  assert.equal(calls.length,0)
  current=verified;assert.equal(await adapter.reconcileTestPayment(order),'succeeded')
  current={...verified,status:'canceled',paid:false};assert.equal(await adapter.reconcileTestPayment(order),'canceled')
- assert.deepEqual(calls,[['paid',id,payment,'test',24900],['cancel',id,payment,'test',24900]])
+ assert.deepEqual(calls,[['paid',id,payment,'test',24900,false],['cancel',id,payment,'test',24900]])
 })

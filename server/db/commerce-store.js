@@ -120,11 +120,24 @@ export function commerceStore(scope){
    return commerceEntitlements(tx,uid)
   })},
   async quoteCommerce(uid,sku,offerVersion,beta,environment,product){return scope(uid,tx=>orderQuote(tx,uid,sku,offerVersion,beta,environment,product))},
-  async createCommerceOrder(uid,sku,amount,offerVersion,beta,environment,product){return scope(uid,async tx=>{
+  async createCommerceOrder(uid,sku,amount,offerVersion,beta,environment,product,attempt){return scope(uid,async tx=>{
    await tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text,312042))`
+   if(attempt){
+    const [existing]=await tx`select o.id,o.sku,o.title,o.amount_kopecks as "amountKopecks",o.idempotency_key as "idempotencyKey",o.payment_id as "paymentId",o.created_at as "createdAt",o.status,o.offer_version as "offerVersion",o.return_to_sets as "returnToSets" from bricklab.commerce_checkout_attempts a join bricklab.commerce_orders o on o.id=a.order_id and o.user_id=a.user_id and o.environment=a.environment where a.user_id=${uid} and a.environment=${environment} and a.checkout_key=${attempt.key}::uuid`
+    if(existing){
+     if(existing.sku!==sku||existing.amountKopecks!==amount||existing.offerVersion!==offerVersion)throw new ProjectError(409,'quote_changed')
+     return existing
+    }
+   }
    const quote=await orderQuote(tx,uid,sku,offerVersion,beta,environment,product)
    if(quote.amountKopecks!==amount)throw new ProjectError(409,'quote_changed')
    const [row]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",idempotency_key as "idempotencyKey",payment_id as "paymentId",created_at as "createdAt" from bricklab.commerce_create_order(${sku},${quote.title},${amount}::integer,${offerVersion},${environment})`
+   if(attempt){
+    const [bound]=await tx`select bricklab.commerce_bind_checkout_attempt(${attempt.key}::uuid,${row.id}::uuid,${environment},${attempt.returnToSets===true}) as ok`
+    if(!bound.ok)throw new ProjectError(409,'quote_changed')
+    const [details]=await tx`select status,return_to_sets as "returnToSets" from bricklab.commerce_orders where id=${row.id}::uuid`
+    return {...row,...details}
+   }
    return row
   })},
   async requestCommerceRefund(uid,id,environment){return scope(uid,async tx=>{const [r]=await tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks",refund_requested_at as "requestedAt",provider_refund_id as "refundId" from bricklab.commerce_request_refund(${id}::uuid,${environment})`;return r})},
@@ -134,6 +147,12 @@ export function commerceStore(scope){
   async registerCommerceReceipt(uid,id,url){return scope(uid,async tx=>{const [r]=await tx`select bricklab.commerce_register_receipt(${id}::uuid,${url}) as ok`;return r.ok})},
   async claimCommerceReceiptDeliveries(){return scope('',tx=>tx`select * from bricklab.commerce_claim_receipt_deliveries()`)},
   async ackCommerceReceiptDelivery(id,url){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_ack_receipt_delivery(${id}::uuid,${url}) as ok`;return r.ok})},
+  async commerceAdminRecoveryOrder(uid,id,environment){return scope(uid,async tx=>{const [r]=await tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks",status from bricklab.commerce_admin_recovery_order(${id}::uuid,${environment})`;return r})},
+  async commerceAdminProviderTotals(uid,environment){return scope(uid,async tx=>{const [r]=await tx`select * from bricklab.commerce_admin_provider_totals(${environment})`;return r})},
+  async commerceAdminHealth(uid,environment){return scope(uid,async tx=>{const [r]=await tx`select * from bricklab.commerce_admin_health(${environment})`;return r})},
+  async commerceAdminAudit(uid,id,action,environment,orderId,phase){return scope(uid,tx=>tx`select bricklab.commerce_admin_audit_write(${id}::uuid,${action},${environment},${orderId}::uuid,${phase})`)},
+  async commerceAdminAuditList(uid,environment){return scope(uid,tx=>tx`select * from bricklab.commerce_admin_audit_list(${environment})`)},
+  async commerceAdminExport(uid,environment,from,to){return scope(uid,tx=>tx`select * from bricklab.commerce_admin_export(${environment},${from}::date,${to}::date)`)},
   async commerceAdminLedger(uid,environment){return scope(uid,tx=>tx`select * from bricklab.commerce_admin_ledger(${environment})`)},
   async confirmCommerceReceiptCorrection(uid,id,reference){return scope(uid,async tx=>{const [r]=await tx`select bricklab.commerce_confirm_receipt_correction(${id}::uuid,${reference}) as ok`;return r.ok})},
   async confirmCommerceReceipt(uid,id,reference){return scope(uid,async tx=>{const [r]=await tx`select bricklab.commerce_confirm_receipt(${id}::uuid,${reference}) as ok`;return r.ok})},
@@ -160,12 +179,18 @@ export function commerceStore(scope){
   async cancelCommercePayment(id,paymentId,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_cancel_payment(${id}::uuid,${paymentId},${environment},${amount}::integer) as ok`;return r.ok})},
   async createCommerceTestOrder(uid,sku){return scope(uid,async tx=>{const [row]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",idempotency_key as "idempotencyKey",payment_id as "paymentId",created_at as "createdAt" from bricklab.commerce_create_test_order(${sku})`;return row})},
   async attachCommercePayment(id,paymentId,environment){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_attach_payment(${id}::uuid,${paymentId},${environment}) as ok`;return r.ok})},
+  async observePartialCommerceRefund(id,paymentId,environment,amount,refunded,income){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_observe_partial_refund(${id}::uuid,${paymentId},${environment},${amount}::integer,${refunded}::integer,${income}::integer) as ok`;return r.ok})},
+  async adminPartialRefundReview(uid,id,expected,reference){return scope(uid,async tx=>{const [r]=await tx`select bricklab.commerce_admin_partial_review(${id}::uuid,${expected}::integer,${reference}) as ok`;return r.ok})},
+  async settleVerifiedCommerceIncome(id,paymentId,environment,amount,refunded,income){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_settle_verified_income(${id}::uuid,${paymentId},${environment},${amount}::integer,${refunded}::boolean,${income}::integer) as ok`;return r.ok})},
+  async settleVerifiedCommercePayment(id,paymentId,environment,amount,refunded=false){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_settle_verified(${id}::uuid,${paymentId},${environment},${amount}::integer,${refunded}::boolean) as ok`;return r.ok})},
+  async cancelVerifiedCommercePayment(id,paymentId,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_cancel_verified(${id}::uuid,${paymentId},${environment},${amount}::integer) as ok`;return r.ok})},
   async fulfillCommercePayment(id,paymentId,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_fulfill(${id}::uuid,${paymentId},${environment},${amount}::integer) as ok`;return r.ok})},
+  async commerceOwnOrder(uid,id,environment){return scope(uid,async tx=>{const [r]=await tx`select id,order_number as "orderNumber",sku,title,amount_kopecks as "amountKopecks",status,refunded_kopecks as "refundedKopecks",receipt_status as "receiptStatus",partial_review_pending as "partialReviewPending",case when status='succeeded' and not partial_refund_seen then receipt_delivery_url else null end as "receiptUrl" from bricklab.commerce_orders where user_id=${uid} and id=${id}::uuid and environment=${environment}`;return r})},
   async commerceAccount(uid){
    return scope(uid,async tx=>{
     const account=await commerceEntitlements(tx,uid);
     const orders=await tx`select id,order_number as "orderNumber",sku,title,amount_kopecks as "amountKopecks",status,
-     created_at as "createdAt",paid_at as "paidAt",refunded_at as "refundedAt",receipt_status as "receiptStatus",case when status='succeeded' then receipt_delivery_url else null end as "receiptUrl",receipt_delivery_sent_at as "receiptSentAt",payment_id as "paymentId",refund_requested_at as "refundRequestedAt"
+     created_at as "createdAt",paid_at as "paidAt",refunded_at as "refundedAt",refunded_kopecks as "refundedKopecks",partial_review_pending as "partialReviewPending",receipt_status as "receiptStatus",case when status='succeeded' and not partial_refund_seen then receipt_delivery_url else null end as "receiptUrl",receipt_delivery_sent_at as "receiptSentAt",payment_id as "paymentId",refund_requested_at as "refundRequestedAt"
      from bricklab.commerce_orders where user_id=${uid} and environment='live'
      order by created_at desc,id limit 50`;
     return {...account,orders};

@@ -1,4 +1,5 @@
 import {readFile,stat} from 'node:fs/promises'
+import {validateReviewedInstructionAudit} from './instruction-audit.js'
 import {canUseInteractive,instructionProduct,trialStepLimit} from '../src/menu/commerce-catalog.js'
 import {canonicalInstructionUrl} from '../src/sets/instruction-url.js'
 
@@ -19,7 +20,7 @@ export function completedInstructionSet(doc,policy){
  return ids.size>=rule.partCount?set.number:null
 }
 export function createInstructionPolicy(audit={}){
- const books=new Map(),products=[],limits=new Map(),completion=new Map()
+ const books=new Map(),products=[],limits=new Map(),completion=new Map(),paidBooks=new Map()
  for(const [set,volumes] of Object.entries(audit)){
   if(!/^\d{3,7}-\d{1,2}$/.test(set)||!volumes||typeof volumes!=='object'||Array.isArray(volumes))throw Error('invalid_audited_set')
   const metadata=volumes.metadata;
@@ -41,6 +42,7 @@ export function createInstructionPolicy(audit={}){
   }
   let maxStep=0;for(const [,pages] of entries)for(const p of pages)maxStep=Math.max(maxStep,p.step)
   limits.set(set,trialStepLimit(maxStep))
+  if(products.some(p=>p.setId===set))for(const [id] of entries)paidBooks.set(id,set)
   // Multi-volume completion requires explicit operator-supplied final book ID.
   const last=metadata?.finalBook??(entries.length===1?entries[0][0]:null)
   const finalPages=entries.find(([id])=>id===last)?.[1]
@@ -52,19 +54,26 @@ export function createInstructionPolicy(audit={}){
   trialSteps:set=>limits.get(set)??10,
   completion:set=>completion.get(set)??null,
   access({setId,book,page,account=null,release=false}){
-   const pages=books.get(setId+'/'+bookId(book)),supported=!!pages
+   const id=bookId(book),pages=books.get(setId+'/'+id),supported=!!pages
    const entry=pages?.[page-1],step=entry?.step??null
    // A known audited book with an out-of-range page is not a free bypass.
-   const interactive=!release||!products.some(p=>p.setId===setId)||!supported||!!entry&&(step===0||canUseInteractive({account,setId,step,beta:false,supported:true,trialSteps:limits.get(setId)??10}))
+   const interactive=!release||!products.some(p=>p.setId===setId)||!!entry&&(step===0||canUseInteractive({account,setId,step,beta:false,supported:true,trialSteps:limits.get(setId)??10}))
    return {mode:release?'release':'beta',supported,step,interactive}
   },
+  paidSetForBook:pdfId=>paidBooks.get(pdfId)??null,
   regions(setId,pdfId,page){return books.get(setId+'/'+pdfId)?.[page-1]?.regions??null}
  }
 }
 const empty=createInstructionPolicy()
 export function instructionAccess(args){return empty.access(args)}
-export async function loadInstructionPolicy(path){
- if(!path)return empty
- if(!(await stat(path)).isFile()||(await stat(path)).size>32*1024*1024)throw Error('invalid_private_audit_file')
- return createInstructionPolicy(JSON.parse(await readFile(path,'utf8')))
+export async function loadInstructionPolicy(path,{requireEvidence=false}={}){
+ if(!path){if(requireEvidence)throw Error('instruction_approval_required');return empty}
+ const info=await stat(path)
+ if(!info.isFile()||info.size>32*1024*1024)throw Error('invalid_private_audit_file')
+ const raw=await readFile(path,'utf8')
+ if(!requireEvidence)return createInstructionPolicy(JSON.parse(raw))
+ const approvalPath=path+'.approval.json',approvalInfo=await stat(approvalPath)
+ if(!approvalInfo.isFile()||approvalInfo.size>65536)throw Error('invalid_instruction_approval')
+ const verified=validateReviewedInstructionAudit(raw,JSON.parse(await readFile(approvalPath,'utf8')))
+ return {...createInstructionPolicy(verified.audit),offerVersion:verified.offerVersion,auditSha256:verified.sha256}
 }

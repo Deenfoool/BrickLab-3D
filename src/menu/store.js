@@ -38,7 +38,7 @@ function communityExamples(theme,language){
 export function mountStore(root,{language='ru',signal}){
  const ru=language==='ru',t=labels[language]??labels.ru,tr=(a,b)=>ru?a:b,money=n=>(Number(n)/100).toLocaleString(ru?'ru-RU':'en-US',{style:'currency',currency:'RUB',maximumFractionDigits:2})
  const orderNo=n=>'BL-'+String(n??'').padStart(6,'0')
- const errorText=e=>({verified_account_required:tr('Подтверди электронную почту перед покупкой.','Verify your email before purchasing.'),invalid_receipt_url:tr('Нужна ссылка на чек из «Мой налог».','Use an official My Tax receipt link.'),receipt_already_used:tr('Чек уже привязан к другому заказу.','Receipt already used.'),checkout_pending:tr('Заверши предыдущую оплату.','Finish the previous payment.')})[e.code]??t.error+' ('+(e.status??'network')+')'
+ const errorText=e=>({invalid_export_range:tr('Выбери корректный период до 31 дня.','Select a valid range of up to 31 days.'),export_too_large:tr('Слишком много операций. Уменьши период.','Too many operations. Narrow the date range.'),verified_account_required:tr('Подтверди электронную почту перед покупкой.','Verify your email before purchasing.'),invalid_receipt_url:tr('Нужна ссылка на чек из «Мой налог».','Use an official My Tax receipt link.'),receipt_already_used:tr('Чек уже привязан к другому заказу.','Receipt already used.'),checkout_pending:tr('Заверши предыдущую оплату.','Finish the previous payment.'),payment_mismatch:tr('Платёж не соответствует заказу. Проверь ID, сумму и режим в ЮKassa.','Payment does not match the order. Verify ID, amount and mode in YooKassa.'),partial_refund_requires_review:tr('Частичный возврат требует ручной сверки.','Partial refund requires manual review.'),order_reconciliation_required:tr('Платёж требует сверки. Не оплачивай повторно — обратись в поддержку.','Payment requires reconciliation. Do not pay again; contact support.'),refund_reconciliation_required:tr('Возврат требует сверки в ЮKassa. Не повторяй вручную.','Refund requires YooKassa reconciliation. Do not repeat manually.')})[e.code]??t.error+' ('+(e.status??'network')+')'
  const profiles=createProfileClient(),nav=el('div','commerce-preview-nav'),grid=el('div','store-grid'),notice=el('p','account-muted'),summary=el('section','store-orders')
  notice.setAttribute('role','status')
  const categories=[['all',tr('Все товары','All products')],['subscription','BrickLab Plus'],['theme',tr('Темы','Themes')],['themeBundle',tr('Коллекции','Collections')],['storage',tr('Облачные проекты','Cloud projects')],['badge',tr('Значки','Badges')],['orders',tr('Мои покупки','My purchases')],['ledger',tr('Финансы','Finance')],['analytics',tr('Аналитика','Analytics')]]
@@ -52,8 +52,9 @@ export function mountStore(root,{language='ru',signal}){
  const tabs=new Map(),header=el('div','store-banner'),heading=el('div'),art=el('div','store-banner-art')
  heading.append(el('span','store-kicker','BRICKLAB STORE'),el('h2',null,tr('Расширь свою мастерскую','Expand your workshop')),el('p',null,tr('Темы, облачное пространство, коллекции и Plus. Основной редактор бесплатный.','Themes, cloud space, collections and Plus. The core editor is free.')))
  for(const id of ['carbon','neon','aurora'])art.append(themePreview(themeFor(id),language));header.append(heading,art)
- let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,analytics=null,testMode=false,busy=false,serial=0
- try{if(sessionStorage.getItem('bricklab-commerce-return')==='1'){selected='orders';sessionStorage.removeItem('bricklab-commerce-return')}}catch{}
+ let returnOrder=null,returnStatus=null,returnChecks=0,returnBusy=false;
+ let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,health=null,providerTotals=null,analytics=null,testMode=false,busy=false,serial=0
+ try{const raw=sessionStorage.getItem('bricklab-commerce-return');if(raw){selected='orders';sessionStorage.removeItem('bricklab-commerce-return');if(raw!=='1'){const v=JSON.parse(raw);if(/^[a-f0-9-]{36}$/i.test(v.id)&&['test','live'].includes(v.mode))returnOrder=v}}}catch{}
  const refreshButton=button(tr('Обновить покупки','Refresh purchases'),()=>refresh())
  for(const [id,label] of categories){const b=button(label,()=>{selected=id;render()});tabs.set(id,b);nav.append(b)}
  nav.append(refreshButton)
@@ -89,30 +90,30 @@ export function mountStore(root,{language='ru',signal}){
   busy=true
   const dialog=el('dialog','store-preview-dialog'),label=el('label','store-consent'),accept=el('input'),status=el('p','account-muted'),price=el('strong','store-price',money(p.priceKopecks))
   accept.type='checkbox';label.append(accept,el('span',null,testMode?tr('Принимаю условия проверки. Тестовая оплата без списания; доступ только в режиме проверки.','I accept the test conditions. No charge; access only during testing.'):tr('Принимаю оферту и условия возврата.','I accept the offer and refund terms.')))
-  const mode=testMode?'test':'live';let quote=null
+  const mode=testMode?'test':'live',checkoutKey=crypto.randomUUID();let quote=null,paying=false,finished=false
   const pay=button(tr('Перейти к оплате','Proceed to payment'),async()=>{
-   if(!accept.checked||!quote)return;pay.disabled=true
+   if(paying||finished||!accept.checked||!quote)return;paying=true;pay.disabled=true;accept.disabled=true;close.disabled=true
    try{
-    const result=await api('/api/commerce/checkout',signal,{sku:p.id,amountKopecks:quote.amountKopecks,offerVersion:quote.offerVersion,accepted:true,mode})
-    if(result.mode!==mode)throw Error('mode');if(result.checkoutUrl){const url=safeUrl(result.checkoutUrl);try{sessionStorage.setItem('bricklab-commerce-return','1')}catch{}location.assign(url);return}
-    status.textContent=result.status==='succeeded'?tr('Оплата подтверждена.','Payment confirmed.'):tr('Платёж отменён.','Payment canceled.');await refresh()
-   }catch(e){status.textContent=errorText(e);pay.disabled=!accept.checked}
+    const result=await api('/api/commerce/checkout',signal,{sku:p.id,amountKopecks:quote.amountKopecks,offerVersion:quote.offerVersion,accepted:true,mode,checkoutKey})
+    if(result.mode!==mode)throw Error('mode');if(result.checkoutUrl){const url=safeUrl(result.checkoutUrl);try{sessionStorage.setItem('bricklab-commerce-return',JSON.stringify({id:result.orderId,mode}))}catch{}location.assign(url);return}
+    finished=true;status.textContent=result.status==='partially_refunded'?tr('Платёж частично возвращён. Обратись в поддержку.','Payment partially refunded. Contact support.'):result.status==='succeeded'?tr('Оплата подтверждена.','Payment confirmed.'):result.status==='refunded'?tr('Средства возвращены.','Payment refunded.'):tr('Платёж отменён.','Payment canceled.');await refresh()
+   }catch(e){status.textContent=errorText(e)}finally{paying=false;accept.disabled=finished;close.disabled=false;pay.disabled=finished||!accept.checked||!quote}
   })
-  pay.disabled=true;accept.onchange=()=>pay.disabled=!accept.checked||!quote
+  pay.disabled=true;accept.onchange=()=>pay.disabled=paying||finished||!accept.checked||!quote
   const close=button(tr('Закрыть','Close'),()=>dialog.close())
   const visual=p.kind==='theme'?themePreview(themeFor(p.id),language):p.kind==='themeBundle'?collectionArt():productArtwork(p,language)
   dialog.append(el('h2',null,productTitle(p)))
   if(visual){visual.classList.add('commerce-checkout-art');dialog.append(visual)}
   dialog.append(el('p','account-muted',description(p)),price,label,pay,close,status)
   {const a=link(tr('Оферта','Offer'),'/offer');a.target='_blank';a.rel='noopener';dialog.append(a);void api('/api/commerce/quote?sku='+encodeURIComponent(p.id),signal).then(q=>{if(q.mode!==mode)throw Error('mode_changed');quote=q;price.textContent=money(q.amountKopecks);pay.disabled=!accept.checked}).catch(e=>status.textContent=errorText(e))}
-  dialog.addEventListener('close',()=>{busy=false;dialog.remove()},{once:true});signal.addEventListener('abort',()=>{if(dialog.open)dialog.close()},{once:true});root.append(dialog);dialog.showModal()
+  dialog.addEventListener('cancel',e=>{if(paying)e.preventDefault()});dialog.addEventListener('close',()=>{busy=false;dialog.remove()},{once:true});signal.addEventListener('abort',()=>{if(dialog.open)dialog.close()},{once:true});root.append(dialog);dialog.showModal()
  }
  function render(){
   if(!catalog||signal.aborted)return
   const a=account,products=[...catalog.products.map(p=>({id:p.sku,kind:'theme',title:p.title,priceKopecks:p.amountKopecks})),...commerceProducts,...(catalog.instructions??[])]
   for(const [id,b] of tabs){b.classList.toggle('primary',selected===id);b.setAttribute('aria-pressed',String(selected===id))}
   const adminTab=tabs.get('ledger');if(adminTab)adminTab.hidden=!ledger;tabs.get('analytics').hidden=!checkoutStatus?.admin;
-  notice.textContent=testMode?tr('ТЕСТ · Оплата без списания. Тестовые права администратора действуют до переключения кассы в боевой режим.','TEST · No charge. Administrator test entitlements apply until switching to live.'):catalog.live?tr('Оплата через ЮKassa.','Payment via YooKassa.'):tr('Оплата пока закрыта. Темы — первый ассортимент; остальные товары готовятся к выпуску.','Checkout closed. Themes are the first assortment; other products are in preparation.')
+  notice.textContent=checkoutStatus?.scope==='pilot'?tr('КОНТРОЛЬНАЯ ПОКУПКА · Реальное списание, доступно только администратору.','LIVE PILOT · Real charge, administrator only.'):testMode?tr('ТЕСТ · Оплата без списания. Тестовые права администратора действуют до переключения кассы в боевой режим.','TEST · No charge. Administrator test entitlements apply until switching to live.'):catalog.live?tr('Оплата через ЮKassa.','Payment via YooKassa.'):tr('Оплата пока закрыта. Темы — первый ассортимент; остальные товары готовятся к выпуску.','Checkout closed. Themes are the first assortment; other products are in preparation.')
   grid.replaceChildren();summary.replaceChildren();summary.hidden=!a
   if(a){
    summary.classList.add('commerce-account-strip')
@@ -143,6 +144,26 @@ export function mountStore(root,{language='ru',signal}){
   }
   if(selected==='ledger'){
    if(!ledger)return
+   const exportPanel=el('section','store-orders');exportPanel.style.gridColumn='1 / -1'
+   exportPanel.append(el('h2',null,tr('Экспорт операций и журнал','Operations export and audit')),el('p','account-muted',tr('До 31 дня включительно, по МСК. Возвраты — по времени наблюдения. CSV без имён, email и ссылок на чеки.','Up to 31 inclusive Moscow-time dates. Refunds use observation time. No buyer names, emails or receipt URLs in CSV.')))
+   const controls=el('div','commerce-preview-nav'),from=el('input'),to=el('input'),environment=checkoutStatus.mode
+   const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
+   for(const [input,label] of [[from,tr('С даты','From')],[to,tr('По дату','To')]]){input.type='date';input.value=today;input.setAttribute('aria-label',label);const wrap=el('label',null,label+' ');wrap.append(input);controls.append(wrap)}
+   const download=button(tr('Скачать CSV','Download CSV'),async()=>{
+    download.disabled=true
+    try{
+     const response=await fetch('/api/commerce/admin-export',{method:'POST',credentials:'same-origin',cache:'no-store',redirect:'error',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({environment,from:from.value,to:to.value})})
+     if(!response.ok){const d=await response.json().catch(()=>null);throw Object.assign(Error('Export failed'),{status:response.status,code:d?.error})}
+     const url=URL.createObjectURL(await response.blob()),a=el('a');a.href=url;a.download='bricklab-'+environment+'-'+from.value+'-'+to.value+'.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)
+    }catch(e){notice.textContent=errorText(e)}finally{download.disabled=false}
+   })
+   const journal=el('details');journal.append(el('summary',null,tr('Последние события администратора','Recent administrator events')))
+   const entries=el('div');journal.append(entries)
+   const loadAudit=button(tr('Загрузить журнал','Load audit'),async()=>{
+    loadAudit.disabled=true
+    try{const data=await api('/api/commerce/admin-audit?environment='+environment,signal);entries.replaceChildren();for(const event of data.events){entries.append(el('p','account-muted',new Date(event.recorded_at).toLocaleString(language==='ru'?'ru-RU':'en-US')+' · '+event.action+' · '+event.phase+' · '+event.actor_id+' · '+(event.order_id??'—')+' · '+event.request_id))}if(!data.events.length)entries.append(el('p','account-muted',tr('Событий пока нет','No events yet')))}catch(e){notice.textContent=errorText(e)}finally{loadAudit.disabled=false}
+   })
+   journal.append(loadAudit);controls.append(download);exportPanel.append(controls,journal);grid.append(exportPanel)
    const totals=ledger.totals
    if(totals){
     const metrics=el('section','store-orders');metrics.style.gridColumn='1 / -1'
@@ -153,18 +174,54 @@ export function mountStore(root,{language='ru',signal}){
     }
     metrics.append(values);grid.append(metrics)
    }
+   if(!testMode&&providerTotals){
+    const settlement=el('section','store-orders');settlement.style.gridColumn='1 / -1';settlement.append(el('h2',null,tr('Расчёты с ЮKassa','YooKassa settlements')+' · '+providerTotals.day+' · МСК'),el('p','account-muted',tr('По данным API, не банковская выписка и не чистая прибыль. Налог НПД и расходы не вычтены.','Provider API data, not a bank statement or profit. NPD and operating expenses are not deducted.')));
+    const values=el('div','store-grid');
+    for(const [label,value] of [[tr('Сумма после удержаний · известные оплаты','After fees · known payments'),providerTotals.provider_income_kopecks],[tr('Комиссия и НДС · известные оплаты','Fees and VAT · known payments'),providerTotals.fees_kopecks],[tr('Возвраты','Refunds'),providerTotals.refunded_kopecks],[tr('Остаток после удержаний и возвратов','After fees and refunds'),providerTotals.net_after_provider_kopecks]]){const metric=el('article','commerce-preview-card');metric.append(el('small','account-muted',label),el('strong','store-price',value==null?'—':money(value)));values.append(metric)}
+    settlement.append(values,el('small','account-muted',tr('Оплат без данных комиссии: ','Payments missing fee data: ')+providerTotals.unknown_count+' / '+providerTotals.paid_count));grid.append(settlement)
+   }
+   if(health){
+    const ops=el('section','store-orders');ops.style.gridColumn='1 / -1';
+    ops.append(el('h2',null,tr('Контроль операций','Operations monitor')),el('p','account-muted',tr('Все заказы текущего режима, не только последние 100.','All orders in this mode, not only the latest 100.')));
+    const values=el('div','store-grid');
+    for(const [key,label] of [['pending',tr('Ожидают оплаты','Pending payments')],['unattached_old',tr('Без ID платежа более 23 ч','Unattached >23h')],['refund_pending',tr('Ожидают возврата','Pending refunds')],['refund_unattached',tr('Возврат без ID','Refund ID missing')],['receipt_pending',tr('Ожидают чека','Receipts pending')],['receipt_unknown',tr('Неизвестный результат ФНС','Uncertain FNS result')],['early_refund',tr('Возврат до чека','Refund before receipt')],['correction_pending',tr('Ожидают корректировки','Corrections pending')],['partial_review',tr('Частичные возвраты на сверке','Partial refunds under review')],['mail_pending',tr('Чеки в почтовой очереди','Receipt mail queued')],['telegram_pending',tr('Уведомления в очереди','Notifications queued')]]){
+     if(testMode&&['receipt_pending','receipt_unknown','early_refund','correction_pending','mail_pending'].includes(key))continue;
+     const card=el('article','commerce-preview-card');card.append(el('small','account-muted',label),el('strong','store-price',String(health[key]??'—')));values.append(card)
+    }
+    ops.append(values);grid.append(ops)
+   }
    for(const o of ledger.orders){
     const card=el('article','commerce-preview-card');card.append(orderIdentity(products.find(p=>p.id===o.sku),o.title),el('strong','store-price',money(o.amount_kopecks)),el('p','account-muted',o.display_name+' · '+o.email),el('p',null,o.status),el('small','account-muted',orderNo(o.order_number)))
-    if(checkoutStatus?.enabled&&o.status==='succeeded'){
+    if(!testMode&&['succeeded','refunded'].includes(o.status))card.append(el('p','account-muted',o.provider_income_kopecks==null?tr('Удержания ЮKassa: нет данных','YooKassa fees: unknown'):tr('Удержания ЮKassa: ','YooKassa fees: ')+money(Number(o.amount_kopecks)-Number(o.provider_income_kopecks))));
+    const uncertain=['issue_unknown','cancel_unknown'].includes(o.fiscal_state),early=!testMode&&o.status==='refunded'&&o.receipt_status==='pending'&&o.receipt_correction_pending;
+    if(o.status==='pending'&&!o.payment_id)card.append(el('p','account-muted',tr('ID платежа ещё не получен. Не создавай повторный заказ вручную.','Payment ID not yet known. Do not manually create a replacement.')));
+    if(o.status==='succeeded'&&o.refund_requested_at)card.append(el('p','account-muted',tr('Возврат запрошен; проверяется у ЮKassa.','Refund requested; checking YooKassa.')));
+    if(checkoutStatus?.refundEnabled){
+     const recovery=el('details','account-muted');recovery.append(el('summary',null,tr('Сверить с ЮKassa','Reconcile with YooKassa')),el('p',null,tr('Только запрос существующего платежа. Новых списаний и возвратов не будет.','Read-only provider lookup. No new charge or refund.')));
+     const id=el('input','account-field');id.placeholder=tr('ID платежа из кабинета ЮKassa','Payment ID from YooKassa dashboard');id.maxLength=36;id.value=o.payment_id??'';id.readOnly=!!o.payment_id;
+     const check=button(tr('Проверить операцию','Verify payment'),async()=>{if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id.value.trim())){notice.textContent=tr('Укажи корректный ID платежа.','Enter a valid payment ID.');return}check.disabled=true;try{const result=await api('/api/commerce/admin-reconcile',signal,{orderId:o.id,paymentId:id.value.trim(),mode:checkoutStatus.mode});await refresh();notice.textContent=tr('Результат сверки: ','Reconciliation: ')+result.status}catch(e){notice.textContent=errorText(e);check.disabled=false}});
+     recovery.append(id,check);card.append(recovery)
+    }
+    if(checkoutStatus?.refundEnabled&&o.status==='succeeded'&&!o.refunded_kopecks){
      const refund=button(tr('Полный возврат','Full refund'),async()=>{if(!window.confirm((testMode?tr('Тестовый возврат ','Test refund '):tr('Вернуть реальные деньги ','Refund real money '))+money(o.amount_kopecks)+'?'))return;refund.disabled=true;try{const result=await api('/api/commerce/refund',signal,{orderId:o.id,confirm:true,mode:checkoutStatus.mode});await refresh();notice.textContent=tr('Возврат: ','Refund: ')+result.status}catch(e){notice.textContent=errorText(e);refund.disabled=false}});card.append(refund)
     }
-    if(!testMode&&o.status==='succeeded'&&o.receipt_status==='pending'){
-     card.append(el('p','account-muted',tr('Сформируй чек в «Мой налог» на указанную сумму, вставь ссылку. BrickLab отправит её покупателю.','Create an NPD receipt in My Tax and paste the link. BrickLab emails it to the customer.')))
+    if(o.refunded_kopecks>0&&o.status!=='refunded')card.append(el('p','account-muted',tr('Частичный возврат: ','Partial refund: ')+money(o.refunded_kopecks)));
+    if(!testMode&&o.partial_review_pending){
+     card.append(el('p','account-muted',tr('Нужна налоговая сверка частичного возврата. Автоматическое оформление новых чеков по заказу остановлено. Проверь фактический чек и корректировку в ФНС.','Partial refund fiscal review required. Automatic new receipt operations are paused. Verify actual receipt and correction in FNS.')));
+     if(!uncertain&&o.receipt_status==='issued'){
+      const ref=el('input','account-field');ref.maxLength=250;ref.placeholder=tr('Подтверждение фактической корректировки','Actual correction reference');
+      const done=button(tr('Подтвердить сверку','Confirm review'),async()=>{if(!ref.value.trim()||!window.confirm(tr('Подтверждаешь корректность налоговых записей и передачу необходимых чеков покупателю?','Confirm actual tax records and delivery of required receipts?')))return;done.disabled=true;try{await api('/api/commerce/admin-partial-review',signal,{orderId:o.id,refundedKopecks:Number(o.refunded_kopecks),reference:ref.value.trim(),confirm:true});await refresh()}catch(e){notice.textContent=errorText(e);done.disabled=false}});card.append(ref,done)
+     }
+    }
+    if(!testMode&&uncertain){
+     card.append(el('p','account-muted',tr('Результат операции ФНС неизвестен. Идёт сверка без повторной записи. Не формируй второй чек и не подтверждай корректировку до выяснения результата.','FNS result uncertain. Read-only reconciliation in progress. Do not issue a duplicate or confirm a correction.')))
+    }else if(!testMode&&(o.status==='succeeded'||early)&&o.receipt_status==='pending'){
+     card.append(el('p','account-muted',early?tr('Возврат до выдачи чека: проверь фактические записи в ФНС и согласованный порядок оформления. Добавь ссылку только на реально сформированный чек; доставку и аннулирование проверь вручную.','Refund before receipt: verify actual FNS records and the approved fiscal procedure. Register only an actual receipt; verify delivery and cancellation manually.'):tr('Если автоматизация не действует, добавь ссылку на фактически сформированный чек. BrickLab отправит её покупателю.','If automation is unavailable, register an actual receipt link. BrickLab emails it to the customer.')))
      const input=el('input','account-field');input.placeholder='https://lknpd.nalog.ru/api/v1/receipt/…/print';input.maxLength=250
-     const confirm=button(tr('Отправить чек покупателю','Send receipt to customer'),async()=>{if(!input.value.trim()||!window.confirm(tr('Подтверждаешь, что чек сформирован в ФНС и соответствует заказу и сумме?','Confirm the FNS receipt matches the order and amount?')))return;confirm.disabled=true;try{await api('/api/commerce/admin-register-receipt',signal,{orderId:o.id,url:input.value.trim(),confirm:true});await refresh()}catch(e){notice.textContent=errorText(e);confirm.disabled=false}})
+     const confirm=button(early?tr('Зарегистрировать чек','Register receipt'):tr('Отправить чек покупателю','Send receipt to customer'),async()=>{if(!input.value.trim()||!window.confirm(tr('Подтверждаешь, что чек сформирован в ФНС и соответствует заказу и сумме?','Confirm the FNS receipt matches the order and amount?')))return;confirm.disabled=true;try{await api('/api/commerce/admin-register-receipt',signal,{orderId:o.id,url:input.value.trim(),confirm:true});await refresh()}catch(e){notice.textContent=errorText(e);confirm.disabled=false}})
      card.append(input,confirm)
     }else if(!testMode)card.append(el('p','account-muted',tr('Чек: ','Receipt: ')+(o.receipt_delivery_url?(o.receipt_delivery_sent_at?tr('Письмо принято почтовым сервисом','Email accepted'):tr('Ожидает отправки','Queued')):o.receipt_status)))
-    if(!testMode&&o.receipt_correction_pending){
+    if(!testMode&&o.receipt_correction_pending&&!o.partial_refund_seen&&!uncertain&&o.receipt_status==='issued'){
      card.append(el('p','account-muted',tr('После возврата требуется корректировка расчёта в «Мой налог».','Correct the fiscal record after the refund.')))
      const input=el('input','account-field');input.placeholder=tr('Номер или основание корректировки','Correction reference');input.maxLength=250
      const confirm=button(tr('Корректировка выполнена','Correction completed'),async()=>{if(!input.value.trim()||!window.confirm(tr('Подтвердить фактически выполненную корректировку в «Мой налог»?','Confirm that the fiscal correction is complete?')))return;confirm.disabled=true;try{await api('/api/commerce/admin-receipt-correction',signal,{orderId:o.id,reference:input.value.trim(),confirm:true});await refresh()}catch{notice.textContent=t.error;confirm.disabled=false}})
@@ -176,8 +233,14 @@ export function mountStore(root,{language='ru',signal}){
    return
   }
   if(selected==='orders'){
+   if(returnOrder){
+    const focus=el('section','store-orders');focus.style.gridColumn='1 / -1';focus.append(el('h2',null,tr('Статус последней оплаты','Latest checkout status')));
+    if(returnStatus){const s=returnStatus;focus.append(el('p',null,orderNo(s.orderNumber)+' · '+s.title),el('strong','store-price',money(s.amountKopecks)),el('p',null,s.status==='succeeded'?(s.refundedKopecks>0?tr('Частичный возврат. Проверь историю покупок.','Partially refunded. Check purchase history.'):tr('Оплата подтверждена сервером. Покупка закреплена за аккаунтом.','Payment verified by the server. Purchase linked to your account.')):s.status==='refunded'?tr('Средства возвращены.','Payment refunded.'):s.status==='canceled'?tr('Платёж отменён.','Payment canceled.'):tr('Ожидаем подтверждения ЮKassa. Не оплачивай повторно.','Waiting for YooKassa confirmation. Do not pay again.')))}
+    else focus.append(el('p','account-muted',a?tr('Подтверждение пока не получено. Проверь аккаунт и обнови статус.','Confirmation unavailable. Verify your account and refresh.'):tr('Войди в тот же аккаунт, с которого совершалась покупка.','Sign in to the account used for this purchase.')));
+    focus.append(button(tr('Проверить статус','Check status'),()=>{returnChecks=0;void refresh()}),button(tr('Скрыть','Dismiss'),()=>{returnOrder=null;returnStatus=null;render()}));grid.append(focus)
+   }
    if(!a){grid.append(link(t.login,'#account'));return}
-   for(const o of a.orders??[]){const card=el('article','commerce-preview-card'),p=products.find(p=>p.id===o.sku);card.append(orderIdentity(p,p?productTitle(p):o.title),el('strong','store-price',money(o.amountKopecks)),el('p','account-muted',({pending:tr('Ожидает оплаты','Pending'),succeeded:tr('Оплачено','Paid'),canceled:tr('Отменено','Canceled'),refunded:tr('Возвращено','Refunded')})[o.status]??o.status),el('small','account-muted',orderNo(o.orderNumber)));if(!testMode&&o.receiptStatus==='pending')card.append(el('p','account-muted',tr('Чек формируется','Receipt pending')));if(!testMode&&o.receiptUrl&&/^https:\/\/lknpd\.nalog\.ru\/api\/v1\/receipt\/[0-9]{12}\/[A-Za-z0-9_-]{1,80}\/print$/.test(o.receiptUrl)){const receipt=link(tr('Чек НПД','NPD receipt'),o.receiptUrl);receipt.target='_blank';receipt.rel='noopener noreferrer';card.append(receipt)}if(p?.kind==='instruction'&&['pending','succeeded'].includes(o.status))card.append(button(tr('Открыть набор','Open set'),()=>{try{sessionStorage.setItem('bricklab-instruction-return',p.setId)}catch{}location.hash='#sets'}));else if(o.status==='pending'&&p&&checkoutStatus?.enabled&&checkoutStatus.skus.includes(p.id))card.append(button(tr('Продолжить оплату','Resume checkout'),()=>showCheckout(p)));if(testMode&&o.status==='succeeded'){const refund=button(o.refundRequestedAt?tr('Проверить возврат','Check refund'):tr('Тестовый возврат','Test refund'),async()=>{if(!o.refundRequestedAt&&!window.confirm(tr('Вернуть всю тестовую сумму и отозвать приобретение?','Refund the full test amount and revoke the entitlement?')))return;refund.disabled=true;try{const result=await api('/api/commerce/refund',signal,{orderId:o.id,confirm:true,mode:checkoutStatus.mode});await refresh();notice.textContent=tr('Возврат: ','Refund: ')+result.status}catch(e){notice.textContent=errorText(e);refund.disabled=false}});card.append(refund)}grid.append(card)}
+   for(const o of a.orders??[]){const card=el('article','commerce-preview-card'),p=products.find(p=>p.id===o.sku);card.append(orderIdentity(p,p?productTitle(p):o.title),el('strong','store-price',money(o.amountKopecks)),el('p','account-muted',({pending:tr('Ожидает оплаты','Pending'),succeeded:tr('Оплачено','Paid'),canceled:tr('Отменено','Canceled'),refunded:tr('Возвращено','Refunded')})[o.status]??o.status),el('small','account-muted',orderNo(o.orderNumber)));if(o.refundedKopecks>0&&o.status!=='refunded')card.append(el('p','account-muted',tr('Частично возвращено: ','Partially refunded: ')+money(o.refundedKopecks)));if(!testMode&&o.receiptStatus==='pending')card.append(el('p','account-muted',tr('Чек формируется','Receipt pending')));if(!testMode&&o.receiptUrl&&/^https:\/\/lknpd\.nalog\.ru\/api\/v1\/receipt\/[0-9]{12}\/[A-Za-z0-9_-]{1,80}\/print$/.test(o.receiptUrl)){const receipt=link(tr('Чек НПД','NPD receipt'),o.receiptUrl);receipt.target='_blank';receipt.rel='noopener noreferrer';card.append(receipt)}if(p?.kind==='instruction'&&['pending','succeeded'].includes(o.status))card.append(button(tr('Открыть набор','Open set'),()=>{try{sessionStorage.setItem('bricklab-instruction-return',p.setId)}catch{}location.hash='#sets'}));else if(o.status==='pending'&&p&&checkoutStatus?.enabled&&checkoutStatus.skus.includes(p.id))card.append(button(tr('Продолжить оплату','Resume checkout'),()=>showCheckout(p)));if(testMode&&o.status==='succeeded'){const refund=button(o.refundRequestedAt?tr('Проверить возврат','Check refund'):tr('Тестовый возврат','Test refund'),async()=>{if(!o.refundRequestedAt&&!window.confirm(tr('Вернуть всю тестовую сумму и отозвать приобретение?','Refund the full test amount and revoke the entitlement?')))return;refund.disabled=true;try{const result=await api('/api/commerce/refund',signal,{orderId:o.id,confirm:true,mode:checkoutStatus.mode});await refresh();notice.textContent=tr('Возврат: ','Refund: ')+result.status}catch(e){notice.textContent=errorText(e);refund.disabled=false}});card.append(refund)}grid.append(card)}
    if(!(a.orders??[]).length)grid.append(el('p','account-muted',t.noOrders))
    grid.append(link(tr('Перейти в мастерскую','Open workshop'),'#account'));return
   }
@@ -216,11 +279,17 @@ export function mountStore(root,{language='ru',signal}){
    }
   }
  }
+ async function readReturn(){
+  if(!returnOrder||returnBusy||signal.aborted)return;
+  returnBusy=true;const item=returnOrder;returnChecks++;
+  try{const s=await api('/api/commerce/order-status?id='+encodeURIComponent(item.id)+'&mode='+item.mode,signal);if(returnOrder===item)returnStatus=s}catch{if(returnOrder===item)returnStatus=null}finally{returnBusy=false}
+ }
  async function refresh(){
   const v=++serial;notice.textContent=t.loading
-  try{const [c,a,st,p]=await Promise.all([api('/api/store/catalog',signal),optional('/api/commerce/account'),optional('/api/commerce/status'),profiles.get().catch(()=>null)]);const [adminLedger,adminAnalytics]=st?.admin?await Promise.all([optional('/api/commerce/admin-ledger?environment='+st.mode),optional('/api/commerce/instruction-analytics').catch(()=>null)]):[null,null];if(signal.aborted||v!==serial)return;catalog=c;account=a;checkoutStatus=st;profile=p;ledger=adminLedger;analytics=adminAnalytics;testMode=st?.mode==='test'&&st?.admin===true;if(selected==='ledger'&&!ledger)selected='all';render()}catch{if(!signal.aborted&&v===serial)notice.textContent=t.error}
+  await readReturn();
+  try{const [c,a,st,p]=await Promise.all([api('/api/store/catalog',signal),optional('/api/commerce/account'),optional('/api/commerce/status'),profiles.get().catch(()=>null)]);const [adminLedger,adminAnalytics,adminHealth,adminProviderTotals]=st?.admin?await Promise.all([optional('/api/commerce/admin-ledger?environment='+st.mode),optional('/api/commerce/instruction-analytics').catch(()=>null),optional('/api/commerce/admin-health?environment='+st.mode).catch(()=>null),st.mode==='live'?optional('/api/commerce/admin-provider-totals?environment=live').catch(()=>null):null]):[null,null,null,null];if(signal.aborted||v!==serial)return;catalog=c;account=a;checkoutStatus=st;profile=p;ledger=adminLedger;health=adminHealth;providerTotals=adminProviderTotals;analytics=adminAnalytics;testMode=st?.mode==='test'&&st?.admin===true;if(selected==='ledger'&&!ledger)selected='all';render()}catch{if(!signal.aborted&&v===serial)notice.textContent=t.error}
  }
- const timer=setInterval(()=>{if(!busy&&account?.orders?.some(o=>o.status==='pending'&&o.paymentId||o.status==='succeeded'&&o.refundRequestedAt))void refresh()},15000)
+ const timer=setInterval(()=>{if(!busy&&selected==='orders'&&returnOrder&&returnChecks<20&&(!returnStatus||returnStatus.status==='pending')){void refresh();return}if(!busy&&selected!=='ledger'&&account?.orders?.some(o=>o.status==='pending'&&o.paymentId||o.status==='succeeded'&&(o.refundRequestedAt||o.receiptStatus==='pending')))void refresh()},15000)
  signal.addEventListener('abort',()=>clearInterval(timer),{once:true})
  void refresh()
 }

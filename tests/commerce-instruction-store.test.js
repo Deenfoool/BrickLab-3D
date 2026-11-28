@@ -33,7 +33,7 @@ test('sandbox lists multiple SKUs; live checkout accepts completed large audit o
   const calls=[],account={instructions:[],plus:false}
   const store={storeCatalog:async()=>[],getSession:async()=>({id:'fixture',admin:true}),commerceAccount:async()=>account,quoteCommerce:async(uid,sku,version,beta,environment,p)=>({...instructionOrderQuote(sku,account,p),offerVersion:version})}
   const adapter={enabled:true,checkout:async(...args)=>{calls.push(args);return {mode,status:'pending'}}}
-  const handler=createPaymentsHandler({store,origin,config:{enabled:false},legal:{version:terms},fullCatalog:true,commerceMode:mode,instructionRelease:release,instructionPolicy:audit,yookassa:adapter,liveYookassa:adapter})
+  const handler=createPaymentsHandler({store,origin,config:{enabled:false},legal:{version:terms},fullCatalog:true,commerceMode:mode,liveCheckoutScope:'public',instructionRelease:release,instructionPolicy:audit,yookassa:adapter,liveYookassa:adapter})
   const server=createServer((req,res)=>handler(req,res,new URL(req.url,origin).pathname))
   await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)))
   const base='http://127.0.0.1:'+server.address().port,headers={cookie:'__Host-bricklab_session='+'a'.repeat(64),origin,'Content-Type':'application/json'}
@@ -44,7 +44,7 @@ test('sandbox lists multiple SKUs; live checkout accepts completed large audit o
   assert.equal(status.skus.includes('instruction-42154-1'),mode==='test')
   assert.equal(status.skus.includes('instruction-12345-1'),mode==='test'||release)
   assert.ok(!status.skus.includes('instruction-12346-1'))
-  const sku='instruction-12345-1',payload={sku,amountKopecks:7900,offerVersion:terms,accepted:true,mode}
+  const sku='instruction-12345-1',payload={sku,amountKopecks:7900,offerVersion:terms,accepted:true,mode,...(mode==='live'?{checkoutKey:crypto.randomUUID()}:{})}
   assert.equal((await get('/api/commerce/quote?sku='+sku)).status,mode==='test'||release?200:404)
   assert.equal((await post({...payload,partCount:601})).status,400)
   assert.equal((await post({...payload,sku:'instruction-12346-1'})).status,400)
@@ -57,7 +57,7 @@ test('contextual activation is authorized by the released set and does not accep
  const origin='https://bricklab.test',terms='a'.repeat(64),account={instructions:[],plus:false,welcomeRemaining:1,orders:[]}
  let calls=0
  const store={getSession:async()=>({id:'fixture',admin:true}),commerceAccount:async()=>account,commerceTestAccount:async()=>account,claimInstructionWelcome:async(uid,setId)=>{calls++;if(!account.instructions.includes(setId)){account.instructions.push(setId);account.welcomeRemaining--}return account}}
- const handler=createPaymentsHandler({store,origin,config:{enabled:false},legal:{version:terms},fullCatalog:true,commerceMode:'live',instructionRelease:true,instructionPolicy:audit,liveYookassa:{enabled:true}})
+ const handler=createPaymentsHandler({store,origin,config:{enabled:false},legal:{version:terms},fullCatalog:true,commerceMode:'live',liveCheckoutScope:'public',instructionRelease:true,instructionPolicy:audit,liveYookassa:{enabled:true}})
  const server=createServer((req,res)=>handler(req,res,new URL(req.url,origin).pathname))
  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)))
  const base='http://127.0.0.1:'+server.address().port,headers={cookie:'__Host-bricklab_session='+'a'.repeat(64),origin,'Content-Type':'application/json'}
