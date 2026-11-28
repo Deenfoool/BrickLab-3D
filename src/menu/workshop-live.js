@@ -1,4 +1,4 @@
-import {toLiveBlocks,defaultLiveBlocks,resolveLivePlacement,resizeLiveRect,moveLiveRect,compactLiveBlocks,livePreset,createLiveHistory,cloneLiveState} from './workshop-live-model.js'
+import {toLiveBlocks,defaultLiveBlocks,validateLiveBlocks,resolveLivePlacement,resizeLiveRect,moveLiveRect,compactLiveBlocks,livePreset,createLiveHistory,cloneLiveState} from './workshop-live-model.js'
 import {setLiveWidgetRect} from './unified-profile.js?v=workshop-live-1'
 import {openWorkshopAwardPicker,selectedWorkshopAwards} from './workshop-award-widgets.js?v=workshop-live-1'
 const el=(tag,cls,value)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(value!==undefined)n.textContent=String(value);return n}
@@ -15,7 +15,7 @@ export function renderWorkshopLive({lang='ru',session,portfolio,progress,busy=fa
  const state=()=>current?current.history.value:{portfolio,showcase:selectedWorkshopAwards(progress)}
  function sync(){onSession(current)}
  function change(next){if(!current||busy)return;current.history.commit(next);sync();render()}
- function changeBlocks(blocks){change({...state(),portfolio:{...state().portfolio,blocks}})}
+ function changeBlocks(blocks){change({...state(),portfolio:{...state().portfolio,blocks:validateLiveBlocks(blocks)}})}
  function changeWidget(key,patch){changeBlocks(state().portfolio.blocks.map(b=>b.key===key?{...b,...patch}:b))}
  function enter(){if(busy)return;if(!current){current=createWorkshopLiveSession({portfolio,progress});sync()}render()}
  function discard(){if(!current||busy)return;if(liveSessionDirty(current)&&!globalThis.confirm(tr('Отменить несохранённые изменения мастерской?','Discard unsaved workshop changes?')))return;current=null;sync();render()}
@@ -35,8 +35,9 @@ export function renderWorkshopLive({lang='ru',session,portfolio,progress,busy=fa
   controls.append(button('check',tr('Сохранить компоновку','Save layout'),save,busy),button('close',tr('Отменить изменения','Discard changes'),discard,busy))
   const preset=el('select','studio-select'),option=el('option',null,tr('Шаблоны','Templates'));option.value='';preset.append(option)
   for(const [id,title] of [['classic',tr('Классический','Classic')],['minimal',tr('Минимализм','Minimal')],['portfolio',tr('Портфолио','Portfolio')],['engineering',tr('Инженерный','Engineering')]]){const o=el('option',null,title);o.value=id;preset.append(o)}
-  preset.setAttribute('aria-label',tr('Шаблоны','Templates'));preset.disabled=busy;preset.onchange=()=>{const id=preset.value;preset.value='';if(id&&globalThis.confirm(tr('Применить шаблон? Видимость блоков может измениться.','Apply template? Widget visibility may change.')))changeBlocks(livePreset(state().portfolio.blocks,id))}
+  preset.setAttribute('aria-label',tr('Шаблоны','Templates'));preset.disabled=busy;preset.onchange=()=>{const id=preset.value;preset.value='';if(id&&globalThis.confirm(tr('Применить шаблон? Видимость блоков может измениться, а блокировки будут сняты.','Apply template? Widget visibility may change and locks will be cleared.')))changeBlocks(livePreset(state().portfolio.blocks,id))}
   toolbar.append(button('undo',tr('Отменить действие · Ctrl+Z','Undo · Ctrl+Z'),undo,busy||!current.history.canUndo),button('redo',tr('Повторить · Ctrl+Shift+Z','Redo · Ctrl+Shift+Z'),redo,busy||!current.history.canRedo),button('compact',tr('Уплотнить сетку','Compact grid'),()=>changeBlocks(compactLiveBlocks(state().portfolio.blocks)),busy),button('reset',tr('Равные размеры по умолчанию','Reset equal widget sizes'),()=>{if(globalThis.confirm(tr('Восстановить стандартные размеры и снять блокировки?','Reset sizes and unlock widgets?')))changeBlocks(defaultLiveBlocks(state().portfolio.blocks))},busy),preset,button('preview',tr('Глазами посетителя','View as visitor'),preview,busy))
+  const hidden=state().portfolio.blocks.filter(b=>!b.visible);if(hidden.length){const add=el('select','studio-select'),placeholder=el('option',null,tr('+ Добавить скрытый блок','+ Restore hidden widget'));placeholder.value='';add.append(placeholder);const names={featured:tr('Закреплённая работа','Featured build'),publications:tr('Опубликованные сборки','Published builds'),collections:tr('Коллекции','Collections'),awards:tr('Достижения','Achievements'),activity:tr('Календарь активности','Activity calendar'),statistics:tr('Статистика','Statistics'),about:tr('О себе','About'),followers:tr('Подписчики','Followers'),metrics:tr('Показатели','Metrics')};for(const item of hidden){const o=el('option',null,names[item.key]);o.value=item.key;add.append(o)}add.disabled=busy;add.setAttribute('aria-label',placeholder.textContent);add.onchange=()=>{if(hidden.some(b=>b.key===add.value))changeWidget(add.value,{visible:true})};toolbar.append(add)}
   status.textContent=busy?tr('Сохранение…','Saving…'):tr('Перетащи свободную область блока. Восемь маркеров меняют размеры. Глаз скрывает блок, замок закрепляет его. Галочка сохраняет изменения.','Drag a free area. Eight handles resize. Eye toggles visibility; lock fixes a widget. Check saves changes.')
  }
  function applyRects(blocks,animate=false){

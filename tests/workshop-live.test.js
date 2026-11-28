@@ -78,3 +78,31 @@ test('cover controls enter live edit, expose eight handles, hide, undo and save 
   find(ui.controls,'Сохранить компоновку').onclick();assert.equal(saved.length,1);assert.equal(saved[0][2],true);assert.deepEqual(saved[0][1],['firstCloudSave']);assert.equal(saved[0][0].blocks.find(b=>b.key==='about').visible,false)
  }finally{if(old===undefined)delete globalThis.document;else globalThis.document=old}
 })
+
+test('pointer drag creates a ghost and target, moves actual widgets on drop and cleans up on cancellation',()=>{
+ const keys=['document','getComputedStyle','window','innerHeight','requestAnimationFrame','cancelAnimationFrame','matchMedia'],old=Object.fromEntries(keys.map(k=>[k,globalThis[k]]))
+ const body=element('body'),pending=new Map();let seq=0,grid
+ function fake(tag){
+  const n=element(tag);n.append=(...nodes)=>{for(const child of nodes){child.parentNode=n;n.children.push(child)}};n.remove=()=>{if(n.parentNode)n.parentNode.children=n.parentNode.children.filter(c=>c!==n)}
+  n.cloneNode=()=>{const c=fake(n.tag);c.className=n.className;c.attrs={...n.attrs};return c};n.querySelectorAll=()=>[];n.setPointerCapture=()=>{};n.releasePointerCapture=()=>{};n.hasPointerCapture=()=>false
+  n.getBoundingClientRect=()=>({left:0,top:0,width:1200,height:1000});return n
+ }
+ body.append=(...nodes)=>{for(const n of nodes){n.parentNode=body;body.children.push(n)}}
+ Object.assign(globalThis,{document:{createElement:fake,createElementNS:(_ns,tag)=>fake(tag),body},getComputedStyle:()=>({columnGap:'0',rowGap:'8',gridAutoRows:'92'}),window:{scrollBy(){}},innerHeight:900,requestAnimationFrame:cb=>{pending.set(++seq,cb);return seq},cancelAnimationFrame:id=>pending.delete(id),matchMedia:()=>({matches:true})})
+ try{
+  let session
+  const p={...base(),blocks:initial()},renderGrid=(value,editing)=>{
+   grid=fake('div');grid.clientWidth=1200
+   for(const b of value.portfolio.blocks.filter(b=>editing||b.visible)){const n=fake('section');n.setAttribute('data-widget',b.key);n.append(fake('h2'));n.style['--portfolio-row']=String(b.rect.y+1);n.style['--portfolio-column']=String(b.rect.x+1);n.style['--portfolio-span']=String(b.rect.w);n.style['--widget-height']=String(b.rect.h);n.getBoundingClientRect=()=>({left:(Number(n.style['--portfolio-column'])-1)*100,top:(Number(n.style['--portfolio-row'])-1)*100,width:Number(n.style['--portfolio-span'])*100,height:Number(n.style['--widget-height'])*100});grid.append(n)}return grid
+  }
+  const ui=renderWorkshopLive({lang:'ru',portfolio:p,signal:new AbortController().signal,onSession:s=>session=s,onSave(){},renderGrid,renderPreview(){return fake('div')}})
+  ui.controls.children[0].onclick()
+  const key=p.blocks[0].key,first=grid.children[0],event={button:0,pointerId:1,clientX:50,clientY:120,target:first,preventDefault(){},stopPropagation(){}}
+  first.onpointerdown(event);assert.ok(body.children.some(n=>n.className.includes('workshop-live-ghost')));assert.ok(body.children.some(n=>n.className.includes('workshop-live-drop-target')))
+  ui.surface.onpointermove({...event,clientX:650});ui.surface.onpointerup({...event,clientX:650})
+  assert.equal(session.history.value.portfolio.blocks.find(b=>b.key===key).rect.x,6);assert.equal(body.children.length,0);assert.equal(pending.size,0)
+  const moved=grid.children.find(n=>n.getAttribute('data-widget')===key),before=session.history.value
+  moved.onpointerdown({...event,target:moved,clientX:650});ui.surface.onpointercancel(event)
+  assert.deepEqual(session.history.value,before);assert.equal(body.children.length,0);assert.equal(pending.size,0)
+ }finally{for(const k of keys){if(old[k]===undefined)delete globalThis[k];else globalThis[k]=old[k]}}
+})
