@@ -445,3 +445,34 @@ test('refunding an earlier Plus period advances remaining paid and promo periods
   const rows=await store.commerceAdminLedger(uid,'live');assert.equal(rows.find(o=>o.id===first.id).provider_income_kopecks,24800)
  }finally{await store.close();await db.end()}
 })
+
+test('partial refund observations are monotonic, counted once, and full refund revokes only the corresponding grant',{skip:!enabled},async()=>{
+ assert.equal(process.env.PGDATABASE,'bricklab_commerce_check')
+ const db=postgres({host:process.env.PGHOST,port:Number(process.env.PGPORT||5432),database:process.env.PGDATABASE,username:'bricklab_admin',password:process.env.COMMERCE_ADMIN_PASSWORD,max:1})
+ const store=connectAuthStore(),uid='36000000-0000-4000-8000-000000000001',terms='a'.repeat(64),pid=crypto.randomUUID()
+ try{
+  await db`insert into bricklab.users(id,email,display_name,password_hash,email_verified_at) values(${uid},'partial@example.invalid','Partial fixture','fixture',now())`
+  await db`insert into bricklab.admin_accounts(user_id) values(${uid})`
+  const order=await store.createCommerceOrder(uid,'aurora',19900,terms,true,'live')
+  const baseline=Number((await store.commerceAdminDayTotals(uid,'live')).refunded_kopecks)
+  const observe=n=>store.observePartialCommerceRefund(order.id,pid,'live',19900,n,null)
+  assert.equal(await observe(3000),true);assert.equal(await observe(3000),true);assert.equal(await observe(1000),true)
+  assert.equal(await observe(5000),true)
+  assert.equal((await store.commerceAccount(uid)).orders[0].refundedKopecks,5000)
+  assert.ok((await store.commerceAccount(uid)).themes.includes('aurora'))
+  assert.equal(Number((await store.commerceAdminDayTotals(uid,'live')).refunded_kopecks),baseline+5000)
+  assert.equal(await store.adminPartialRefundReview(uid,order.id,5000,'fixture'),false)
+  assert.equal(await store.registerCommerceReceipt(uid,order.id,'https://lknpd.nalog.ru/api/v1/receipt/000000000000/partialFixture/print'),true)
+  assert.equal(await store.adminPartialRefundReview(uid,order.id,3000,'fixture'),false)
+  assert.equal(await store.adminPartialRefundReview(uid,order.id,5000,'fixture'),true)
+  assert.equal(await store.refundCommercePayment(pid,'live',19900),true)
+  assert.equal(await store.refundCommercePayment(pid,'live',19900),true)
+  assert.equal(await observe(1000),true)
+  const ledger=(await store.commerceAdminLedger(uid,'live')).find(x=>x.id===order.id)
+  assert.equal(ledger.refunded_kopecks,19900);assert.equal(ledger.partial_review_pending,true)
+  assert.deepEqual((await store.commerceAccount(uid)).themes,[])
+  const journal=await db`select delta_kopecks from bricklab.commerce_refund_observations where order_id=${order.id} order by cumulative_kopecks`
+  assert.deepEqual(journal.map(x=>x.delta_kopecks),[3000,2000,14900])
+  assert.equal(Number((await store.commerceAdminDayTotals(uid,'live')).refunded_kopecks),baseline+19900)
+ }finally{await store.close();await db.end()}
+})

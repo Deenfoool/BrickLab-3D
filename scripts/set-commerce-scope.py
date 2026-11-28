@@ -60,7 +60,7 @@ if scope != "closed":
          AND receipt_correction_pending=false AND fiscal_receipt_uuid IS NOT NULL;""")
         require(verified > 0, "No completed live payment -> NPD receipt -> mail -> refund -> cancellation in database")
         unresolved = count("""SELECT count(*) FROM bricklab.commerce_orders WHERE environment='live'
-        AND (status='pending' OR fiscal_state IN ('issue_unknown','cancel_unknown') OR receipt_correction_pending
+        AND (status='pending' OR fiscal_state IN ('issue_unknown','cancel_unknown') OR receipt_correction_pending OR partial_review_pending
         OR (status='succeeded' AND (receipt_status<>'issued' OR receipt_delivery_sent_at IS NULL)));""")
         require(unresolved == 0, "Unresolved live orders or receipts; review before launch")
     prompt = "Confirm operator review and actual receipt delivery/refund checks. Type PUBLIC: " if scope == "public" else "Real money, administrators only. Type PILOT: "

@@ -42,8 +42,12 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
  async function settle(p){
   if(!validPayment(p,undefined,environment)||p.status!=='succeeded'||p.paid!==true)throw new ProjectError(409,'payment_unverified')
   const amount=amountKopecks(p.amount.value),refunded=refundedAmount(p)
-  if(refunded!==0&&refunded!==amount)throw new ProjectError(409,'partial_refund_requires_review')
+  if(refunded>amount)throw new ProjectError(409,'refund_mismatch')
   const income=providerIncome(p,amount)
+  if(refunded>0&&refunded<amount){
+   if(!await store.observePartialCommerceRefund(p.metadata.order_id,p.id,environment,amount,refunded,income))throw new ProjectError(409,'refund_mismatch')
+   return 'partially_refunded'
+  }
   const ok=income===null?await store.settleVerifiedCommercePayment(p.metadata.order_id,p.id,environment,amount,refunded===amount):await store.settleVerifiedCommerceIncome(p.metadata.order_id,p.id,environment,amount,refunded===amount,income)
   if(!ok)throw new ProjectError(409,'payment_mismatch')
   return refunded===amount?'refunded':'succeeded'
@@ -120,7 +124,7 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
      else if(!await store.refundCommercePayment(order.paymentId,environment,order.amountKopecks))throw new ProjectError(409,'refund_mismatch')
      return {status:'succeeded',mode:environment}
     }
-    if(alreadyRefunded!==null&&alreadyRefunded>0)throw new ProjectError(409,'partial_refund_requires_review')
+    if(alreadyRefunded>0){await settle(paid);throw new ProjectError(409,'partial_refund_requires_review')}
     // A previous refund may have succeeded before its response reached us.
     // Replay only the same idempotency key, never generate a new refund key.
     refund=await call('refunds',{payment_id:order.paymentId,amount:{currency:'RUB',value:(order.amountKopecks/100).toFixed(2)}},order.id)
@@ -137,7 +141,7 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
     if(!validPayment(paid,order.paymentId,environment)||paid.metadata.order_id!==order.id||paid.status!=='succeeded'||paid.paid!==true||amountKopecks(paid.amount.value)!==order.amountKopecks)throw new ProjectError(409,'payment_mismatch')
     const amount=refundedAmount(paid)
     if(amount===0)return 'pending'
-    if(amount!==order.amountKopecks)throw new ProjectError(409,'partial_refund_requires_review')
+    if(amount!==order.amountKopecks)return settle(paid)
     if(providerIncome(paid,amount)!==null)await settle(paid)
     else if(!await store.refundCommercePayment(paid.id,environment,amount))throw new ProjectError(409,'refund_mismatch')
     return 'succeeded'
@@ -163,7 +167,9 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
    const paid=await call('payments/'+refund.payment_id)
    if(!validPayment(paid,refund.payment_id,environment)||paid.status!=='succeeded'||paid.paid!==true)throw new ProjectError(409,'refund_unverified')
    const amount=amountKopecks(paid.amount.value)
-   if(paid.refunded_amount?.currency!=='RUB'||amountKopecks(paid.refunded_amount.value)!==amount)throw new ProjectError(409,'partial_refund_requires_review')
+   const returned=refundedAmount(paid)
+   if(returned<amountKopecks(refund.amount.value)||returned>amount)throw new ProjectError(409,'refund_mismatch')
+   if(returned<amount){await settle(paid);return {ok:true}}
    if(providerIncome(paid,amount)!==null||!await store.refundCommercePayment(paid.id,environment,amount))await settle(paid)
    return {ok:true}
   },

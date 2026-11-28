@@ -176,6 +176,8 @@ export function commerceStore(scope){
   async cancelCommercePayment(id,paymentId,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_cancel_payment(${id}::uuid,${paymentId},${environment},${amount}::integer) as ok`;return r.ok})},
   async createCommerceTestOrder(uid,sku){return scope(uid,async tx=>{const [row]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",idempotency_key as "idempotencyKey",payment_id as "paymentId",created_at as "createdAt" from bricklab.commerce_create_test_order(${sku})`;return row})},
   async attachCommercePayment(id,paymentId,environment){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_attach_payment(${id}::uuid,${paymentId},${environment}) as ok`;return r.ok})},
+  async observePartialCommerceRefund(id,paymentId,environment,amount,refunded,income){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_observe_partial_refund(${id}::uuid,${paymentId},${environment},${amount}::integer,${refunded}::integer,${income}::integer) as ok`;return r.ok})},
+  async adminPartialRefundReview(uid,id,expected,reference){return scope(uid,async tx=>{const [r]=await tx`select bricklab.commerce_admin_partial_review(${id}::uuid,${expected}::integer,${reference}) as ok`;return r.ok})},
   async settleVerifiedCommerceIncome(id,paymentId,environment,amount,refunded,income){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_settle_verified_income(${id}::uuid,${paymentId},${environment},${amount}::integer,${refunded}::boolean,${income}::integer) as ok`;return r.ok})},
   async settleVerifiedCommercePayment(id,paymentId,environment,amount,refunded=false){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_settle_verified(${id}::uuid,${paymentId},${environment},${amount}::integer,${refunded}::boolean) as ok`;return r.ok})},
   async cancelVerifiedCommercePayment(id,paymentId,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_cancel_verified(${id}::uuid,${paymentId},${environment},${amount}::integer) as ok`;return r.ok})},
@@ -184,7 +186,7 @@ export function commerceStore(scope){
    return scope(uid,async tx=>{
     const account=await commerceEntitlements(tx,uid);
     const orders=await tx`select id,order_number as "orderNumber",sku,title,amount_kopecks as "amountKopecks",status,
-     created_at as "createdAt",paid_at as "paidAt",refunded_at as "refundedAt",receipt_status as "receiptStatus",case when status='succeeded' then receipt_delivery_url else null end as "receiptUrl",receipt_delivery_sent_at as "receiptSentAt",payment_id as "paymentId",refund_requested_at as "refundRequestedAt"
+     created_at as "createdAt",paid_at as "paidAt",refunded_at as "refundedAt",refunded_kopecks as "refundedKopecks",partial_review_pending as "partialReviewPending",receipt_status as "receiptStatus",case when status='succeeded' then receipt_delivery_url else null end as "receiptUrl",receipt_delivery_sent_at as "receiptSentAt",payment_id as "paymentId",refund_requested_at as "refundRequestedAt"
      from bricklab.commerce_orders where user_id=${uid} and environment='live'
      order by created_at desc,id limit 50`;
     return {...account,orders};

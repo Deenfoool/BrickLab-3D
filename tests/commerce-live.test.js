@@ -49,7 +49,7 @@ test('provider-confirmed full refund settles atomically and lost refund response
  let current=paid,existing=false;const calls=[]
  const adapter=createYookassaAdapter({origin:'https://bricklab.test',config:{enabled:true,environment:'live',shopId:'1',secret:'live_example_secret'},store:{
   settleVerifiedCommercePayment:async(...a)=>{calls.push(['settle',...a]);return true},
-  refundCommercePayment:async(...a)=>{calls.push(['refund',...a]);return existing}
+  refundCommercePayment:async(...a)=>{calls.push(['refund',...a]);return existing},observePartialCommerceRefund:async(...a)=>{calls.push(['partial',...a]);return true}
  },fetcher:async(url,opts)=>{assert.equal(opts.method,'GET');return Response.json(url.endsWith(refund)?{id:refund,payment_id:payment,status:'succeeded',amount:paid.amount}:current)}})
  await adapter.notification({event:'payment.succeeded',object:{id:payment}})
  assert.deepEqual(calls.pop(),['settle',id,payment,'live',9900,true])
@@ -57,7 +57,7 @@ test('provider-confirmed full refund settles atomically and lost refund response
  assert.deepEqual(calls.splice(0),[['refund',payment,'live',9900],['settle',id,payment,'live',9900,true]])
  existing=true;const row={id,paymentId:payment,amountKopecks:9900,refundId:null}
  current={...paid,refunded_amount:{value:'0.00',currency:'RUB'}};assert.equal(await adapter.pollRefund(row),'pending')
- current={...paid,refunded_amount:{value:'1.00',currency:'RUB'}};await assert.rejects(adapter.pollRefund(row),/partial_refund/)
+ current={...paid,refunded_amount:{value:'1.00',currency:'RUB'}};assert.equal(await adapter.pollRefund(row),'partially_refunded');assert.deepEqual(calls.pop(),['partial',id,payment,'live',9900,100,null])
  current=paid;assert.equal(await adapter.pollRefund(row),'succeeded')
  assert.deepEqual(calls,[['refund',payment,'live',9900]])
 })
