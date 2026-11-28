@@ -1,5 +1,5 @@
 import { loadPartIndex, enrichInventory, normalizeDocumentDesigns } from '../catalog/part-resolver.js?v=catalog-engine-1'
-import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=recognition-recovery-1'
+import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=recognition-v9.3'
 import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=recognition-recovery-1'
 import { mountSetPalette } from '../sets/palette.js?v=recognition-v9'
 import { inspectSetPart } from '../sets/inspect.js'

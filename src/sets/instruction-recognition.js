@@ -93,7 +93,7 @@ export function createInstructionRecognition(reader, set, signal) {
   function analyze(action, input, transfer = [], request=signal) {
     try{signal.throwIfAborted();request.throwIfAborted()}catch(error){for(const item of transfer)item.close?.();throw error}
     if (!worker) {
-      worker = new Worker(new URL('./instruction-recognition-worker.js?v=recognition-recovery-1', import.meta.url), { type: 'module' })
+      worker = new Worker(new URL('./instruction-recognition-worker.js?v=recognition-v9.3', import.meta.url), { type: 'module' })
       worker.onmessage = ({ data }) => {
         const job = jobs.get(data.id)
         jobs.delete(data.id)
@@ -120,7 +120,7 @@ export function createInstructionRecognition(reader, set, signal) {
     const bookSignal = AbortSignal.any([controller.signal, signal])
     const key = Promise.all([reader.fingerprint(source), version]).then(([fingerprint, hash]) => {
       if (!fingerprint || !hash) return
-      return JSON.stringify(['regions-v9.2', set.number, hash, fingerprint])
+      return JSON.stringify(['regions-v9.3', set.number, hash, fingerprint])
     }).catch(()=>undefined)
     active = { source, controller, signal: bookSignal, key, pages }
     return active
@@ -188,7 +188,7 @@ export function createInstructionRecognition(reader, set, signal) {
   async function scanInventory(source,request,pdfReader,bookSignal){
     const [fingerprint,hash]=await boundedTask(Promise.all([pdfReader.fingerprint(source),version]),request,12000)
     request.throwIfAborted()
-    const key=fingerprint&&hash&&JSON.stringify(['regions-v9.2',set.number,hash,fingerprint])+'/inventory'
+    const key=fingerprint&&hash&&JSON.stringify(['regions-v9.3',set.number,hash,fingerprint])+'/inventory'
     const stored=await cache(key)
     request.throwIfAborted()
     if(Array.isArray(stored)&&stored.length){books.set(source,stored);return stored}

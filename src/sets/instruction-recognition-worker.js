@@ -1,3 +1,4 @@
+import {CLEAN_SIZE,cleanComponent,prepareCleanReferences,cleanMatch} from './instruction-clean-match.js?v=recognition-v9.3'
 import {candidateWindow} from './instruction-inventory-search.js?v=recognition-recovery-1'
 import {stepForCallout,repeatedArtwork} from './instruction-study.js?v=recognition-v9'
 import {rankModels,prepareModelReferences} from './instruction-model-match.js?v=recognition-v8'
@@ -224,7 +225,7 @@ function largestDrawing(pixels, width, height) {
   return largest
 }
 
-function feature(raster, box, neighbors) {
+function feature(raster, box, neighbors, annotations=[]) {
   const area = pixelBox([box[0] - .75, box[1] - .75, box[2] + .75, box[3] + .2], raster)
   const [left, top, right, bottom] = area
   if (right - left < 2 || bottom - top < 2) return
@@ -259,6 +260,27 @@ function feature(raster, box, neighbors) {
   const w = x1 - x0 + 1, h = y1 - y0 + 1
   thumb.drawImage(image, x0, y0, w, h, 0, 0, size, size)
   const sample = { pixels: thumb.getImageData(0, 0, size, size).data, aspect: Math.log(w / h) }
+  // Preserve the original crop as independent evidence. Clean a separate view.
+  const cleaned=ctx.createImageData(width,height)
+  cleaned.data.set(pixels.data)
+  for(const annotation of annotations){
+    const [a,b,c,d]=pixelBox(annotation,raster)
+    const l=Math.max(left,a-1),t=Math.max(top,b-1),r=Math.min(right,c+1),bt=Math.min(bottom,d+1)
+    if(r<=l||bt<=t||(r-l)*(bt-t)>.32*width*height)continue
+    for(let y=t;y<bt;y++)cleaned.data.fill(0,((y-top)*width+l-left)*4,((y-top)*width+r-left)*4)
+  }
+  const clean=cleanComponent(cleaned.data,width,height)
+  if(clean){
+    cleaned.data.set(clean.pixels);ctx.putImageData(cleaned,0,0)
+    const view=new OffscreenCanvas(CLEAN_SIZE,CLEAN_SIZE).getContext('2d')
+    const [a,b,c,d]=clean.box
+    view.fillStyle='white';view.fillRect(0,0,CLEAN_SIZE,CLEAN_SIZE)
+    view.imageSmoothingQuality='high'
+    // Slight common blur reduces differences in printed inventory resolution.
+    view.filter='blur(0.65px)';view.drawImage(image,a,b,c-a,d-b,0,0,CLEAN_SIZE,CLEAN_SIZE)
+    view.filter='none'
+    sample.clean={pixels:view.getImageData(0,0,CLEAN_SIZE,CLEAN_SIZE).data,aspect:Math.log((c-a)/(d-b))}
+  }
   const component = largestDrawing(pixels.data, width, height)
   if (component.length < count * .5 || component.length >= count * .995) return sample
   const isolated = ctx.createImageData(width, height)
@@ -305,7 +327,7 @@ function extract({ bitmap, geometry, labels, inventory }) {
   const output=candidates.flatMap(({ box, caption, embedded, badge }) => {
     const neighbors = candidates.map(part => part.box).filter(other => other !== box &&
       widthOf(other) * heightOf(other) < .65 * widthOf(box) * heightOf(box) && overlaps(other, box))
-    const sample = feature(raster, box, neighbors)
+    const sample = feature(raster, box, neighbors,[...words.map(w=>w.box),...(geometry.badges??[]).map(b=>b.box)])
     if(!sample&&inventory)return []
     const item = Object.hasOwn(labels,caption.text) ? [...labels[caption.text],caption.text] : undefined
     if (inventory) return [{ ...sample, item, embedded, badge }]
@@ -384,6 +406,7 @@ function badgeMatch(scores, sample) {
 }
 
 export function rank({ samples, templates }) {
+  const cleanReferences=prepareCleanReferences(templates)
   return samples.flatMap(sample => {
     if (sample.item?.[0]) return [[...sample.region, ...sample.item]]
     if(!sample.pixels)return []
@@ -394,6 +417,7 @@ export function rank({ samples, templates }) {
       if (aspect > .17) continue
       scores.push({ reference, aspect, score: aspect + pixelDistance(sample.pixels, reference.pixels) })
     }
+    const rawScores=scores.map(s=>({...s}))
     let item = badgeMatch(scores, sample) ?? confident(scores, sample)
     if (!item && sample.embedded && scores.some(({ score }) => score <= .13)) {
       const views = shiftedViews(sample.pixels)
@@ -414,10 +438,12 @@ export function rank({ samples, templates }) {
       const [first, second] = bestByItem(scores)
       if (first?.score <= .065 && (second?.score ?? Infinity) - first.score >= .035) item = first.reference.item
     }
+    // Clean evidence is a fallback, not a replacement for existing direct matches.
+    if(!item){const recovered=cleanMatch(sample,cleanReferences,rawScores);if(recovered)item=recovered}
     if(item){
       const references=templates.filter(t=>t.item?.[0]===item[0]&&t.item?.[1]===item[1]&&t.pixels)
       // A color match alone cannot identify a different shape. Keep shifted and isolated views as valid evidence.
-      if(references.length&&!references.some(t=>silhouetteDifference(sample.pixels,t.pixels)<=.48||silhouetteDifference((sample.drawing??sample).pixels,(t.drawing??t).pixels)<=.48))return []
+      if(references.length&&!references.some(t=>silhouetteDifference(sample.pixels,t.pixels)<=.48||silhouetteDifference((sample.drawing??sample).pixels,(t.drawing??t).pixels)<=.48||(sample.clean&&t.clean&&cleanMatch(sample,cleanReferences,rawScores)?.slice(0,2).join('/')===item.slice(0,2).join('/'))))return []
     }
     if(!item)return []
     const ids=new Set(templates.filter(t=>t.item?.[0]===item[0]&&t.item?.[1]===item[1]).map(t=>t.item[2]).filter(Boolean))
