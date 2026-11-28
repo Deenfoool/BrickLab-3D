@@ -1,5 +1,5 @@
 import {achievementById} from './achievement-catalog.js'
-import {renderAchievementMedal} from './achievement-hall.js?v=workshop-live-2'
+import {renderAchievementMedal} from './achievement-hall.js?v=showcase-motion-2'
 const el=(tag,cls,value)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(value!==undefined)n.textContent=String(value);return n}
 const rarity={ru:{common:'Обычное',uncommon:'Необычное',rare:'Редкое',epic:'Эпическое',legendary:'Легендарное',unique:'Уникальное'},en:{common:'Common',uncommon:'Uncommon',rare:'Rare',epic:'Epic',legendary:'Legendary',unique:'Unique'}}
 const gift={id:'firstBuilder',ru:'First Builder',en:'First Builder',descRu:'Первая подарочная сборка',descEn:'First gifted build',rarity:'unique',icon:'icon-trophy'}
