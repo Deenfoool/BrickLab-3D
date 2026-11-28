@@ -19,13 +19,13 @@ export function renderWorkshopLive({lang='ru',session,portfolio,progress,busy=fa
  function changeWidget(key,patch){changeBlocks(state().portfolio.blocks.map(b=>b.key===key?{...b,...patch}:b))}
  function enter(){if(busy)return;if(!current){current=createWorkshopLiveSession({portfolio,progress});sync()}render()}
  function discard(){if(!current||busy)return;if(liveSessionDirty(current)&&!globalThis.confirm(tr('Отменить несохранённые изменения мастерской?','Discard unsaved workshop changes?')))return;current=null;sync();render()}
- function save(){if(!current||busy||drag)return;onSave(state().portfolio,state().showcase)}
+ function save(){if(!current||busy||drag)return;onSave(state().portfolio,state().showcase,true)}
  function undo(){if(current?.history.undo()){sync();render()}}
  function redo(){if(current?.history.redo()){sync();render()}}
  function preview(){
   const dialog=el('dialog','workshop-live-preview-dialog'),close=button('close',tr('Закрыть предпросмотр','Close preview'),()=>dialog.close()),body=el('div','workshop-live-preview-body'),head=el('header','workshop-live-preview-head'),desktop=el('button','workspace-action',tr('Компьютер','Desktop')),phone=el('button','workspace-action',tr('Телефон','Phone'))
   desktop.type=phone.type='button';desktop.onclick=()=>body.classList.remove('is-mobile');phone.onclick=()=>body.classList.add('is-mobile');head.append(el('strong',null,tr('Глазами посетителя','View as visitor')),desktop,phone,close)
-  body.append(renderPreview(state()));dialog.append(head,body);surface.append(dialog);dialog.onclose=()=>dialog.remove();dialog.showModal()
+  const page=renderPreview(state());page.inert=true;body.append(page);dialog.append(head,body);surface.append(dialog);dialog.onclose=()=>dialog.remove();dialog.showModal()
  }
  function toolbarRender(){
   toolbar.replaceChildren();controls.replaceChildren()

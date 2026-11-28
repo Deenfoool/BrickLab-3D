@@ -157,7 +157,7 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
   }
   collections.append(action(t.add,()=>{p.collections.push({title:'',ids:[]});draftChanged();renderCollections()},busy||p.collections.length>=6))
  }
- if(mode!=='layout')renderBlocks();renderCollections()
+ if(mode==='all')renderBlocks();renderCollections()
  if(mode==='layout'&&contentOnly){panel.append(field(t.featured,pin),ui('h3',null,t.collections),collections)}else if(mode==='layout'){
   const ru=lang==='ru',describe=key=>{
    if(key==='featured')return publicBuilds.find(b=>b.id===p.featured)?.title??t.noPin

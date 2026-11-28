@@ -18,7 +18,7 @@ export function validateLiveBlocks(blocks){
 }
 export function defaultLiveBlocks(blocks=[]){
  const by=new Map(blocks.map(b=>[b.key,b])),keys=[...new Set(['metrics',...blocks.map(b=>b.key).filter(k=>liveKeys.includes(k)),...liveKeys])]
- return keys.map((key,i)=>({key,visible:by.get(key)?.visible??(key==='metrics'),rect:{x:(i%2)*6,y:Math.floor(i/2)*2,w:6,h:2}}))
+ const visible=key=>by.get(key)?.visible??(key==='metrics');keys.sort((a,b)=>Number(visible(b))-Number(visible(a)));return keys.map((key,i)=>({key,visible:visible(key),rect:{x:(i%2)*6,y:Math.floor(i/2)*2,w:6,h:2}}))
 }
 export function toLiveBlocks(blocks){
  if(isLiveLayout(blocks))return validateLiveBlocks(blocks)
@@ -73,7 +73,10 @@ export function livePreset(blocks,id){
  const sequences={minimal:['metrics','about','followers','publications'],portfolio:['featured','publications','collections','awards','about','metrics','followers','statistics'],engineering:['metrics','statistics','awards','featured','publications','activity','collections','about','followers']}
  if(!Object.hasOwn(sequences,id))return copy(source)
  const keys=sequences[id],by=new Map(source.map(b=>[b.key,b]))
- return defaultLiveBlocks([...keys,...liveKeys.filter(k=>!keys.includes(k))].map(key=>({...by.get(key),key,visible:keys.includes(key)}))).map(b=>({...b,visible:keys.includes(b.key)}))
+ const widths=id==='minimal'?{metrics:8,about:4,followers:4,publications:8}:id==='portfolio'?{featured:8,publications:12,collections:8,awards:4,about:4,metrics:8,followers:4,statistics:8}:{metrics:8,statistics:4,awards:4,featured:8,publications:12,activity:12,collections:8,about:4,followers:6}
+ let x=0,y=0,rowHeight=0;const next=[]
+ for(const key of [...keys,...liveKeys.filter(k=>!keys.includes(k))]){const visible=keys.includes(key),w=visible?(widths[key]??6):6,h=visible&&key==='featured'?3:2;if(x+w>12){x=0;y+=rowHeight;rowHeight=0}next.push({key,visible,rect:{x,y,w,h}});x+=w;rowHeight=Math.max(rowHeight,h)}
+ return validateLiveBlocks(next)
 }
 export function cloneLiveState(state){return JSON.parse(JSON.stringify(state))}
 export function createLiveHistory(initial){

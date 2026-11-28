@@ -257,14 +257,15 @@ export function connectAuthStore(env = process.env) {
         }else await tx`update bricklab.public_profiles set unified=false,share_avatar=false,share_cover=false,portfolio=null,show_award=false where user_id=${uid}`
       })
     },
-    async savePortfolio(uid,input,showcase){
+    async savePortfolio(uid,input,showcase,layoutOnly=false){
       const validated=validatePortfolio(input)
       return scope(uid,async tx=>{
         await lock(tx,uid)
-        const [card]=await tx`select public_id from bricklab.public_profiles where user_id=${uid} and unified for update`
+        const [card]=await tx`select public_id,portfolio from bricklab.public_profiles where user_id=${uid} and unified for update`
         if(!card)throw new ProjectError(409,'public_profile_required')
         const rows=await tx`select public_id as id from bricklab.public_builds where author_id=${card.public_id}`
-        const portfolio=filterPortfolio(validated,rows.map(r=>r.id))
+        const current=filterPortfolio(card.portfolio,rows.map(r=>r.id))
+        const portfolio=filterPortfolio(layoutOnly?{...current,blocks:validated.blocks}:validated,rows.map(r=>r.id))
         if(showcase!==undefined){const [{ok}]=await tx`select bricklab.set_achievement_showcase(${tx.array(showcase)}::text[]) as ok`;if(!ok)throw new ProjectError(403,'invalid_showcase')}
         const [earned]=await tx`select exists(select 1 from bricklab.workshop_awards where user_id=${uid} and award='firstCloudSave') as earned`
         await tx`update bricklab.public_profiles set portfolio=${tx.json(portfolio)},show_award=${earned.earned===true&&portfolio.blocks.some(b=>b.key==='awards'&&b.visible)},updated_at=now() where user_id=${uid}`

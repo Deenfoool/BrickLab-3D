@@ -196,7 +196,8 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
        let portfolio;try{portfolio=validatePortfolio(data?.portfolio)}catch{throw new ProjectError(400,'invalid_portfolio')}
        const showcase=data?.showcase
        if(showcase!==undefined&&(!Array.isArray(showcase)||showcase.length>6||new Set(showcase).size!==showcase.length||showcase.some(id=>typeof id!=='string'||(!achievementById(id)&&!/^custom-[a-z0-9-]{1,39}$/.test(id)))))throw new ProjectError(400,'invalid_showcase')
-       if(showcase===undefined)await store.savePortfolio(user.id,portfolio);else await store.savePortfolio(user.id,portfolio,showcase)
+       if(data.layoutOnly!==undefined&&typeof data.layoutOnly!=='boolean')throw new ProjectError(400,'invalid_portfolio')
+       if(data.layoutOnly===true)await store.savePortfolio(user.id,portfolio,showcase,true);else if(showcase===undefined)await store.savePortfolio(user.id,portfolio);else await store.savePortfolio(user.id,portfolio,showcase)
       }else await store.publishCard(user.id,validatePublicCard(data))
      }else if(req.method==='DELETE'){if(store.hideCard)await store.hideCard(user.id);else await store.unpublishCard(user.id)}
      const card=publicCard(await store.getOwnCard(user.id),{owner:true});if(card&&store.reputation)card.reputation=publicReputation(await store.reputation(card.id));if(card&&store.workshopPublicSummary)Object.assign(card,publicWorkshopSummary(await store.workshopPublicSummary(card.id)));reply(res,200,{profile:card});return true
