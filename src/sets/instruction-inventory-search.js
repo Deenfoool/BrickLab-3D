@@ -2,12 +2,13 @@
 export function inventoryEvidence(words,labels){
  const elements=new Set(words.filter(w=>/^\d{6,8}$/.test(w.text)&&Object.hasOwn(labels,w.text)).map(w=>w.text))
  const quantities=words.filter(w=>/^[1-9]\d{0,2}[x×]$/i.test(w.text)).length
- return {known:elements.size,quantities,score:elements.size*4+Math.min(elements.size,quantities)}
+ const printed=new Set(words.filter(w=>/^\d{6,8}$/.test(w.text)).map(w=>w.text)).size
+ return {known:elements.size,printed,quantities,score:elements.size*8+printed+Math.min(printed,quantities)}
 }
 export function inventoryPageOrder(entries){
  // An inventory can contain very few items on its final page; keep those pages too.
  const likely=entries.filter(e=>e.known>0).sort((a,b)=>b.score-a.score||b.page-a.page)
- const fallback=entries.filter(e=>!e.known).sort((a,b)=>b.page-a.page)
+ const fallback=entries.filter(e=>!e.known).sort((a,b)=>b.score-a.score||b.page-a.page)
  return [...likely,...fallback]
 }
 export function candidateWindow(caption,inventory){

@@ -213,7 +213,7 @@ export function createInstructionRecognition(reader, set, signal) {
       return !request.aborted
     }
     // Never spend the scan budget OCR-ing a back cover before known printed IDs.
-    for(const candidate of ordered.filter(e=>e.known>0))if(!await visit(candidate.page,false))break
+    for(const candidate of ordered.filter(e=>e.known>0||e.printed>=3&&e.quantities>=2))if(!await visit(candidate.page,false))break
     // Mixed/scanned books still get OCR, but only after the cheap vector pass.
     if(!templates.length&&!request.aborted){
       for(const candidate of ordered.slice(0,8))if(!await visit(candidate.page,true))break
