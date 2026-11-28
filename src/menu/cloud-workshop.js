@@ -1,11 +1,13 @@
+import {renderWorkshopLive} from './workshop-live.js?v=workshop-live-2'
+import {selectedWorkshopAwards} from './workshop-award-widgets.js?v=workshop-live-2'
 import {metricItems} from './workshop-metrics-model.js'
-import {renderMetricEditor,workshopMetricValues} from './workshop-metrics.js?v=layout-studio-2'
+import {renderMetricEditor,workshopMetricValues} from './workshop-metrics.js?v=workshop-live-2'
 import {renderVerificationLab,renderAchievementRewards,renderAchievementRankings} from './achievement-platform.js'
 import {renderAchievements} from './achievement-hall.js'
 import {achievementName} from './achievement-catalog.js'
 import {renderInstructionCollection} from './instruction-collection.js'
 import {commerceBadge,productArtwork,factsPanel,loyaltyBadge} from './commerce-visuals.js?v=merch-2'
-import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=layout-studio-2'
+import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=workshop-live-2'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 import {commerceProducts} from './commerce-catalog.js'
@@ -40,7 +42,7 @@ function metrics(items){const g=el('div','workshop-metric-grid');for(const [k,v]
 export function workshopSummary(local,remote){
  return {local:local.length,cloud:remote.length,revisions:remote.reduce((n,p)=>n+(Number.isSafeInteger(p.revision)&&p.revision>0?p.revision:0),0)}
 }
-export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,settingsTab='profile',setSettingsTab=()=>{},integrationsPanel,notificationPanel,promoPanel,passwordPanel,visibilitySupported=false,portfolioDraft,onPortfolioDraft,savePortfolio,bureauPanel,adminPanel,revokeOthers,profileData,saveProfile,uploadMedia,removeMedia,activityData,publicCard,publicLoaded,publicBuilds=[],loadPublic,publishPublic,unpublishPublic,publishBuild,unpublishBuild,refreshActivity,verifyAchievement,verificationResult,readActivity,toggleFavorite,openFavorite,logout,createBuild,openLocal,fetchCloud,signal,previewsEnabled,noticeNodes=[]}){
+export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,settingsTab='profile',setSettingsTab=()=>{},integrationsPanel,notificationPanel,promoPanel,passwordPanel,visibilitySupported=false,portfolioDraft,onPortfolioDraft,savePortfolio,liveSession,onLiveSession,startLive,bureauPanel,adminPanel,revokeOthers,profileData,saveProfile,uploadMedia,removeMedia,activityData,publicCard,publicLoaded,publicBuilds=[],loadPublic,publishPublic,unpublishPublic,publishBuild,unpublishBuild,refreshActivity,verifyAchievement,verificationResult,readActivity,toggleFavorite,openFavorite,logout,createBuild,openLocal,fetchCloud,signal,previewsEnabled,noticeNodes=[]}){
  const t={...workshopCopy[lang],...extra[lang],admin:lang==='ru'?'Администрирование':'Administration',revokeOthers:lang==='ru'?'Завершить остальные сессии':'End other sessions'},summary=workshopSummary(local,remote)
  const profile=profileData?.profile,progress=profileData?.progress
  const layout=el('div','workshop-layout cosmetic-'+(profile?.background??'default')),nav=el('nav','workshop-nav'),content=el('div','workshop-content')
@@ -61,10 +63,31 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,sett
  else if(section==='workshop'){
   const displayName=profile?.displayName??publicCard?.displayName??user.displayName
   const metricValues=workshopMetricValues({lang,owner:true,remoteCount:summary.cloud,progress,card:publicCard,loaded:publicLoaded})
-  const hero=renderUnifiedHero({lang,owner:true,identity:{displayName,username:user.username,bio:publicCard?'':profile?.bio,coverTheme:profile?.cover,backgroundTheme:profile?.background,achievementStyle:profile?.achievementStyle,supportBadge:profileData?.supportBadge,plus:profileData?.plus===true,avatarUrl:profile?.avatarUrl,coverUrl:profile?.coverUrl,subtitle:user.admin===true?(ru?'Администратор · BrickLab Cloud':'Administrator · BrickLab Cloud'):t.active},metricCards:metricItems({layout:profile?.metricLayout,lang,owner:true,values:metricValues})})
-  content.append(hero)
+  const identity={displayName,username:user.username,bio:publicCard?'':profile?.bio,coverTheme:profile?.cover,backgroundTheme:profile?.background,achievementStyle:profile?.achievementStyle,supportBadge:profileData?.supportBadge,plus:profileData?.plus===true,avatarUrl:profile?.avatarUrl,coverUrl:profile?.coverUrl,subtitle:user.admin===true?(ru?'Администратор · BrickLab Cloud':'Administrator · BrickLab Cloud'):t.active}
+  const ownerMetrics=metricItems({layout:profile?.metricLayout,lang,owner:true,values:metricValues})
+  const live=!!publicCard?.unified,makeProfile=state=>{
+   const draft={...publicCard,portfolio:state.portfolio},visible=key=>state.portfolio.blocks.some(b=>b.key===key&&b.visible)
+   if(progress){draft.awards=[...state.showcase,...(publicCard.awards?.includes('firstBuilder')?['firstBuilder']:[])];draft.achievementDefinitions=progress.definitions??[];draft.achievementDates=Object.fromEntries((progress.awards??[]).filter(a=>state.showcase.includes(a.award)).map(a=>[a.award,a.awardedAt]));draft.achievementXp=progress.xp;draft.achievementCount=progress.awards?.length;draft.achievementStyle=profile?.achievementStyle}
+   if(!visible('awards')){draft.awards=[];draft.achievementDates={};draft.achievementXp=undefined;draft.achievementCount=undefined;draft.achievementStyle=null;draft.achievementDefinitions=[]}
+   if(!visible('about'))draft.bio=''
+   return draft
+  }
+  let liveUI=null
+  if(live&&savePortfolio&&onLiveSession){
+   liveUI=renderWorkshopLive({lang,session:liveSession,portfolio:publicCard.portfolio,progress,busy,signal,onSession:onLiveSession,onSave:savePortfolio,
+    renderGrid:(state,editing)=>renderPortfolio({lang,profile:makeProfile(state),builds:publicBuilds,owner:true,live:true,editing,metricCards:ownerMetrics}),
+    renderPreview:state=>{
+     const draft=makeProfile(state),ownerMedia=publicCard.visible===false,identity={...draft,bio:'',subtitle:ru?'Конструктор BrickLab':'BrickLab builder'}
+     if(ownerMedia){identity.avatarUrl=publicCard.showAvatar?profile?.avatarUrl:null;identity.coverUrl=publicCard.showCover?profile?.coverUrl:null}
+     const metrics=metricItems({layout:profile?.metricLayout,lang,portfolio:draft.portfolio,values:workshopMetricValues({lang,card:draft,loaded:true})}),view=el('div','workshop-live-preview-page')
+     applySignature(view,draft.backgroundTheme);if(!draft.backgroundTheme||draft.backgroundTheme==='default')view.classList.add('workshop-preview-neutral');view.append(renderUnifiedHero({lang,identity,owner:ownerMedia}),renderPortfolio({lang,profile:draft,builds:publicBuilds,live:true,metricCards:metrics}));return view
+    }})
+  }
+  content.append(renderUnifiedHero({lang,owner:true,identity,metricCards:live?[]:ownerMetrics,coverControls:liveUI?.controls}))
   if(publicCard?.visible===false)content.append(el('p','account-muted',ru?'Мастерская скрыта от посетителей. Публикации сохранены.':'Workshop hidden from visitors. Publications retained.'))
-  if(publicCard)content.append(renderPortfolio({lang,profile:publicCard,builds:publicBuilds,owner:true}))
+  if(liveUI)content.append(liveUI.surface)
+  else if(publicCard)content.append(renderPortfolio({lang,profile:publicCard,builds:publicBuilds,owner:true,live,metricCards:ownerMetrics}))
+
  }else if(section==='achievements'){
   content.append(renderVerificationLab({lang,remote,busy,verify:verifyAchievement,result:verificationResult,go}),renderAchievements({lang,progress,profile,busy,saveProfile,go,refresh:refreshActivity}))
  }else if(section==='rankings'){
@@ -92,7 +115,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,sett
   const active=section==='cosmetics'?'appearance':section==='security'?'security':settingsTab,tabBar=el('nav','workshop-settings-tabs')
   const tabs=[['profile','Профиль','Profile'],['appearance','Оформление','Appearance'],['layout','Компоновка','Layout'],['privacy','Приватность','Privacy'],['security','Безопасность','Security'],['notifications','Уведомления','Notifications'],['integrations','Интеграции','Integrations'],['subscription','Подписка','Subscription']]
   tabBar.setAttribute('aria-label',ru?'Настройки аккаунта':'Account settings');for(const [key,r,e] of tabs){const b=button(ru?r:e,()=>setSettingsTab(key),busy);b.setAttribute('aria-pressed',String(active===key));tabBar.append(b)}content.append(tabBar)
-  const editor=mode=>renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic,visibilitySupported,mode,portfolioDraft,onPortfolioDraft,savePortfolio,progress})
+  const editor=mode=>renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic,visibilitySupported,mode,portfolioDraft,onPortfolioDraft,savePortfolio,progress,contentOnly:mode==='layout'})
   if(active==='profile'){
    content.append(editor('profile'))
   const c=card(ru?'Изображения профиля':'Profile images');c.append(el('p','account-muted',ru?'При включённой синхронизации изменения аватара и обложки сразу видны посетителям.':'When sharing is enabled, avatar and cover changes are immediately public.'))
@@ -104,7 +127,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,sett
   }}else c.append(el('p','account-muted',t.profileMissing))
   content.append(c)
   }else if(active==='layout'){
-   const values=workshopMetricValues({lang,owner:true,remoteCount:summary.cloud,progress,card:publicCard,loaded:publicLoaded});content.append(editor('layout'),renderMetricEditor({lang,layout:profile?.metricLayout,values,busy,enabled:!!profile,expanded:true,save:metricLayout=>saveProfile({bio:profile.bio,cover:profile.cover,metricLayout})}),renderAchievements({lang,progress,profile,busy,saveProfile,go,refresh:refreshActivity,showcaseOnly:true}))
+   const liveCard=card(ru?'Workshop Live · компоновка':'Workshop Live · layout');liveCard.append(el('p','account-muted',ru?'Теперь редактирование происходит прямо в мастерской. Шаблон открывается как черновик; галочка на обложке сохраняет изменения.':'Edit directly on your workshop. Templates open as drafts; the cover checkmark saves them.'));if(startLive&&publicCard?.unified){const options=el('div','studio-toolbar');for(const [id,title] of [['',ru?'Редактировать мастерскую':'Edit workshop'],['classic',ru?'Классический':'Classic'],['minimal',ru?'Минимализм':'Minimal'],['portfolio',ru?'Портфолио':'Portfolio'],['engineering',ru?'Инженерный':'Engineering']])options.append(button(title,()=>{startLive(id);go('workshop')},busy));liveCard.append(options)}content.append(liveCard);const values=workshopMetricValues({lang,owner:true,remoteCount:summary.cloud,progress,card:publicCard,loaded:publicLoaded});content.append(editor('layout'),renderMetricEditor({lang,layout:profile?.metricLayout,values,busy,enabled:!!profile,expanded:true,save:metricLayout=>saveProfile({bio:profile.bio,cover:profile.cover,metricLayout})}),renderAchievements({lang,progress,profile,busy,saveProfile,go,refresh:refreshActivity,showcaseOnly:true}))
   }else if(active==='privacy'){content.append(editor('privacy'))}
   else if(active==='appearance'){
    const c=card(ru?'Темы оформления':'Themes');c.append(el('p','account-muted',t.cosmeticHint),el('p','account-muted',lang==='ru'?'Если показ оформления разрешён в публичном профиле, новая тема сразу появится в сообществе.':'If public appearance is enabled, equipped themes immediately appear in the community.'))

@@ -11,6 +11,7 @@ const el=(tag,cls,value)=>{const n=document.createElement(tag);if(cls)n.classNam
 function icon(id){const s=document.createElementNS('http://www.w3.org/2000/svg','svg'),u=document.createElementNS(s.namespaceURI,'use');s.setAttribute('class','icon');s.setAttribute('aria-hidden','true');u.setAttribute('href','#'+id);s.append(u);return s}
 function button(label,fn,disabled=false){const b=el('button','workspace-action',label);b.type='button';b.disabled=disabled;b.onclick=fn;return b}
 function bar(n,max){const p=el('progress','achievement-bar');p.max=Math.max(1,max);p.value=Math.min(p.max,Math.max(0,n));return p}
+export function renderAchievementMedal(a){const m=el('div','achievement-medal rarity-'+a.rarity);m.append(icon(a.icon));return m}
 export function renderAchievements({lang,progress,profile,busy,saveProfile,go,refresh,showcaseOnly=false}){
  lang=lang==='ru'?'ru':'en';const t=words[lang],root=el('section','achievement-hall')
  if(!progress){root.append(el('p','account-muted',t.missing),button(t.refresh,refresh,busy));return root}
@@ -29,7 +30,7 @@ export function renderAchievements({lang,progress,profile,busy,saveProfile,go,re
  tools.append(search,select([['all',t.all],['earned',t.earned],['locked',t.locked]],t.collection,v=>{status=v;renderGrid()}),select([['default',t.default],['closest',t.closest],['recent',t.recent],['rare',t.rare]],t.sort,v=>{sort=v;renderGrid()}),button(t.refresh,refresh,busy));collection.append(el('h3',null,t.collection),tools,filters,grid);root.append(collection)
  const categories=['all',...new Set(available.map(a=>a.cat))]
  for(const c of categories){const b=button(t[c],()=>{category=c;renderGrid();for(const f of filters.children)f.setAttribute('aria-pressed',String(f===b))});b.setAttribute('aria-pressed',String(c==='all'));filters.append(b)}
- function medal(a){const m=el('div','achievement-medal rarity-'+a.rarity);m.append(icon(a.icon));return m}
+ const medal=renderAchievementMedal
  function tile(a,compact=false){const e=earned.get(a.id),card=el('article','achievement-tile rarity-'+a.rarity+(e?' earned':' locked')),top=el('div','achievement-tile-top');top.append(el('span',null,t[a.rarity==='rare'?'rareLabel':a.rarity]),el('span',null,e?'✓ '+t.earned:t.locked));card.append(top,medal(a),el('h4',null,a[lang]),el('p','achievement-description',a[lang==='ru'?'descRu':'descEn']),bar(current(a),a.target));const foot=el('div','achievement-tile-foot');foot.append(el('span',null,e?date(e.awardedAt):fmt(current(a))+' / '+fmt(a.target)),el('strong',null,'+'+a.xp+' XP'));card.append(foot)
  if(!compact&&Object.hasOwn(p.rarity??{},a.id))card.append(el('small','account-muted',t.population+': '+fmt(Number(p.rarity[a.id]))+'%'))
  if(showcaseOnly&&e&&!compact){const selected=pinned.includes(a.id);card.append(button(selected?t.unpin:t.pin,()=>{pinned=selected?pinned.filter(id=>id!==a.id):[...pinned,a.id];renderPins();renderGrid()},busy||!profile||(!selected&&pinned.length>=6)))}

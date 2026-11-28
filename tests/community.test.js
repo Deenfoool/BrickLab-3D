@@ -44,3 +44,25 @@ test('layout-only PATCH validates widths, authorizes session and never changes v
  assert.equal(result.visible,false);assert.equal(result.displayName,'Builder');assert.equal(result.bio,'Private bio')
  assert.deepEqual(result.portfolio,portfolio);assert.deepEqual(calls,[[uid,portfolio]])
 })
+
+test('live layout PATCH rejects overlaps and untrusted award IDs, forwards only validated geometry and selected awards',async t=>{
+ const {defaultPortfolio}=await import('../src/menu/portfolio-model.js'),{toLiveBlocks}=await import('../src/menu/workshop-live-model.js')
+ const base=defaultPortfolio({publicByDefault:true}),portfolio={...base,blocks:toLiveBlocks(base.blocks)},calls=[]
+ const store={getSession:async()=>({id:uid}),getOwnCard:async()=>({id,displayName:'Builder',bio:'',visible:false,unified:true,portfolio,publicIds:[]}),savePortfolio:async(...a)=>calls.push(a)}
+ const handler=createCommunityHandler({store,origin,enabled:true}),server=createServer(async(req,res)=>{if(!await handler(req,res,req.url)){res.statusCode=404;res.end()}})
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>{server.closeAllConnections();return new Promise(r=>server.close(r))})
+ const url='http://127.0.0.1:'+server.address().port+'/api/community/me',headers={Cookie:'bricklab_session='+'a'.repeat(64),Origin:origin,'Content-Type':'application/json'},patch=body=>fetch(url,{method:'PATCH',headers,body:JSON.stringify(body)})
+ assert.equal((await patch({portfolio:{...portfolio,blocks:portfolio.blocks.map(b=>({...b,rect:{x:0,y:0,w:6,h:2}}))},layoutOnly:true})).status,400)
+ assert.equal((await patch({portfolio,showcase:['unknown-award'],layoutOnly:true})).status,400)
+ assert.equal((await patch({portfolio,showcase:['firstCloudSave','firstCloudSave'],layoutOnly:true})).status,400)
+ const response=await patch({portfolio,layoutOnly:true,showcase:['firstCloudSave'],visible:true,userId:'other'})
+ assert.equal(response.status,200);assert.equal((await response.json()).profile.visible,false)
+ assert.deepEqual(calls,[[uid,portfolio,['firstCloudSave'],true]])
+})
+test('public award dates are projected only for selected visible medals',async()=>{
+ const {defaultPortfolio}=await import('../src/menu/portfolio-model.js'),portfolio=defaultPortfolio({publicByDefault:true})
+ const row={id,displayName:'Builder',bio:'',unified:true,portfolio,publicIds:[],achievementShowcase:['firstCloudSave'],achievementDetails:{xp:30,style:null,definitions:[],dates:{firstCloudSave:'2026-11-27T00:00:00Z',privateAward:'2026-11-01T00:00:00Z'}}}
+ assert.deepEqual(publicCard(row).achievementDates,{firstCloudSave:'2026-11-27T00:00:00Z'})
+ portfolio.blocks.find(b=>b.key==='awards').visible=false;assert.equal(publicCard(row).achievementDates,undefined)
+ assert.equal(publicCard({...row,visible:false}),null)
+})
