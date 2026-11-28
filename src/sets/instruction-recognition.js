@@ -65,7 +65,7 @@ export function createInstructionRecognition(reader, set, signal) {
   const {labels,ambiguous}=inventoryLabels(set.inventory)
   const version = inventoryVersion(labels,set.inventory)
   const recoverElements=createElementRecovery(set.inventory,lookupElement)
-  let modelReferences
+  let modelReferences,modelWorker
   const jobs = new Map()
   const books = new Map()
   let active, worker, ocr, ocrQueue = Promise.resolve(), jobId = 0
@@ -73,6 +73,7 @@ export function createInstructionRecognition(reader, set, signal) {
   function cancelJobs(error) {
     worker?.terminate()
     worker = undefined
+    modelWorker=undefined
     for (const job of jobs.values()) job.reject(error)
     jobs.clear()
   }
@@ -189,27 +190,45 @@ export function createInstructionRecognition(reader, set, signal) {
       emptyAfterInventory=items.length?0:emptyAfterInventory+Number(templates.length>0)
       if(emptyAfterInventory>=3)break
     }
+    if(!templates.length){
+      // Some editions put their illustrated inventory before the assembly steps.
+      for(let page=1;page<=Math.min(12,Math.max(0,total-36));page++){
+        request.throwIfAborted()
+        let items=[]
+        try{items=await extract(source,page,null,true,request,pdfReader)}catch{request.throwIfAborted()}
+        templates.push(...items)
+        emptyAfterInventory=items.length?0:emptyAfterInventory+Number(templates.length>0)
+        if(emptyAfterInventory>=3)break
+      }
+    }
     request.throwIfAborted()
     books.set(source,templates)
     if(templates.length)void cache(key,templates)
     return templates
   }
   async function illustratedInventory(book){
-    // Multi-volume sets usually put the illustrated inventory in the final volume.
-    // Use a separate PDF reader so opening it cannot replace the visible document.
-    if(typeof book.source==='string'&&canonicalInstructionUrl(book.source)){
-      const others=(set.books??[]).filter(v=>canonicalInstructionUrl(v.url)&&canonicalInstructionUrl(v.url)!==canonicalInstructionUrl(book.source)).slice(-3).reverse()
-      for(const volume of others){
-        book.signal.throwIfAborted()
-        if(books.get(volume.url)?.length)return books.get(volume.url)
-        const extra=createInstructionPdfReader()
-        try{
-          const templates=await scanInventory(volume.url,null,book.signal,extra)
-          if(templates.length)return templates
-        }catch{book.signal.throwIfAborted()}finally{extra.close()}
+    if(typeof book.source!=='string'||!canonicalInstructionUrl(book.source))return scanInventory(book.source,book.pages,book.signal,reader)
+    // Prefer the actual final volume, including the case where it is already open.
+    const identity=canonicalInstructionUrl(book.source)
+    const volumes=[...(set.books??[])].reverse().filter(v=>canonicalInstructionUrl(v.url))
+    const ordered=[...volumes.slice(0,3),{url:book.source,pages:book.pages}]
+    const visited=new Set(),combined=[]
+    const expected=new Set(set.inventory.filter(i=>!i.spare).map(i=>JSON.stringify([i.partNum,String(i.colorId)]))).size
+    for(const volume of ordered){
+      const url=canonicalInstructionUrl(volume.url)
+      if(!url||visited.has(url))continue
+      visited.add(url);book.signal.throwIfAborted()
+      let templates=books.get(volume.url)
+      if(!templates?.length){
+        const same=url===identity,extra=same?reader:createInstructionPdfReader()
+        try{templates=await scanInventory(same?book.source:volume.url,same?book.pages:null,book.signal,extra)}
+        catch{book.signal.throwIfAborted();templates=[]}finally{if(!same)extra.close()}
       }
+      combined.push(...templates)
+      const coverage=new Set(combined.filter(t=>t.item?.[0]).map(t=>JSON.stringify(t.item.slice(0,2)))).size
+      if(expected&&coverage>=expected*.95)break
     }
-    return scanInventory(book.source,book.pages,book.signal,reader)
+    return combined
   }
 
   async function pageRegions(source, page, pages, canvas, request, onProgress=()=>{}) {
@@ -234,12 +253,11 @@ export function createInstructionRecognition(reader, set, signal) {
       book.inventoryPromise = undefined
       throw error
     })
-    try{await book.inventoryPromise}catch{request.throwIfAborted()}
+    let inventoryTemplates=[]
+    try{inventoryTemplates=await book.inventoryPromise}catch{request.throwIfAborted()}
     request.throwIfAborted()
     // A personal PDF can belong to a different edition or set.
-    const templates = typeof source === 'string'
-      ? [...books].filter(([volume]) => typeof volume === 'string').flatMap(([, items]) => items)
-      : books.get(source)??[]
+    const templates=inventoryTemplates??[]
     const regions=templates.length?await analyze('rank',{samples,templates}):direct
     request.throwIfAborted()
     if(regions.length===samples.length){if(regions.length)void cache(pageKey,regions);return regions}
@@ -256,7 +274,9 @@ export function createInstructionRecognition(reader, set, signal) {
     const references=await modelReferences
     request.throwIfAborted()
     if(!references.length)return regions
-    const recovered=await analyze('rank-models',{samples:unresolved,references})
+    if(modelWorker!==worker||!worker){await analyze('model-references',{references});modelWorker=worker}
+    request.throwIfAborted()
+    const recovered=await analyze('rank-models',{samples:unresolved})
     request.throwIfAborted()
     // Synthetic views are supplementary and are never persisted as reviewed PDF matches.
     return [...regions,...recovered]

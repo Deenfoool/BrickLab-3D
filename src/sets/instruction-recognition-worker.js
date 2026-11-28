@@ -1,4 +1,4 @@
-import {rankModels} from './instruction-model-match.js?v=recognition-v8'
+import {rankModels,prepareModelReferences} from './instruction-model-match.js?v=recognition-v8'
 // Page text locates the callouts. Compare the composited part artwork with
 // labeled drawings from the illustrated inventory of the same set.
 import {isQuantity} from './instruction-text.js?v=smart-highlight-1'
@@ -410,10 +410,12 @@ export function rank({ samples, templates }) {
   })
 }
 
+let modelViews=[]
 if(typeof self!=='undefined'&&typeof self.postMessage==='function')self.onmessage = ({ data }) => {
   const { id, action, input } = data
   try {
-    self.postMessage({ id, value: action === 'extract' ? extract(input) : action==='rank-models'?rankModels(input):rank(input) })
+    if(action==='model-references'){modelViews=prepareModelReferences(input.references);self.postMessage({id,value:true});return}
+    self.postMessage({ id, value: action === 'extract' ? extract(input) : action==='rank-models'?rankModels({...input,prepared:modelViews}):rank(input) })
   } catch (error) {
     self.postMessage({ id, error: error.message })
   }

@@ -28,9 +28,13 @@ export function normalizedModelImage(rgba,width,height){
  if(count<16||x0<=0||y0<=0||x1>=width-1||y1>=height-1)return null
  const w=x1-x0+1,h=y1-y0+1,pixels=new Uint8ClampedArray(side*side*4).fill(255)
  for(let y=0;y<side;y++)for(let x=0;x<side;x++){
-  const p=(Math.min(y1,y0+Math.floor((y+.5)*h/side))*width+Math.min(x1,x0+Math.floor((x+.5)*w/side)))*4,q=(y*side+x)*4
-  const alpha=rgba[p+3]/255
-  for(let c=0;c<3;c++)pixels[q+c]=Math.round(255+(rgba[p+c]-255)*alpha)
+  const q=(y*side+x)*4,sum=[0,0,0]
+  for(const dy of [.25,.75])for(const dx of [.25,.75]){
+   const p=(Math.min(y1,y0+Math.floor((y+dy)*h/side))*width+Math.min(x1,x0+Math.floor((x+dx)*w/side)))*4
+   const alpha=rgba[p+3]/255
+   for(let c=0;c<3;c++)sum[c]+=255+(rgba[p+c]-255)*alpha
+  }
+  for(let c=0;c<3;c++)pixels[q+c]=Math.round(sum[c]/4)
  }
  return {pixels,aspect:Math.log(w/h)}
 }
@@ -64,11 +68,12 @@ function rotate(view){
  }
  return {...view,pixels:b,aspect:-view.aspect}
 }
-export function rankModels({samples,references}){
- if(!references?.length)return []
- const identities=new Set(references.map(r=>JSON.stringify(r.item)))
- if(identities.size<2)return []
- const views=references.map(reference=>{const variants=[reference];for(let i=1;i<4;i++)variants.push(rotate(variants[i-1]));return {item:reference.item,variants}})
+export function prepareModelReferences(references){
+ return references.map(reference=>{const variants=[reference];for(let i=1;i<4;i++)variants.push(rotate(variants[i-1]));return {item:reference.item,variants}})
+}
+export function rankModels({samples,references,prepared}){
+ const views=prepared??prepareModelReferences(references??[])
+ if(new Set(views.map(r=>JSON.stringify(r.item))).size<2)return []
  return samples.flatMap(sample=>{
   if(sample.item?.[0]||!sample.pixels)return []
   const byKey=new Map()

@@ -9,15 +9,17 @@ export function createElementRecovery(inventory,lookup,{budget=128,perPage=12}={
  const contains=inventoryIdentity(inventory),requests=new Map()
  return async function recover(words,labels,blocked,signal){
   const ids=[...new Set(words.map(w=>w.text).filter(id=>/^\d{6,8}$/.test(id)&&!Object.hasOwn(labels,id)&&!blocked.has(id)))].slice(0,perPage)
-  for(const id of ids){
+  for(let offset=0;offset<ids.length;offset+=4){
    signal.throwIfAborted()
-   if(!requests.has(id)){
-    if(requests.size>=budget)continue
-    requests.set(id,Promise.resolve().then(()=>lookup(id)).catch(()=>null))
-   }
-   const record=await requests.get(id)
-   signal.throwIfAborted()
-   if(record?.elementId===id&&contains(record))labels[id]=[String(record.partNum),String(record.colorId)]
+   await Promise.all(ids.slice(offset,offset+4).map(async id=>{
+    if(!requests.has(id)){
+     if(requests.size>=budget)return
+     requests.set(id,Promise.resolve().then(()=>lookup(id)).catch(()=>null))
+    }
+    const record=await requests.get(id)
+    signal.throwIfAborted()
+    if(record?.elementId===id&&contains(record))labels[id]=[String(record.partNum),String(record.colorId)]
+   }))
   }
  }
 }
