@@ -1,10 +1,10 @@
 import * as THREE from 'three'
-import { partMesh, parts, loadPartModel, previewActuatorMesh } from './parts.js?v=linear-actuator-1'
-import { loadParts } from './model.js?v=linear-actuator-1'
+import { partMesh, parts, loadPartModel, previewActuatorMesh } from './parts.js?v=linear-actuator-2'
+import { loadParts } from './model.js?v=linear-actuator-2'
 import { expandComponents } from './components.js?v=belt-drive'
 import { upgradeInlineEngineFan } from './inline-engine.js'
 import { hiddenSceneParts, readSceneLayers } from './scene-layers.js?v=scene-parts'
-import { createBeltScene } from './belt-scene.js?v=linear-actuator-1'
+import { createBeltScene } from './belt-scene.js?v=linear-actuator-2'
 import { assembleBelts, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 
 const width = 768

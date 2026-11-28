@@ -1,13 +1,13 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
-import { partMesh, parts, previewActuatorMesh } from './parts.js?v=linear-actuator-1'
-import { createBeltScene } from './belt-scene.js?v=linear-actuator-1'
+import { partMesh, parts, previewActuatorMesh } from './parts.js?v=linear-actuator-2'
+import { createBeltScene } from './belt-scene.js?v=linear-actuator-2'
 import { createMotorCables } from './motor-cables.js?v=system-complete'
 import { createPartOutlines } from './part-outlines.js?v=transmission-map-1'
 import { isRodPort } from '../mechanics/actuators.js'
-import { portsFor } from '../mechanics/catalog.js?v=linear-actuator-1'
-import { snapGrid } from './model.js?v=linear-actuator-1'
+import { portsFor } from '../mechanics/catalog.js?v=linear-actuator-2'
+import { snapGrid } from './model.js?v=linear-actuator-2'
 import { readPreference } from '../menu/preferences.js?v=full-settings'
 
 const unitScale = [1, 1, 1]

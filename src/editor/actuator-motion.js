@@ -1,7 +1,7 @@
 import { Vector3 } from 'three'
 import { linearActuators, actuatorTravel, isRodPort, currentActuatorSpec } from '../mechanics/actuators.js'
-import { portsFor } from '../mechanics/catalog.js?v=linear-actuator-1'
-import { worldPort } from './placement.js?v=linear-actuator-1'
+import { portsFor } from '../mechanics/catalog.js?v=linear-actuator-2'
+import { worldPort } from './placement.js?v=linear-actuator-2'
 import { planarActuatorLinkage } from './actuator-linkage.js'
 import { movePose } from '../mechanics/linkage.js'
 

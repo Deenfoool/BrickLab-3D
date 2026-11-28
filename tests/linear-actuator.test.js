@@ -104,3 +104,26 @@ test('actual LDraw pack produces independently movable housing, input and rod me
   object.userData.finish.dispose()
  }finally{globalThis.fetch=old}
 })
+
+test('saved intermediate extension relocates rod ports and keeps the input keyed to the saved shaft phase',async()=>{
+ const {commitActuatorPose,currentActuatorSpec}=await import('../src/mechanics/actuators.js')
+ const {worldPort}=await import('../src/editor/placement.js')
+ const a=part('a','43097-f2'),rod=portsFor(a.design).find(p=>p.id==='shadow-9d46d615dac1')
+ const saved=commitActuatorPose({...a,previewActuatorRod:-50,previewActuatorInput:.3})
+ assert.equal(saved.actuatorExtension,50)
+ assert.ok(Math.abs(saved.actuatorInputPhase-.3)<1e-9)
+ assert.ok(!Object.hasOwn(saved,'previewActuatorRod'))
+ assert.equal(worldPort(saved,rod).start.z,240)
+ assert.equal(currentActuatorSpec(saved).initial,50)
+ const motion=rotationMotion('a',[saved],createAssembly([saved],[]))
+ assert.deepEqual(motion.range,[-50,50])
+ const shaft=part('s','3705'),input=portsFor(a.design).find(p=>p.actuatorInput),male=portsFor(shaft.design)[0]
+ const fit=evaluateInsertion(male,input,{offset:-60,direction:1,roll:0})
+ Object.assign(shaft,joinedPose(shaft,male,saved,input,fit.placement))
+ const assembly=createAssembly([saved,shaft],[])
+ assert.equal(connectAligned(assembly,[saved],[shaft]).length,1)
+ const {ldrawText}=await import('../src/editor/project-exports.js')
+ const exportText=ldrawText({name:'actuator',parts:[saved]},{})
+ assert.match(exportText,/62274c01\.dat/)
+ assert.match(exportText,/u9559c01\.dat/)
+})

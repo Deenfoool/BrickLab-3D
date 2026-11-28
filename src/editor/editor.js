@@ -11,15 +11,16 @@ import { mountWorkspace } from './workspace.js?v=menu-studio-2'
 import { createEditorAudio } from './audio.js?v=editor-sound'
 import { mountMotorPanel } from './motor-panel.js'
 import { Plane, Quaternion, Vector3 } from 'three'
-import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=linear-actuator-1'
-import { baseRotation, mirrorPose, samePose, worldPort } from './placement.js?v=linear-actuator-1'
-import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, assemblyJoints, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=linear-actuator-1'
+import { commitActuatorPose } from '../mechanics/actuators.js'
+import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=linear-actuator-2'
+import { baseRotation, mirrorPose, samePose, worldPort } from './placement.js?v=linear-actuator-2'
+import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, assemblyJoints, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=linear-actuator-2'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
-import { nearestDetent } from '../mechanics/axial.js?v=linear-actuator-1'
-import { nearbyConnections, translationSnaps } from './snap.js?v=linear-actuator-1'
-import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=linear-actuator-1'
+import { nearestDetent } from '../mechanics/axial.js?v=linear-actuator-2'
+import { nearbyConnections, translationSnaps } from './snap.js?v=linear-actuator-2'
+import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=linear-actuator-2'
 import { mountLibrary } from './library.js?v=catalog-engine-1'
-import { createScene } from './scene.js?v=linear-actuator-1'
+import { createScene } from './scene.js?v=linear-actuator-2'
 import {mountTransmissionMap,transmissionMap,transmissionCodes} from './transmission-map.js?v=menu-studio-1'
 import {mountMotorBench} from './motor-bench-panel.js'
 import {mountCollaboration} from './collaboration-client.js?v=live-polish-1'
@@ -34,7 +35,7 @@ import { mountTrackPanel, trackLabels } from './track-panel.js?v=level-treads'
 import { upgradeInlineEngineFan } from './inline-engine.js'
 import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
-import { editorLabels } from './labels.js?v=linear-actuator-1'
+import { editorLabels } from './labels.js?v=linear-actuator-2'
 import { readPreference, writePreference } from '../menu/preferences.js?v=full-settings'
 import { mountTutorial, showEditorTip } from './tutorial.js?v=academy-1'
 
@@ -192,6 +193,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
                 </select>
                 <button type="button" data-el="play">${t.play}</button>
                 <button type="button" data-el="applyHinge" hidden>${t.applyHinge}</button>
+                <button type="button" data-el="applyActuator" hidden>${language==='ru'?'Сохранить положение актуатора':'Apply actuator position'}</button>
               </div>
               <section class="editor-transmission-map" data-el="transmissionMap" hidden></section>
               <section class="editor-drive-estimate" data-el="driveEstimate" hidden></section>
@@ -612,7 +614,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     render()
     try {
       const [{ createPhysicalAssembly }, { loadRapier }] = await Promise.all([
-        import('../mechanics/physical-assembly.js?v=linear-actuator-1'), import('../mechanics/physics-world.js'),
+        import('../mechanics/physical-assembly.js?v=linear-actuator-2'), import('../mechanics/physics-world.js'),
       ])
       const rapier = await loadRapier()
       if (signal.aborted || clutchTest !== test) return
@@ -885,7 +887,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
       next.parts.some((part, index) => {
         const previous = state.parts[index]
         return part.id !== previous.id || part.design !== previous.design ||
-          part.position !== previous.position || part.rotation !== previous.rotation
+          part.position !== previous.position || part.rotation !== previous.rotation || part.actuatorExtension!==previous.actuatorExtension || part.actuatorInputPhase!==previous.actuatorInputPhase
       }))
     const mechanicalChange = geometryChanged || state.links !== next.links || state.belts !== next.belts
     state = next
@@ -914,7 +916,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }
 
   function commit(next) {
-    if(next.parts){const byId=new Map(next.parts.map(p=>[p.id,p]));if(state.parts.some(p=>{const n=byId.get(p.id);return locked(p.id)&&n&&(n.design!==p.design||Boolean(n.mirrored)!==Boolean(p.mirrored)||!samePose(p,n))})){setMessage(tr('Сначала разблокируй детали.','Unlock the parts first.'));render();return false}}
+    if(next.parts){const byId=new Map(next.parts.map(p=>[p.id,p]));if(state.parts.some(p=>{const n=byId.get(p.id);return locked(p.id)&&n&&(n.design!==p.design||Boolean(n.mirrored)!==Boolean(p.mirrored)||n.actuatorExtension!==p.actuatorExtension||n.actuatorInputPhase!==p.actuatorInputPhase||!samePose(p,n))})){setMessage(tr('Сначала разблокируй детали.','Unlock the parts first.'));render();return false}}
     const beforeLinks = state.links
     undo.push(state)
     if (undo.length > 80) undo.shift()
@@ -1067,6 +1069,8 @@ export async function mountEditor(root, { document, projectId, language, save, d
     el('motionLabel').textContent = transmission?.unit === 'linear' ? t.travel
       : transmission?.kind === 'engine' ? t.crankAngle : t.drive
     el('applyHinge').hidden = !hinge?.ok
+    el('applyActuator').hidden=!transmission?.ok||!transmission.actuators?.length
+    el('applyActuator').disabled=!!runningMotor||Math.abs(angle)<1e-8
     const range = el('angle')
     range.min = hinge?.ok ? hinge.detents[0] * 180 / Math.PI : transmission?.range?.[0] ?? -1080
     range.max = hinge?.ok ? hinge.detents.at(-1) * 180 / Math.PI : transmission?.range?.[1] ?? 1080
@@ -1343,7 +1347,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     setMessage(t.snapAllWorking, true)
     render()
     try {
-      const { snapScene } = await import('./scene-snap.js?v=linear-actuator-1')
+      const { snapScene } = await import('./scene-snap.js?v=linear-actuator-2')
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
       if (signal.aborted || state !== before || mode !== 'build' || hidden !== hiddenBefore || dragActive() || pendingPart) {
         if (message === t.snapAllWorking) setMessage()
@@ -1796,6 +1800,21 @@ export async function mountEditor(root, { document, projectId, language, save, d
     showMotion(true)
     render()
     if (hinge?.ok || transmission?.ok) tutorial?.handle('motion')
+  })
+  on(el('applyActuator'),'click',()=>{
+    if(!transmission?.ok||!transmission.actuators?.length||runningMotor)return
+    stopAnimation()
+    const value=transmission.unit==='linear'?angle:angle*Math.PI/180
+    const preview=rotationPoses(state.parts,transmission,value)
+    if(!preview)return
+    const moved=new Map(preview.map(part=>[part.id,commitActuatorPose(part)]))
+    const placed=state.parts.map(part=>moved.get(part.id)??part)
+    const nextLinks=transformLinks(placed,[...moved.keys()])
+    const checked=createAssembly(placed,nextLinks,{belts:state.belts})
+    if(nextLinks.length!==state.links.length||checked.connections.length!==state.links.length||checked.belts.length!==state.belts.length){
+      setMessage(tr('Положение не сохранено: нарушается соединение или ременная передача.','Position not applied: a connection or belt would be lost.'),true);render();return
+    }
+    commit({...state,parts:placed,links:nextLinks})
   })
   on(el('applyHinge'), 'click', () => {
     if (!hinge?.ok) return
