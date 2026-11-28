@@ -79,3 +79,21 @@ test('existing price rules preserve actual badge credit, collection discount and
  assert.ok(commerceQuote('theme-collection',partial).amountKopecks<69900);
  assert.throws(()=>commerceQuote('carbon',partial),/already_owned/);
 });
+
+test('operator recovery cannot attach unrelated provider payments and uses GET only',async()=>{
+ const order='30000000-0000-4000-8000-000000000001',payment='40000000-0000-4000-8000-000000000001';
+ const pending={id:payment,test:false,status:'pending',paid:false,amount:{value:'99.00',currency:'RUB'},metadata:{order_id:order}};
+ let value=pending;const calls=[];
+ const adapter=createYookassaAdapter({origin:'https://bricklab.test',config:{enabled:true,environment:'live',shopId:'1',secret:'live_example_secret'},store:{
+ attachCommercePayment:async(...a)=>{calls.push(['attach',...a]);return true},
+ settleVerifiedCommercePayment:async(...a)=>{calls.push(['settle',...a]);return true},
+ cancelVerifiedCommercePayment:async(...a)=>{calls.push(['cancel',...a]);return true}
+ },fetcher:async(url,opts)=>{assert.equal(opts.method,'GET');assert.ok(url.endsWith(payment));return Response.json(value)}});
+ const row={id:order,amountKopecks:9900,status:'pending',paymentId:null};
+ for(const bad of [{...pending,test:true},{...pending,metadata:{order_id:payment}},{...pending,amount:{value:'1.00',currency:'RUB'}}]){value=bad;await assert.rejects(adapter.recoverPayment(row,payment))}
+ assert.equal(calls.length,0);
+ value=pending;assert.equal(await adapter.recoverPayment(row,payment),'pending');assert.deepEqual(calls.pop(),['attach',order,payment,'live']);
+ value={...pending,status:'succeeded',paid:true};assert.equal(await adapter.recoverPayment(row,payment),'succeeded');assert.deepEqual(calls.pop(),['settle',order,payment,'live',9900,false]);
+ value={...pending,status:'canceled'};assert.equal(await adapter.recoverPayment(row,payment),'canceled');assert.deepEqual(calls.pop(),['cancel',order,payment,'live',9900]);
+ await assert.rejects(adapter.recoverPayment({...row,paymentId:order},payment));
+});

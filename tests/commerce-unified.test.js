@@ -71,3 +71,21 @@ test('a completed checkout attempt is returned without creating or reading anoth
  }},fetcher:async()=>{throw Error('must not call provider')}})
  assert.deepEqual(await adapter.checkout(uid,'plus-1',{unified:true,amountKopecks:24900,offerVersion:terms,beta:true,checkoutKey:pid,returnToSets:true}),{orderId:uid,status:'succeeded',checkoutUrl:null,mode:'live'})
 })
+
+test('operator recovery is admin-only and available in closed live scope',async t=>{
+ let admin=false,lookups=0,checks=0;
+ const store={getSession:async()=>({id:uid,admin}),commerceAdminRecoveryOrder:async(...a)=>{lookups++;assert.deepEqual(a,[uid,uid,'live']);return {id:uid,paymentId:null,amountKopecks:24900,status:'pending'}}};
+ const adapter={enabled:true,recoverPayment:async(row,id)=>{checks++;assert.equal(row.id,uid);assert.equal(id,pid);return 'succeeded'}};
+ const handler=createPaymentsHandler({store,origin,config:{enabled:false},legal:{version:terms},fullCatalog:true,commerceMode:'live',liveCheckoutScope:'closed',liveYookassa:adapter});
+ const server=createServer((req,res)=>handler(req,res,new URL(req.url,origin).pathname));
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
+ const base='http://127.0.0.1:'+server.address().port,headers={cookie:'__Host-bricklab_session='+'a'.repeat(64),origin,'Content-Type':'application/json'},payload={orderId:uid,paymentId:pid,mode:'live'};
+ const post=(data,extra={})=>fetch(base+'/api/commerce/admin-reconcile',{method:'POST',headers:{...headers,...extra},body:JSON.stringify(data)});
+ assert.equal((await post(payload)).status,403);admin=true;
+ assert.equal((await post(payload,{origin:'https://other.invalid'})).status,403);
+ assert.equal((await post({...payload,mode:'test'})).status,400);
+ assert.equal((await post({...payload,paymentId:'invalid'})).status,400);
+ assert.equal(lookups,0);assert.equal(checks,0);
+ assert.deepEqual(await (await post(payload)).json(),{status:'succeeded',mode:'live'});
+ assert.equal(lookups,1);assert.equal(checks,1);
+});

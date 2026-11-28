@@ -86,6 +86,20 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
    }
    return 'pending'
   },
+  async recoverPayment(order,providedId){
+   if(!config.enabled||!uuid.test(order?.id??'')||!paymentId.test(providedId??'')||!Number.isSafeInteger(order?.amountKopecks))throw new ProjectError(400,'invalid_order')
+   if(order.paymentId&&order.paymentId!==providedId)throw new ProjectError(409,'payment_mismatch')
+   const paid=await call('payments/'+providedId)
+   if(!validPayment(paid,providedId,environment)||paid.metadata.order_id!==order.id||amountKopecks(paid.amount.value)!==order.amountKopecks)throw new ProjectError(409,'payment_mismatch')
+   if(paid.status==='succeeded')return settle(paid)
+   if(paid.status==='canceled'){
+    if(!await cancel(paid))throw new ProjectError(409,'payment_mismatch')
+    return 'canceled'
+   }
+   if(!['pending','waiting_for_capture'].includes(paid.status)||order.status!=='pending')throw new ProjectError(409,'payment_unverified')
+   if(!await store.attachCommercePayment(order.id,paid.id,environment))throw new ProjectError(409,'payment_mismatch')
+   return 'pending'
+  },
   async reconcileTestPayment(order){
    if(environment!=='test')throw new ProjectError(503,'yookassa_test_disabled')
    return this.reconcilePayment(order)
