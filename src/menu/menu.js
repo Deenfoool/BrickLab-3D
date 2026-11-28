@@ -6,7 +6,7 @@ import { safeImage } from '../sets/data.js?v=catalog-engine-1'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
 import { locales } from './locale.js?v=seo-discovery-1'
 import {mountStore} from './store.js?v=brand-plus-1'
-import { mountHomeHub, mountHubSearch, openReleaseHistory } from './home-hub.js?v=seo-discovery-1'
+import { mountHomeHub, mountHubSearch, openReleaseHistory } from './home-hub.js?v=seo-discovery-2'
 import { mountShellNavigation } from './shell-navigation.js?v=compact-nav-1'
 import { mountBrandPlus } from './brand-plus.js?v=brand-plus-1'
 import { createAuthClient } from './auth-client.js?v=live-polish-1'
@@ -57,6 +57,9 @@ let editorSession
 let librarySession
 let storeSession
 let hubSession,hubSearch,hubSearchLanguage,pendingLibraryQuery='',pendingSetQuery=''
+const discoveryQuery=new URLSearchParams(location.search)
+if(location.hash==='#sets'&&/^\d{3,7}-\d{1,2}$/.test(discoveryQuery.get('set')??''))pendingSetQuery=discoveryQuery.get('set')
+if(location.hash==='#library'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$/.test(discoveryQuery.get('part')??''))pendingLibraryQuery=discoveryQuery.get('part')
 let homePreviewSession
 let projectPreviewSession
 let projectPreviewObserver
