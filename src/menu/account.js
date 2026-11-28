@@ -1,8 +1,8 @@
-import {createWorkshopLiveSession,liveSessionDirty} from './workshop-live.js?v=workshop-live-1'
+import {createWorkshopLiveSession,liveSessionDirty} from './workshop-live.js?v=workshop-live-2'
 import {livePreset} from './workshop-live-model.js'
 import {renderAccountPassword} from './account-password.js'
 import {renderWorkshopNotificationSettings} from './workshop-notification-settings.js'
-import {renderTelegramLink,renderPromoRedeem} from './telegram-link.js?v=layout-studio-2'
+import {renderTelegramLink,renderPromoRedeem} from './telegram-link.js?v=workshop-live-2'
 import {isWorkshopHandle,profileHref,workshopRoute} from './profile-route.js'
 import {renderAdminPanel} from './admin-panel.js?v=achievements-v4'
 import {renderBureauPanel} from './bureau-panel.js?v=profile-gallery-1'
@@ -10,13 +10,13 @@ import { createAuthClient } from './auth-client.js?v=live-polish-1'
 
 import { createProjectsClient, cloudLink } from './projects-client.js?v=profile-gallery-1'
 
-import { renderCloudWorkshop } from './cloud-workshop.js?v=layout-studio-2'
+import { renderCloudWorkshop } from './cloud-workshop.js?v=workshop-live-2'
 
-import {createProfileClient} from './profile-client.js?v=layout-studio-2'
+import {createProfileClient} from './profile-client.js?v=workshop-live-2'
 
 import {createActivityClient} from './activity-client.js?v=notifications-1'
 
-import {createCommunityClient} from './community-client.js?v=layout-studio-2'
+import {createCommunityClient} from './community-client.js?v=workshop-live-2'
 
 const copy = {
  ru:{login:'Войти',register:'Регистрация',account:'Мой профиль',hero:'Твоя мастерская. Где угодно.',intro:'Настоящий аккаунт BrickLab Cloud.',email:'Электронная почта',name:'Имя пользователя',password:'Пароль',enter:'Войти',create:'Создать аккаунт',local:'Продолжить без аккаунта',logout:'Выйти',loading:'Проверяем серверную сессию…',retry:'Повторить проверку',profile:'Серверный аккаунт',localBuilds:'Локальные сборки',selected:'Выбранная сборка',coming:'Приватные облачные сборки и история версий. Сохраняй изменения явно; локальные сборки не удаляются. Достижения начисляются по серверным данным.',closed:'Регистрация доступна только при разрешении администратора. Подтверждение почты и восстановление пароля ещё не реализованы.',https_required:'Для входа необходим HTTPS или локальный адрес разработки.',auth_unavailable:'Сервер авторизации недоступен. Повтори попытку.',invalid_credentials:'Проверь введённые данные.',invalid_login:'Неверная почта или пароль.',registration_disabled:'Регистрация пока закрыта.',registration_unavailable:'Не удалось создать аккаунт с этими данными.',too_many_attempts:'Слишком много попыток. Попробуй позже.',invalid_origin:'Адрес приложения не совпадает с настройками сервера.',unknown:'Не удалось выполнить запрос.',busy:'Выполняется запрос…',passwordHelp:'Минимум 12 символов при регистрации.'},

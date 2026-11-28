@@ -1,13 +1,13 @@
-import {renderWorkshopLive} from './workshop-live.js?v=workshop-live-1'
-import {selectedWorkshopAwards} from './workshop-award-widgets.js?v=workshop-live-1'
+import {renderWorkshopLive} from './workshop-live.js?v=workshop-live-2'
+import {selectedWorkshopAwards} from './workshop-award-widgets.js?v=workshop-live-2'
 import {metricItems} from './workshop-metrics-model.js'
-import {renderMetricEditor,workshopMetricValues} from './workshop-metrics.js?v=layout-studio-2'
+import {renderMetricEditor,workshopMetricValues} from './workshop-metrics.js?v=workshop-live-2'
 import {renderVerificationLab,renderAchievementRewards,renderAchievementRankings} from './achievement-platform.js'
 import {renderAchievements} from './achievement-hall.js'
 import {achievementName} from './achievement-catalog.js'
 import {renderInstructionCollection} from './instruction-collection.js'
 import {commerceBadge,productArtwork,factsPanel,loyaltyBadge} from './commerce-visuals.js?v=merch-2'
-import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=layout-studio-2'
+import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=workshop-live-2'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 import {commerceProducts} from './commerce-catalog.js'
@@ -80,7 +80,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,sett
      const draft=makeProfile(state),ownerMedia=publicCard.visible===false,identity={...draft,bio:'',subtitle:ru?'Конструктор BrickLab':'BrickLab builder'}
      if(ownerMedia){identity.avatarUrl=publicCard.showAvatar?profile?.avatarUrl:null;identity.coverUrl=publicCard.showCover?profile?.coverUrl:null}
      const metrics=metricItems({layout:profile?.metricLayout,lang,portfolio:draft.portfolio,values:workshopMetricValues({lang,card:draft,loaded:true})}),view=el('div','workshop-live-preview-page')
-     view.append(renderUnifiedHero({lang,identity,owner:ownerMedia}),renderPortfolio({lang,profile:draft,builds:publicBuilds,live:true,metricCards:metrics}));return view
+     applySignature(view,draft.backgroundTheme);if(!draft.backgroundTheme||draft.backgroundTheme==='default')view.classList.add('workshop-preview-neutral');view.append(renderUnifiedHero({lang,identity,owner:ownerMedia}),renderPortfolio({lang,profile:draft,builds:publicBuilds,live:true,metricCards:metrics}));return view
     }})
   }
   content.append(renderUnifiedHero({lang,owner:true,identity,metricCards:live?[]:ownerMetrics,coverControls:liveUI?.controls}))
