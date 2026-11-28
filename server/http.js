@@ -4,6 +4,7 @@ import { realpath, stat } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
 import { extname, relative, resolve, sep } from 'node:path'
 import { createInstructionsHandler } from './instructions.js'
+import { seoResponse } from './seo.js'
 
 const directories = new Set(['src', 'assets', 'catalog', 'examples', 'vendor'])
 const types = {
@@ -77,6 +78,8 @@ export function createBrickLabServer({ root, logger = console, auth, projects, p
         res.setHeader('Allow', 'GET, HEAD')
         return send(req, res, 405, 'Method not allowed')
       }
+      const seo = seoResponse(pathname)
+      if (seo) return send(req, res, 200, seo.body, seo.type)
       if (pathname === '/store') {
         res.writeHead(302,{'Location':'/#store','Cache-Control':'no-store'});return res.end()
       }
