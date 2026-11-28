@@ -12,7 +12,7 @@
 .shell .navigation a[aria-current="page"]::after{scale:1 1;opacity:1}
 .shell .workshop-nav .workspace-action[aria-current="page"]{animation:bricklab-selection 320ms var(--motion-ease)}
 .shell .workshop-cover{overflow:hidden}
-.shell .workshop-cover::before{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;background:linear-gradient(112deg,transparent 36%,#ffffff0d 48%,transparent 60%);translate:-100% 0;animation:bricklab-cover-light 1.15s var(--motion-ease) 180ms;animation-fill-mode:none}
+.shell .workshop-cover-glint{position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(112deg,transparent 36%,#ffffff0d 48%,transparent 60%);opacity:0;translate:-100% 0}
 .shell .workshop-cover .profile-cover-image{transition:scale 700ms var(--motion-ease)}
 .shell .workshop-avatar{transition:box-shadow var(--motion-normal),scale var(--motion-normal) var(--motion-ease)}
 .shell .workshop-live-cover-controls{transition:background-color var(--motion-normal),border-color var(--motion-normal),box-shadow var(--motion-normal)}
@@ -43,7 +43,6 @@
  .shell .workshop-live-grid.is-editing [data-showcase-card],.shell .workshop-live-grid.is-editing [data-showcase-card] img{transform:none;scale:1;transition:none}
 }
 @keyframes bricklab-selection{from{opacity:.7}to{opacity:1}}
-@keyframes bricklab-cover-light{from{translate:-100% 0}to{translate:100% 0}}
 @keyframes bricklab-confirm{from{scale:.82;opacity:.5}to{scale:1;opacity:1}}
 @keyframes bricklab-toolbar{from{opacity:.5;translate:0 -6px}to{opacity:1;translate:0 0}}
 @keyframes bricklab-dialog{from{opacity:.25;scale:.98;translate:0 8px}to{opacity:1;scale:1;translate:0 0}}
@@ -51,7 +50,7 @@
 @keyframes bricklab-medal-reveal{from{scale:.88;opacity:.4}60%{scale:1.04;opacity:1}to{scale:1;opacity:1}}
 @media(prefers-reduced-motion:reduce){
  .shell :is(.workspace-action,.workshop-live-icon,.navigation a,.workshop-award-item,.workshop-award-choice,.workshop-avatar,.workshop-cover img,.workshop-live-cover-controls,.workshop-live-toolbar,.workshop-live-grid>.portfolio-block,[data-showcase-card],.project-card,.community-card,.hub-build,.set-card,.store-product,.example-card,.achievement-tile,.achievement-medal,.workshop-award-dialog,.workshop-live-preview-dialog,.settings-modal,.community-viewer-dialog,.store-preview-dialog,.hub-search-dialog,.set-details-dialog){animation:none!important;transition:none!important;scale:none!important}
- .shell .navigation a::after,.shell .workshop-cover::before,.shell dialog::backdrop{animation:none!important;transition:none!important}
+ .shell .navigation a::after,.shell .workshop-cover-glint,.shell dialog::backdrop{animation:none!important;transition:none!important}
  .shell :is(.project-card,.community-card,.hub-build,.set-card,.store-product,.example-card,.achievement-tile,[data-showcase-card]):hover{transform:none!important}
  .shell :is(.portfolio-build-art,.community-art,.hub-build-art,.set-card-art,.project-card-image)>img{transition:none!important;scale:none!important}
  .shell .workshop-live-cover-controls svg{transition:none!important}

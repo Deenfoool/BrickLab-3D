@@ -106,3 +106,22 @@ test('pointer drag creates a ghost and target, moves actual widgets on drop and 
   assert.deepEqual(session.history.value,before);assert.equal(body.children.length,0);assert.equal(pending.size,0)
  }finally{for(const k of keys){if(old[k]===undefined)delete globalThis[k];else globalThis[k]=old[k]}}
 })
+
+test('showcases choose hero for a single build, adaptive gallery for two to four, and collection for many',()=>{
+ const old=globalThis.document;globalThis.document={createElement:element,createElementNS:(_ns,tag)=>element(tag)}
+ try{
+  const ids=Array.from({length:6},(_,i)=>'aaaaaaaa-aaaa-aaaa-aaaa-'+String(i+1).padStart(12,'0'))
+  const portfolio={...base(),blocks:initial(),featured:ids[0]},profile={portfolio,awards:['firstCloudSave']}
+  const builds=ids.map((id,i)=>({id,title:'Build '+i,partCount:100,imageCount:1}))
+  for(const [count,mode] of [[1,'single'],[2,'gallery'],[4,'gallery'],[6,'collection']]){
+   const root=renderPortfolio({lang:'ru',profile,builds:builds.slice(0,count),owner:true,live:true})
+   const list=flat(root).find(n=>n.className==='portfolio-build-grid')
+   assert.equal(list.attrs['data-build-mode'],mode);assert.equal(list.attrs['data-build-count'],String(count));assert.equal(list.children.length,count)
+   assert.ok(list.children.every(n=>n.attrs['data-showcase-card']===(count===1?'hero':'tile')))
+   const pin=flat(root).find(n=>n.attrs['data-widget']==='featured')
+   assert.ok(flat(pin).some(n=>n.attrs['data-showcase-card']==='hero'))
+   const image=flat(pin).find(n=>n.tag==='img');assert.equal(image.src,'/api/community/build/'+ids[0]+'/image/0')
+   const awards=flat(root).find(n=>n.className==='workshop-award-grid');assert.equal(awards.attrs['data-award-count'],'1');assert.ok(flat(awards).some(n=>n.className==='workshop-award-name'&&n.textContent===achievementById('firstCloudSave').ru))
+  }
+ }finally{if(old===undefined)delete globalThis.document;else globalThis.document=old}
+})

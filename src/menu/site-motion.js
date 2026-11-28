@@ -17,8 +17,11 @@ export function createSiteMotion(root,{media=globalThis.matchMedia?.('(prefers-r
   if(key)animatedKeys.add(key);budget++
   // Independent translate property avoids replacing hover/drag transforms.
   const animation=node.animate([{opacity:0.64,translate:'0 9px'},{opacity:1,translate:'0 0'}],{duration:380,delay:motionDelay(index),easing:'cubic-bezier(.2,.8,.2,1)',fill:'none'})
-  animations.add(animation);const release=()=>animations.delete(animation);animation.onfinish=release;animation.oncancel=release
+  track(animation)
+  const glint=node.matches('.workshop-hero')?node.querySelector('.workshop-cover-glint'):null
+  if(glint?.animate)track(glint.animate([{opacity:0,translate:'-100% 0'},{opacity:1,offset:.35},{opacity:0,translate:'100% 0'}],{duration:1100,delay:180,easing:'ease-out',fill:'none'}))
  }
+ function track(animation){animations.add(animation);const release=()=>animations.delete(animation);animation.onfinish=release;animation.oncancel=release}
  function scan(){
   frame=null;if(!allowed()||!content||budget>=motionBudget)return
   let index=0
@@ -38,11 +41,11 @@ export function createSiteMotion(root,{media=globalThis.matchMedia?.('(prefers-r
  }
  function start(){
   if(!allowed()||!content)return
-  if(Intersection)observer=new Intersection(entries=>{let index=0;for(const entry of entries){if(!entry.isIntersecting)continue;observer?.unobserve(entry.target);pending.delete(entry.target);animate(entry.target,index++)}if(budget<motionBudget)schedule()},{threshold:.12})
+  if(Intersection)observer=new Intersection(entries=>{let index=0;for(const entry of entries){if(!entry.isIntersecting)continue;observer?.unobserve(entry.target);pending.delete(entry.target);animate(entry.target,index++)}if(budget<motionBudget)schedule();else{observer?.disconnect();mutation?.disconnect();pending.clear()}},{threshold:.12})
   if(Mutation){mutation=new Mutation(()=>{for(const node of pending)if(!node.isConnected||!eligible(node)){observer?.unobserve(node);pending.delete(node)}schedule()});mutation.observe(content,{childList:true,subtree:true})}
   schedule()
  }
- const preferenceChanged=()=>{stop();if(allowed())start()}
+ const preferenceChanged=()=>{stop();seen=new WeakSet();if(allowed())start()}
  media?.addEventListener?.('change',preferenceChanged)
  return {setRoute(next){if(next===route)return;stop();route=next;seen=new WeakSet();animatedKeys=new Set();budget=0;start()},dispose(){route=null;stop();media?.removeEventListener?.('change',preferenceChanged)}}
 }

@@ -34,7 +34,7 @@ export function renderUnifiedHero({lang,identity,owner=false,actions=[],metrics=
  const plate=themePlate(theme);if(plate)cover.append(plate)
  const avatarUrl=owner?ownMedia('avatar',identity.avatarUrl):publicImage(identity.id,'avatar',identity.avatarUrl),coverUrl=owner?ownMedia('cover',identity.coverUrl):publicImage(identity.id,'cover',identity.coverUrl)
  if(coverUrl){const img=ui('img','profile-cover-image');img.src=coverUrl;img.alt='';cover.prepend(img)}
- mountThemeCover(cover,theme,{custom:!!coverUrl});if(owner&&coverControls)cover.append(coverControls);applySignature(hero,theme);applyAchievementAppearance(hero,identity.achievementStyle)
+ mountThemeCover(cover,theme,{custom:!!coverUrl});const glint=ui('span','workshop-cover-glint');glint.setAttribute('aria-hidden','true');cover.append(glint);if(owner&&coverControls)cover.append(coverControls);applySignature(hero,theme);applyAchievementAppearance(hero,identity.achievementStyle)
  const body=ui('div','workshop-hero-inner'),person=ui('div','workshop-identity'),avatar=ui('div','workshop-avatar',Array.from(identity.displayName||'?').slice(0,2).join('').toUpperCase()),name=ui('div')
  if(avatarUrl){const img=ui('img','profile-avatar-image');img.src=avatarUrl;img.alt='';avatar.replaceChildren(img)}
  name.append(ui('h2',null,identity.displayName));if(identity.username)name.append(ui('p','account-muted','@'+identity.username));if(identity.subtitle)name.append(ui('p','account-muted',identity.subtitle));const badge=themeBadge(theme,lang);if(badge)name.append(badge);if(identity.plus===true)name.append(commerceBadge('plus'));const support=productById(identity.supportBadge);if(support?.kind==='badge')name.append(commerceBadge(support.id))
