@@ -22,13 +22,13 @@ These figures count the checked-in maps, not verified recognition accuracy or ac
 | 76419-1 | 2 | 362 | 855 |
 | Total | 23 | 3771 | 9800 |
 
-42215-1 is not in the sequence catalog: confirm the actual volume order and page counts. Other sequence entries are candidate metadata, not proof.
+42215-1 has a separate knownBooks entry in src/sets/data.js. The official set page lists volume 1 as 6592888 and volume 2 as 6595793 (https://www.lego.com/en-us/service/building-instructions/42215). The local metadata says 292 and 232 pages; actual file page counts must be verified by extraction. Other sequence entries are candidate metadata, not proof.
 
 ## Prepare a draft (operator, VPS or private workstation)
 1. Use only confirmed official PDF files, stored outside Git and public web root. Name them by official PDF ID, e.g. 6456541.pdf. Obtain the actual volume list and part counts independently. Confirm rights to use the PDF and commercial derived annotations. Do not equate public download with permission to resell.
 2. Run `python3 scripts/prepare-instruction-audit.py` for current candidate statistics. Install/use PyMuPDF in the existing OCR environment for draft generation.
-3. Create a private plan JSON with one or more sets, e.g. `{"42154-1":{"title":"Ford GT","partCount":1468,"volumes":["6456541"]}}`. This is an example, not reviewed evidence.
-4. Run `python3 scripts/prepare-instruction-audit.py --plan /private/plan.json --pdf-dir /private/pdfs --output /private/audit-draft.json`. This opens actual PDFs, hashes them, checks map page bounds, populates every page, and supplies numeric text candidates as review aids. It does not choose step numbers or approve anything.
+3. Use docs/instruction-audit-candidates.json as the candidate plan for all 13 sets or create a private plan JSON with one or more sets, e.g. `{"42154-1":{"title":"Ford GT","partCount":1468,"volumes":["6456541"]}}`. This is an example, not reviewed evidence.
+4. Run `python3 scripts/prepare-instruction-audit.py --plan docs/instruction-audit-candidates.json --pdf-dir /private/pdfs --output /private/audit-draft.json --download-missing` (or omit the download flag if PDFs already exist). This opens actual PDFs, hashes them, checks map page bounds, populates every page, and supplies numeric text candidates as review aids. It does not choose step numbers or approve anything.
 5. Review every volume and page against the actual PDF: all required parts, correct design/color, clickable boundaries, no false positives, correct global building step (same step can span pages; never restart numbering in later volumes). Set step 0 only for non-building matter with no paid regions; use `review:"verified"` for pages with checked regions and `review:"no-parts"` only after confirming the page has no part callouts. For unrecognized callouts, fix the map, do not mark no-parts. Check that designs resolve in BrickLab library. Confirm actual final assembly milestone and full volume list. Set `reviewed:true` only after completion. Exclude an incomplete set entirely from the approved manifest. Remove stepCandidates if desired.
 6. Save the finished schema-2 JSON as `/var/lib/bricklab-instructions-private/audit.json`; operator must create a separate `audit.json.approval.json` after real review:
 ```json
