@@ -17,9 +17,9 @@ export function renderWorkshopAwards({lang='ru',ids=[],definitions=[],dates={},e
  for(const id of [...new Set(ids)].slice(0,7)){
   const a=id==='firstBuilder'?gift:achievementById(id,definitions);if(!a)continue
   const date=dateText(dates[id],lang),tile=btn('',()=>{if(!editing)showDetails(root,a,lang,date)},'workshop-award-item rarity-'+a.rarity)
-  tile.disabled=editing;tile.title=label(a,lang,date);tile.setAttribute('aria-label',tile.title);tile.append(renderAchievementMedal(a),el('span','workshop-award-name',a[lang]),el('small','workshop-award-xp',Number.isInteger(a.xp)?'+'+a.xp+' XP':rarity[lang][a.rarity]));grid.append(tile)
+  tile.disabled=editing;tile.title=label(a,lang,date);tile.setAttribute('aria-label',tile.title);tile.append(renderAchievementMedal(a),el('span','workshop-award-name',a[lang]),el('small','workshop-award-xp',[rarity[lang][a.rarity],Number.isInteger(a.xp)?'+'+a.xp+' XP':''].filter(Boolean).join(' · ')));grid.append(tile)
  }
- root.append(grid);return root
+ grid.setAttribute('data-award-count',String(grid.children.length));root.append(grid);return root
 }
 export function openWorkshopAwardPicker({host,lang='ru',progress,selected,onApply}){
  lang=lang==='ru'?'ru':'en';const ru=lang==='ru',dialog=el('dialog','workshop-award-dialog workshop-award-picker'),grid=el('div','workshop-award-picker-grid achievement-hall'),status=el('p','account-muted'),actions=el('div','workshop-live-actions'),earned=(progress?.awards??[]).map(row=>({row,a:achievementById(row.award,progress?.definitions??[])})).filter(x=>x.a)

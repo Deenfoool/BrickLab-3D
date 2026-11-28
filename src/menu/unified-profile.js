@@ -54,9 +54,10 @@ export function activityCalendar(lang,entries,{publicOnly=false}={}){
  grid.setAttribute('role','img');grid.setAttribute('aria-label',publicOnly?t.publicDays:t.privateDays)
  root.append(summary,grid,ui('p','account-muted',publicOnly?t.publicDays:t.privateDays));return root
 }
+export function portfolioBuildMode(count){return count<=1?'single':count<=4?'gallery':'collection'}
 function buildTile(b,t,onOpen,makeArt){
  const card=ui('article','portfolio-build-tile'),art=makeArt?makeArt(b):ui('div','portfolio-build-art');if(makeArt)art.classList.add('portfolio-build-art');else art.append(icon('layers'))
- if(!makeArt&&b.imageCount>0&&safePublicId(b.id)){const img=ui('img');img.alt='';img.loading='lazy';img.src='/api/community/build/'+b.id+'/image/0';art.append(img)}
+ if(!makeArt&&b.imageCount>0&&safePublicId(b.id)){const img=ui('img');img.alt=b.title;img.loading='lazy';img.decoding='async';img.onerror=()=>img.remove();img.src='/api/community/build/'+b.id+'/image/0';art.append(img)}
  const info=ui('div','portfolio-build-info');info.append(ui('h3',null,b.title),ui('p','account-muted',String(b.partCount??0)+' · '+t.parts))
  if(onOpen)info.append(action(t.open,()=>onOpen(b)));else info.append(anchor(t.open,'#community/build/'+b.id))
  card.append(art,info);return card
@@ -74,10 +75,10 @@ export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeB
   if(!visible&&editing)c.append(ui('p','account-muted',lang==='ru'?'Скрыт от посетителей':'Hidden from visitors'))
   else{
   if(key==='featured'){
-   const b=byId.get(p.featured);if(b)c.append(buildTile(b,t,onOpen,makeFeaturedArt));else if(owner||live)c.append(ui('p','account-muted',owner?t.noPin:t.empty));else continue
+   const b=byId.get(p.featured);if(b){const tile=buildTile(b,t,onOpen,makeFeaturedArt);tile.setAttribute('data-showcase-card','hero');c.append(tile)}else if(owner||live)c.append(ui('p','account-muted',owner?t.noPin:t.empty));else continue
   }else if(key==='publications'){
-   const grid=ui('div','portfolio-build-grid')
-   for(const b of valid)grid.append(makeBuildCard?makeBuildCard(b):buildTile(b,t,onOpen))
+   const grid=ui('div','portfolio-build-grid'),mode=portfolioBuildMode(valid.length);grid.setAttribute('data-build-mode',mode);grid.setAttribute('data-build-count',String(valid.length))
+   for(const b of valid){const tile=makeBuildCard?makeBuildCard(b):buildTile(b,t,onOpen);tile.setAttribute('data-showcase-card',mode==='single'?'hero':'tile');grid.append(tile)}
    if(!valid.length)c.append(ui('p','account-muted',t.empty));else c.append(grid)
   }else if(key==='collections'){
    if(!p.collections.length){if(!owner&&!live)continue;c.append(ui('p','account-muted',t.noCollections))}

@@ -183,11 +183,6 @@
 .workshop-award-item .achievement-medal>.icon{width:29px;height:29px}
 .workshop-award-name{font-size:11px;line-height:1.2;overflow-wrap:anywhere}
 .workshop-award-xp{font-size:10px;color:var(--medal)}
-.workshop-live-grid .portfolio-awards:is([data-layout-span="3"],[data-layout-span="4"],[data-layout-span="5"],[data-layout-height="2"]) .workshop-award-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,48px),1fr));gap:4px}
-.workshop-live-grid .portfolio-awards:is([data-layout-span="3"],[data-layout-span="4"],[data-layout-span="5"],[data-layout-height="2"]) .workshop-award-item .achievement-medal{width:48px;height:48px}
-.workshop-live-grid .portfolio-awards:is([data-layout-span="3"],[data-layout-span="4"],[data-layout-span="5"],[data-layout-height="2"]) .workshop-award-item .achievement-medal>.icon{width:23px;height:23px}
-.workshop-live-grid .portfolio-awards:is([data-layout-span="3"],[data-layout-span="4"],[data-layout-span="5"],[data-layout-height="2"]) .workshop-award-xp{display:none}
-.workshop-live-grid .portfolio-awards:is([data-layout-span="3"],[data-layout-span="4"],[data-layout-height="2"]) .workshop-award-name{display:none}
 .workshop-award-dialog,.workshop-live-preview-dialog{width:min(92vw,620px);max-height:85dvh;border:1px solid #60748a;border-radius:14px;background:#202b36;color:#e5edf5;padding:20px;overflow:auto;box-shadow:0 20px 70px #0009}
 .workshop-award-dialog::backdrop,.workshop-live-preview-dialog::backdrop{background:#0b1119b8;backdrop-filter:blur(3px)}
 .workshop-award-detail{display:grid;gap:12px;justify-items:center;text-align:center}
@@ -216,3 +211,51 @@
 @media(prefers-reduced-motion:reduce){.workshop-live-grid.is-editing>.portfolio-block[data-widget]{animation:none;transition:none}.workshop-live-ghost{transform:none}}
 
 .workshop-preview-neutral{--sig:#ffb53c;--sig-dark:#222831;--sig-panel:#252931;--sig-radius:10px;--portfolio-accent:#ffb53c;--portfolio-line:#42434a;--portfolio-surface:#232831}.workshop-live-preview-page.signature-theme{--portfolio-accent:var(--sig);--portfolio-line:color-mix(in srgb,var(--sig) 24%,#353b44);--portfolio-surface:color-mix(in srgb,var(--sig-panel,#252931) 72%,#171b22)}
+
+/* Showcase layout uses actual widget content dimensions, not stored grid spans.
+   The flex body has a definite height supplied by the grid, so size containment
+   does not collapse the widget and responds immediately during resize. */
+.workshop-live-grid :is(.portfolio-featured,.portfolio-publications,.portfolio-awards)>.workshop-widget-body{container:workshop-showcase / size;display:flex;flex-direction:column;align-items:stretch;min-height:0;gap:8px;overflow:auto}
+.workshop-live-grid :is(.portfolio-featured,.portfolio-publications) .portfolio-build-grid{flex:1;min-height:0;min-width:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,185px),1fr));align-content:stretch;align-items:stretch;gap:10px}
+.workshop-live-grid .portfolio-build-grid[data-build-mode="single"]{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+.workshop-live-grid .portfolio-build-grid[data-build-mode="gallery"]{grid-auto-rows:minmax(155px,1fr)}
+.workshop-live-grid .portfolio-build-grid[data-build-mode="collection"]{grid-template-columns:repeat(auto-fill,minmax(min(100%,190px),1fr));grid-auto-rows:minmax(200px,auto);align-content:start}
+.workshop-live-grid [data-showcase-card]{position:relative;min-height:0;min-width:0;display:flex;flex-direction:column;isolation:isolate;border:1px solid var(--portfolio-line,#455361);border-radius:var(--sig-radius,12px);overflow:hidden;background:color-mix(in srgb,var(--portfolio-surface,#25303b) 80%,#121920);box-shadow:0 6px 18px #0002}
+.workshop-live-grid [data-showcase-card="hero"]{flex:1;width:100%;height:100%;min-height:0}
+.workshop-live-grid [data-showcase-card] :is(.portfolio-build-art,.community-art){position:relative;display:grid;place-items:center;min-height:0;max-height:none;aspect-ratio:auto;flex:1 1 0;overflow:hidden;padding:0;background:radial-gradient(ellipse at 42% 38%,color-mix(in srgb,var(--portfolio-accent,#ffb53c) 12%,#34414e),#151c24 82%)}
+.workshop-live-grid [data-showcase-card] :is(.portfolio-build-art,.community-art)>img{position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;object-fit:contain;object-position:center}
+.workshop-live-grid [data-showcase-card] :is(.portfolio-build-art,.community-art)>.icon{width:clamp(34px,6cqw,76px);height:clamp(34px,6cqw,76px);opacity:.72}
+.workshop-live-grid [data-showcase-card] :is(.portfolio-build-info,.community-card-body){display:grid;grid-template-columns:minmax(0,1fr);gap:5px;flex:none;min-width:0;padding:10px 12px;background:linear-gradient(150deg,#ffffff06,transparent),var(--portfolio-surface,#25303b);border-top:1px solid var(--portfolio-line,#455361);max-height:65%;overflow:auto;scrollbar-width:thin}
+.workshop-live-grid [data-showcase-card] :is(.portfolio-build-info h3,.community-title){font-size:clamp(14px,3cqw,23px);line-height:1.2;font-weight:650;margin:0;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.workshop-live-grid [data-showcase-card] .account-muted{font-size:12px;margin:0}
+.workshop-live-grid [data-showcase-card] .workspace-action{min-height:32px;padding:5px 10px;font-size:12px;max-width:100%}
+.workshop-live-grid [data-showcase-card] .community-meta{font-size:11px;gap:5px}
+.workshop-live-grid [data-showcase-card] .community-description{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:12px;margin:0}
+.workshop-live-grid [data-showcase-card] .community-actions{gap:4px;flex-wrap:wrap}
+.workshop-live-grid [data-showcase-card="hero"] .portfolio-build-info{grid-template-columns:minmax(0,1fr) auto;align-items:center}
+.workshop-live-grid [data-showcase-card="hero"] .portfolio-build-info h3{grid-column:1;grid-row:1}
+.workshop-live-grid [data-showcase-card="hero"] .portfolio-build-info p{grid-column:1;grid-row:2}
+.workshop-live-grid [data-showcase-card="hero"] .portfolio-build-info .workspace-action{grid-column:2;grid-row:1/span 2;align-self:center;white-space:normal;text-align:center}
+/* Short, wide showcases retain useful artwork and compact details side by side. */
+@container workshop-showcase (min-width:600px) and (max-height:240px){
+ .workshop-live-grid [data-showcase-card="hero"]{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+ .workshop-live-grid [data-showcase-card="hero"] :is(.portfolio-build-info,.community-card-body){display:flex;flex-direction:column;justify-content:center;max-height:100%;border-top:0;border-left:1px solid var(--portfolio-line,#455361)}
+ .workshop-live-grid [data-showcase-card="hero"] .portfolio-build-info .workspace-action{align-self:flex-start}
+}
+@container workshop-showcase (max-width:340px){
+ .workshop-live-grid [data-showcase-card="hero"] .portfolio-build-info{display:flex;flex-direction:column;align-items:stretch}
+ .workshop-live-grid [data-showcase-card="hero"] .portfolio-build-info .workspace-action{align-self:stretch}
+ .workshop-live-grid .portfolio-build-grid[data-build-mode="gallery"]{grid-template-columns:minmax(0,1fr)}
+}
+.workshop-live-grid .portfolio-awards .workshop-award-showcase{flex:1;display:grid;align-content:center;min-width:0;min-height:0}
+.workshop-live-grid .portfolio-awards .workshop-award-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,95px),1fr));gap:7px;align-items:start;justify-items:stretch}
+.workshop-live-grid .portfolio-awards .workshop-award-item{width:100%;gap:5px;padding:4px;align-self:stretch}
+.workshop-live-grid .portfolio-awards .workshop-award-item .achievement-medal{width:clamp(46px,8cqw,76px);height:clamp(46px,8cqw,76px)}
+.workshop-live-grid .portfolio-awards .workshop-award-item .achievement-medal>.icon{width:43%;height:43%}
+.workshop-live-grid .portfolio-awards .workshop-award-name{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;text-wrap:balance;font-size:12px;font-weight:600;line-height:1.24}
+.workshop-live-grid .portfolio-awards .workshop-award-xp{display:none;font-size:10px;color:var(--medal)}
+@container workshop-showcase (min-height:185px) and (min-width:360px){.workshop-live-grid .portfolio-awards .workshop-award-xp{display:block}}
+@container workshop-showcase (max-width:260px){.workshop-live-grid .portfolio-awards .workshop-award-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,68px),1fr));gap:3px}.workshop-live-grid .portfolio-awards .workshop-award-name{font-size:10px}}
+@container workshop-showcase (max-height:90px){.workshop-live-grid .portfolio-awards .workshop-award-name{display:none}.workshop-live-grid .portfolio-awards .workshop-award-item .achievement-medal{width:42px;height:42px}}
+@container workshop-showcase (max-height:145px){.workshop-live-grid .portfolio-awards .workshop-award-showcase{align-content:start}.workshop-live-grid .portfolio-awards .workshop-award-item .achievement-medal{width:48px;height:48px}}
+@container workshop-showcase (min-height:320px) and (min-width:300px){.workshop-live-grid .portfolio-awards .workshop-award-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,125px),1fr));gap:14px}.workshop-live-grid .portfolio-awards .workshop-award-item .achievement-medal{width:84px;height:84px}.workshop-live-grid .portfolio-awards .workshop-award-name{font-size:13px}}
