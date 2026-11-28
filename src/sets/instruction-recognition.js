@@ -1,4 +1,6 @@
 import { createOcrWorker } from './ocr.js'
+import {createInstructionPdfReader} from './instruction-pdf.js?v=smart-highlight-1'
+import {canonicalInstructionUrl} from './instruction-url.js'
 import {normalizeCaption,isQuantity,isElement,normalizedCaptions,mergeCaptions} from './instruction-text.js?v=smart-highlight-1'
 let database
 
@@ -131,13 +133,13 @@ export function createInstructionRecognition(reader, set, signal) {
     return run
   }
 
-  async function extract(source, page, canvas, mode, request) {
-    const geometry = await reader.inspect(source, page, request)
+  async function extract(source, page, canvas, mode, request, pdfReader=reader) {
+    const geometry = await pdfReader.inspect(source, page, request)
     let surface = canvas
     const raw=geometry.words
     geometry.words=normalizedCaptions(raw)
     const hasWords=()=>geometry.words.some(({text})=>mode?isElement(text)&&Object.hasOwn(labels,text):isQuantity(text)||isElement(text)&&Object.hasOwn(labels,text))
-    if(!surface){surface=document.createElement('canvas');await reader.render(source,page,surface,request)}
+    if(!surface){surface=document.createElement('canvas');await pdfReader.render(source,page,surface,request)}
     async function recognize(){
       try{const words=await readText(surface,geometry,request);geometry.words=mergeCaptions(raw,words)}
       catch(error){request.throwIfAborted()} // A failed OCR pass must not discard vector evidence.
@@ -163,28 +165,45 @@ export function createInstructionRecognition(reader, set, signal) {
     return samples
   }
 
-  async function illustratedInventory(book) {
-    const bookKey = await book.key
-    const key = bookKey && `${bookKey}/inventory`
-    const stored = await cache(key)
-    book.signal.throwIfAborted()
-    if (stored) {
-      books.set(book.source, stored)
-      return stored
-    }
-    const templates = []
-    let emptyAfterInventory = 0
-    for (let page = book.pages; page > Math.max(0, book.pages - 36); page--) {
-      book.signal.throwIfAborted()
+  async function scanInventory(source,pages,request,pdfReader){
+    const [fingerprint,hash]=await Promise.all([pdfReader.fingerprint(source),version])
+    request.throwIfAborted()
+    const key=fingerprint&&hash&&JSON.stringify(['regions-v7',set.number,hash,fingerprint])+'/inventory'
+    const stored=await cache(key)
+    request.throwIfAborted()
+    if(stored?.length){books.set(source,stored);return stored}
+    const templates=[]
+    let emptyAfterInventory=0
+    const total=Number.isInteger(pages)&&pages>0?pages:await pdfReader.pageCount(source,request)
+    for(let page=total;page>Math.max(0,total-36);page--){
+      request.throwIfAborted()
       let items=[]
-      try{items=await extract(book.source,page,null,true,book.signal)}catch{book.signal.throwIfAborted()}
+      try{items=await extract(source,page,null,true,request,pdfReader)}catch{request.throwIfAborted()}
       templates.push(...items)
-      emptyAfterInventory = items.length ? 0 : emptyAfterInventory + Number(templates.length > 0)
-      if (emptyAfterInventory >= 3) break
+      emptyAfterInventory=items.length?0:emptyAfterInventory+Number(templates.length>0)
+      if(emptyAfterInventory>=3)break
     }
-    books.set(book.source, templates)
-    if (templates.length) void cache(key, templates)
+    request.throwIfAborted()
+    books.set(source,templates)
+    if(templates.length)void cache(key,templates)
     return templates
+  }
+  async function illustratedInventory(book){
+    // Multi-volume sets usually put the illustrated inventory in the final volume.
+    // Use a separate PDF reader so opening it cannot replace the visible document.
+    if(typeof book.source==='string'&&canonicalInstructionUrl(book.source)){
+      const others=(set.books??[]).filter(v=>canonicalInstructionUrl(v.url)&&canonicalInstructionUrl(v.url)!==canonicalInstructionUrl(book.source)).slice(-3).reverse()
+      for(const volume of others){
+        book.signal.throwIfAborted()
+        if(books.get(volume.url)?.length)return books.get(volume.url)
+        const extra=createInstructionPdfReader()
+        try{
+          const templates=await scanInventory(volume.url,null,book.signal,extra)
+          if(templates.length)return templates
+        }catch{book.signal.throwIfAborted()}finally{extra.close()}
+      }
+    }
+    return scanInventory(book.source,book.pages,book.signal,reader)
   }
 
   async function pageRegions(source, page, pages, canvas, request) {
@@ -215,7 +234,7 @@ export function createInstructionRecognition(reader, set, signal) {
       : books.get(source)??[]
     if (!templates.length) return samples.filter(s=>s.item?.[0]).map(s=>[...s.region,...s.item])
     const regions = await analyze('rank', { samples, templates })
-    if (regions.length) void cache(pageKey, regions)
+    if (regions.length && regions.length===samples.length) void cache(pageKey, regions)
     request.throwIfAborted()
     return regions
   }

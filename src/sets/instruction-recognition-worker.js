@@ -1,6 +1,6 @@
 // Page text locates the callouts. Compare the composited part artwork with
 // labeled drawings from the illustrated inventory of the same set.
-import {isQuantity,overlapFraction} from './instruction-text.js?v=smart-highlight-1'
+import {isQuantity} from './instruction-text.js?v=smart-highlight-1'
 const quantity = {test:isQuantity}
 const element = /^\d{6,8}$/
 const size = 24
@@ -313,6 +313,15 @@ function pixelDistance(a, b) {
   return delta / (size * size * 3 * 255)
 }
 
+function silhouetteDifference(a,b){
+ let overlap=0,union=0
+ for(let i=0;i<a.length;i+=4){
+  const aa=Math.min(a[i],a[i+1],a[i+2])<215,bb=Math.min(b[i],b[i+1],b[i+2])<215
+  if(aa||bb)union++
+  if(aa&&bb)overlap++
+ }
+ return union?1-overlap/union:1
+}
 function shiftedViews(pixels) {
   const views = []
   for (let dy = -1; dy <= 1; dy++) {
@@ -388,6 +397,11 @@ export function rank({ samples, templates }) {
       })
       const [first, second] = bestByItem(scores)
       if (first?.score <= .065 && (second?.score ?? Infinity) - first.score >= .035) item = first.reference.item
+    }
+    if(item){
+      const references=templates.filter(t=>t.item?.[0]===item[0]&&t.item?.[1]===item[1]&&t.pixels)
+      // A color match alone cannot identify a different shape. Keep shifted and isolated views as valid evidence.
+      if(references.length&&!references.some(t=>silhouetteDifference(sample.pixels,t.pixels)<=.48||silhouetteDifference((sample.drawing??sample).pixels,(t.drawing??t).pixels)<=.48))return []
     }
     return item ? [[...sample.region, ...item]] : []
   })

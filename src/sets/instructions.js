@@ -9,7 +9,7 @@ import {
 } from './instruction-sources.js?v=ducati-instructions-1'
 import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=smart-highlight-1'
 import { canonicalInstructionUrl } from './instruction-url.js'
-import { createInstructionPdfReader } from './instruction-pdf.js?v=instruction-artwork-v5'
+import { createInstructionPdfReader } from './instruction-pdf.js?v=smart-highlight-1'
 
 const maxUnknownPages = 5000
 const pageWait = 6000
@@ -371,13 +371,15 @@ export function mountInstructions(
       })
       const engine = await recognition
       const detected = await engine.pageRegions(source, page, pages, canvas, request)
-      return detected.filter(([x, y, w, h]) => !ready.some(([a, b, aw, ah]) =>
+      const extra=detected.filter(([x, y, w, h]) => !ready.some(([a, b, aw, ah]) =>
         Math.min(x + w, a + aw) - Math.max(x, a) > .5 * Math.min(w, aw) &&
         Math.min(y + h, b + ah) - Math.max(y, b) > .5 * Math.min(h, ah)))
+      if(!request.aborted&&!ready.length&&!extra.length){recognitionStatus.textContent=ru?'На этой странице нет уверенно распознанных деталей.':'No confidently recognized parts on this page.';recognitionStatus.hidden=false;return extra}
+      if(!request.aborted)recognitionStatus.hidden=true
+      return extra
     } catch {
+      if(!request.aborted){recognitionStatus.textContent=ru?'Не удалось завершить распознавание. PDF доступен.':'Recognition could not finish. PDF is available.';recognitionStatus.hidden=false}
       return []
-    } finally {
-      if (!request.aborted) recognitionStatus.hidden = true
     }
   }
   function showPage(ratio, regions, signal) {

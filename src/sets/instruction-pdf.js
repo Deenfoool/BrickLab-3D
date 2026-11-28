@@ -105,7 +105,8 @@ export function createInstructionPdfReader(load = loadPdfJs) {
     }
   }
 
-  return { render, fingerprint, inspect, close }
+  async function pageCount(source,signal){signal.throwIfAborted();const doc=await documentFor(source);signal.throwIfAborted();return doc.numPages}
+  return { render, fingerprint, inspect, pageCount, close }
 }
 
 const quantity = /^[1-9]\d{0,2}[x×]$/i
