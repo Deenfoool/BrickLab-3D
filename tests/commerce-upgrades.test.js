@@ -366,3 +366,31 @@ test('username migration and coauthor credit resolve only published profiles; co
   assert.equal(token.failed_attempts,5)
  }finally{await store.close();await db.end()}
 })
+
+test('verified callbacks recover unattached live payments, reject wrong amounts and never regrant refunded orders',{skip:!enabled},async()=>{
+ assert.equal(process.env.PGDATABASE,'bricklab_commerce_check')
+ const db=postgres({host:process.env.PGHOST,port:Number(process.env.PGPORT||5432),database:process.env.PGDATABASE,username:'bricklab_admin',password:process.env.COMMERCE_ADMIN_PASSWORD,max:1})
+ const store=connectAuthStore(),uid='33000000-0000-4000-8000-000000000001',terms='a'.repeat(64)
+ try{
+  await db`insert into bricklab.users(id,email,display_name,password_hash,email_verified_at) values(${uid},'recovery@example.invalid','Recovery fixture','fixture',now())`
+  const order=await store.createCommerceOrder(uid,'aurora',19900,terms,true,'live'),pid=crypto.randomUUID()
+  assert.equal(await store.settleVerifiedCommercePayment(order.id,pid,'live',19899),false)
+  assert.equal(await store.settleVerifiedCommercePayment(order.id,pid,'test',19900),false)
+  assert.equal((await store.commerceAccount(uid)).orders[0].paymentId,null)
+  assert.equal(await store.settleVerifiedCommercePayment(order.id,pid,'live',19900,true),true)
+  assert.equal(await store.attachCommercePayment(order.id,pid,'live'),true)
+  assert.equal(await store.settleVerifiedCommercePayment(order.id,pid,'live',19900,false),true)
+  assert.equal(await store.settleVerifiedCommercePayment(order.id,crypto.randomUUID(),'live',19900),false)
+  assert.equal((await store.commerceAccount(uid)).orders[0].status,'refunded')
+  assert.deepEqual((await store.commerceAccount(uid)).themes,[])
+  const next=await store.createCommerceOrder(uid,'aurora',19900,terms,true,'live'),pid2=crypto.randomUUID()
+  assert.equal(await store.cancelVerifiedCommercePayment(next.id,pid2,'live',19900),true)
+  assert.equal(await store.cancelVerifiedCommercePayment(next.id,pid2,'live',19900),true)
+  assert.equal(await store.settleVerifiedCommercePayment(next.id,pid2,'live',19900),false)
+  const third=await store.createCommerceOrder(uid,'aurora',19900,terms,true,'live'),pid3=crypto.randomUUID()
+  assert.equal(await store.settleVerifiedCommercePayment(third.id,pid3,'live',19900),true)
+  await db`update bricklab.commerce_orders set refund_requested_at=now(),next_payment_check_at=now()-interval '1 day' where id=${third.id}`
+  const claimed=await store.claimCommerceRefunds('live')
+  assert.ok(claimed.some(o=>o.id===third.id&&o.refundId===null))
+ }finally{await store.close();await db.end()}
+})

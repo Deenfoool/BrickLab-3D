@@ -160,6 +160,8 @@ export function commerceStore(scope){
   async cancelCommercePayment(id,paymentId,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_cancel_payment(${id}::uuid,${paymentId},${environment},${amount}::integer) as ok`;return r.ok})},
   async createCommerceTestOrder(uid,sku){return scope(uid,async tx=>{const [row]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",idempotency_key as "idempotencyKey",payment_id as "paymentId",created_at as "createdAt" from bricklab.commerce_create_test_order(${sku})`;return row})},
   async attachCommercePayment(id,paymentId,environment){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_attach_payment(${id}::uuid,${paymentId},${environment}) as ok`;return r.ok})},
+  async settleVerifiedCommercePayment(id,paymentId,environment,amount,refunded=false){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_settle_verified(${id}::uuid,${paymentId},${environment},${amount}::integer,${refunded}::boolean) as ok`;return r.ok})},
+  async cancelVerifiedCommercePayment(id,paymentId,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_cancel_verified(${id}::uuid,${paymentId},${environment},${amount}::integer) as ok`;return r.ok})},
   async fulfillCommercePayment(id,paymentId,environment,amount){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_fulfill(${id}::uuid,${paymentId},${environment},${amount}::integer) as ok`;return r.ok})},
   async commerceAccount(uid){
    return scope(uid,async tx=>{

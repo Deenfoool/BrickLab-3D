@@ -22,9 +22,9 @@ test('verified live callback cannot settle a sandbox payment',async()=>{
  const payment='40000000-0000-4000-8000-000000000001',order='30000000-0000-4000-8000-000000000001'
  const data={id:payment,test:false,status:'succeeded',paid:true,amount:{value:'99.00',currency:'RUB'},metadata:{order_id:order}}
  const calls=[];let actual=data
- const adapter=createYookassaAdapter({config:{enabled:true,environment:'live',shopId:'1',secret:'live_example_secret'},origin:'https://bricklab.test',store:{fulfillCommercePayment:async(...args)=>{calls.push(args);return true}},fetcher:async()=>Response.json(actual)})
+ const adapter=createYookassaAdapter({config:{enabled:true,environment:'live',shopId:'1',secret:'live_example_secret'},origin:'https://bricklab.test',store:{settleVerifiedCommercePayment:async(...args)=>{calls.push(args);return true}},fetcher:async()=>Response.json(actual)})
  await adapter.notification({event:'payment.succeeded',object:{id:payment}})
- assert.deepEqual(calls,[[order,payment,'live',9900]])
+ assert.deepEqual(calls,[[order,payment,'live',9900,false]])
  actual={...data,test:true};await assert.rejects(adapter.notification({event:'payment.succeeded',object:{id:payment}}))
  assert.equal(calls.length,1)
 })
@@ -42,3 +42,22 @@ test('live refund polling verifies provider state and settles lost webhook witho
  source=paid;assert.equal(await adapter.pollRefund(row),'succeeded');assert.deepEqual(calls,[[payment,'live',9900]]);
  await assert.rejects(adapter.pollTestRefund(row));
 });
+
+test('provider-confirmed full refund settles atomically and lost refund response is recovered read-only',async()=>{
+ const id='30000000-0000-4000-8000-000000000001',payment='40000000-0000-4000-8000-000000000001',refund='50000000-0000-4000-8000-000000000001'
+ const paid={id:payment,test:false,status:'succeeded',paid:true,amount:{value:'99.00',currency:'RUB'},metadata:{order_id:id},refunded_amount:{value:'99.00',currency:'RUB'}}
+ let current=paid,existing=false;const calls=[]
+ const adapter=createYookassaAdapter({origin:'https://bricklab.test',config:{enabled:true,environment:'live',shopId:'1',secret:'live_example_secret'},store:{
+  settleVerifiedCommercePayment:async(...a)=>{calls.push(['settle',...a]);return true},
+  refundCommercePayment:async(...a)=>{calls.push(['refund',...a]);return existing}
+ },fetcher:async(url,opts)=>{assert.equal(opts.method,'GET');return Response.json(url.endsWith(refund)?{id:refund,payment_id:payment,status:'succeeded',amount:paid.amount}:current)}})
+ await adapter.notification({event:'payment.succeeded',object:{id:payment}})
+ assert.deepEqual(calls.pop(),['settle',id,payment,'live',9900,true])
+ await adapter.notification({event:'refund.succeeded',object:{id:refund}})
+ assert.deepEqual(calls.splice(0),[['refund',payment,'live',9900],['settle',id,payment,'live',9900,true]])
+ existing=true;const row={id,paymentId:payment,amountKopecks:9900,refundId:null}
+ current={...paid,refunded_amount:{value:'0.00',currency:'RUB'}};assert.equal(await adapter.pollRefund(row),'pending')
+ current={...paid,refunded_amount:{value:'1.00',currency:'RUB'}};await assert.rejects(adapter.pollRefund(row),/partial_refund/)
+ current=paid;assert.equal(await adapter.pollRefund(row),'succeeded')
+ assert.deepEqual(calls,[['refund',payment,'live',9900]])
+})
