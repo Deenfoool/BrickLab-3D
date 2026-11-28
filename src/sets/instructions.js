@@ -1,3 +1,4 @@
+import {createPageStudy} from './instruction-study-ui.js?v=recognition-v9'
 import {instructionEvent} from './instruction-events.js'
 import {mountInstructionOffer} from './instruction-offer.js?v=welcome-1'
 import { node, control, setStrings } from './catalog.js?v=ducati-instructions-1'
@@ -7,9 +8,9 @@ import {
   instructionPagePreview,
   instructionSources,
 } from './instruction-sources.js?v=ducati-instructions-1'
-import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=smart-highlight-1'
+import { addInstructionParts, instructionPartRegions, resetInstructionParts } from './instruction-parts.js?v=recognition-v9'
 import { canonicalInstructionUrl } from './instruction-url.js'
-import { createInstructionPdfReader } from './instruction-pdf.js?v=smart-highlight-1'
+import { createInstructionPdfReader } from './instruction-pdf.js?v=recognition-v9'
 
 const maxUnknownPages = 5000
 const pageWait = 6000
@@ -77,7 +78,7 @@ export function instructionState(value) {
 export function mountInstructions(
   layer,
   initial,
-  { language, signal, change, findPart, describePart, firstPage, pdf = createInstructionPdfReader() },
+  { language, signal, change, findPart, describePart, readInventoryUsage, firstPage, pdf = createInstructionPdfReader() },
 ) {
   let progress = instructionState(initial)
   if (!progress) return null
@@ -128,6 +129,8 @@ export function mountInstructions(
   const actions = node('div', undefined, 'instruction-actions')
   actions.id = 'editor-instruction-actions'
   const preview = node('div', undefined, 'instruction-preview')
+  const find=(...args)=>{instructionEvent(progress.set.number,'hint_use');return findPart?.(...args)}
+  const study=createPageStudy({preview,inventory:progress.set.inventory,language,find,describe:describePart,readUsage:readInventoryUsage,onRegions:regions=>{resetInstructionParts(preview);addInstructionParts(preview,regions,{language,describe:describePart,find})}})
   const previewStatus = node('p')
   previewStatus.setAttribute('role', 'status')
   const recognitionStatus = node('p', undefined, 'instruction-recognition-status')
@@ -222,7 +225,7 @@ export function mountInstructions(
     { signal },
   )
   actions.append(choosePdf, credit, add)
-  body.append(actions, status, retry, previewStatus, recovery, file, preview, recognitionStatus, unlock)
+  body.append(actions, status, retry, previewStatus, recovery, file, preview, recognitionStatus, study.root, unlock)
   panel.append(header, body)
   layer.append(panel)
   function setMoreOpen(open) {
@@ -257,6 +260,7 @@ export function mountInstructions(
     previewRequest = new AbortController()
     const signal = previewRequest.signal
     preview.replaceChildren()
+    study.reset(signal)
     preview.hidden = true
     previewStatus.hidden = true
     recognitionStatus.hidden = true
@@ -361,11 +365,11 @@ export function mountInstructions(
       ? await instructionPartRegions(progress.set.number, pdfId, page).catch(() => [])
       : []
     if (request.aborted) return []
-    if (ready.length) addInstructionParts(preview, ready, { language, describe: describePart, find: (...args)=>{instructionEvent(progress.set.number,'hint_use');return findPart(...args)} })
+    if(ready.length)study.update(ready)
     recognitionStatus.textContent = ru ? 'Распознаём детали…' : 'Recognizing parts…'
     recognitionStatus.hidden = false
     try {
-      recognition ??= import('./instruction-recognition.js?v=recognition-v8').then(module => {
+      recognition ??= import('./instruction-recognition.js?v=recognition-v9').then(module => {
         recognitionEngine = module.createInstructionRecognition(pdf, progress.set, signal)
         return recognitionEngine
       })
@@ -374,11 +378,11 @@ export function mountInstructions(
         Math.min(x + w, a + aw) - Math.max(x, a) > .5 * Math.min(w, aw) &&
         Math.min(y + h, b + ah) - Math.max(y, b) > .5 * Math.min(h, ah)))
       let detectedCount=0
-      const detected=await engine.pageRegions(source,page,pages,canvas,request,({stage,regions,total})=>{
+      const detected=await engine.pageRegions(source,page,pages,canvas,request,({stage,regions,total,callouts,scope})=>{
         detectedCount=total
         if(request.aborted)return
         const found=additional(regions)
-        if(found.length)addInstructionParts(preview,found,{language,describe:describePart,find:(...args)=>{instructionEvent(progress.set.number,'hint_use');return findPart(...args)}})
+        study.update(found,{callouts,scope})
         recognitionStatus.textContent=(stage==='models'?(ru?'Сравниваем с 3D-библиотекой':'Comparing with 3D library'):(ru?'Сверяем с описью':'Checking inventory'))+' · '+regions.length+'/'+total
       })
       const extra=additional(detected)
@@ -398,7 +402,7 @@ export function mountInstructions(
     preview.hidden = false
     previewStatus.hidden = true
     if (findPart && regions) regions.then(parts => {
-      if (!signal.aborted) addInstructionParts(preview, parts, { language, describe: describePart, find: (...args)=>{instructionEvent(progress.set.number,'hint_use');return findPart(...args)} })
+      if(!signal.aborted)study.update(parts)
     }).catch(()=>{})
   }
   async function lookupBooks() {
@@ -474,5 +478,6 @@ export function mountInstructions(
     get value() {
       return progress
     },
+    refreshInventory:()=>study.refresh(),
   }
 }

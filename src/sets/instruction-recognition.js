@@ -1,7 +1,8 @@
+import {pageCallouts} from './instruction-study.js?v=recognition-v9'
 import {lookupElement} from '../editor/element-index.js?v=catalog-engine-1'
 import {createElementRecovery} from './instruction-element-recovery.js?v=recognition-v8'
 import { createOcrWorker } from './ocr.js'
-import {createInstructionPdfReader} from './instruction-pdf.js?v=smart-highlight-1'
+import {createInstructionPdfReader} from './instruction-pdf.js?v=recognition-v9'
 import {canonicalInstructionUrl} from './instruction-url.js'
 import {normalizeCaption,isQuantity,isElement,normalizedCaptions,mergeCaptions} from './instruction-text.js?v=smart-highlight-1'
 let database
@@ -86,7 +87,7 @@ export function createInstructionRecognition(reader, set, signal) {
   function analyze(action, input, transfer = []) {
     signal.throwIfAborted()
     if (!worker) {
-      worker = new Worker(new URL('./instruction-recognition-worker.js?v=recognition-v8', import.meta.url), { type: 'module' })
+      worker = new Worker(new URL('./instruction-recognition-worker.js?v=recognition-v9', import.meta.url), { type: 'module' })
       worker.onmessage = ({ data }) => {
         const job = jobs.get(data.id)
         jobs.delete(data.id)
@@ -109,7 +110,7 @@ export function createInstructionRecognition(reader, set, signal) {
     const bookSignal = AbortSignal.any([controller.signal, signal])
     const key = Promise.all([reader.fingerprint(source), version]).then(([fingerprint, hash]) => {
       if (!fingerprint || !hash) return
-      return JSON.stringify(['regions-v8', set.number, hash, fingerprint])
+      return JSON.stringify(['regions-v9', set.number, hash, fingerprint])
     })
     active = { source, controller, signal: bookSignal, key, pages }
     return active
@@ -140,7 +141,7 @@ export function createInstructionRecognition(reader, set, signal) {
   }
 
   async function extract(source, page, canvas, mode, request, pdfReader=reader) {
-    const geometry = await pdfReader.inspect(source, page, request)
+    const geometry = await pdfReader.inspect(source, page, request,{study:!mode})
     let surface = canvas
     const raw=geometry.words
     geometry.words=normalizedCaptions(raw)
@@ -175,7 +176,7 @@ export function createInstructionRecognition(reader, set, signal) {
   async function scanInventory(source,pages,request,pdfReader){
     const [fingerprint,hash]=await Promise.all([pdfReader.fingerprint(source),version])
     request.throwIfAborted()
-    const key=fingerprint&&hash&&JSON.stringify(['regions-v8',set.number,hash,fingerprint])+'/inventory'
+    const key=fingerprint&&hash&&JSON.stringify(['regions-v9',set.number,hash,fingerprint])+'/inventory'
     const stored=await cache(key)
     request.throwIfAborted()
     if(stored?.length){books.set(source,stored);return stored}
@@ -238,15 +239,17 @@ export function createInstructionRecognition(reader, set, signal) {
     const pageKey = key && `${key}/${page}`
     const stored = await cache(pageKey)
     request.throwIfAborted()
-    if (stored) return stored
+    if(stored&&Array.isArray(stored.regions)&&Array.isArray(stored.callouts)){onProgress({stage:'cached',regions:stored.regions,total:stored.callouts.length,callouts:stored.callouts,scope:pageKey});return stored.regions}
     const samples = await extract(source, page, canvas, false, request)
     request.throwIfAborted()
+    const callouts=pageCallouts(samples)
     if (!samples.length) return []
+    const notify=(stage,regions)=>onProgress({stage,regions,total:samples.length,callouts,scope:pageKey})
     const direct=samples.filter(s=>s.item?.[0]).map(s=>[...s.region,...s.item])
-    onProgress({stage:'inventory',regions:direct,total:samples.length})
+    notify('inventory',direct)
     if (samples.every(sample => sample.item?.[0])) {
       const regions = samples.map(({ region, item }) => [...region, ...item])
-      void cache(pageKey, regions)
+      void cache(pageKey,{regions,callouts})
       return regions
     }
     book.inventoryPromise ??= illustratedInventory(book).catch(error => {
@@ -260,14 +263,14 @@ export function createInstructionRecognition(reader, set, signal) {
     const templates=inventoryTemplates??[]
     const regions=templates.length?await analyze('rank',{samples,templates}):direct
     request.throwIfAborted()
-    if(regions.length===samples.length){if(regions.length)void cache(pageKey,regions);return regions}
+    if(regions.length===samples.length){if(regions.length)void cache(pageKey,{regions,callouts});return regions}
     // Only canonical books may use the selected set as a complete candidate universe.
     // A user-supplied PDF may describe a different model.
     if(typeof source!=='string'||!canonicalInstructionUrl(source))return regions
     const identified=new Set(regions.map(r=>r.slice(0,4).join('/')))
     const unresolved=samples.filter(s=>!identified.has(s.region.join('/'))&&!s.item?.[0])
     if(!unresolved.length)return regions
-    onProgress({stage:'models',regions,total:samples.length})
+    notify('models',regions)
     modelReferences??=import('./instruction-model-references.js?v=recognition-v8').then(module=>
       module.buildModelReferences(set.inventory,AbortSignal.any([signal,AbortSignal.timeout(35000)]))
     ).catch(()=>[])

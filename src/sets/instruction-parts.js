@@ -43,7 +43,7 @@ export function addInstructionParts(preview, regions, { language, describe, find
   const name=describe?.(partNum,colorId),label=[partNum,elementId&&'LEGO '+elementId,name].filter(Boolean).join(' · ')
   button.className='instruction-part-region';button.type='button'
   button.setAttribute('aria-label',(language==='ru'?'Найти деталь ':'Find part ')+label)
-  button.dataset.partNum=partNum;if(elementId)button.dataset.elementId=elementId
+  button.dataset.partNum=partNum;button.dataset.regionKey=region.slice(0,4).join('/');if(elementId)button.dataset.elementId=elementId
   Object.assign(button.style,{left:x/100+'%',top:y/100+'%',width:width/100+'%',height:height/100+'%',zIndex:String(Math.max(1,1000-Math.floor(width*height/100000)))})
   let prepared=false
   function showLabel(){
@@ -78,4 +78,8 @@ export function addInstructionParts(preview, regions, { language, describe, find
   button.addEventListener('animationend',()=>button.classList.remove('is-selected'))
   preview.append(button)
  }
+}
+
+export function resetInstructionParts(preview){
+ preview.querySelectorAll('.instruction-part-region,.instruction-part-label').forEach(node=>node.remove());states.delete(preview)
 }
