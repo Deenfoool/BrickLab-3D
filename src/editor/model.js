@@ -12,7 +12,7 @@ import { baseRotation, joinedPose, retainedPlacement, worldPort } from './placem
 import { clutchTravel, selectorLinkages } from './selector-linkage.js?v=selector-drag'
 import { motorSupply } from '../mechanics/motors.js'
 import { linearActuatorMotion, actuatorPreview } from './actuator-motion.js'
-import { linearActuators } from '../mechanics/actuators.js'
+import { linearActuators, validActuatorExtension, validActuatorPhase } from '../mechanics/actuators.js'
 
 const valid = (value, size) => Array.isArray(value) && value.length === size && value.every(Number.isFinite)
 export const snapGrid = 10
@@ -33,7 +33,9 @@ export function loadParts(document, models) {
     const old = !valid(entry.position, 3)
     const q = valid(entry.rotation, 4) && entry.rotation.some(Boolean) ? new Quaternion().fromArray(entry.rotation).normalize().toArray() : baseRotation
     const defaultY = models.get(design).bounds.max.y
-    records.push({ ...entry, id, design, position: old ? [index * 45, defaultY, 0] : entry.position, rotation: q })
+    const {previewActuatorRod,previewActuatorInput,actuatorExtension,actuatorInputPhase,...record}=entry
+    records.push({ ...record, id, design, position: old ? [index * 45, defaultY, 0] : entry.position, rotation: q,
+      ...(validActuatorExtension(design,actuatorExtension)&&{actuatorExtension}),...(validActuatorPhase(design,actuatorInputPhase)&&{actuatorInputPhase}) })
   }
   const exampleIds = ['drive', 'driven', 'bearing', 'bush', 'gear8', 'gear24']
   if (exampleIds.every(id => seen.has(id) && !valid(document.parts.find(entry => entry?.id === id)?.position, 3))) {

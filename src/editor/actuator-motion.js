@@ -1,5 +1,5 @@
 import { Vector3 } from 'three'
-import { linearActuators, actuatorTravel, isRodPort } from '../mechanics/actuators.js'
+import { linearActuators, actuatorTravel, isRodPort, currentActuatorSpec } from '../mechanics/actuators.js'
 import { portsFor } from '../mechanics/catalog.js?v=linear-actuator-1'
 import { worldPort } from './placement.js?v=linear-actuator-1'
 import { planarActuatorLinkage } from './actuator-linkage.js'
@@ -25,7 +25,7 @@ export function linearActuatorMotion(selected,parts,joints,rotation){
  const targets=[]
  const direct=parts.find(p=>p.id===selected&&linearActuators[p.design])
  for(const part of direct?[direct]:parts.filter(p=>linearActuators[p.design])){
-  const spec=linearActuators[part.design],line=worldPort(part,{start:[0,0,0],axis:spec.axis})
+  const spec=currentActuatorSpec(part),line=worldPort(part,{start:[0,0,0],axis:spec.axis})
   let inputSpin
   if(!direct){
    const input=joints.find(j=>j.b===part.id&&j.socketPort===spec.inputPort)
@@ -40,7 +40,8 @@ export function linearActuatorMotion(selected,parts,joints,rotation){
   if(branch===null&&!planar||rotation?.spins?.has(part.id)&&!direct||branch&&[...branch].some(id=>rotation?.spins?.has(id)))return {ok:false,reason:'actuator-closed-or-driven-branch'}
   const moving=branch??planar.affected,range=planar?.range??[-spec.initial,spec.stroke-spec.initial]
   if(targets.some(t=>t.part.id===part.id||t.moving.has(part.id)||moving.has(t.part.id)||[...moving].some(id=>t.moving.has(id))))return {ok:false,reason:'actuator-shared-output'}
-  targets.push({part,spec,line,moving,inputSpin,planar,range})
+  const inputAttached=joints.some(j=>j.b===part.id&&j.socketPort===spec.inputPort)
+  targets.push({part,spec,line,moving,inputSpin,planar,range,inputAttached})
  }
  if(!targets.length)return null
  if(direct)return {ok:true,kind:'actuator',unit:'linear',actuators:targets,range:targets[0].range,spins:new Map(),meshes:[],periodic:false}
@@ -53,10 +54,10 @@ export function linearActuatorMotion(selected,parts,joints,rotation){
 }
 export function actuatorPreview(parts,motion,poses,angle){
  const result=new Map(poses.map(p=>[p.id,p])),byId=new Map(parts.map(p=>[p.id,p]))
- for(const {part,spec,line,moving,inputSpin,planar,range} of motion.actuators){
+ for(const {part,spec,line,moving,inputSpin,planar,range,inputAttached} of motion.actuators){
   const inputAngle=motion.unit==='linear'?angle*spec.turns*2*Math.PI/spec.stroke:
    inputSpin.alignment*(inputSpin.angleAt?inputSpin.angleAt(angle):angle*inputSpin.ratio)
-  const travel=actuatorTravel(part.design,inputAngle)
+  const travel=actuatorTravel(part.design,inputAngle,spec.initial)
   if(!travel)return null
   const delta=Math.max(range[0],Math.min(range[1],travel.displacement))
   if(planar){
@@ -64,7 +65,7 @@ export function actuatorPreview(parts,motion,poses,angle){
    if(!transforms)return null
    for(const [id,transform] of transforms){const original=result.get(id)??byId.get(id);if(original)result.set(id,movePose(original,transform))}
   }else for(const id of moving){const original=byId.get(id);if(original)result.set(id,{...original,position:v(original.position).addScaledVector(line.axis,delta).toArray()})}
-  result.set(part.id,{...(result.get(part.id)??part),previewActuatorRod:delta,previewActuatorInput:travel.inputAngle})
+  result.set(part.id,{...(result.get(part.id)??part),previewActuatorRod:delta,previewActuatorInput:motion.unit==='linear'&&inputAttached?0:travel.inputAngle*(part.mirrored?-1:1)})
  }
  return [...result.values()]
 }

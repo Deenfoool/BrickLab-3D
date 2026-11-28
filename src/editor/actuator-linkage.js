@@ -1,6 +1,6 @@
 import {Quaternion,Vector3} from 'three'
 import {jointBodies,turnPose} from '../mechanics/linkage.js'
-import {isRodPort,linearActuators} from '../mechanics/actuators.js'
+import {isRodPort,currentActuatorSpec} from '../mechanics/actuators.js'
 import {portsFor} from '../mechanics/catalog.js?v=linear-actuator-1'
 
 const vec=a=>new Vector3(...a)
@@ -16,7 +16,7 @@ const samePose=(a,b)=>Math.abs(a.rotation.dot(b.rotation))>1-1e-9&&a.translation
 // Expose the rod as a virtual rigid body only within the kinematic graph.
 // The actual document still contains one catalog actuator.
 export function planarActuatorLinkage(actuator,parts,joints,line){
- const spec=linearActuators[actuator.design]
+ const spec=currentActuatorSpec(actuator)
  if(!spec)return null
  const rodId=Symbol('actuator rod')
  const rodPort=id=>isRodPort(actuator.design,portsFor(actuator.design).find(p=>p.id===id))

@@ -5,6 +5,7 @@ import { partMesh, parts, previewActuatorMesh } from './parts.js?v=linear-actuat
 import { createBeltScene } from './belt-scene.js?v=linear-actuator-1'
 import { createMotorCables } from './motor-cables.js?v=system-complete'
 import { createPartOutlines } from './part-outlines.js?v=transmission-map-1'
+import { isRodPort } from '../mechanics/actuators.js'
 import { portsFor } from '../mechanics/catalog.js?v=linear-actuator-1'
 import { snapGrid } from './model.js?v=linear-actuator-1'
 import { readPreference } from '../menu/preferences.js?v=full-settings'
@@ -206,7 +207,7 @@ export function createScene(host, models) {
   const connectorPoints=new THREE.Group();world.add(connectorPoints)
   const wireMaterial=new THREE.MeshBasicMaterial({color:0xb6c4d6,wireframe:true});
   const pointGeometry=new THREE.SphereGeometry(1.7,8,6),pointMale=new THREE.MeshBasicMaterial({color:0x55c4ff,depthTest:true}),pointFemale=new THREE.MeshBasicMaterial({color:0xffbe55,depthTest:true});let pointsVisible=false,wireframe=false
-  function refreshConnectorPoints(){for(const mesh of connectorPoints.children)mesh.dispose?.();connectorPoints.clear();if(!pointsVisible)return;const groups=[[],[]];let count=0;outer:for(const o of objects.values()){if(!o.visible)continue;for(const p of portsFor(o.userData.design)){if(p.legacy||p.role==='gear'||!Array.isArray(p.start))continue;if(++count>1500)break outer;groups[p.gender==='M'?0:1].push(new THREE.Vector3(...p.start).applyMatrix4(o.matrixWorld))}}for(const [i,points] of groups.entries()){if(!points.length)continue;const mesh=new THREE.InstancedMesh(pointGeometry,i===0?pointMale:pointFemale,points.length);points.forEach((v,n)=>mesh.setMatrixAt(n,new THREE.Matrix4().makeTranslation(v.x,v.y,v.z)));mesh.instanceMatrix.needsUpdate=true;connectorPoints.add(mesh)}}
+  function refreshConnectorPoints(){for(const mesh of connectorPoints.children)mesh.dispose?.();connectorPoints.clear();if(!pointsVisible)return;const groups=[[],[]];let count=0;outer:for(const o of objects.values()){if(!o.visible)continue;for(const p of portsFor(o.userData.design)){if(p.legacy||p.role==='gear'||!Array.isArray(p.start))continue;if(++count>1500)break outer;groups[p.gender==='M'?0:1].push(new THREE.Vector3(...p.start).add(new THREE.Vector3(0,0,isRodPort(o.userData.design,p)?o.userData.actuatorRodOffset??0:0)).applyMatrix4(o.matrixWorld))}}for(const [i,points] of groups.entries()){if(!points.length)continue;const mesh=new THREE.InstancedMesh(pointGeometry,i===0?pointMale:pointFemale,points.length);points.forEach((v,n)=>mesh.setMatrixAt(n,new THREE.Matrix4().makeTranslation(v.x,v.y,v.z)));mesh.instanceMatrix.needsUpdate=true;connectorPoints.add(mesh)}}
   function setConnectorPoints(value){pointsVisible=!!value;refreshConnectorPoints();invalidate()}
   function setWireframe(value){wireframe=!!value;for(const o of objects.values())o.traverse(child=>{if(child.isMesh){if(wireframe){if(!child.userData.solidMaterial)child.userData.solidMaterial=child.material;child.material=wireMaterial}else if(child.userData.solidMaterial){child.material=child.userData.solidMaterial;delete child.userData.solidMaterial}}});invalidate()}
   const remoteMeshes=new Map()
@@ -234,7 +235,7 @@ export function createScene(host, models) {
       let r=remoteMeshes.get(k)
       if(r&&r.design!==p.design){world.remove(r.mesh);r.mesh.userData.finish.dispose();remoteMeshes.delete(k);r=null}
       if(!r){const mesh=partMesh(models.get(p.design),p.color??parts[p.design].color,true);const original=objects.get(p.id);mesh.position.copy(original?.position??new THREE.Vector3(...p.position));mesh.quaternion.copy(original?.quaternion??new THREE.Quaternion(...p.rotation));world.add(mesh);r={mesh,design:p.design};remoteMeshes.set(k,r)}
-      keep.add(k);r.position=new THREE.Vector3(...p.position);r.rotation=new THREE.Quaternion(...p.rotation).normalize();r.mesh.scale.x=p.mirrored?-1:1;r.mesh.userData.finish.color.set(p.color??parts[p.design].color)
+      keep.add(k);r.position=new THREE.Vector3(...p.position);r.rotation=new THREE.Quaternion(...p.rotation).normalize();r.mesh.scale.x=p.mirrored?-1:1;r.mesh.userData.finish.color.set(p.color??parts[p.design].color);previewActuatorMesh(r.mesh,p)
       if(objects.has(p.id))remoteHidden.add(p.id)
     }
     for(const [k,r] of remoteMeshes)if(!keep.has(k)){world.remove(r.mesh);r.mesh.userData.finish.dispose();remoteMeshes.delete(k)}
@@ -272,6 +273,7 @@ export function createScene(host, models) {
       ghost.position.fromArray(part.position)
       ghost.quaternion.fromArray(part.rotation)
       ghost.scale.x = part.mirrored ? -1 : 1
+      previewActuatorMesh(ghost,part)
       ghost.userData.finish.color.set(blocked ? '#ef6161' : candidate ? '#ffd16a' : (part.color ?? parts[part.design].color))
     }
     marker.visible = Boolean(candidate)
@@ -294,6 +296,7 @@ export function createScene(host, models) {
         mesh.position.fromArray(part.position)
         mesh.quaternion.fromArray(part.rotation)
         mesh.scale.x = part.mirrored ? -1 : 1
+        previewActuatorMesh(mesh,part)
         mesh.updateMatrix()
         mesh.matrixAutoUpdate = false
         ghostRoot.add(mesh)

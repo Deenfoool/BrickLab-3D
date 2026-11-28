@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.js'
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js'
-import { linearActuators } from '../mechanics/actuators.js'
+import { linearActuators, actuatorOffset, actuatorPhase } from '../mechanics/actuators.js'
 import { curated, partOrder, parts, sections } from './parts-data.js?v=system-complete'
 
 export { parts, sections }
@@ -190,9 +190,11 @@ export function partMesh(model, color, ghost = false) {
 
 // Actuator parts retain their original mesh positions; only the screw input and rod move in preview.
 export function previewActuatorMesh(group,part){
+  const rod=actuatorOffset(part)+(part.previewActuatorRod??0),phase=actuatorPhase(part)+(part.previewActuatorInput??0)
+  group.userData.actuatorRodOffset=rod
   for(const mesh of group.children){
     const section=mesh.geometry?.userData?.actuatorSection
-    if(section==='rod')mesh.position.z=part.previewActuatorRod??0
-    if(section==='input')mesh.rotation.z=part.previewActuatorInput??0
+    if(section==='rod')mesh.position.z=rod
+    if(section==='input')mesh.rotation.z=phase
   }
 }
