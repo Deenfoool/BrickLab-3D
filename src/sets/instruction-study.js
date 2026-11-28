@@ -1,7 +1,22 @@
 // Page analysis is advisory: no page number is treated as an assembly step.
-export const regionKey=r=>r.slice(0,4).join('/')
+export const regionKey=r=>Array.isArray(r)?r.slice(0,4).join('/'):''
 const validBox=b=>Array.isArray(b)&&b.length===4&&b.every(Number.isFinite)&&b[2]>0&&b[3]>0&&b[0]>=0&&b[1]>=0&&b[0]+b[2]<=10000&&b[1]+b[3]<=10000
 export const identityKey=(part,color)=>JSON.stringify([String(part),String(color)])
+export const validRegion=r=>Array.isArray(r)&&validBox(r.slice(0,4))&&typeof r[4]==='string'&&r[4].length>0&&r[5]!=null
+// Preserve server-provided identities when client callout bounds overlap them.
+export function reconcileCallouts(callouts,authoritative){
+ const result=new Map()
+ for(const c of callouts){
+  if(!validBox(c.region))continue
+  const matches=authoritative.filter(validRegion).filter(r=>intersection(c.region,r.slice(0,4))>.5*Math.min(area(c.region),area(r.slice(0,4))))
+  if(matches.length>1)continue
+  const value=matches.length?{...c,region:matches[0].slice(0,4),repeat:null,readonly:true}:c
+  const key=regionKey(value.region)
+  if(!result.has(key))result.set(key,value)
+  else{const old=result.get(key);result.set(key,{...old,quantity:null,step:null,repeat:null,readonly:old.readonly||value.readonly})}
+ }
+ return [...result.values()]
+}
 export function stepForCallout(box,steps){
  if(!validBox(box))return null
  const [x,y,w,h]=box
@@ -31,8 +46,9 @@ export function pageCallouts(samples){
 }
 export function correctedRegions(regions,callouts,corrections,inventory){
  const allowed=new Set(inventory.filter(i=>!i.spare).map(i=>identityKey(i.partNum,i.colorId)))
- const result=new Map(regions.filter(r=>validBox(r.slice(0,4))).map(r=>[regionKey(r),r]))
+ const result=new Map(regions.filter(validRegion).map(r=>[regionKey(r),r]))
  for(const c of callouts){
+  if(c.readonly||!validBox(c.region))continue
   const key=regionKey(c.region),change=corrections[key]
   if(change?.ignore){result.delete(key);continue}
   if(change&&allowed.has(identityKey(change.partNum,change.colorId)))result.set(key,[...c.region,String(change.partNum),String(change.colorId)])
@@ -40,7 +56,7 @@ export function correctedRegions(regions,callouts,corrections,inventory){
  return [...result.values()]
 }
 export function pageRequirements(regions,callouts,inventoryUsage=[]){
- const byRegion=new Map(regions.map(r=>[regionKey(r),r]))
+ const byRegion=new Map(regions.filter(validRegion).map(r=>[regionKey(r),r]))
  const seen=new Set(),rows=new Map()
  const available=new Map()
  for(const i of inventoryUsage){
@@ -60,10 +76,10 @@ export function pageRequirements(regions,callouts,inventoryUsage=[]){
   if(row.elementId!==recognized?.[6])row.elementId=undefined
   if(Number.isInteger(meta?.quantity)&&meta.quantity>0)row.quantity+=meta.quantity
   else row.unknownQuantity=true
-  row.regions.push({region:region.slice(0,4),repeat:meta?.repeat??null})
+  row.regions.push({region:region.slice(0,4),repeat:meta?.repeat??null,editable:!!meta&&!meta.readonly})
  }
- for(const meta of callouts)add(meta.region,meta)
- for(const region of regions)add(region,null)
+ for(const meta of callouts)if(validBox(meta.region))add(meta.region,meta)
+ for(const region of regions)if(validRegion(region))add(region,null)
  return [...rows.values()]
 }
 export function loadCorrections(storage,scope){

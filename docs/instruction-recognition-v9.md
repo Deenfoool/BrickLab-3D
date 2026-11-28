@@ -1,0 +1,7 @@
+# Recognition V9 — page study
+- Recognized quantity labels, including inventory labels, are kept as advisory page metadata separately from the six/seven-field region record. Unknown quantity is displayed as unknown. Large PDF text near the callout can yield a possible step number; the page number is never substituted for a step.
+- A collapsed page list groups by step, part and color, reports actual scene usage and remaining quantities across the full set, not per-step completion. Unrecognized callouts with located artwork are visible and can be manually assigned.
+- The repeated-artwork hint requires a unique exact PDF image object match outside the callouts and inside larger artwork. It is not proof of installation position; no automatic 3D placement or assembly segmentation is claimed.
+- Corrections are local to the browser and the exact fingerprint/inventory/page key. A user can assign an inventory part/color, ignore a false region, or reset. No printed Element ID is invented. Overlapping authoritative regions are read-only; paid/server-only policies are unchanged.
+- Existing PDF region cache is versioned to V9 and keeps callout metadata. Manual changes are separate from machine results. Local corrections are not shared, do not train a global model and are bounded to 80 page scopes / 100 changes each.
+- New synthetic regressions verify layout ambiguity, repeated artwork, quantities, usage, corrections and source isolation. Actual PDF accuracy, browser rendering, and full test suite are not yet verified.

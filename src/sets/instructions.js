@@ -1,3 +1,4 @@
+import {reconcileCallouts} from './instruction-study.js?v=recognition-v9'
 import {createPageStudy} from './instruction-study-ui.js?v=recognition-v9'
 import {instructionEvent} from './instruction-events.js'
 import {mountInstructionOffer} from './instruction-offer.js?v=welcome-1'
@@ -382,7 +383,7 @@ export function mountInstructions(
         detectedCount=total
         if(request.aborted)return
         const found=additional(regions)
-        study.update(found,{callouts,scope})
+        study.update(found,{callouts:reconcileCallouts(callouts??[],ready),scope})
         recognitionStatus.textContent=(stage==='models'?(ru?'Сравниваем с 3D-библиотекой':'Comparing with 3D library'):(ru?'Сверяем с описью':'Checking inventory'))+' · '+regions.length+'/'+total
       })
       const extra=additional(detected)

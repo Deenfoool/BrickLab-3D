@@ -1,4 +1,4 @@
-import {regionKey,identityKey,correctedRegions,pageRequirements,loadCorrections,saveCorrections} from './instruction-study.js?v=recognition-v9'
+import {regionKey,identityKey,validRegion,correctedRegions,pageRequirements,loadCorrections,saveCorrections} from './instruction-study.js?v=recognition-v9'
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!=null)el.textContent=text;if(cls)el.className=cls;return el}
 const btn=(text,action)=>{const el=node('button',text);el.type='button';el.onclick=action;return el}
 function storage(){try{return globalThis.localStorage}catch{return null}}
@@ -31,9 +31,9 @@ export function createPageStudy({preview,inventory,language,find,describe,readUs
  function edit(region){
   if(!editable||!scope||request?.aborted)return
   dialog?.close()
-  const key=regionKey(region),d=node('dialog',null,'set-dialog instruction-correction'),search=node('input'),list=node('div',null,'instruction-correction-list')
+  const ownRequest=request,ownScope=scope,key=regionKey(region),d=node('dialog',null,'set-dialog instruction-correction'),search=node('input'),list=node('div',null,'instruction-correction-list')
   dialog=d;search.type='search';search.placeholder=tr('Название или артикул','Name or part number');search.setAttribute('aria-label',search.placeholder)
-  function pick(value){if(request?.aborted)return;changes[key]=value;persist();d.close()}
+  function pick(value){if(ownRequest?.aborted||scope!==ownScope)return;changes[key]=value;persist();d.close()}
   function results(){
    const q=search.value.toLowerCase().trim()
    list.replaceChildren()
@@ -44,15 +44,15 @@ export function createPageStudy({preview,inventory,language,find,describe,readUs
   }
   search.oninput=results
   const actions=node('div',null,'instruction-study-actions')
-  actions.append(btn(tr('Не деталь','Not a part'),()=>pick({ignore:true})),btn(tr('Сбросить','Reset'),()=>{delete changes[key];persist();d.close()}),btn(tr('Закрыть','Close'),()=>d.close()))
+  actions.append(btn(tr('Не деталь','Not a part'),()=>pick({ignore:true})),btn(tr('Сбросить','Reset'),()=>{if(ownRequest?.aborted||scope!==ownScope)return;delete changes[key];persist();d.close()}),btn(tr('Закрыть','Close'),()=>d.close()))
   d.append(node('h2',tr('Исправить распознавание','Correct recognition')),node('p',tr('Исправление хранится только в этом браузере для данной страницы PDF.','Correction stays in this browser for this PDF page.')),search,list,actions)
   const abort=()=>{if(d.open)d.close();d.remove()}
-  request?.addEventListener('abort',abort,{once:true})
-  d.addEventListener('close',()=>{request?.removeEventListener('abort',abort);d.remove();if(dialog===d)dialog=null},{once:true})
+  ownRequest?.addEventListener('abort',abort,{once:true})
+  d.addEventListener('close',()=>{ownRequest?.removeEventListener('abort',abort);d.remove();if(dialog===d)dialog=null},{once:true})
   document.body.append(d);results();d.showModal();search.focus()
  }
  function render(){
-  const regions=updateOverlays(),visible=callouts.filter(c=>!changes[regionKey(c.region)]?.ignore)
+  const regions=updateOverlays(),visible=callouts.filter(c=>c.readonly||!changes[regionKey(c.region)]?.ignore)
   const rows=pageRequirements(regions,visible,readUsage?.()??[])
   root.hidden=!rows.length&&!Object.keys(changes).length
   if(root.hidden)return
@@ -60,7 +60,7 @@ export function createPageStudy({preview,inventory,language,find,describe,readUs
   summary.textContent=tr('Детали страницы','Page parts')+' · '+identified+'/'+all
   if(!root.open)return
   content.replaceChildren()
-  content.append(node('small',tr('Количество — из подписей PDF. На сцене — по всему набору, не по текущему шагу.','Quantities are from PDF captions. Scene counts cover the full set, not just this step.')))
+  content.append(node('small',tr('Количество — из распознанных подписей PDF. На сцене — по всему набору, не по текущему шагу.','Quantities are from PDF captions. Scene counts cover the full set, not just this step.')))
   const groups=new Map()
   for(const row of rows){const key=row.kind==='inventory'?tr('Опись','Inventory'):row.step?tr('Вероятный шаг ','Possible step ')+row.step:tr('Без номера шага','Unassigned step');const list=groups.get(key)??[];list.push(row);groups.set(key,list)}
   for(const [name,items] of groups){
@@ -78,7 +78,7 @@ export function createPageStudy({preview,inventory,language,find,describe,readUs
      const suffix=row.regions.length>1?' '+(index+1):''
      actions.append(btn(tr('Показать','Show')+suffix,()=>focusRegion(entry.region)))
      if(entry.repeat&&!changes[regionKey(entry.region)])actions.append(btn(tr('Повтор рисунка','Repeated image')+suffix,()=>mark(entry.repeat,tr('Повтор изображения; не точка установки','Repeated artwork; not an installation point'))))
-     if(editable&&scope)actions.append(btn(tr('Исправить','Correct')+suffix,()=>edit(entry.region)))
+     if(editable&&scope&&entry.editable)actions.append(btn(tr('Исправить','Correct')+suffix,()=>edit(entry.region)))
     }
     line.append(actions);content.append(line)
    }
@@ -91,7 +91,7 @@ export function createPageStudy({preview,inventory,language,find,describe,readUs
  },update(regions,meta){
   if(request?.aborted)return
   if(meta){callouts=meta.callouts??callouts;if(meta.scope&&meta.scope!==scope){scope=meta.scope;changes=loadCorrections(storage(),scope)}editable=!!scope}
-  for(const region of regions){const key=regionKey(region);if(!raw.has(key))raw.set(key,region)}
+  for(const region of regions){if(!validRegion(region))continue;const key=regionKey(region);if(!raw.has(key))raw.set(key,region)}
   render()
  },refresh(){if(!request?.aborted&&root.open)render()}}
 }
