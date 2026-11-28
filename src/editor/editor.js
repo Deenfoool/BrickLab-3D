@@ -1604,7 +1604,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
   function stepAnimation(time) {
     if (!frame) return
     if (!stepAnimation.previous) stepAnimation.previous = time
-    const speed = transmission?.playback ?? 90
+    const speed = transmission?.playback ?? (transmission?.actuators ? 360*(stepAnimation.direction??1) : 90)
     angle += Math.min(50, time - stepAnimation.previous) * speed * motionSpeed / 1000
     stepAnimation.previous = time
     const limit = Number(el('angle').max)
@@ -1863,6 +1863,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     else {
       audio.unlock()
       stepAnimation.previous = 0
+      stepAnimation.direction = transmission?.actuators && angle>=Number(el('angle').max)-.001 ? -1 : 1
       frame = requestAnimationFrame(stepAnimation)
       if (hinge?.ok || transmission?.ok) tutorial?.handle('motion')
     }

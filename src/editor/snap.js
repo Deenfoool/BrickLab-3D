@@ -211,7 +211,7 @@ export function nearbyConnections(context) {
       const span = portLength(fixedPort)
       if (['shift-tip', 'shift-groove', 'ball', 'ball-socket', 'pivot', 'clip', 'plug', 'receptacle',
         'piston', 'damper-cylinder', 'coil', 'coil-seat', 'turntable-top', 'turntable-base',
-        'torque-clutch-inner', 'torque-clutch-outer'].includes(fixedPort.role)) {
+        'torque-clutch-inner', 'torque-clutch-outer', 'actuator-housing', 'actuator-mount'].includes(fixedPort.role)) {
         if (scene.pixelDistance(start, event) > 31) continue
         for (const own of ownConnectors) {
           const mode = own.gender === 'M' ? connectionMode(own, fixedPort) : connectionMode(fixedPort, own)
