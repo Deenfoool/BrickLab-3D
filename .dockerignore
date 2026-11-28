@@ -4,6 +4,7 @@ node_modules
 .env
 .env.*
 docs
-scripts
+scripts/*
+!scripts/render-seo-banners.sh
 tests
 **/.DS_Store
