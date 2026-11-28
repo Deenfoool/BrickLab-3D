@@ -6,7 +6,7 @@ import { safeImage } from '../sets/data.js?v=catalog-engine-1'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
 import { locales } from './locale.js?v=compact-nav-1'
 import {mountStore} from './store.js?v=brand-plus-1'
-import { mountHomeHub, mountHubSearch, openReleaseHistory } from './home-hub.js?v=recognition-v9'
+import { mountHomeHub, mountHubSearch, openReleaseHistory } from './home-hub.js?v=recognition-v9-polish'
 import { mountShellNavigation } from './shell-navigation.js?v=compact-nav-1'
 import { mountBrandPlus } from './brand-plus.js?v=brand-plus-1'
 import { createAuthClient } from './auth-client.js?v=live-polish-1'
@@ -704,7 +704,7 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=recognition-v9')
+    const { mountEditor } = await import('../editor/editor.js?v=recognition-v9-polish')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

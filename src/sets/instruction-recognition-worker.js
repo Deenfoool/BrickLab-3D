@@ -65,11 +65,13 @@ export function inventoryCaptions(elements,quantities){
   if(dx>3||dy<3||dy>15||quantity.box[3]>y+2)continue
   pairs.push({i,j,score:dx*2+dy})
  }
- const used=new Set(),assigned=new Map()
- for(const {i,j,score} of pairs.sort((a,b)=>a.score-b.score)){
-  if(used.has(j)||assigned.has(i))continue
-  // A near tie is not evidence that the printed quantity belongs to this ID.
-  if(pairs.some(p=>p.i!==i&&p.j===j&&p.score-score<1.5&&p.score>=score))continue
+ const used=new Set(),assigned=new Map(),best=new Map(),ambiguous=new Set()
+ for(const pair of pairs.sort((a,b)=>a.score-b.score)){
+  if(!best.has(pair.j))best.set(pair.j,pair)
+  else if(pair.score-best.get(pair.j).score<1.5)ambiguous.add(pair.j)
+ }
+ for(const {i,j} of [...best.values()].sort((a,b)=>a.score-b.score)){
+  if(ambiguous.has(j)||used.has(j)||assigned.has(i))continue
   used.add(j);assigned.set(i,j)
  }
  return elements.map((element,i)=>{

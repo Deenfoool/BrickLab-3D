@@ -183,65 +183,57 @@ export function createInstructionRecognition(reader, set, signal) {
     return samples
   }
 
-  async function scanInventory(source,pages,request,pdfReader){
-    const [fingerprint,hash]=await Promise.all([pdfReader.fingerprint(source),version])
+  async function scanInventory(source,request,pdfReader,bookSignal){
+    const [fingerprint,hash]=await boundedTask(Promise.all([pdfReader.fingerprint(source),version]),request,12000)
     request.throwIfAborted()
     const key=fingerprint&&hash&&JSON.stringify(['regions-v9.1',set.number,hash,fingerprint])+'/inventory'
     const stored=await cache(key)
     request.throwIfAborted()
-    if(stored?.length){books.set(source,stored);return stored}
+    if(Array.isArray(stored)&&stored.length){books.set(source,stored);return stored}
     const templates=[]
-    let emptyAfterInventory=0
-    const total=await pdfReader.pageCount(source,request)
-    for(let page=total;page>Math.max(0,total-36);page--){
-      request.throwIfAborted()
+    let emptyAfterInventory=0,complete=true
+    const total=await boundedTask(pdfReader.pageCount(source,request),request,10000)
+    async function visit(page){
+      if(request.aborted){complete=false;return false}
       let items=[]
-      try{items=await extract(source,page,null,true,request,pdfReader)}catch{request.throwIfAborted()}
+      try{items=await boundedTask(extract(source,page,null,true,request,pdfReader),request,22000)}
+      catch{if(request.aborted){complete=false;return false}complete=false}
       templates.push(...items)
       emptyAfterInventory=items.length?0:emptyAfterInventory+Number(templates.length>0)
-      if(emptyAfterInventory>=3)break
+      return emptyAfterInventory<3
     }
-    if(!templates.length){
-      // Some editions put their illustrated inventory before the assembly steps.
-      for(let page=1;page<=Math.min(12,Math.max(0,total-36));page++){
-        request.throwIfAborted()
-        let items=[]
-        try{items=await extract(source,page,null,true,request,pdfReader)}catch{request.throwIfAborted()}
-        templates.push(...items)
-        emptyAfterInventory=items.length?0:emptyAfterInventory+Number(templates.length>0)
-        if(emptyAfterInventory>=3)break
-      }
+    for(let page=total;page>Math.max(0,total-36);page--)if(!await visit(page))break
+    if(!templates.length&&!request.aborted){
+      for(let page=1;page<=Math.min(12,Math.max(0,total-36));page++)if(!await visit(page))break
     }
-    request.throwIfAborted()
+    bookSignal.throwIfAborted()
+    if(request.aborted)complete=false
     books.set(source,templates)
-    if(templates.length)void cache(key,templates)
+    if(templates.length&&complete)void cache(key,templates)
     return templates
   }
   async function illustratedInventory(book){
-    if(typeof book.source!=='string'||!canonicalInstructionUrl(book.source)){
-      const extra=createInstructionPdfReader()
-      try{return await scanInventory(book.source,book.pages,book.signal,extra)}finally{extra.close()}
-    }
-    // Prefer the actual final volume, including the case where it is already open.
-    const identity=canonicalInstructionUrl(book.source)
-    const volumes=[...(set.books??[])].reverse().filter(v=>canonicalInstructionUrl(v.url))
-    const ordered=[...volumes.slice(0,3),{url:book.source,pages:book.pages}]
+    const budget=AbortSignal.any([book.signal,AbortSignal.timeout(40000)])
+    const identity=typeof book.source==='string'&&canonicalInstructionUrl(book.source)
+    const ordered=identity?[...(set.books??[])].reverse().filter(v=>canonicalInstructionUrl(v.url)).slice(0,3).concat([{url:book.source}]):[{url:book.source}]
     const visited=new Set(),combined=[]
     const expected=new Set(set.inventory.filter(i=>!i.spare).map(i=>JSON.stringify([i.partNum,String(i.colorId)]))).size
     for(const volume of ordered){
-      const url=canonicalInstructionUrl(volume.url)
+      if(budget.aborted)break
+      const url=identity?canonicalInstructionUrl(volume.url):volume.url
       if(!url||visited.has(url))continue
       visited.add(url);book.signal.throwIfAborted()
       let templates=books.get(volume.url)
       if(!templates?.length){
-        const same=url===identity,extra=createInstructionPdfReader()
-        try{templates=await scanInventory(same?book.source:volume.url,same?book.pages:null,book.signal,extra)}
+        const extra=createInstructionPdfReader()
+        try{templates=await scanInventory(url,budget,extra,book.signal)}
         catch{book.signal.throwIfAborted();templates=[]}finally{extra.close()}
       }
       combined.push(...templates)
       const coverage=new Set(combined.filter(t=>t.item?.[0]).map(t=>JSON.stringify(t.item.slice(0,2)))).size
       if(expected&&coverage>=expected*.95)break
     }
+    book.signal.throwIfAborted()
     return combined
   }
 
@@ -279,7 +271,12 @@ export function createInstructionRecognition(reader, set, signal) {
     const templates=inventoryTemplates??[]
     const regions=templates.length?await analyze('rank',{samples,templates},[],request):direct
     request.throwIfAborted()
-    if(regions.length===samples.length){if(regions.length&&inventoryComplete)void cache(pageKey,{regions,callouts});return regions}
+    if(regions.length===samples.length){
+      const available=new Set(templates.filter(t=>t.item?.[0]).map(t=>JSON.stringify(t.item.slice(0,2))))
+      const expected=set.inventory.filter(i=>!i.spare).every(i=>available.has(JSON.stringify([i.partNum,String(i.colorId)])))
+      if(regions.length&&inventoryComplete&&expected)void cache(pageKey,{regions,callouts})
+      return regions
+    }
     // Only canonical books may use the selected set as a complete candidate universe.
     // A user-supplied PDF may describe a different model.
     if(typeof source!=='string'||!canonicalInstructionUrl(source))return regions
