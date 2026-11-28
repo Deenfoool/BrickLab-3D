@@ -27,7 +27,7 @@ BEGIN
 END $$;
 INSERT INTO bricklab.admin_accounts(user_id) VALUES ('10000000-0000-4000-8000-000000000002');
 SET LOCAL ROLE bricklab_app;
-DO $
+DO $audit$
 DECLARE day date:=(now() AT TIME ZONE 'Europe/Moscow')::date;
 BEGIN
  PERFORM set_config('bricklab.user_id','10000000-0000-4000-8000-000000000001',true);
@@ -43,7 +43,7 @@ BEGIN
  PERFORM bricklab.commerce_admin_audit_write('30000000-0000-4000-8000-000000000001','finance_export','live',NULL,'succeeded');
  IF (SELECT count(*) FROM bricklab.commerce_admin_audit_list('live'))<>2 THEN RAISE EXCEPTION 'audit incomplete'; END IF;
  PERFORM set_config('bricklab.user_id','',true);
-END $;
+END $audit$;
 DO $$
 BEGIN
  IF (SELECT count(*) FROM bricklab.commerce_orders)<>0 THEN RAISE EXCEPTION 'unscoped orders exposed'; END IF;
