@@ -23,7 +23,7 @@ export function prepareInstructionPage(progress, signal, reader) {
   if (!progress) return null
   const local = personalPdfs.get(entry?.url ?? localBookKey(progress.set))
   const display = entry && instructionPagePreview(progress.set.number, entry.url, progress.page)
-  if (local || !display?.image) {
+  if (local || !display?.image || (reader&&signal&&canonicalInstructionUrl(entry?.url))) {
     const source = local ?? entry?.url
     if (!reader || !signal || !source) return null
     const canvas = node('canvas')
@@ -37,7 +37,7 @@ export function prepareInstructionPage(progress, signal, reader) {
   const decoded = image.decode().then(() => true, () => false)
   const regions = instructionPartRegions(progress.set.number, display.pdfId, progress.page)
     .catch(() => []) // Image viewing remains available if annotations fail to load.
-  return { image, decoded, regions }
+  return { image, decoded, regions, source:entry.url, page:progress.page }
 }
 
 export async function waitForInstruction(prepared, signal) {
@@ -283,11 +283,8 @@ export function mountInstructions(
       return
     }
     const display = instructionPagePreview(progress.set.number, entry.url, progress.page)
-    const creditUrl = display?.source ?? instructionSources[entry?.source]
-    if (creditUrl) {
-      credit.hidden = false
-      credit.textContent = display?.source ? 'BrickInstructions' : entry.source
-    }
+    credit.hidden=true
+    if(entry.source&&instructionSources[entry.source]){credit.hidden=false;credit.textContent=entry.source}
     previewStatus.hidden = false
     previewStatus.textContent = ru ? 'Загружаем страницу…' : 'Loading page…'
     const pageNumber = progress.page
@@ -307,26 +304,26 @@ export function mountInstructions(
     if(signal.aborted)return
     if(!interactive){unlock.hidden=!locked;recognitionStatus.textContent=ru?'Интерактивность недоступна. PDF и ручной поиск остаются доступны.':'Interactive access unavailable. PDF and manual search remain available.';recognitionStatus.hidden=false}
     const pageLabel = number => ru ? `Страница ${number} инструкции` : `Instruction page ${number}`
-    if (!local && display?.image) {
-      const { image, decoded, regions } = prepared?.image ? prepared : prepareInstructionPage(progress)
-      const ready = await decoded
-      if (signal.aborted) return
-      if (ready) {
-        image.alt = pageLabel(pageNumber)
-        preview.append(image)
-        showPage(image.naturalWidth / image.naturalHeight, interactive && findPart &&
-          (serverOnly?instructionPartRegions(progress.set.number,privatePdfId,pageNumber).catch(()=>[]):resolvePdfRegions(display.pdfId, source, pageNumber, entry.pages, null, signal, regions)), signal)
-        if (entry.pages && pageNumber < entry.pages && !navigator.connection?.saveData) {
-          const following = instructionPagePreview(progress.set.number, entry.url, pageNumber + 1)
-          if (following?.image) {
-            const ahead = new Image()
-            ahead.fetchPriority = 'low'
-            ahead.src = following.image
-          }
-        }
-        return
+    async function showIndexedPreview(){
+      if(local||!display?.image||signal.aborted)return false
+      const fallback=prepared?.image&&prepared.source===source&&prepared.page===pageNumber?prepared:prepareInstructionPage(progress)
+      if(!fallback?.image)return false
+      const ready=await fallback.decoded
+      if(signal.aborted||!ready)return false
+      const image=fallback.image
+      image.alt=pageLabel(pageNumber)
+      preview.append(image)
+      credit.hidden=false;credit.textContent='BrickInstructions'
+      // The alternate artwork is a viewing fallback, not proof of matching crop or edition.
+      // Keep overlays tied to the exact original PDF coordinate system.
+      showPage(image.naturalWidth/image.naturalHeight,false,signal)
+      if(interactive&&findPart){
+        recognitionStatus.textContent=ru?'Оригинальный PDF недоступен. Резервное изображение без подсказок.':'Original PDF unavailable. Preview image without hints.'
+        recognitionStatus.hidden=false
       }
+      return true
     }
+    if(!canonicalBook&&await showIndexedPreview())return
     const warm = prepared?.result && prepared.source === source && prepared.page === pageNumber
     const canvas = warm ? prepared.canvas : node('canvas')
     canvas.setAttribute('role', 'img')
@@ -349,6 +346,8 @@ export function mountInstructions(
       showPage(canvas.width / canvas.height, regions, signal)
     } catch {
       if (signal.aborted) return
+      if(await showIndexedPreview())return
+      if(signal.aborted)return
       if (local) {
         personalPdfs.delete(entry.url)
         localPageCounts.delete(entry.url)

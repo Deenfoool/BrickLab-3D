@@ -1,6 +1,6 @@
 import { loadPartIndex, enrichInventory, normalizeDocumentDesigns } from '../catalog/part-resolver.js?v=catalog-engine-1'
 import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=recognition-v9-polish'
-import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=instruction-artwork-v5'
+import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=recognition-v9'
 import { mountSetPalette } from '../sets/palette.js?v=recognition-v9'
 import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'

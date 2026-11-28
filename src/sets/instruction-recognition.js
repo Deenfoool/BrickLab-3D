@@ -196,7 +196,8 @@ export function createInstructionRecognition(reader, set, signal) {
     async function visit(page){
       if(request.aborted){complete=false;return false}
       let items=[]
-      try{items=await boundedTask(extract(source,page,null,true,request,pdfReader),request,22000)}
+      const pageSignal=AbortSignal.any([request,AbortSignal.timeout(21000)])
+      try{items=await boundedTask(extract(source,page,null,true,pageSignal,pdfReader),pageSignal,22000)}
       catch{if(request.aborted){complete=false;return false}complete=false}
       templates.push(...items)
       emptyAfterInventory=items.length?0:emptyAfterInventory+Number(templates.length>0)
