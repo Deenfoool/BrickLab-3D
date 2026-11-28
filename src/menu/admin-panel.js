@@ -1,5 +1,6 @@
 import {profileHref,workshopRoute} from './profile-route.js'
 import {renderAchievementAdmin} from './admin-achievements.js'
+import {renderSeoAdmin} from './admin-seo.js?v=seo-discovery-3'
 import {achievements} from './achievement-catalog.js'
 
 import {AuthError,authOriginAllowed} from './auth-client.js?v=security-1'
@@ -15,8 +16,8 @@ function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className
 export function renderAdminPanel({lang='ru',signal,initialMode='overview',initialQuery='',fetcher=globalThis.fetch,location=globalThis.location}){
  const t={...(labels[lang]??labels.ru),bugs:lang==='ru'?'Баг-репорты':'Bug reports',bugSearch:lang==='ru'?'ID отчёта':'Report ID',grant_achievement:lang==='ru'?'Выдать достижение':'Grant achievement',confirm_bug:lang==='ru'?'Подтвердить баг':'Confirm bug',confirmed:lang==='ru'?'Подтверждён':'Confirmed'},root=el('section','admin-panel'),notice=el('p','account-muted'),tabs=el('div','community-actions'),content=el('div','admin-content'),more=el('button','workspace-action',t.more)
  notice.setAttribute('role','status');more.type='button';more.hidden=true
- const modes=['overview','users','achievements','reports','build-reports','bugs','content','audit'];let mode=modes.includes(initialMode)?initialMode:'overview',offset=0,q=uuid.test(initialQuery)?initialQuery:'',busy=false,serial=0
- const controls=new Map();let definitions=[];t.achievements=lang==='ru'?'Достижения':'Achievements';t.create_achievement=lang==='ru'?'Создание достижения':'Achievement created'
+ const modes=['overview','seo','users','achievements','reports','build-reports','bugs','content','audit'];let mode=modes.includes(initialMode)?initialMode:'overview',offset=0,q=uuid.test(initialQuery)?initialQuery:'',busy=false,serial=0
+ const controls=new Map();let definitions=[];t.seo=lang==='ru'?'SEO':'SEO';t.achievements=lang==='ru'?'Достижения':'Achievements';t.create_achievement=lang==='ru'?'Создание достижения':'Achievement created'
  async function call(path='',method='GET',body){
   if(!authOriginAllowed(location))throw new AuthError('https_required')
   const r=await fetcher('/api/admin'+path,{method,signal,credentials:'same-origin',cache:'no-store',redirect:'error',headers:{Accept:'application/json',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})})
@@ -63,6 +64,7 @@ export function renderAdminPanel({lang='ru',signal,initialMode='overview',initia
    content.append(form);notice.textContent='';return
   }
   try{
+   if(mode==='seo'){const panel=await renderSeoAdmin({lang,signal,fetcher});if(signal.aborted||version!==serial)return;content.append(panel);notice.textContent='';return}
    if(mode==='achievements'){const {items}=await call('/achievements');if(signal.aborted||version!==serial)return;definitions=items;content.append(renderAchievementAdmin({lang,definitions,signal,create:async data=>{await call('/achievements','POST',data);if(!signal.aborted)await load(true)}}));notice.textContent='';return}
    if(mode==='users'){const {items}=await call('/achievements');if(signal.aborted||version!==serial)return;definitions=items}
    if(mode==='overview'){
