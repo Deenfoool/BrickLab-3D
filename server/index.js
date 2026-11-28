@@ -9,6 +9,7 @@ import {loadInstructionPolicy} from './instruction-access.js'
 import {loadApprovedLegal,liveCommerceConfig,liveProviderConfig} from './legal-release.js'
 import {createTelegramHubHandler} from './telegram-hub.js'
 import { createBrickLabServer } from './http.js'
+import { createDiscovery } from './seo-discovery.js'
 import { createInstructionsHandler } from './instructions.js'
 import { createInstructionFetch } from './instruction-fetch.js'
 import { createRebrickableHandler } from './rebrickable.js'
@@ -69,7 +70,9 @@ if (process.env.PGPASSWORD) {
   }
 }
 const instructionFetch = createInstructionFetch({ proxy: process.env.BRICKLAB_INSTRUCTIONS_PROXY || '' })
-const server = createBrickLabServer({ root: fileURLToPath(new URL('../', import.meta.url)), auth, projects, profile, activity, community, bureau, security, payments, hub, approvedLegal:legal,
+const root = fileURLToPath(new URL('../', import.meta.url))
+const discovery=createDiscovery({root,store,publicBuilds:process.env.BRICKLAB_COMMUNITY_ENABLED==='true'&&process.env.BRICKLAB_SEO_PUBLIC_BUILDS==='true'})
+const server = createBrickLabServer({ root, discovery, auth, projects, profile, activity, community, bureau, security, payments, hub, approvedLegal:legal,
   instructions: createInstructionsHandler({ fetcher: instructionFetch }),
   rebrickable:createRebrickableHandler({apiKey:process.env.BRICKLAB_REBRICKABLE_API_KEY || ''}), cspReport:createCspReportHandler() })
 server.on('error', async error => {
