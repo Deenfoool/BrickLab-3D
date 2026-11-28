@@ -7,7 +7,7 @@ const origin='https://bricklab.test',terms='a'.repeat(64),uid='30000000-0000-400
 test('same quote, checkout and refund routes switch modes only on the server',async t=>{
  for(const mode of ['test','live']){
   let admin=true;const calls=[]
-  const store={getSession:async()=>({id:uid,admin}),quoteCommerce:async(...args)=>{calls.push(args);return {sku:'plus-1',amountKopecks:24900,offerVersion:terms}},commerceTestAccount:async()=>({mode:'test'}),commerceAccount:async()=>({mode:'live'})}
+  const store={commerceAdminAudit:async()=>{},getSession:async()=>({id:uid,admin}),quoteCommerce:async(...args)=>{calls.push(args);return {sku:'plus-1',amountKopecks:24900,offerVersion:terms}},commerceTestAccount:async()=>({mode:'test'}),commerceAccount:async()=>({mode:'live'})}
   const adapter={enabled:true,checkout:async(...args)=>{calls.push(args);return {mode,status:'pending'}},requestRefund:async(...args)=>{calls.push(args);return {mode,status:'succeeded'}}}
   const handler=createPaymentsHandler({store,origin,config:{enabled:false},legal:{version:terms},fullCatalog:true,commerceMode:mode,liveCheckoutScope:'public',yookassa:mode==='test'?adapter:null,liveYookassa:mode==='live'?adapter:null})
   const server=createServer((req,res)=>handler(req,res,new URL(req.url,origin).pathname))
@@ -40,7 +40,7 @@ test('same provider adapter persists unified quotes for sandbox and live, verifi
 
 test('live scope fails closed, pilot allows admin only, public allows users, callbacks and refunds stay available',async t=>{
  let admin=false,scope='closed',checkout=0,refunds=0,callbacks=0;
- const store={getSession:async()=>({id:uid,admin}),storeCatalog:async()=>[],quoteCommerce:async()=>({sku:'plus-1',amountKopecks:24900,offerVersion:terms}),quoteCommerceLive:async()=>({sku:'plus-1',amountKopecks:24900,offerVersion:terms})};
+ const store={commerceAdminAudit:async()=>{},getSession:async()=>({id:uid,admin}),storeCatalog:async()=>[],quoteCommerce:async()=>({sku:'plus-1',amountKopecks:24900,offerVersion:terms}),quoteCommerceLive:async()=>({sku:'plus-1',amountKopecks:24900,offerVersion:terms})};
  const adapter={enabled:true,checkout:async()=>{checkout++;return {mode:'live'}},requestRefund:async()=>{refunds++;return {status:'succeeded'}},notification:async()=>{callbacks++;return {ok:true}}};
  const server=createServer((req,res)=>createPaymentsHandler({store,origin,config:{enabled:false},legal:{version:terms},fullCatalog:true,commerceMode:'live',liveCheckoutScope:scope,liveYookassa:adapter})(req,res,new URL(req.url,origin).pathname));
  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
@@ -74,7 +74,7 @@ test('a completed checkout attempt is returned without creating or reading anoth
 
 test('operator recovery is admin-only and available in closed live scope',async t=>{
  let admin=false,lookups=0,checks=0;
- const store={getSession:async()=>({id:uid,admin}),commerceAdminRecoveryOrder:async(...a)=>{lookups++;assert.deepEqual(a,[uid,uid,'live']);return {id:uid,paymentId:null,amountKopecks:24900,status:'pending'}}};
+ const store={commerceAdminAudit:async()=>{},getSession:async()=>({id:uid,admin}),commerceAdminRecoveryOrder:async(...a)=>{lookups++;assert.deepEqual(a,[uid,uid,'live']);return {id:uid,paymentId:null,amountKopecks:24900,status:'pending'}}};
  const adapter={enabled:true,recoverPayment:async(row,id)=>{checks++;assert.equal(row.id,uid);assert.equal(id,pid);return 'succeeded'}};
  const handler=createPaymentsHandler({store,origin,config:{enabled:false},legal:{version:terms},fullCatalog:true,commerceMode:'live',liveCheckoutScope:'closed',liveYookassa:adapter});
  const server=createServer((req,res)=>handler(req,res,new URL(req.url,origin).pathname));
@@ -92,7 +92,7 @@ test('operator recovery is admin-only and available in closed live scope',async 
 
 test('closed or unready checkout does not prevent verified callbacks or an owner reading an existing order',async t=>{
  let admin=false;const calls=[]
- const store={getSession:async()=>({id:uid,admin}),commerceOwnOrder:async(...a)=>{calls.push(a);return a[1]===pid?{id:pid,status:'pending',amountKopecks:24900}:null}}
+ const store={commerceAdminAudit:async()=>{},getSession:async()=>({id:uid,admin}),commerceOwnOrder:async(...a)=>{calls.push(a);return a[1]===pid?{id:pid,status:'pending',amountKopecks:24900}:null}}
  const adapter={enabled:true,notification:async()=>({ok:true})}
  const handler=createPaymentsHandler({store,origin,config:{enabled:false},legal:{version:terms},fullCatalog:true,commerceMode:'live',liveCheckoutScope:'public',liveCheckoutReady:false,liveYookassa:adapter})
  const server=createServer((req,res)=>handler(req,res,new URL(req.url,origin).pathname))

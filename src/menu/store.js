@@ -144,6 +144,26 @@ export function mountStore(root,{language='ru',signal}){
   }
   if(selected==='ledger'){
    if(!ledger)return
+   const exportPanel=el('section','store-orders');exportPanel.style.gridColumn='1 / -1'
+   exportPanel.append(el('h2',null,tr('Экспорт операций и журнал','Operations export and audit')),el('p','account-muted',tr('До 31 дня включительно, по МСК. Возвраты — по времени наблюдения. CSV без персональных данных покупателей.','Up to 31 inclusive Moscow-time dates. Refunds use observation time. No buyer personal data in CSV.')))
+   const controls=el('div','commerce-preview-nav'),from=el('input'),to=el('input'),environment=checkoutStatus.mode
+   const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
+   for(const [input,label] of [[from,tr('С даты','From')],[to,tr('По дату','To')]]){input.type='date';input.value=today;input.setAttribute('aria-label',label);const wrap=el('label',null,label+' ');wrap.append(input);controls.append(wrap)}
+   const download=button(tr('Скачать CSV','Download CSV'),async()=>{
+    download.disabled=true
+    try{
+     const response=await fetch('/api/commerce/admin-export',{method:'POST',credentials:'same-origin',cache:'no-store',redirect:'error',signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({environment,from:from.value,to:to.value})})
+     if(!response.ok){const d=await response.json().catch(()=>null);throw Object.assign(Error('Export failed'),{status:response.status,code:d?.error})}
+     const url=URL.createObjectURL(await response.blob()),a=el('a');a.href=url;a.download='bricklab-'+environment+'-'+from.value+'-'+to.value+'.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)
+    }catch(e){notice.textContent=errorText(e)}finally{download.disabled=false}
+   })
+   const journal=el('details');journal.append(el('summary',null,tr('Последние события администратора','Recent administrator events')))
+   const entries=el('div');journal.append(entries)
+   const loadAudit=button(tr('Загрузить журнал','Load audit'),async()=>{
+    loadAudit.disabled=true
+    try{const data=await api('/api/commerce/admin-audit?environment='+environment,signal);entries.replaceChildren();for(const event of data.events){entries.append(el('p','account-muted',new Date(event.recorded_at).toLocaleString(language==='ru'?'ru-RU':'en-US')+' · '+event.action+' · '+event.phase+' · '+event.actor_id+' · '+(event.order_id??'—')+' · '+event.request_id))}if(!data.events.length)entries.append(el('p','account-muted',tr('Событий пока нет','No events yet')))}catch(e){notice.textContent=errorText(e)}finally{loadAudit.disabled=false}
+   })
+   journal.append(loadAudit);controls.append(download);exportPanel.append(controls,journal);grid.append(exportPanel)
    const totals=ledger.totals
    if(totals){
     const metrics=el('section','store-orders');metrics.style.gridColumn='1 / -1'

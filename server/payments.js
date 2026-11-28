@@ -1,6 +1,7 @@
 import {themeIds} from '../src/menu/store-themes.js'
 import {commerceProducts,productById,indexedInstructionProducts} from '../src/menu/commerce-catalog.js'
-import {createHash,timingSafeEqual} from 'node:crypto'
+import {createHash,timingSafeEqual,randomUUID} from 'node:crypto'
+import {financeCsv,validExportRange} from './commerce-export.js'
 import {ProjectError} from './projects.js'
 import {validNpdReceiptUrl} from './receipt-delivery.js'
 import {instructionAccess,completedInstructionSet} from './instruction-access.js'
@@ -68,10 +69,24 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
  const adapter=commerceMode==='live'?liveYookassa:yookassa
  const activeSkus=commerceMode==='live'?liveSkus:testSkus
  const cookieName=new URL(origin).protocol==='https:'?'__Host-bricklab_session':'bricklab_session'
+ async function audited(user,action,environment,orderId,operation){
+  const id=randomUUID()
+  const record=phase=>store.commerceAdminAudit(user.id,id,action,environment,orderId,phase)
+  // Fail closed before side effects. An unresolved started event remains
+  // visible if the process dies or final journal persistence fails.
+  await record('started')
+  let result
+  try{result=await operation()}catch(e){
+   try{await record('failed')}catch{logger.error('Commerce audit terminal write failed:',id)}
+   throw e
+  }
+  try{await record('succeeded')}catch{logger.error('Commerce audit terminal write failed:',id)}
+  return result
+ }
  let active=0
  async function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return /^[a-f0-9]{64}$/.test(token||'')?await store.getSession(digest(token)):null}
  return async(req,res,path)=>{
-  if(!['/api/commerce/order-status','/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-health','/api/commerce/admin-provider-totals','/api/commerce/admin-reconcile','/api/commerce/admin-partial-review','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions','/api/commerce/instruction-offer','/api/commerce/instruction-activate','/api/commerce/instruction-complete','/api/commerce/instruction-event','/api/commerce/instruction-analytics','/api/commerce/instruction-pack-quote','/api/commerce/instruction-pack-checkout'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
+  if(!['/api/commerce/order-status','/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-export','/api/commerce/admin-audit','/api/commerce/admin-ledger','/api/commerce/admin-health','/api/commerce/admin-provider-totals','/api/commerce/admin-reconcile','/api/commerce/admin-partial-review','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions','/api/commerce/instruction-offer','/api/commerce/instruction-activate','/api/commerce/instruction-complete','/api/commerce/instruction-event','/api/commerce/instruction-analytics','/api/commerce/instruction-pack-quote','/api/commerce/instruction-pack-checkout'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
   if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
   active++
   try{
@@ -167,7 +182,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
    const user=await session(req);if(!user)throw new ProjectError(401,'unauthenticated')
    if(path==='/api/commerce/order-status'&&req.method==='GET'){
     const q=new URL(req.url,'http://localhost').searchParams,id=q.get('id'),mode=q.get('mode')
-    if(q.size!==2||!validCheckoutKey(id)||!['test','live'].includes(mode))throw new ProjectError(400,'invalid_order')
+    if(q.size!==2||q.getAll('id').length!==1||q.getAll('mode').length!==1||!validCheckoutKey(id)||!['test','live'].includes(mode))throw new ProjectError(400,'invalid_order')
     if(mode==='test'&&!user.admin)throw new ProjectError(403,'admin_required')
     const order=await store.commerceOwnOrder(user.id,id,mode)
     if(!order)throw new ProjectError(404,'unknown_order')
@@ -211,12 +226,12 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     throw new ProjectError(405,'method_not_allowed')
    }
    if(path==='/api/commerce/refund'&&req.method==='POST'){
-    if(!user.admin)throw new ProjectError(403,'admin_required')
+    if(user.admin!==true)throw new ProjectError(403,'admin_required')
     if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
     if(!adapter?.enabled)throw new ProjectError(503,'payments_disabled')
     let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
     if(!data||typeof data.orderId!=='string'||!(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.orderId))||data.confirm!==true||data.mode!==commerceMode||Object.keys(data).some(k=>!['orderId','confirm','mode'].includes(k)))throw new ProjectError(400,'invalid_refund')
-    reply(res,200,await adapter.requestRefund(user.id,data.orderId));return true
+    reply(res,200,await audited(user,'refund',commerceMode,data.orderId,()=>adapter.requestRefund(user.id,data.orderId)));return true
    }
    if(path==='/api/commerce/account'){
     if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
@@ -243,12 +258,12 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     }
     throw new ProjectError(405,'method_not_allowed')
    }
-   if(!user.admin)throw new ProjectError(403,'admin_required')
+   if(user.admin!==true)throw new ProjectError(403,'admin_required')
    if(path==='/api/commerce/admin-partial-review'&&req.method==='POST'){
     if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
     let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
-    if(!data||!validCheckoutKey(data.orderId)||!Number.isSafeInteger(data.refundedKopecks)||data.refundedKopecks<1||typeof data.reference!=='string'||!data.reference.trim()||data.reference.length>250||data.confirm!==true||Object.keys(data).some(k=>!['orderId','refundedKopecks','reference','confirm'].includes(k)))throw new ProjectError(400,'invalid_refund')
-    if(!await store.adminPartialRefundReview(user.id,data.orderId,data.refundedKopecks,data.reference))throw new ProjectError(409,'fiscal_reconciliation_required')
+    if(!data||!validCheckoutKey(data.orderId)||!Number.isSafeInteger(data.refundedKopecks)||data.refundedKopecks<1||typeof data.reference!=='string'||!data.reference.trim()||data.reference.length>250||/[\x00-\x1f\x7f]/.test(data.reference)||data.confirm!==true||Object.keys(data).some(k=>!['orderId','refundedKopecks','reference','confirm'].includes(k)))throw new ProjectError(400,'invalid_refund')
+    await audited(user,'partial_review','live',data.orderId,async()=>{if(!await store.adminPartialRefundReview(user.id,data.orderId,data.refundedKopecks,data.reference))throw new ProjectError(409,'fiscal_reconciliation_required')})
     reply(res,200,{ok:true});return true
    }
    if(path==='/api/commerce/admin-reconcile'&&req.method==='POST'){
@@ -258,8 +273,25 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(!data||!validCheckoutKey(data.orderId)||!validCheckoutKey(data.paymentId)||data.mode!==commerceMode||Object.keys(data).some(k=>!['orderId','paymentId','mode'].includes(k)))throw new ProjectError(400,'invalid_order')
     const order=await store.commerceAdminRecoveryOrder(user.id,data.orderId,commerceMode)
     if(!order)throw new ProjectError(404,'unknown_order')
-    const status=await adapter.recoverPayment(order,data.paymentId)
+    const status=await audited(user,'reconcile',commerceMode,data.orderId,()=>adapter.recoverPayment(order,data.paymentId))
     reply(res,200,{status,mode:commerceMode});return true
+   }
+   if(path==='/api/commerce/admin-audit'&&req.method==='GET'){
+    const q=new URL(req.url,'http://localhost').searchParams,environment=q.get('environment')
+    if(q.size!==1||!['test','live'].includes(environment))throw new ProjectError(400,'invalid_environment')
+    reply(res,200,{events:await store.commerceAdminAuditList(user.id,environment)});return true
+   }
+   if(path==='/api/commerce/admin-export'&&req.method==='POST'){
+    if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
+    let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
+    if(!data||Object.keys(data).length!==3||!['test','live'].includes(data.environment)||!validExportRange(data.from,data.to))throw new ProjectError(400,'invalid_export_range')
+    const csv=await audited(user,'finance_export',data.environment,null,async()=>{
+     const rows=await store.commerceAdminExport(user.id,data.environment,data.from,data.to)
+     if(rows.length>10000)throw new ProjectError(409,'export_too_large')
+     return financeCsv(rows,data.environment)
+    })
+    res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="bricklab-'+data.environment+'-'+data.from+'-'+data.to+'.csv"','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Length':Buffer.byteLength(csv)})
+    res.end(csv);return true
    }
    if(path==='/api/commerce/admin-provider-totals'&&req.method==='GET'){
     const q=new URL(req.url,'http://localhost').searchParams
@@ -280,14 +312,14 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
     let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
     if(!data||typeof data.orderId!=='string'||!(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.orderId))||!validNpdReceiptUrl(data.url)||data.confirm!==true||Object.keys(data).some(k=>!['orderId','url','confirm'].includes(k)))throw new ProjectError(400,'invalid_receipt_url')
-    if(!await store.registerCommerceReceipt(user.id,data.orderId,data.url))throw new ProjectError(409,'receipt_not_pending')
+    await audited(user,'register_receipt','live',data.orderId,async()=>{if(!await store.registerCommerceReceipt(user.id,data.orderId,data.url))throw new ProjectError(409,'receipt_not_pending')})
     reply(res,200,{ok:true,delivery:'queued_if_eligible'});return true
    }
    if((path==='/api/commerce/admin-receipt'||path==='/api/commerce/admin-receipt-correction')&&req.method==='POST'){
     if(req.headers.origin!==origin)throw new ProjectError(403,'invalid_origin')
     let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
     if(!data||typeof data.orderId!=='string'||!(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.orderId))||typeof data.reference!=='string'||!data.reference.trim()||data.reference.length>250||/[\x00-\x1f\x7f]/.test(data.reference)||data.confirm!==true||Object.keys(data).some(k=>!['orderId','reference','confirm'].includes(k)))throw new ProjectError(400,'invalid_receipt')
-    if(!await (path.endsWith('-correction')?store.confirmCommerceReceiptCorrection(user.id,data.orderId,data.reference):store.confirmCommerceReceipt(user.id,data.orderId,data.reference)))throw new ProjectError(409,'receipt_not_pending')
+    await audited(user,path.endsWith('-correction')?'receipt_correction':'confirm_receipt','live',data.orderId,async()=>{if(!await (path.endsWith('-correction')?store.confirmCommerceReceiptCorrection(user.id,data.orderId,data.reference):store.confirmCommerceReceipt(user.id,data.orderId,data.reference)))throw new ProjectError(409,'receipt_not_pending')})
     reply(res,200,{ok:true});return true
    }
    if(path==='/api/commerce/test-refund'&&req.method==='POST'){
@@ -295,7 +327,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(!yookassa?.enabled)throw new ProjectError(503,'yookassa_test_disabled')
     let data;try{data=JSON.parse(await body(req,'application/json'))}catch(e){if(e instanceof ProjectError)throw e;throw new ProjectError(400,'invalid_json')}
     if(!data||typeof data.orderId!=='string'||!(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.orderId))||data.confirm!==true||Object.keys(data).some(k=>!['orderId','confirm'].includes(k)))throw new ProjectError(400,'invalid_refund')
-    reply(res,200,await yookassa.requestTestRefund(user.id,data.orderId));return true
+    reply(res,200,await audited(user,'refund','test',data.orderId,()=>yookassa.requestTestRefund(user.id,data.orderId)));return true
    }
    if(path==='/api/commerce/test-account'&&req.method==='GET'){reply(res,200,await store.commerceTestAccount(user.id));return true}
    if(path==='/api/commerce/test-status'&&req.method==='GET'){reply(res,200,{enabled:yookassa?.enabled===true,mode:'test'});return true}
