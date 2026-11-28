@@ -423,7 +423,7 @@ function homeInstruction(project, signal, emptyModelArt) {
   const preview = byId('home-instruction-art')
   preview.replaceChildren(icon('book'))
   if (!book?.url) return
-  import('../sets/instruction-sources.js?v=browser-recognition').then(({ instructionPagePreview }) => {
+  import('../sets/instruction-sources.js?v=ducati-instructions-1').then(({ instructionPagePreview }) => {
     if (signal.aborted) return
     const image = instructionPagePreview(set.number, book.url, page)?.image
     if (image) {
@@ -616,7 +616,7 @@ async function openSets() {
   const root = byId('sets-panel')
   root.textContent = strings().loadingLibrary
   try {
-    const { mountSetCatalog } = await import('../sets/catalog.js?v=feedback-3')
+    const { mountSetCatalog } = await import('../sets/catalog.js?v=ducati-instructions-1')
     if (controller.signal.aborted) return
     let initialQuery=pendingSetQuery;pendingSetQuery=''
     try{const target=sessionStorage.getItem('bricklab-instruction-return');if(/^\d{3,7}-\d{1,2}$/.test(target??'')){initialQuery=target;sessionStorage.removeItem('bricklab-instruction-return')}}catch{}
@@ -704,7 +704,7 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=academy-1')
+    const { mountEditor } = await import('../editor/editor.js?v=ducati-instructions-1')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

@@ -1,12 +1,12 @@
 import {instructionEvent} from './instruction-events.js'
 import {mountInstructionOffer} from './instruction-offer.js?v=welcome-1'
-import { node, control, setStrings } from './catalog.js?v=browser-recognition'
-import { safeBook, validateSet } from './data.js?v=browser-recognition'
+import { node, control, setStrings } from './catalog.js?v=ducati-instructions-1'
+import { safeBook, validateSet } from './data.js?v=ducati-instructions-1'
 import {
   discoverBooks,
   instructionPagePreview,
   instructionSources,
-} from './instruction-sources.js?v=browser-recognition'
+} from './instruction-sources.js?v=ducati-instructions-1'
 import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=commerce-regions-1'
 import { canonicalInstructionUrl } from './instruction-url.js'
 import { createInstructionPdfReader } from './instruction-pdf.js?v=instruction-artwork-v5'
@@ -17,7 +17,7 @@ const personalPdfs = new Map()
 const localBookKey = set => `local:${set.number}`
 
 export function prepareInstructionPage(progress, signal, reader) {
-  const entry = progress?.set.books[progress.book]
+  const entry = progress?.set?.books?.[progress.book]
   if (!progress) return null
   const local = personalPdfs.get(entry?.url ?? localBookKey(progress.set))
   const display = entry && instructionPagePreview(progress.set.number, entry.url, progress.page)
@@ -339,7 +339,7 @@ export function mountInstructions(
       renderNavigation(books[progress.book] ?? entry)
       canvas.setAttribute('aria-label', pageLabel(shown))
       preview.append(canvas)
-      const regions = interactive && findPart && (serverOnly?instructionPartRegions(progress.set.number,privatePdfId,shown).catch(()=>[]):resolvePdfRegions(local ? null : display?.pdfId, source, shown, pages, canvas, signal))
+      const regions = interactive && findPart && (serverOnly?instructionPartRegions(progress.set.number,privatePdfId,shown).catch(()=>[]):resolvePdfRegions(local ? null : privatePdfId, source, shown, pages, canvas, signal))
       showPage(canvas.width / canvas.height, regions, signal)
     } catch {
       if (signal.aborted) return
@@ -365,7 +365,7 @@ export function mountInstructions(
     recognitionStatus.textContent = ru ? 'Распознаём детали…' : 'Recognizing parts…'
     recognitionStatus.hidden = false
     try {
-      recognition ??= import('./instruction-recognition.js?v=instruction-artwork-v5').then(module => {
+      recognition ??= import('./instruction-recognition.js?v=ducati-instructions-1').then(module => {
         recognitionEngine = module.createInstructionRecognition(pdf, progress.set, signal)
         return recognitionEngine
       })
@@ -386,7 +386,7 @@ export function mountInstructions(
     previewStatus.hidden = true
     if (findPart && regions) regions.then(parts => {
       if (!signal.aborted) addInstructionParts(preview, parts, { language, describe: describePart, find: (...args)=>{instructionEvent(progress.set.number,'hint_use');return findPart(...args)} })
-    })
+    }).catch(()=>{})
   }
   async function lookupBooks() {
     if (progress.set.books.length) return

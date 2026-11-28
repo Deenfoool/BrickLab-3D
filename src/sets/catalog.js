@@ -7,7 +7,7 @@ import {
   loadSetPage,
   importSet,
 } from './rebrickable.js?v=browser-recognition'
-import { safeImage, validateSet } from './data.js?v=browser-recognition'
+import { safeImage, validateSet, normalizeSetBooks } from './data.js?v=ducati-instructions-1'
 import {
   discoverBooks, indexedBooks,
   instructionSources,
@@ -331,7 +331,7 @@ export async function mountSetCatalog(
     for(const item of selection){
       const b=control('',async()=>{
         const id=++requestId;b.disabled=true
-        try{const set=sets.get(item.number)??await importSet(item.number,signal);if(signal.aborted||id!==requestId)return;const verified={...set,books:item.books?.length?item.books:set.books};sets.set(verified.number,verified);saveCache();showDetails(verified)}
+        try{const set=sets.get(item.number)??await importSet(item.number,signal);if(signal.aborted||id!==requestId)return;const verified={...set,books:normalizeSetBooks(set.number,item.books?.length?item.books:set.books)};sets.set(verified.number,verified);saveCache();showDetails(verified)}
         catch{if(!signal.aborted)status.textContent=t.error}finally{b.disabled=false}
       },signal)
       const image=node('img');image.src=safeImage(item.image);image.alt='';image.loading='lazy'
@@ -346,7 +346,7 @@ export async function mountSetCatalog(
     for(let offset=0;offset<items.length;offset+=4){
       request.throwIfAborted()
       const batch=await Promise.all(items.slice(offset,offset+4).map(async item=>{
-        let books=sets.get(item.number)?.books??item.books
+        let books=normalizeSetBooks(item.number,sets.get(item.number)?.books??item.books)
         if(!books?.length)books=verifiedBooks.get(item.number)
         if(!books?.length){try{books=await indexedBooks(item.number,request)}catch{request.throwIfAborted();books=[]}}
         if(!books?.length){try{books=await discoverBooks(item.number,AbortSignal.any([request,AbortSignal.timeout(10000)]))}catch{request.throwIfAborted();return null}}
@@ -385,7 +385,7 @@ export async function mountSetCatalog(
           const set =
             sets.get(item.number) ?? (await importSet(item.number, signal))
           if (signal.aborted || id !== requestId) return
-          const verified={...set,books:item.books?.length?item.books:set.books}
+          const verified={...set,books:normalizeSetBooks(set.number,item.books?.length?item.books:set.books)}
           sets.set(verified.number, verified)
           status.textContent = ''
           saveCache()

@@ -102,7 +102,7 @@ export function createInstructionRecognition(reader, set, signal) {
     const bookSignal = AbortSignal.any([controller.signal, signal])
     const key = Promise.all([reader.fingerprint(source), version]).then(([fingerprint, hash]) => {
       if (!fingerprint || !hash) return
-      return JSON.stringify(['regions-v5', set.number, hash, fingerprint])
+      return JSON.stringify(['regions-v6', set.number, hash, fingerprint])
     })
     active = { source, controller, signal: bookSignal, key, pages }
     return active
@@ -137,7 +137,9 @@ export function createInstructionRecognition(reader, set, signal) {
     let surface = canvas
     const hasWords = () => geometry.words.some(({ text }) => mode ? element.test(text) : quantity.test(text))
     // Inventory labels may be raster artwork even when the PDF also has vector text.
-    if (!hasWords() && !geometry.wideScan && !mode) return []
+    // Mixed pages can have vector pictures and rasterized quantity labels.
+    // Do not reject them simply because the page is not one full-page scan.
+    if (!hasWords() && !geometry.wideScan && !mode && !geometry.images.length) return []
     if (!surface) {
       surface = document.createElement('canvas')
       await reader.render(source, page, surface, request)
