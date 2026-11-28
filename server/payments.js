@@ -71,7 +71,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
  let active=0
  async function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return /^[a-f0-9]{64}$/.test(token||'')?await store.getSession(digest(token)):null}
  return async(req,res,path)=>{
-  if(!['/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-health','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions','/api/commerce/instruction-offer','/api/commerce/instruction-activate','/api/commerce/instruction-complete','/api/commerce/instruction-event','/api/commerce/instruction-analytics','/api/commerce/instruction-pack-quote','/api/commerce/instruction-pack-checkout'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
+  if(!['/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-ledger','/api/commerce/admin-health','/api/commerce/admin-provider-totals','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions','/api/commerce/instruction-offer','/api/commerce/instruction-activate','/api/commerce/instruction-complete','/api/commerce/instruction-event','/api/commerce/instruction-analytics','/api/commerce/instruction-pack-quote','/api/commerce/instruction-pack-checkout'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
   if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
   active++
   try{
@@ -236,6 +236,11 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     throw new ProjectError(405,'method_not_allowed')
    }
    if(!user.admin)throw new ProjectError(403,'admin_required')
+   if(path==='/api/commerce/admin-provider-totals'&&req.method==='GET'){
+    const q=new URL(req.url,'http://localhost').searchParams
+    if(q.size!==1||q.get('environment')!=='live')throw new ProjectError(400,'invalid_environment')
+    reply(res,200,await store.commerceAdminProviderTotals(user.id,'live'));return true
+   }
    if(path==='/api/commerce/admin-health'&&req.method==='GET'){
     const q=new URL(req.url,'http://localhost').searchParams,environment=q.get('environment')
     if(q.size!==1||!['test','live'].includes(environment))throw new ProjectError(400,'invalid_environment')

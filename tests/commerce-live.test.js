@@ -61,3 +61,21 @@ test('provider-confirmed full refund settles atomically and lost refund response
  current=paid;assert.equal(await adapter.pollRefund(row),'succeeded')
  assert.deepEqual(calls,[['refund',payment,'live',9900]])
 })
+
+test('provider income is optional, validated and never taken from webhook payload',async()=>{
+ const order='30000000-0000-4000-8000-000000000001',payment='40000000-0000-4000-8000-000000000001';
+ const paid={id:payment,test:false,status:'succeeded',paid:true,amount:{value:'100.00',currency:'RUB'},metadata:{order_id:order}};
+ let value={...paid,income_amount:{value:'95.73',currency:'RUB'}};const calls=[];
+ const adapter=createYookassaAdapter({origin:'https://bricklab.test',config:{enabled:true,environment:'live',shopId:'1',secret:'live_example_secret'},store:{settleVerifiedCommercePayment:async(...a)=>{calls.push(a);return true},settleVerifiedCommerceIncome:async(...a)=>{calls.push(a);return true}},fetcher:async()=>Response.json(value)});
+ const notify=()=>adapter.notification({event:'payment.succeeded',object:{id:payment,income_amount:{value:'1.00',currency:'RUB'}}});
+ await notify();assert.deepEqual(calls.pop(),[order,payment,'live',10000,false,9573]);
+ for(const invalid of [undefined,{value:'101.00',currency:'RUB'},{value:'95.731',currency:'RUB'},{value:'95.73',currency:'USD'}]){value={...paid,income_amount:invalid};await notify();assert.deepEqual(calls.pop(),[order,payment,'live',10000,false])}
+ value={...paid,income_amount:{value:'0.00',currency:'RUB'}};await notify();assert.deepEqual(calls.pop(),[order,payment,'live',10000,false,0]);
+});
+test('existing price rules preserve actual badge credit, collection discount and fixed subscription price',()=>{
+ const partial={...account,plus:true,badges:['bronze-builder','silver-builder'],themes:['carbon','neon']};
+ assert.equal(commerceQuote('gold-builder',partial,[{sku:'bronze-builder',amountKopecks:14900},{sku:'silver-builder',amountKopecks:15000}]).amountKopecks,27000);
+ assert.equal(commerceQuote('plus-12',partial).amountKopecks,249000);
+ assert.ok(commerceQuote('theme-collection',partial).amountKopecks<69900);
+ assert.throws(()=>commerceQuote('carbon',partial),/already_owned/);
+});

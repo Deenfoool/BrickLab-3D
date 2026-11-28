@@ -52,7 +52,7 @@ export function mountStore(root,{language='ru',signal}){
  const tabs=new Map(),header=el('div','store-banner'),heading=el('div'),art=el('div','store-banner-art')
  heading.append(el('span','store-kicker','BRICKLAB STORE'),el('h2',null,tr('Расширь свою мастерскую','Expand your workshop')),el('p',null,tr('Темы, облачное пространство, коллекции и Plus. Основной редактор бесплатный.','Themes, cloud space, collections and Plus. The core editor is free.')))
  for(const id of ['carbon','neon','aurora'])art.append(themePreview(themeFor(id),language));header.append(heading,art)
- let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,health=null,analytics=null,testMode=false,busy=false,serial=0
+ let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,health=null,providerTotals=null,analytics=null,testMode=false,busy=false,serial=0
  try{if(sessionStorage.getItem('bricklab-commerce-return')==='1'){selected='orders';sessionStorage.removeItem('bricklab-commerce-return')}}catch{}
  const refreshButton=button(tr('Обновить покупки','Refresh purchases'),()=>refresh())
  for(const [id,label] of categories){const b=button(label,()=>{selected=id;render()});tabs.set(id,b);nav.append(b)}
@@ -153,6 +153,12 @@ export function mountStore(root,{language='ru',signal}){
     }
     metrics.append(values);grid.append(metrics)
    }
+   if(!testMode&&providerTotals){
+    const settlement=el('section','store-orders');settlement.style.gridColumn='1 / -1';settlement.append(el('h2',null,tr('Расчёты с ЮKassa','YooKassa settlements')+' · '+providerTotals.day+' · МСК'),el('p','account-muted',tr('По данным API, не банковская выписка и не чистая прибыль. Налог НПД и расходы не вычтены.','Provider API data, not a bank statement or profit. NPD and operating expenses are not deducted.')));
+    const values=el('div','store-grid');
+    for(const [label,value] of [[tr('Сумма после удержаний · известные оплаты','After fees · known payments'),providerTotals.provider_income_kopecks],[tr('Комиссия и НДС · известные оплаты','Fees and VAT · known payments'),providerTotals.fees_kopecks],[tr('Возвраты','Refunds'),providerTotals.refunded_kopecks],[tr('Остаток после удержаний и возвратов','After fees and refunds'),providerTotals.net_after_provider_kopecks]]){const metric=el('article','commerce-preview-card');metric.append(el('small','account-muted',label),el('strong','store-price',value==null?'—':money(value)));values.append(metric)}
+    settlement.append(values,el('small','account-muted',tr('Оплат без данных комиссии: ','Payments missing fee data: ')+providerTotals.unknown_count+' / '+providerTotals.paid_count));grid.append(settlement)
+   }
    if(health){
     const ops=el('section','store-orders');ops.style.gridColumn='1 / -1';
     ops.append(el('h2',null,tr('Контроль операций','Operations monitor')),el('p','account-muted',tr('Все заказы текущего режима, не только последние 100.','All orders in this mode, not only the latest 100.')));
@@ -165,6 +171,7 @@ export function mountStore(root,{language='ru',signal}){
    }
    for(const o of ledger.orders){
     const card=el('article','commerce-preview-card');card.append(orderIdentity(products.find(p=>p.id===o.sku),o.title),el('strong','store-price',money(o.amount_kopecks)),el('p','account-muted',o.display_name+' · '+o.email),el('p',null,o.status),el('small','account-muted',orderNo(o.order_number)))
+    if(!testMode&&['succeeded','refunded'].includes(o.status))card.append(el('p','account-muted',o.provider_income_kopecks==null?tr('Удержания ЮKassa: нет данных','YooKassa fees: unknown'):tr('Удержания ЮKassa: ','YooKassa fees: ')+money(Number(o.amount_kopecks)-Number(o.provider_income_kopecks))));
     const uncertain=['issue_unknown','cancel_unknown'].includes(o.fiscal_state),early=!testMode&&o.status==='refunded'&&o.receipt_status==='pending'&&o.receipt_correction_pending;
     if(o.status==='pending'&&!o.payment_id)card.append(el('p','account-muted',tr('ID платежа ещё не получен. Не создавай повторный заказ вручную.','Payment ID not yet known. Do not manually create a replacement.')));
     if(o.status==='succeeded'&&o.refund_requested_at)card.append(el('p','account-muted',tr('Возврат запрошен; проверяется у ЮKassa.','Refund requested; checking YooKassa.')));
@@ -233,7 +240,7 @@ export function mountStore(root,{language='ru',signal}){
  }
  async function refresh(){
   const v=++serial;notice.textContent=t.loading
-  try{const [c,a,st,p]=await Promise.all([api('/api/store/catalog',signal),optional('/api/commerce/account'),optional('/api/commerce/status'),profiles.get().catch(()=>null)]);const [adminLedger,adminAnalytics,adminHealth]=st?.admin?await Promise.all([optional('/api/commerce/admin-ledger?environment='+st.mode),optional('/api/commerce/instruction-analytics').catch(()=>null),optional('/api/commerce/admin-health?environment='+st.mode).catch(()=>null)]):[null,null,null];if(signal.aborted||v!==serial)return;catalog=c;account=a;checkoutStatus=st;profile=p;ledger=adminLedger;health=adminHealth;analytics=adminAnalytics;testMode=st?.mode==='test'&&st?.admin===true;if(selected==='ledger'&&!ledger)selected='all';render()}catch{if(!signal.aborted&&v===serial)notice.textContent=t.error}
+  try{const [c,a,st,p]=await Promise.all([api('/api/store/catalog',signal),optional('/api/commerce/account'),optional('/api/commerce/status'),profiles.get().catch(()=>null)]);const [adminLedger,adminAnalytics,adminHealth,adminProviderTotals]=st?.admin?await Promise.all([optional('/api/commerce/admin-ledger?environment='+st.mode),optional('/api/commerce/instruction-analytics').catch(()=>null),optional('/api/commerce/admin-health?environment='+st.mode).catch(()=>null),st.mode==='live'?optional('/api/commerce/admin-provider-totals?environment=live').catch(()=>null):null]):[null,null,null,null];if(signal.aborted||v!==serial)return;catalog=c;account=a;checkoutStatus=st;profile=p;ledger=adminLedger;health=adminHealth;providerTotals=adminProviderTotals;analytics=adminAnalytics;testMode=st?.mode==='test'&&st?.admin===true;if(selected==='ledger'&&!ledger)selected='all';render()}catch{if(!signal.aborted&&v===serial)notice.textContent=t.error}
  }
  const timer=setInterval(()=>{if(!busy&&selected!=='ledger'&&account?.orders?.some(o=>o.status==='pending'&&o.paymentId||o.status==='succeeded'&&(o.refundRequestedAt||o.receiptStatus==='pending')))void refresh()},15000)
  signal.addEventListener('abort',()=>clearInterval(timer),{once:true})

@@ -421,3 +421,27 @@ test('checkout confirmation replay cannot buy another repeatable product after s
   assert.notEqual(fresh.id,first.id);assert.equal(fresh.status,'pending')
  }finally{await store.close();await db.end()}
 })
+
+test('refunding an earlier Plus period advances remaining paid and promo periods without losing duration',{skip:!enabled},async()=>{
+ assert.equal(process.env.PGDATABASE,'bricklab_commerce_check')
+ const db=postgres({host:process.env.PGHOST,port:Number(process.env.PGPORT||5432),database:process.env.PGDATABASE,username:'bricklab_admin',password:process.env.COMMERCE_ADMIN_PASSWORD,max:1})
+ const store=connectAuthStore(),uid='35000000-0000-4000-8000-000000000001',terms='a'.repeat(64)
+ try{
+  await db`insert into bricklab.users(id,email,display_name,password_hash,email_verified_at) values(${uid},'continuity@example.invalid','Continuity fixture','fixture',now())`
+  await db`insert into bricklab.admin_accounts(user_id) values(${uid})`
+  const buy=async(sku,amount)=>{const o=await store.createCommerceOrder(uid,sku,amount,terms,true,'live'),pid=crypto.randomUUID();assert.equal(await store.settleVerifiedCommerceIncome(o.id,pid,'live',amount,false,amount-100),true);return {...o,pid}}
+  const first=await buy('plus-1',24900),second=await buy('plus-3',64900)
+  await db`insert into bricklab.hub_promos(code,days,max_uses,expires_at,created_by) values('CONTINUITY',7,1,now()+interval '1 day',${uid})`
+  await db`insert into bricklab.hub_promo_grants(code,user_id,granted_at,expires_at) select 'CONTINUITY',${uid},expires_at,expires_at+interval '7 days' from bricklab.commerce_grants where order_id=${second.id}`
+  const [before]=await db`select granted_at from bricklab.commerce_grants where order_id=${second.id}`
+  assert.equal(await store.refundCommercePayment(first.pid,'live',24900),true)
+  const [after]=await db`select granted_at,expires_at,expires_at=granted_at+interval '3 months' as duration_ok from bricklab.commerce_grants where order_id=${second.id}`
+  const [promo]=await db`select granted_at,expires_at=granted_at+interval '7 days' as duration_ok from bricklab.hub_promo_grants where user_id=${uid}`
+  assert.ok(+after.granted_at<+before.granted_at);assert.equal(after.duration_ok,true);assert.equal(promo.duration_ok,true);assert.equal(+promo.granted_at,+after.expires_at)
+  assert.equal((await store.commerceAccount(uid)).plus,true)
+  assert.equal(await store.refundCommercePayment(first.pid,'live',24900),true)
+  assert.equal(+((await db`select granted_at from bricklab.commerce_grants where order_id=${second.id}`)[0].granted_at),+after.granted_at)
+  const totals=await store.commerceAdminProviderTotals(uid,'live');assert.ok(Number(totals.known_count)>=2)
+  const rows=await store.commerceAdminLedger(uid,'live');assert.equal(rows.find(o=>o.id===first.id).provider_income_kopecks,24800)
+ }finally{await store.close();await db.end()}
+})
