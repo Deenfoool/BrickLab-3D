@@ -61,7 +61,7 @@ function buildTile(b,t,onOpen,makeArt){
  if(onOpen)info.append(action(t.open,()=>onOpen(b)));else info.append(anchor(t.open,'#community/build/'+b.id))
  card.append(art,info);return card
 }
-export function setLiveWidgetRect(node,rect){placePortfolioBlock(node,{row:rect.y+1,column:rect.x+1,span:rect.w});node.setAttribute('data-layout-height',String(rect.h));node.style?.setProperty?.('--widget-height',String(rect.h))}
+export function setLiveWidgetRect(node,rect){placePortfolioBlock(node,{row:rect.y+1,column:rect.x+1,span:rect.w});node.setAttribute('data-layout-height',String(rect.h));node.style?.setProperty?.('--widget-height',String(rect.h));node.style?.setProperty?.('--widget-order',String(rect.y*12+rect.x))}
 export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeBuildCard,makeFeaturedArt,privateCalendar,live=false,editing=false,metricCards=[]}){
  const t=tr(lang),root=ui('div','portfolio-blocks portfolio-layout-grid'),rendered=[],valid=builds.filter(b=>safePublicId(b.id)).map(b=>profile?.visible===false?{...b,imageCount:0}:b),p=filterPortfolio(profile?.portfolio,valid.map(b=>b.id))
  live=live||isLiveLayout(p.blocks);const byId=new Map(valid.map(b=>[b.id,b])),layout=live?toLiveBlocks(p.blocks):p.blocks

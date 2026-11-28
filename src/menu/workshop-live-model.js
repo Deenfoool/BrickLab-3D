@@ -58,8 +58,8 @@ export function resolveLivePlacement(blocks,key,rect){
 }
 export function compactLiveBlocks(blocks){
  const source=validateLiveBlocks(blocks),placed=source.filter(b=>b.locked)
- for(const b of source.filter(b=>!b.locked).sort(order)){
-  const rect=firstFree({...b.rect,y:0},placed);if(!rect)return source
+ for(const b of source.filter(b=>!b.locked).sort((a,b)=>Number(b.visible)-Number(a.visible)||order(a,b))){
+  const y=b.visible?0:Math.max(0,...placed.filter(p=>p.visible).map(p=>p.rect.y+p.rect.h));const rect=firstFree({...b.rect,y},placed);if(!rect)return source
   placed.push({...b,rect})
  }
  return validateLiveBlocks(placed)
