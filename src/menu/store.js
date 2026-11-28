@@ -112,7 +112,7 @@ export function mountStore(root,{language='ru',signal}){
   const a=account,products=[...catalog.products.map(p=>({id:p.sku,kind:'theme',title:p.title,priceKopecks:p.amountKopecks})),...commerceProducts,...(catalog.instructions??[])]
   for(const [id,b] of tabs){b.classList.toggle('primary',selected===id);b.setAttribute('aria-pressed',String(selected===id))}
   const adminTab=tabs.get('ledger');if(adminTab)adminTab.hidden=!ledger;tabs.get('analytics').hidden=!checkoutStatus?.admin;
-  notice.textContent=testMode?tr('ТЕСТ · Оплата без списания. Тестовые права администратора действуют до переключения кассы в боевой режим.','TEST · No charge. Administrator test entitlements apply until switching to live.'):catalog.live?tr('Оплата через ЮKassa.','Payment via YooKassa.'):tr('Оплата пока закрыта. Темы — первый ассортимент; остальные товары готовятся к выпуску.','Checkout closed. Themes are the first assortment; other products are in preparation.')
+  notice.textContent=checkoutStatus?.scope==='pilot'?tr('КОНТРОЛЬНАЯ ПОКУПКА · Реальное списание, доступно только администратору.','LIVE PILOT · Real charge, administrator only.'):testMode?tr('ТЕСТ · Оплата без списания. Тестовые права администратора действуют до переключения кассы в боевой режим.','TEST · No charge. Administrator test entitlements apply until switching to live.'):catalog.live?tr('Оплата через ЮKassa.','Payment via YooKassa.'):tr('Оплата пока закрыта. Темы — первый ассортимент; остальные товары готовятся к выпуску.','Checkout closed. Themes are the first assortment; other products are in preparation.')
   grid.replaceChildren();summary.replaceChildren();summary.hidden=!a
   if(a){
    summary.classList.add('commerce-account-strip')

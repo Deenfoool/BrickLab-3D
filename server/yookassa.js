@@ -94,7 +94,7 @@ export function createYookassaAdapter({store,origin,config=yookassaConfig(),fetc
    return {status:refund.status,mode:environment}
   },
   async pollRefund(order){
-   if(!config.enabled||environment!=='test'||!uuid.test(order?.refundId??''))throw new ProjectError(400,'invalid_refund')
+   if(!config.enabled||!uuid.test(order?.refundId??'')||!paymentId.test(order?.paymentId??'')||!Number.isSafeInteger(order?.amountKopecks))throw new ProjectError(400,'invalid_refund')
    const refund=await call('refunds/'+order.refundId)
    if(refund?.id!==order.refundId||refund.payment_id!==order.paymentId||refund.amount?.currency!=='RUB'||amountKopecks(refund.amount.value)!==order.amountKopecks)throw new ProjectError(409,'refund_mismatch')
    if(refund.status==='succeeded')await this.reconcileRefund(refund.id)

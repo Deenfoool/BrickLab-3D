@@ -28,3 +28,17 @@ test('verified live callback cannot settle a sandbox payment',async()=>{
  actual={...data,test:true};await assert.rejects(adapter.notification({event:'payment.succeeded',object:{id:payment}}))
  assert.equal(calls.length,1)
 })
+
+test('live refund polling verifies provider state and settles lost webhook without creating another refund',async()=>{
+ const payment='40000000-0000-4000-8000-000000000001',order='30000000-0000-4000-8000-000000000001',refund='50000000-0000-4000-8000-000000000001';
+ const paid={id:payment,test:false,status:'succeeded',paid:true,amount:{value:'99.00',currency:'RUB'},refunded_amount:{value:'99.00',currency:'RUB'},metadata:{order_id:order}};
+ const returned={id:refund,payment_id:payment,status:'succeeded',amount:{currency:'RUB',value:'99.00'}};
+ let current=returned,source=paid;const calls=[];
+ const adapter=createYookassaAdapter({origin:'https://bricklab.test',config:{enabled:true,environment:'live',shopId:'1',secret:'live_example_secret'},store:{refundCommercePayment:async(...a)=>{calls.push(a);return true}},fetcher:async(url,opts)=>{assert.equal(opts.method,'GET');return Response.json(url.endsWith(refund)?current:source)}});
+ const row={id:order,paymentId:payment,refundId:refund,amountKopecks:9900};
+ current={...returned,status:'pending'};assert.equal(await adapter.pollRefund(row),'pending');assert.equal(calls.length,0);
+ current={...returned,payment_id:order};await assert.rejects(adapter.pollRefund(row));
+ current=returned;source={...paid,test:true};await assert.rejects(adapter.pollRefund(row));
+ source=paid;assert.equal(await adapter.pollRefund(row),'succeeded');assert.deepEqual(calls,[[payment,'live',9900]]);
+ await assert.rejects(adapter.pollTestRefund(row));
+});

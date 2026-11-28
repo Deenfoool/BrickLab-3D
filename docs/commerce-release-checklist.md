@@ -36,3 +36,6 @@ References:
 - https://www.consultant.ru/document/cons_doc_LAW_305/758e2cfdf136a621c8f66dcb3372b772c7b5e6e8/
 
 Live order preparation persists the exact accepted legal digest and marks the NPD receipt pending on settlement. This is not receipt issuance. The approval manifest must be created by the operator after reviewing the actual documents, and is stored outside the public web root.
+
+## Live rollout safety (supersedes the original test-only runtime description)
+The live adapter exists. A valid live configuration no longer opens checkout by itself. Use BRICKLAB_LIVE_CHECKOUT_SCOPE=closed (default), pilot (admin only), public (everyone). This controls creation/quotes, not incoming notifications, settlement, admin refunds or reconciliation. Do not set public until the contract, verified live provider credentials, approved offer, NPD issuance, email delivery and full refund/correction are verified. Keep provider credentials and the NPD worker active when closing sales if any real orders remain. Do not enable instruction release until a separate audit. Run isolated VPS tests before merge. The live refund polling regression is fixed; its test uses mocked provider responses, not real money.

@@ -9,7 +9,7 @@ test('same quote, checkout and refund routes switch modes only on the server',as
   let admin=true;const calls=[]
   const store={getSession:async()=>({id:uid,admin}),quoteCommerce:async(...args)=>{calls.push(args);return {sku:'plus-1',amountKopecks:24900,offerVersion:terms}},commerceTestAccount:async()=>({mode:'test'}),commerceAccount:async()=>({mode:'live'})}
   const adapter={enabled:true,checkout:async(...args)=>{calls.push(args);return {mode,status:'pending'}},requestRefund:async(...args)=>{calls.push(args);return {mode,status:'succeeded'}}}
-  const handler=createPaymentsHandler({store,origin,config:{enabled:false},legal:{version:terms},fullCatalog:true,commerceMode:mode,yookassa:mode==='test'?adapter:null,liveYookassa:mode==='live'?adapter:null})
+  const handler=createPaymentsHandler({store,origin,config:{enabled:false},legal:{version:terms},fullCatalog:true,commerceMode:mode,liveCheckoutScope:'public',yookassa:mode==='test'?adapter:null,liveYookassa:mode==='live'?adapter:null})
   const server=createServer((req,res)=>handler(req,res,new URL(req.url,origin).pathname))
   await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)))
   const base='http://127.0.0.1:'+server.address().port,headers={cookie:'__Host-bricklab_session='+'a'.repeat(64),origin,'Content-Type':'application/json'}
@@ -37,3 +37,30 @@ test('same provider adapter persists unified quotes for sandbox and live, verifi
   assert.deepEqual(calls,[[uid,'plus-1',24900,terms,true,environment]])
  }
 })
+
+test('live scope fails closed, pilot allows admin only, public allows users, callbacks and refunds stay available',async t=>{
+ let admin=false,scope='closed',checkout=0,refunds=0,callbacks=0;
+ const store={getSession:async()=>({id:uid,admin}),storeCatalog:async()=>[],quoteCommerce:async()=>({sku:'plus-1',amountKopecks:24900,offerVersion:terms}),quoteCommerceLive:async()=>({sku:'plus-1',amountKopecks:24900,offerVersion:terms})};
+ const adapter={enabled:true,checkout:async()=>{checkout++;return {mode:'live'}},requestRefund:async()=>{refunds++;return {status:'succeeded'}},notification:async()=>{callbacks++;return {ok:true}}};
+ const server=createServer((req,res)=>createPaymentsHandler({store,origin,config:{enabled:false},legal:{version:terms},fullCatalog:true,commerceMode:'live',liveCheckoutScope:scope,liveYookassa:adapter})(req,res,new URL(req.url,origin).pathname));
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
+ const base='http://127.0.0.1:'+server.address().port,headers={cookie:'__Host-bricklab_session='+'a'.repeat(64),origin,'Content-Type':'application/json'};
+ const get=path=>fetch(base+path,{headers}),post=(path,data)=>fetch(base+path,{method:'POST',headers,body:JSON.stringify(data)});
+ const payload={sku:'plus-1',amountKopecks:24900,offerVersion:terms,accepted:true};
+ for(const value of ['closed','pilot','public']){
+  scope=value;
+  for(const isAdmin of [false,true]){
+   admin=isAdmin;const allowed=scope==='public'||scope==='pilot'&&admin;
+   assert.equal((await (await get('/api/commerce/status')).json()).enabled,allowed);
+   assert.equal((await (await get('/api/commerce/live-status')).json()).enabled,scope==='public');
+   assert.equal((await (await get('/api/store/catalog')).json()).live,scope==='public');
+   assert.equal((await get('/api/commerce/quote?sku=plus-1')).status,allowed?200:503);
+   assert.equal((await get('/api/commerce/live-quote?sku=plus-1')).status,allowed?200:503);
+   assert.equal((await post('/api/commerce/checkout',{...payload,mode:'live'})).status,allowed?200:503);
+   assert.equal((await post('/api/commerce/live-checkout',payload)).status,allowed?200:503);
+  }
+  assert.equal((await post('/api/payments/yookassa/live-result',{event:'refund.succeeded'})).status,200);
+  assert.equal((await post('/api/commerce/refund',{orderId:uid,confirm:true,mode:'live'})).status,200);
+ }
+ assert.equal(checkout,6);assert.equal(refunds,3);assert.equal(callbacks,3);
+});

@@ -51,7 +51,9 @@ async function body(req,type){
  for await(const chunk of req.iterator({destroyOnReturn:false})){size+=chunk.length;if(size>8192){req.resume();throw new ProjectError(413,'body_too_large')}chunks.push(chunk)}
  return Buffer.concat(chunks).toString('utf8')
 }
-export function createPaymentsHandler({store,origin,config=paymentConfig(),logger=console,instructionRelease=false,instructionPolicy=null,yookassa=null,liveYookassa=null,legal=null,regions=null,fullCatalog=false,commerceMode='test'}){
+export function createPaymentsHandler({store,origin,config=paymentConfig(),logger=console,instructionRelease=false,instructionPolicy=null,yookassa=null,liveYookassa=null,legal=null,regions=null,fullCatalog=false,commerceMode='test',liveCheckoutScope='closed'}){
+ const publicLive=commerceMode==='live'&&liveCheckoutScope==='public'&&liveYookassa?.enabled===true&&!!legal?.version
+ const canCheckout=user=>commerceMode==='test'?user?.admin===true:commerceMode==='live'&&(liveCheckoutScope==='public'||liveCheckoutScope==='pilot'&&user?.admin===true)
  const releasedProducts=fullCatalog?commerceProducts.filter(p=>!p.betaOnly||!instructionRelease):[]
  const instructionCatalog=new Map(indexedInstructionProducts.map(p=>[p.id,p]))
  const auditedProducts=new Map((instructionPolicy?.products??[]).map(p=>[p.id,p]))
@@ -72,7 +74,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
   if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
   active++
   try{
-   if(path==='/api/store/catalog'&&req.method==='GET'){reply(res,200,{products:await store.storeCatalog(),instructions:[...instructionCatalog.values()],instructionRelease:effectiveInstructionRelease,mode:config.enabled?'test':'disabled',live:commerceMode==='live'&&liveYookassa?.enabled===true,liveSkus:commerceMode==='live'&&liveYookassa?.enabled===true?liveSkus:[]});return true}
+   if(path==='/api/store/catalog'&&req.method==='GET'){reply(res,200,{products:await store.storeCatalog(),instructions:[...instructionCatalog.values()],instructionRelease:effectiveInstructionRelease,mode:config.enabled?'test':'disabled',live:publicLive,liveSkus:publicLive?liveSkus:[]});return true}
    if(path==='/api/payments/robokassa/result'){
     if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
     if(!config.enabled)throw new ProjectError(503,'payments_disabled')
@@ -81,7 +83,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(!await store.confirmTestOrder(data.invoice,data.amount))throw new ProjectError(409,'payment_mismatch')
     reply(res,200,'OK'+data.invoice,true);return true
    }
-   if(path==='/api/commerce/live-status'&&req.method==='GET'){reply(res,200,{enabled:commerceMode==='live'&&liveYookassa?.enabled===true,offerVersion:legal?.version??null});return true}
+   if(path==='/api/commerce/live-status'&&req.method==='GET'){reply(res,200,{enabled:publicLive,offerVersion:legal?.version??null});return true}
    if(path==='/api/payments/yookassa/live-result'){
     if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
     if(!liveYookassa?.enabled)throw new ProjectError(503,'payments_disabled')
@@ -126,7 +128,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(!viewer){reply(res,200,{state:'signin',mode:commerceMode,product,trialSteps:instructionPolicy?.trialSteps?.(setId)??10});return true}
     const account=await store.commerceAccount(viewer.id),pending=account.orders?.some(o=>o.sku===sku&&o.status==='pending')===true
     const state=account.instructions.includes(setId)?'owned':account.plus?'plus':pending?'purchase':account.welcomeRemaining>0?'welcome':'purchase'
-    reply(res,200,{state,mode:commerceMode,product,remaining:account.welcomeRemaining??0,firstBuilder:account.firstBuilder===true,trialSteps:instructionPolicy?.trialSteps?.(setId)??10,pending,canBuy:!!legal?.version&&adapter?.enabled===true,plusProduct:!pending&&liveSkus.includes('plus-1')?productById('plus-1'):null});return true
+    reply(res,200,{state,mode:commerceMode,product,remaining:account.welcomeRemaining??0,firstBuilder:account.firstBuilder===true,trialSteps:instructionPolicy?.trialSteps?.(setId)??10,pending,canBuy:canCheckout(viewer)&&!!legal?.version&&adapter?.enabled===true,plusProduct:!pending&&liveSkus.includes('plus-1')?productById('plus-1'):null});return true
    }
    if(path==='/api/commerce/instruction-activate'){
     if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
@@ -177,11 +179,11 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     reply(res,200,await adapter.checkout(user.id,q.sku,{sandboxPack:{setIds:data.setIds,products},amountKopecks:q.amountKopecks,offerVersion:legal.version}));return true
    }
    if(path==='/api/commerce/status'&&req.method==='GET'){
-    const allowed=commerceMode==='live'||user.admin===true
-    reply(res,200,{mode:commerceMode,enabled:allowed&&adapter?.enabled===true&&!!legal?.version,skus:allowed?activeSkus:[],offerVersion:legal?.version??null,admin:user.admin===true});return true
+    const allowed=canCheckout(user)
+    reply(res,200,{mode:commerceMode,enabled:allowed&&adapter?.enabled===true&&!!legal?.version,skus:allowed?activeSkus:[],offerVersion:legal?.version??null,admin:user.admin===true,...(user.admin&&commerceMode==='live'?{scope:liveCheckoutScope}:{})});return true
    }
    if(path==='/api/commerce/quote'||path==='/api/commerce/checkout'){
-    if(commerceMode==='test'&&!user.admin)throw new ProjectError(403,'admin_required')
+    if(!canCheckout(user))throw new ProjectError(commerceMode==='test'?403:503,commerceMode==='test'?'admin_required':'payments_disabled')
     if(!adapter?.enabled||!legal?.version)throw new ProjectError(503,'payments_disabled')
     if(path.endsWith('quote')&&req.method==='GET'){
      const q=new URL(req.url,'http://localhost').searchParams,sku=q.get('sku')
@@ -212,7 +214,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     reply(res,200,commerceMode==='test'&&user.admin?await store.commerceTestAccount(user.id):await store.commerceAccount(user.id));return true
    }
    if(path==='/api/commerce/live-quote'||path==='/api/commerce/live-checkout'){
-    if(commerceMode!=='live')throw new ProjectError(503,'payments_disabled')
+    if(commerceMode!=='live'||!canCheckout(user))throw new ProjectError(503,'payments_disabled')
     if(!liveYookassa?.enabled||!legal?.version)throw new ProjectError(503,'payments_disabled')
     if(path.endsWith('quote')&&req.method==='GET'){
      const q=new URL(req.url,'http://localhost').searchParams,sku=q.get('sku');if(q.size!==1||!(/^[a-z0-9-]{1,60}$/.test(sku??'')))throw new ProjectError(400,'invalid_order')

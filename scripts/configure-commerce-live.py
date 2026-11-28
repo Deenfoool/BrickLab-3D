@@ -53,7 +53,7 @@ try:
             raise SystemExit("Проверка боевого магазина не пройдена.")
 except (HTTPError, URLError, TimeoutError):
     raise SystemExit("API ЮKassa не подтвердил доступ. Реквизиты не изменены.")
-if input("Включить реальные списания после пересоздания контейнера? Введите ВКЛЮЧИТЬ: ").strip() != "ВКЛЮЧИТЬ":
+if input("Подключить боевой магазин, оставив новые оплаты закрытыми? Введите ВКЛЮЧИТЬ: ").strip() != "ВКЛЮЧИТЬ":
     raise SystemExit("Переключение отменено.")
 backup = Path("/var/backups/bricklab-commerce")
 backup.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -63,6 +63,7 @@ shutil.copyfile(env,target)
 target.chmod(0o600)
 for key,value in {
     "BRICKLAB_COMMERCE_MODE":"live",
+    "BRICKLAB_LIVE_CHECKOUT_SCOPE":"closed",
     "BRICKLAB_YOOKASSA_LIVE_ENABLED":"true",
     "BRICKLAB_YOOKASSA_LIVE_SHOP_ID":shop,
     "BRICKLAB_YOOKASSA_LIVE_SECRET":secret,
@@ -81,5 +82,5 @@ try:
 finally:
     if os.path.exists(temp):
         os.unlink(temp)
-print("Боевой режим настроен. Для вступления изменений в силу пересоздайте контейнер bricklab.")
+print("Боевые реквизиты настроены. Новые оплаты закрыты. Пересоздайте контейнер только после подготовки чеков.")
 print("Тестовые заказы остаются отдельными. Секреты не выводились.")
