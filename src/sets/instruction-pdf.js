@@ -59,7 +59,7 @@ export function createInstructionPdfReader(load = loadPdfJs) {
     signal.throwIfAborted()
     const pdf = await documentFor(source)
     signal.throwIfAborted()
-    const pageNumber = Math.min(number, pdf.numPages)
+    const pageNumber = Math.max(1,Math.min(Math.trunc(Number(number))||1,pdf.numPages))
     const page = await pdf.getPage(pageNumber)
     signal.throwIfAborted()
     const size = page.getViewport({ scale: 1 })

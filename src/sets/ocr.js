@@ -5,8 +5,10 @@ function loadLibrary() {
   library ??= new Promise((resolve, reject) => {
     const script = document.createElement('script')
     script.src = new URL('tesseract.min.js', root).href
-    script.onload = () => globalThis.Tesseract ? resolve(globalThis.Tesseract) : reject(Error('OCR unavailable'))
-    script.onerror = () => { script.remove(); reject(Error('OCR unavailable')) }
+    const timer=setTimeout(()=>fail(),10000)
+    function fail(){clearTimeout(timer);script.onload=script.onerror=null;script.remove();reject(Error('OCR unavailable'))}
+    script.onload=()=>{clearTimeout(timer);if(globalThis.Tesseract)resolve(globalThis.Tesseract);else fail()}
+    script.onerror=fail
     document.head.append(script)
   }).catch(error => { library = undefined; throw error })
   return library

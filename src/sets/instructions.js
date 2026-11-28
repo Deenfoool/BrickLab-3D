@@ -1,3 +1,4 @@
+import {boundedTask} from './instruction-task.js?v=recognition-v9-polish'
 import {reconcileCallouts} from './instruction-study.js?v=recognition-v9'
 import {createPageStudy} from './instruction-study-ui.js?v=recognition-v9-polish'
 import {instructionEvent} from './instruction-events.js'
@@ -27,10 +28,9 @@ export function prepareInstructionPage(progress, signal, reader) {
     const source = local ?? entry?.url
     if (!reader || !signal || !source) return null
     const canvas = node('canvas')
-    const result = reader.render(source, progress.page, canvas, signal).then(
-      value => ({ value }), error => ({ error }),
-    )
-    return { canvas, result, source, page: progress.page, decoded: result.then(({ value }) => Boolean(value)) }
+    const controller=new AbortController(),request=AbortSignal.any([signal,controller.signal,AbortSignal.timeout(18000)])
+    const result=boundedTask(reader.render(source,progress.page,canvas,request),request,18000).then(value=>({value}),error=>({error}))
+    return {canvas,result,source,page:progress.page,decoded:result.then(({value})=>Boolean(value)),cancel:()=>controller.abort()}
   }
   const image = new Image()
   image.src = display.image
@@ -308,7 +308,8 @@ export function mountInstructions(
       if(local||!display?.image||signal.aborted)return false
       const fallback=prepared?.image&&prepared.source===source&&prepared.page===pageNumber?prepared:prepareInstructionPage(progress)
       if(!fallback?.image)return false
-      const ready=await fallback.decoded
+      let ready=false
+      try{ready=await boundedTask(fallback.decoded,signal,8000)}catch{}
       if(signal.aborted||!ready)return false
       const image=fallback.image
       image.alt=pageLabel(pageNumber)
@@ -325,10 +326,13 @@ export function mountInstructions(
     }
     if(!canonicalBook&&await showIndexedPreview())return
     const warm = prepared?.result && prepared.source === source && prepared.page === pageNumber
+    if(!warm)prepared?.cancel?.()
+    else signal.addEventListener('abort',prepared.cancel,{once:true})
+    const renderSignal=AbortSignal.any([signal,AbortSignal.timeout(18000)])
     const canvas = warm ? prepared.canvas : node('canvas')
     canvas.setAttribute('role', 'img')
     try {
-      const { value, error } = warm ? await prepared.result : { value: await pdf.render(source, pageNumber, canvas, signal) }
+      const {value,error}=warm?await boundedTask(prepared.result,renderSignal,18000):{value:await boundedTask(pdf.render(source,pageNumber,canvas,renderSignal),renderSignal,18000)}
       if (error) throw error
       const { pages, pageNumber: shown } = value
       if (signal.aborted) return
@@ -346,6 +350,8 @@ export function mountInstructions(
       showPage(canvas.width / canvas.height, regions, signal)
     } catch {
       if (signal.aborted) return
+      prepared?.cancel?.()
+      pdf.close()
       if(await showIndexedPreview())return
       if(signal.aborted)return
       if (local) {
