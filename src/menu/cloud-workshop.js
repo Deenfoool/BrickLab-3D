@@ -1,13 +1,13 @@
-import {renderWorkshopLive} from './workshop-live.js?v=workshop-live-2'
-import {selectedWorkshopAwards} from './workshop-award-widgets.js?v=workshop-live-2'
+import {renderWorkshopLive} from './workshop-live.js?v=showcase-motion-2'
+import {selectedWorkshopAwards} from './workshop-award-widgets.js?v=showcase-motion-2'
 import {metricItems} from './workshop-metrics-model.js'
-import {renderMetricEditor,workshopMetricValues} from './workshop-metrics.js?v=workshop-live-2'
+import {renderMetricEditor,workshopMetricValues} from './workshop-metrics.js?v=showcase-motion-2'
 import {renderVerificationLab,renderAchievementRewards,renderAchievementRankings} from './achievement-platform.js'
 import {renderAchievements} from './achievement-hall.js'
 import {achievementName} from './achievement-catalog.js'
 import {renderInstructionCollection} from './instruction-collection.js'
 import {commerceBadge,productArtwork,factsPanel,loyaltyBadge} from './commerce-visuals.js?v=merch-2'
-import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=workshop-live-2'
+import {renderUnifiedHero,renderUnifiedEditor,renderPortfolio,activityCalendar} from './unified-profile.js?v=showcase-motion-2'
 import {applySignature,themeBadge,themePlate,signatureFor,mountThemeCover} from './profile-signature.js?v=signature-art-1'
 import {themeFor} from './store-themes.js?v=themes-2'
 import {commerceProducts} from './commerce-catalog.js'
@@ -46,6 +46,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,sett
  const t={...workshopCopy[lang],...extra[lang],admin:lang==='ru'?'Администрирование':'Administration',revokeOthers:lang==='ru'?'Завершить остальные сессии':'End other sessions'},summary=workshopSummary(local,remote)
  const profile=profileData?.profile,progress=profileData?.progress
  const layout=el('div','workshop-layout cosmetic-'+(profile?.background??'default')),nav=el('nav','workshop-nav'),content=el('div','workshop-content')
+ content.setAttribute('data-motion-section',section==='settings'?'settings:'+settingsTab:section)
  applySignature(layout,profile?.background)
  const ru=lang==='ru',sidebar=el('aside','workshop-sidebar'),sideHead=el('div','workshop-sidebar-heading'),sideFoot=el('div','workshop-sidebar-footer');sideHead.append(el('span','workshop-sidebar-kicker','BRICKLAB CLOUD'),el('strong',null,ru?'Личный кабинет':'Workspace'));nav.setAttribute('aria-label',t.workshop)
  for(const [key,symbol] of [...sections,...(user.admin===true?[['admin','icon-shield']]:[])]){
