@@ -55,11 +55,11 @@ export function renderWorkshopLive({lang='ru',session,portfolio,progress,busy=fa
   let rect=drag.edge?resizeLiveRect(drag.rect,drag.edge,dx,vertical):moveLiveRect(drag.rect,dx,vertical)
   if(drag.mobile){const steps=Math.round((clientY-drag.startY+scrollDelta)/drag.stepY)
    if(drag.edge){rect=resizeLiveRect(drag.rect,drag.edge.replace(/[ew]/g,''),0,steps)}
-   else{const nearest=drag.mobileCenters.reduce((best,c)=>{const d=Math.abs(clientY-(bounds.top+c.center));return !best||d<best.d?{...c,d}:best},null);const other=drag.source.find(b=>b.key===nearest?.key);rect=other?{...drag.rect,x:Math.min(other.rect.x,12-drag.rect.w),y:other.rect.y}:drag.rect}
+   else if(Math.hypot(clientX-drag.startX,clientY-drag.startY+scrollDelta)>6){const nearest=drag.mobileCenters.reduce((best,c)=>{const d=Math.abs(clientY-(bounds.top+c.center));return !best||d<best.d?{...c,d}:best},null);const other=drag.source.find(b=>b.key===nearest?.key);rect=other?{...drag.rect,x:Math.min(other.rect.x,12-drag.rect.w),y:other.rect.y}:drag.rect}
   }
   const signature=JSON.stringify(rect);if(signature!==drag.signature){drag.signature=signature;drag.next=resolveLivePlacement(drag.source,drag.key,rect);applyRects(drag.next??drag.source,!drag.mobile)}const next=drag.next
   if(ghost){ghost.style.left=(clientX-drag.offsetX)+'px';ghost.style.top=(clientY-drag.offsetY)+'px';ghost.classList.toggle('is-invalid',!next)}
-  if(target){const selected=Array.from(grid.children).find(n=>n.getAttribute('data-widget')===drag.key),box=selected?.getBoundingClientRect();if(box){target.style.left=box.left+'px';target.style.top=box.top+'px';target.style.width=box.width+'px';target.style.height=box.height+'px';target.classList.toggle('is-invalid',!next)}}
+  if(target){const selected=Array.from(grid.children).find(n=>n.getAttribute('data-widget')===drag.key),box=selected?.getBoundingClientRect();if(box){target.style.left=box.left+'px';target.style.top=box.top+'px';target.style.width=box.width+'px';target.style.height=box.height+'px';target.classList.toggle('is-invalid',!next);if(drag.edge&&next&&ghost){ghost.style.width=box.width+'px';ghost.style.height=box.height+'px';ghost.style.left=box.left+'px';ghost.style.top=box.top+'px'}}}
   if(dy)frame=requestAnimationFrame(tick)
  }
  function begin(e,node,item,edge='',capture=node,force=false){
@@ -67,7 +67,7 @@ export function renderWorkshopLive({lang='ru',session,portfolio,progress,busy=fa
   e.preventDefault();e.stopPropagation();const bounds=grid.getBoundingClientRect(),box=node.getBoundingClientRect(),css=getComputedStyle(grid),gap=Number.parseFloat(css.columnGap)||0,rowGap=Number.parseFloat(css.rowGap)||0,row=Number.parseFloat(css.gridAutoRows)||86,mobile=grid.clientWidth<=720
   drag={pointer:e.pointerId,node,key:item.key,rect:{...item.rect},edge,source:state().portfolio.blocks,next:null,gridTop:bounds.top,startX:e.clientX,startY:e.clientY,offsetX:e.clientX-box.left,offsetY:e.clientY-box.top,stepX:(bounds.width+gap)/12,stepY:row+rowGap,capture,mobile,mobileCenters:Array.from(grid.children).filter(n=>n!==node).map(n=>{const b=n.getBoundingClientRect();return {key:n.getAttribute('data-widget'),center:b.top+b.height/2-bounds.top}})}
   node.classList.add('is-dragging');capture.setPointerCapture?.(e.pointerId)
-  ghost=node.cloneNode(true);ghost.classList.add('workshop-live-ghost');ghost.inert=true;ghost.setAttribute('aria-hidden','true');ghost.style.width=box.width+'px';ghost.style.height=box.height+'px';ghost.style.left=box.left+'px';ghost.style.top=box.top+'px';ghost.querySelectorAll('button,dialog,.workshop-live-resizer').forEach(n=>n.remove());document.body.append(ghost)
+  ghost=node.cloneNode(true);ghost.classList.add('workshop-live-ghost');ghost.inert=true;ghost.setAttribute('aria-hidden','true');ghost.style.width=box.width+'px';ghost.style.height=box.height+'px';ghost.style.left=box.left+'px';ghost.style.top=box.top+'px';ghost.querySelectorAll('.workshop-live-widget-actions,dialog,.workshop-live-resizer').forEach(n=>n.remove());ghost.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));document.body.append(ghost)
   target=el('div','workshop-live-drop-target');document.body.append(target);coords={clientX:e.clientX,clientY:e.clientY};frame=requestAnimationFrame(tick)
  }
  function keyboardMove(e,item,edge=''){
