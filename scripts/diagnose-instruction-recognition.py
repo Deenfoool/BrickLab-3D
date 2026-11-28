@@ -8,8 +8,17 @@ import json
 import re
 from collections import Counter
 from pathlib import Path
-import fitz
-from build_instruction_part_maps import read_book, analyze, save_map, QUANTITY, ELEMENT
+from importlib.util import spec_from_file_location, module_from_spec
+
+# The existing CLI has a hyphenated filename, not an importable module name.
+builder_path = Path(__file__).resolve().with_name("build-instruction-part-maps.py")
+spec = spec_from_file_location("build_instruction_part_maps", builder_path)
+if spec is None or spec.loader is None:
+    raise ImportError(f"Cannot load instruction map builder: {builder_path}")
+builder = module_from_spec(spec)
+spec.loader.exec_module(builder)
+read_book, analyze, save_map = builder.read_book, builder.analyze, builder.save_map
+QUANTITY, ELEMENT = builder.QUANTITY, builder.ELEMENT
 
 def load_local_elements(directory):
     elements = {}
