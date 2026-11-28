@@ -4,13 +4,15 @@ import { sessionDiagnostics } from '../feedback/diagnostics.js?v=bug-report-v1'
 import { mountBugReport } from '../feedback/dialog.js?v=events-1'
 import { safeImage } from '../sets/data.js?v=catalog-engine-1'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
-import { locales } from './locale.js?v=store-1'
-import {mountStore} from './store.js?v=welcome-1'
-import { mountHomeHub, mountHubSearch } from './home-hub.js?v=showcase-motion-2'
+import { locales } from './locale.js?v=compact-nav-1'
+import {mountStore} from './store.js?v=brand-plus-1'
+import { mountHomeHub, mountHubSearch, openReleaseHistory } from './home-hub.js?v=compact-nav-1'
+import { mountShellNavigation } from './shell-navigation.js?v=compact-nav-1'
+import { mountBrandPlus } from './brand-plus.js?v=brand-plus-1'
 import { createAuthClient } from './auth-client.js?v=live-polish-1'
 import { createCommunityClient } from './community-client.js?v=community-options-1'
 import { createProjectsClient,cloudLink,mergeProjectGallery } from './projects-client.js?v=profile-gallery-1'
-import { createCloudAccount } from './account.js?v=showcase-motion-2'
+import { createCloudAccount } from './account.js?v=brand-plus-1'
 import { createNotificationPopover } from './notifications.js?v=showcase-motion-2'
 import { readPreference, writePreference, resetPreferences } from './preferences.js?v=full-settings'
 import { readTutorial, dismissTutorialOffer, startTutorial } from './tutorial-state.js?v=onboarding-v1'
@@ -61,13 +63,14 @@ let projectPreviewObserver
 let librarySection
 let libraryGroup = ''
 let language = 'ru'
+const brandPlus=mountBrandPlus(document)
 const notificationPopover = createNotificationPopover({root:byId('notification-control'),trigger:byId('notification-trigger'),count:byId('notification-count'),panel:byId('notification-popover'),
   onRefresh:()=>cloudAccount.refreshNotifications(),
   onRead:()=>cloudAccount.readNotifications(),
   onOpen:()=>{cloudAccount.showNotifications();if(location.hash!=='#account')location.hash='#account'}
 })
 const cloudAccount = createCloudAccount({ root: byId('account-panel'), link: byId('account-link'),
-  getProjects: () => projects, createBuild:()=>addProject(newProject(strings().untitled)), openLocal:openProject, previewsEnabled:()=>readPreference('previews')!=='off', download: downloadProject, openCopy: (data, cloud) => addProject(data, null, cloud), linkLocal: linkCloudProject, onNotifications: state => notificationPopover.update(state), onProjectsPanel:mountAccountProjects, onProjectsChanged:()=>{const signedIn=cloudAccount.projectState().signedIn;if(renderedPage&&workshopRoute(location.hash.slice(1))&&currentPage()!==renderedPage)queueMicrotask(()=>{if(currentPage()!==renderedPage)render()});document.querySelector('[data-page="projects"]').href=signedIn?'#account/projects':'#projects';if(currentPage()==='projects'){if(signedIn)location.replace('#account/projects');else renderList()}else if(dashboard.parentNode!==dashboardHome&&!dashboard.hidden)renderList();if(currentPage()==='home')renderCloudContinue()} })
+  getProjects: () => projects, createBuild:()=>addProject(newProject(strings().untitled)), openLocal:openProject, previewsEnabled:()=>readPreference('previews')!=='off', download: downloadProject, openCopy: (data, cloud) => addProject(data, null, cloud), linkLocal: linkCloudProject, onNotifications: state => {notificationPopover.update(state);brandPlus.update(state)}, onProjectsPanel:mountAccountProjects, onProjectsChanged:()=>{const signedIn=cloudAccount.projectState().signedIn;if(renderedPage&&workshopRoute(location.hash.slice(1))&&currentPage()!==renderedPage)queueMicrotask(()=>{if(currentPage()!==renderedPage)render()});document.querySelector('[data-page="projects"]').href=signedIn?'#account/projects':'#projects';if(currentPage()==='projects'){if(signedIn)location.replace('#account/projects');else renderList()}else if(dashboard.parentNode!==dashboardHome&&!dashboard.hidden)renderList();if(currentPage()==='home')renderCloudContinue()} })
 
 try {
   if (localStorage.getItem('bricklab.language') === 'en') language = 'en'
@@ -550,7 +553,7 @@ function render(initial = false) {
   byId('sets-panel').hidden = page !== 'sets'
   byId('account-panel').hidden = page !== 'account'
   const storeRoot=byId('store-panel');storeRoot.hidden=page!=='store'
-  if(page==='store'){if(storeSession?.language!==language){storeSession?.controller.abort();const controller=new AbortController();storeSession={controller,language};mountStore(storeRoot,{language,signal:controller.signal})}}else{storeSession?.controller.abort();storeSession=null;storeRoot.replaceChildren()}
+  if(page==='store'){if(storeSession?.language!==language){storeSession?.controller.abort();const controller=new AbortController();storeSession={controller,language};mountStore(storeRoot,{language,signal:controller.signal,onEntitlementsChanged:()=>{void cloudAccount.refreshNotifications()}})}}else{storeSession?.controller.abort();storeSession=null;storeRoot.replaceChildren()}
   cloudAccount.update(language, page === 'account')
   byId('community-panel').hidden=page!=='community'
   if(page==='community')openCommunity()
@@ -794,6 +797,7 @@ byId('project-cloud-refresh').addEventListener('click',()=>cloudAccount.refreshP
 libraryRetry.addEventListener('click', () => location.reload())
 byId('language').addEventListener('change', event => setLanguage(event.target.value))
 byId('settings-language').addEventListener('change', event => setLanguage(event.target.value))
+mountShellNavigation({getLanguage:()=>language,openHistory:openReleaseHistory})
 const bugReport = mountBugReport({ getLanguage: () => language, diagnostics: sessionDiagnostics, version: new URL(import.meta.url).searchParams.get('v') ?? 'dev' })
 byId('bug-report-button').addEventListener('click', () => bugReport.open())
 byId('settings-button').addEventListener('click', () => {

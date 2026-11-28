@@ -3,10 +3,12 @@ import {applySignature,themeBadge} from './profile-signature.js?v=signature-1'
 import {readPreference} from './preferences.js?v=full-settings'
 import {sanitizePreview,isLargePreview} from './public-preview.js?v=large-viewer-1'
 const words={
-ru:{popular:'Популярное в сообществе',recent:'Новые публикации',following:'От авторов, на которых ты подписан',feature:'Конструкция недели',all:'Все публикации',empty:'Пока нет опубликованных конструкций.',noFollowing:'Новых работ от твоих подписок пока нет.',unavailable:'Сообщество временно недоступно.',loading:'Загрузка…',parts:'дет.',likes:'лайков',featureHint:'Подборка из популярных работ за последние семь дней.',newTitle:'Что нового',history:'История обновлений',support:'Поддержать BrickLab',supportText:'Независимый проект, который развивается благодаря своему сообществу.',donate:'Поддержать разработку',changelog:'История обновлений BrickLab',close:'Закрыть',search:'Найти в BrickLab',hint:'Детали, наборы, сборки и авторы',local:'Мои сборки',cloud:'Облачные сборки',library:'Детали',sets:'Наборы',models:'Сообщество',authors:'Авторы',none:'Ничего не найдено',more:'Все результаты',searching:'Поиск…',error:'Некоторые источники недоступны.',keys:'↑ ↓ — выбор · Enter — открыть · Esc — закрыть',communityUpdate:'Новый просмотрщик, публикации, обложки и управление разрешениями.',previousUpdate:'Единая галерея локальных и облачных сборок, обновлённый профиль и верхняя навигация.'},
-en:{popular:'Popular in the community',recent:'New publications',following:'From builders you follow',feature:'Build of the week',all:'All publications',empty:'No published builds yet.',noFollowing:'No recent builds from your follows.',unavailable:'Community temporarily unavailable.',loading:'Loading…',parts:'parts',likes:'likes',featureHint:'A selection from popular builds published within the last seven days.',newTitle:'What’s new',history:'Release history',support:'Support BrickLab',supportText:'An independent project powered by its community.',donate:'Support development',changelog:'BrickLab release history',close:'Close',search:'Search BrickLab',hint:'Parts, sets, builds and builders',local:'My builds',cloud:'Cloud builds',library:'Parts',sets:'Sets',models:'Community',authors:'Builders',none:'No results',more:'All results',searching:'Searching…',error:'Some sources are unavailable.',keys:'↑ ↓ — select · Enter — open · Esc — close',communityUpdate:'New viewer, publishing, covers and access permissions.',previousUpdate:'Unified local and cloud gallery, improved profile and top navigation.'}}
+ru:{popular:'Популярное в сообществе',recent:'Новые публикации',following:'От авторов, на которых ты подписан',feature:'Конструкция недели',all:'Все публикации',empty:'Пока нет опубликованных конструкций.',noFollowing:'Новых работ от твоих подписок пока нет.',unavailable:'Сообщество временно недоступно.',loading:'Загрузка…',parts:'дет.',likes:'лайков',featureHint:'Подборка из популярных работ за последние семь дней.',newTitle:'Что нового',history:'История обновлений',changelog:'История обновлений BrickLab',close:'Закрыть',search:'Найти в BrickLab',hint:'Детали, наборы, сборки и авторы',local:'Мои сборки',cloud:'Облачные сборки',library:'Детали',sets:'Наборы',models:'Сообщество',authors:'Авторы',none:'Ничего не найдено',more:'Все результаты',searching:'Поиск…',error:'Некоторые источники недоступны.',keys:'↑ ↓ — выбор · Enter — открыть · Esc — закрыть',communityUpdate:'Новый просмотрщик, публикации, обложки и управление разрешениями.',previousUpdate:'Единая галерея локальных и облачных сборок, обновлённый профиль и верхняя навигация.'},
+en:{popular:'Popular in the community',recent:'New publications',following:'From builders you follow',feature:'Build of the week',all:'All publications',empty:'No published builds yet.',noFollowing:'No recent builds from your follows.',unavailable:'Community temporarily unavailable.',loading:'Loading…',parts:'parts',likes:'likes',featureHint:'A selection from popular builds published within the last seven days.',newTitle:'What’s new',history:'Release history',changelog:'BrickLab release history',close:'Close',search:'Search BrickLab',hint:'Parts, sets, builds and builders',local:'My builds',cloud:'Cloud builds',library:'Parts',sets:'Sets',models:'Community',authors:'Builders',none:'No results',more:'All results',searching:'Searching…',error:'Some sources are unavailable.',keys:'↑ ↓ — select · Enter — open · Esc — close',communityUpdate:'New viewer, publishing, covers and access permissions.',previousUpdate:'Unified local and cloud gallery, improved profile and top navigation.'}}
 // Release dates refer to source commits or merged pull requests, not production deployments.
 const releaseHistory=[
+ ["2026-11-28","commit/f0f52c8b660a9ee5cb537a062fd6a9240825ac6e","Фирменная шапка и статус Plus","Редкий золотистый блик на кнопке проекта и компактный статус Plus с остатком дней и датой окончания подписки по данным серверного профиля.","Brand header and Plus status","An occasional gold sweep on the project button and a compact Plus status with remaining days and expiry from the server profile."],
+ ["2026-11-28","commit/f534f839eade287f2462c318b1c95bf71ac3b477","Компактная навигация BrickLab","Документы собраны в одном меню, ссылки на GitHub, портфолио и историю доступны из шапки. Прямые ссылки на донат убраны, поддержка остаётся в магазине.","Compact BrickLab navigation","Legal documents are grouped in one menu; GitHub, portfolio and release history are available from the header. Direct donation links are removed; support stays in the store."],
  ["2026-11-28","commit/8941c07811c65fb0ef7bad0340c5e6015bb06a73","Витрины мастерской и BrickLab Motion","Карточки сборок заполняют виджеты, а оригинальные медали показывают названия и сведения в зависимости от доступного пространства. Добавлены плавные появления, подсветки, реакции и переходы в интерфейсе сайта без декоративной нагрузки на 3D-редактор.","Workshop showcases and BrickLab Motion","Build cards fill their widgets, and original achievement medals adapt their names and details to available space. Viewport reveals, highlights, reaction feedback and interface transitions improve the site without adding decorative motion to the CAD editor."],
  ["2026-11-28","commit/2f62cbb517d16a50ee14f9d8ee848b10b0b0a510","Контроль выпуска интерактивных инструкций","Проверка всех томов и страниц перед продажей, защита от обхода идентификаторов и независимый доступ к уже приобретённым подсказкам. Непроверенные наборы остаются бесплатными.","Interactive instruction release controls","Reviewed volume and page evidence, identifier access checks and purchased hint access independent of payment readiness. Unreviewed sets stay free."],
  ["2026-11-28","commit/5288e4083ac387ab49ca9c3759dea12231c5a156","Финансовый журнал и экспорт","Подготовлен журнал административных операций, отдельный CSV оплат и возвратов, усилены проверки налоговой корректировки. Боевые продажи не включены.","Financial audit and export","Administrator operation journal, separate payment and refund CSV, and stricter fiscal correction checks. Live sales remain disabled."],
@@ -98,11 +100,8 @@ function createHubPreviewQueue(signal){
  signal.addEventListener('abort',()=>{observer?.disconnect();jobs.clear();for(const url of urls)URL.revokeObjectURL(url);urls.clear()},{once:true})
  return {observe(art,b){if(observer&&readPreference('previews')!=='off'&&b.partCount>0&&b.partCount<=600){jobs.set(art,b);observer.observe(art)}}}
 }
-export async function mountHomeHub(root,{language,signal}){
- const t=words[language]??words.ru,previewQueue=createHubPreviewQueue(signal)
- const popular=shelf(t.popular,t),recent=shelf(t.recent,t),following=shelf(t.following,t),feature=shelf(t.feature,t)
- feature.section.hidden=true;following.section.hidden=true;popular.grid.append(node('p','hub-muted',t.loading))
- const end=node('div','hub-bottom'),news=node('section','hub-info-card'),support=node('section','hub-info-card')
+export function openReleaseHistory(language){
+ const t=words[language]??words.ru
  const dialog=node('dialog','hub-history'),title=node('h2',null,t.changelog);dialog.setAttribute('aria-label',t.changelog)
  const locale=language==='en'?'en':'ru',dateFormat=new Intl.DateTimeFormat(locale,{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'})
  const entryTitle=e=>e[locale==='en'?4:2],entryText=e=>e[locale==='en'?5:3]
@@ -115,12 +114,21 @@ export async function mountHomeHub(root,{language,signal}){
   article.append(date,node('h3',null,entryTitle(entry)),node('p',null,entryText(entry)),source);dialog.append(article)
  }
  dialog.append(button(t.close,closeHistory))
- const history=button(t.history+' ›',()=>dialog.showModal(),'hub-link')
+ dialog.addEventListener('close',()=>dialog.remove(),{once:true})
+ document.body.append(dialog);dialog.showModal()
+ return dialog
+}
+export async function mountHomeHub(root,{language,signal}){
+ const t=words[language]??words.ru,previewQueue=createHubPreviewQueue(signal)
+ const popular=shelf(t.popular,t),recent=shelf(t.recent,t),following=shelf(t.following,t),feature=shelf(t.feature,t)
+ feature.section.hidden=true;following.section.hidden=true;popular.grid.append(node('p','hub-muted',t.loading))
+ const end=node('div','hub-bottom'),news=node('section','hub-info-card')
+ const entryTitle=e=>e[language==='en'?4:2],entryText=e=>e[language==='en'?5:3]
+ const history=button(t.history+' ›',()=>openReleaseHistory(language),'hub-link')
  news.append(node('h2',null,t.newTitle),node('strong',null,entryTitle(releaseHistory[0])),node('p','hub-muted',entryText(releaseHistory[0])),history)
- const donate=link(t.donate+' ›','https://tips.tips/000482810');donate.target='_blank';donate.rel='noopener'
- support.append(node('h2',null,t.support),node('p','hub-muted',t.supportText),donate);end.append(news,support)
- root.replaceChildren(popular.section,feature.section,recent.section,following.section,end,dialog)
- signal.addEventListener('abort',()=>{if(dialog.open)dialog.close();root.replaceChildren()},{once:true})
+ end.append(news)
+ root.replaceChildren(popular.section,feature.section,recent.section,following.section,end)
+ signal.addEventListener('abort',()=>{root.replaceChildren()},{once:true})
  const fill=(grid,items,empty)=>{grid.replaceChildren(...items.map(b=>buildCard(b,t,false,previewQueue)));if(!items.length)grid.append(node('p','hub-muted',empty))}
  const result=await Promise.allSettled([get('/api/community/builds?sort=popular',signal),get('/api/community/builds?sort=recent',signal),get('/api/community/builds?feed=following&sort=recent',signal),get('/api/community/builds?sort=popular&week=1',signal)])
  if(signal.aborted)return
