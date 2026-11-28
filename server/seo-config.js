@@ -18,7 +18,7 @@ export function decorateSeo(html,path,config={},banner=false){
  }
  // No analytics on private SPA routes, checkout, or user-generated build pages.
  if(config.counter&&/^\d{1,12}$/.test(config.counter)&&!home&&/^\/(?:editor|instructions|parts(?:\/[a-zA-Z0-9_-]+)?|sets(?:\/[\d-]+)?|mechanics|updates|learn(?:\/[a-z-]+)?|en)$/.test(path)){
-  meta+='<meta name="bricklab-metrika" content="'+config.counter+'"><script defer src="/assets/seo-analytics.js"></script>'
+  meta+='<meta name="bricklab-metrika" content="'+config.counter+'"><script defer src="/assets/seo-analytics.js?v=consent-2"></script>'
  }
  return meta?html.replace('</head>',meta+'</head>'):html
 }
