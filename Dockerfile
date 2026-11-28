@@ -1,6 +1,6 @@
 FROM node:22-bookworm-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends imagemagick ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends imagemagick ca-certificates fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=8080
@@ -14,6 +14,8 @@ COPY --chown=node:node assets ./assets
 COPY --chown=node:node catalog ./catalog
 COPY --chown=node:node examples ./examples
 COPY --chown=node:node vendor ./vendor
+COPY scripts/render-seo-banners.sh /tmp/render-seo-banners.sh
+RUN sh /tmp/render-seo-banners.sh /app && rm /tmp/render-seo-banners.sh
 
 USER node
 EXPOSE 8080
