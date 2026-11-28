@@ -295,7 +295,7 @@ export function mountInstructions(
       try{
         const query=new URLSearchParams({set:progress.set.number,book:entry.url,page:String(pageNumber)})
         const response=await fetch('/api/commerce/instruction-access?'+query,{signal:AbortSignal.any([signal,AbortSignal.timeout(3000)]),credentials:'same-origin',cache:'no-store'})
-        if(response.ok){const policy=await response.json();interactive=policy.interactive===true;serverOnly=policy.supported===true;locked=policy.mode==='release'&&policy.supported===true&&!interactive}
+        if(response.ok){const policy=await response.json();interactive=policy.interactive===true;serverOnly=policy.supported===true;locked=policy.mode==='release'&&!interactive}
       }catch{/* The original PDF is still available. Retry restores overlays when the API recovers. */}
     }
     if(signal.aborted)return

@@ -32,9 +32,9 @@ if (process.env.PGPASSWORD) {
   try {
     await store.ready()
     const origin=process.env.PUBLIC_ORIGIN||'http://localhost:8080',registrationEnabled=process.env.BRICKLAB_REGISTRATION_ENABLED==='true'
-    const instructionPolicy=await loadInstructionPolicy(process.env.BRICKLAB_PRIVATE_INSTRUCTION_AUDIT||'')
     const instructionRelease=process.env.BRICKLAB_INSTRUCTIONS_RELEASE==='true'
-    if(instructionRelease&&!instructionPolicy.count)throw Error('Paid instructions require a nonempty private audit')
+    const instructionPolicy=await loadInstructionPolicy(instructionRelease?process.env.BRICKLAB_PRIVATE_INSTRUCTION_AUDIT||'':'',{requireEvidence:instructionRelease})
+    if(instructionRelease&&!instructionPolicy.products.length)throw Error('Paid instructions require a reviewed private catalog')
     try{legal=await loadApprovedLegal({directory:fileURLToPath(new URL('../assets/legal/',import.meta.url)),approvalFile:process.env.BRICKLAB_COMMERCE_APPROVAL_FILE||''})}catch{legal=null;console.error('Legal approval unavailable; new live checkout remains closed')}
     const commerceMode=process.env.BRICKLAB_COMMERCE_MODE||'test'
     const liveCheckoutScope=process.env.BRICKLAB_LIVE_CHECKOUT_SCOPE||'closed'

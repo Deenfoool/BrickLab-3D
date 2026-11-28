@@ -60,10 +60,11 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
  const instructionCatalog=new Map(indexedInstructionProducts.map(p=>[p.id,p]))
  const auditedProducts=new Map((instructionPolicy?.products??[]).map(p=>[p.id,p]))
  for(const [id,p] of auditedProducts)instructionCatalog.set(id,p)
- const effectiveInstructionRelease=commerceMode==='live'&&instructionRelease&&fullCatalog&&liveYookassa?.enabled===true&&!!legal?.version
- const liveInstructionProducts=effectiveInstructionRelease?auditedProducts:new Map()
+ const effectiveInstructionRelease=instructionRelease&&auditedProducts.size>0
+ const instructionSalesReady=effectiveInstructionRelease&&commerceMode==='live'&&fullCatalog&&(!instructionPolicy?.offerVersion||instructionPolicy.offerVersion===legal?.version)
+ const liveInstructionProducts=instructionSalesReady?auditedProducts:new Map()
  const instructionFor=sku=> (commerceMode==='live'?liveInstructionProducts:instructionCatalog).get(sku)
- const instructionLocked=setId=>effectiveInstructionRelease&&liveInstructionProducts.has('instruction-'+setId)
+ const instructionLocked=setId=>effectiveInstructionRelease&&auditedProducts.has('instruction-'+setId)
  const liveSkus=[...themeIds,...releasedProducts.map(p=>p.id),...liveInstructionProducts.keys()]
  const testSkus=[...themeIds,...commerceProducts.filter(p=>!p.betaOnly||!instructionRelease).map(p=>p.id),...instructionCatalog.keys()]
  const adapter=commerceMode==='live'?liveYookassa:yookassa
@@ -119,15 +120,19 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
     const q=new URL(req.url,'http://localhost').searchParams,setId=q.get('set'),pdfId=q.get('pdf'),page=Number(q.get('page'))
     if(!/^\d{3,7}-\d{1,2}$/.test(setId??'')||!/^\d{1,12}$/.test(pdfId??'')||!Number.isInteger(page)||page<1||page>5000||q.size!==3)throw new ProjectError(400,'invalid_instruction')
+    const paidSet=effectiveInstructionRelease?instructionPolicy?.paidSetForBook?.(pdfId):null
+    if(paidSet&&paidSet!==setId)throw new ProjectError(403,'interactive_locked')
     const viewer=instructionRelease?await session(req):null,account=viewer?await store.commerceAccount(viewer.id):null
     const policy=(instructionPolicy?.access??instructionAccess)({setId,book:'https://www.lego.com/biassets/bi/'+pdfId+'.pdf',page,account,release:instructionLocked(setId)})
     if(!policy.interactive)throw new ProjectError(403,'interactive_locked')
-    const audited=instructionPolicy?.regions(setId,pdfId,page);reply(res,200,{regions:policy.supported?(audited??[]):regions?await regions(setId,pdfId,page):[]});return true
+    const audited=instructionPolicy?.regions(setId,pdfId,page);reply(res,200,{regions:policy.supported?(audited??[]):instructionLocked(setId)?[]:regions?await regions(setId,pdfId,page):[]});return true
    }
    if(path==='/api/commerce/instruction-access'){
     if(req.method!=='GET')throw new ProjectError(405,'method_not_allowed')
     const q=new URL(req.url,'http://localhost').searchParams,setId=q.get('set'),book=canonicalInstructionUrl(q.get('book')),page=Number(q.get('page'))
     if(!/^\d{3,7}-\d{1,2}$/.test(setId??'')||!book||!Number.isInteger(page)||page<1||page>5000||q.size!==3)throw new ProjectError(400,'invalid_instruction')
+    const id=new URL(book).pathname.match(/\/(\d+)\.pdf$/)?.[1],paidSet=effectiveInstructionRelease?instructionPolicy?.paidSetForBook?.(id):null
+    if(paidSet&&paidSet!==setId){reply(res,200,{mode:'release',supported:false,step:null,interactive:false});return true}
     const viewer=instructionRelease?await session(req):null
     const account=viewer?await store.commerceAccount(viewer.id):null
     reply(res,200,(instructionPolicy?.access??instructionAccess)({setId,book,page,account,release:instructionLocked(setId)}));return true
@@ -147,7 +152,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
     if(!viewer){reply(res,200,{state:'signin',mode:commerceMode,product,trialSteps:instructionPolicy?.trialSteps?.(setId)??10});return true}
     const account=await store.commerceAccount(viewer.id),pending=account.orders?.some(o=>o.sku===sku&&o.status==='pending')===true
     const state=account.instructions.includes(setId)?'owned':account.plus?'plus':pending?'purchase':account.welcomeRemaining>0?'welcome':'purchase'
-    reply(res,200,{state,mode:commerceMode,product,remaining:account.welcomeRemaining??0,firstBuilder:account.firstBuilder===true,trialSteps:instructionPolicy?.trialSteps?.(setId)??10,pending,canBuy:canCheckout(viewer)&&!!legal?.version&&adapter?.enabled===true,plusProduct:!pending&&liveSkus.includes('plus-1')?productById('plus-1'):null});return true
+    reply(res,200,{state,mode:commerceMode,product,remaining:account.welcomeRemaining??0,firstBuilder:account.firstBuilder===true,trialSteps:instructionPolicy?.trialSteps?.(setId)??10,pending,canBuy:instructionSalesReady&&canCheckout(viewer)&&!!legal?.version&&adapter?.enabled===true,plusProduct:!pending&&liveSkus.includes('plus-1')?productById('plus-1'):null});return true
    }
    if(path==='/api/commerce/instruction-activate'){
     if(req.method!=='POST')throw new ProjectError(405,'method_not_allowed')
