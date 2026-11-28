@@ -42,7 +42,6 @@ if scope != "closed":
     require(bool(re.fullmatch(r"\d{1,20}",shop)) and shop != value("BRICKLAB_YOOKASSA_TEST_SHOP_ID"), "Invalid live shop")
     require(bool(re.fullmatch(r"live_[A-Za-z0-9_*-]{11,}",value("BRICKLAB_YOOKASSA_LIVE_SECRET"))), "Invalid live secret")
     require(all(value(k) for k in ("BRICKLAB_MAIL_USER","BRICKLAB_MAIL_KEY","BRICKLAB_MAIL_FROM")), "Receipt mail configuration incomplete")
-    require(value("BRICKLAB_INSTRUCTIONS_RELEASE") != "true", "Instruction release requires its own separate audit")
     try:
         manifest = json.loads(Path("/var/lib/bricklab-commerce-private/approval.json").read_text())
         hashes = [hashlib.sha256((Path("/var/lib/bricklab-legal")/(name+".html")).read_bytes()).hexdigest() for name in ("offer","privacy","refund","requisites")]
@@ -51,6 +50,12 @@ if scope != "closed":
         require(value("BRICKLAB_COMMERCE_FULL_CATALOG_OFFER_VERSION") == offer_version, "Full catalog approval mismatch")
     except (OSError, ValueError, KeyError, TypeError):
         sys.exit("Legal approval not readable")
+    if value("BRICKLAB_INSTRUCTIONS_RELEASE") == "true":
+        audit = value("BRICKLAB_PRIVATE_INSTRUCTION_AUDIT")
+        require(bool(re.fullmatch(r"/app/private-instructions/[A-Za-z0-9_-]+\.json",audit)), "Invalid private instruction audit path")
+        checked = subprocess.run(["docker","compose","exec","-T","bricklab","node","server/check-instruction-audit.js",audit,offer_version],cwd=ROOT,capture_output=True,text=True,timeout=30)
+        require(checked.returncode == 0, "Reviewed instruction manifest and current-offer approval required")
+        print("Instruction catalog validated:",checked.stdout.strip())
     require(subprocess.run(["systemctl","is-active","--quiet","bricklab-npd.timer"]).returncode == 0, "NPD timer not active")
     require(count("SELECT count(*) FROM bricklab.schema_migrations WHERE version=\'128_commerce_admin_audit_export\';") == 1, "Commerce audit migration not installed")
     if scope == "public":
