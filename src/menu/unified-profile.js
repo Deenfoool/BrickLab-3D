@@ -1,4 +1,4 @@
-import {toLiveBlocks,compactLiveBlocks} from './workshop-live-model.js'
+import {toLiveBlocks,isLiveLayout} from './workshop-live-model.js'
 import {renderWorkshopAwards} from './workshop-award-widgets.js?v=workshop-live-1'
 import {renderWorkshopLayoutEditor} from './workshop-layout-editor.js?v=layout-studio-2'
 import {planPortfolioGrid,placePortfolioBlock} from './portfolio-layout-model.js'
@@ -64,7 +64,7 @@ function buildTile(b,t,onOpen,makeArt){
 export function setLiveWidgetRect(node,rect){placePortfolioBlock(node,{row:rect.y+1,column:rect.x+1,span:rect.w});node.setAttribute('data-layout-height',String(rect.h));node.style?.setProperty?.('--widget-height',String(rect.h))}
 export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeBuildCard,makeFeaturedArt,privateCalendar,live=false,editing=false,metricCards=[]}){
  const t=tr(lang),root=ui('div','portfolio-blocks portfolio-layout-grid'),rendered=[],valid=builds.filter(b=>safePublicId(b.id)).map(b=>profile?.visible===false?{...b,imageCount:0}:b),p=filterPortfolio(profile?.portfolio,valid.map(b=>b.id))
- const byId=new Map(valid.map(b=>[b.id,b])),layout=live?toLiveBlocks(p.blocks):p.blocks
+ live=live||isLiveLayout(p.blocks);const byId=new Map(valid.map(b=>[b.id,b])),layout=live?toLiveBlocks(p.blocks):p.blocks
  if(live)root.classList.add('workshop-live-grid')
  for(const item of layout){
   const {key,visible}=item
@@ -110,8 +110,8 @@ export function profileLinkControls(lang,profile){
  const href='/'+profileHref(profile.username,profile.id),notice=ui('span','account-muted');notice.setAttribute('role','status')
  root.append(action(t.copy,async()=>{const value=new URL(href,location.origin).href;try{await navigator.clipboard.writeText(value);notice.textContent=t.copied}catch{notice.textContent=t.copyFailed+' '+value}}),notice);return root
 }
-export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic,visibilitySupported=false,mode='all',portfolioDraft,onPortfolioDraft,savePortfolio,progress}){
- const t=tr(lang),root=ui('section','account-card workshop-card unified-profile-editor');root.append(ui('h2',null,mode==='layout'?(lang==='ru'?'Компоновка мастерской':'Workshop layout'):mode==='privacy'?t.publicationSettings:t.edit))
+export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,publicBuilds,busy,loadPublic,saveProfile,publishPublic,unpublishPublic,visibilitySupported=false,mode='all',portfolioDraft,onPortfolioDraft,savePortfolio,progress,contentOnly=false}){
+ const t=tr(lang),root=ui('section','account-card workshop-card unified-profile-editor');root.append(ui('h2',null,mode==='layout'?(contentOnly?(lang==='ru'?'Содержимое мастерской':'Workshop content'):(lang==='ru'?'Компоновка мастерской':'Workshop layout')):mode==='privacy'?t.publicationSettings:t.edit))
  if(mode==='layout'&&publicLoaded&&(!publicCard||!publicCard.unified)){root.append(ui('p','account-muted',lang==='ru'?'Сначала создай или обнови единый профиль во вкладке «Приватность».':'Create or update your unified workshop in Privacy first.'));return root}
  if(!profile){root.append(ui('p','account-muted',lang==='ru'?'Профиль недоступен':'Profile unavailable'));return root}
  const form=ui('form','workshop-form'),name=ui('input'),bio=ui('textarea'),cover=ui('select')
@@ -158,7 +158,7 @@ export function renderUnifiedEditor({lang,user,profile,publicCard,publicLoaded,p
   collections.append(action(t.add,()=>{p.collections.push({title:'',ids:[]});draftChanged();renderCollections()},busy||p.collections.length>=6))
  }
  if(mode!=='layout')renderBlocks();renderCollections()
- if(mode==='layout'){
+ if(mode==='layout'&&contentOnly){panel.append(field(t.featured,pin),ui('h3',null,t.collections),collections)}else if(mode==='layout'){
   const ru=lang==='ru',describe=key=>{
    if(key==='featured')return publicBuilds.find(b=>b.id===p.featured)?.title??t.noPin
    if(key==='publications')return publicBuilds.length+' · '+t.builds

@@ -355,8 +355,8 @@ export async function mountCommunity(root,{language='ru',route='community',signa
     const workshop=el('section','unified-public-profile fullscreen-workshop cosmetic-'+theme);applySignature(workshop,profile.backgroundTheme)
     const actions=[link(t.back,'#community'),reaction('follow',profile.id,profile.followers,profile.id===social.ownId)]
     if(profile.id===social.ownId)actions.push(link(language==='ru'?'Вернуться в мастерскую':'Back to workshop','#account','workspace-action'))
-    workshop.append(renderUnifiedHero({lang:language,identity:{...profile,bio:'',subtitle:language==='ru'?'Конструктор BrickLab':'BrickLab builder'},actions,metricCards:metricItems({layout:profile.metricLayout,lang:language,portfolio:profile.portfolio,values:workshopMetricValues({lang:language,card:profile,loaded:true})})}))
-    workshop.append(renderPortfolio({lang:language,profile,builds,onOpen:b=>void showViewer(b),makeBuildCard:b=>buildCard(b),makeFeaturedArt:b=>artFor(b,true)}));root.replaceChildren(status,workshop)
+    const metricCards=metricItems({layout:profile.metricLayout,lang:language,portfolio:profile.portfolio,values:workshopMetricValues({lang:language,card:profile,loaded:true})});workshop.append(renderUnifiedHero({lang:language,identity:{...profile,bio:'',subtitle:language==='ru'?'Конструктор BrickLab':'BrickLab builder'},actions}))
+    workshop.append(renderPortfolio({lang:language,profile,builds,live:true,metricCards,onOpen:b=>void showViewer(b),makeBuildCard:b=>buildCard(b),makeFeaturedArt:b=>artFor(b,true)}));root.replaceChildren(status,workshop)
    }
   }catch(e){fail(e)}
   return

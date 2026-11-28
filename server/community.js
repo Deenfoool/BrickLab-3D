@@ -81,7 +81,7 @@ export function publicCard(row,options={}){
   coverTheme:['blueprint','graphite','amber'].includes(row.coverTheme)?row.coverTheme:null,
   backgroundTheme:backgroundIds.includes(row.backgroundTheme)?row.backgroundTheme:null,
   ...(row.supportBadge?{supportBadge:row.supportBadge}:{}),...(row.plus===true?{plus:true}:{}),
-  ...(portfolio?{unified:true,portfolio:projected,...(visible('awards')&&row.achievementDetails?{achievementXp:row.achievementDetails.xp,achievementStyle:row.achievementDetails.style,achievementDefinitions:row.achievementDetails.definitions}:{}),awards:visible('awards')?[...(Array.isArray(row.achievementShowcase)?row.achievementShowcase.filter(id=>achievementById(id,row.achievementDetails?.definitions??[])).slice(0,6):row.showAward===true?['firstCloudSave']:[]),...(row.firstBuilder===true?['firstBuilder']:[])]:[],...(owner?{showAvatar:row.shareAvatar===true,showCover:row.shareCover===true}:{})}:{})}
+  ...(portfolio?{unified:true,portfolio:projected,...(visible('awards')&&row.achievementDetails?{achievementXp:row.achievementDetails.xp,achievementStyle:row.achievementDetails.style,achievementDefinitions:row.achievementDetails.definitions,achievementDates:Object.fromEntries(Object.entries(row.achievementDetails.dates??{}).filter(([id,date])=>row.achievementShowcase?.includes(id)&&typeof date==='string'&&Number.isFinite(Date.parse(date))))}:{}),awards:visible('awards')?[...(Array.isArray(row.achievementShowcase)?row.achievementShowcase.filter(id=>achievementById(id,row.achievementDetails?.definitions??[])).slice(0,6):row.showAward===true?['firstCloudSave']:[]),...(row.firstBuilder===true?['firstBuilder']:[])]:[],...(owner?{showAvatar:row.shareAvatar===true,showCover:row.shareCover===true}:{})}:{})}
 }
 
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
@@ -194,7 +194,9 @@ export function createCommunityHandler({store,origin,enabled=false,logger=consol
       let data;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'))}catch{throw new ProjectError(400,'invalid_json')}
       if(req.method==='PATCH'){
        let portfolio;try{portfolio=validatePortfolio(data?.portfolio)}catch{throw new ProjectError(400,'invalid_portfolio')}
-       await store.savePortfolio(user.id,portfolio)
+       const showcase=data?.showcase
+       if(showcase!==undefined&&(!Array.isArray(showcase)||showcase.length>6||new Set(showcase).size!==showcase.length||showcase.some(id=>typeof id!=='string'||(!achievementById(id)&&!/^custom-[a-z0-9-]{1,39}$/.test(id)))))throw new ProjectError(400,'invalid_showcase')
+       if(showcase===undefined)await store.savePortfolio(user.id,portfolio);else await store.savePortfolio(user.id,portfolio,showcase)
       }else await store.publishCard(user.id,validatePublicCard(data))
      }else if(req.method==='DELETE'){if(store.hideCard)await store.hideCard(user.id);else await store.unpublishCard(user.id)}
      const card=publicCard(await store.getOwnCard(user.id),{owner:true});if(card&&store.reputation)card.reputation=publicReputation(await store.reputation(card.id));if(card&&store.workshopPublicSummary)Object.assign(card,publicWorkshopSummary(await store.workshopPublicSummary(card.id)));reply(res,200,{profile:card});return true
