@@ -69,6 +69,15 @@ if scope != "closed":
          AND receipt_delivery_sent_at IS NOT NULL AND fiscal_state='canceled'
          AND receipt_correction_pending=false AND fiscal_receipt_uuid IS NOT NULL;""")
         require(verified > 0, "No completed live payment -> NPD receipt -> mail -> refund -> cancellation in database")
+        if value("BRICKLAB_INSTRUCTIONS_RELEASE") == "true":
+            instruction_pilot = count(f"""SELECT count(*) FROM bricklab.commerce_orders o
+             WHERE environment='live' AND provider='yookassa' AND status='refunded'
+             AND sku LIKE 'instruction-%' AND offer_version='{offer_version}' AND accepted_at IS NOT NULL
+             AND NOT partial_refund_seen AND EXISTS (SELECT 1 FROM bricklab.admin_accounts a WHERE a.user_id=o.user_id)
+             AND paid_at IS NOT NULL AND refunded_at IS NOT NULL AND receipt_status='issued'
+             AND receipt_delivery_sent_at IS NOT NULL AND fiscal_state='canceled'
+             AND receipt_correction_pending=false AND fiscal_receipt_uuid IS NOT NULL;""")
+            require(instruction_pilot > 0, "Complete a real instruction pilot purchase and refund under the current offer")
         unresolved = count("""SELECT count(*) FROM bricklab.commerce_orders WHERE environment='live'
         AND (status='pending' OR fiscal_state IN ('issue_unknown','cancel_unknown') OR receipt_correction_pending OR partial_review_pending
         OR (status='succeeded' AND (receipt_status<>'issued' OR (NOT partial_refund_seen AND receipt_delivery_sent_at IS NULL))));""")
