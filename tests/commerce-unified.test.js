@@ -16,10 +16,10 @@ test('same quote, checkout and refund routes switch modes only on the server',as
   const get=path=>fetch(base+path,{headers}),post=(path,data)=>fetch(base+path,{method:'POST',headers,body:JSON.stringify(data)})
   const status=await (await get('/api/commerce/status')).json();assert.equal(status.mode,mode);assert.ok(status.skus.includes('plus-1'))
   const quote=await (await get('/api/commerce/quote?sku=plus-1')).json();assert.equal(quote.mode,mode)
-  const payload={sku:'plus-1',amountKopecks:24900,offerVersion:terms,accepted:true,mode}
+  const payload={sku:'plus-1',amountKopecks:24900,offerVersion:terms,accepted:true,mode,...(mode==='live'?{checkoutKey:pid}:{})}
   assert.equal((await post('/api/commerce/checkout',{...payload,mode:mode==='test'?'live':'test'})).status,400)
   assert.equal((await post('/api/commerce/checkout',payload)).status,200)
-  assert.deepEqual(calls[1],[uid,'plus-1',{unified:true,amountKopecks:24900,offerVersion:terms,beta:true}])
+  assert.deepEqual(calls[1],[uid,'plus-1',{unified:true,amountKopecks:24900,offerVersion:terms,beta:true,...(mode==='live'?{checkoutKey:pid}:{})}])
   assert.equal((await post('/api/commerce/refund',{orderId:uid,confirm:true,mode})).status,200)
   assert.equal((await (await get('/api/commerce/account')).json()).mode,mode)
   admin=false;assert.equal((await post('/api/commerce/refund',{orderId:uid,confirm:true,mode})).status,403)
@@ -46,7 +46,7 @@ test('live scope fails closed, pilot allows admin only, public allows users, cal
  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
  const base='http://127.0.0.1:'+server.address().port,headers={cookie:'__Host-bricklab_session='+'a'.repeat(64),origin,'Content-Type':'application/json'};
  const get=path=>fetch(base+path,{headers}),post=(path,data)=>fetch(base+path,{method:'POST',headers,body:JSON.stringify(data)});
- const payload={sku:'plus-1',amountKopecks:24900,offerVersion:terms,accepted:true};
+ const payload={sku:'plus-1',amountKopecks:24900,offerVersion:terms,accepted:true,checkoutKey:pid};
  for(const value of ['closed','pilot','public']){
   scope=value;
   for(const isAdmin of [false,true]){
@@ -64,3 +64,10 @@ test('live scope fails closed, pilot allows admin only, public allows users, cal
  }
  assert.equal(checkout,6);assert.equal(refunds,3);assert.equal(callbacks,3);
 });
+
+test('a completed checkout attempt is returned without creating or reading another provider payment',async()=>{
+ const adapter=createYookassaAdapter({origin,config:{enabled:true,environment:'live',shopId:'1',secret:'live_example_secret'},store:{createCommerceOrder:async(...a)=>{
+ assert.deepEqual(a.slice(-2),[undefined,{key:pid,returnToSets:true}]);return {id:uid,status:'succeeded',paymentId:pid}
+ }},fetcher:async()=>{throw Error('must not call provider')}})
+ assert.deepEqual(await adapter.checkout(uid,'plus-1',{unified:true,amountKopecks:24900,offerVersion:terms,beta:true,checkoutKey:pid,returnToSets:true}),{orderId:uid,status:'succeeded',checkoutUrl:null,mode:'live'})
+})

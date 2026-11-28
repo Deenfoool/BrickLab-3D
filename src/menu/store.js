@@ -38,7 +38,7 @@ function communityExamples(theme,language){
 export function mountStore(root,{language='ru',signal}){
  const ru=language==='ru',t=labels[language]??labels.ru,tr=(a,b)=>ru?a:b,money=n=>(Number(n)/100).toLocaleString(ru?'ru-RU':'en-US',{style:'currency',currency:'RUB',maximumFractionDigits:2})
  const orderNo=n=>'BL-'+String(n??'').padStart(6,'0')
- const errorText=e=>({verified_account_required:tr('Подтверди электронную почту перед покупкой.','Verify your email before purchasing.'),invalid_receipt_url:tr('Нужна ссылка на чек из «Мой налог».','Use an official My Tax receipt link.'),receipt_already_used:tr('Чек уже привязан к другому заказу.','Receipt already used.'),checkout_pending:tr('Заверши предыдущую оплату.','Finish the previous payment.')})[e.code]??t.error+' ('+(e.status??'network')+')'
+ const errorText=e=>({verified_account_required:tr('Подтверди электронную почту перед покупкой.','Verify your email before purchasing.'),invalid_receipt_url:tr('Нужна ссылка на чек из «Мой налог».','Use an official My Tax receipt link.'),receipt_already_used:tr('Чек уже привязан к другому заказу.','Receipt already used.'),checkout_pending:tr('Заверши предыдущую оплату.','Finish the previous payment.'),order_reconciliation_required:tr('Платёж требует сверки. Не оплачивай повторно — обратись в поддержку.','Payment requires reconciliation. Do not pay again; contact support.'),refund_reconciliation_required:tr('Возврат требует сверки в ЮKassa. Не повторяй вручную.','Refund requires YooKassa reconciliation. Do not repeat manually.')})[e.code]??t.error+' ('+(e.status??'network')+')'
  const profiles=createProfileClient(),nav=el('div','commerce-preview-nav'),grid=el('div','store-grid'),notice=el('p','account-muted'),summary=el('section','store-orders')
  notice.setAttribute('role','status')
  const categories=[['all',tr('Все товары','All products')],['subscription','BrickLab Plus'],['theme',tr('Темы','Themes')],['themeBundle',tr('Коллекции','Collections')],['storage',tr('Облачные проекты','Cloud projects')],['badge',tr('Значки','Badges')],['orders',tr('Мои покупки','My purchases')],['ledger',tr('Финансы','Finance')],['analytics',tr('Аналитика','Analytics')]]
@@ -89,23 +89,23 @@ export function mountStore(root,{language='ru',signal}){
   busy=true
   const dialog=el('dialog','store-preview-dialog'),label=el('label','store-consent'),accept=el('input'),status=el('p','account-muted'),price=el('strong','store-price',money(p.priceKopecks))
   accept.type='checkbox';label.append(accept,el('span',null,testMode?tr('Принимаю условия проверки. Тестовая оплата без списания; доступ только в режиме проверки.','I accept the test conditions. No charge; access only during testing.'):tr('Принимаю оферту и условия возврата.','I accept the offer and refund terms.')))
-  const mode=testMode?'test':'live';let quote=null
+  const mode=testMode?'test':'live',checkoutKey=crypto.randomUUID();let quote=null,paying=false,finished=false
   const pay=button(tr('Перейти к оплате','Proceed to payment'),async()=>{
-   if(!accept.checked||!quote)return;pay.disabled=true
+   if(paying||finished||!accept.checked||!quote)return;paying=true;pay.disabled=true;accept.disabled=true;close.disabled=true
    try{
-    const result=await api('/api/commerce/checkout',signal,{sku:p.id,amountKopecks:quote.amountKopecks,offerVersion:quote.offerVersion,accepted:true,mode})
+    const result=await api('/api/commerce/checkout',signal,{sku:p.id,amountKopecks:quote.amountKopecks,offerVersion:quote.offerVersion,accepted:true,mode,checkoutKey})
     if(result.mode!==mode)throw Error('mode');if(result.checkoutUrl){const url=safeUrl(result.checkoutUrl);try{sessionStorage.setItem('bricklab-commerce-return','1')}catch{}location.assign(url);return}
-    status.textContent=result.status==='succeeded'?tr('Оплата подтверждена.','Payment confirmed.'):tr('Платёж отменён.','Payment canceled.');await refresh()
-   }catch(e){status.textContent=errorText(e);pay.disabled=!accept.checked}
+    finished=true;status.textContent=result.status==='succeeded'?tr('Оплата подтверждена.','Payment confirmed.'):result.status==='refunded'?tr('Средства возвращены.','Payment refunded.'):tr('Платёж отменён.','Payment canceled.');await refresh()
+   }catch(e){status.textContent=errorText(e)}finally{paying=false;accept.disabled=finished;close.disabled=false;pay.disabled=finished||!accept.checked||!quote}
   })
-  pay.disabled=true;accept.onchange=()=>pay.disabled=!accept.checked||!quote
+  pay.disabled=true;accept.onchange=()=>pay.disabled=paying||finished||!accept.checked||!quote
   const close=button(tr('Закрыть','Close'),()=>dialog.close())
   const visual=p.kind==='theme'?themePreview(themeFor(p.id),language):p.kind==='themeBundle'?collectionArt():productArtwork(p,language)
   dialog.append(el('h2',null,productTitle(p)))
   if(visual){visual.classList.add('commerce-checkout-art');dialog.append(visual)}
   dialog.append(el('p','account-muted',description(p)),price,label,pay,close,status)
   {const a=link(tr('Оферта','Offer'),'/offer');a.target='_blank';a.rel='noopener';dialog.append(a);void api('/api/commerce/quote?sku='+encodeURIComponent(p.id),signal).then(q=>{if(q.mode!==mode)throw Error('mode_changed');quote=q;price.textContent=money(q.amountKopecks);pay.disabled=!accept.checked}).catch(e=>status.textContent=errorText(e))}
-  dialog.addEventListener('close',()=>{busy=false;dialog.remove()},{once:true});signal.addEventListener('abort',()=>{if(dialog.open)dialog.close()},{once:true});root.append(dialog);dialog.showModal()
+  dialog.addEventListener('cancel',e=>{if(paying)e.preventDefault()});dialog.addEventListener('close',()=>{busy=false;dialog.remove()},{once:true});signal.addEventListener('abort',()=>{if(dialog.open)dialog.close()},{once:true});root.append(dialog);dialog.showModal()
  }
  function render(){
   if(!catalog||signal.aborted)return

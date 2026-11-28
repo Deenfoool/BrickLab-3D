@@ -401,3 +401,23 @@ test('verified callbacks recover unattached live payments, reject wrong amounts 
   assert.ok(claimed.some(o=>o.id===third.id&&o.refundId===null))
  }finally{await store.close();await db.end()}
 })
+
+test('checkout confirmation replay cannot buy another repeatable product after settlement',{skip:!enabled},async()=>{
+ assert.equal(process.env.PGDATABASE,'bricklab_commerce_check')
+ const db=postgres({host:process.env.PGHOST,port:Number(process.env.PGPORT||5432),database:process.env.PGDATABASE,username:'bricklab_admin',password:process.env.COMMERCE_ADMIN_PASSWORD,max:1})
+ const store=connectAuthStore(),uid='34000000-0000-4000-8000-000000000001',terms='a'.repeat(64),key=crypto.randomUUID()
+ try{
+  await db`insert into bricklab.users(id,email,display_name,password_hash,email_verified_at) values(${uid},'attempt@example.invalid','Attempt fixture','fixture',now())`
+  const create=(attempt)=>store.createCommerceOrder(uid,'plus-1',24900,terms,true,'live',undefined,attempt)
+  const first=await create({key,returnToSets:true})
+  const second=await create({key:crypto.randomUUID(),returnToSets:false})
+  assert.equal(first.id,second.id);assert.equal(second.returnToSets,true)
+  const pid=crypto.randomUUID()
+  assert.equal(await store.settleVerifiedCommercePayment(first.id,pid,'live',24900),true)
+  const replay=await create({key,returnToSets:false})
+  assert.equal(replay.id,first.id);assert.equal(replay.status,'succeeded');assert.equal(replay.returnToSets,true)
+  await assert.rejects(store.createCommerceOrder(uid,'plus-1',24800,terms,true,'live',undefined,{key}),/quote_changed/)
+  const fresh=await create({key:crypto.randomUUID(),returnToSets:false})
+  assert.notEqual(fresh.id,first.id);assert.equal(fresh.status,'pending')
+ }finally{await store.close();await db.end()}
+})

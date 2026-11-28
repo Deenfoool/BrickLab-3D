@@ -44,7 +44,7 @@ test('sandbox lists multiple SKUs; live checkout accepts completed large audit o
   assert.equal(status.skus.includes('instruction-42154-1'),mode==='test')
   assert.equal(status.skus.includes('instruction-12345-1'),mode==='test'||release)
   assert.ok(!status.skus.includes('instruction-12346-1'))
-  const sku='instruction-12345-1',payload={sku,amountKopecks:7900,offerVersion:terms,accepted:true,mode}
+  const sku='instruction-12345-1',payload={sku,amountKopecks:7900,offerVersion:terms,accepted:true,mode,...(mode==='live'?{checkoutKey:crypto.randomUUID()}:{})}
   assert.equal((await get('/api/commerce/quote?sku='+sku)).status,mode==='test'||release?200:404)
   assert.equal((await post({...payload,partCount:601})).status,400)
   assert.equal((await post({...payload,sku:'instruction-12346-1'})).status,400)

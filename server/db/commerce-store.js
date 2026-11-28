@@ -120,11 +120,24 @@ export function commerceStore(scope){
    return commerceEntitlements(tx,uid)
   })},
   async quoteCommerce(uid,sku,offerVersion,beta,environment,product){return scope(uid,tx=>orderQuote(tx,uid,sku,offerVersion,beta,environment,product))},
-  async createCommerceOrder(uid,sku,amount,offerVersion,beta,environment,product){return scope(uid,async tx=>{
+  async createCommerceOrder(uid,sku,amount,offerVersion,beta,environment,product,attempt){return scope(uid,async tx=>{
    await tx`select pg_advisory_xact_lock(hashtextextended(${uid}::text,312042))`
+   if(attempt){
+    const [existing]=await tx`select o.id,o.sku,o.title,o.amount_kopecks as "amountKopecks",o.idempotency_key as "idempotencyKey",o.payment_id as "paymentId",o.created_at as "createdAt",o.status,o.offer_version as "offerVersion",o.return_to_sets as "returnToSets" from bricklab.commerce_checkout_attempts a join bricklab.commerce_orders o on o.id=a.order_id and o.user_id=a.user_id and o.environment=a.environment where a.user_id=${uid} and a.environment=${environment} and a.checkout_key=${attempt.key}::uuid`
+    if(existing){
+     if(existing.sku!==sku||existing.amountKopecks!==amount||existing.offerVersion!==offerVersion)throw new ProjectError(409,'quote_changed')
+     return existing
+    }
+   }
    const quote=await orderQuote(tx,uid,sku,offerVersion,beta,environment,product)
    if(quote.amountKopecks!==amount)throw new ProjectError(409,'quote_changed')
    const [row]=await tx`select id,sku,title,amount_kopecks as "amountKopecks",idempotency_key as "idempotencyKey",payment_id as "paymentId",created_at as "createdAt" from bricklab.commerce_create_order(${sku},${quote.title},${amount}::integer,${offerVersion},${environment})`
+   if(attempt){
+    const [bound]=await tx`select bricklab.commerce_bind_checkout_attempt(${attempt.key}::uuid,${row.id}::uuid,${environment},${attempt.returnToSets===true}) as ok`
+    if(!bound.ok)throw new ProjectError(409,'quote_changed')
+    const [details]=await tx`select status,return_to_sets as "returnToSets" from bricklab.commerce_orders where id=${row.id}::uuid`
+    return {...row,...details}
+   }
    return row
   })},
   async requestCommerceRefund(uid,id,environment){return scope(uid,async tx=>{const [r]=await tx`select id,payment_id as "paymentId",amount_kopecks as "amountKopecks",refund_requested_at as "requestedAt",provider_refund_id as "refundId" from bricklab.commerce_request_refund(${id}::uuid,${environment})`;return r})},
