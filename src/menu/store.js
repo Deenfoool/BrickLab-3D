@@ -52,7 +52,7 @@ export function mountStore(root,{language='ru',signal}){
  const tabs=new Map(),header=el('div','store-banner'),heading=el('div'),art=el('div','store-banner-art')
  heading.append(el('span','store-kicker','BRICKLAB STORE'),el('h2',null,tr('Расширь свою мастерскую','Expand your workshop')),el('p',null,tr('Темы, облачное пространство, коллекции и Plus. Основной редактор бесплатный.','Themes, cloud space, collections and Plus. The core editor is free.')))
  for(const id of ['carbon','neon','aurora'])art.append(themePreview(themeFor(id),language));header.append(heading,art)
- let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,analytics=null,testMode=false,busy=false,serial=0
+ let selected='all',catalog=null,profile=null,account=null,checkoutStatus=null,ledger=null,health=null,analytics=null,testMode=false,busy=false,serial=0
  try{if(sessionStorage.getItem('bricklab-commerce-return')==='1'){selected='orders';sessionStorage.removeItem('bricklab-commerce-return')}}catch{}
  const refreshButton=button(tr('Обновить покупки','Refresh purchases'),()=>refresh())
  for(const [id,label] of categories){const b=button(label,()=>{selected=id;render()});tabs.set(id,b);nav.append(b)}
@@ -153,18 +153,33 @@ export function mountStore(root,{language='ru',signal}){
     }
     metrics.append(values);grid.append(metrics)
    }
+   if(health){
+    const ops=el('section','store-orders');ops.style.gridColumn='1 / -1';
+    ops.append(el('h2',null,tr('Контроль операций','Operations monitor')),el('p','account-muted',tr('Все заказы текущего режима, не только последние 100.','All orders in this mode, not only the latest 100.')));
+    const values=el('div','store-grid');
+    for(const [key,label] of [['pending',tr('Ожидают оплаты','Pending payments')],['unattached_old',tr('Без ID платежа более 23 ч','Unattached >23h')],['refund_pending',tr('Ожидают возврата','Pending refunds')],['refund_unattached',tr('Возврат без ID','Refund ID missing')],['receipt_pending',tr('Ожидают чека','Receipts pending')],['receipt_unknown',tr('Неизвестный результат ФНС','Uncertain FNS result')],['early_refund',tr('Возврат до чека','Refund before receipt')],['correction_pending',tr('Ожидают корректировки','Corrections pending')],['mail_pending',tr('Чеки в почтовой очереди','Receipt mail queued')],['telegram_pending',tr('Уведомления в очереди','Notifications queued')]]){
+     if(testMode&&['receipt_pending','receipt_unknown','early_refund','correction_pending','mail_pending'].includes(key))continue;
+     const card=el('article','commerce-preview-card');card.append(el('small','account-muted',label),el('strong','store-price',String(health[key]??'—')));values.append(card)
+    }
+    ops.append(values);grid.append(ops)
+   }
    for(const o of ledger.orders){
     const card=el('article','commerce-preview-card');card.append(orderIdentity(products.find(p=>p.id===o.sku),o.title),el('strong','store-price',money(o.amount_kopecks)),el('p','account-muted',o.display_name+' · '+o.email),el('p',null,o.status),el('small','account-muted',orderNo(o.order_number)))
-    if(checkoutStatus?.enabled&&o.status==='succeeded'){
+    const uncertain=['issue_unknown','cancel_unknown'].includes(o.fiscal_state),early=!testMode&&o.status==='refunded'&&o.receipt_status==='pending'&&o.receipt_correction_pending;
+    if(o.status==='pending'&&!o.payment_id)card.append(el('p','account-muted',tr('ID платежа ещё не получен. Не создавай повторный заказ вручную.','Payment ID not yet known. Do not manually create a replacement.')));
+    if(o.status==='succeeded'&&o.refund_requested_at)card.append(el('p','account-muted',tr('Возврат запрошен; проверяется у ЮKassa.','Refund requested; checking YooKassa.')));
+    if(checkoutStatus?.refundEnabled&&o.status==='succeeded'){
      const refund=button(tr('Полный возврат','Full refund'),async()=>{if(!window.confirm((testMode?tr('Тестовый возврат ','Test refund '):tr('Вернуть реальные деньги ','Refund real money '))+money(o.amount_kopecks)+'?'))return;refund.disabled=true;try{const result=await api('/api/commerce/refund',signal,{orderId:o.id,confirm:true,mode:checkoutStatus.mode});await refresh();notice.textContent=tr('Возврат: ','Refund: ')+result.status}catch(e){notice.textContent=errorText(e);refund.disabled=false}});card.append(refund)
     }
-    if(!testMode&&o.status==='succeeded'&&o.receipt_status==='pending'){
-     card.append(el('p','account-muted',tr('Сформируй чек в «Мой налог» на указанную сумму, вставь ссылку. BrickLab отправит её покупателю.','Create an NPD receipt in My Tax and paste the link. BrickLab emails it to the customer.')))
+    if(!testMode&&uncertain){
+     card.append(el('p','account-muted',tr('Результат операции ФНС неизвестен. Идёт сверка без повторной записи. Не формируй второй чек и не подтверждай корректировку до выяснения результата.','FNS result uncertain. Read-only reconciliation in progress. Do not issue a duplicate or confirm a correction.')))
+    }else if(!testMode&&(o.status==='succeeded'||early)&&o.receipt_status==='pending'){
+     card.append(el('p','account-muted',early?tr('Возврат до выдачи чека: проверь фактические записи в ФНС и согласованный порядок оформления. Добавь ссылку только на реально сформированный чек; доставку и аннулирование проверь вручную.','Refund before receipt: verify actual FNS records and the approved fiscal procedure. Register only an actual receipt; verify delivery and cancellation manually.'):tr('Если автоматизация не действует, добавь ссылку на фактически сформированный чек. BrickLab отправит её покупателю.','If automation is unavailable, register an actual receipt link. BrickLab emails it to the customer.')))
      const input=el('input','account-field');input.placeholder='https://lknpd.nalog.ru/api/v1/receipt/…/print';input.maxLength=250
-     const confirm=button(tr('Отправить чек покупателю','Send receipt to customer'),async()=>{if(!input.value.trim()||!window.confirm(tr('Подтверждаешь, что чек сформирован в ФНС и соответствует заказу и сумме?','Confirm the FNS receipt matches the order and amount?')))return;confirm.disabled=true;try{await api('/api/commerce/admin-register-receipt',signal,{orderId:o.id,url:input.value.trim(),confirm:true});await refresh()}catch(e){notice.textContent=errorText(e);confirm.disabled=false}})
+     const confirm=button(early?tr('Зарегистрировать чек','Register receipt'):tr('Отправить чек покупателю','Send receipt to customer'),async()=>{if(!input.value.trim()||!window.confirm(tr('Подтверждаешь, что чек сформирован в ФНС и соответствует заказу и сумме?','Confirm the FNS receipt matches the order and amount?')))return;confirm.disabled=true;try{await api('/api/commerce/admin-register-receipt',signal,{orderId:o.id,url:input.value.trim(),confirm:true});await refresh()}catch(e){notice.textContent=errorText(e);confirm.disabled=false}})
      card.append(input,confirm)
     }else if(!testMode)card.append(el('p','account-muted',tr('Чек: ','Receipt: ')+(o.receipt_delivery_url?(o.receipt_delivery_sent_at?tr('Письмо принято почтовым сервисом','Email accepted'):tr('Ожидает отправки','Queued')):o.receipt_status)))
-    if(!testMode&&o.receipt_correction_pending){
+    if(!testMode&&o.receipt_correction_pending&&!uncertain&&o.receipt_status==='issued'){
      card.append(el('p','account-muted',tr('После возврата требуется корректировка расчёта в «Мой налог».','Correct the fiscal record after the refund.')))
      const input=el('input','account-field');input.placeholder=tr('Номер или основание корректировки','Correction reference');input.maxLength=250
      const confirm=button(tr('Корректировка выполнена','Correction completed'),async()=>{if(!input.value.trim()||!window.confirm(tr('Подтвердить фактически выполненную корректировку в «Мой налог»?','Confirm that the fiscal correction is complete?')))return;confirm.disabled=true;try{await api('/api/commerce/admin-receipt-correction',signal,{orderId:o.id,reference:input.value.trim(),confirm:true});await refresh()}catch{notice.textContent=t.error;confirm.disabled=false}})
@@ -218,9 +233,9 @@ export function mountStore(root,{language='ru',signal}){
  }
  async function refresh(){
   const v=++serial;notice.textContent=t.loading
-  try{const [c,a,st,p]=await Promise.all([api('/api/store/catalog',signal),optional('/api/commerce/account'),optional('/api/commerce/status'),profiles.get().catch(()=>null)]);const [adminLedger,adminAnalytics]=st?.admin?await Promise.all([optional('/api/commerce/admin-ledger?environment='+st.mode),optional('/api/commerce/instruction-analytics').catch(()=>null)]):[null,null];if(signal.aborted||v!==serial)return;catalog=c;account=a;checkoutStatus=st;profile=p;ledger=adminLedger;analytics=adminAnalytics;testMode=st?.mode==='test'&&st?.admin===true;if(selected==='ledger'&&!ledger)selected='all';render()}catch{if(!signal.aborted&&v===serial)notice.textContent=t.error}
+  try{const [c,a,st,p]=await Promise.all([api('/api/store/catalog',signal),optional('/api/commerce/account'),optional('/api/commerce/status'),profiles.get().catch(()=>null)]);const [adminLedger,adminAnalytics,adminHealth]=st?.admin?await Promise.all([optional('/api/commerce/admin-ledger?environment='+st.mode),optional('/api/commerce/instruction-analytics').catch(()=>null),optional('/api/commerce/admin-health?environment='+st.mode).catch(()=>null)]):[null,null,null];if(signal.aborted||v!==serial)return;catalog=c;account=a;checkoutStatus=st;profile=p;ledger=adminLedger;health=adminHealth;analytics=adminAnalytics;testMode=st?.mode==='test'&&st?.admin===true;if(selected==='ledger'&&!ledger)selected='all';render()}catch{if(!signal.aborted&&v===serial)notice.textContent=t.error}
  }
- const timer=setInterval(()=>{if(!busy&&account?.orders?.some(o=>o.status==='pending'&&o.paymentId||o.status==='succeeded'&&o.refundRequestedAt))void refresh()},15000)
+ const timer=setInterval(()=>{if(!busy&&selected!=='ledger'&&account?.orders?.some(o=>o.status==='pending'&&o.paymentId||o.status==='succeeded'&&(o.refundRequestedAt||o.receiptStatus==='pending')))void refresh()},15000)
  signal.addEventListener('abort',()=>clearInterval(timer),{once:true})
  void refresh()
 }

@@ -383,6 +383,13 @@ test('verified callbacks recover unattached live payments, reject wrong amounts 
   assert.equal(await store.settleVerifiedCommercePayment(order.id,crypto.randomUUID(),'live',19900),false)
   assert.equal((await store.commerceAccount(uid)).orders[0].status,'refunded')
   assert.deepEqual((await store.commerceAccount(uid)).themes,[])
+  await db`insert into bricklab.admin_accounts(user_id) values(${uid})`
+  const health=await store.commerceAdminHealth(uid,'live');assert.ok(Number(health.early_refund)>=1)
+  assert.equal(await store.confirmCommerceReceiptCorrection(uid,order.id,'unverified fixture'),false)
+  assert.equal(await store.registerCommerceReceipt(uid,order.id,'https://lknpd.nalog.ru/api/v1/receipt/000000000000/earlyFixture/print'),true)
+  assert.equal(await store.confirmCommerceReceiptCorrection(uid,order.id,'fixture corrected'),true)
+  const early=(await store.commerceAdminLedger(uid,'live')).find(x=>x.id===order.id)
+  assert.equal(early.receipt_status,'issued');assert.equal(early.receipt_correction_pending,false);assert.equal(early.receipt_delivery_sent_at,null)
   const next=await store.createCommerceOrder(uid,'aurora',19900,terms,true,'live'),pid2=crypto.randomUUID()
   assert.equal(await store.cancelVerifiedCommercePayment(next.id,pid2,'live',19900),true)
   assert.equal(await store.cancelVerifiedCommercePayment(next.id,pid2,'live',19900),true)

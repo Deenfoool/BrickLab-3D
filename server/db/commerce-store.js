@@ -134,6 +134,7 @@ export function commerceStore(scope){
   async registerCommerceReceipt(uid,id,url){return scope(uid,async tx=>{const [r]=await tx`select bricklab.commerce_register_receipt(${id}::uuid,${url}) as ok`;return r.ok})},
   async claimCommerceReceiptDeliveries(){return scope('',tx=>tx`select * from bricklab.commerce_claim_receipt_deliveries()`)},
   async ackCommerceReceiptDelivery(id,url){return scope('',async tx=>{const [r]=await tx`select bricklab.commerce_ack_receipt_delivery(${id}::uuid,${url}) as ok`;return r.ok})},
+  async commerceAdminHealth(uid,environment){return scope(uid,async tx=>{const [r]=await tx`select * from bricklab.commerce_admin_health(${environment})`;return r})},
   async commerceAdminLedger(uid,environment){return scope(uid,tx=>tx`select * from bricklab.commerce_admin_ledger(${environment})`)},
   async confirmCommerceReceiptCorrection(uid,id,reference){return scope(uid,async tx=>{const [r]=await tx`select bricklab.commerce_confirm_receipt_correction(${id}::uuid,${reference}) as ok`;return r.ok})},
   async confirmCommerceReceipt(uid,id,reference){return scope(uid,async tx=>{const [r]=await tx`select bricklab.commerce_confirm_receipt(${id}::uuid,${reference}) as ok`;return r.ok})},
