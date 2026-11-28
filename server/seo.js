@@ -54,7 +54,8 @@ export function seoResponse(path) {
   if(path==='/sitemap.xml') return {type:'application/xml; charset=utf-8',body:'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+publicSeoPaths.map(p=>'  <url><loc>'+siteOrigin+p+'</loc></url>').join('\n')+'\n</urlset>\n'}
   if(!Object.hasOwn(pages,path)) return null
   const p=pages[path],url=siteOrigin+path
-  const navigation=Object.keys(pages).map(k=>'<a href="'+k+'"'+(k===path?' aria-current="page"':'')+'>'+escape(pages[k].cta.replace(/^Открыть |^Перейти к /,''))+'</a>').join('')
+  const labels={'/editor':'Редактор','/instructions':'Инструкции','/parts':'Детали','/mechanics':'Механика'}
+  const navigation=Object.keys(pages).map(k=>'<a href="'+k+'"'+(k===path?' aria-current="page"':'')+'>'+escape(labels[k])+'</a>').join('')
   const schema=JSON.stringify({'@context':'https://schema.org','@type':'WebPage',name:p.heading,url,description:p.description,isPartOf:{'@type':'WebSite',name:'BrickLab 3D',url:siteOrigin+'/'}})
   const body='<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'+
     '<title>'+escape(p.title)+'</title><meta name="description" content="'+escape(p.description)+'"><link rel="canonical" href="'+url+'">'+
