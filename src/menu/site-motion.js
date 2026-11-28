@@ -5,7 +5,7 @@ export const motionDelay=index=>Math.min(Math.max(0,index)*35,140)
 export function motionAllowed(root,media){
  return !!root&&!root.hidden&&!media?.matches
 }
-export function createSiteMotion(root,{media=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)'),Intersection=globalThis.IntersectionObserver,Mutation=globalThis.MutationObserver,raf=globalThis.requestAnimationFrame,caf=globalThis.cancelAnimationFrame}={}){
+export function createSiteMotion(root,{media=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)'),Intersection=globalThis.IntersectionObserver,Mutation=globalThis.MutationObserver,raf=globalThis.requestAnimationFrame?.bind(globalThis),caf=globalThis.cancelAnimationFrame?.bind(globalThis)}={}){
  let route=null,seen=new WeakSet(),animatedKeys=new Set(),pending=new Set(),animations=new Set(),budget=0,frame=null,observer=null,mutation=null
  const content=root?.querySelector?.('.content')??root
  const allowed=()=>route!==null&&motionAllowed(root,media)
@@ -49,4 +49,4 @@ export function createSiteMotion(root,{media=globalThis.matchMedia?.('(prefers-r
  media?.addEventListener?.('change',preferenceChanged)
  return {setRoute(next){if(next===route)return;stop();route=next;seen=new WeakSet();animatedKeys=new Set();budget=0;start()},dispose(){route=null;stop();media?.removeEventListener?.('change',preferenceChanged)}}
 }
-export function acknowledgeMotion(node){if(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches||!node?.animate)return;node.animate([{scale:'1'},{scale:'1.045'},{scale:'1'}],{duration:240,easing:'ease-out'})}
+export function acknowledgeMotion(node){if(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches||!node?.animate||node.isConnected===false)return;node.animate([{scale:'1'},{scale:'1.045'},{scale:'1'}],{duration:240,easing:'ease-out'})}
