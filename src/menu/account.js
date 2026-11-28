@@ -4,7 +4,7 @@ import {renderAccountPassword} from './account-password.js'
 import {renderWorkshopNotificationSettings} from './workshop-notification-settings.js'
 import {renderTelegramLink,renderPromoRedeem} from './telegram-link.js?v=showcase-motion-2'
 import {isWorkshopHandle,profileHref,workshopRoute} from './profile-route.js'
-import {renderAdminPanel} from './admin-panel.js?v=achievements-v4'
+import {renderAdminPanel} from './admin-panel.js?v=seo-discovery-3'
 import {renderBureauPanel} from './bureau-panel.js?v=profile-gallery-1'
 import { createAuthClient } from './auth-client.js?v=live-polish-1'
 
@@ -137,7 +137,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
    }
    return row
  }
- function deepAdmin(){const hash=location.hash,m=/^#account\/admin\/(user|bug)\/([0-9a-f-]{36})$/i.exec(hash);if(m)return {initialMode:m[1]==='user'?'users':'bugs',initialQuery:m[2]};const tab=/^#account\/admin\/(overview|users|reports|build-reports|bugs|audit|content|achievements)$/.exec(hash);return tab?{initialMode:tab[1]}:null}
+ function deepAdmin(){const hash=location.hash,m=/^#account\/admin\/(user|bug)\/([0-9a-f-]{36})$/i.exec(hash);if(m)return {initialMode:m[1]==='user'?'users':'bugs',initialQuery:m[2]};const tab=/^#account\/admin\/(overview|seo|users|reports|build-reports|bugs|audit|content|achievements)$/.exec(hash);return tab?{initialMode:tab[1]}:null}
  function render(){
    onProjectsPanel(null)
    workshopController?.abort();workshopController=null
