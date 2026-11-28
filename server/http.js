@@ -1,10 +1,11 @@
 import { createServer } from 'node:http'
-import { createReadStream, realpathSync } from 'node:fs'
-import { realpath, stat } from 'node:fs/promises'
+import { createReadStream, realpathSync, existsSync } from 'node:fs'
+import { realpath, stat, readFile } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
 import { extname, relative, resolve, sep } from 'node:path'
 import { createInstructionsHandler } from './instructions.js'
 import { seoResponse } from './seo.js'
+import { decorateSeo } from './seo-config.js'
 
 const directories = new Set(['src', 'assets', 'catalog', 'examples', 'vendor'])
 const types = {
@@ -46,8 +47,10 @@ function rangeOf(header, size) {
     ? { start: first, end: last } : null
 }
 
-export function createBrickLabServer({ root, logger = console, auth, projects, profile, activity, community, bureau, security, rebrickable, cspReport, payments, hub, approvedLegal=null, discovery=null, instructions = createInstructionsHandler() } = {}) {
+export function createBrickLabServer({ root, logger = console, auth, projects, profile, activity, community, bureau, security, rebrickable, cspReport, payments, hub, approvedLegal=null, discovery=null, searchConfig={}, instructions = createInstructionsHandler() } = {}) {
   const base = realpathSync(root)
+  const banner = existsSync(resolve(base,'assets/seo/og.jpg'))
+  const seoBody=(response,path)=>response.type.startsWith('text/html')?decorateSeo(response.body,path,searchConfig,banner):response.body
   const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
@@ -79,9 +82,9 @@ export function createBrickLabServer({ root, logger = console, auth, projects, p
         return send(req, res, 405, 'Method not allowed')
       }
       const extraSeo = discovery && await discovery(pathname)
-      if (extraSeo) return send(req, res, extraSeo.status ?? 200, extraSeo.body, extraSeo.type)
+      if (extraSeo) return send(req, res, extraSeo.status ?? 200, seoBody(extraSeo,pathname), extraSeo.type)
       const seo = seoResponse(pathname)
-      if (seo) return send(req, res, 200, seo.body, seo.type)
+      if (seo) return send(req, res, 200, seoBody(seo,pathname), seo.type)
       if (pathname === '/store') {
         res.writeHead(302,{'Location':'/#store','Cache-Control':'no-store'});return res.end()
       }
@@ -105,6 +108,7 @@ export function createBrickLabServer({ root, logger = console, auth, projects, p
         throw error
       }
       if (!info.isFile()) return send(req, res, 404, 'Not found')
+      if(name==='index.html'&&(banner||searchConfig.yandex||searchConfig.google))return send(req,res,200,decorateSeo(await readFile(file,'utf8'),pathname,searchConfig,banner),'text/html; charset=utf-8')
       const etag = `W/"${info.size.toString(16)}-${Math.trunc(info.mtimeMs).toString(16)}"`
       res.setHeader('ETag', etag)
       res.setHeader('Cache-Control', 'no-cache')
