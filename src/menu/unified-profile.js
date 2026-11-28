@@ -100,7 +100,7 @@ export function renderPortfolio({lang,profile,builds=[],owner=false,onOpen,makeB
   if(live){const body=ui('div','workshop-widget-body');body.append(...Array.from(c.children).slice(1));const heading=c.children[0];c.replaceChildren(heading,body)}
   root.append(c);rendered.push({item,node:c})
  }
- if(live){const positions=editing?layout:compactLiveBlocks(layout.map(b=>({...b,locked:b.locked&&b.visible})));const byKey=new Map(positions.map(b=>[b.key,b.rect]));for(const {item,node} of rendered){const rect=byKey.get(item.key);setLiveWidgetRect(node,rect)}}else{const positions=planPortfolioGrid(rendered.map(x=>x.item));rendered.forEach((entry,i)=>placePortfolioBlock(entry.node,positions[i]))}
+ if(live){const positions=layout;const byKey=new Map(positions.map(b=>[b.key,b.rect]));for(const {item,node} of rendered){const rect=byKey.get(item.key);setLiveWidgetRect(node,rect)}}else{const positions=planPortfolioGrid(rendered.map(x=>x.item));rendered.forEach((entry,i)=>placePortfolioBlock(entry.node,positions[i]))}
  if(owner&&Array.isArray(privateCalendar)){const c=block(t.activity+' · '+(lang==='ru'?'личный':'private'),'private-activity');c.append(activityCalendar(lang,privateCalendar));root.append(c)}
  return root
 }
