@@ -51,7 +51,7 @@ export async function waitForInstruction(prepared, signal) {
     }
     function cancel() { finish(false) }
     signal.addEventListener('abort', cancel, { once: true })
-    Promise.all([prepared.decoded, prepared.regions]).then(([ready]) => finish(ready))
+    Promise.all([prepared.decoded, prepared.regions]).then(([ready]) => finish(ready),()=>finish(false))
   })
 }
 
@@ -370,7 +370,7 @@ export function mountInstructions(
     recognitionStatus.textContent = ru ? 'Распознаём детали…' : 'Recognizing parts…'
     recognitionStatus.hidden = false
     try {
-      recognition ??= import('./instruction-recognition.js?v=recognition-v9').then(module => {
+      recognition ??= import('./instruction-recognition.js?v=recognition-v9-polish').then(module => {
         recognitionEngine = module.createInstructionRecognition(pdf, progress.set, signal)
         return recognitionEngine
       })

@@ -25,6 +25,9 @@ export async function createOcrWorker(signal) {
     errorHandler: () => {},
   })
   if (signal.aborted) { await worker.terminate(); signal.throwIfAborted() }
-  await worker.setParameters({ tessedit_pageseg_mode: '11', user_defined_dpi: '300' })
-  return worker
+  try{
+    await worker.setParameters({ tessedit_pageseg_mode: '11', user_defined_dpi: '300' })
+    signal.throwIfAborted()
+    return worker
+  }catch(error){await worker.terminate().catch(()=>{});throw error}
 }

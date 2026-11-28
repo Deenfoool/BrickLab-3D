@@ -1,3 +1,4 @@
+import {boundedTask} from './instruction-task.js?v=recognition-v9-polish'
 import {pageCallouts,visualKeyForSample} from './instruction-study.js?v=recognition-v9'
 import {lookupElement} from '../editor/element-index.js?v=catalog-engine-1'
 import {createElementRecovery} from './instruction-element-recovery.js?v=recognition-v8'
@@ -69,38 +70,46 @@ export function createInstructionRecognition(reader, set, signal) {
   let modelReferences,modelWorker
   const jobs = new Map()
   const books = new Map()
-  let active, worker, ocr, ocrQueue = Promise.resolve(), jobId = 0
+  let active, worker, ocr, ocrController, ocrQueue = Promise.resolve(), jobId = 0
 
   function cancelJobs(error) {
     worker?.terminate()
     worker = undefined
     modelWorker=undefined
-    for (const job of jobs.values()) job.reject(error)
+    for (const job of jobs.values()) {clearTimeout(job.timer);job.reject(error)}
     jobs.clear()
   }
   signal.addEventListener('abort', () => {
     active?.controller.abort()
     cancelJobs(signal.reason)
-    ocr?.then(engine => engine.terminate(), () => {})
+    resetOcr()
   }, { once: true })
 
-  function analyze(action, input, transfer = []) {
-    signal.throwIfAborted()
+  function resetOcr(){
+    const previous=ocr;ocr=undefined;ocrController?.abort();ocrController=undefined
+    previous?.then(engine=>engine.terminate(),()=>{}).catch(()=>{})
+  }
+  function analyze(action, input, transfer = [], request=signal) {
+    try{signal.throwIfAborted();request.throwIfAborted()}catch(error){for(const item of transfer)item.close?.();throw error}
     if (!worker) {
       worker = new Worker(new URL('./instruction-recognition-worker.js?v=recognition-v9', import.meta.url), { type: 'module' })
       worker.onmessage = ({ data }) => {
         const job = jobs.get(data.id)
         jobs.delete(data.id)
+        clearTimeout(job?.timer)
         if (data.error) job?.reject(Error(data.error))
         else job?.resolve(data.value)
       }
       worker.onerror = () => cancelJobs(Error('Instruction analysis worker unavailable'))
+      worker.onmessageerror=()=>cancelJobs(Error('Instruction analysis worker message unavailable'))
     }
     const id = ++jobId
-    return new Promise((resolve, reject) => {
-      worker.postMessage({ id, action, input }, transfer)
-      jobs.set(id, { resolve, reject })
+    const task=new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>cancelJobs(Error('Instruction analysis worker timed out')),20000)
+      jobs.set(id,{resolve,reject,timer})
+      try{worker.postMessage({id,action,input},transfer)}catch(error){clearTimeout(timer);jobs.delete(id);for(const item of transfer)item.close?.();reject(error)}
     })
+    return boundedTask(task,request,21000)
   }
 
   function currentBook(source, pages) {
@@ -110,8 +119,8 @@ export function createInstructionRecognition(reader, set, signal) {
     const bookSignal = AbortSignal.any([controller.signal, signal])
     const key = Promise.all([reader.fingerprint(source), version]).then(([fingerprint, hash]) => {
       if (!fingerprint || !hash) return
-      return JSON.stringify(['regions-v9', set.number, hash, fingerprint])
-    })
+      return JSON.stringify(['regions-v9.1', set.number, hash, fingerprint])
+    }).catch(()=>undefined)
     active = { source, controller, signal: bookSignal, key, pages }
     return active
   }
@@ -119,18 +128,19 @@ export function createInstructionRecognition(reader, set, signal) {
   function readText(canvas, geometry, request) {
     const run = ocrQueue.then(async () => {
       request.throwIfAborted()
-      ocr ??= createOcrWorker(signal).catch(error => {
-        ocr = undefined
-        throw error
-      })
-      const engine = await ocr
-      request.throwIfAborted()
-      const { data } = await engine.recognize(canvas, {}, { text: false, blocks: true })
+      if(!ocr){ocrController=new AbortController();ocr=createOcrWorker(AbortSignal.any([signal,ocrController.signal]))}
+      let data
+      try{
+        const engine=await boundedTask(ocr,request,12000)
+        request.throwIfAborted()
+        ;({data}=await boundedTask(engine.recognize(canvas,{}, {text:false,blocks:true}),request,15000))
+      }catch(error){resetOcr();throw error}
       request.throwIfAborted()
       const x = geometry.width / canvas.width, y = geometry.height / canvas.height
       return (data.blocks ?? []).flatMap(block =>
         (block.paragraphs??[]).flatMap(paragraph => (paragraph.lines??[]).flatMap(line => line.words??[])))
         .flatMap(({ text, bbox, confidence }) => {
+          if(!bbox||!Number.isFinite(confidence))return []
           const word = normalizeCaption(text)
           if (isElement(word) ? confidence < 75 : !/^(?:[1-9]\d{0,2}x?|x)$/.test(word) || confidence < 55) return []
           return [{ text: word, box: [bbox.x0 * x, bbox.y0 * y, bbox.x1 * x, bbox.y1 * y] }]
@@ -160,7 +170,7 @@ export function createInstructionRecognition(reader, set, signal) {
       request.throwIfAborted()
       const bitmap=await createImageBitmap(surface)
       if(request.aborted){bitmap.close();request.throwIfAborted()}
-      return analyze('extract',{bitmap,geometry,inventory:mode,labels},[bitmap])
+      return analyze('extract',{bitmap,geometry,inventory:mode,labels},[bitmap],request)
     }
     let samples=await extractSamples()
     // Partial text layers: rerun on raster evidence if the first pass missed captions.
@@ -176,13 +186,13 @@ export function createInstructionRecognition(reader, set, signal) {
   async function scanInventory(source,pages,request,pdfReader){
     const [fingerprint,hash]=await Promise.all([pdfReader.fingerprint(source),version])
     request.throwIfAborted()
-    const key=fingerprint&&hash&&JSON.stringify(['regions-v9',set.number,hash,fingerprint])+'/inventory'
+    const key=fingerprint&&hash&&JSON.stringify(['regions-v9.1',set.number,hash,fingerprint])+'/inventory'
     const stored=await cache(key)
     request.throwIfAborted()
     if(stored?.length){books.set(source,stored);return stored}
     const templates=[]
     let emptyAfterInventory=0
-    const total=Number.isInteger(pages)&&pages>0?pages:await pdfReader.pageCount(source,request)
+    const total=await pdfReader.pageCount(source,request)
     for(let page=total;page>Math.max(0,total-36);page--){
       request.throwIfAborted()
       let items=[]
@@ -208,7 +218,10 @@ export function createInstructionRecognition(reader, set, signal) {
     return templates
   }
   async function illustratedInventory(book){
-    if(typeof book.source!=='string'||!canonicalInstructionUrl(book.source))return scanInventory(book.source,book.pages,book.signal,reader)
+    if(typeof book.source!=='string'||!canonicalInstructionUrl(book.source)){
+      const extra=createInstructionPdfReader()
+      try{return await scanInventory(book.source,book.pages,book.signal,extra)}finally{extra.close()}
+    }
     // Prefer the actual final volume, including the case where it is already open.
     const identity=canonicalInstructionUrl(book.source)
     const volumes=[...(set.books??[])].reverse().filter(v=>canonicalInstructionUrl(v.url))
@@ -221,9 +234,9 @@ export function createInstructionRecognition(reader, set, signal) {
       visited.add(url);book.signal.throwIfAborted()
       let templates=books.get(volume.url)
       if(!templates?.length){
-        const same=url===identity,extra=same?reader:createInstructionPdfReader()
+        const same=url===identity,extra=createInstructionPdfReader()
         try{templates=await scanInventory(same?book.source:volume.url,same?book.pages:null,book.signal,extra)}
-        catch{book.signal.throwIfAborted();templates=[]}finally{if(!same)extra.close()}
+        catch{book.signal.throwIfAborted();templates=[]}finally{extra.close()}
       }
       combined.push(...templates)
       const coverage=new Set(combined.filter(t=>t.item?.[0]).map(t=>JSON.stringify(t.item.slice(0,2)))).size
@@ -260,11 +273,11 @@ export function createInstructionRecognition(reader, set, signal) {
       throw error
     })
     let inventoryTemplates=[]
-    try{inventoryTemplates=await book.inventoryPromise}catch{request.throwIfAborted()}
+    try{inventoryTemplates=await boundedTask(book.inventoryPromise,request,45000)}catch{request.throwIfAborted()}
     request.throwIfAborted()
     // A personal PDF can belong to a different edition or set.
     const templates=inventoryTemplates??[]
-    const regions=templates.length?await analyze('rank',{samples,templates}):direct
+    const regions=templates.length?await analyze('rank',{samples,templates},[],request):direct
     request.throwIfAborted()
     if(regions.length===samples.length){if(regions.length)void cache(pageKey,{regions,callouts});return regions}
     // Only canonical books may use the selected set as a complete candidate universe.
@@ -277,12 +290,13 @@ export function createInstructionRecognition(reader, set, signal) {
     modelReferences??=import('./instruction-model-references.js?v=recognition-v8').then(module=>
       module.buildModelReferences(set.inventory,AbortSignal.any([signal,AbortSignal.timeout(35000)]))
     ).catch(()=>[])
-    const references=await modelReferences
+    let references=[]
+    try{references=await boundedTask(modelReferences,request,36000)}catch{request.throwIfAborted()}
     request.throwIfAborted()
     if(!references.length)return regions
-    if(modelWorker!==worker||!worker){await analyze('model-references',{references});modelWorker=worker}
+    if(modelWorker!==worker||!worker){await analyze('model-references',{references},[],request);modelWorker=worker}
     request.throwIfAborted()
-    const recovered=await analyze('rank-models',{samples:unresolved})
+    const recovered=await analyze('rank-models',{samples:unresolved},[],request)
     request.throwIfAborted()
     // Synthetic views are supplementary and are never persisted as reviewed PDF matches.
     return [...regions,...recovered]
