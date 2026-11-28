@@ -6,7 +6,7 @@ import { safeImage } from '../sets/data.js?v=catalog-engine-1'
 import { editorLabels } from '../editor/labels.js?v=torque-clutch'
 import { locales } from './locale.js?v=compact-nav-1'
 import {mountStore} from './store.js?v=brand-plus-1'
-import { mountHomeHub, mountHubSearch, openReleaseHistory } from './home-hub.js?v=compact-nav-1'
+import { mountHomeHub, mountHubSearch, openReleaseHistory } from './home-hub.js?v=smart-highlight-1'
 import { mountShellNavigation } from './shell-navigation.js?v=compact-nav-1'
 import { mountBrandPlus } from './brand-plus.js?v=brand-plus-1'
 import { createAuthClient } from './auth-client.js?v=live-polish-1'
@@ -616,7 +616,7 @@ async function openSets() {
   const root = byId('sets-panel')
   root.textContent = strings().loadingLibrary
   try {
-    const { mountSetCatalog } = await import('../sets/catalog.js?v=ducati-instructions-1')
+    const { mountSetCatalog } = await import('../sets/catalog.js?v=smart-highlight-1')
     if (controller.signal.aborted) return
     let initialQuery=pendingSetQuery;pendingSetQuery=''
     try{const target=sessionStorage.getItem('bricklab-instruction-return');if(/^\d{3,7}-\d{1,2}$/.test(target??'')){initialQuery=target;sessionStorage.removeItem('bricklab-instruction-return')}}catch{}
@@ -704,7 +704,7 @@ async function openEditor(project, showLoading = startupRoot.hidden) {
   }) : null
   let phase = 'loadEditorError'
   try {
-    const { mountEditor } = await import('../editor/editor.js?v=ducati-instructions-1')
+    const { mountEditor } = await import('../editor/editor.js?v=smart-highlight-1')
     if (controller.signal.aborted) return
     phase = 'startEditorError'
     await mountEditor(editorRoot, {

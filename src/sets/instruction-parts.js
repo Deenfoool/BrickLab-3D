@@ -17,11 +17,13 @@ function pageState(preview){
  const tooltip=document.createElement('span')
  tooltip.className='instruction-part-label';tooltip.hidden=true;tooltip.setAttribute('aria-hidden','true')
  preview.append(tooltip)
- const state={surface,tooltip,keys:new Set(),active:null}
+ const state={surface,tooltip,keys:new Set(),active:null,readable:null}
  states.set(preview,state);return state
 }
 function highlight(button,shape){
  if(!shape){button.classList.add('instruction-part-marker');return}
+ button.classList.remove('instruction-part-marker')
+ button.querySelector('svg')?.remove()
  const svg=document.createElementNS(ns,'svg'),path=document.createElementNS(ns,'path')
  svg.setAttribute('viewBox','0 0 '+shape.width+' '+shape.height)
  svg.setAttribute('preserveAspectRatio','none');svg.setAttribute('aria-hidden','true')
@@ -45,7 +47,22 @@ export function addInstructionParts(preview, regions, { language, describe, find
   Object.assign(button.style,{left:x/100+'%',top:y/100+'%',width:width/100+'%',height:height/100+'%',zIndex:String(Math.max(1,1000-Math.floor(width*height/100000)))})
   let prepared=false
   function showLabel(){
-   if(!prepared){prepared=true;highlight(button,regionSilhouette(state.surface??{},region))}
+   if(!prepared){
+    prepared=true
+    const shape=regionSilhouette(state.surface??{},region)
+    highlight(button,shape)
+    if(!shape&&state.surface?.tagName==='IMG'){
+      // Existing preview remains visible even if the image host disallows CORS.
+      state.readable??=new Promise(resolve=>{
+        const copy=new Image();copy.crossOrigin='anonymous';copy.src=state.surface.currentSrc||state.surface.src
+        copy.decode().then(()=>resolve(copy),()=>resolve(null))
+      })
+      void state.readable.then(copy=>{
+        if(copy&&button.isConnected&&states.get(preview)===state)highlight(button,regionSilhouette(copy,region))
+      })
+    }
+   }
+   if(state.active&&state.active!==button)state.active.classList.remove('is-highlighted')
    state.active=button;button.classList.add('is-highlighted')
    tooltip.textContent=label
    tooltip.style.left='clamp(6.5rem, '+(x+width/2)/100+'%, calc(100% - 6.5rem))'
