@@ -52,7 +52,7 @@ export function createCloudAccount({root,link,getProjects,download,openCopy,link
  let adminRoute='',notificationError=false,bellRefreshing=false,bellRendered=false
  const t=()=>copy[lang]
  globalThis.addEventListener?.('beforeunload',event=>{if(liveSessionDirty(liveDraft?.session)){event.preventDefault();event.returnValue=''}})
- function publishNotifications(){onNotifications({lang,signedIn:Boolean(user),checked,busy,items:activityData?.notifications??null,userId:user?.id??null,error:notificationError})}
+ function publishNotifications(){onNotifications({lang,signedIn:Boolean(user),checked,busy,items:activityData?.notifications??null,userId:user?.id??null,plus:!!user&&profileData?.plus===true,plusUntil:user?profileData?.plusUntil??0:0,error:notificationError})}
  function label(){const e=link.querySelector('[data-account-label]');e.textContent=user?(lang==='ru'?'Моя мастерская':'My workshop'):t().login;link.href=user&&isWorkshopHandle(user.username)?profileHref(user.username):'#account';link.title=e.textContent;link.setAttribute('aria-label',e.textContent)}
  link.addEventListener('click',e=>{if(!user||e.ctrlKey||e.metaKey||e.shiftKey||e.altKey||e.button!==0)return;section='workshop';if(visible&&location.hash===link.hash){e.preventDefault();render()}})
  function message(code){const p=node('p','account-notice',t()[code]??t().unknown);p.setAttribute('role','status');return p}

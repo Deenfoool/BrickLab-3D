@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#181a1d">
   <title>BrickLab 3D</title>
   <link rel="icon" href="./assets/bricklab.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./src/menu/menu.css?v=compact-nav-1">
+  <link rel="stylesheet" href="./src/menu/menu.css?v=compact-nav-2">
   <link rel="stylesheet" href="./src/editor/editor.css?v=feedback-3">
   <link rel="stylesheet" href="./src/sets/sets.css?v=feedback-3">
   <link rel="stylesheet" href="./src/menu/startup.css?v=ldraw-brand">
@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="./src/menu/commerce-visuals.css?v=instruction-store-1">
   <link rel="stylesheet" href="./src/editor/workspace.css?v=context-pages-1">
   <link rel="stylesheet" href="./src/menu/site-motion.css?v=showcase-motion-2">
-  <script type="module" src="./src/menu/menu.js?v=compact-nav-1"></script>
+  <script type="module" src="./src/menu/menu.js?v=compact-nav-2"></script>
 </head>
 <body>
   <section class="startup" id="startup" aria-label="Подготовка BrickLab 3D">
@@ -84,6 +84,7 @@
   <div class="shell">
     <main class="main">
       <header class="topbar">
+        <div class="brand-cluster">
         <details class="shell-disclosure brand-disclosure" id="project-navigation">
           <summary class="brand"><img src="./assets/bricklab.svg" alt="" width="48" height="48"><span>BrickLab 3D</span><svg class="icon" aria-hidden="true"><use href="#down"/></svg></summary>
           <div class="shell-popover">
@@ -94,6 +95,11 @@
             <button type="button" data-open-about><svg class="icon" aria-hidden="true"><use href="#icon-info"/></svg><span data-text="aboutProject">О проекте</span></button>
           </div>
         </details>
+        <div class="brand-plus" id="brand-plus" hidden>
+          <button type="button" class="brand-plus-badge" id="brand-plus-trigger" aria-describedby="brand-plus-tooltip" aria-expanded="false">Plus</button>
+          <div class="brand-plus-tooltip" id="brand-plus-tooltip" role="tooltip" hidden><strong>BrickLab Plus</strong><span id="brand-plus-remaining"></span><small id="brand-plus-expiry"></small></div>
+        </div>
+        </div>
         <nav class="navigation" aria-label="Разделы">
         <a href="#home" data-page="home"><svg class="icon" aria-hidden="true"><use href="#icon-home"/></svg><span data-text="home">Главная</span></a>
         <a href="#projects" data-page="projects"><svg class="icon" aria-hidden="true"><use href="#folder"/></svg><span data-text="projects">Мои сборки</span></a>
