@@ -46,6 +46,7 @@ export function renderCloudWorkshop({lang,user,local,remote,section,busy,go,sett
  const t={...workshopCopy[lang],...extra[lang],admin:lang==='ru'?'Администрирование':'Administration',revokeOthers:lang==='ru'?'Завершить остальные сессии':'End other sessions'},summary=workshopSummary(local,remote)
  const profile=profileData?.profile,progress=profileData?.progress
  const layout=el('div','workshop-layout cosmetic-'+(profile?.background??'default')),nav=el('nav','workshop-nav'),content=el('div','workshop-content')
+ content.setAttribute('data-motion-section',section==='settings'?'settings:'+settingsTab:section)
  applySignature(layout,profile?.background)
  const ru=lang==='ru',sidebar=el('aside','workshop-sidebar'),sideHead=el('div','workshop-sidebar-heading'),sideFoot=el('div','workshop-sidebar-footer');sideHead.append(el('span','workshop-sidebar-kicker','BRICKLAB CLOUD'),el('strong',null,ru?'Личный кабинет':'Workspace'));nav.setAttribute('aria-label',t.workshop)
  for(const [key,symbol] of [...sections,...(user.admin===true?[['admin','icon-shield']]:[])]){

@@ -1,3 +1,4 @@
+import {acknowledgeMotion} from './site-motion.js?v=showcase-motion-1'
 import {metricItems} from './workshop-metrics-model.js'
 import {workshopMetricValues} from './workshop-metrics.js?v=workshop-live-2'
 import {profileHref,workshopRoute} from './profile-route.js'
@@ -65,7 +66,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
     const result=await request('/api/community/'+kind+'/'+id,signal,false,set.has(id)?'DELETE':'PUT')
     if(signal.aborted)return
     if(result.active)set.add(id);else set.delete(id)
-    for(const update of reactionUpdates.get(key)??[])update(result.count)
+    for(const update of reactionUpdates.get(key)??[]){update(result.count);acknowledgeMotion(update.control)}
    }catch(e){fail(e)}finally{pending.delete(key);if(!signal.aborted)control.disabled=own}
   })
   function update(n){control.textContent=(set.has(id)?label[1]:label[0])+(kind==='bookmark'?'':' · '+n);control.setAttribute('aria-pressed',String(set.has(id)))}
@@ -80,7 +81,7 @@ export async function mountCommunity(root,{language='ru',route='community',signa
  }
  const artFor=(b,large=false)=>{
   const art=el('div','community-art'+(large?' large':''))
-  if(b.imageCount>0&&uuid.test(b.id)){const image=el('img');image.src='/api/community/build/'+b.id+'/image/0';image.alt=b.title;image.loading='lazy';art.append(image);return art}
+  if(b.imageCount>0&&uuid.test(b.id)){const image=el('img');image.src='/api/community/build/'+b.id+'/image/0';image.alt=b.title;image.loading='lazy';image.decoding='async';image.onerror=()=>{image.remove();art.append(icon('layers'))};art.append(image);return art}
   art.append(icon('layers'))
   const openLarge=()=>{if(activeViewer)location.hash='#community/build/'+b.id;else void showViewer(b)}
   const largeCard=b.partCount>previewLimits.thumbnailParts

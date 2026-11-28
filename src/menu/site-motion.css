@@ -1,0 +1,60 @@
+/* BrickLab motion language: restrained acceleration, theme accents, finite feedback.
+   Scoped to the menu shell; never run decorative motion inside the CAD editor. */
+.shell{
+ --motion-fast:150ms;--motion-normal:260ms;--motion-slow:480ms;--motion-ease:cubic-bezier(.2,.8,.2,1);
+}
+.shell :is(.workspace-action,.workshop-live-icon,.navigation a,.workshop-award-item,.workshop-award-choice,.achievement-filters button,.set-tabs button){
+ transition:background-color var(--motion-fast),color var(--motion-fast),border-color var(--motion-fast),box-shadow var(--motion-normal),scale var(--motion-fast) var(--motion-ease)
+}
+.shell :is(.workspace-action,.workshop-live-icon,.navigation a,.workshop-award-item):active:not(:disabled){scale:.975}
+.shell .navigation a{position:relative;isolation:isolate}
+.shell .navigation a::after{content:'';position:absolute;inset:9px auto 9px 1px;width:2px;border-radius:4px;background:var(--gold,#e5b970);scale:1 0;opacity:0;transition:scale var(--motion-normal) var(--motion-ease),opacity var(--motion-fast);pointer-events:none}
+.shell .navigation a[aria-current="page"]::after{scale:1 1;opacity:1}
+.shell .workshop-nav .workspace-action[aria-current="page"]{animation:bricklab-selection 320ms var(--motion-ease)}
+.shell .workshop-cover{overflow:hidden}
+.shell .workshop-cover::before{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;background:linear-gradient(112deg,transparent 36%,#ffffff0d 48%,transparent 60%);translate:-100% 0;animation:bricklab-cover-light 1.15s var(--motion-ease) 180ms;animation-fill-mode:none}
+.shell .workshop-cover .profile-cover-image{transition:scale 700ms var(--motion-ease)}
+.shell .workshop-avatar{transition:box-shadow var(--motion-normal),scale var(--motion-normal) var(--motion-ease)}
+.shell .workshop-live-cover-controls{transition:background-color var(--motion-normal),border-color var(--motion-normal),box-shadow var(--motion-normal)}
+.shell .workshop-live-cover-controls:has([aria-pressed=true]){border-color:color-mix(in srgb,var(--portfolio-accent,#ffbd62) 55%,transparent);box-shadow:0 6px 25px #0005,0 0 16px color-mix(in srgb,var(--portfolio-accent,#ffbd62) 15%,transparent)}
+.shell .workshop-live-cover-controls .workshop-live-icon:first-child svg{transition:rotate 360ms var(--motion-ease)}
+.shell .workshop-live-cover-controls .workshop-live-icon[aria-pressed=true] svg{rotate:60deg}
+.shell .workshop-live-cover-controls .workshop-live-icon:nth-child(2){animation:bricklab-confirm 240ms var(--motion-ease)}
+.shell .workshop-live-toolbar:not([hidden]){animation:bricklab-toolbar 240ms var(--motion-ease)}
+.shell .workshop-live-grid:not(.is-editing)>.portfolio-block{transition:border-color var(--motion-normal),box-shadow var(--motion-normal)}
+.shell .workshop-live-grid:not(.is-editing) [data-showcase-card],
+.shell :is(.project-card,.community-card,.hub-build,.set-card,.store-product.commerce-merch,.example-card,.achievement-tile){transition:transform var(--motion-normal) var(--motion-ease),border-color var(--motion-normal),box-shadow var(--motion-normal)}
+.shell :is(.portfolio-build-art,.community-art,.hub-build-art,.set-card-art,.project-card-image)>img{transition:scale var(--motion-slow) var(--motion-ease)}
+.shell .workshop-award-item .achievement-medal{transition:scale var(--motion-normal) var(--motion-ease),filter var(--motion-normal)}
+.shell .workshop-award-item:focus-visible .achievement-medal{scale:1.08;filter:drop-shadow(0 0 9px color-mix(in srgb,var(--medal) 55%,transparent))}
+.shell :is(.workshop-award-dialog,.workshop-live-preview-dialog,.settings-modal,.community-viewer-dialog,.store-preview-dialog,.hub-search-dialog,.set-details-dialog)[open]{animation:bricklab-dialog 240ms var(--motion-ease)}
+.shell :is(.workshop-award-dialog,.workshop-live-preview-dialog,.settings-modal,.community-viewer-dialog,.store-preview-dialog,.hub-search-dialog,.set-details-dialog)[open]::backdrop{animation:bricklab-backdrop 220ms ease-out}
+.shell .workshop-award-dialog[open] .achievement-medal{animation:bricklab-medal-reveal 460ms var(--motion-ease)}
+.shell .achievement-bar::-webkit-progress-value{transition:width 480ms var(--motion-ease)}
+.shell .achievement-bar::-moz-progress-bar{transition:width 480ms var(--motion-ease)}
+@media(hover:hover) and (pointer:fine){
+ .shell .workshop-cover:hover .profile-cover-image{scale:1.012}
+ .shell .workshop-avatar:hover{scale:1.025;box-shadow:0 0 22px color-mix(in srgb,var(--portfolio-accent,#ffbd62) 22%,transparent)}
+ .shell .workshop-live-grid:not(.is-editing)>.portfolio-block:hover{border-color:color-mix(in srgb,var(--portfolio-accent,#ffbd62) 40%,#353b44);box-shadow:0 8px 26px #0002}
+ .shell .workshop-live-grid:not(.is-editing) [data-showcase-card]:hover{transform:translateY(-2px);border-color:var(--portfolio-accent,#ffbd62);box-shadow:0 10px 24px #0004}
+ .shell :is(.project-card,.community-card:not([data-showcase-card]),.hub-build,.set-card,.store-product.commerce-merch,.example-card,.achievement-tile):hover{transform:translateY(-3px);box-shadow:0 12px 30px #0004}
+ .shell :is([data-showcase-card],.community-card,.hub-build,.set-card,.project-card):hover :is(.portfolio-build-art,.community-art,.hub-build-art,.set-card-art,.project-card-image)>img{scale:1.035}
+ .shell .workshop-live-grid:not(.is-editing) .workshop-award-item:hover:not(:disabled) .achievement-medal{scale:1.1;filter:drop-shadow(0 0 10px color-mix(in srgb,var(--medal) 55%,transparent))}
+ .shell .workshop-live-grid.is-editing [data-showcase-card],.shell .workshop-live-grid.is-editing [data-showcase-card] img{transform:none;scale:1;transition:none}
+}
+@keyframes bricklab-selection{from{opacity:.7}to{opacity:1}}
+@keyframes bricklab-cover-light{from{translate:-100% 0}to{translate:100% 0}}
+@keyframes bricklab-confirm{from{scale:.82;opacity:.5}to{scale:1;opacity:1}}
+@keyframes bricklab-toolbar{from{opacity:.5;translate:0 -6px}to{opacity:1;translate:0 0}}
+@keyframes bricklab-dialog{from{opacity:.25;scale:.98;translate:0 8px}to{opacity:1;scale:1;translate:0 0}}
+@keyframes bricklab-backdrop{from{opacity:0}to{opacity:1}}
+@keyframes bricklab-medal-reveal{from{scale:.88;opacity:.4}60%{scale:1.04;opacity:1}to{scale:1;opacity:1}}
+@media(prefers-reduced-motion:reduce){
+ .shell :is(.workspace-action,.workshop-live-icon,.navigation a,.workshop-award-item,.workshop-award-choice,.workshop-avatar,.workshop-cover img,.workshop-live-cover-controls,.workshop-live-toolbar,.workshop-live-grid>.portfolio-block,[data-showcase-card],.project-card,.community-card,.hub-build,.set-card,.store-product,.example-card,.achievement-tile,.achievement-medal,.workshop-award-dialog,.workshop-live-preview-dialog,.settings-modal,.community-viewer-dialog,.store-preview-dialog,.hub-search-dialog,.set-details-dialog){animation:none!important;transition:none!important;scale:none!important}
+ .shell .navigation a::after,.shell .workshop-cover::before,.shell dialog::backdrop{animation:none!important;transition:none!important}
+ .shell :is(.project-card,.community-card,.hub-build,.set-card,.store-product,.example-card,.achievement-tile,[data-showcase-card]):hover{transform:none!important}
+ .shell :is(.portfolio-build-art,.community-art,.hub-build-art,.set-card-art,.project-card-image)>img{transition:none!important;scale:none!important}
+ .shell .workshop-live-cover-controls svg{transition:none!important}
+ .shell .achievement-bar::-webkit-progress-value{transition:none}
+ .shell .achievement-bar::-moz-progress-bar{transition:none}
+}

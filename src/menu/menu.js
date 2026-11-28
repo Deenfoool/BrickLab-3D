@@ -1,3 +1,4 @@
+import {createSiteMotion} from './site-motion.js?v=showcase-motion-1'
 import {workshopRoute} from './profile-route.js'
 import { sessionDiagnostics } from '../feedback/diagnostics.js?v=bug-report-v1'
 import { mountBugReport } from '../feedback/dialog.js?v=events-1'
@@ -38,6 +39,7 @@ const startupRoot = byId('startup')
 const loadingTemplate = startupRoot.cloneNode(true)
 loadingTemplate.removeAttribute('id')
 const shell = document.querySelector('.shell')
+const siteMotion=createSiteMotion(shell)
 const workshopHeader=shell.querySelector('.topbar')
 if(typeof ResizeObserver==='function'&&workshopHeader){const observer=new ResizeObserver(()=>{if(!shell.hidden)shell.style.setProperty('--workshop-header-height',workshopHeader.offsetHeight+'px')});observer.observe(workshopHeader)}
 const libraryRoot = byId('library-panel')
@@ -564,6 +566,7 @@ function render(initial = false) {
   else closeLibrary()
   setStatus(requestedId && !activeProject ? 'missing' : storageWarning ? 'storageError' : null)
   if (returning && startupRoot.hidden) revealMenu(shell)
+  siteMotion.setRoute(activeProject?null:page+':'+location.hash)
   return editorReady
 }
 
