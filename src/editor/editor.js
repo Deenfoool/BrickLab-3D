@@ -187,6 +187,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
               <div data-el="motion" class="editor-motion" hidden>
                 <label><span data-el="motionLabel">${t.drive}</span><input data-el="angle" type="range" min="-1080" max="1080" step="1" value="0"></label>
                 <output data-el="degrees">0°</output>
+                <small data-el="actuatorState" class="editor-actuator-state" role="status" hidden></small>
                 <label data-el="speedControl"><span>${language==='ru'?'Скорость воспроизведения':'Playback speed'} <output data-el="speedValue">1×</output></span><input data-el="motionSpeed" type="range" min="0.1" max="5" step="0.1" value="1"></label>
                 <select data-el="motionAxis" aria-label="${t.motionAxis}" hidden>
                   <option value="0">X</option><option value="1" selected>Y</option><option value="2">Z</option>
@@ -662,12 +663,14 @@ export async function mountEditor(root, { document, projectId, language, save, d
     motor.last = time
     if (motion?.ok && motion.playback) {
       motor.degrees += motion.playback * dt * motionSpeed
+      if(motion.actuators)motor.degrees=Math.max(motion.range[0],Math.min(motion.range[1],motor.degrees))
       const radians = motor.degrees * Math.PI / 180
       const poses = rotationPoses(state.parts, motion, radians)
       if (poses) scene.previewParts(poses)
       scene.belts.travel(new Map(motion.belts?.map(belt =>
         [belt.record.id, beltTravel(belt, motion.spins, radians)])))
       if (selected === motor.id) {
+        showActuatorState(motion,poses)
         angle = motion.actuators ? Math.max(motion.range[0],Math.min(motion.range[1],motor.degrees)) : ((motor.degrees % 360) + 360) % 360
         el('angle').value = angle
         el('degrees').textContent = Math.round(angle) + '°'
@@ -682,6 +685,18 @@ export async function mountEditor(root, { document, projectId, language, save, d
     clearTimeout(messageTimer)
     scene.dispose()
   }, { once: true })
+
+  function showActuatorState(motion,poses){
+    const status=el('actuatorState')
+    status.hidden=!motion?.actuators?.length
+    if(status.hidden)return
+    const byId=new Map((poses??[]).map(p=>[p.id,p]))
+    status.textContent=motion.actuators.map(({part,spec})=>{
+      const extension=spec.initial+(byId.get(part.id)?.previewActuatorRod??0)
+      const mm=n=>Number((n*.4).toFixed(2))
+      return tr('Шток ','Rod ')+mm(extension)+' / '+mm(spec.stroke)+' '+t.millimeters+' · '+Math.round(extension/spec.stroke*100)+'%'
+    }).join(' | ')
+  }
 
   function showMotion(audible = false, wrappedAngle = 0) {
     const previous = lastPreview
@@ -702,6 +717,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
         lastPreview = angle
         scene.previewParts(poses)
         lastMotionPoses=poses
+        showActuatorState(transmission,poses)
         if(mapUI.enabled&&performance.now()-lastMapUpdate>100)refreshTransmissionMap()
         scene.belts.travel(new Map(transmission.belts?.map(belt =>
           [belt.record.id, beltTravel(belt, transmission.spins, value)])))
@@ -709,6 +725,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
         if (audible && transmission.unit !== 'linear') audio.advanceRotation(angle - previous + wrappedAngle)
       }
     }
+    if(!transmission?.actuators?.length)showActuatorState(null)
     el('degrees').textContent = transmission?.unit === 'linear'
       ? `${Number((angle * .4).toFixed(2))} ${t.millimeters}` : `${Number(angle.toFixed(2))}°`
     el('angle').value = angle
@@ -1059,7 +1076,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     el('links').hidden = addingBelt
     el('links').textContent = mode === 'kinematics'
       ? hinge ? (hinge.ok ? t.detented : t.closedHinge)
-        : transmission ? (transmission.ok ? (t.mechanisms[transmission.kind] ?? drives) : t.transmissionError)
+        : transmission ? (transmission.ok ? (t.mechanisms[transmission.kind] ?? drives) : transmission.reason?.startsWith('actuator-')?tr('Актуатор: механизм заблокирован или контур не поддерживается.','Actuator: constrained or unsupported linkage.'):t.transmissionError)
           : t.driver
       : part ? (portsFor(part.design).length ? `${t.joints}: ${selectedLinks.length}` : t.geometryOnly) : ''
     el('motion').hidden = (!hinge?.ok && !transmission?.ok) || mode !== 'kinematics'

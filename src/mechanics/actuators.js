@@ -1,13 +1,13 @@
 // LDraw 43097/61927 f1/f2: the piston assembly is at Z=170/270 LDU.
 // 26 input revolutions per full stroke is an engineering approximation, not a measured Type 2 calibration.
 const large={stroke:100,turns:26,axis:[0,0,1],inputPort:'shadow-cfce509d66af'}
-export const linearActuators=Object.freeze(Object.fromEntries(['43097','61927'].flatMap(id=>[1,2].map(n=>[id+'-f'+n,Object.freeze({...large,initial:n===1?0:100})]))))
+export const linearActuators=Object.freeze(Object.assign(Object.create(null),Object.fromEntries(['43097','61927'].flatMap(id=>[1,2].map(n=>[id+'-f'+n,Object.freeze({...large,initial:n===1?0:100})])))))
 export const actuatorMounts=new Set(['61904','61905'])
 export const isRodPort=(design,port)=>Boolean(linearActuators[design]&&port?.start?.[2]>=170&&port.gender==='F')
-export const validActuatorExtension=(design,value)=>!!linearActuators[design]&&Number.isFinite(value)&&value>=0&&value<=linearActuators[design].stroke
-export const validActuatorPhase=(design,value)=>!!linearActuators[design]&&Number.isFinite(value)&&value>=0&&value<2*Math.PI
+export const validActuatorExtension=(design,value)=>typeof design==='string'&&!!linearActuators[design]&&Number.isFinite(value)&&value>=0&&value<=linearActuators[design].stroke
+export const validActuatorPhase=(design,value)=>typeof design==='string'&&!!linearActuators[design]&&Number.isFinite(value)&&value>=0&&value<2*Math.PI
 export function currentActuatorSpec(part){
- const spec=linearActuators[part?.design]
+ const spec=typeof part?.design==='string'?linearActuators[part.design]:null
  return spec&&{...spec,initial:validActuatorExtension(part.design,part.actuatorExtension)?part.actuatorExtension:spec.initial}
 }
 export function actuatorOffset(part){return (currentActuatorSpec(part)?.initial??0)-(linearActuators[part?.design]?.initial??0)}
