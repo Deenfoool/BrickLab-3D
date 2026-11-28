@@ -1,0 +1,8 @@
+# Linear actuators — first integration
+- 43097-f1/f2 and 61927-f1/f2: LDraw root has housing, input bush 47157, and piston 62274c01. Piston datum Z=170 or 270 LDU. Stroke 100 LDU (5 studs).
+- 61904 hinged and 61905 fixed bracket: common local housing datum, keyed seat. Existing cross-axis holes remain available for actual fasteners; the virtual seat does not add those fasteners to the inventory. External hinges still use pins/axles.
+- Input cross bore remains keyed during snapping, but the housing is not locked to the rotating input.
+- Kinematics preview: direct actuator slider or external axle / gear input; independent rod and rotor rendering; translates a freely moving rod-side branch. Range capped, no extrapolated rod travel.
+- 26 turns/full stroke and positive input rotation=extension are simulation assumptions pending physical calibration; no measured torque/clutch model yet.
+- Closed linkages/shared moving branches deliberately rejected instead of breaking geometry. Next: planar loop solving, persistent adjustable extension, physical motor/force limits, small and XL designs, browser verification.
+- Geometry sources: https://library.ldraw.org/library/official/parts/43097-f1.dat and 43097-f2.dat, 61927-f1.dat and 61927-f2.dat, 61904.dat, 47157.dat, 62274c01.dat. LDraw data is already shipped in the project.

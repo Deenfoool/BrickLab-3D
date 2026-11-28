@@ -1,12 +1,12 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
-import { partMesh, parts } from './parts.js?v=system-complete'
-import { createBeltScene } from './belt-scene.js?v=belt-drive'
+import { partMesh, parts, previewActuatorMesh } from './parts.js?v=linear-actuator-1'
+import { createBeltScene } from './belt-scene.js?v=linear-actuator-1'
 import { createMotorCables } from './motor-cables.js?v=system-complete'
 import { createPartOutlines } from './part-outlines.js?v=transmission-map-1'
-import { portsFor } from '../mechanics/catalog.js?v=volvo-spur-gears'
-import { snapGrid } from './model.js?v=belt-drive'
+import { portsFor } from '../mechanics/catalog.js?v=linear-actuator-1'
+import { snapGrid } from './model.js?v=linear-actuator-1'
 import { readPreference } from '../menu/preferences.js?v=full-settings'
 
 const unitScale = [1, 1, 1]
@@ -191,6 +191,7 @@ export function createScene(host, models) {
       object.position.fromArray(part.position)
       object.quaternion.fromArray(part.rotation)
       object.scale.set(part.mirrored ? -1 : 1, 1, 1)
+      previewActuatorMesh(object,part)
       object.userData.finish.color.set(part.color ?? parts[part.design].color)
       object.updateMatrixWorld(true)
       syncVisibility(part.id, object)
@@ -358,6 +359,7 @@ export function createScene(host, models) {
       object.quaternion.fromArray(part.rotation)
       object.scale.fromArray(part.previewScale ?? unitScale)
       if (part.mirrored) object.scale.x *= -1
+      previewActuatorMesh(object,part)
       object.updateMatrixWorld(true)
     }
     motorCables.update()

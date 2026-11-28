@@ -11,15 +11,15 @@ import { mountWorkspace } from './workspace.js?v=menu-studio-2'
 import { createEditorAudio } from './audio.js?v=editor-sound'
 import { mountMotorPanel } from './motor-panel.js'
 import { Plane, Quaternion, Vector3 } from 'three'
-import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=volvo-spur-gears'
-import { baseRotation, mirrorPose, samePose, worldPort } from './placement.js?v=torque-clutch'
-import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, assemblyJoints, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=volvo-spur-gears'
+import { hasConnectors, portsFor } from '../mechanics/catalog.js?v=linear-actuator-1'
+import { baseRotation, mirrorPose, samePose, worldPort } from './placement.js?v=linear-actuator-1'
+import { shiftSelector, linkedSelector, recoverSelectorLinks, connectAligned, connectPlaced, createAssembly, assemblyJoints, gearPoses, hingeMotion, hingePoses, loadParts, raisedPose, rotationMotion, rotationPoses, snapGrid } from './model.js?v=linear-actuator-1'
 import { axleEnds, axleOptions, resizeAxle } from './axle-length.js?v=belt-drive'
-import { nearestDetent } from '../mechanics/axial.js?v=torque-clutch'
-import { nearbyConnections, translationSnaps } from './snap.js?v=volvo-spur-gears'
-import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=system-complete'
+import { nearestDetent } from '../mechanics/axial.js?v=linear-actuator-1'
+import { nearbyConnections, translationSnaps } from './snap.js?v=linear-actuator-1'
+import { loadCoreModels, loadPartModel, parts, sections } from './parts.js?v=linear-actuator-1'
 import { mountLibrary } from './library.js?v=catalog-engine-1'
-import { createScene } from './scene.js?v=menu-studio-2'
+import { createScene } from './scene.js?v=linear-actuator-1'
 import {mountTransmissionMap,transmissionMap,transmissionCodes} from './transmission-map.js?v=menu-studio-1'
 import {mountMotorBench} from './motor-bench-panel.js'
 import {mountCollaboration} from './collaboration-client.js?v=live-polish-1'
@@ -34,7 +34,7 @@ import { mountTrackPanel, trackLabels } from './track-panel.js?v=level-treads'
 import { upgradeInlineEngineFan } from './inline-engine.js'
 import { beltTravel, promoteLegacyBelts } from '../mechanics/belts.js?v=belt-drive'
 import { componentBundle, expandComponents } from './components.js?v=belt-drive'
-import { editorLabels } from './labels.js?v=torque-clutch'
+import { editorLabels } from './labels.js?v=linear-actuator-1'
 import { readPreference, writePreference } from '../menu/preferences.js?v=full-settings'
 import { mountTutorial, showEditorTip } from './tutorial.js?v=academy-1'
 
@@ -612,7 +612,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     render()
     try {
       const [{ createPhysicalAssembly }, { loadRapier }] = await Promise.all([
-        import('../mechanics/physical-assembly.js?v=torque-clutch'), import('../mechanics/physics-world.js'),
+        import('../mechanics/physical-assembly.js?v=linear-actuator-1'), import('../mechanics/physics-world.js'),
       ])
       const rapier = await loadRapier()
       if (signal.aborted || clutchTest !== test) return
@@ -666,7 +666,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
       scene.belts.travel(new Map(motion.belts?.map(belt =>
         [belt.record.id, beltTravel(belt, motion.spins, radians)])))
       if (selected === motor.id) {
-        angle = ((motor.degrees % 360) + 360) % 360
+        angle = motion.actuators ? Math.max(motion.range[0],Math.min(motion.range[1],motor.degrees)) : ((motor.degrees % 360) + 360) % 360
         el('angle').value = angle
         el('degrees').textContent = Math.round(angle) + '°'
       }
@@ -1061,7 +1061,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
           : t.driver
       : part ? (portsFor(part.design).length ? `${t.joints}: ${selectedLinks.length}` : t.geometryOnly) : ''
     el('motion').hidden = (!hinge?.ok && !transmission?.ok) || mode !== 'kinematics'
-    el('play').hidden = Boolean(hinge || (transmission?.solve && !transmission.playback))
+    el('play').hidden = Boolean(hinge || (transmission?.actuators && transmission.unit==='linear') || (transmission?.solve && !transmission.playback))
     el('speedControl').hidden=el('play').hidden&&!runningMotor
     el('motionAxis').hidden = !transmission?.spherical
     el('motionLabel').textContent = transmission?.unit === 'linear' ? t.travel
@@ -1343,7 +1343,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     setMessage(t.snapAllWorking, true)
     render()
     try {
-      const { snapScene } = await import('./scene-snap.js?v=volvo-spur-gears')
+      const { snapScene } = await import('./scene-snap.js?v=linear-actuator-1')
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
       if (signal.aborted || state !== before || mode !== 'build' || hidden !== hiddenBefore || dragActive() || pendingPart) {
         if (message === t.snapAllWorking) setMessage()
@@ -1612,6 +1612,9 @@ export async function mountEditor(root, { document, projectId, language, save, d
     if (transmission?.periodic && (angle >= limit || angle < 0)) {
       wrappedAngle = Math.floor(angle / limit) * limit
       angle = ((angle % limit) + limit) % limit
+    }
+    if (angle < Number(el('angle').min) && transmission?.actuators) {
+      angle = Number(el('angle').min);stopAnimation();showMotion(true);render();return
     }
     if (angle > limit) {
       angle = limit

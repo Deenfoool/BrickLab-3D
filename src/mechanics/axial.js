@@ -44,11 +44,13 @@ export function connectionMode(male, female) {
     return mate && { rotation: 'locked', rimSeat: mate }
   }
   const family = `${male.role}:${female.role}`
+  if (female.actuatorInput && ['axle','axle-pin','friction-axle-pin'].includes(male.role)) return { rotation:'continuous', translation:male.role==='axle', inputScrew:true }
   if (male.group && male.group === female.group) {
     if (family === 'torque-clutch-inner:torque-clutch-outer') {
       // Provisional simulation value in N·m until the physical part is measured.
       return { rotation: 'locked', anchor: 'pivot', orientation: 1, torqueLimit: .09 }
     }
+    if (family === 'actuator-housing:actuator-mount') return { rotation:'fixed', anchor:'keyed', orientation:1 }
     if (family === 'turntable-top:turntable-base') return { rotation: 'continuous', anchor: 'pivot', orientation: 1 }
     if (family === 'shift-tip:shift-groove') return { rotation: 'continuous', anchor: 'pivot' }
     if (family === 'piston:damper-cylinder') return { rotation: 'slider', anchor: 'slide', stroke: female.stroke }
@@ -258,7 +260,7 @@ export function evaluateInsertion(male, female, { offset, direction = 1, side = 
 
   const detents = mode.rotation === 'detented' ? [...female.detents] : []
   // A seated dog clutch carries the relative angular phase at engagement.
-  const keyStep = !(mode.clutch && seated) && !mode.tube && ['locked', 'fixed'].includes(mode.rotation) ? Math.PI / 2 : null
+  const keyStep = mode.inputScrew || (!(mode.clutch && seated) && !mode.tube && ['locked', 'fixed'].includes(mode.rotation)) ? Math.PI / 2 : null
   const snappedRoll = detents.length ? nearestDetent(detents, roll)
     : keyStep === null ? roll : Math.round(roll / keyStep) * keyStep
   const [low, high] = fit.interval.map(point => (point - offset) * direction).sort((a, b) => a - b)
