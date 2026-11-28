@@ -438,13 +438,13 @@ export function rank({ samples, templates }) {
       const [first, second] = bestByItem(scores)
       if (first?.score <= .065 && (second?.score ?? Infinity) - first.score >= .035) item = first.reference.item
     }
-    // Clean evidence is a fallback, not a replacement for existing direct matches.
-    if(!item){const recovered=cleanMatch(sample,cleanReferences,rawScores);if(recovered)item=recovered}
+    // A legacy match must pass the original shape veto. Only then try the
+    // independent cleaned-view consensus if the ordinary ranking abstains.
     if(item){
-      const references=templates.filter(t=>t.item?.[0]===item[0]&&t.item?.[1]===item[1]&&t.pixels)
-      // A color match alone cannot identify a different shape. Keep shifted and isolated views as valid evidence.
-      if(references.length&&!references.some(t=>silhouetteDifference(sample.pixels,t.pixels)<=.48||silhouetteDifference((sample.drawing??sample).pixels,(t.drawing??t).pixels)<=.48||(sample.clean&&t.clean&&cleanMatch(sample,cleanReferences,rawScores)?.slice(0,2).join('/')===item.slice(0,2).join('/'))))return []
+      const references=templates.filter(t=>t.item?.[0]===item[0]&&String(t.item?.[1])===String(item[1])&&t.pixels)
+      if(references.length&&!references.some(t=>silhouetteDifference(sample.pixels,t.pixels)<=.48||silhouetteDifference((sample.drawing??sample).pixels,(t.drawing??t).pixels)<=.48))item=undefined
     }
+    if(!item)item=cleanMatch(sample,cleanReferences,rawScores)
     if(!item)return []
     const ids=new Set(templates.filter(t=>t.item?.[0]===item[0]&&t.item?.[1]===item[1]).map(t=>t.item[2]).filter(Boolean))
     return [[...sample.region,...(ids.size>1?item.slice(0,2):item)]]

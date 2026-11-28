@@ -1,0 +1,7 @@
+# Recognition V9.3
+
+The original Ducati 42238-1 PDF (6661842, 140 pages) was analyzed offline on the VPS. The unreviewed experiment located 335 regions from 345 quantity labels and assigned 189, then 247, 254, and 319 candidate identities. This is coverage, not measured precision. The last 65 candidates have not been independently reviewed; neither candidate maps nor provisional visual labels may be treated as approved commercial maps.
+
+The browser worker now retains its original ranking and shape veto, then tries a separate cleaned-artwork view with disconnected components removed, small text and badge exclusions, blur normalization and neutral-shade comparison. It requires the raw ranking to support the candidate and a margin over other clean references. Its browser performance and actual coverage must be verified separately; the Python experiment does not execute PDF.js or OffscreenCanvas. The reference cache is versioned to avoid reusing older features. No payment or audit policy changes.
+
+Before publishing: run the isolated full suite, compare provisional visual checks, and verify hints on real assembly pages. A future production server preprocessing workflow needs a separate review and explicit publication gate.
