@@ -28,6 +28,7 @@ test('PDF reader reuses an open book, clamps the page, and closes it when a loca
   const url = 'https://bdpinstructions.download.bricklink.info/910037.pdf'
   assert.deepEqual(await reader.render(url, 2, {}, signal), { pageNumber: 2, pages: 3 })
   assert.deepEqual(await reader.render(url, 9, {}, signal), { pageNumber: 3, pages: 3 })
+  assert.deepEqual(await reader.render(url, 0, {}, signal), {pageNumber:1,pages:3})
   const file = new Blob(['%PDF-1.7'], { type: 'application/pdf' })
   await reader.render(file, 1, {}, signal)
   reader.close()
@@ -35,7 +36,7 @@ test('PDF reader reuses an open book, clamps the page, and closes it when a loca
   assert.equal(opened[0].url, `/api/instructions/pdf?url=${encodeURIComponent(url)}`)
   assert.equal(opened[0].withCredentials, false)
   assert.equal(new TextDecoder().decode(opened[1].data), '%PDF-1.7')
-  assert.deepEqual(rendered, [[2, 800, 1600], [3, 800, 1600], [1, 800, 1600]])
+  assert.deepEqual(rendered, [[2, 800, 1600], [3, 800, 1600], [1,800,1600], [1, 800, 1600]])
   assert.deepEqual(closed, [0, 1])
 })
 

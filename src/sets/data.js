@@ -1,7 +1,9 @@
+import { verifiedInstructionBooks } from './verified-instruction-books.js'
 import { resolveInventoryPart } from '../catalog/part-resolver.js?v=catalog-engine-1'
 // Set inventories are portable project data. Credentials never belong here.
 // Checked against the sequence on LEGO's set-specific instruction pages.
 export const knownBooks = {
+  '42238-1': verifiedInstructionBooks('42238-1'),
   '42215-1': [
     {
       title: '1/2',
@@ -61,6 +63,15 @@ export function normalizeBooks(books) {
   }
   return result
 }
+export function normalizeSetBooks(setNumber,books) {
+  const pinned=verifiedInstructionBooks(setNumber)
+  const supplied=normalizeBooks(books)
+  if(!pinned)return supplied
+  return pinned.map(book=>{
+    const existing=supplied.find(item=>item.url===book.url)
+    return {...book,pages:existing?.pages??book.pages}
+  })
+}
 export function mapInventory(inventory, catalog) {
   return inventory.map((item) => {
     const result = resolveInventoryPart(item, catalog)
@@ -113,7 +124,7 @@ export function validateSet(value) {
     themeId: Number(value.themeId) || (value.number === '42215-1' ? 1 : null),
     image: safeImage(value.image),
     source: 'Rebrickable',
-    books: normalizeBooks(value.books ?? knownBooks[value.number]),
+    books: normalizeSetBooks(value.number,value.books ?? knownBooks[value.number]),
     inventory: value.inventory.map((item) => {
       if (
         !item ||

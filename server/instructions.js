@@ -1,3 +1,4 @@
+import { verifiedInstructionBooks } from '../src/sets/verified-instruction-books.js'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { canonicalInstructionUrl } from '../src/sets/instruction-url.js'
@@ -45,6 +46,8 @@ export function createInstructionsHandler({ fetcher = fetch, maxBytes = maxPdfBy
     throw Error('too-many-redirects')
   }
   async function books(set, signal) {
+    const verified=verifiedInstructionBooks(set)
+    if(verified)return verified
     const cached = cache.get(set)
     if (cached?.until > Date.now()) return cached.books
     if (pendingBooks.has(set)) return pendingBooks.get(set)

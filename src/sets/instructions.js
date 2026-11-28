@@ -1,15 +1,18 @@
+import {boundedTask} from './instruction-task.js?v=recognition-v9-polish'
+import {reconcileCallouts} from './instruction-study.js?v=recognition-v9'
+import {createPageStudy} from './instruction-study-ui.js?v=recognition-v9-polish'
 import {instructionEvent} from './instruction-events.js'
 import {mountInstructionOffer} from './instruction-offer.js?v=welcome-1'
-import { node, control, setStrings } from './catalog.js?v=browser-recognition'
-import { safeBook, validateSet } from './data.js?v=browser-recognition'
+import { node, control, setStrings } from './catalog.js?v=ducati-instructions-1'
+import { safeBook, validateSet } from './data.js?v=ducati-instructions-1'
 import {
   discoverBooks,
   instructionPagePreview,
   instructionSources,
-} from './instruction-sources.js?v=browser-recognition'
-import { addInstructionParts, instructionPartRegions } from './instruction-parts.js?v=commerce-regions-1'
+} from './instruction-sources.js?v=ducati-instructions-1'
+import { addInstructionParts, instructionPartRegions, resetInstructionParts } from './instruction-parts.js?v=recognition-v9-polish'
 import { canonicalInstructionUrl } from './instruction-url.js'
-import { createInstructionPdfReader } from './instruction-pdf.js?v=instruction-artwork-v5'
+import { createInstructionPdfReader } from './instruction-pdf.js?v=recognition-v9'
 
 const maxUnknownPages = 5000
 const pageWait = 6000
@@ -17,25 +20,24 @@ const personalPdfs = new Map()
 const localBookKey = set => `local:${set.number}`
 
 export function prepareInstructionPage(progress, signal, reader) {
-  const entry = progress?.set.books[progress.book]
+  const entry = progress?.set?.books?.[progress.book]
   if (!progress) return null
   const local = personalPdfs.get(entry?.url ?? localBookKey(progress.set))
   const display = entry && instructionPagePreview(progress.set.number, entry.url, progress.page)
-  if (local || !display?.image) {
+  if (local || !display?.image || (reader&&signal&&canonicalInstructionUrl(entry?.url))) {
     const source = local ?? entry?.url
     if (!reader || !signal || !source) return null
     const canvas = node('canvas')
-    const result = reader.render(source, progress.page, canvas, signal).then(
-      value => ({ value }), error => ({ error }),
-    )
-    return { canvas, result, source, page: progress.page, decoded: result.then(({ value }) => Boolean(value)) }
+    const controller=new AbortController(),request=AbortSignal.any([signal,controller.signal,AbortSignal.timeout(18000)])
+    const result=boundedTask(reader.render(source,progress.page,canvas,request),request,18000).then(value=>({value}),error=>({error}))
+    return {canvas,result,source,page:progress.page,decoded:result.then(({value})=>Boolean(value)),cancel:()=>controller.abort()}
   }
   const image = new Image()
   image.src = display.image
   const decoded = image.decode().then(() => true, () => false)
   const regions = instructionPartRegions(progress.set.number, display.pdfId, progress.page)
     .catch(() => []) // Image viewing remains available if annotations fail to load.
-  return { image, decoded, regions }
+  return { image, decoded, regions, source:entry.url, page:progress.page }
 }
 
 export async function waitForInstruction(prepared, signal) {
@@ -49,7 +51,7 @@ export async function waitForInstruction(prepared, signal) {
     }
     function cancel() { finish(false) }
     signal.addEventListener('abort', cancel, { once: true })
-    Promise.all([prepared.decoded, prepared.regions]).then(([ready]) => finish(ready))
+    Promise.all([prepared.decoded, prepared.regions]).then(([ready]) => finish(ready),()=>finish(false))
   })
 }
 
@@ -77,7 +79,7 @@ export function instructionState(value) {
 export function mountInstructions(
   layer,
   initial,
-  { language, signal, change, findPart, describePart, firstPage, pdf = createInstructionPdfReader() },
+  { language, signal, change, findPart, describePart, readInventoryUsage, firstPage, pdf = createInstructionPdfReader() },
 ) {
   let progress = instructionState(initial)
   if (!progress) return null
@@ -128,6 +130,8 @@ export function mountInstructions(
   const actions = node('div', undefined, 'instruction-actions')
   actions.id = 'editor-instruction-actions'
   const preview = node('div', undefined, 'instruction-preview')
+  const find=(...args)=>{instructionEvent(progress.set.number,'hint_use');return findPart?.(...args)}
+  const study=createPageStudy({preview,inventory:progress.set.inventory,language,find,describe:describePart,readUsage:readInventoryUsage,onRegions:regions=>addInstructionParts(preview,regions,{language,describe:describePart,find,replace:true})})
   const previewStatus = node('p')
   previewStatus.setAttribute('role', 'status')
   const recognitionStatus = node('p', undefined, 'instruction-recognition-status')
@@ -222,7 +226,7 @@ export function mountInstructions(
     { signal },
   )
   actions.append(choosePdf, credit, add)
-  body.append(actions, status, retry, previewStatus, recovery, file, preview, recognitionStatus, unlock)
+  body.append(actions, status, retry, previewStatus, recovery, file, preview, recognitionStatus, study.root, unlock)
   panel.append(header, body)
   layer.append(panel)
   function setMoreOpen(open) {
@@ -256,7 +260,9 @@ export function mountInstructions(
     previewRequest?.abort()
     previewRequest = new AbortController()
     const signal = previewRequest.signal
+    resetInstructionParts(preview)
     preview.replaceChildren()
+    study.reset(signal)
     preview.hidden = true
     previewStatus.hidden = true
     recognitionStatus.hidden = true
@@ -277,11 +283,8 @@ export function mountInstructions(
       return
     }
     const display = instructionPagePreview(progress.set.number, entry.url, progress.page)
-    const creditUrl = display?.source ?? instructionSources[entry?.source]
-    if (creditUrl) {
-      credit.hidden = false
-      credit.textContent = display?.source ? 'BrickInstructions' : entry.source
-    }
+    credit.hidden=true
+    if(entry.source&&instructionSources[entry.source]){credit.hidden=false;credit.textContent=entry.source}
     previewStatus.hidden = false
     previewStatus.textContent = ru ? 'Загружаем страницу…' : 'Loading page…'
     const pageNumber = progress.page
@@ -301,31 +304,35 @@ export function mountInstructions(
     if(signal.aborted)return
     if(!interactive){unlock.hidden=!locked;recognitionStatus.textContent=ru?'Интерактивность недоступна. PDF и ручной поиск остаются доступны.':'Interactive access unavailable. PDF and manual search remain available.';recognitionStatus.hidden=false}
     const pageLabel = number => ru ? `Страница ${number} инструкции` : `Instruction page ${number}`
-    if (!local && display?.image) {
-      const { image, decoded, regions } = prepared?.image ? prepared : prepareInstructionPage(progress)
-      const ready = await decoded
-      if (signal.aborted) return
-      if (ready) {
-        image.alt = pageLabel(pageNumber)
-        preview.append(image)
-        showPage(image.naturalWidth / image.naturalHeight, interactive && findPart &&
-          (serverOnly?instructionPartRegions(progress.set.number,privatePdfId,pageNumber).catch(()=>[]):resolvePdfRegions(display.pdfId, source, pageNumber, entry.pages, null, signal, regions)), signal)
-        if (entry.pages && pageNumber < entry.pages && !navigator.connection?.saveData) {
-          const following = instructionPagePreview(progress.set.number, entry.url, pageNumber + 1)
-          if (following?.image) {
-            const ahead = new Image()
-            ahead.fetchPriority = 'low'
-            ahead.src = following.image
-          }
-        }
-        return
+    async function showIndexedPreview(){
+      if(local||!display?.image||signal.aborted)return false
+      const fallback=prepared?.image&&prepared.source===source&&prepared.page===pageNumber?prepared:prepareInstructionPage(progress)
+      if(!fallback?.image)return false
+      let ready=false
+      try{ready=await boundedTask(fallback.decoded,signal,8000)}catch{}
+      if(signal.aborted||!ready)return false
+      const image=fallback.image
+      image.alt=pageLabel(pageNumber)
+      preview.append(image)
+      credit.hidden=false;credit.textContent='BrickInstructions'
+      // The alternate artwork is a viewing fallback, not proof of matching crop or edition.
+      // Keep overlays tied to the exact original PDF coordinate system.
+      showPage(image.naturalWidth/image.naturalHeight,false,signal)
+      if(interactive&&findPart){
+        recognitionStatus.textContent=ru?'Оригинальный PDF недоступен. Резервное изображение без подсказок.':'Original PDF unavailable. Preview image without hints.'
+        recognitionStatus.hidden=false
       }
+      return true
     }
+    if(!canonicalBook&&await showIndexedPreview())return
     const warm = prepared?.result && prepared.source === source && prepared.page === pageNumber
+    if(!warm)prepared?.cancel?.()
+    else signal.addEventListener('abort',prepared.cancel,{once:true})
+    const renderSignal=AbortSignal.any([signal,AbortSignal.timeout(18000)])
     const canvas = warm ? prepared.canvas : node('canvas')
     canvas.setAttribute('role', 'img')
     try {
-      const { value, error } = warm ? await prepared.result : { value: await pdf.render(source, pageNumber, canvas, signal) }
+      const {value,error}=warm?await boundedTask(prepared.result,renderSignal,18000):{value:await boundedTask(pdf.render(source,pageNumber,canvas,renderSignal),renderSignal,18000)}
       if (error) throw error
       const { pages, pageNumber: shown } = value
       if (signal.aborted) return
@@ -339,10 +346,14 @@ export function mountInstructions(
       renderNavigation(books[progress.book] ?? entry)
       canvas.setAttribute('aria-label', pageLabel(shown))
       preview.append(canvas)
-      const regions = interactive && findPart && (serverOnly?instructionPartRegions(progress.set.number,privatePdfId,shown).catch(()=>[]):resolvePdfRegions(local ? null : display?.pdfId, source, shown, pages, canvas, signal))
+      const regions = interactive && findPart && (serverOnly?instructionPartRegions(progress.set.number,privatePdfId,shown).catch(()=>[]):resolvePdfRegions(local ? null : privatePdfId, source, shown, pages, canvas, signal))
       showPage(canvas.width / canvas.height, regions, signal)
     } catch {
       if (signal.aborted) return
+      prepared?.cancel?.()
+      pdf.close()
+      if(await showIndexedPreview())return
+      if(signal.aborted)return
       if (local) {
         personalPdfs.delete(entry.url)
         localPageCounts.delete(entry.url)
@@ -361,23 +372,36 @@ export function mountInstructions(
       ? await instructionPartRegions(progress.set.number, pdfId, page).catch(() => [])
       : []
     if (request.aborted) return []
-    if (ready.length) addInstructionParts(preview, ready, { language, describe: describePart, find: (...args)=>{instructionEvent(progress.set.number,'hint_use');return findPart(...args)} })
+    if(ready.length)study.update(ready)
     recognitionStatus.textContent = ru ? 'Распознаём детали…' : 'Recognizing parts…'
     recognitionStatus.hidden = false
     try {
-      recognition ??= import('./instruction-recognition.js?v=instruction-artwork-v5').then(module => {
+      recognition ??= import('./instruction-recognition.js?v=recognition-v9-polish').then(module => {
         recognitionEngine = module.createInstructionRecognition(pdf, progress.set, signal)
         return recognitionEngine
       })
       const engine = await recognition
-      const detected = await engine.pageRegions(source, page, pages, canvas, request)
-      return detected.filter(([x, y, w, h]) => !ready.some(([a, b, aw, ah]) =>
+      const additional=detected=>detected.filter(([x, y, w, h]) => !ready.some(([a, b, aw, ah]) =>
         Math.min(x + w, a + aw) - Math.max(x, a) > .5 * Math.min(w, aw) &&
         Math.min(y + h, b + ah) - Math.max(y, b) > .5 * Math.min(h, ah)))
+      let detectedCount=0
+      const detected=await engine.pageRegions(source,page,pages,canvas,request,({stage,regions,total,callouts,scope})=>{
+        detectedCount=total
+        if(request.aborted)return
+        const found=additional(regions)
+        study.update(found,{callouts:reconcileCallouts(callouts??[],ready),scope})
+        recognitionStatus.textContent=(stage==='models'?(ru?'Сравниваем с 3D-библиотекой':'Comparing with 3D library'):(ru?'Сверяем с описью':'Checking inventory'))+' · '+regions.length+'/'+total
+      })
+      const extra=additional(detected)
+      if(!request.aborted&&!ready.length&&!extra.length){recognitionStatus.textContent=ru?'На этой странице нет уверенно распознанных деталей.':'No confidently recognized parts on this page.';recognitionStatus.hidden=false;return extra}
+      if(!request.aborted){
+        recognitionStatus.hidden=!(detectedCount>detected.length)
+        if(!recognitionStatus.hidden)recognitionStatus.textContent=ru?'Часть деталей не распознана уверенно.':'Some parts could not be confidently recognized.'
+      }
+      return extra
     } catch {
+      if(!request.aborted){recognitionStatus.textContent=ru?'Не удалось завершить распознавание. PDF доступен.':'Recognition could not finish. PDF is available.';recognitionStatus.hidden=false}
       return []
-    } finally {
-      if (!request.aborted) recognitionStatus.hidden = true
     }
   }
   function showPage(ratio, regions, signal) {
@@ -385,8 +409,8 @@ export function mountInstructions(
     preview.hidden = false
     previewStatus.hidden = true
     if (findPart && regions) regions.then(parts => {
-      if (!signal.aborted) addInstructionParts(preview, parts, { language, describe: describePart, find: (...args)=>{instructionEvent(progress.set.number,'hint_use');return findPart(...args)} })
-    })
+      if(!signal.aborted)study.update(parts,{final:true})
+    }).catch(()=>{})
   }
   async function lookupBooks() {
     if (progress.set.books.length) return
@@ -461,5 +485,6 @@ export function mountInstructions(
     get value() {
       return progress
     },
+    refreshInventory:()=>study.refresh(),
   }
 }

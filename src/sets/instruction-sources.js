@@ -1,5 +1,5 @@
 import sequences from '../../catalog/sets/instruction-sequences.json?v=browser-recognition' with { type: 'json' }
-import { knownBooks, normalizeBooks, safeBook } from './data.js?v=browser-recognition'
+import { knownBooks, normalizeBooks, safeBook } from './data.js?v=ducati-instructions-1'
 
 const brickDbUrl = 'https://bricks.party/brickdb.json'
 const brickInstructions = 'https://lego.brickinstructions.com'

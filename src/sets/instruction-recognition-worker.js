@@ -1,6 +1,9 @@
+import {stepForCallout,repeatedArtwork} from './instruction-study.js?v=recognition-v9'
+import {rankModels,prepareModelReferences} from './instruction-model-match.js?v=recognition-v8'
 // Page text locates the callouts. Compare the composited part artwork with
 // labeled drawings from the illustrated inventory of the same set.
-const quantity = /^[1-9]\d{0,2}[x×]$/i
+import {isQuantity} from './instruction-text.js?v=smart-highlight-1'
+const quantity = {test:isQuantity}
 const element = /^\d{6,8}$/
 const size = 24
 const widthOf = box => box[2] - box[0]
@@ -18,6 +21,8 @@ function anchors(captions, images, inventory) {
           widthOf(box) <= widthOf(caption.box) + 3) continue
       if (dx <= 5 && dy >= -4 && dy <= (inventory ? 20 : 5)) {
         matches.push({ i, j, score: dx * 2 + Math.abs(dy) })
+      } else if (Math.abs((caption.box[0]+caption.box[2]-box[0]-box[2])/2)<=4 && dy>=-2 && dy<=(inventory?15:7)) {
+        matches.push({i,j,score:8+Math.abs(dy)+Math.abs((caption.box[0]+caption.box[2]-box[0]-box[2])/2)})
       }
     }
   }
@@ -46,27 +51,35 @@ function anchors(captions, images, inventory) {
         box[0] = Math.min(box[0], fragment[0])
         box[1] = Math.min(box[1], fragment[1])
         box[2] = Math.max(box[2], fragment[2])
+        box[3] = Math.max(box[3], fragment[3])
       }
     }
     return { caption: captions[i], box, embedded: true }
   })
 }
 
-function inventoryCaptions(elements, quantities) {
-  return elements.map(element => {
-    const [x, y] = element.box
-    let closest, distance = Infinity
-    for (const quantity of quantities) {
-      const dx = Math.abs(quantity.box[0] - x), dy = y - quantity.box[1]
-      if (dx > 3 || dy < 3 || dy > 15 || quantity.box[3] > y + 2) continue
-      const score = dx * 2 + dy
-      if (score < distance) {
-        closest = quantity
-        distance = score
-      }
-    }
-    return closest ? { ...element, box: closest.box } : element
-  })
+export function inventoryCaptions(elements,quantities){
+ const pairs=[]
+ for(const [i,element] of elements.entries())for(const [j,quantity] of quantities.entries()){
+  const [x,y]=element.box,dx=Math.abs(quantity.box[0]-x),dy=y-quantity.box[1]
+  if(dx>3||dy<3||dy>15||quantity.box[3]>y+2)continue
+  pairs.push({i,j,score:dx*2+dy})
+ }
+ const used=new Set(),assigned=new Map(),best=new Map(),ambiguous=new Set()
+ for(const pair of pairs.sort((a,b)=>a.score-b.score)){
+  if(!best.has(pair.j))best.set(pair.j,pair)
+  else if(pair.score-best.get(pair.j).score<1.5)ambiguous.add(pair.j)
+ }
+ for(const {i,j} of [...best.values()].sort((a,b)=>a.score-b.score)){
+  if(ambiguous.has(j)||used.has(j)||assigned.has(i))continue
+  used.add(j);assigned.set(i,j)
+ }
+ return elements.map((element,i)=>{
+  const j=assigned.get(i)
+  if(j===undefined)return element
+  const closest=quantities[j]
+  return {...element,box:closest.box,quantity:Number.parseInt(closest.text,10),quantityToken:closest}
+ })
 }
 
 function assignBadges(candidates, badges) {
@@ -264,21 +277,21 @@ function feature(raster, box, neighbors) {
 function extract({ bitmap, geometry, labels, inventory }) {
   const surface = new OffscreenCanvas(bitmap.width, bitmap.height)
   const ctx = surface.getContext('2d', { willReadFrequently: true })
-  ctx.drawImage(bitmap, 0, 0)
-  bitmap.close()
+  try{ctx.drawImage(bitmap,0,0)}finally{bitmap.close()}
   const pixels = ctx.getImageData(0, 0, surface.width, surface.height)
   const { width, height, words } = geometry
   const raster = { data: pixels.data, width: surface.width, height: surface.height,
     x: surface.width / width, y: surface.height / height }
-  const elements = words.filter(({ text }) => element.test(text) && Object.hasOwn(labels,text))
-  const quantities = words.filter(({ text }) => quantity.test(text))
+  const elements = words.filter(({ text }) => element.test(text) && Object.hasOwn(labels,text)).slice(0,300)
+  const quantities = words.filter(({ text }) => quantity.test(text)).slice(0,300)
   const labeled = inventoryCaptions(elements, quantities)
   const inventoryPage = labeled.filter((entry, i) => entry !== elements[i]).length >= 2
   const readInventory = inventory || inventoryPage
-  const captions = readInventory ? labeled : quantities
+  const paired=new Set(labeled.map(c=>c.quantityToken).filter(Boolean))
+  const captions=readInventory?labeled:[...labeled,...quantities.filter(q=>!paired.has(q))]
   if (inventory && !labeled.length) return []
   const images = geometry.images.filter(box => widthOf(box) >= 5 && heightOf(box) >= 3 &&
-    widthOf(box) < .45 * width && heightOf(box) < .35 * height)
+    widthOf(box) < .45 * width && heightOf(box) < .35 * height).slice(0,4000)
   const candidates = anchors(captions, images, readInventory)
   const assigned = new Set(candidates.map(candidate => candidate.caption))
   if (assigned.size < captions.length) {
@@ -287,18 +300,23 @@ function extract({ bitmap, geometry, labels, inventory }) {
     candidates.push(...anchors(missing, fallback, readInventory).map(part => ({ ...part, embedded: false })))
   }
   assignBadges(candidates, geometry.badges ?? [])
-  return candidates.flatMap(({ box, caption, embedded, badge }) => {
+  const output=candidates.flatMap(({ box, caption, embedded, badge }) => {
     const neighbors = candidates.map(part => part.box).filter(other => other !== box &&
       widthOf(other) * heightOf(other) < .65 * widthOf(box) * heightOf(box) && overlaps(other, box))
     const sample = feature(raster, box, neighbors)
-    if (!sample && (inventory || !readInventory)) return []
-    const item = readInventory ? [...(labels[caption.text] ?? [null, null]), caption.text] : undefined
+    if(!sample&&inventory)return []
+    const item = Object.hasOwn(labels,caption.text) ? [...labels[caption.text],caption.text] : undefined
     if (inventory) return [{ ...sample, item, embedded, badge }]
     const coordinates = [box[0] - 1.5, box[1] - 1.5, box[2] + 1.5, box[3] + 1.5]
     const [x, y, right, bottom] = coordinates.map((value, index) =>
       Math.max(0, Math.min(10000, Math.round(value * 10000 / (index % 2 ? height : width)))))
-    return [{ ...sample, item, embedded, badge, region: [x, y, right - x, bottom - y] }]
+    if(right<=x||bottom<=y)return []
+    const region=[x,y,right-x,bottom-y]
+    const count=quantity.test(caption.text)?Number.parseInt(caption.text,10):caption.quantity??null
+    return [{ ...sample, item, embedded, badge, region,quantity:count,kind:readInventory?'inventory':'callout',step:readInventory?null:stepForCallout(region,geometry.stepLabels??[]) }]
   })
+  if(!inventory){const boxes=output.map(s=>s.region);for(const sample of output)if(sample.kind==='callout')sample.repeat=repeatedArtwork(sample.region,geometry.imageObjects??[],boxes)}
+  return output
 }
 
 function pixelDistance(a, b) {
@@ -309,6 +327,15 @@ function pixelDistance(a, b) {
   return delta / (size * size * 3 * 255)
 }
 
+function silhouetteDifference(a,b){
+ let overlap=0,union=0
+ for(let i=0;i<a.length;i+=4){
+  const aa=Math.min(a[i],a[i+1],a[i+2])<215,bb=Math.min(b[i],b[i+1],b[i+2])<215
+  if(aa||bb)union++
+  if(aa&&bb)overlap++
+ }
+ return union?1-overlap/union:1
+}
 function shiftedViews(pixels) {
   const views = []
   for (let dy = -1; dy <= 1; dy++) {
@@ -329,7 +356,7 @@ function shiftedViews(pixels) {
 function bestByItem(scores) {
   const items = new Map()
   for (const result of scores.sort((a, b) => a.score - b.score)) {
-    const key = result.reference.item.join('/')
+    const key = result.reference.item.slice(0,2).join('/')
     if (!items.has(key)) items.set(key, result)
   }
   return [...items.values()]
@@ -354,7 +381,7 @@ function badgeMatch(scores, sample) {
       (!second || second.score - first.score >= .022)) return first.reference.item
 }
 
-function rank({ samples, templates }) {
+export function rank({ samples, templates }) {
   return samples.flatMap(sample => {
     if (sample.item?.[0]) return [[...sample.region, ...sample.item]]
     if(!sample.pixels)return []
@@ -385,14 +412,23 @@ function rank({ samples, templates }) {
       const [first, second] = bestByItem(scores)
       if (first?.score <= .065 && (second?.score ?? Infinity) - first.score >= .035) item = first.reference.item
     }
-    return item ? [[...sample.region, ...item]] : []
+    if(item){
+      const references=templates.filter(t=>t.item?.[0]===item[0]&&t.item?.[1]===item[1]&&t.pixels)
+      // A color match alone cannot identify a different shape. Keep shifted and isolated views as valid evidence.
+      if(references.length&&!references.some(t=>silhouetteDifference(sample.pixels,t.pixels)<=.48||silhouetteDifference((sample.drawing??sample).pixels,(t.drawing??t).pixels)<=.48))return []
+    }
+    if(!item)return []
+    const ids=new Set(templates.filter(t=>t.item?.[0]===item[0]&&t.item?.[1]===item[1]).map(t=>t.item[2]).filter(Boolean))
+    return [[...sample.region,...(ids.size>1?item.slice(0,2):item)]]
   })
 }
 
-self.onmessage = ({ data }) => {
+let modelViews=[]
+if(typeof self!=='undefined'&&typeof self.postMessage==='function')self.onmessage = ({ data }) => {
   const { id, action, input } = data
   try {
-    self.postMessage({ id, value: action === 'extract' ? extract(input) : rank(input) })
+    if(action==='model-references'){modelViews=prepareModelReferences(input.references);self.postMessage({id,value:true});return}
+    self.postMessage({ id, value: action === 'extract' ? extract(input) : action==='rank-models'?rankModels({...input,prepared:modelViews}):rank(input) })
   } catch (error) {
     self.postMessage({ id, error: error.message })
   }

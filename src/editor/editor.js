@@ -1,7 +1,7 @@
 import { loadPartIndex, enrichInventory, normalizeDocumentDesigns } from '../catalog/part-resolver.js?v=catalog-engine-1'
-import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=instruction-artwork-v5'
-import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=instruction-artwork-v5'
-import { mountSetPalette } from '../sets/palette.js?v=catalog-engine-1'
+import { instructionState, mountInstructions, prepareInstructionPage, waitForInstruction } from '../sets/instructions.js?v=recognition-v9-polish'
+import { createInstructionPdfReader } from '../sets/instruction-pdf.js?v=recognition-v9'
+import { mountSetPalette } from '../sets/palette.js?v=recognition-v9'
 import { inspectSetPart } from '../sets/inspect.js'
 import { node, control } from '../sets/catalog.js'
 import { mountCablePanel } from './cable-panel.js'
@@ -276,10 +276,11 @@ export async function mountEditor(root, { document, projectId, language, save, d
   }
   let findSetPart
   let setPalette
-  mountInstructions(el('panelLayer'), buildingSet, { language, signal, firstPage, pdf,
+  const instructionUI=mountInstructions(el('panelLayer'), buildingSet, { language, signal, firstPage, pdf,
     change(value) { buildingSet = value; persist() },
     findPart: (...ids) => findSetPart?.(...ids),
     describePart: (partNum, colorId) => setPalette?.describe(partNum, colorId),
+    readInventoryUsage:()=>setPalette?.inventoryUsage()??[],
   })
   mountFloatingPanels(el('panelLayer'), t, signal)
   let collaborationUI
@@ -890,6 +891,7 @@ export async function mountEditor(root, { document, projectId, language, save, d
     const mechanicalChange = geometryChanged || state.links !== next.links || state.belts !== next.belts
     state = next
     setPalette?.update([...state.parts, ...hiddenParts])
+    instructionUI?.refreshInventory()
     if (mechanicalChange) {
       assembly = createAssembly(state.parts, state.links, { belts: state.belts })
       state.belts = assembly.belts.map(({ record }) => record)

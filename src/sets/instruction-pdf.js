@@ -59,7 +59,7 @@ export function createInstructionPdfReader(load = loadPdfJs) {
     signal.throwIfAborted()
     const pdf = await documentFor(source)
     signal.throwIfAborted()
-    const pageNumber = Math.min(number, pdf.numPages)
+    const pageNumber = Math.max(1,Math.min(Math.trunc(Number(number))||1,pdf.numPages))
     const page = await pdf.getPage(pageNumber)
     signal.throwIfAborted()
     const size = page.getViewport({ scale: 1 })
@@ -83,7 +83,7 @@ export function createInstructionPdfReader(load = loadPdfJs) {
     return ids?.[0] && ids.filter(Boolean).join('/')
   }
 
-  async function inspect(source, number, signal) {
+  async function inspect(source, number, signal,{study=false}={}) {
     signal.throwIfAborted()
     const pending = documentFor(source)
     const session = active
@@ -96,16 +96,18 @@ export function createInstructionPdfReader(load = loadPdfJs) {
     const { words, dimensions } = pdfWords(items, styles, viewport)
     const list = await page.getOperatorList()
     signal.throwIfAborted()
-    const { images, badgeShapes } = pdfArtwork(list, session.ops, viewport)
+    const { images, badgeShapes, imageObjects } = pdfArtwork(list, session.ops, viewport)
     const wideScan = images.some(([x, y, right, bottom]) =>
       right - x >= viewport.width * .7 && bottom - y >= viewport.height * .7)
     return {
       words, images, wideScan, width: viewport.width, height: viewport.height,
       badges: dimensionBadges(dimensions, badgeShapes),
+      ...(study?{stepLabels:stepLabels(items,viewport),imageObjects}:{}),
     }
   }
 
-  return { render, fingerprint, inspect, close }
+  async function pageCount(source,signal){signal.throwIfAborted();const doc=await documentFor(source);signal.throwIfAborted();return doc.numPages}
+  return { render, fingerprint, inspect, pageCount, close }
 }
 
 const quantity = /^[1-9]\d{0,2}[x×]$/i
@@ -116,7 +118,7 @@ function pdfWords(items, styles, viewport) {
   const words = new Map()
   const dimensions = new Map(), fragments=[]
   for (const item of items) {
-    const text = item.str?.trim()
+    const text = item.str?.trim().replace(/\s+/g,'')
     const isDimension = dimension.test(text) && item.height >= 5 && item.height <= 12
     if (!isDimension && !quantity.test(text) && !element.test(text) && !/^(?:\d{1,8}|[x×])$/i.test(text??'')) continue
     const [a, b, c, d, x, y] = item.transform
@@ -167,12 +169,29 @@ function bounds([a, b, c, d, x, y]) {
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
 }
 
+function stepLabels(items,viewport){
+  const result=[]
+  for(const item of items){
+    const text=item.str?.trim()??'',match=/^(?:Step\s+|Шаг\s+)?([1-9]\d{0,3})$/i.exec(text)
+    if(!match||!item.transform||item.width<=0||Math.abs(item.height??0)<Math.max(14,viewport.height*.018))continue
+    const [a,b,c,d,x,y]=item.transform,length=Math.hypot(a,b)
+    if(!length||Math.abs(b)>length*.05)continue
+    const p=viewport.convertToViewportPoint(x+c*.85,y+d*.85),q=viewport.convertToViewportPoint(x+a/length*item.width,y+b/length*item.width)
+    const box=[Math.min(p[0],q[0]),Math.min(p[1],q[1]),Math.max(p[0],q[0]),Math.max(p[1],q[1])]
+    if(box[1]<viewport.height*.02||box[3]>viewport.height*.88||box[2]>viewport.width*.94)continue
+    const normalized=[box[0]/viewport.width*10000,box[1]/viewport.height*10000,(box[2]-box[0])/viewport.width*10000,(box[3]-box[1])/viewport.height*10000].map(Math.round)
+    if(!result.some(s=>s.number===Number(match[1])&&s.box.join('/')===normalized.join('/')))result.push({number:Number(match[1]),box:normalized})
+  }
+  return result
+}
+
 function pdfArtwork({ fnArray, argsArray }, ops, viewport) {
-  const images = new Map(), badgeShapes = [], stack = []
+  const images = new Map(), badgeShapes = [], stack = [], imageObjects=[]
   let matrix = viewport.transform
-  function place(placement) {
+  function place(placement,id=null) {
     const box = bounds(placement)
     images.set(box.map(value => value.toFixed(1)).join('/'), box)
+    if(imageObjects.length<2500){const normalized=[box[0]/viewport.width*10000,box[1]/viewport.height*10000,(box[2]-box[0])/viewport.width*10000,(box[3]-box[1])/viewport.height*10000].map(Math.round);imageObjects.push({id:typeof id==='string'?id:null,box:normalized})}
   }
   for (const [index, op] of fnArray.entries()) {
     const args = argsArray[index]
@@ -184,11 +203,11 @@ function pdfArtwork({ fnArray, argsArray }, ops, viewport) {
     } else if (op === ops.transform) {
       matrix = multiply(matrix, args)
     } else if (op === ops.paintImageXObject || op === ops.paintInlineImageXObject || op === ops.paintImageMaskXObject) {
-      place(matrix)
+      place(matrix,op===ops.paintImageXObject?args?.[0]:null)
     } else if (op === ops.paintImageXObjectRepeat) {
       const [, xScale, yScale, positions] = args
       for (let i = 0; positions && i + 1 < positions.length; i += 2) {
-        place(multiply(matrix, [xScale, 0, 0, yScale, positions[i], positions[i + 1]]))
+        place(multiply(matrix, [xScale, 0, 0, yScale, positions[i], positions[i + 1]]),args[0])
       }
     } else if (op === ops.paintInlineImageXObjectGroup) {
       for (const image of args[1]) place(multiply(matrix, image.transform))
@@ -205,7 +224,7 @@ function pdfArtwork({ fnArray, argsArray }, ops, viewport) {
       }
     }
   }
-  return { images: [...images.values()], badgeShapes }
+  return { images: [...images.values()], badgeShapes, imageObjects }
 }
 
 // PDF.js 6 packs path commands as move/line/cubic/quadratic/close (0 through 4).

@@ -216,6 +216,7 @@ export function mountSetPalette(
       const name = item?.model?.[language] ?? item?.name ?? resolvePart(partNum, catalog).model?.[language]
       return ru ? name?.split(' · ', 1)[0] : name
     },
+    inventoryUsage(){return used},
     update(parts) {
       used = inventoryUsage(items, parts)
       render()
