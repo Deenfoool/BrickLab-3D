@@ -83,12 +83,15 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
   try{await record('succeeded')}catch{logger.error('Commerce audit terminal write failed:',id)}
   return result
  }
- let active=0
+ let activeRequests=0,activeCallbacks=0
+ const callbacks=new Set(['/api/payments/robokassa/result','/api/payments/yookassa/live-result','/api/payments/yookassa/test-result'])
  async function session(req){const token=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(cookieName+'='))?.slice(cookieName.length+1);return /^[a-f0-9]{64}$/.test(token||'')?await store.getSession(digest(token)):null}
  return async(req,res,path)=>{
   if(!['/api/commerce/order-status','/api/commerce/checkout','/api/commerce/quote','/api/commerce/status','/api/commerce/refund','/api/commerce/test-checkout','/api/commerce/admin-export','/api/commerce/admin-audit','/api/commerce/admin-ledger','/api/commerce/admin-health','/api/commerce/admin-provider-totals','/api/commerce/admin-reconcile','/api/commerce/admin-partial-review','/api/commerce/admin-receipt','/api/commerce/admin-register-receipt','/api/commerce/admin-receipt-correction','/api/commerce/test-refund','/api/commerce/test-account','/api/commerce/test-status','/api/commerce/live-status','/api/commerce/live-quote','/api/commerce/live-checkout','/api/commerce/instruction-regions','/api/commerce/instruction-offer','/api/commerce/instruction-activate','/api/commerce/instruction-complete','/api/commerce/instruction-event','/api/commerce/instruction-analytics','/api/commerce/instruction-pack-quote','/api/commerce/instruction-pack-checkout'].includes(path)&&path!=='/api/commerce/instruction-access'&&path!=='/api/commerce/account'&&path!=='/api/store/catalog'&&!path.startsWith('/api/payments/')&&path!=='/api/store/orders'&&path!=='/api/store/finance')return false
-  if(active>=12){reply(res,429,{error:'too_many_attempts'});return true}
-  active++
+  // Reserve callback capacity: browser traffic must not consume every payment slot.
+  const callback=callbacks.has(path)
+  if(callback?activeCallbacks>=4:activeRequests>=8){reply(res,429,{error:'too_many_attempts'});return true}
+  if(callback)activeCallbacks++;else activeRequests++
   try{
    if(path==='/api/store/catalog'&&req.method==='GET'){reply(res,200,{products:await store.storeCatalog(),instructions:[...instructionCatalog.values()],instructionRelease:effectiveInstructionRelease,mode:config.enabled?'test':'disabled',live:publicLive,liveSkus:publicLive?liveSkus:[]});return true}
    if(path==='/api/payments/robokassa/result'){
@@ -359,7 +362,7 @@ export function createPaymentsHandler({store,origin,config=paymentConfig(),logge
    else if(e.code==='23505'&&e.constraint_name==='commerce_receipt_unique_url')reply(res,409,{error:'receipt_already_used'})
    else{logger.error('Store operation failed:',path,e.code||e.name);reply(res,503,{error:'store_unavailable'})}
   }
-  finally{active--}
+  finally{if(callback)activeCallbacks--;else activeRequests--}
   return true
  }
 }

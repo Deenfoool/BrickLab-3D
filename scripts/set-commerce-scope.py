@@ -47,14 +47,19 @@ if scope != "closed":
         manifest = json.loads(Path("/var/lib/bricklab-commerce-private/approval.json").read_text())
         hashes = [hashlib.sha256((Path("/var/lib/bricklab-legal")/(name+".html")).read_bytes()).hexdigest() for name in ("offer","privacy","refund","requisites")]
         require(manifest.get("approved") is True and hashes == [manifest["files"][name] for name in ("offer","privacy","refund","requisites")], "Legal approval mismatch")
-        require(value("BRICKLAB_COMMERCE_FULL_CATALOG_OFFER_VERSION") == hashlib.sha256(":".join(hashes).encode()).hexdigest(), "Full catalog approval mismatch")
+        offer_version = hashlib.sha256(":".join(hashes).encode()).hexdigest()
+        require(value("BRICKLAB_COMMERCE_FULL_CATALOG_OFFER_VERSION") == offer_version, "Full catalog approval mismatch")
     except (OSError, ValueError, KeyError, TypeError):
         sys.exit("Legal approval not readable")
     require(subprocess.run(["systemctl","is-active","--quiet","bricklab-npd.timer"]).returncode == 0, "NPD timer not active")
+    require(count("SELECT count(*) FROM bricklab.schema_migrations WHERE version=\'128_commerce_admin_audit_export\';") == 1, "Commerce audit migration not installed")
     if scope == "public":
         require(value("BRICKLAB_LIVE_CHECKOUT_SCOPE") == "pilot", "Complete the pilot before opening public checkout")
-        verified = count("""SELECT count(*) FROM bricklab.commerce_orders
+        # offer_version is a locally computed SHA-256, never raw user input.
+        verified = count(f"""SELECT count(*) FROM bricklab.commerce_orders o
          WHERE environment='live' AND provider='yookassa' AND status='refunded'
+         AND offer_version='{offer_version}' AND accepted_at IS NOT NULL AND NOT partial_refund_seen
+         AND EXISTS (SELECT 1 FROM bricklab.admin_accounts a WHERE a.user_id=o.user_id)
          AND paid_at IS NOT NULL AND refunded_at IS NOT NULL AND receipt_status='issued'
          AND receipt_delivery_sent_at IS NOT NULL AND fiscal_state='canceled'
          AND receipt_correction_pending=false AND fiscal_receipt_uuid IS NOT NULL;""")
@@ -63,6 +68,10 @@ if scope != "closed":
         AND (status='pending' OR fiscal_state IN ('issue_unknown','cancel_unknown') OR receipt_correction_pending OR partial_review_pending
         OR (status='succeeded' AND (receipt_status<>'issued' OR (NOT partial_refund_seen AND receipt_delivery_sent_at IS NULL))));""")
         require(unresolved == 0, "Unresolved live orders or receipts; review before launch")
+        audit_open = count("""SELECT count(*) FROM bricklab.commerce_admin_audit a
+         WHERE a.environment='live' AND a.phase='started' AND a.action<>'finance_export'
+         AND NOT EXISTS (SELECT 1 FROM bricklab.commerce_admin_audit b WHERE b.request_id=a.request_id AND b.phase IN ('succeeded','failed'));""")
+        require(audit_open == 0, "Unresolved administrative audit events; reconcile before launch")
     prompt = "Confirm operator review and actual receipt delivery/refund checks. Type PUBLIC: " if scope == "public" else "Real money, administrators only. Type PILOT: "
     require(input(prompt).strip() == scope.upper(), "Canceled")
 backup = Path("/var/backups/bricklab-commerce")

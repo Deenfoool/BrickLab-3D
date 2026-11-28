@@ -470,6 +470,13 @@ test('partial refund observations are monotonic, counted once, and full refund r
   assert.equal(await observe(1000),true)
   const ledger=(await store.commerceAdminLedger(uid,'live')).find(x=>x.id===order.id)
   assert.equal(ledger.refunded_kopecks,19900);assert.equal(ledger.partial_review_pending,true)
+  assert.equal(await store.confirmCommerceReceiptCorrection(uid,order.id,'ordinary correction must not clear partial review'),false)
+  const [{day}]=await db`select to_char(now() AT TIME ZONE 'Europe/Moscow','YYYY-MM-DD') as day`
+  const exported=(await store.commerceAdminExport(uid,'live',day,day)).filter(x=>x.order_id===order.id)
+  assert.equal(exported.filter(x=>x.event_type==='payment').length,1)
+  assert.deepEqual(exported.filter(x=>x.event_type==='refund_observed').map(x=>x.amount_kopecks).sort((a,b)=>a-b),[-14900,-3000,-2000])
+  assert.equal(exported.reduce((sum,x)=>sum+x.amount_kopecks,0),0)
+  assert.equal((await store.commerceAdminExport(uid,'test',day,day)).some(x=>x.order_id===order.id),false)
   assert.deepEqual((await store.commerceAccount(uid)).themes,[])
   const journal=await db`select delta_kopecks from bricklab.commerce_refund_observations where order_id=${order.id} order by cumulative_kopecks`
   assert.deepEqual(journal.map(x=>x.delta_kopecks),[3000,2000,14900])

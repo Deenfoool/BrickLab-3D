@@ -32,3 +32,21 @@ test('admin export and refund require authorization, origin and durable start au
  const response=await post('/api/commerce/admin-export',exp);assert.equal(response.status,200);assert.match(response.headers.get('content-type'),/text\/csv/);assert.equal(response.headers.get('cache-control'),'no-store');assert.equal(exports,1)
  large=true;assert.equal((await post('/api/commerce/admin-export',exp)).status,409);assert.deepEqual(audit.slice(-2).map(a=>a[5]),['started','failed'])
 })
+
+test('browser congestion leaves capacity for provider notifications',async t=>{
+ let release,enteredAll,entered=0,notifications=0
+ const held=new Promise(r=>release=r),ready=new Promise(r=>enteredAll=r)
+ const store={storeCatalog:async()=>{if(++entered===8)enteredAll();await held;return []}}
+ const adapter={enabled:true,notification:async()=>{notifications++;return {ok:true}}}
+ const handler=createPaymentsHandler({store,origin,config:{enabled:false},liveYookassa:adapter})
+ const server=createServer((req,res)=>handler(req,res,new URL(req.url,origin).pathname))
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)))
+ const base='http://127.0.0.1:'+server.address().port
+ const requests=Array.from({length:8},()=>fetch(base+'/api/store/catalog'))
+ try{
+  await ready
+  assert.equal((await fetch(base+'/api/store/catalog')).status,429)
+  const callback=await fetch(base+'/api/payments/yookassa/live-result',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+  assert.equal(callback.status,200);assert.equal(notifications,1)
+ }finally{release();await Promise.all(requests)}
+})
