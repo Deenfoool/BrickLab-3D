@@ -1,3 +1,7 @@
+# BrickLab Store — live release preparation
+
+The historical sandbox instructions below are retained for the legacy Robokassa adapter. Current YooKassa live checkout is implemented but defaults to closed; see docs/commerce-release-checklist.md for the current operator gates. Do not treat successful local tests as provider approval.
+
 # BrickLab Store: test-only release
 This version deliberately cannot create live payments. Real sales are blocked in code, regardless of environment flags. Only authenticated administrators can start test purchases. Test orders and test entitlements live in separate tables and never grant paid cosmetics in the actual profile inventory.
 

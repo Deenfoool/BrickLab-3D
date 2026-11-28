@@ -39,3 +39,12 @@ Live order preparation persists the exact accepted legal digest and marks the NP
 
 ## Live rollout safety (supersedes the original test-only runtime description)
 The live adapter exists. A valid live configuration no longer opens checkout by itself. Use BRICKLAB_LIVE_CHECKOUT_SCOPE=closed (default), pilot (admin only), public (everyone). This controls creation/quotes, not incoming notifications, settlement, admin refunds or reconciliation. Do not set public until the contract, verified live provider credentials, approved offer, NPD issuance, email delivery and full refund/correction are verified. Keep provider credentials and the NPD worker active when closing sales if any real orders remain. Do not enable instruction release until a separate audit. Run isolated VPS tests before merge. The live refund polling regression is fixed; its test uses mocked provider responses, not real money.
+
+### Operator launch sequence
+1. Keep live sales closed. Run the isolated VPS release checks.
+2. After contract and provider approval, configure live shop credentials using scripts/configure-commerce-live.py. It performs a read-only API check and stages closed scope.
+3. Configure live webhook at /api/payments/yookassa/live-result for payment.succeeded, payment.canceled and refund.succeeded. Confirm reachability and provider configuration. Enable NPD worker only after confirming fiscal arrangements and no other issuer; verify timer and email.
+4. Stage administrator-only checkout with scripts/set-commerce-scope.py pilot; recreate bricklab service, verify public status remains disabled and ordinary accounts cannot buy.
+5. Pay for a genuine product from an admin account, verify fulfillment, actual NPD receipt and email inbox, then full refund and receipt cancellation. Verify provider dashboard, entitlement revocation, ledger and notifications. Use approved lawful fiscal arrangement, no fake tax records.
+6. Only after these checks, stage public scope with scripts/set-commerce-scope.py public. The script requires a completed fiscalized and refunded live order with sent receipt and no unresolved live operations. Operator must still confirm actual inbox delivery and provider results. Recreate bricklab and verify a regular account. To pause new orders, stage closed, recreate bricklab; do not disable reconciliation or the fiscal worker.
+The script intentionally requires the automatic NPD path for public opening. If the provider supplies another approved fiscal solution, review the integration and gate explicitly before launch.
