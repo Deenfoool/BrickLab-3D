@@ -1,3 +1,4 @@
+import {toLiveBlocks} from '../src/menu/workshop-live-model.js'
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {randomBytes,randomUUID} from 'node:crypto'
@@ -36,7 +37,7 @@ test('both account registration flows create a public workshop; hiding removes i
   await store.setSocial(reader.id,'follow',card.id,true)
   await store.hideCard(owner.id)
   assert.equal((await store.getOwnCard(owner.id)).visible,false)
-  const layout={...card.portfolio,blocks:card.portfolio.blocks.map(b=>({...b,span:b.key==='featured'?8:4,...(b.key==='publications'?{newRow:true}:{})})),featured:build.id}
+  const layout={...card.portfolio,blocks:card.portfolio.blocks.map(b=>({...b,span:b.key==='featured'?8:4,...(b.key==='publications'?{newRow:true}:{})})),featured:build.id,collections:[{title:'Test collection',ids:[build.id]}]}
   await store.savePortfolio(owner.id,layout)
   const hidden=await store.getOwnCard(owner.id)
   assert.equal(hidden.visible,false);assert.equal(hidden.displayName,card.displayName);assert.equal(hidden.bio,card.bio)
@@ -54,6 +55,20 @@ test('both account registration flows create a public workshop; hiding removes i
   assert.equal((await store.getPublicBuild(build.id)).likes,1)
   assert.equal((await store.getOwnCard(owner.id)).followers,1)
   assert.equal((await store.listComments(build.id))[0].body,'Preserve this discussion')
+  const live={...layout,blocks:toLiveBlocks(layout.blocks),featured:null,collections:[]}
+  await store.savePortfolio(owner.id,live,['firstCloudSave'],true)
+  const expected={...layout,blocks:live.blocks}
+  const published=await store.getPublicCard(handle)
+  assert.deepEqual(published.portfolio,expected)
+  assert.deepEqual(published.achievementShowcase,['firstCloudSave'])
+  assert.ok(Number.isFinite(Date.parse(published.achievementDetails.dates.firstCloudSave)))
+  assert.deepEqual(Object.keys(published.achievementDetails.dates),['firstCloudSave'])
+  await assert.rejects(store.savePortfolio(owner.id,{...live,blocks:live.blocks.map(b=>({...b,visible:false}))},['custom-nonexistent'],true),{message:'invalid_showcase'})
+  assert.deepEqual((await store.getPublicCard(handle)).portfolio,expected)
+  const withoutAwards={...live,blocks:live.blocks.map(b=>b.key==='awards'?{...b,visible:false}:b)}
+  await store.savePortfolio(owner.id,withoutAwards,undefined,true)
+  const noAwards=await store.getPublicCard(handle);assert.equal(noAwards.achievementDetails,null);assert.equal(noAwards.achievementShowcase,null)
+  await store.savePortfolio(owner.id,live,undefined,true)
   await store.hideCard(owner.id)
   assert.equal(await store.workshopPublicSummary(card.id),null)
   assert.equal(await store.getPublicCard(handle),undefined)
