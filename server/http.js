@@ -46,7 +46,7 @@ function rangeOf(header, size) {
     ? { start: first, end: last } : null
 }
 
-export function createBrickLabServer({ root, logger = console, auth, projects, profile, activity, community, bureau, security, rebrickable, cspReport, payments, hub, approvedLegal=null, instructions = createInstructionsHandler() } = {}) {
+export function createBrickLabServer({ root, logger = console, auth, projects, profile, activity, community, bureau, security, rebrickable, cspReport, payments, hub, approvedLegal=null, discovery=null, instructions = createInstructionsHandler() } = {}) {
   const base = realpathSync(root)
   const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff')
@@ -78,6 +78,8 @@ export function createBrickLabServer({ root, logger = console, auth, projects, p
         res.setHeader('Allow', 'GET, HEAD')
         return send(req, res, 405, 'Method not allowed')
       }
+      const extraSeo = discovery && await discovery(pathname)
+      if (extraSeo) return send(req, res, extraSeo.status ?? 200, extraSeo.body, extraSeo.type)
       const seo = seoResponse(pathname)
       if (seo) return send(req, res, 200, seo.body, seo.type)
       if (pathname === '/store') {
